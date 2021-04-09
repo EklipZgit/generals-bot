@@ -71,18 +71,18 @@ class BoardAnalyzer:
 				pathwaySource = self.intergeneral_analysis.pathways[move.source]
 				pathwayDest = self.intergeneral_analysis.pathways[move.dest]
 				if pathwaySource.distance <= maxAltLength:
-					if pathwaySource not in includedPathways:
-						if pathwaySource.distance > pathwayDest.distance or pathwaySource.distance == pathwayDest.distance:
-							# moving to a shorter path or moving along same distance path
-							# If getting further from our general (and by extension closer to opp since distance is equal)
-							gettingFurtherFromOurGen = self.intergeneral_analysis.aMap[move.source.x][move.source.y] < self.intergeneral_analysis.aMap[move.dest.x][move.dest.y]
-							# not more than cutoffDist tiles behind our general, effectively
-							cutoffDist = 5
-							reasonablyCloseToTheirGeneral = self.intergeneral_analysis.bMap[move.dest.x][move.dest.y] < cutoffDist + self.intergeneral_analysis.aMap[self.intergeneral_analysis.tileB.x][self.intergeneral_analysis.tileB.y]
+					#if pathwaySource not in includedPathways:
+					if pathwaySource.distance > pathwayDest.distance or pathwaySource.distance == pathwayDest.distance:
+						# moving to a shorter path or moving along same distance path
+						# If getting further from our general (and by extension closer to opp since distance is equal)
+						gettingFurtherFromOurGen = self.intergeneral_analysis.aMap[move.source.x][move.source.y] < self.intergeneral_analysis.aMap[move.dest.x][move.dest.y]
+						# not more than cutoffDist tiles behind our general, effectively
+						cutoffDist = 5
+						reasonablyCloseToTheirGeneral = self.intergeneral_analysis.bMap[move.dest.x][move.dest.y] < cutoffDist + self.intergeneral_analysis.aMap[self.intergeneral_analysis.tileB.x][self.intergeneral_analysis.tileB.y]
 					
-							if (gettingFurtherFromOurGen and reasonablyCloseToTheirGeneral):
-								includedPathways.add(pathwaySource)
-								goodLeaves.append(move)
+						if (gettingFurtherFromOurGen and reasonablyCloseToTheirGeneral):
+							includedPathways.add(pathwaySource)
+							goodLeaves.append(move)
 					else:
 						logging.info("Pathway for tile {} was already included, skipping".format(move.source.toString()))
 

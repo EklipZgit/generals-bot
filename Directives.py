@@ -9,13 +9,14 @@ import logging
 from enum import Enum
 
 class Timings():
-	def __init__(self, cycleTurns, quickExpandSplitTurns, splitTurns, launchTiming, offsetTurns, recalcTurn):
+	def __init__(self, cycleTurns, quickExpandSplitTurns, splitTurns, launchTiming, offsetTurns, recalcTurn, disallowEnemyGather):
 		self.cycleTurns = cycleTurns
 		self.quickExpandTurns = quickExpandSplitTurns
 		self.splitTurns = splitTurns
 		self.offsetTurns = offsetTurns
 		self.launchTiming = launchTiming
 		self.nextRecalcTurn = recalcTurn
+		self.disallowEnemyGather = disallowEnemyGather
 
 	def should_recalculate(self, turn):
 		return turn == self.nextRecalcTurn

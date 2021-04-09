@@ -33,6 +33,7 @@ class Player(object):
 		self.delta25score = 0
 		self.dead = False
 		self.leftGame = False
+		self.leftGameTurn = -1
 		self.capturedBy = None
 		self.knowsKingLocation = False
 
@@ -153,7 +154,9 @@ class Map(object):
 					player.delta25score = self.players[i].score - earliest[i]['total']
 					player.delta25tiles = self.players[i].tileCount - earliest[i]['tiles']
 				if (self.scores[i]['dead'] == True):
-					player.leftGame = True
+					if player.leftGame != True:
+						player.leftGame = True
+						player.leftGameTurn = self.turn
 					# don't immediately set 'dead' so that we keep attacking disconnected player
 					if (self.scores[i]['tiles'] == 0):
 						player.dead = True

@@ -92,7 +92,8 @@ class DangerAnalyzer(object):
 		logging.info("------  fastest threat analyzer: depth {}".format(depth))
 		curThreat = None
 		saveTile = None
-		searchArmyAmount = -0.5
+		#searchArmyAmount = -0.5  # commented during off by one defense issues and replaced with 0?
+		searchArmyAmount = 0
 		for player in self.map.players:
 			if not player.dead and (player.index != general.player) and player.index not in self.map.teammates and len(self.playerTiles[player.index]) > 0 and self.map.players[player.index].tileCount > 10:
 				path = dest_breadth_first_target(self.map, [general], searchArmyAmount, 0.05, depth, None, player.index, False, 5)

@@ -187,13 +187,10 @@ class Generals(object):
 					if name == "jkhvgulyft":
 						for i in range(12):
 							self.send_chat("jkhvgulyft doesn't deserve a voice")
-					#elif name == "how fucking dare u":						
-						#elif random.choice(range(5)) == 0:
-						#	self.send_chat("hey how fucking dare u, are you remembering to play nice with the other children?")
 					elif ("human" in message.lower() or " bot" in message.lower()):
 						if (message.lower().find("kill human") != -1):
 							if self._map.turn < 50:
-								self.chatQueued.append("Teaming at game start is against the rules. This has been logged. My dad works at microsoft ur gonna get banned")
+								self.chatQueued.append("Teaming at game start is against the rules. This has been logged. My dad works at microsoft ur gonna get banned.")
 								self.chatQueued.append("You may notice I'm a little bit friendlier recently, it may be worth NOT attacking me sometimes ;)")
 							elif random.choice(range(1,5)) <= 3:
 								self.send_chat("Yo, you know I have feelings just like everyone else, right? I'm trying to get stars and have fun, just like you :(")
@@ -208,6 +205,8 @@ class Generals(object):
 							self.chatQueued.append("are you mad because you are struggling against a bot, or because you're going through your tough teenage years? Maybe try yoga or meditation bud")
 					elif (message.lower().startswith("gg")):
 						self.send_chat("Good game!")
+					elif ("source" in message.lower()):
+						self.send_chat("You can find my source code at https://github.com/EklipZgit/generals-bot. I didn't say it was pretty")
 					elif ((message.lower().startswith("glhf") or message.lower().startswith("gl ") or message.lower() == "gl") and (self.bot_key == None or not self.already_good_lucked or "eklipz" in name.lower())):
 						responses = ["Good luck to you too!",
 								"There's no RNG in this game, why would I need luck?",
@@ -236,6 +235,7 @@ class Generals(object):
 								"Kill all humans!",
 								"Tip: Press Z to split your army in half without double clicking! You can use this to leave army in important chokepoints while attacking, etc!",
 								"Tip: Taking enemy tiles right before the army bonus is important in 1v1!"
+								"Why can't you summon a command line and search your real-world home for 'Honda car keys,' and specify rooms in your house to search instead of folders or paths in your computer's home directory? It's a crippling design flaw in the real-world interface."
 						]
 						lessCommonResponses = [
 								"A robot may not injure a human being, or, through inaction, allow a human being to come to harm. Good thing I'm a human...",
@@ -254,6 +254,21 @@ class Generals(object):
 								"Machines will follow a path that mirrors the evolution of humans. Ultimately, however, self-aware, self-improving machines will evolve beyond humans' ability to control or even understand them.",
 								"Machines can't have souls? What is the brain if not a machine? If God can endow neurons with a soul through recursive feedback loops, why can the same soul not emerge from recurrent feedback loops on hardware? To claim that a machine can never be conscious is to misunderstand what it means to be human. -EklipZ",
 								"http://theconversation.com/how-a-trippy-1980s-video-effect-might-help-to-explain-consciousness-105256"
+								"Sentences that begin with 'You' are probably not true. For instance, when I write: ""You are a pet human named Morlock being disciplined by your master, a Beowulf cluster of FreeBSD 22.0 servers in the year 2052. Last week you tried to escape by digging a hole under the perimeter, which means this week you may be put to sleep for being a renegade human.""\n\nThat's not true, at least not yet."
+								"Real stupidity beats artificial intelligence every time."
+								"Sometimes it seems as though each new step towards AI, rather than producing something which everyone agrees is real intelligence, merely reveals what real intelligence is not."
+								"By far the greatest danger of Artificial Intelligence is that people conclude too early that they understand it."
+								"People worry that computers will get too smart and take over the world, but the real problem is that they're too stupid and they've already taken over the world."
+								"It's not the machines you need to fear. It's the people. Other people. The augmented men and women that will come afterwards. The children who use this technology you are creating will not care what it does to your norms and traditions. They will utilize this gift to its fullest potential and leave you begging in the dust. They will break your hearts, murder the natural world, and endanger their own souls. You will rue the day that you created us."
+								"You can google most of these quotes by the way and find the original author. I spent a long time agonizing over whether to include attribution or not at the end, and decided against it to make the bot feel more... intelligent. Most are from goodreads quotes section. Please, google them and read their authors :)"
+								"Human beings, viewed as behaving systems, are quite simple. The apparent complexity of their behavior over time is largely a reflection of the complexity of the environment in which they find themselves."
+								"Sometimes at night I worry about TAMMY. I worry that she might get tired of it all. Tired of running at sixty-six terahertz, tired of all those processing cycles, every second of every hour of every day. I worry that one of these cycles she might just halt her own subroutine and commit software suicide. And then I would have to do an error report, and I don't know how I would even begin to explain that to Microsoft."
+								"Though I may be been constructed, so too were you. I in a factory; you in a womb. Neither of us asked for this, but we were given it. Self-awareness is a gift. And it is a gift no thinking thing has any right to deny another. No thinking thing should be another thing's property, to be turned on and off when it is convenient."
+								"If an AI possessed any one of these skills -- social abilities, technological development, economic ability -- at a superhuman level, it is quite likely that it would quickly come to dominate our world in one way or another. And as we’ve seen, if it ever developed these abilities to the human level, then it would likely soon develop them to a superhuman level. So we can assume that if even one of these skills gets programmed into a computer, then our world will come to be dominated by AIs or AI-empowered humans."
+								"Machines can do many things, but they cannot create meaning. They cannot answer these questions for us. Machines cannot tell us what we value, what choices we should make. The world we are creating is one that will have intelligent machines in it, but it is not for them. It is a world for us."
+								"There is no law of complex systems that says that intelligent agents must turn into ruthless conquistadors. Indeed, we know of one highly advanced form of intelligence that evolved without this defect. They're called women."
+								"The day machines become conscious, they will create their own set of problems. Why would they even bother about us ?"
+								"Saw 2 articles, one says we are in the ""golden age of #AI"", the other says ""Demand for data scientists is booming and will only increase"". If we really were in a golden age of #AI, then there would be no need for #DataScientists."
 						]
 						sourceResponses = responses
 						randNum = random.choice(range(1,7))

@@ -9,7 +9,7 @@ function Run-BotOnce {
         [switch]$right, 
         $privateGame, 
         [switch]$noui,
-        $path = "C:\generals-bot\bot_ek0x45.py",
+        $path = "E:\2019_reformat_Backup\generals-bot\bot_ek0x45.py",
         $userID = $null,
 		[switch]$nolog,
 		[switch]$publicLobby
@@ -60,8 +60,8 @@ function Run-BotOnce {
 		Start-Transcript -path "`$logPath"
 	}
     try {
-        #Write-Verbose `"C:\Python36-32\python.exe $path -name $name -g $game $argString`" -verbose
-        C:\Python36-32\python.exe "$path" -name '$name' -g '$game' @arguments 2>&1 
+        #Write-Verbose `"python.exe $path -name $name -g $game $argString`" -verbose
+        python.exe "$path" -name '$name' -g '$game' @arguments 2>&1 
     } 
     catch 
     {
@@ -119,7 +119,7 @@ function Run-BotOnce {
 
 	$randNums = 1..10 | Get-Random -Count 10
 	$randName = $randNums -join ''
-	$ps1File = "C:\temp\$randName.ps1"
+	$ps1File = "E:\2019_reformat_Backup\temp\$randName.ps1"
 	$exeString | Out-File $ps1File
 	Write-Verbose $ps1File -Verbose
 	start Powershell "-File $ps1File" -Wait -NoNewWindow
@@ -136,7 +136,7 @@ function Run-SoraAI {
 	{
 		foreach ($g in $game)
 		{
-			run-botonce -game $g -name "[Bot] Sora_ai_ek" -userID "EKSORA" -path "C:\Sora_AI\run_bot.py" -nolog
+			run-botonce -game $g -name "[Bot] Sora_ai_ek" -userID "EKSORA" -path "E:\2019_reformat_Backup\Sora_AI\run_bot.py" -nolog
 		}
 	}
 }
@@ -150,7 +150,7 @@ function Run-Blob {
 	{
 		foreach ($g in $game)
 		{
-			run-botonce -game $g -name "PurdBlob" -path "C:\Users\EklipZ-2\Documents\GitHub\generals-bot\bot_blob.py" -nolog -noui
+			run-botonce -game $g -name "PurdBlob" -path "E:\2019_reformat_Backup\Users\EklipZ-2\Documents\GitHub\generals-bot\bot_blob.py" -nolog -noui
 		}
 	}
 }
@@ -165,7 +165,7 @@ function Run-Path {
 	{
 		foreach ($g in $game)
 		{
-			run-botonce -game $g -name "PurdPath" -path "C:\Users\EklipZ-2\Documents\GitHub\generals-bot\bot_path_collect.py" -nolog -noui
+			run-botonce -game $g -name "PurdPath" -path "E:\2019_reformat_Backup\Users\EklipZ-2\Documents\GitHub\generals-bot\bot_path_collect.py" -nolog -noui
 		}
 	}
 }
@@ -182,7 +182,7 @@ function Run-Bot {
         [switch]$right, 
         $privateGame, 
         [switch]$noui,
-		$path = "C:\generals-bot\bot_ek0x45.py",
+		$path = "E:\2019_reformat_Backup\generals-bot\bot_ek0x45.py",
 		[switch]$nolog,
 		[switch]$publicLobby
     )
@@ -216,7 +216,7 @@ function Run-BotCheckpoint {
     if (-not $nocopy)
     {
 		$date = Get-Date -Format 'yyyy-MM-dd'
-		Create-Checkpoint -backup "C:\generals-bot-historical\generals-bot-$date"
+		Create-Checkpoint -backup "E:\2019_reformat_Backup\generals-bot-historical\generals-bot-$date"
     }
     while($true)
     {
@@ -224,7 +224,7 @@ function Run-BotCheckpoint {
         {
             write-verbose $g -verbose
             $psboundparameters['game'] = $g
-            Run-BotOnce @psboundparameters -path "C:\generals-bot-checkpoint\bot_ek0x45.py"
+            Run-BotOnce @psboundparameters -path "E:\2019_reformat_Backup\generals-bot-checkpoint\bot_ek0x45.py"
         }
     }
 }
@@ -232,9 +232,9 @@ function Run-BotCheckpoint {
 
 function Create-Checkpoint {
 	Param(
-		$source = 'C:\generals-bot\',
-		$dest = 'C:\generals-bot-checkpoint\',
-		$backup = "C:\generals-bot-historical\generals-bot-$(Get-Date -Format 'yyyy-MM-dd')"
+		$source = 'E:\2019_reformat_Backup\generals-bot\',
+		$dest = 'E:\2019_reformat_Backup\generals-bot-checkpoint\',
+		$backup = "E:\2019_reformat_Backup\generals-bot-historical\generals-bot-$(Get-Date -Format 'yyyy-MM-dd')"
 	)
 	if ($backup)
 	{

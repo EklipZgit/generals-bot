@@ -32,10 +32,10 @@ class PathMove(object):
 
 	def toString(self):
 		prevVal = "[]"
-		if self.prev != None:
+		if self.prev is not None:
 			prevVal = "[{},{}]".format(self.prev.tile.x, self.prev.tile.y)
 		nextVal = "[]"
-		if self.next != None:
+		if self.next is not None:
 			nextVal = "[{},{}]".format(self.next.tile.x, self.next.tile.y)
 		myVal = "[{},{}]".format(self.tile.x, self.tile.y)
 
@@ -85,7 +85,7 @@ class Path(object):
 		if self._tileList == None:
 			self._tileList = list()
 			node = self.start
-			while node != None:
+			while node is not None:
 				self._tileList.append(node.tile)
 				node = node.next
 		return list(self._tileList)
@@ -95,20 +95,20 @@ class Path(object):
 		move.prev = self.tail
 		if self.start == None:
 			self.start = move
-		if self.tail != None:
+		if self.tail is not None:
 			self.tail.next = move
-		if self._tileList != None:
+		if self._tileList is not None:
 			self._tileList.append(nextTile)
 		self.tail = move
 		self._pathQueue.append(move)
 
 	def add_start(self, startTile):
 		move = PathMove(startTile)
-		if self.start != None:
+		if self.start is not None:
 			move.next = self.start
 			self.start.prev = move
 		self.start = move
-		if self._tileList != None:
+		if self._tileList is not None:
 			self._tileList.insert(0, startTile)
 		self._pathQueue.appendleft(move)
 
@@ -116,7 +116,7 @@ class Path(object):
 		if len(self._pathQueue) == 0:
 			logging.info(", bitch? Why you tryin to made_move when there aint no moves to made?")
 			return
-		if self._tileList != None:
+		if self._tileList is not None:
 			self._tileList.remove(self.start.tile)
 		self.start = self.start.next
 		return self._pathQueue.popleft()
@@ -125,11 +125,11 @@ class Path(object):
 		if len(self._pathQueue) == 0:
 			logging.info(", bitch? Removing nothing??")
 			return
-		if self._tileList != None:
+		if self._tileList is not None:
 			self._tileList.remove(self.tail.tile)
 		move = self._pathQueue.pop()
 		self.tail = self.tail.prev
-		if self.tail != None:
+		if self.tail is not None:
 			self.tail.next = None
 		return move	
 	
@@ -137,7 +137,7 @@ class Path(object):
 		dist = 0
 		dict = {}
 		node = self.start
-		while node != None:
+		while node is not None:
 			dict[node.tile] = dist
 			node = node.next
 			dist += 1
@@ -147,7 +147,7 @@ class Path(object):
 		val = 0
 		node = self.start
 		i = 0
-		while (node != None):
+		while (node is not None):
 			tile = node.tile
 			if tile.player == forPlayer:
 				val += tile.army - 1
@@ -165,7 +165,7 @@ class Path(object):
 	def clone(self):
 		newPath = Path()
 		node = self.start
-		while node != None:
+		while node is not None:
 			newPath.add_next(node.tile)
 			node = node.next
 		return newPath
@@ -176,7 +176,7 @@ class Path(object):
 
 		newPath = Path()
 		temp = self.tail
-		while temp != None:
+		while temp is not None:
 			newPath.add_next(temp.tile)
 			temp = temp.prev
 		newPath.value = self.value
@@ -201,7 +201,7 @@ class Path(object):
 	def toString(self):
 		val = "[{} len {}] ".format(self.value, self.length)
 		node = self.start
-		while (node != None):
+		while node is not None:
 			val = val + str(node.tile.x) + "," + str(node.tile.y) + " "
 			node = node.next
 		return val
@@ -211,7 +211,7 @@ class Path(object):
 		curPathNode = self.start
 		prevPathTile = None
 		turn = 0
-		while curPathNode != None:
+		while curPathNode is not None:
 			prevTreeNode = curTreeNode
 			curTreeNode = TreeNode(curPathNode.tile, prevPathTile, turn)
 			curTreeNode.children.append(prevTreeNode)
@@ -240,7 +240,7 @@ def PathFromPathNode(pathEnd, path):
 	
 	prev = head
 	node = node.parent
-	while (node.parent != None):
+	while (node.parent is not None):
 		turn += 1
 		prev.next = PathMove(Move(node.tile, node.parent.tile), None, node.parent.value, turn)
 		prev = prev.next

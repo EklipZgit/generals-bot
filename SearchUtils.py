@@ -94,10 +94,10 @@ def dest_breadth_first_target(map, goalList, targetArmy = 1, maxTime = 0.1, maxD
 			if ignoreGoalArmy:
 				# then we have to inversely increment so we dont have to figure that out in the loop every time
 				if searchingPlayer != goal.player:
-					if (negativeTiles == None or goal not in negativeTiles):
+					if (negativeTiles is None or goal not in negativeTiles):
 						 startArmy -= goal.army
 				else:
-					if (negativeTiles == None or goal not in negativeTiles):
+					if (negativeTiles is None or goal not in negativeTiles):
 						 startArmy += goal.army
 
 			startVal = (startDist, 0 - startArmy)
@@ -110,7 +110,7 @@ def dest_breadth_first_target(map, goalList, targetArmy = 1, maxTime = 0.1, maxD
 
 			goalInc = 0
 			startArmy = 0
-			if ignoreGoalArmy and (negativeTiles == None or goal not in negativeTiles):
+			if ignoreGoalArmy and (negativeTiles is None or goal not in negativeTiles):
 				# then we have to inversely increment so we dont have to figure that out in the loop every time
 				if searchingPlayer != goal.player:
 					startArmy = 0 - goal.army
@@ -150,7 +150,7 @@ def dest_breadth_first_target(map, goalList, targetArmy = 1, maxTime = 0.1, maxD
 				goalInc -= 0.5
 			else:
 				goalInc += 0.5
-		if (negativeTiles == None or current not in negativeTiles):
+		if (negativeTiles is None or current not in negativeTiles):
 			if (searchingPlayer == current.player):
 				if (current.isCity and dontEvacCities):								
 					nextArmy += (current.army // 2)
@@ -314,7 +314,7 @@ def a_star_kill(map, startTiles, goal, maxTime = 0.1, maxDepth = 20, restriction
 					
 				#new_cost = cost_so_far[current] + graph.cost(current, next)
 				nextArmy = army - 1
-				if negativeTiles == None or next not in negativeTiles:
+				if negativeTiles is None or next not in negativeTiles:
 					if (startTiles[0].player == next.player):
 						nextArmy += next.army + inc
 					else:
@@ -404,7 +404,7 @@ def breadth_first_dynamic(map, startTiles, goalFunc, maxTime = 0.2, maxDepth = 1
 		if nextTile.player != searchingPlayer and (nextTile.player != -1 or (preferNeutral and nextTile.isCity == False)):
 			negEnemyTileCount -= 1
 			
-		if (negativeTiles == None or next not in negativeTiles):
+		if (negativeTiles is None or next not in negativeTiles):
 			if nextTile.player == searchingPlayer:
 				negArmySum -= nextTile.army
 			else:
@@ -417,7 +417,7 @@ def breadth_first_dynamic(map, startTiles, goalFunc, maxTime = 0.2, maxDepth = 1
 
 	if searchingPlayer == -2:
 		searchingPlayer = map.player_index
-	if (priorityFunc == None):
+	if (priorityFunc is None):
 		priorityFunc = default_priority_func
 	frontier = PriorityQueue()
 	visited = [[{} for x in range(map.rows)] for y in range(map.cols)]
@@ -581,7 +581,7 @@ def greedy_backpack_gather(map, startTiles, turns, targetArmy = None, valueFunc 
 
 
 	logging.info("Trying greedy-bfs-gather. Turns {}. Searching player {}".format(turns, searchingPlayer))
-	if valueFunc == None:
+	if valueFunc is None:
 		logging.info("Using default valueFunc")
 		def default_value_func_max_gathered_per_turn(currentTile, priorityObject):
 			(realDist, negPrioTilesPerTurn, negGatheredSum, negArmySum, negDistanceSum, dist, xSum, ySum, numPrioTiles) = priorityObject
@@ -592,7 +592,7 @@ def greedy_backpack_gather(map, startTiles, turns, targetArmy = None, valueFunc 
 		valueFunc = default_value_func_max_gathered_per_turn
 
 		
-	if priorityFunc == None:
+	if priorityFunc is None:
 		logging.info("Using default priorityFunc")
 		def default_priority_func(nextTile, currentPriorityObject):
 			(realDist, negPrioTilesPerTurn, negGatheredSum, negArmySum, negDistanceSum, dist, xSum, ySum, numPrioTiles) = currentPriorityObject
@@ -622,7 +622,7 @@ def greedy_backpack_gather(map, startTiles, turns, targetArmy = None, valueFunc 
 		priorityFunc = default_priority_func
 		
 
-	if baseCaseFunc == None:
+	if baseCaseFunc is None:
 		logging.info("Using default baseCaseFunc")
 		def default_base_case_func(tile, startingDist):
 			startArmy = 0
@@ -666,7 +666,7 @@ def greedy_backpack_gather(map, startTiles, turns, targetArmy = None, valueFunc 
 						incrementBackward = incrementBackward,
 						preferNeutral = preferNeutral, logResultValues = True)
 	
-	if valuePerTurnPath == None:
+	if valuePerTurnPath is None:
 		logging.info("Yo, no initial valuePerTurnPath??????? :(")
 		return []
 	treeNodeLookup = {}
@@ -742,7 +742,7 @@ def greedy_backpack_gather(map, startTiles, turns, targetArmy = None, valueFunc 
 	
 
 	logging.info("Concluded greedy-bfs-gather built from {} path segments. Duration: {:.3f}".format(itr, time.time() - startTime))
-	rootNodes = list(where(treeNodeLookup.values(), lambda treeNode: treeNode.fromTile == None))
+	rootNodes = list(where(treeNodeLookup.values(), lambda treeNode: treeNode.fromTile is None))
 	for node in rootNodes:
 		recalculate_tree_values(node, negativeTilesOrig, searchingPlayer = searchingPlayer, onlyCalculateFriendlyArmy = False, viewInfo = viewInfo)
 	return rootNodes
@@ -750,7 +750,7 @@ def greedy_backpack_gather(map, startTiles, turns, targetArmy = None, valueFunc 
 def recalculate_tree_values(rootNode, negativeTiles, searchingPlayer, onlyCalculateFriendlyArmy = False, viewInfo = None):
 	logging.info("recalculate_tree_values {}, searchingPlayer {}, onlyCalculateFriendlyArmy {}".format(rootNode.tile.toString(), searchingPlayer, onlyCalculateFriendlyArmy))
 	sum = -1
-	if negativeTiles == None or rootNode.tile not in negativeTiles:
+	if negativeTiles is None or rootNode.tile not in negativeTiles:
 		if rootNode.tile.player == searchingPlayer:
 			sum += rootNode.tile.army
 		elif not onlyCalculateFriendlyArmy:
@@ -780,14 +780,14 @@ def get_tree_move(gathers, priorityFunc, valueFunc):
 		if len(curGather.children) == 0:
 			# WE FOUND OUR FIRST MOVE!
 			thisValue = valueFunc(curGather.tile, curPrio)
-			if curGather.fromTile != None and (highestValue == None or thisValue > highestValue):
+			if curGather.fromTile != None and (highestValue is None or thisValue > highestValue):
 				highestValue = thisValue
 				highestValueMove = Move(curGather.tile, curGather.fromTile)
 				logging.info("new highestValueMove {}!".format(highestValueMove.toString()))
 		for gather in curGather.children:
 			nextPrio = priorityFunc(gather.tile, curPrio)
 			q.put((nextPrio, gather))
-	if highestValueMove == None:
+	if highestValueMove is None:
 		return None
 	logging.info("highestValueMove in get_tree_move was {}!".format(highestValueMove.toString()))
 	return highestValueMove
@@ -842,7 +842,7 @@ def breadth_first_dynamic_max(map, startTiles, valueFunc, maxTime = 0.2, maxDept
 		if nextTile.player != searchingPlayer and (nextTile.player != -1 or (preferNeutral and nextTile.isCity == False)):
 			negEnemyTileCount -= 1
 			
-		if (negativeTiles == None or next not in negativeTiles):
+		if (negativeTiles is None or next not in negativeTiles):
 			if nextTile.player == searchingPlayer:
 				negArmySum -= nextTile.army
 			else:
@@ -886,7 +886,7 @@ def breadth_first_dynamic_max(map, startTiles, valueFunc, maxTime = 0.2, maxDept
 	
 	if searchingPlayer == -2:
 		searchingPlayer = map.player_index
-	if (priorityFunc == None):
+	if (priorityFunc is None):
 		priorityFunc = default_priority_func
 	frontier = PriorityQueue()
 
@@ -961,7 +961,7 @@ def breadth_first_dynamic_max(map, startTiles, valueFunc, maxTime = 0.2, maxDept
 		#		parentString = parent.toString()
 		#	else:
 		#		parentString = "None"
-		if newValue != None and (maxValue == None or newValue > maxValue):
+		if newValue != None and (maxValue is None or newValue > maxValue):
 			foundDist = dist
 			if logResultValues:
 				if parent != None:
@@ -1089,7 +1089,7 @@ def bidirectional_breadth_first_dynamic(map, startTiles, goalFunc, maxTime = 0.2
 		if nextTile.player != searchingPlayer and (nextTile.player != -1 or (preferNeutral and nextTile.isCity == False)):
 			negEnemyTileCount -= 1
 			
-		if (negativeTiles == None or next not in negativeTiles):
+		if (negativeTiles is None or next not in negativeTiles):
 			if nextTile.player == searchingPlayer:
 				negArmySum -= nextTile.army
 			else:
@@ -1102,7 +1102,7 @@ def bidirectional_breadth_first_dynamic(map, startTiles, goalFunc, maxTime = 0.2
 
 	if searchingPlayer == -2:
 		searchingPlayer = map.player_index
-	if (priorityFunc == None):
+	if (priorityFunc is None):
 		priorityFunc = default_priority_func
 	frontier = PriorityQueue()
 	visited = [[{} for x in range(map.rows)] for y in range(map.cols)]
@@ -1289,13 +1289,13 @@ def breadth_first_find_queue(map, startTiles, goalFunc, maxTime = 0.1, maxDepth 
 				inc = 0 if not ((next.isCity and next.player != -1) or next.isGeneral) else dist / 2
 				#new_cost = cost_so_far[current] + graph.cost(current, next)
 				nextArmy = army - 1
-				if (negativeTiles == None or next not in negativeTiles):
+				if (negativeTiles is None or next not in negativeTiles):
 					if (searchingPlayer == next.player):
 						nextArmy += next.army + inc
 					else:
 						nextArmy -= (next.army + inc)
 				newDist = dist + 1
-				if visited[next.x][next.y] == None or visited[next.x][next.y][0] < nextArmy:
+				if visited[next.x][next.y] is None or visited[next.x][next.y][0] < nextArmy:
 					visited[next.x][next.y] = (nextArmy, current)
 				frontier.appendleft((next, newDist, nextArmy, goalInc))
 
@@ -1460,7 +1460,7 @@ def breadth_first_foreach_dist(map, startTiles, maxDepth, foreachFunc, negativeF
 def build_distance_map(map, startTiles, skipTiles = None):
 	distanceMap = new_value_matrix(map, INF)
 	
-	if skipTiles == None:
+	if skipTiles is None:
 		skipTiles = None
 	elif not isinstance(skipTiles, set):
 		newSkipTiles = set()

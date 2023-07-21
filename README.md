@@ -11,11 +11,12 @@ This is EklipZ_ai on the bot server, and Human.exe on the human server.
 
 ## Setup
 
-- [ ] Python3 (https://www.python.org/downloads/)
+- [ ] Python3.11+ (https://www.python.org/downloads/)
 - [ ] Install Dependencies: `pip3 install -r requirements.txt`
 
 ## Usage
-(might need to tweak some hardcoded paths.... This was only ever intended for my use and opensourced later)
+Ref this commit for paths you may need to tweak for your local:
+https://github.com/EklipZgit/generals-bot/commit/76b114c4d6bd551dd273fe9192e82a5690ea260e
 
 Powershell:
 ```Powershell

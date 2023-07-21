@@ -9,7 +9,7 @@ function Run-BotOnce {
         [switch]$right, 
         $privateGame, 
         [switch]$noui,
-        $path = "E:\2019_reformat_Backup\generals-bot\bot_ek0x45.py",
+        $path = "D:\2019_reformat_Backup\generals-bot\bot_ek0x45.py",
         $userID = $null,
 		[switch]$nolog,
 		[switch]$publicLobby
@@ -54,7 +54,7 @@ function Run-BotOnce {
 	`$cleanName = '$name'.Replace('[', '').Replace(']', '')
 	`$logName = "`$cleanName-$game-$df$privateGame"
 	`$logFile = "`$logName.txt"
-	`$logPath = "H:\GeneralsLogs\`$logFile"
+	`$logPath = "D:\GeneralsLogs\`$logFile"
 	if (-not `$$($nolog.ToString()))
 	{
 		Start-Transcript -path "`$logPath"
@@ -98,11 +98,11 @@ function Run-BotOnce {
 			}
 			if (`$repId)
 			{
-				`$folder = Get-ChildItem "H:\GeneralsLogs" -Filter "*`$repId*" -Directory
+				`$folder = Get-ChildItem "D:\GeneralsLogs" -Filter "*`$repId*" -Directory
 				`$newLogPath = Join-Path `$folder.FullName "_`$logFile"
 				`$newContent | Set-Content -Path `$newLogPath -Force
-				`$null = mkdir H:\GeneralsLogs\GroupedLogs -Force
-				`$newFolder = Move-Item `$folder.FullName "H:\GeneralsLogs\GroupedLogs" -PassThru
+				`$null = mkdir D:\GeneralsLogs\GroupedLogs -Force
+				`$newFolder = Move-Item `$folder.FullName "D:\GeneralsLogs\GroupedLogs" -PassThru
 				`$newName = "`$logName---`$repId"
 				Rename-Item `$newFolder.FullName `$newName -PassThru
 				Write-Warning "`$newName"
@@ -113,13 +113,13 @@ function Run-BotOnce {
 		}
     }
     PING 127.0.0.1 -n 1 | out-null
-	Get-ChildItem "H:\GeneralsLogs" | ? { `$_.FullName -notlike '*_chat*' } | ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-30) } | Remove-Item -Force -Recurse -ErrorAction Ignore
-	Get-ChildItem "H:\GeneralsLogs\GroupedLogs" -Directory | ? { `$_.FullName -notlike '*_chat*' } | ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-30) } | Remove-Item -Force -Recurse -ErrorAction Ignore
+	Get-ChildItem "D:\GeneralsLogs" | ? { `$_.FullName -notlike '*_chat*' } | ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-30) } | Remove-Item -Force -Recurse -ErrorAction Ignore
+	Get-ChildItem "D:\GeneralsLogs\GroupedLogs" -Directory | ? { `$_.FullName -notlike '*_chat*' } | ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-30) } | Remove-Item -Force -Recurse -ErrorAction Ignore
 "@
 
 	$randNums = 1..10 | Get-Random -Count 10
 	$randName = $randNums -join ''
-	$ps1File = "E:\2019_reformat_Backup\temp\$randName.ps1"
+	$ps1File = "D:\2019_reformat_Backup\temp\$randName.ps1"
 	$exeString | Out-File $ps1File
 	Write-Verbose $ps1File -Verbose
 	start Powershell "-File $ps1File" -Wait -NoNewWindow
@@ -136,7 +136,7 @@ function Run-SoraAI {
 	{
 		foreach ($g in $game)
 		{
-			run-botonce -game $g -name "[Bot] Sora_ai_ek" -userID "EKSORA" -path "E:\2019_reformat_Backup\Sora_AI\run_bot.py" -nolog
+			run-botonce -game $g -name "[Bot] Sora_ai_ek" -userID "EKSORA" -path "D:\2019_reformat_Backup\Sora_AI\run_bot.py" -nolog
 		}
 	}
 }
@@ -150,7 +150,7 @@ function Run-Blob {
 	{
 		foreach ($g in $game)
 		{
-			run-botonce -game $g -name "PurdBlob" -path "E:\2019_reformat_Backup\Users\EklipZ-2\Documents\GitHub\generals-bot\bot_blob.py" -nolog -noui
+			run-botonce -game $g -name "PurdBlob" -path "D:\2019_reformat_Backup\Users\EklipZ-2\Documents\GitHub\generals-bot\bot_blob.py" -nolog -noui
 		}
 	}
 }
@@ -165,7 +165,7 @@ function Run-Path {
 	{
 		foreach ($g in $game)
 		{
-			run-botonce -game $g -name "PurdPath" -path "E:\2019_reformat_Backup\Users\EklipZ-2\Documents\GitHub\generals-bot\bot_path_collect.py" -nolog -noui
+			run-botonce -game $g -name "PurdPath" -path "D:\2019_reformat_Backup\Users\EklipZ-2\Documents\GitHub\generals-bot\bot_path_collect.py" -nolog -noui
 		}
 	}
 }
@@ -182,7 +182,7 @@ function Run-Bot {
         [switch]$right, 
         $privateGame, 
         [switch]$noui,
-		$path = "E:\2019_reformat_Backup\generals-bot\bot_ek0x45.py",
+		$path = "D:\2019_reformat_Backup\generals-bot\bot_ek0x45.py",
 		[switch]$nolog,
 		[switch]$publicLobby
     )
@@ -216,7 +216,7 @@ function Run-BotCheckpoint {
     if (-not $nocopy)
     {
 		$date = Get-Date -Format 'yyyy-MM-dd'
-		Create-Checkpoint -backup "E:\2019_reformat_Backup\generals-bot-historical\generals-bot-$date"
+		Create-Checkpoint -backup "D:\2019_reformat_Backup\generals-bot-historical\generals-bot-$date"
     }
     while($true)
     {
@@ -224,7 +224,7 @@ function Run-BotCheckpoint {
         {
             write-verbose $g -verbose
             $psboundparameters['game'] = $g
-            Run-BotOnce @psboundparameters -path "E:\2019_reformat_Backup\generals-bot-checkpoint\bot_ek0x45.py"
+            Run-BotOnce @psboundparameters -path "D:\2019_reformat_Backup\generals-bot-checkpoint\bot_ek0x45.py"
         }
     }
 }
@@ -232,9 +232,9 @@ function Run-BotCheckpoint {
 
 function Create-Checkpoint {
 	Param(
-		$source = 'E:\2019_reformat_Backup\generals-bot\',
-		$dest = 'E:\2019_reformat_Backup\generals-bot-checkpoint\',
-		$backup = "E:\2019_reformat_Backup\generals-bot-historical\generals-bot-$(Get-Date -Format 'yyyy-MM-dd')"
+		$source = 'D:\2019_reformat_Backup\generals-bot\',
+		$dest = 'D:\2019_reformat_Backup\generals-bot-checkpoint\',
+		$backup = "D:\2019_reformat_Backup\generals-bot-historical\generals-bot-$(Get-Date -Format 'yyyy-MM-dd')"
 	)
 	if ($backup)
 	{

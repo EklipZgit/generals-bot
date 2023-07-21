@@ -356,9 +356,9 @@ class EklipZBot(object):
 			self.ReplayId = self._bot._game._start_data['replay_id']
 			self.loggingSetUp = True
 			print("replay " + self.ReplayId)
-			file = 'H:\\GeneralsLogs\\' + self.ReplayId + '.log'
+			file = 'D:\\GeneralsLogs\\' + self.ReplayId + '.log'
 			print("file: " + file)
-			logging.basicConfig(format='%(levelname)s:%(message)s', filename="H:\\GeneralsLogs\\test.txt", level=logging.DEBUG)
+			logging.basicConfig(format='%(levelname)s:%(message)s', filename="D:\\GeneralsLogs\\test.txt", level=logging.DEBUG)
 			self._map.ekBot = self
 			self._map.notify_city_found.append(self.handle_city_found)
 			self._map.notify_tile_captures.append(self.handle_tile_captures)

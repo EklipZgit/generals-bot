@@ -15,7 +15,7 @@ from websocket import create_connection, WebSocketConnectionClosedException
 from . import map
 
 _ENDPOINT = "ws://botws.generals.io/socket.io/?EIO=3&transport=websocket"
-_ENDPOINT_PUBLIC = "ws://ws.generals.io/socket.io/?EIO=3&transport=websocket"
+_ENDPOINT_PUBLIC = "ws://ws.generals.io/socket.io/?EIO=3&transport=websocket&sid=I9mT1zlQGIXA3N7JAGfN"
 
 _LOG_WS = False
 # _BOT_KEY = None
@@ -161,12 +161,12 @@ class Generals(object):
 				print("logging????")
 				# for handler in logging.root.handlers[:]:
 				#     logging.root.removeHandler(handler)
-				# logging.basicConfig(format='%(levelname)s:%(message)s', filename='H:\\GeneralsLogs\\' + self._start_data['replay_id'] + '.log', level=logging.DEBUG)
-				self.logFile = "H:\\GeneralsLogs\\" + self.username + "-" + self.mode + "-" + self._start_data['replay_id'] + ".txt" 
-				self.chatLogFile = "H:\\GeneralsLogs\\_chat\\" + self.username + "-" + self.mode + "-" + self._start_data['replay_id'] + ".txt" 
+				# logging.basicConfig(format='%(levelname)s:%(message)s', filename='D:\\GeneralsLogs\\' + self._start_data['replay_id'] + '.log', level=logging.DEBUG)
+				self.logFile = "D:\\GeneralsLogs\\" + self.username + "-" + self.mode + "-" + self._start_data['replay_id'] + ".txt" 
+				self.chatLogFile = "D:\\GeneralsLogs\\_chat\\" + self.username + "-" + self.mode + "-" + self._start_data['replay_id'] + ".txt" 
 				
 				_spawn(self._delayed_chat_thread)
-				os.makedirs("H:\\GeneralsLogs\\_chat", exist_ok=True)
+				os.makedirs("D:\\GeneralsLogs\\_chat", exist_ok=True)
 				if _LOG_WS:
 					try:
 						with open(self.logFile, "a+") as myfile:

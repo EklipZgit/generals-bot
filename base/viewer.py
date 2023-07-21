@@ -147,7 +147,7 @@ class GeneralsViewer(object):
 		fileSafeUserName = fileSafeUserName.replace("[Bot] ", "")
 		fileSafeUserName = fileSafeUserName.replace("[Bot]", "")
 		#logging.info("\n\n\nFILE SAFE USERNAME\n {}\n\n".format(fileSafeUserName))
-		self.logDirectory = "H:\\GeneralsLogs\\{}-{}".format(fileSafeUserName, self.repId)
+		self.logDirectory = "D:\\GeneralsLogs\\{}-{}".format(fileSafeUserName, self.repId)
 		if not os.path.exists(self.logDirectory):
 			try:
 				os.makedirs(self.logDirectory)

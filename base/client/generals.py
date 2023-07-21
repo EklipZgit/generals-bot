@@ -71,6 +71,8 @@ class Generals(object):
 
         self._send(["set_username", userid, username, self.bot_key])
 
+        self._send(["token", userid, "0.nPYb3-b6tCbTxdOzv6R6GXtXGxrc0nleDhsBuoiVXwNf3ZL5FCRRJrxaonexJUbvBkjPThjs2idOqyhHdsOUJj2cwQwzEJbu9ddpw5P761dZja0-ZkASCmyrII2EIHmgDWIxU_D0bGrJO6uOixWt9d2yZwcfA1cVWDYxP_nK7QQxrbvMpUXLWh4so_SQEOeqW3bXw9vIszikWXYrJLBNzpnSi1bKeUu0Skm0NcFWX_2BO_pCX9gGHPqN4d07Yj3ZrnJugSWG2vOR8WfsKthjd0uqgbi1Y3I7dYqhSUAZQZ9f1ZsqxyJ2Stv5cf--slw-DIN0-GqoTlwCJLxFiuQ0cvyeMFu8Vdnxf1FteAcVnfK5F1FGfl3fHjm-0dxQ08nnX1nXAbdThrKRRLBLNUz3sl3z5HqDkMOzGCtZwYGD4HM.Auq4pgagKfvUlSlIZ5FJ5Q.ec1ea2309c9506edb7800d2e052ee12183c32396d1b7cf316f2ae2c4245971da", self.bot_key])
+
         if (username == None):
             raise ValueError("username empty")
         if (userid == None):
@@ -132,7 +134,7 @@ class Generals(object):
             try:
                 logging.info("pre ws recv")
                 msg = self._ws.recv()
-                logging.info("post ws recv: " + msg)
+                logging.info("post ws recv: " + json.dumps(msg))
                 self.lastCommunicationTime = time.time()
             except WebSocketConnectionClosedException as ex:
                 logging.info("socket closed")
@@ -145,12 +147,12 @@ class Generals(object):
                 raise
 
             if not msg.strip():
-                logging.info("not msg strip: " + msg)
+                logging.info("not msg strip: " + json.dumps(msg))
                 continue
 
             # ignore heartbeats and connection acks
             if msg in {"3", "40"}:
-                logging.info("3 and 40 ignored")
+                logging.info("3 and 40 ignored, " + json.dumps(msg))
                 continue
 
             # remove numeric prefix
@@ -165,6 +167,7 @@ class Generals(object):
                 logging.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
 
             if not isinstance(msg, list):
+                logging.info("msg was not list, " + json.dumps(msg))
                 continue
 
             if msg[0] == "game_start":

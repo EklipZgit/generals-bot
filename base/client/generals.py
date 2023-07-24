@@ -2,12 +2,15 @@
 	Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
 	Client Adopted from @toshima Generals Python Client - https://github.com/toshima/generalsio
 '''
+import certifi
 import os, errno
 import random
 import sys
 import traceback
 import logging
 import json
+import requests
+import ssl
 import threading
 import time
 from websocket import create_connection, WebSocketConnectionClosedException
@@ -17,8 +20,8 @@ from . import map
 #
 # _ENDPOINT = "wss://botws.generals.io/socket.io/?EIO=4&transport=websocket&sid=stybCDIvqMvCS5d0AA4M"
 # _ENDPOINT_PUBLIC = "wss://ws.generals.io/socket.io/?EIO=4&transport=websocket&sid=09hljVI-FBnaxaeQBTTd"
-_ENDPOINT = "wss://botws.generals.io/socket.io/?EIO=4&transport=websocket"
-_ENDPOINT_PUBLIC = "wss://ws.generals.io/socket.io/?EIO=4&transport=websocket"
+_ENDPOINT_BOT = "://botws.generals.io/socket.io/?EIO=4"
+_ENDPOINT_PUBLIC = "://ws.generals.io/socket.io/?EIO=4"
 
 _LOG_WS = False
 
@@ -30,24 +33,6 @@ _LOG_WS = False
 class Generals(object):
     def __init__(self, userid, username, mode="1v1", gameid=None,
                  force_start=False, public_server=False):
-        self.bot_key = "sd09fjd203i0ejwi"
-        self._lock = threading.RLock()
-        self.lastCommunicationTime = time.time()
-        # clearly, I do not condone racist / sexist words or mean comments. The bot does not say any of these.
-        # These are used to trigger a passive aggressive response from the bot to players who call it names etc,
-        # which unfortunately is all too common on these game servers.
-        # Just making that clear since this is on my github...
-        self.cursewords = {'pussy', 'fuck', 'fk ', ' fk', 'cunt', 'bitch', 'ass', 'of shit', 'dick', 'cock',
-                           'kill yourself', ' kys', 'kys ', ' fag', 'fag ', 'faggot', 'stupid'}
-        _spawn(self._start_killswitch_timer)
-        logging.debug("Creating connection")
-        # try:
-        self._ws = create_connection(_ENDPOINT if not public_server else _ENDPOINT_PUBLIC)
-
-        # except:
-        # 	#self._ws = create_connection(_ENDPOINT if not public_server else _ENDPOINT_PUBLIC)
-        # 	pass
-        logging.debug("Connection created.")
         self._gameid = None
         self.isPrivate = False
         self.lastChatCommand = ""
@@ -61,21 +46,55 @@ class Generals(object):
         self.already_good_lucked = False
         self.chatQueued = []
         self.result = False
+        self._gio_session_id = None
+        self.public_server = public_server
+
+        self.bot_key = "sd09fjd203i0ejwi"
+        self._lock = threading.RLock()
+        self.lastCommunicationTime = time.time()
+        # clearly, I do not condone racist / sexist words or mean comments. The bot does not say any of these.
+        # These are used to trigger a passive aggressive response from the bot to players who call it names etc,
+        # which unfortunately is all too common on these game servers.
+        # Just making that clear since this is on my github...
+        self.cursewords = {'pussy', 'fuck', 'fk ', ' fk', 'cunt', 'bitch', 'ass', 'of shit', 'dick', 'cock',
+                           'kill yourself', ' kys', 'kys ', ' fag', 'fag ', 'faggot', 'stupid'}
+        _spawn(self._start_killswitch_timer)
+        logging.debug("Creating connection")
+
+        endpoint = self.get_endpoint_ws() + "&sid=" + self.get_sid()
+
+        # try:
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+        ssl_context.load_verify_locations(certifi.where())
+
+        self._ws = create_connection(endpoint, sslopt={"cert_reqs": ssl.CERT_NONE})
+
+        self._ws.send("2probe")
+        self._ws.send("5")
+
+        _spawn(self._start_sending_heartbeat)
+
+        # except:
+        # 	#self._ws = create_connection(_ENDPOINT if not public_server else _ENDPOINT_PUBLIC)
+        # 	pass
+        logging.debug("Connection created.")
 
         if not public_server and "[Bot]" not in username:
             username = "[Bot] " + username
         if not public_server:
             self.bot_key = None
 
-        self._send(["stars_and_rank", userid, self.bot_key])
+        # self._send(["stars_and_rank", userid, self.bot_key])
 
-        self._send(["set_username", userid, username, self.bot_key])
+        # self._send(["set_username", userid, username, self.bot_key])
 
-        self._send(["token", userid, "0.nPYb3-b6tCbTxdOzv6R6GXtXGxrc0nleDhsBuoiVXwNf3ZL5FCRRJrxaonexJUbvBkjPThjs2idOqyhHdsOUJj2cwQwzEJbu9ddpw5P761dZja0-ZkASCmyrII2EIHmgDWIxU_D0bGrJO6uOixWt9d2yZwcfA1cVWDYxP_nK7QQxrbvMpUXLWh4so_SQEOeqW3bXw9vIszikWXYrJLBNzpnSi1bKeUu0Skm0NcFWX_2BO_pCX9gGHPqN4d07Yj3ZrnJugSWG2vOR8WfsKthjd0uqgbi1Y3I7dYqhSUAZQZ9f1ZsqxyJ2Stv5cf--slw-DIN0-GqoTlwCJLxFiuQ0cvyeMFu8Vdnxf1FteAcVnfK5F1FGfl3fHjm-0dxQ08nnX1nXAbdThrKRRLBLNUz3sl3z5HqDkMOzGCtZwYGD4HM.Auq4pgagKfvUlSlIZ5FJ5Q.ec1ea2309c9506edb7800d2e052ee12183c32396d1b7cf316f2ae2c4245971da", self.bot_key])
+        # self._send(["token", userid,
+        #             "0.nPYb3-b6tCbTxdOzv6R6GXtXGxrc0nleDhsBuoiVXwNf3ZL5FCRRJrxaonexJUbvBkjPThjs2idOqyhHdsOUJj2cwQwzEJbu9ddpw5P761dZja0-ZkASCmyrII2EIHmgDWIxU_D0bGrJO6uOixWt9d2yZwcfA1cVWDYxP_nK7QQxrbvMpUXLWh4so_SQEOeqW3bXw9vIszikWXYrJLBNzpnSi1bKeUu0Skm0NcFWX_2BO_pCX9gGHPqN4d07Yj3ZrnJugSWG2vOR8WfsKthjd0uqgbi1Y3I7dYqhSUAZQZ9f1ZsqxyJ2Stv5cf--slw-DIN0-GqoTlwCJLxFiuQ0cvyeMFu8Vdnxf1FteAcVnfK5F1FGfl3fHjm-0dxQ08nnX1nXAbdThrKRRLBLNUz3sl3z5HqDkMOzGCtZwYGD4HM.Auq4pgagKfvUlSlIZ5FJ5Q.ec1ea2309c9506edb7800d2e052ee12183c32396d1b7cf316f2ae2c4245971da",
+        #             self.bot_key])
 
-        if (username == None):
+        if username is None:
             raise ValueError("username empty")
-        if (userid == None):
+        if userid is None:
             raise ValueError("userid empty")
         logging.debug("Joining game, userid: " + userid)
 
@@ -99,16 +118,40 @@ class Generals(object):
         else:
             raise ValueError("Invalid mode")
 
-        if (force_start):
+        if force_start:
             _spawn(self._send_forcestart)
         logging.debug("Starting heartbeat thread")
-        _spawn(self._start_sending_heartbeat)
 
         self._seen_update = False
         self._move_id = 1
         self._stars = []
         self._map = []
         self._cities = []
+
+    def get_endpoint_ws(self):
+        return "wss" + (_ENDPOINT_BOT if not self.public_server else _ENDPOINT_PUBLIC) + "&transport=websocket"
+
+    def get_endpoint_requests(self):
+        return "https" + (_ENDPOINT_BOT if not self.public_server else _ENDPOINT_PUBLIC) + "&transport=polling"
+
+    def get_sid(self):
+        request = requests.get(self.get_endpoint_requests() + "&t=ObyKmaZ")
+        result = request.text
+        while result and result[0].isdigit():
+            result = result[1:]
+
+        msg = json.loads(result)
+        sid = msg["sid"]
+        self._gio_session_id = sid
+        _spawn(self.verify_sid)
+        return sid
+
+    def verify_sid(self):
+        sid = self._gio_session_id
+        checkOne = requests.post(self.get_endpoint_requests() + "&t=ObyKmbC&sid=" + sid, data="40")
+
+    # checkTwo = requests.get(self._endpointRequests() + "&t=ObyKmbC.0&sid=" + sid)
+    # logging.debug("Check two: %s" % checkTwo.text)
 
     def send_chat(self, msg):
         if not self._seen_update:
@@ -151,13 +194,16 @@ class Generals(object):
                 continue
 
             # ignore heartbeats and connection acks
-            if msg in {"3", "40"}:
-                logging.info("3 and 40 ignored, " + json.dumps(msg))
+            if msg in {"2", "3", "40"}:
+                logging.info("2, 3 and 40 ignored, " + json.dumps(msg))
                 continue
 
             # remove numeric prefix
             while msg and msg[0].isdigit():
                 msg = msg[1:]
+
+            if msg == "probe":
+                continue
 
             try:
                 msg = json.loads(msg)
@@ -207,8 +253,8 @@ class Generals(object):
                     if name == "jkhvgulyft":
                         for i in range(12):
                             self.send_chat("jkhvgulyft doesn't deserve a voice")
-                    elif ("human" in message.lower() or " bot" in message.lower()):
-                        if (message.lower().find("kill human") != -1):
+                    elif "human" in message.lower() or " bot" in message.lower():
+                        if message.lower().find("kill human") != -1:
                             if self._map.turn < 50:
                                 self.chatQueued.append(
                                     "Teaming at game start is against the rules. This has been logged. My dad works at microsoft ur gonna get banned.")
@@ -229,14 +275,14 @@ class Generals(object):
                         if swore:
                             self.chatQueued.append(
                                 "are you mad because you are struggling against a bot, or because you're going through your tough teenage years? Maybe try yoga or meditation bud")
-                    elif (message.lower().startswith("gg")):
+                    elif message.lower().startswith("gg"):
                         self.send_chat("Good game!")
-                    elif ("source" in message.lower()):
+                    elif "source" in message.lower():
                         self.send_chat(
                             "You can find my source code at https://github.com/EklipZgit/generals-bot. I didn't say it was pretty")
                     elif ((message.lower().startswith("glhf") or message.lower().startswith(
                             "gl ") or message.lower() == "gl") and (
-                                  self.bot_key == None or not self.already_good_lucked or "eklipz" in name.lower())):
+                                  self.bot_key is None or not self.already_good_lucked or "eklipz" in name.lower())):
                         responses = ["Good luck to you too!",
                                      "There's no RNG in this game, why would I need luck?",
                                      "What is luck?",
@@ -314,14 +360,14 @@ class Generals(object):
                             logging.info(
                                 "!!!!!!!!!!\n!!!!!!!!!!!!!\n!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!\ncouldn't write chat message to file")
 
-                    if (chat_msg["text"].startswith("-")):
+                    if chat_msg["text"].startswith("-"):
                         self.lastChatCommand = chat_msg["text"]
-                elif (" captured " in chat_msg["text"]):
+                elif " captured " in chat_msg["text"]:
                     self._map.handle_player_capture(chat_msg["text"])
                 else:
                     logging.info("Message: %s" % chat_msg["text"])
                     if self.writingFile or (
-                            not self.chatLogFile == None and not " surrendered" in chat_msg["text"] and not " left" in
+                            not self.chatLogFile is None and not " surrendered" in chat_msg["text"] and not " left" in
                                                                                                             chat_msg[
                                                                                                                 "text"] and not " quit" in
                                                                                                                                 chat_msg[
@@ -361,7 +407,7 @@ class Generals(object):
         with self._lock:
             self._ws.close()
         if _LOG_WS:
-            if (self.logFile == None):
+            if self.logFile is None:
                 self.earlyLogs.append("\nClosed WebSocket")
             else:
                 with open(self.logFile, "a+") as myfile:
@@ -402,7 +448,7 @@ class Generals(object):
     def _send_forcestart(self):
         time.sleep(3)
         while 'replay_id' not in self._start_data:
-            if (self._gameid != None):
+            if self._gameid is not None:
                 # map size
                 # options = {
                 #	"width": "0.99",
@@ -425,16 +471,16 @@ class Generals(object):
         while True:
             try:
                 with self._lock:
-                    self._ws.send("2")
+                    self._ws.send("3")
                 if _LOG_WS:
-                    if (self.logFile == None):
+                    if self.logFile is None:
                         self.earlyLogs.append("\n2")
                     else:
                         with open(self.logFile, "a+") as myfile:
                             myfile.write("\n2")
             except WebSocketConnectionClosedException:
                 break
-            time.sleep(10)
+            time.sleep(19)
 
     def _delayed_chat_thread(self):
         while True:
@@ -448,9 +494,10 @@ class Generals(object):
         try:
             toSend = "42" + json.dumps(msg)
             with self._lock:
+                logging.info('sending: ' + toSend)
                 self._ws.send(toSend)
             if _LOG_WS:
-                if (self.logFile == None):
+                if self.logFile is None:
                     self.earlyLogs.append("\n" + toSend)
                 else:
                     with open(self.logFile, "a+") as myfile:

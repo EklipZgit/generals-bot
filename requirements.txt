@@ -1,2 +1,4 @@
 websocket-client
 pygame
+certifi
+requests

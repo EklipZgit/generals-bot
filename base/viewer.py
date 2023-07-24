@@ -160,8 +160,8 @@ class GeneralsViewer(object):
 	def mainViewerLoop(self, alignTop = True, alignLeft = True):
 		while not self._receivedUpdate: # Wait for first update
 			time.sleep(0.2)
-		x = 3 if alignLeft else 1920 - 3 - (CELL_WIDTH + CELL_MARGIN) * self._map.cols 
-		y = 3 if alignTop else 1080 - 3 - (CELL_HEIGHT + CELL_MARGIN) * self._map.rows
+		x = 3 if alignLeft else 1920 - 3 - (CELL_WIDTH + CELL_MARGIN) * self._map.cols
+		y = 3 - 1080 if alignTop else 3 - (CELL_HEIGHT + CELL_MARGIN) * self._map.rows - 1080
 		self._initViewier((x, y))
 
 		done = False

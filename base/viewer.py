@@ -32,6 +32,10 @@ P_DARK_GREEN = (5,75,45)
 P_DARK_RED = (100,5,35)
 P_YELLOW = (170,140,20)
 P_BRIGHT_GREEN = (10,20,10)
+
+CHOKE_PURPLE = (-1,-1,-1)
+
+
 #P_BRIGHT_GREEN = (10,225,90)
 PLAYER_COLORS = [P_RED, P_BLUE, P_GREEN, P_PURPLE, P_TEAL, P_DARK_GREEN, P_YELLOW, P_DARK_RED, P_BRIGHT_GREEN]
 FOG_COLOR_OFFSET = 25
@@ -43,19 +47,68 @@ LEFT_ARROW = "<"
 RIGHT_ARROW = ">"
 
 # Table Properies
-CELL_WIDTH = 33
-CELL_HEIGHT = 33
+CELL_WIDTH = 35
+CELL_HEIGHT = 35
 CELL_MARGIN = 1
-SCORES_ROW_HEIGHT = 33
-INFO_ROW_HEIGHT = 35
+SCORES_ROW_HEIGHT = CELL_HEIGHT + 3
+
+INFO_ROW_HEIGHT = 110
+INFO_LINE_HEIGHT = 17
+INFO_SPACING_FROM_LEFT = 180
+
 PLUS_DEPTH = 9
+OFFSET_1080_ABOVE_1440p_MONITOR = 276  # 320 was too far right...?
 SQUARE = Rect(0, 0, CELL_WIDTH, CELL_HEIGHT)
 SQUARE_1 = Rect(1, 1, CELL_WIDTH - 2, CELL_HEIGHT - 2)
 SQUARE_2 = Rect(2, 2, CELL_WIDTH - 4, CELL_HEIGHT - 4)
 SQUARE_SMALLER_INNER = Rect(0, 0, CELL_WIDTH - 1, CELL_HEIGHT - 1)
 
+FORCE_NO_UI = False
+
+"""
+LEGEND
+Player information card readout:
+{Name} ([Stars])
+{Army} on {TileCount} ({CityCount}) [{TargetPriority*}]
+
+	*Target Priority is used to select which player to consider the current main opponent during an FFA
+	
+Information area:
+Top line
+	-> The THING the bot is currently doing, basically the evaluation that led to a move selection.
+Timings: C {CycleInterval} Q {QuickExpandTurns} G {Gather/AttackSplitTurn} L {LaunchTiming} Off {Offset} ({CurrentCycleTurn})
+
+black arrows 
+	-> intended gather lines
+red arrows 
+	-> considered gather lines that were trimmed
+green chevrons
+	-> the AI's current army movement path (used when launching timing attacks or attacks against cities etc).
+yellow chevrons
+	-> indicate a calculated kill-path against an enemy general that was found during other operations and took priority.
+pink chevrons 
+	-> intended tile-expansion path
+blue chevrons 
+	-> intended general hunt heuristic exploration path
+red chevrons 
+	-> enemy threat path against general
+little colored square in tile top right 
+	-> AI evaluates that this tile is probably enemy territory. Uses knowledge that it has about historical empty tiles
+		to eliminate tiles bridged by current-or-previous neutral tiles. This is used when predicting enemy general location
+		based on armies appearing from fog of war.
+red Xs 
+	-> tiles evaluated in a specific search that happened that turn. The more often a tile is evaluated, the darker the red X.
+little green lines between tiles 
+	->
+purple outline inside tiles
+	-> Indicates this tile is calculated to be a 'choke' tile on the set of tiles in the shortest path between generals.
+		This means that an attacking army from the enemy general must cross this tile, or take a less optimal path at least
+		two tiles longer. This lets the AI optimize defense 1-2 turns later than it would otherwise need to 
+		when attempting to intercept attacks.
 
 
+
+"""
 
 class DirectionalShape(object):
 	def __init__(self, downShape):
@@ -123,9 +176,7 @@ class GeneralsViewer(object):
 		self._screen = pygame.display.set_mode(self._window_size)
 		self._transparent = pygame.Surface(self._window_size, pygame.SRCALPHA)
 
-		window_title = "Generals IO Bot"
-		if (self._name != None):
-			window_title += " - " + str(self._name)
+		window_title = str(self._name)
 		pygame.display.set_caption(window_title)
 		self._font = pygame.font.SysFont('Arial', int(CELL_HEIGHT // 2) - 2)
 		self._fontSmall = pygame.font.SysFont('Arial', min(9, int(CELL_HEIGHT // 3)))
@@ -155,13 +206,18 @@ class GeneralsViewer(object):
 				logging.info("Couldn't create dir")
 		_spawn(self.save_images)
 
-
-
 	def mainViewerLoop(self, alignTop = True, alignLeft = True):
 		while not self._receivedUpdate: # Wait for first update
 			time.sleep(0.2)
-		x = 3 if alignLeft else 1920 - 3 - (CELL_WIDTH + CELL_MARGIN) * self._map.cols
-		y = 3 - 1080 if alignTop else 3 - (CELL_HEIGHT + CELL_MARGIN) * self._map.rows - 1080
+
+		x = 3 + OFFSET_1080_ABOVE_1440p_MONITOR
+		if not alignLeft:
+			x = OFFSET_1080_ABOVE_1440p_MONITOR + 1920 - 3 - (CELL_WIDTH + CELL_MARGIN) * self._map.cols
+
+		y = 3 - 1080
+		if not alignTop:
+			y = 3 - (CELL_HEIGHT + CELL_MARGIN) * self._map.rows - 1080
+
 		self._initViewier((x, y))
 
 		done = False
@@ -182,7 +238,6 @@ class GeneralsViewer(object):
 					
 					print("Click ", pos, "Grid coordinates: ", row, column)
 
-
 			time.sleep(0.05)
 		time.sleep(2.0)
 		pygame.quit() # Done.  Quit pygame.
@@ -197,15 +252,35 @@ class GeneralsViewer(object):
 
 			# Draw Bottom Info Text
 			self._screen.blit(self._fontLrg.render("Turn: {}, ({})".format(self._map.turn, ("%.2f" % self._map.ekBot.viewInfo.lastMoveDuration).lstrip('0')), True, WHITE), (10, self._window_size[1] - INFO_ROW_HEIGHT + 4))
-			self._screen.blit(self._font.render(self._map.ekBot.viewInfo.infoText, True, WHITE), (170, self._window_size[1] - INFO_ROW_HEIGHT))
+			curInfoTextHeight = 0
+			self._screen.blit(self._font.render(self._map.ekBot.viewInfo.infoText, True, WHITE), (INFO_SPACING_FROM_LEFT, self._window_size[1] - INFO_ROW_HEIGHT))
+			curInfoTextHeight += INFO_LINE_HEIGHT
 			if self._map.ekBot.timings:
 				timings = self._map.ekBot.timings
-				self._screen.blit(self._font.render("Timings: {} ({})   - {}{}       {}".format(timings.toString(), (self._map.turn + timings.offsetTurns) % timings.cycleTurns, allInText, self._map.ekBot.all_in_counter, self._map.ekBot.viewInfo.addlTimingsLineText), True, WHITE), (170, self._window_size[1] - INFO_ROW_HEIGHT + 15))
-		
+				timingTurn = (self._map.turn + timings.offsetTurns) % timings.cycleTurns
+				self._screen.blit(
+					self._font.render(
+						"Timings: {} ({})   - {}{}       {}".format(
+							timings.toString(), timingTurn, allInText, self._map.ekBot.all_in_counter, self._map.ekBot.viewInfo.addlTimingsLineText),
+						True,
+						WHITE),
+					(INFO_SPACING_FROM_LEFT, self._window_size[1] - INFO_ROW_HEIGHT + curInfoTextHeight))
+				curInfoTextHeight += INFO_LINE_HEIGHT
+
+			for addlInfo in self._map.ekBot.viewInfo.addlInfoLines:
+				self._screen.blit(
+					self._font.render(
+						addlInfo,
+						True,
+						WHITE),
+					(INFO_SPACING_FROM_LEFT, self._window_size[1] - INFO_ROW_HEIGHT + curInfoTextHeight))
+				curInfoTextHeight += INFO_LINE_HEIGHT
+
+
 			# Draw Scores
 			pos_top = self._window_size[1] - INFO_ROW_HEIGHT - SCORES_ROW_HEIGHT
 			score_width = self._window_size[0] / len(self._map.players)
-			      #self._scores = sorted(update.scores, key=lambda general: general['total'], reverse=True)
+			#self._scores = sorted(update.scores, key=lambda general: general['total'], reverse=True)
 			if (self._map != None):				
 				playersByScore = sorted(self._map.players, key=lambda player: player.score, reverse=True) # Sort Scores
 				
@@ -647,14 +722,14 @@ class GeneralsViewer(object):
 					# Poiple
 					self.draw_square(choke, 2, R, G, B, 230, SQUARE_SMALLER_INNER)
 					
-			#for tile in self._map.reachableTiles:
-			#	if self._map.ekBot.board_analysis.innerChokes[tile.x][tile.y]:
-			#		# Dark green?
-			#		self.draw_square(tile, 1, 30, 97, 10, 255, SQUARE_1)
+			for tile in self._map.reachableTiles:
+				if self._map.ekBot.board_analysis.innerChokes[tile.x][tile.y]:
+					# Dark green?
+					self.draw_square(tile, 1, 30, 97, 10, 255, SQUARE_1)
 
-			#	if self._map.ekBot.board_analysis.outerChokes[tile.x][tile.y]:
-			#		# Dark yella
-			#		self.draw_square(tile, 1, 135, 131, 0, 240, SQUARE_2)
+				if self._map.ekBot.board_analysis.outerChokes[tile.x][tile.y]:
+					# Dark yella
+					self.draw_square(tile, 1, 135, 131, 0, 240, SQUARE_2)
 	
 	def draw_path(self, pathObject, R, G, B, alphaStart, alphaDec, alphaMin):
 		if pathObject == None:

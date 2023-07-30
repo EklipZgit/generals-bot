@@ -6,6 +6,7 @@
 '''
 
 import logging
+import typing
 from copy import deepcopy
 import time
 import json
@@ -1457,7 +1458,7 @@ def breadth_first_foreach_dist(map, startTiles, maxDepth, foreachFunc, negativeF
 
 
 
-def build_distance_map(map, startTiles, skipTiles = None):
+def build_distance_map(map, startTiles, skipTiles = None) -> typing.List[typing.List[int]]:
 	distanceMap = new_value_matrix(map, INF)
 	
 	if skipTiles is None:

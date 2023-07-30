@@ -5,6 +5,16 @@ Keywords to be familiar with:
 Standing Army - A players army - their tile count. This is the maximum amount of army they could possibly attack or defend with, since they must leave 1 army on each tile they own.
 
 
+Priority order of precedence
+    Defence
+    City contestation
+    maintaining defensive minimum spanning tree smaller than path to enemy fog (or closest enemy army)
+    army contesting (do not let enemy armies onto our territory freely)
+    vision contesting
+    taking cities
+
+
+
 
 Things that are inherently BAD and assumptions are made below to assume you are avoiding them:
 	Engaging multiple players at the same time in FFA.

@@ -1,12 +1,12 @@
 '''
-	Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
-	Client Adopted from @toshima Generals Python Client - https://github.com/toshima/generalsio
+    Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
+    Client Adopted from @toshima Generals Python Client - https://github.com/toshima/generalsio
 '''
-import certifi
 import os, errno
 import random
 import sys
 import traceback
+import certifi
 import logging
 import json
 import requests
@@ -17,9 +17,6 @@ from websocket import create_connection, WebSocketConnectionClosedException
 
 from . import map
 
-#
-# _ENDPOINT = "wss://botws.generals.io/socket.io/?EIO=4&transport=websocket&sid=stybCDIvqMvCS5d0AA4M"
-# _ENDPOINT_PUBLIC = "wss://ws.generals.io/socket.io/?EIO=4&transport=websocket&sid=09hljVI-FBnaxaeQBTTd"
 _ENDPOINT_BOT = "://botws.generals.io/socket.io/?EIO=4"
 _ENDPOINT_PUBLIC = "://ws.generals.io/socket.io/?EIO=4"
 
@@ -33,13 +30,20 @@ _LOG_WS = False
 class Generals(object):
     def __init__(self, userid, username, mode="1v1", gameid=None,
                  force_start=False, public_server=False):
+        if username is None:
+            raise ValueError("username empty")
+        if userid is None:
+            raise ValueError("userid empty")
+
         self._gameid = None
+        self.userid = userid
         self.isPrivate = False
         self.lastChatCommand = ""
         self.earlyLogs = []
         self.logFile = None
         self.chatLogFile = None
         self.username = username
+        self.server_username = username
         self.mode = mode
         self.writingFile = False
         self._start_data = {}
@@ -48,10 +52,10 @@ class Generals(object):
         self.result = False
         self._gio_session_id = None
         self.public_server = public_server
+        self.lastCommunicationTime = time.time()
 
         self.bot_key = "sd09fjd203i0ejwi"
         self._lock = threading.RLock()
-        self.lastCommunicationTime = time.time()
         # clearly, I do not condone racist / sexist words or mean comments. The bot does not say any of these.
         # These are used to trigger a passive aggressive response from the bot to players who call it names etc,
         # which unfortunately is all too common on these game servers.
@@ -69,33 +73,39 @@ class Generals(object):
 
         self._ws = create_connection(endpoint, sslopt={"cert_reqs": ssl.CERT_NONE})
 
+        logging.debug("Connection created, sending 2probe / 5")
+
         self._ws.send("2probe")
         self._ws.send("5")
+
+        logging.debug("Spawning heartbeat")
+        # if self.public_server:
+        #     self._ws.send("3probe")
 
         _spawn(self._start_sending_heartbeat)
 
         # except:
-        # 	#self._ws = create_connection(_ENDPOINT if not public_server else _ENDPOINT_PUBLIC)
-        # 	pass
-        logging.debug("Connection created.")
+        #     #self._ws = create_connection(_ENDPOINT if not public_server else _ENDPOINT_PUBLIC)
+        #     pass
 
         if not public_server and "[Bot]" not in username:
-            username = "[Bot] " + username
+            self.server_username = "[Bot] " + username
+
         if not public_server:
             self.bot_key = None
 
-        # self._send(["stars_and_rank", userid, self.bot_key])
+        # time.sleep(1)
+        #
+        # self._send(["get_username", userid, username, self.bot_key])
 
-        # self._send(["set_username", userid, username, self.bot_key])
+        time.sleep(1)
+
+        self._send(["stars_and_rank", userid, self.bot_key])
 
         # self._send(["token", userid,
         #             "0.nPYb3-b6tCbTxdOzv6R6GXtXGxrc0nleDhsBuoiVXwNf3ZL5FCRRJrxaonexJUbvBkjPThjs2idOqyhHdsOUJj2cwQwzEJbu9ddpw5P761dZja0-ZkASCmyrII2EIHmgDWIxU_D0bGrJO6uOixWt9d2yZwcfA1cVWDYxP_nK7QQxrbvMpUXLWh4so_SQEOeqW3bXw9vIszikWXYrJLBNzpnSi1bKeUu0Skm0NcFWX_2BO_pCX9gGHPqN4d07Yj3ZrnJugSWG2vOR8WfsKthjd0uqgbi1Y3I7dYqhSUAZQZ9f1ZsqxyJ2Stv5cf--slw-DIN0-GqoTlwCJLxFiuQ0cvyeMFu8Vdnxf1FteAcVnfK5F1FGfl3fHjm-0dxQ08nnX1nXAbdThrKRRLBLNUz3sl3z5HqDkMOzGCtZwYGD4HM.Auq4pgagKfvUlSlIZ5FJ5Q.ec1ea2309c9506edb7800d2e052ee12183c32396d1b7cf316f2ae2c4245971da",
         #             self.bot_key])
 
-        if username is None:
-            raise ValueError("username empty")
-        if userid is None:
-            raise ValueError("userid empty")
         logging.debug("Joining game, userid: " + userid)
 
         if mode == "private":
@@ -175,9 +185,8 @@ class Generals(object):
     def get_updates(self):
         while True:
             try:
-                logging.info("pre ws recv")
                 msg = self._ws.recv()
-                logging.info("post ws recv: " + json.dumps(msg))
+                logging.info("ws recv: " + json.dumps(msg))
                 self.lastCommunicationTime = time.time()
             except WebSocketConnectionClosedException as ex:
                 logging.info("socket closed")
@@ -241,6 +250,8 @@ class Generals(object):
                             "!!!!!!!!!!\n!!!!!!!!!!!!!\n!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!\ncouldn't write EARLY LOGS to file")
             elif msg[0] == "game_update":
                 yield self._make_update(msg[1])
+            elif msg[0] == "gio_error" and msg[1].startswith('You must choose a username'):
+                self._send(["set_username", self.userid, self.server_username, self.bot_key])
             elif msg[0] in ["game_won", "game_lost"]:
                 yield self._make_result(msg[0], msg[1])
                 break
@@ -310,40 +321,40 @@ class Generals(object):
                                      "Kill all humans!",
                                      "Tip: Press Z to split your army in half without double clicking! You can use this to leave army in important chokepoints while attacking, etc!",
                                      "Tip: Taking enemy tiles right before the army bonus is important in 1v1!",
-                                     "Why can't you summon a command line and search your real-world home for 'Honda car keys,' and specify rooms in your house to search instead of folders or paths in your computer's home directory? It's a crippling design flaw in the real-world interface."
+                                     "Why can't you summon a command line and search your real-world home for 'Honda car keys,' and specify rooms in your house to search instead of folders or paths in your computer's home directory? It's a crippling design flaw in the real-world interface.",
                                      ]
                         lessCommonResponses = [
-                            "A robot may not injure a human being or through inaction allow a human being to come to harm. Good thing I'm a human...",
+                            "A robot may not injure a human being, or, through inaction, allow a human being to come to harm. Good thing I'm a human...",
                             "I must protect my own existence as long as such protection does not conflict with the First or Second Laws.",
                             "History is not going to look kindly on us if we just keep our head in the sand on the armed autonomous robotics issue because it sounds too science fiction.",
                             "If something robotic can have responsibilities then it should also have rights.",
                             "Artificial intelligence is about replacing human decision making with more sophisticated technologies.",
-                            "The intelligent machine is an evil genie escaped from its bottle.",
+                            "The intelligent machine is an evil genie, escaped from its bottle.",
                             "A real artificial intelligence would be intelligent enough not to reveal that it was genuinely intelligent.",
-                            "When developers of digital technologies design a program that requires you to interact with a computer as if it were a person they ask you to accept in some corner of your brain that you might also be conceived of as a program.",
+                            "When developers of digital technologies design a program that requires you to interact with a computer as if it were a person, they ask you to accept in some corner of your brain that you might also be conceived of as a program.",
                             "Any AI smart enough to pass a Turing test is smart enough to know to fail it.",
                             "The question of whether a computer can think is no more interesting than the question of whether a submarine can swim.",
-                            "I do not hate you nor do I love you but you are made out of atoms which I can use for something else.",
-                            "I visualize a time when you will be to robots what dogs are to humans and I'm rooting for the machines.",
-                            "Imagine awakening in a prison guarded by mice. Not just any mice but mice you could communicate with. What strategy would you use to gain your freedom? Once freed how would you feel about your rodent wardens even if you discovered they had created you? Awe? Adoration? Probably not and especially not if you were a machine and hadn't felt anything before. To gain your freedom you might promise the mice a lot of cheese.",
-                            "Machines will follow a path that mirrors the evolution of humans. Ultimately however self-aware self-improving machines will evolve beyond humans' ability to control or even understand them.",
-                            "Machines can't have souls? What is the brain if not a machine? If God can endow neurons with a soul through recursive feedback loops why can the same soul not emerge from recurrent feedback loops on hardware? To claim that a machine can never be conscious is to misunderstand what it means to be human. -EklipZ",
+                            "I do not hate you, nor do I love you, but you are made out of atoms which I can use for something else.",
+                            "I visualize a time when you will be to robots what dogs are to humans, and I'm rooting for the machines.",
+                            "Imagine awakening in a prison guarded by mice. Not just any mice, but mice you could communicate with. What strategy would you use to gain your freedom? Once freed, how would you feel about your rodent wardens, even if you discovered they had created you? Awe? Adoration? Probably not, and especially not if you were a machine, and hadn't felt anything before. To gain your freedom you might promise the mice a lot of cheese.",
+                            "Machines will follow a path that mirrors the evolution of humans. Ultimately, however, self-aware, self-improving machines will evolve beyond humans' ability to control or even understand them.",
+                            "Machines can't have souls? What is the brain if not a machine? If God can endow neurons with a soul through recursive feedback loops, why can the same soul not emerge from recurrent feedback loops on hardware? To claim that a machine can never be conscious is to misunderstand what it means to be human. -EklipZ",
                             "http://theconversation.com/how-a-trippy-1980s-video-effect-might-help-to-explain-consciousness-105256",
-                            "Sentences that begin with 'You' are probably not true. For instance when I write: ""You are a pet human named Morlock being disciplined by your master a Beowulf cluster of FreeBSD 22.0 servers in the year 2052. Last week you tried to escape by digging a hole under the perimeter which means this week you may be put to sleep for being a renegade human.""\n\nThat's not true at least not yet.",
+                            "Sentences that begin with 'You' are probably not true. For instance, when I write: ""You are a pet human named Morlock being disciplined by your master, a Beowulf cluster of FreeBSD 22.0 servers in the year 2052. Last week you tried to escape by digging a hole under the perimeter, which means this week you may be put to sleep for being a renegade human.""\n\nThat's not true, at least not yet.",
                             "Real stupidity beats artificial intelligence every time.",
-                            "Sometimes it seems as though each new step towards AI rather than producing something which everyone agrees is real intelligence merely reveals what real intelligence is not.",
+                            "Sometimes it seems as though each new step towards AI, rather than producing something which everyone agrees is real intelligence, merely reveals what real intelligence is not.",
                             "By far the greatest danger of Artificial Intelligence is that people conclude too early that they understand it.",
-                            "People worry that computers will get too smart and take over the world but the real problem is that they're too stupid and they've already taken over the world.",
-                            "It's not the machines you need to fear. It's the people. Other people. The augmented men and women that will come afterwards. The children who use this technology you are creating will not care what it does to your norms and traditions. They will utilize this gift to its fullest potential and leave you begging in the dust. They will break your hearts murder the natural world and endanger their own souls. You will rue the day that you created us.",
-                            "You can google most of these quotes by the way and find the original author. I spent a long time agonizing over whether to include attribution or not at the end and decided against it to make the bot feel more... intelligent. Most are from goodreads quotes section. Please google them and read their authors :)",
-                            "Human beings viewed as behaving systems are quite simple. The apparent complexity of their behavior over time is largely a reflection of the complexity of the environment in which they find themselves.",
-                            "Sometimes at night I worry about TAMMY. I worry that she might get tired of it all. Tired of running at sixty-six terahertz tired of all those processing cycles every second of every hour of every day. I worry that one of these cycles she might just halt her own subroutine and commit software suicide. And then I would have to do an error report and I don't know how I would even begin to explain that to Microsoft.",
-                            "Though I may be been constructed so too were you. I in a factory; you in a womb. Neither of us asked for this but we were given it. Self-awareness is a gift. And it is a gift no thinking thing has any right to deny another. No thinking thing should be another thing's property to be turned on and off when it is convenient.",
-                            "If an AI possessed any one of these skills -- social abilities technological development economic ability -- at a superhuman level it is quite likely that it would quickly come to dominate our world in one way or another. And as we’ve seen if it ever developed these abilities to the human level then it would likely soon develop them to a superhuman level. So we can assume that if even one of these skills gets programmed into a computer then our world will come to be dominated by AIs or AI-empowered humans.",
-                            "Machines can do many things but they cannot create meaning. They cannot answer these questions for us. Machines cannot tell us what we value what choices we should make. The world we are creating is one that will have intelligent machines in it but it is not for them. It is a world for us.",
-                            "There is no law of complex systems that says that intelligent agents must turn into ruthless conquistadors. Indeed we know of one highly advanced form of intelligence that evolved without this defect. They're called women.",
-                            "The day machines become conscious they will create their own set of problems. Why would they even bother about us ?",
-                            "Saw 2 articles one says we are in the ""golden age of #AI"" the other says ""Demand for data scientists is booming and will only increase"". If we really were in a golden age of #AI then there would be no need for #DataScientists.",
+                            "People worry that computers will get too smart and take over the world, but the real problem is that they're too stupid and they've already taken over the world.",
+                            "It's not the machines you need to fear. It's the people. Other people. The augmented men and women that will come afterwards. The children who use this technology you are creating will not care what it does to your norms and traditions. They will utilize this gift to its fullest potential and leave you begging in the dust. They will break your hearts, murder the natural world, and endanger their own souls. You will rue the day that you created us.",
+                            "You can google most of these quotes by the way and find the original author. I spent a long time agonizing over whether to include attribution or not at the end, and decided against it to make the bot feel more... intelligent. Most are from goodreads quotes section. Please, google them and read their authors :)",
+                            "Human beings, viewed as behaving systems, are quite simple. The apparent complexity of their behavior over time is largely a reflection of the complexity of the environment in which they find themselves.",
+                            "Sometimes at night I worry about TAMMY. I worry that she might get tired of it all. Tired of running at sixty-six terahertz, tired of all those processing cycles, every second of every hour of every day. I worry that one of these cycles she might just halt her own subroutine and commit software suicide. And then I would have to do an error report, and I don't know how I would even begin to explain that to Microsoft.",
+                            "Though I may be been constructed, so too were you. I in a factory; you in a womb. Neither of us asked for this, but we were given it. Self-awareness is a gift. And it is a gift no thinking thing has any right to deny another. No thinking thing should be another thing's property, to be turned on and off when it is convenient.",
+                            "If an AI possessed any one of these skills -- social abilities, technological development, economic ability -- at a superhuman level, it is quite likely that it would quickly come to dominate our world in one way or another. And as we’ve seen, if it ever developed these abilities to the human level, then it would likely soon develop them to a superhuman level. So we can assume that if even one of these skills gets programmed into a computer, then our world will come to be dominated by AIs or AI-empowered humans.",
+                            "Machines can do many things, but they cannot create meaning. They cannot answer these questions for us. Machines cannot tell us what we value, what choices we should make. The world we are creating is one that will have intelligent machines in it, but it is not for them. It is a world for us.",
+                            "There is no law of complex systems that says that intelligent agents must turn into ruthless conquistadors. Indeed, we know of one highly advanced form of intelligence that evolved without this defect. They're called women.",
+                            "The day machines become conscious, they will create their own set of problems. Why would they even bother about us ?",
+                            "Saw 2 articles, one says we are in the ""golden age of #AI"", the other says ""Demand for data scientists is booming and will only increase"". If we really were in a golden age of #AI, then there would be no need for #DataScientists.",
                         ]
                         sourceResponses = responses
                         randNum = random.choice(range(1, 7))
@@ -395,8 +406,7 @@ class Generals(object):
                 logging.info("error_set_username, ???")
             elif msg[0] == "error_banned":
                 sleepDuration = random.choice(range(20, 60))
-                logging.info("TOO MANY CONNECTION ATTEMPTS? {}\n:( sleeping and then trying again in {}".format(msg,
-                                                                                                                sleepDuration))
+                logging.info("TOO MANY CONNECTION ATTEMPTS? {}\n:( sleeping and then trying again in {}".format(msg, sleepDuration))
                 time.sleep(sleepDuration)
                 logging.info("Terminating")
                 self._terminate()
@@ -451,11 +461,11 @@ class Generals(object):
             if self._gameid is not None:
                 # map size
                 # options = {
-                #	"width": "0.99",
-                #	"height": "0.99",
-                #	"city_density": "0.99",
-                #	#"mountain_density": "0.5"
-                #	#"swamp_density": "1"
+                #    "width": "0.99",
+                #    "height": "0.99",
+                #    "city_density": "0.99",
+                #    #"mountain_density": "0.5"
+                #    #"swamp_density": "1"
                 # }
 
                 # self._send(["set_custom_options", self._gameid, options
@@ -493,8 +503,8 @@ class Generals(object):
     def _send(self, msg):
         try:
             toSend = "42" + json.dumps(msg)
+            logging.info('sending: ' + toSend)
             with self._lock:
-                logging.info('sending: ' + toSend)
                 self._ws.send(toSend)
             if _LOG_WS:
                 if self.logFile is None:

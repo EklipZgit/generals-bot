@@ -13,6 +13,8 @@ from SearchUtils import *
 from collections import deque 
 from queue import PriorityQueue 
 from Path import Path
+from base.client.map import Tile
+
 
 class PathWay:
 	def __init__(self, distance):
@@ -61,28 +63,22 @@ class MapMatrix:
 	
 	def __delitem__(self, key):
 		self.grid[key.x][key.y] = SENTINAL
-		
-	def has_key(self, k):
-		return self.grid[item.x][item.y] != SENTINAL
 
 	def __contains__(self, item):
 		return self.grid[item.x][item.y] != SENTINAL
 
-	def __unicode__(self):
-		return unicode(repr(self.grid))
-
 
 
 class ArmyAnalyzer:
-	def __init__(self, map, armyA, armyB, maxDist = 1000):
+	def __init__(self, map, armyA: Tile, armyB: Tile, maxDist = 1000):
 		startTime = time.time()
 		self.map = map
 		self.tileA = armyA
 		self.tileB = armyB
 		# path chokes are relative to the paths between A and B
-		self.pathChokes = set()
+		self.pathChokes: typing.Set[Tile] = set()
 		self.pathways = MapMatrix(map)
-
+		self.shortestPathWay: PathWay = PathWay(distance=INF)
 
 		if type(armyA) is Army:
 			self.tileA = armyA.tile
@@ -106,10 +102,13 @@ class ArmyAnalyzer:
 
 	def scan(self):
 		chokeCounterMap = {}
+		minPath = PathWay(distance=INF)
 		for tile in self.map.reachableTiles:
 			# build the pathway
 			if tile not in self.pathways:
-				self.build_pathway(tile)
+				path = self.build_pathway(tile)
+				if path.distance < minPath.distance:
+					minPath = path
 
 			# map out choke counts. TODO i don't think this pathChoke stuff works :/ make sure to visualize it well and debug.
 			chokeKey = (self.aMap[tile.x][tile.y], self.bMap[tile.x][tile.y])
@@ -131,9 +130,10 @@ class ArmyAnalyzer:
 						# Todo this should probably be on pathways lol
 						self.pathChokes.add(tile)
 
+		self.shortestPathWay = minPath
 
 
-	def build_pathway(self, tile):
+	def build_pathway(self, tile) -> PathWay:
 		distance = self.aMap[tile.x][tile.y] + self.bMap[tile.x][tile.y]
 		#logging.info("  building pathway from tile {} distance {}".format(tile.toString(), distance))
 		path = PathWay(distance = distance)
@@ -154,6 +154,7 @@ class ArmyAnalyzer:
 
 					for adjacentTile in currentTile.moveable:
 						queue.appendleft(adjacentTile)
+		return path
 
 
 

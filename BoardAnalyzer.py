@@ -22,10 +22,10 @@ class BoardAnalyzer:
 		self.general = general
 		self.should_rescan = False
 
-		self.innerChokes = None
-		self.outerChokes = None
+		self.innerChokes: typing.List[typing.List[bool]] = []
+		self.outerChokes: typing.List[typing.List[bool]] = []
 
-		self.intergeneral_analysis = None
+		self.intergeneral_analysis: ArmyAnalyzer = None
 
 		self.rescan_chokes()
 

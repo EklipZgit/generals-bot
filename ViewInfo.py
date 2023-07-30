@@ -6,6 +6,7 @@
 '''
 
 import logging
+import typing
 from copy import deepcopy
 import time
 import json
@@ -40,10 +41,12 @@ class ViewInfo(object):
 		self.bottomRightGridText = [[None for x in range(self.rows)] for y in range(self.cols)]
 		self.bottomLeftGridText = [[None for x in range(self.rows)] for y in range(self.cols)]
 		self.lastMoveDuration = 0.0
-		self.addlTimingsLineText = ""
+		self.addlTimingsLineText: str = ""
+		self.addlInfoLines: typing.List[str] = []
 	
 	def turnInc(self):
 		self.addlTimingsLineText = ""
+		self.addlInfoLines = []
 		self.bottomRightGridText = [[None for x in range(self.rows)] for y in range(self.cols)]
 		self.bottomLeftGridText = [[None for x in range(self.rows)] for y in range(self.cols)]
 		countHist = len(self.searchHistory)
@@ -61,3 +64,7 @@ class ViewInfo(object):
 
 	def addSearched(self, tile):
 		self.lastSearched.append(tile)
+
+	def addAdditionalInfoLine(self, additionalInfo: str):
+		logging.info(additionalInfo)
+		self.addlInfoLines.append(additionalInfo)

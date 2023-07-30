@@ -37,6 +37,7 @@ function Run-BotOnce {
 	$arguments = $arguments.ToArray()
     $argString = $([string]::Join(" ", $arguments))
     Write-Verbose $argString -Verbose
+	$host.ui.RawUI.WindowTitle = "$($name.Replace('[Bot]', '').Trim()) - $game"
 
 	# this exeString is a hack due to the powershell memory leak, need to keep opening new PS processes
 	# or we fill up memory to 1GB per powershell window overnight :(
@@ -55,11 +56,14 @@ function Run-BotOnce {
 	`$logName = "`$cleanName-$game-$df$privateGame"
 	`$logFile = "`$logName.txt"
 	`$logPath = "D:\GeneralsLogs\`$logFile"
+
 	if (-not `$$($nolog.ToString()))
 	{
 		Start-Transcript -path "`$logPath"
 	}
-    try {
+
+    try 
+	{
         #Write-Verbose `"python.exe $path -name $name -g $game $argString`" -verbose
         python.exe "$path" -name '$name' -g '$game' @arguments 2>&1 
     } 
@@ -96,6 +100,7 @@ function Run-BotOnce {
 					`$prevLine = [string]::Empty
 				}
 			}
+
 			if (`$repId)
 			{
 				`$folder = Get-ChildItem "D:\GeneralsLogs" -Filter "*`$repId*" -Directory
@@ -109,12 +114,22 @@ function Run-BotOnce {
 				Write-Warning "`$newName"
 				Write-Warning "`$newName"
 			}
+
 			Remove-Item `$logPath -Force
 		}
     }
-    PING 127.0.0.1 -n 1 | out-null
-	Get-ChildItem "D:\GeneralsLogs" | ? { `$_.FullName -notlike '*_chat*' } | ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-30) } | Remove-Item -Force -Recurse -ErrorAction Ignore
-	Get-ChildItem "D:\GeneralsLogs\GroupedLogs" -Directory | ? { `$_.FullName -notlike '*_chat*' } | ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-30) } | Remove-Item -Force -Recurse -ErrorAction Ignore
+
+    Start-Sleep -Seconds 1
+
+	Get-ChildItem "D:\GeneralsLogs" | 
+		? { `$_.FullName -notlike '*_chat*' } | 
+		? { `$_.LastWriteTime -lt (get-date).AddMinutes(-120) } | 
+		Remove-Item -Force -Recurse -ErrorAction Ignore
+	
+	Get-ChildItem "D:\GeneralsLogs\GroupedLogs" -Directory | 
+		? { `$_.FullName -notlike '*_chat*' } | 
+		? { `$_.LastWriteTime -lt (get-date).AddMinutes(-120) } |
+		Remove-Item -Force -Recurse -ErrorAction Ignore
 "@
 
 	$randNums = 1..10 | Get-Random -Count 10
@@ -130,7 +145,7 @@ function Run-BotOnce {
 
 function Run-SoraAI {
     Param(
-        $game = @('1v1', '1v1', 'ffa')
+        $game = @('1v1', '1v1', 'ffa', 'ffa')
     )
 	while ($true)
 	{
@@ -144,13 +159,13 @@ function Run-SoraAI {
 
 function Run-Blob {
     Param(
-        $game = @('1v1', '1v1', 'ffa')
+        $game = @('ffa')
     )
 	while ($true)
 	{
 		foreach ($g in $game)
 		{
-			run-botonce -game $g -name "PurdBlob" -path "D:\2019_reformat_Backup\Users\EklipZ-2\Documents\GitHub\generals-bot\bot_blob.py" -nolog -noui
+			run-botonce -game $g -name "PurdBlob" -path "D:\2019_reformat_Backup\generals-blob-and-path\bot_blob.py" -nolog -noui
 		}
 	}
 }
@@ -159,13 +174,13 @@ function Run-Blob {
 
 function Run-Path {
     Param(
-        $game = @('1v1', '1v1', 'ffa')
+        $game = @('ffa')
     )
 	while ($true)
 	{
 		foreach ($g in $game)
 		{
-			run-botonce -game $g -name "PurdPath" -path "D:\2019_reformat_Backup\Users\EklipZ-2\Documents\GitHub\generals-bot\bot_path_collect.py" -nolog -noui
+			run-botonce -game $g -name "PurdPath" -path "D:\2019_reformat_Backup\generals-blob-and-path\bot_path_collect.py" -nolog -noui
 		}
 	}
 }

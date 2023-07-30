@@ -6,6 +6,8 @@
 '''
 import json
 import logging
+import typing
+
 TILE_EMPTY = -1
 TILE_MOUNTAIN = -2
 TILE_FOG = -3
@@ -37,23 +39,178 @@ class Player(object):
 		self.capturedBy = None
 		self.knowsKingLocation = False
 
+class TileDelta(object):
+	def __init__(self):
+		# Public Properties
+		self.oldOwner = -1
+		self.newOwner = -1
+		self.gainedSight = False
+		self.lostSight = False
+		self.friendlyCaptured = False
+		self.armyDelta = 0
+		self.fromTile = None
+		self.toTile = None
+
+class Tile(object):
+	def __init__(self, x, y, tile=TILE_EMPTY, army=0, isCity=False, isGeneral=False, player=-1, mountain=False,
+				 turnCapped=0):
+		# Public Properties
+		self.x = x  # Integer X Coordinate
+		self.y = y  # Integer Y Coordinate
+		self.tile = tile  # Integer Tile Type (TILE_OBSTACLE, TILE_FOG, TILE_MOUNTAIN, TILE_EMPTY, or
+		# player_ID)
+		self.turn_captured = turnCapped  # Integer Turn Tile Last Captured
+		self.army = army  # Integer Army Count
+		self.isCity = isCity  # Boolean isCity
+		self.isGeneral = isGeneral  # Boolean isGeneral
+		self.player = player
+		self.visible = False
+		self.discovered = False
+		self.discoveredAsNeutral = False
+		self.lastSeen = -1
+		self.mountain = mountain
+		self.delta = TileDelta()
+		self.adjacents = []
+		self.moveable = []
+
+	def __repr__(self):
+		return "(%d,%d) %d (%d)" % (self.x, self.y, self.tile, self.army)
+
+	'''def __eq__(self, other):
+			return (other != None and self.x==other.x and self.y==other.y)'''
+
+	def __lt__(self, other):
+		if other == None:
+			return False
+		return self.army < other.army
+
+	def __gt__(self, other):
+		if other == None:
+			return True
+		return self.army > other.army
+
+	def tileToString(self, tile):
+		if (tile == TILE_EMPTY):
+			return "Empty"
+		elif (tile == TILE_FOG):
+			return "Fog"
+		elif (tile == TILE_MOUNTAIN):
+			return "Mountain"
+		elif (tile == TILE_OBSTACLE):
+			return "Obstacle"
+		return "Player " + str(tile)
+
+	def __str__(self):
+		return self.toString()
+
+	def toString(self):
+		return "{},{}".format(self.x, self.y)
+
+	def isobstacle(self):
+		return (self.mountain or (not self.discovered and self.tile == TILE_OBSTACLE))
+
+	def update(self, map, tile, army, isCity=False, isGeneral=False, overridePlayer=None):
+
+		# if (self.tile < 0 or tile >= 0 or (tile < TILE_MOUNTAIN and self.tile == map.player_index)): # Remember Discovered Tiles
+		#	if (tile >= 0 and self.tile != tile):
+		#		if (self.player != tile):
+		#			self.turn_captured = map.turn
+		#			self.player = tile
+		#			print("Tile " + str(self.x) + "," + str(self.y) + " captured by player " + str(tile))
+		#	if (self.tile != tile):
+		#		print("Tile " + str(self.x) + "," + str(self.y) + " from " + self.tileToString(self.tile) + " to " + self.tileToString(tile))
+		#		self.tile = tile
+		#		if (tile == TILE_MOUNTAIN):
+		#			self.mountain = True
+
+		self.delta = TileDelta()
+		if (tile >= TILE_MOUNTAIN):
+			self.discovered = True
+			self.lastSeen = map.turn
+			if not self.visible:
+				self.delta.gainedSight = True
+				self.visible = True
+		armyMovedHere = False
+
+		self.delta.oldOwner = self.player
+
+		if (self.tile != tile):  # tile changed
+			if (tile < TILE_MOUNTAIN and self.discovered):  # lost sight of tile.
+				self.delta.lostSight = True
+				self.visible = False
+				self.lastSeen = map.turn - 1
+
+				if (self.player == map.player_index or self.player in map.teammates):
+					# we lost the tile
+					# TODO Who might have captured it? for now set to unowned.
+					self.delta.friendlyCaptured = True
+					armyMovedHere = True
+					self.player = -1
+			elif (tile == TILE_MOUNTAIN):
+				self.mountain = True
+			elif (tile >= 0):
+				self.player = tile
+
+			self.tile = tile
+
+		self.delta.newOwner = self.player
+		if overridePlayer != None:
+			self.delta.newOwner = overridePlayer
+			self.player = overridePlayer
+
+		if (army == 0 and self.visible) or army > 0 and (
+				self.army != army or self.delta.oldOwner != self.delta.newOwner):  # Remember Discovered Armies
+			if (self.army == 0 or self.army - army > 1 or self.army - army < -1):
+				armyMovedHere = True
+			oldArmy = self.army
+			# logging.info("assigning tile {} with oldArmy {} new army {}?".format(self.toString(), oldArmy, army))
+			self.army = army
+			if (self.delta.oldOwner != self.delta.newOwner):
+				self.delta.armyDelta = 0 - (self.army + oldArmy)
+			else:
+				self.delta.armyDelta = self.army - oldArmy
+
+		if isCity:
+			self.isCity = True
+			self.isGeneral = False
+			# if self in map.cities:
+			#	map.cities.remove(self)
+			# map.cities.append(self)
+			if not self in map.cities:
+				map.cities.append(self)
+
+			# playerObj = map.players[self.player]
+
+			# if not self in playerObj.cities:
+			#	playerObj.cities.append(self)
+
+			if self in map.generals:
+				map.generals[self._general_index] = None
+		elif isGeneral:
+			playerObj = map.players[self.player]
+			playerObj.general = self
+			self.isGeneral = True
+			map.generals[tile] = self
+			self._general_index = self.tile
+		return armyMovedHere
+
 
 class Map(object):
 	def __init__(self, start_data, data):
 		# Start Data
 		self._start_data = start_data
-		self.player_index = start_data['playerIndex'] 									# Integer Player Index
+		self.player_index: int = start_data['playerIndex'] 									# Integer Player Index
 		self.teammates = set()
 		if 'teams' in start_data:
 			for player, team in enumerate(start_data['teams']):
 				if team == start_data['teams'][self.player_index]:
 					self.teammates.add(player)
 		#TODO TEAMMATE
-		self.usernames = start_data['usernames'] 										# List of String Usernames
+		self.usernames: typing.List[str] = start_data['usernames'] 										# List of String Usernames
 		self.replay_url = _REPLAY_URLS["na"] + start_data['replay_id'] 					# String Replay URL # TODO: Use Client Region
 		self.players = [Player(x) for x in range(len(self.usernames))]
 		self.ekBot = None
-		self.reachableTiles = []
+		self.reachableTiles: typing.List[Tile] = []
 		self.notify_tile_captures = []
 		self.notify_tile_deltas = []
 		self.notify_city_found = []
@@ -63,9 +220,9 @@ class Map(object):
 		
 		# First Game Data
 		self._applyUpdateDiff(data)
-		self.rows = self.rows 															# Integer Number Grid Rows
-		self.cols = self.cols 															# Integer Number Grid Cols
-		self.grid = [[Tile(x,y) for x in range(self.cols)] for y in range(self.rows)]	# 2D List of Tile Objects
+		self.rows: int = self.rows 															# Integer Number Grid Rows
+		self.cols: int = self.cols 															# Integer Number Grid Cols
+		self.grid: typing.List[typing.List[Tile]] = [[Tile(x,y) for x in range(self.cols)] for y in range(self.rows)]	# 2D List of Tile Objects
 		for x in range(self.cols):
 			for y in range(self.rows):
 				tile = self.grid[y][x]
@@ -99,18 +256,18 @@ class Map(object):
 					tile.adjacents.append(adjTile)
 		
 		self.updateTurnGrid = [[int for x in range(self.cols)] for y in range(self.rows)]	# 2D List of Tile Objects
-		self.turn = data['turn']														# Integer Turn # (1 turn / 0.5 seconds)
-		self.cities = []																# List of City Tiles
-		self.generals = [ None for x in range(8) ]										# List of 8 Generals (None if not found)
+		self.turn: int = data['turn']														# Integer Turn # (1 turn / 0.5 seconds)
+		self.cities: typing.List[Tile] = []																# List of City Tiles
+		self.generals: typing.List[typing.Union[Tile, None]] = [ None for x in range(8) ]										# List of 8 Generals (None if not found)
 		self._setGenerals()
 		self.stars = []																	# List of Player Star Ratings
 		self.scores = self._getScores(data)												# List of Player Scores
 		self.complete = False															# Boolean Game Complete
 		self.result = False																# Boolean Game Result (True = Won)
-		self.scoreHistory = [None for i in range(25)]
+		self.scoreHistory: typing.List[typing.Union[None, int]] = [None for i in range(25)]
 		self.remainingPlayers = 0
 		
-	def GetTile(self, x, y):
+	def GetTile(self, x, y) -> typing.Union[None, Tile]:
 		if (x < 0 or x >= self.cols or y < 0 or y >= self.rows):
 			return None
 		return self.grid[y][x]
@@ -489,165 +646,6 @@ def evaluateSameOwnerMoves(tile, candidateTile):
 			return 50	
 	return -100
 
-class TileDelta(object):
-	def __init__(self):
-		# Public Properties
-		self.oldOwner = -1
-		self.newOwner = -1
-		self.gainedSight = False
-		self.lostSight = False
-		self.friendlyCaptured = False
-		self.armyDelta = 0
-		self.fromTile = None
-		self.toTile = None
-		
-
-class Tile(object):
-	def __init__(self, x, y, tile = TILE_EMPTY, army = 0, isCity = False, isGeneral = False, player = -1, mountain = False, turnCapped = 0):
-		# Public Properties
-		self.x = x					# Integer X Coordinate
-		self.y = y					# Integer Y Coordinate
-		self.tile = tile		# Integer Tile Type (TILE_OBSTACLE, TILE_FOG, TILE_MOUNTAIN, TILE_EMPTY, or
-                        		# player_ID)
-		self.turn_captured = turnCapped		# Integer Turn Tile Last Captured
-		self.army = army				# Integer Army Count
-		self.isCity = isCity			# Boolean isCity
-		self.isGeneral = isGeneral		# Boolean isGeneral
-		self.player = player
-		self.visible = False
-		self.discovered = False
-		self.discoveredAsNeutral = False
-		self.lastSeen = -1
-		self.mountain = mountain
-		self.delta = TileDelta()
-		self.adjacents = []
-		self.moveable = []
-
-	def __repr__(self):
-		return "(%d,%d) %d (%d)" %(self.x, self.y, self.tile, self.army)
-
-	'''def __eq__(self, other):
-			return (other != None and self.x==other.x and self.y==other.y)'''
-			
-	def __lt__(self, other):
-		if other == None:
-			return False
-		return self.army < other.army
-
-	def __gt__(self, other):
-		if other == None:
-			return True
-		return self.army > other.army
-	
-	def tileToString(self, tile):
-		if (tile == TILE_EMPTY):
-			return "Empty"
-		elif (tile == TILE_FOG):
-			return "Fog"
-		elif (tile == TILE_MOUNTAIN):
-			return "Mountain"
-		elif (tile == TILE_OBSTACLE):
-			return "Obstacle"
-		return "Player " + str(tile)
-	
-	def __str__(self):
-		return self.toString()
-
-	def toString(self):
-		return "{},{}".format(self.x, self.y)	
-
-	def isobstacle(self):
-		return (self.mountain or (not self.discovered and self.tile == TILE_OBSTACLE))
-	
-
-	def update(self, map, tile, army, isCity=False, isGeneral=False, overridePlayer=None):
-
-		#if (self.tile < 0 or tile >= 0 or (tile < TILE_MOUNTAIN and self.tile == map.player_index)): # Remember Discovered Tiles
-		#	if (tile >= 0 and self.tile != tile):				
-		#		if (self.player != tile):
-		#			self.turn_captured = map.turn
-		#			self.player = tile
-		#			print("Tile " + str(self.x) + "," + str(self.y) + " captured by player " + str(tile))
-		#	if (self.tile != tile): 
-		#		print("Tile " + str(self.x) + "," + str(self.y) + " from " + self.tileToString(self.tile) + " to " + self.tileToString(tile))
-		#		self.tile = tile
-		#		if (tile == TILE_MOUNTAIN):
-		#			self.mountain = True
-		
-		self.delta = TileDelta()
-		if (tile >= TILE_MOUNTAIN):
-			self.discovered = True
-			self.lastSeen = map.turn
-			if not self.visible:
-				self.delta.gainedSight = True
-				self.visible = True
-		armyMovedHere = False
-		
-		self.delta.oldOwner = self.player
-		
-		
-			
-		if (self.tile != tile): # tile changed
-			if (tile < TILE_MOUNTAIN and self.discovered): #lost sight of tile. 
-				self.delta.lostSight = True
-				self.visible = False
-				self.lastSeen = map.turn - 1
-				
-				if (self.player == map.player_index or self.player in map.teammates): 
-					# we lost the tile
-					# TODO Who might have captured it? for now set to unowned.
-					self.delta.friendlyCaptured = True
-					armyMovedHere = True
-					self.player = -1
-			elif (tile == TILE_MOUNTAIN):
-				self.mountain = True
-			elif (tile >= 0):
-				self.player = tile
-				
-			self.tile = tile
-		
-		self.delta.newOwner = self.player
-		if overridePlayer != None:
-			self.delta.newOwner = overridePlayer
-			self.player = overridePlayer
-		
-			
-		
-		if (army == 0 and self.visible) or army > 0 and (self.army != army or self.delta.oldOwner != self.delta.newOwner): # Remember Discovered Armies
-			if (self.army == 0 or self.army - army > 1 or self.army - army < -1):
-				armyMovedHere = True
-			oldArmy = self.army
-			#logging.info("assigning tile {} with oldArmy {} new army {}?".format(self.toString(), oldArmy, army))
-			self.army = army
-			if (self.delta.oldOwner != self.delta.newOwner):
-				self.delta.armyDelta = 0 - (self.army + oldArmy)
-			else:
-				self.delta.armyDelta = self.army - oldArmy
-			
-
-		if isCity:
-			self.isCity = True
-			self.isGeneral = False
-			#if self in map.cities:
-			#	map.cities.remove(self)
-			#map.cities.append(self)
-			if not self in map.cities:
-				map.cities.append(self)
-			
-			#playerObj = map.players[self.player]
-
-			#if not self in playerObj.cities:
-			#	playerObj.cities.append(self)
-			
-			if self in map.generals:
-				map.generals[self._general_index] = None
-		elif isGeneral:
-			playerObj = map.players[self.player]
-			playerObj.general = self
-			self.isGeneral = True
-			map.generals[tile] = self
-			self._general_index = self.tile
-		return armyMovedHere
 
 def _apply_diff(cache, diff):
 	i = 0

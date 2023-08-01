@@ -12,6 +12,7 @@ from SearchUtils import *
 from collections import deque 
 from queue import PriorityQueue 
 from Path import Path
+from base.client.map import Tile
 
 
 class Army(object):
@@ -19,7 +20,7 @@ class Army(object):
 	end = 'Z'
 	curLetter = start
 
-	def get_letter():
+	def get_letter(self):
 		ch = Army.curLetter
 		if (ord(ch) + 1 > ord(Army.end)):
 			Army.curLetter = Army.start
@@ -37,7 +38,7 @@ class Army(object):
 		self.expectedPath = None
 		self.distMap = None
 		self.entangledArmies = []
-		self.name = Army.get_letter()
+		self.name = self.get_letter()
 		self.entangledValue = None
 		self.scrapped = False
 
@@ -82,16 +83,18 @@ class Army(object):
 	def toString(self):
 		return "{} ({})".format(self.tile.toString(), self.name)
 
+
 class PlayerAggressionTracker(object):
 	def __init__(self, index):
 		self.player = index
 
+
 class ArmyTracker(object):
 	def __init__(self, map):
 		self.map = map
-		self.armies = {}
+		self.armies: typing.Dict[Tile, Army] = {}
 		# used to keep track of armies while attempting to resolve where they went
-		self.trackingArmies = {}
+		self.trackingArmies: typing.Dict[Tile, Army] = {}
 		self.isArmyBonus = map.turn % 50 == 0
 		self.isCityBonus = map.turn % 2 == 0
 		self.distMap = None
@@ -542,21 +545,35 @@ class ArmyTracker(object):
 
 	def new_army_emerged(self, emergedTile, armyEmergenceValue):
 		logging.info("running new_army_emerged for tile {}".format(emergedTile.toString()))
-		distance = 7
+		distance = 10
 		#armyEmergenceValue = 
 		armyEmergenceValue = 2 + (armyEmergenceValue ** 0.8)
-		if armyEmergenceValue > 30:
-			armyEmergenceValue = 30
+		if armyEmergenceValue > 50:
+			armyEmergenceValue = 50
 		def foreachFunc(tile, dist): 
-			self.emergenceLocationMap[emergedTile.player][tile.x][tile.y] += 3 * armyEmergenceValue // (dist + 1)
+			self.emergenceLocationMap[emergedTile.player][tile.x][tile.y] += 3 * armyEmergenceValue // max(4, (dist + 1))
 
 		negativeLambda = lambda tile: tile.discovered
-		skipFunc = lambda tile: tile.visible and tile != emergedTile
+		skipFunc = lambda tile: (tile.visible or tile.discoveredAsNeutral) and tile != emergedTile
 		breadth_first_foreach_dist(self.map, [emergedTile], distance, foreachFunc, negativeLambda, skipFunc)
 
-		#self.emergenceLocationMap[emergedTile.player][emergedTile.x][emergedTile.y] += armyEmergenceValue
 		for handler in self.notify_unresolved_army_emerged:
 			handler(emergedTile)
+
+
+	def tile_discovered_neutral(self, neutralTile):
+		logging.info("running tile_discovered_neutral for tile {}".format(neutralTile.toString()))
+		distance = 6
+		armyEmergenceValue = 40
+		def foreachFunc(tile, dist):
+			self.emergenceLocationMap[neutralTile.player][tile.x][tile.y] -= 1 * armyEmergenceValue // (dist + 5)
+			if self.emergenceLocationMap[neutralTile.player][tile.x][tile.y] < 0:
+				self.emergenceLocationMap[neutralTile.player][tile.x][tile.y] = 0
+
+		negativeLambda = lambda tile: tile.discovered or tile.player >= 0
+		skipFunc = lambda tile: tile.visible and tile != neutralTile
+		breadth_first_foreach_dist(self.map, [neutralTile], distance, foreachFunc, negativeLambda, skipFunc)
+
 
 
 	def find_fog_source(self, tile):

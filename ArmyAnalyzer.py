@@ -73,8 +73,8 @@ class ArmyAnalyzer:
 	def __init__(self, map, armyA: Tile, armyB: Tile, maxDist = 1000):
 		startTime = time.time()
 		self.map = map
-		self.tileA = armyA
-		self.tileB = armyB
+		self.tileA: Tile = armyA
+		self.tileB: Tile = armyB
 		# path chokes are relative to the paths between A and B
 		self.pathChokes: typing.Set[Tile] = set()
 		self.pathways = MapMatrix(map)

@@ -10,10 +10,20 @@ import typing
 from copy import deepcopy
 import time
 import json
-from collections import deque 
+from collections import deque
+from enum import Enum
 from queue import PriorityQueue
 from pprint import pprint,pformat
 
+from base.client.map import Tile
+
+
+class TargetStyle(Enum):
+	RED = 1
+	GREEN = 2
+	BLUE = 3
+	GOLD = 4
+	PURPLE = 5
 
 
 class PathColorer(object):
@@ -27,12 +37,15 @@ class PathColorer(object):
 
 class ViewInfo(object):
 	def __init__(self, countHist, cols, rows):
-		self.lastSearched = []
-		self.searchHistory = []
+		# Draws the red target circles
+		self.redTargetedTiles: typing.List[typing.Tuple[Tile, TargetStyle]] = []
+		self.redTargetedTileHistory: typing.List[typing.List[typing.Tuple[Tile, TargetStyle]]] = []
 		for i in range(countHist):
-			self.searchHistory.append([])
-		self.evaluatedGrid = []
-		self.lastEvaluatedGrid = []
+			self.redTargetedTileHistory.append([])
+
+		# per-tile int that darkens the red 'evaluated' X drawn on evaluated tiles.
+		self.evaluatedGrid: typing.List[typing.List[int]] = []
+		self.lastEvaluatedGrid: typing.List[typing.List[int]] = []
 		self.infoText = "(replace with whatever text here)"
 		self.cols = cols
 		self.rows = rows
@@ -40,6 +53,7 @@ class ViewInfo(object):
 		self.readyToDraw = False
 		self.bottomRightGridText = [[None for x in range(self.rows)] for y in range(self.cols)]
 		self.bottomLeftGridText = [[None for x in range(self.rows)] for y in range(self.cols)]
+		self.midRightGridText = [[None for x in range(self.rows)] for y in range(self.cols)]
 		self.lastMoveDuration = 0.0
 		self.addlTimingsLineText: str = ""
 		self.addlInfoLines: typing.List[str] = []
@@ -49,21 +63,22 @@ class ViewInfo(object):
 		self.addlInfoLines = []
 		self.bottomRightGridText = [[None for x in range(self.rows)] for y in range(self.cols)]
 		self.bottomLeftGridText = [[None for x in range(self.rows)] for y in range(self.cols)]
-		countHist = len(self.searchHistory)
+		self.midRightGridText = [[None for x in range(self.rows)] for y in range(self.cols)]
+		countHist = len(self.redTargetedTileHistory)
 		for i in range(countHist):
 			if (i == countHist - 2):
 				break
-			self.searchHistory[countHist - i - 1] = self.searchHistory[countHist - i - 2]
-		self.searchHistory[0] = self.lastSearched
-		self.lastSearched = []
+			self.redTargetedTileHistory[countHist - i - 1] = self.redTargetedTileHistory[countHist - i - 2]
+		self.redTargetedTileHistory[0] = self.redTargetedTiles
+		self.redTargetedTiles = []
 
 		self.lastEvaluatedGrid = self.evaluatedGrid
-		if (len(self.lastEvaluatedGrid) == 0):
+		if len(self.lastEvaluatedGrid) == 0:
 			self.lastEvaluatedGrid = [[0 for x in range(self.rows)] for y in range(self.cols)]
 		self.evaluatedGrid = [[0 for x in range(self.rows)] for y in range(self.cols)]
 
-	def addSearched(self, tile):
-		self.lastSearched.append(tile)
+	def add_targeted_tile(self, tile: Tile, targetStyle: TargetStyle = TargetStyle.RED):
+		self.redTargetedTiles.append((tile, targetStyle))
 
 	def addAdditionalInfoLine(self, additionalInfo: str):
 		logging.info(additionalInfo)

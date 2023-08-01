@@ -35,7 +35,7 @@ def new_map_matrix(map, initialValueXYFunc):
 def new_tile_matrix(map, initialValueTileFunc):
 	return [[initialValueTileFunc(map.grid[y][x]) for y in range(map.rows)] for x in range(map.cols)]
 
-def new_value_matrix(map, initValue):
+def new_value_matrix(map, initValue) -> typing.List[typing.List[int]]:
 	return [[initValue] * map.rows for _ in range(map.cols)]
 
 	

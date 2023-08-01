@@ -22,22 +22,22 @@ class Timings():
 		return turn == self.nextRecalcTurn
 
 	def in_quick_expand_split(self, turn):
-		adjustedTurn = self.get_split_turn(turn)
+		adjustedTurn = self.get_turn_in_cycle(turn)
 		return adjustedTurn <= self.quickExpandTurns
 
 	def in_gather_split(self, turn):
-		adjustedTurn = self.get_split_turn(turn)
+		adjustedTurn = self.get_turn_in_cycle(turn)
 		return self.quickExpandTurns < adjustedTurn < self.splitTurns
 
 	def in_expand_split(self, turn):
-		adjustedTurn = self.get_split_turn(turn)
+		adjustedTurn = self.get_turn_in_cycle(turn)
 		return adjustedTurn >= self.splitTurns
 
 	def in_launch_split(self, turn):
-		adjustedTurn = self.get_split_turn(turn)
+		adjustedTurn = self.get_turn_in_cycle(turn)
 		return adjustedTurn >= self.launchTiming and adjustedTurn - self.launchTiming < 5
 
-	def get_split_turn(self, turn):
+	def get_turn_in_cycle(self, turn):
 		adjustedTurn = (turn + self.offsetTurns) % self.cycleTurns
 		return adjustedTurn
 

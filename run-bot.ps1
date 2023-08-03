@@ -9,7 +9,7 @@ function Run-BotOnce {
         [switch]$right, 
         $privateGame, 
         [switch]$noui,
-        $path = "D:\2019_reformat_Backup\generals-bot\bot_ek0x45.py",
+        $path = "D:\2019_reformat_Backup\generals-bot\BotHost.py",
         $userID = $null,
 		[switch]$nolog,
 		[switch]$publicLobby
@@ -197,7 +197,7 @@ function Run-Bot {
         [switch]$right, 
         $privateGame, 
         [switch]$noui,
-		$path = "D:\2019_reformat_Backup\generals-bot\bot_ek0x45.py",
+		$path = "D:\2019_reformat_Backup\generals-bot\BotHost.py",
 		[switch]$nolog,
 		[switch]$publicLobby
     )
@@ -228,18 +228,22 @@ function Run-BotCheckpoint {
 		[switch]$publicLobby
     )
     $games = $game
-    if (-not $nocopy)
-    {
-		$date = Get-Date -Format 'yyyy-MM-dd'
-		Create-Checkpoint -backup "D:\2019_reformat_Backup\generals-bot-historical\generals-bot-$date"
-    }
+	$date = Get-Date -Format 'yyyy-MM-dd'
+	$checkpointLoc = "D:\2019_reformat_Backup\generals-bot-historical\generals-bot-$date"
+	Create-Checkpoint -backup $checkpointLoc
+
     while($true)
     {
         foreach ($g in $games)
         {
             write-verbose $g -verbose
             $psboundparameters['game'] = $g
-            Run-BotOnce @psboundparameters -path "D:\2019_reformat_Backup\generals-bot-checkpoint\bot_ek0x45.py"
+			$botFile = "bot_ek0x45.py"
+			if (Test-Path "$checkpointLoc\BotHost.py")
+			{
+				$botFile = "BotHost.py"	
+			}
+            Run-BotOnce @psboundparameters -path "$checkpointLoc\$botFile"
         }
     }
 }

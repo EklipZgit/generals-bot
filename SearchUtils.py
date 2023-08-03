@@ -17,9 +17,7 @@ from DataModels import PathNode, TreeNode, Move
 from Path import Path, PathMove
 from test.test_float import INF
 from ViewInfo import ViewInfo, PathColorer
-
-
-
+from base.client.map import Tile
 
 
 class Counter(object):
@@ -88,28 +86,35 @@ def dest_breadth_first_target(map, goalList, targetArmy = 1, maxTime = 0.1, maxD
 			startArmy = goalIncModifier
 			
 			if searchingPlayer != goal.player:
-				startArmy = 0 + goalTargetArmy
+				startArmy = 0 + goalTargetArmy + goalInc
 			else:
-				startArmy = 0 - goalTargetArmy
+				startArmy = 0 - goalTargetArmy - goalInc
 
 			if ignoreGoalArmy:
 				# then we have to inversely increment so we dont have to figure that out in the loop every time
 				if searchingPlayer != goal.player:
-					if (negativeTiles is None or goal not in negativeTiles):
-						 startArmy -= goal.army
+					if negativeTiles is None or goal not in negativeTiles:
+						startArmy -= goal.army
 				else:
-					if (negativeTiles is None or goal not in negativeTiles):
-						 startArmy += goal.army
+					if negativeTiles is None or goal not in negativeTiles:
+						startArmy += goal.army
 
 			startVal = (startDist, 0 - startArmy)
 			frontier.put((startVal, goal, startDist, startArmy, goalInc, None))
 	else:
-		for goal in goalList:
+		for goalRaw in goalList:
+			goal: Tile = goalRaw
 			if goal.mountain:
 				#logging.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
 				continue
 
 			goalInc = 0
+			if goal.isCity or goal.isGeneral and goal.player >= 0:
+				if searchingPlayer != goal.player:
+					startArmy = 0 - goal.army
+				else:
+					startArmy = goal.army
+
 			startArmy = 0
 			if ignoreGoalArmy and (negativeTiles is None or goal not in negativeTiles):
 				# then we have to inversely increment so we dont have to figure that out in the loop every time
@@ -144,13 +149,15 @@ def dest_breadth_first_target(map, goalList, targetArmy = 1, maxTime = 0.1, maxD
 			if not noLog and iter < 100:
 				logging.info("PopSkipped Mountain, neutCity or Obstacle current {}".format(current.toString()))
 			continue
-		
-		nextArmy = army - 1 - goalInc
+
 		if (current.isCity and current.player != -1) or current.isGeneral:
 			if current.player == searchingPlayer:
 				goalInc -= 0.5
 			else:
 				goalInc += 0.5
+
+		nextArmy = army - 1 - goalInc
+
 		if (negativeTiles is None or current not in negativeTiles):
 			if (searchingPlayer == current.player):
 				if (current.isCity and dontEvacCities):								

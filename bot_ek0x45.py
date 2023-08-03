@@ -37,7 +37,6 @@ from History import *
 from Territory import *
 from ArmyTracker import *
 
-GENERAL_HALF_TURN = 20000
 # was 30. Prevents runaway CPU usage...?
 GATHER_SWITCH_POINT = 50
 
@@ -307,6 +306,9 @@ class EklipZBot(object):
             if army.player == capturee:
                 logging.info("EH:   scrapping dead players army {}".format(army.toString()))
                 self.armyTracker.scrap_army(army)
+
+        self.history.captured_player(self._map.turn, capturee, capturer)
+
         if capturer == self.general.player:
             logging.info("setting lastPlayerKilled to {}".format(capturee))
             self.lastPlayerKilled = capturee
@@ -1708,29 +1710,30 @@ class EklipZBot(object):
                     gathString += " +needToKill"
                     for tile in needToKillTiles:
                         self.mark_tile(tile, 200)
-                        #
-                        #
-                        # def tile_remover(curTile: Tile):
-                        #     if curTile not in needToKillTiles and curTile in gatherTargets:
-                        #         gatherTargets.remove(curTile)
-                        #
-                        # breadth_first_foreach(self._map, [tile], 4, tile_remover, None, None, noLog = True)
-                        #
-                        # gatherTargets.add(tile)
-                    negCopy = gatherNegatives.copy()
-                    for pathTile in self.target_player_gather_path.tileList:
-                        negCopy.add(pathTile)
 
-                    move = self.timing_gather(needToKillTiles, negCopy, skipTiles=None, force=True,
-                                              priorityTiles=needToKillTiles, targetTurns = 4)
-                    if move is not None:
-                        self.curPath = None
-                        self.info("GATHER needToKill{}! Gather move: {} Duration {:.3f}".format(gathString,
-                                                                                                        move.toString(),
-                                                                                                        time.perf_counter() - gathStartTime))
-                        return self.move_half_on_repetition(move, 6, 4)
-                    else:
-                        logging.info("No needToKill gather move found")
+                        def tile_remover(curTile: Tile):
+                            if curTile not in needToKillTiles and curTile in gatherTargets:
+                                gatherTargets.remove(curTile)
+
+                        breadth_first_foreach(self._map, [tile], 2, tile_remover, None, None, noLog = True)
+
+                        gatherTargets.add(tile)
+
+                    if self.timings.in_quick_expand_split(self._map.turn):
+                        negCopy = gatherNegatives.copy()
+                        for pathTile in self.target_player_gather_path.tileList:
+                            negCopy.add(pathTile)
+
+                        move = self.timing_gather(needToKillTiles, negCopy, skipTiles=genPlayer.cities, force=True,
+                                                  priorityTiles=needToKillTiles, targetTurns=4)
+                        if move is not None:
+                            self.curPath = None
+                            self.info("GATHER needToKill{}! Gather move: {} Duration {:.3f}".format(gathString,
+                                                                                                            move.toString(),
+                                                                                                            time.perf_counter() - gathStartTime))
+                            return self.move_half_on_repetition(move, 6, 4)
+                        else:
+                            logging.info("No needToKill gather move found")
                 else:
                     needToKillTiles = None
 
@@ -1837,7 +1840,7 @@ class EklipZBot(object):
                         armyAmount = -1
                         if dest.isGeneral or (dest.isCity and dest.player >= 0):
                             armyAmount = dest.army / 2
-                        paths = self.weighted_breadth_search([dest], gatherDist, 0.12, -2, armyAmount, 10, negativeTiles)
+                        paths = self.weighted_breadth_search([dest], int(gatherDist), 0.12, -2, armyAmount, 10, negativeTiles)
                         if len(paths) > 0:
                             self.curPath = paths[0]
                             logging.info("Found path to cap the city: {}".format(self.curPath.toString()))
@@ -3869,7 +3872,7 @@ class EklipZBot(object):
         undiscoveredTileSearchCount = 0
         score = Map.scores[playerSearching]
         skippedTargetCount = 0
-        isHalfTurn = Map.turn > GENERAL_HALF_TURN
+        isHalfTurn = False
         while not frontier.empty(): #make sure there are nodes to check left
 
             if iter & 32 == 0 and time.perf_counter() - start > maxTime:
@@ -4111,9 +4114,7 @@ class EklipZBot(object):
         general = self._map.generals[self._map.player_index]
         minArmy = self.general_min_army_allowable()
 
-        genArmyAfterMove = general.army // 2
-        if not move_half and (self._map.turn <= GENERAL_HALF_TURN):
-            genArmyAfterMove = 1
+        genArmyAfterMove = 1
 
         safeSoFar = True
 
@@ -4151,9 +4152,7 @@ class EklipZBot(object):
 
     def get_danger_tiles(self, move_half=False):
         general = self._map.generals[self._map.player_index]
-        genArmyAfterMove = general.army / 2
-        if not move_half and (self._map.turn <= GENERAL_HALF_TURN):
-            genArmyAfterMove = 1
+        genArmyAfterMove = 1
         dangerTiles = set()
         toCheck = []
         #if (general.left is not None and general.left.left is not None):
@@ -5400,7 +5399,7 @@ class EklipZBot(object):
                 self.largeTilesNearEnemyKings[enemyGen] = []
         for x in range(self._map.cols):
             for y in range(self._map.rows):
-                tile = _map.grid[y][x]
+                tile = self._map.grid[y][x]
                 if tile.discovered and tile.player == -1:
                     tile.discoveredAsNeutral = True
                 if not tile.discovered and not tile.isobstacle():
@@ -5416,7 +5415,7 @@ class EklipZBot(object):
 
                 if tile.player == self._map.player_index:
                     for nextTile in tile.moveable:
-                        if nextTile.player != _map.player_index and not nextTile.mountain:
+                        if nextTile.player != self._map.player_index and not nextTile.mountain:
                             self.leafMoves.append(Move(tile, nextTile))
                     if tile.army > largePlayerTileThreshold:
                         self.largePlayerTiles.append(tile)
@@ -5871,43 +5870,3 @@ class EklipZBot(object):
         # logging.info(f"NOT Cramped: 8[{count8}/{cap8}] 6[{count6}/{cap6}] 4[{count4}/{cap4}] spawnDistFactor[{spawnDistFactor}]")
 
         return cramped
-
-_eklipzBot = EklipZBot(THREAD_COUNT)
-
-def make_move(currentBot, currentMap):
-    global _bot, _map
-    _bot = currentBot
-    _map = currentMap
-    _eklipzBot._bot = _bot
-    _eklipzBot._map = _map
-
-    command = currentBot.getLastCommand()
-    #if (command == "-s"):
-    #    return
-    startTime = time.perf_counter()
-    move = _eklipzBot.find_move()
-    duration = time.perf_counter() - startTime
-    _eklipzBot.viewInfo.lastMoveDuration = duration
-    if move is not None:
-        if not place_move(move.source, move.dest, move.move_half):
-            logging.info("!!!!!!!!! {},{} -> {},{} was an illegal / bad move!!!!".format(move.source.x, move.source.y, move.dest.x, move.dest.y))
-    return
-
-
-def place_move(source, dest, moveHalf = False):
-    if _map.turn > GENERAL_HALF_TURN:
-        if source.isGeneral:
-            moveHalf = True
-        elif source.isCity and _map.turn - source.turn_captured < 50:
-            moveHalf = True
-    if source.army == 1 or source.army == 0:
-        logging.info("BOT PLACED BAD MOVE! {},{} to {},{}. Will send anyway, i guess.".format(source.x, source.y, dest.x, dest.y))
-    else:
-        logging.info("Placing move: {},{} to {},{}".format(source.x, source.y, dest.x, dest.y))
-    return _bot.place_move(source, dest, move_half=moveHalf)
-
-
-# Start Game
-import startup
-if __name__ == '__main__':
-    startup.startup(make_move, "EklipZTest2")

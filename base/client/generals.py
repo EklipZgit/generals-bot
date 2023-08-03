@@ -135,7 +135,7 @@ class Generals(object):
         self._seen_update = False
         self._move_id = 1
         self._stars = []
-        self._map = []
+        self._map: map.Map = None
         self._cities = []
 
     def get_endpoint_ws(self):
@@ -429,7 +429,8 @@ class Generals(object):
             self._map = map.Map(self._start_data, data)
             return self._map
 
-        return self._map.update(data)
+        self._map.apply_server_update(data)
+        return self._map.update()
 
     def _make_result(self, update, data):
         result = self._map.updateResult(update)

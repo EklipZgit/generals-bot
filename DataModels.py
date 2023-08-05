@@ -23,14 +23,22 @@ class PathNode(object):
 		self.move_half = False
 		self.cityCount = cityCount
 		self.pathDict = pathDict
+
 	def __gt__(self, other):
 		if (other == None):
 			return True
 		return self.turn > other.turn
+
 	def __lt__(self, other):
 		if (other == None):
 			return True
-		return self.turn < other.turn	
+		return self.turn < other.turn
+
+	def __str__(self):
+		return f'{str(self.parent) if self.parent is not None else ""} -> {str(self.tile)}'
+
+	def __repr__(self):
+		return str(self)
 
 def get_tile_list_from_path(pathObject):
 	path = pathObject.start

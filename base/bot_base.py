@@ -56,8 +56,7 @@ class GeneralsBot(object):
     ######################### Handle Updates From Server #########################
     
     def getLastCommand(self):
-        return self._game.lastChatCommand	
-
+        return self._game.lastChatCommand
 
     def _start_game_thread(self):
         # Create Game

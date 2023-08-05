@@ -40,6 +40,9 @@ class Player(object):
         self.capturedBy = None
         self.knowsKingLocation = False
 
+    def __str__(self):
+        return f'p{self.index}{"(dead)" if self.dead else ""}: tiles {self.tileCount}, standingArmy {self.standingArmy}, general {str(self.general)}'
+
 
 class TileDelta(object):
     def __init__(self):
@@ -48,6 +51,7 @@ class TileDelta(object):
         self.newOwner = -1
         self.gainedSight = False
         self.lostSight = False
+        # true when this was a friendly tile and was captured
         self.friendlyCaptured = False
         self.armyDelta = 0
         self.fromTile = None
@@ -55,26 +59,32 @@ class TileDelta(object):
 
 
 class Tile(object):
-    def __init__(self, x, y, tile=TILE_EMPTY, army=0, isCity=False, isGeneral=False, player=-1, mountain=False,
+    def __init__(self, x, y, tile=TILE_EMPTY, army=0, isCity=False, isGeneral=False, player: typing.Union[None, int] = None, mountain=False,
                  turnCapped=0):
         # Public Properties
         self.x = x  # Integer X Coordinate
         self.y = y  # Integer Y Coordinate
-        self.tile = tile  # Integer Tile Type (TILE_OBSTACLE, TILE_FOG, TILE_MOUNTAIN, TILE_EMPTY, or
-        # player_ID)
-        self.turn_captured = turnCapped  # Integer Turn Tile Last Captured
-        self.army = army  # Integer Army Count
-        self.isCity = isCity  # Boolean isCity
-        self.isGeneral = isGeneral  # Boolean isGeneral
-        self.player = player
-        self.visible = False
-        self.discovered = False
-        self.discoveredAsNeutral = False
-        self.lastSeen = -1
-        self.mountain = mountain
-        self.delta = TileDelta()
-        self.adjacents = []
-        self.moveable = []
+
+        # Integer Tile Type (TILE_OBSTACLE, TILE_FOG, TILE_MOUNTAIN, TILE_EMPTY, or 0-8 player_ID)
+        self.tile: int = tile
+        self.turn_captured: int = turnCapped  # Integer Turn Tile Last Captured
+        self.army: int = army  # Integer Army Count
+        self.isCity: bool = isCity  # Boolean isCity
+        self.isGeneral: bool = isGeneral  # Boolean isGeneral
+        self.player: int = -1
+        if player is not None:
+            self.player = player
+        elif tile >= 0:
+            self.player = tile
+
+        self.visible: bool = False
+        self.discovered: bool = False
+        self.discoveredAsNeutral: bool = False
+        self.lastSeen: int = -1
+        self.mountain: bool = mountain
+        self.delta: TileDelta = TileDelta()
+        self.adjacents: typing.List[Tile] = []
+        self.moveable: typing.List[Tile] = []
 
     def __repr__(self):
         return "(%d,%d) %d (%d)" % (self.x, self.y, self.tile, self.army)
@@ -112,7 +122,8 @@ class Tile(object):
     def isobstacle(self):
         return self.mountain or (not self.discovered and self.tile == TILE_OBSTACLE)
 
-    def update(self, map, tile, army, isCity=False, isGeneral=False, overridePlayer=None):
+    # returns true if an army was likely moved to this tile, false if not.
+    def update(self, map, tile, army, isCity=False, isGeneral=False, overridePlayer=None) -> bool:
 
         # if (self.tile < 0 or tile >= 0 or (tile < TILE_MOUNTAIN and self.tile == map.player_index)): # Remember Discovered Tiles
         #	if (tile >= 0 and self.tile != tile):
@@ -195,6 +206,7 @@ class Tile(object):
             self.isGeneral = True
             map.generals[tile] = self
             self._general_index = self.tile
+
         return armyMovedHere
 
 
@@ -219,7 +231,7 @@ class Score(object):
 class MapBase(object):
     def __init__(self,
                  player_index: int,
-                 teams: typing.List[int],  # the players index into this array gives the index of their teammate as the value.
+                 teams: typing.Union[None, typing.List[int]],  # the players index into this array gives the index of their teammate as the value.
                  user_names: typing.List[str],
                  turn: int,
                  map_grid_y_x: typing.List[typing.List[Tile]],  # dont need to init moveable and stuff
@@ -231,7 +243,7 @@ class MapBase(object):
         self.teammates = set()
         if teams is not None:
             for player, team in enumerate(teams):
-                if team == teams[self.player_index]:
+                if team == teams[self.player_index] and player != self.player_index:
                     self.teammates.add(player)
 
         self.usernames: typing.List[str] = user_names  # List of String Usernames
@@ -321,7 +333,7 @@ class MapBase(object):
                     self.remainingPlayers += 1
 
         if self.remainingPlayers == 2:
-            self.calculate_player_city_counts()
+            self.calculate_player_city_counts_1v1()
         elif self.remainingPlayers > 2:
             for i, player in enumerate(self.players):
                 if not player.dead and player.index != self.player_index:
@@ -332,7 +344,7 @@ class MapBase(object):
                         player.cityCount = cityCounts[i]
                         player.cityLostTurn = self.turn
 
-    def calculate_player_city_counts(self):
+    def calculate_player_city_counts_1v1(self):
         myPlayer = self.players[self.player_index]
         otherPlayer = None
         for player in self.players:
@@ -377,7 +389,7 @@ class MapBase(object):
             # then opp just took a neutral city
             otherPlayer.cityCount += 1
             logging.info("set otherPlayer cityCount += 1 to {} because it appears he just took a city.")
-        elif realEnemyCities >= 38 and actualPlayerDelta < -30:
+        elif realEnemyCities >= 30 and actualPlayerDelta < -30:
             # then our player just took a neutral city, noop
             logging.info(
                 "myPlayer just took a city? ignoring realEnemyCities this turn, realEnemyCities >= 38 and actualPlayerDelta < -30")
@@ -595,7 +607,11 @@ class Map(MapBase):
         self._apply_server_patch(data)
 
         map_grid_y_x: typing.List[typing.List[Tile]] = [[Tile(x, y) for x in range(self.cols)] for y in range(self.rows)]
-        super().__init__(start_data['playerIndex'], start_data['teams'], start_data['usernames'], data['turn'], map_grid_y_x, replay_url)
+        teams = None
+        if 'teams' in start_data:
+            teams = start_data['teams']
+
+        super().__init__(start_data['playerIndex'], teams, start_data['usernames'], data['turn'], map_grid_y_x, replay_url)
 
         self.apply_server_update(data)
 
@@ -621,7 +637,7 @@ class Map(MapBase):
 
                 self.update_visible_tile(x, y, tile_type, army_count, isCity, isGeneral)
 
-        self.update()
+        mapResult = self.update()
 
         if 'stars' in data:
             self.stars[:] = data['stars']
@@ -629,7 +645,7 @@ class Map(MapBase):
         for player in self.players:
             player.stars = self.stars[player.index]
 
-        return self
+        return mapResult
 
     def _get_raw_scores_from_data(self, data):
         scores = {s['i']: s for s in data['scores']}

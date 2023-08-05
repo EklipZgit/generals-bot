@@ -1,10 +1,8 @@
 import argparse
 import logging
-import os
 import time
 
 from base import bot_base
-from base.bot_base import _create_thread
 from base.viewer import GeneralsViewer
 from bot_ek0x45 import EklipZBot
 
@@ -63,7 +61,7 @@ class BotHost(object):
     # Consumes thread
     def run_viewer_loop(self):
         # Consumes thread
-        self._viewer.main_viewer_loop(not self.align_bottom, not self.align_right)
+        self._viewer.run_main_viewer_loop(not self.align_bottom, not self.align_right)
 
     def make_move(self, currentBot, currentMap):
         self.eklipz_bot._bot = currentBot
@@ -93,6 +91,7 @@ class BotHost(object):
         else:
             logging.info("Placing move: {},{} to {},{}".format(source.x, source.y, dest.x, dest.y))
         return bot_client.place_move(source, dest, move_half=move_half)
+
 
 if __name__ == '__main__':
     host = BotHost()

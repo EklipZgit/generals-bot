@@ -101,7 +101,7 @@ function Run-BotOnce {
 				}
 			}
 
-			if (`$repId)
+			if (`$repId -and (`$path -notlike '*historical*'))
 			{
 				`$folder = Get-ChildItem "D:\GeneralsLogs" -Filter "*`$repId*" -Directory
 				`$newLogPath = Join-Path `$folder.FullName "_`$logFile"

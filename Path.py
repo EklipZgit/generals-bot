@@ -10,7 +10,7 @@ from copy import deepcopy
 import time
 import json
 import math
-from DataModels import TreeNode
+from DataModels import TreeNode, Move
 from collections import deque 
 from queue import PriorityQueue
 from pprint import pprint,pformat
@@ -26,9 +26,6 @@ class PathMove(object):
 
 	def clone(self):
 		return PathMove(self.tile, self.next, self.prev)
-
-	def __str__(self):
-		return self.toString()
 
 	def toString(self):
 		prevVal = "[]"
@@ -49,8 +46,12 @@ class PathMove(object):
 	#	if (other == None):
 	#		return True
 	#	return self.turn < other.turn
+
 	def __str__(self):
 		return self.toString()
+
+	def __repr__(self):
+		return str(self)
 
 
 class Path(object):
@@ -59,13 +60,17 @@ class Path(object):
 		self._pathQueue = deque()
 		self.tail = None
 		self._tileList = None
+		# The exact army tile number that will exist on the final tile at the end of the path run.
+		# So for a path that exactly kills a tile with minimum kill army, this should be 1.
 		self.value = value
+
 	def __gt__(self, other):
-		if (other == None):
+		if other is None:
 			return True
 		return self.length > other.length
+
 	def __lt__(self, other):
-		if (other == None):
+		if other is None:
 			return True
 		return self.length < other.length
 
@@ -76,13 +81,14 @@ class Path(object):
 	@property
 	def tileSet(self):
 		return set(self.tileList)
+
 	@tileSet.setter
 	def tileSet(self, value):
 		raise AssertionError("NO SETTING!")
 
 	@property
 	def tileList(self):
-		if self._tileList == None:
+		if self._tileList is None:
 			self._tileList = list()
 			node = self.start
 			while node is not None:
@@ -93,7 +99,7 @@ class Path(object):
 	def add_next(self, nextTile):
 		move = PathMove(nextTile)
 		move.prev = self.tail
-		if self.start == None:
+		if self.start is None:
 			self.start = move
 		if self.tail is not None:
 			self.tail.next = move
@@ -144,19 +150,21 @@ class Path(object):
 		return dict
 
 	def calculate_value(self, forPlayer):
-		val = 0
+		# offset the first val = val - 1
+		val = 1
 		node = self.start
 		i = 0
-		while (node is not None):
+		while node is not None:
+			val = val - 1
 			tile = node.tile
 			if tile.player == forPlayer:
-				val += tile.army - 1
+				val += tile.army
 				if tile.isCity or tile.isGeneral:
-					val += math.floor(i * 0.5)
+					val += math.floor(max(0, i - 1) * 0.5)
 			else:
-				val -= tile.army + 1
+				val -= tile.army
 				if tile.isCity or tile.isGeneral and tile.player != -1:
-					val -= math.floor(i * 0.5)
+					val -= math.floor(max(0, i - 1) * 0.5)
 			node = node.next
 			i += 1
 		self.value = val
@@ -171,7 +179,7 @@ class Path(object):
 		return newPath
 
 	def get_reversed(self):
-		if (self.start == None or self.start.next == None):
+		if self.start is None or self.start.next is None:
 			return self.clone()
 
 		newPath = Path()
@@ -206,6 +214,9 @@ class Path(object):
 			node = node.next
 		return val
 
+	def __repr__(self):
+		return str(self)
+
 	def convert_to_tree_nodes(self):
 		curTreeNode = None
 		curPathNode = self.start
@@ -219,31 +230,3 @@ class Path(object):
 			prevPathTile = curPathNode.tile
 			curPathNode = curPathNode.next
 		return curTreeNode
-
-	
-		
-	
-
-def PathFromPathNode(pathEnd, path):
-	if pathEnd == None or path == None:
-		return None
-	pathLength = pathEnd.turn
-	value = pathEnd.value
-	cityCount = path.cityCount
-	pathDict = pathEnd.pathDict
-
-	node = path
-	turn = 0
-	
-	curVal = node.tile.army
-	head = PathMove(Move(node.tile, node.parent.tile), None, node.parent.value, turn)
-	
-	prev = head
-	node = node.parent
-	while (node.parent is not None):
-		turn += 1
-		prev.next = PathMove(Move(node.tile, node.parent.tile), None, node.parent.value, turn)
-		prev = prev.next
-		node = node.parent
-	
-	return Path(head, pathLength, value, cityCount, pathDict)

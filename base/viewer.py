@@ -216,9 +216,9 @@ class GeneralsViewer(object):
 				logging.info("Couldn't create dir")
 		_spawn(self.save_images)
 
-	def main_viewer_loop(self, alignTop = True, alignLeft = True):
+	def run_main_viewer_loop(self, alignTop = True, alignLeft = True):
 		while not self._receivedUpdate:  # Wait for first update
-			logging.info("viewer waiting for first update...")
+			# logging.info("viewer waiting for first update...")
 			time.sleep(0.2)
 
 		x = 3 + OFFSET_1080_ABOVE_1440p_MONITOR
@@ -240,6 +240,9 @@ class GeneralsViewer(object):
 			for event in pygame.event.get(): # User did something
 				if event.type == pygame.QUIT: # User clicked quit
 					done = True # Flag done
+					self._map.result = False
+					self._map.complete = True
+
 				elif event.type == pygame.MOUSEBUTTONDOWN: # Mouse Click
 					pos = pygame.mouse.get_pos()
 					
@@ -250,7 +253,8 @@ class GeneralsViewer(object):
 					print("Click ", pos, "Grid coordinates: ", row, column)
 
 			time.sleep(0.05)
-		time.sleep(2.0)
+		logging.info('Pygame closed, exiting')
+		time.sleep(1.0)
 		pygame.quit() # Done.  Quit pygame.
 
 	def _drawGrid(self):

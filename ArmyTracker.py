@@ -545,13 +545,15 @@ class ArmyTracker(object):
 
 	def new_army_emerged(self, emergedTile, armyEmergenceValue):
 		logging.info("running new_army_emerged for tile {}".format(emergedTile.toString()))
-		distance = 10
+		distance = 11
 		#armyEmergenceValue = 
 		armyEmergenceValue = 2 + (armyEmergenceValue ** 0.8)
 		if armyEmergenceValue > 50:
 			armyEmergenceValue = 50
+
+
 		def foreachFunc(tile, dist): 
-			self.emergenceLocationMap[emergedTile.player][tile.x][tile.y] += 3 * armyEmergenceValue // max(4, (dist + 1))
+			self.emergenceLocationMap[emergedTile.player][tile.x][tile.y] += 3 * armyEmergenceValue // max(7, (dist + 1))
 
 		negativeLambda = lambda tile: tile.discovered
 		skipFunc = lambda tile: (tile.visible or tile.discoveredAsNeutral) and tile != emergedTile

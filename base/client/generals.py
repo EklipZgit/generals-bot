@@ -429,8 +429,7 @@ class Generals(object):
             self._map = map.Map(self._start_data, data)
             return self._map
 
-        self._map.apply_server_update(data)
-        return self._map.update()
+        return self._map.apply_server_update(data)
 
     def _make_result(self, update, data):
         result = self._map.updateResult(update)

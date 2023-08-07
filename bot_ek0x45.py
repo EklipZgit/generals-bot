@@ -14,6 +14,7 @@ import json
 import math
 import typing
 
+import ExpandUtils
 from base import bot_base
 from base.bot_base import _create_thread
 from copy import deepcopy
@@ -38,7 +39,7 @@ from Territory import *
 from ArmyTracker import *
 
 # was 30. Prevents runaway CPU usage...?
-GATHER_SWITCH_POINT = 50
+GATHER_SWITCH_POINT = 35
 
 def scale(inValue, inBottom, inTop, outBottom, outTop):
     if inBottom > inTop:
@@ -99,6 +100,9 @@ THREAD_COUNT = 6
 
 class EklipZBot(object):
     def __init__(self, threadCount):
+        self.player: Player = None
+        self.targetPlayerObj: typing.Union[Player, None] = None
+        self.expand_plan: ExpandUtils.ExpansionPlan = None
         self.force_city_take = False
         self._gen_distances: typing.List[typing.List[int]] = []
         self.all_in_army_advantage: bool = False
@@ -356,6 +360,7 @@ class EklipZBot(object):
         logging.info("\n       ~~~\n       Turn {}   ({:.3f})\n       ~~~\n".format(self._map.turn, timeSinceLastUpdate))
         if self.general is None:
             self.general = self._map.generals[self._map.player_index]
+            self.player = self._map.players[self.general.player]
         self._minAllowableArmy = -1
         self._gen_distances = build_distance_map(self._map, [self.general])
         self.enemyCities = []
@@ -466,7 +471,7 @@ class EklipZBot(object):
             split = min(split, genPlayer.tileCount - countOnPath)
 
         if self.targetPlayer == -1 and self._map.remainingPlayers == 2:
-            split += 1
+            split += 3
         if self.defendEconomy:
             split += 3
         split += randomVal
@@ -508,7 +513,7 @@ class EklipZBot(object):
             # pathValueWeight = max(pathValueWeight, subsegment.value ** 0.75)
             pathLength = max(pathLength, self.target_player_gather_path.length)
 
-        launchTiming = cycleDuration - pathValueWeight - pathLength
+        launchTiming = cycleDuration - pathValueWeight - pathLength - 3
         if launchTiming < split:
             self.viewInfo.addAdditionalInfoLine(f'launchTiming was {launchTiming} (pathValueWeight {pathValueWeight}), targetLen {pathLength}, adjusting to be same as split {split}')
             launchTiming = split
@@ -588,6 +593,61 @@ class EklipZBot(object):
 
 
     def make_first_25_move(self):
+
+        calcedThisTurn = False
+        distSource = [self.general]
+        if self.targetPlayerExpectedGeneralLocation is not None:
+            distSource = [self.targetPlayerExpectedGeneralLocation]
+        distMap = build_distance_map(self._map, distSource)
+
+        if self.expand_plan is None or len(self.expand_plan.plan_paths) == 0 or self._map.turn < 20:
+            calcedThisTurn = True
+            self.expand_plan = ExpandUtils.optimize_first_25(self._map, self.general, distMap)
+
+        r = 255
+        for plan in self.expand_plan.plan_paths:
+            if plan is None:
+                continue
+
+            r -= 20
+            self.viewInfo.paths.appendleft(PathColorer(plan.clone(), r, 50, 50, alpha=r, alphaDecreaseRate=5, alphaMinimum=100))
+
+        if not calcedThisTurn and not any(self.player.tiles, lambda tile: not tile.isGeneral and tile.army > 1):
+            self.expand_plan.tile_captures = ExpandUtils.get_start_expand_value(self._map, self.general, self.general.army, self._map.turn, self.expand_plan.plan_paths, noLog=False)
+            # # check for alt plan and draw that just for memes
+            # altPlan = ExpandUtilsTests.optimize_first_25(self._map, self.general, distMap)
+            # g = 255
+            # for plan in altPlan.plan_paths:
+            #     if plan is None:
+            #         continue
+            #
+            #     g -= 20
+            #     self.viewInfo.paths.appendleft(PathColorer(plan, 50, g, 50, alpha=g, alphaDecreaseRate=5, alphaMinimum=100))
+
+        if len(self.expand_plan.plan_paths) > 0:
+            countNone = 0
+            for p in self.expand_plan.plan_paths:
+                if p is not None:
+                    break
+                countNone += 1
+            curPlan = self.expand_plan.plan_paths[0]
+            if curPlan is None:
+                self.info(f'Expand plan {self.expand_plan.tile_captures} no-opped next {countNone} turns :)')
+                self.expand_plan.plan_paths.pop(0)
+                return None
+
+            move = self.get_first_path_move(curPlan)
+            curPlan.made_move()
+            self.info(f'Expand plan {self.expand_plan.tile_captures} path move {str(move)}')
+            if curPlan.length == 0:
+                self.info(f'Expand plan {self.expand_plan.tile_captures} path move {str(move)} (end of path)')
+                self.expand_plan.plan_paths.pop(0)
+
+            return move
+
+        self.viewInfo.addAdditionalInfoLine('wtf, explan plan was empty but we''re in first 25 still..?')
+
+
         # PLAN
         # below, count wasted moves somehow to determine how many path crossings are allowed
         # maximize empty tiles near general
@@ -711,16 +771,7 @@ class EklipZBot(object):
                     [])
 
         if self._map.turn < 50:
-            move = self.make_first_25_move()
-            if self._map.turn < 24:
-                return None
-            if move is not None:
-                return move
-            if (self._map.turn < 46 and self.general.army < 3
-                    and self._map.players[self.general.player].standingArmy + 1 == self.general.army
-                    and count(self.general.moveable, lambda tile: tile.player == -1) > 0):
-                # dont send 2 army except right before the bonus, making perfect first 25 much more likely
-                return None
+            return self.make_first_25_move()
         # Dont re-evaluate attack path except at the beginning of the army bonus round
         #if (self.target_player_gather_path is None
         #        or (self._map.turn % 50 < 2)
@@ -896,7 +947,7 @@ class EklipZBot(object):
             self.viewInfo.lastEvaluatedGrid[threat.saveTile.x][threat.saveTile.y] = 200
         paths = []
 
-        enemyNearGen = self.enemy_army_near(general)
+        enemyNearGen = self.sum_enemy_army_near(general)
         genArmyWeighted = general.army - enemyNearGen
         genLowArmy = self.general_min_army_allowable() / 2 > genArmyWeighted and self._map.remainingPlayers <= 3
         if genLowArmy:
@@ -1823,7 +1874,7 @@ class EklipZBot(object):
                 if self.attackFailedTurn <= self._map.turn - 100 and random.choice(range(3)) == 0:
                     for gen in self._map.generals:
                         if gen is not None and gen.player != self._map.player_index:
-                            if self.cost_effective_to_attack(gen):
+                            if self.is_cost_effective_to_attack(gen):
                                 logging.info("Cost effective to attack general {}".format(gen.toString()))
                                 attackable.append(gen)
                                 highPriAttack = True
@@ -2271,22 +2322,10 @@ class EklipZBot(object):
             logging.info("Value {} was too small to return... (needed {}) :(".format(totalValue, targetArmy))
         return None
 
-
-    def get_enemy_undiscovered(self):
-        enemyUndiscovered = []
-        for tile in self.allUndiscovered:
-            for siblingTile in tile.moveable: #new spots to try
-                if siblingTile.player != -1:
-                    enemyUndiscovered.append(tile)
-        return enemyUndiscovered
-
-    def _shortestPathCost(self, a, b):
-        return 1
-
     def euclidDist(self, x, y, x2, y2):
         return pow(pow(abs(x - x2), 2) + pow(abs(y - y2), 2), 0.5)
 
-    def cost_effective_to_attack(self, enemyGen):
+    def is_cost_effective_to_attack(self, enemyGen):
         player = self._map.players[self.general.player]
         enemyPlayer = self._map.players[enemyGen.player]
 
@@ -2299,7 +2338,7 @@ class EklipZBot(object):
             return False
         return True
 
-    def enemy_army_near(self, tile, distance = 2):
+    def sum_enemy_army_near(self, tile, distance = 2):
         enemyNear = Counter(0)
         counterLambda = lambda tile: enemyNear.add(tile.army - 1)
         negativeLambda = lambda tile: tile.player == self.general.player or tile.player == -1
@@ -2312,7 +2351,7 @@ class EklipZBot(object):
         #logging.info("enemy_army_near for tile {},{} returned {}".format(tile.x, tile.y, value))
         return value
 
-    def enemy_territory_near(self, tile, distance = 2):
+    def count_enemy_territory_near(self, tile, distance = 2):
         enemyNear = Counter(0)
         counterLambda = lambda tile: enemyNear.add(1)
         negativeLambda = lambda tile: tile.player == self.general.player or tile.player == -1 or self.territories.territoryMap[tile.x][tile.y] == self.targetPlayer or self.territories.territoryMap[tile.x][tile.y] == -1
@@ -2321,7 +2360,7 @@ class EklipZBot(object):
         value = enemyNear.value
         return value
 
-    def enemy_tiles_near(self, tile, distance = 2):
+    def count_enemy_tiles_near(self, tile, distance = 2):
         enemyNear = Counter(0)
         counterLambda = lambda tile: enemyNear.add(1)
         negativeLambda = lambda tile: tile.player == self.general.player or tile.player == -1
@@ -2330,7 +2369,7 @@ class EklipZBot(object):
         value = enemyNear.value
         return value
 
-    def player_army_near(self, tile, distance = 2, player = None):
+    def sum_player_army_near(self, tile, distance = 2, player = None):
         if player is None:
             player = self._map.player_index
         armyNear = Counter(0)
@@ -2567,6 +2606,7 @@ class EklipZBot(object):
                 if negArmyRemaining < 0 and negValidExplorationCount < 0:
                     value = 0-(2 * negValidExplorationCount + negRevealedCount + enemyTiles * 2 + neutralTiles + pathPriority) / dist
                 return value, posPathPrio, distSoFar
+
             valueFunc = value_priority_army_dist
 
         if not priorityFunc:
@@ -2635,6 +2675,7 @@ class EklipZBot(object):
                     #addedPriority += count(releventAdjacents, lambda adjTile: not adjTile.visible)
                 else:
                     wastedMoves += 1
+
                 nextRevealedSet = revealedSoFar.copy()
                 for adj in where(nextTile.adjacents, lambda tile: not tile.discovered):
                     nextRevealedSet.add(adj)
@@ -2694,7 +2735,7 @@ class EklipZBot(object):
                 #wastedMoves, pathPriorityDivided, armyRemaining, pathPriority, distSoFar, tileSetSoFar
                 # 10 because it puts the tile above any other first move tile, so it gets explored at least 1 deep...
                 startDict[tile] = (initVal, 0)
-            path, pathValue = breadth_first_dynamic_max(self._map, startDict, value_priority_army_dist, 0.2, remainingTurns, noNeutralCities = True, negativeTiles = negativeTiles,
+            path, pathValue = breadth_first_dynamic_max(self._map, startDict, valueFunc, 0.2, remainingTurns, noNeutralCities = True, negativeTiles = negativeTiles,
                                     searchingPlayer = self.general.player,
                                     priorityFunc = priorityFunc,
                                     useGlobalVisitedSet = True,
@@ -3668,8 +3709,8 @@ class EklipZBot(object):
             target = path.tail.tile
             if player.standingArmy + 8 <= target.army:
                 return None, None
-            targetArmyGather = target.army + 1 + self.enemy_army_near(target, 2) * 2
-            targetArmy = 1 + self.enemy_army_near(target, 2) * 1.5
+            targetArmyGather = target.army + 1 + self.sum_enemy_army_near(target, 2) * 2
+            targetArmy = 1 + self.sum_enemy_army_near(target, 2) * 1.5
             searchDist = maxDist
             self.viewInfo.lastEvaluatedGrid[target.x][target.y] = 140
             # gather to the 2 tiles in front of the city
@@ -3685,8 +3726,8 @@ class EklipZBot(object):
                 #if (target.army < 4 and self.enemy_army_near(target) < 10):
                 #    targetArmy = self.enemy_army_near(target)
                 #searchDist = maxDist // 3 + 1
-                targetArmyGather = target.army + max(3, target.army / 3 + self.enemy_army_near(target, 4) * 1.2)
-                targetArmy = max(2, self.enemy_army_near(target, 2) * 1.1)
+                targetArmyGather = target.army + max(3, target.army / 3 + self.sum_enemy_army_near(target, 4) * 1.2)
+                targetArmy = max(2, self.sum_enemy_army_near(target, 2) * 1.1)
                 searchDist = maxDist // 2 + 1
 
             def goalFunc(currentTile, prioObject):
@@ -3780,8 +3821,8 @@ class EklipZBot(object):
                 if tile.player != -1:
                     distanceRating += self.shortest_path_to_target_player.length // 3
                 else:
-                    enemyTerritoryNear = self.enemy_territory_near(tile, distance=3)
-                    enemyArmyNear = self.enemy_army_near(tile, distance=6)
+                    enemyTerritoryNear = self.count_enemy_territory_near(tile, distance=3)
+                    enemyArmyNear = self.sum_enemy_army_near(tile, distance=6)
                     distanceRating -= enemyArmyNear
                     distanceRating -= enemyTerritoryNear
 
@@ -5519,15 +5560,8 @@ class EklipZBot(object):
                         if tile.army > enemyGen.army and self.euclidDist(tile.x, tile.y, enemyGen.x, enemyGen.y) < 12:
                             self.largeTilesNearEnemyKings[enemyGen].append(tile)
 
-
-
-        reachableTiles = set()
-        def find_reachable(tile):
-            reachableTiles.add(tile)
-
-        fakePath = breadth_first_foreach(self._map, [self.general], 100, find_reachable, skipFunc = lambda tile: tile.isCity and tile.player == -1)
-        self.reachableTiles = reachableTiles
-        self._map.reachableTiles = reachableTiles
+        self._map.update_reachable()
+        self.reachableTiles = self._map.reachableTiles
 
         for i in range(len(self._map.generals)):
             if self._map.generals[i] is not None:
@@ -5627,10 +5661,12 @@ class EklipZBot(object):
                 self.playerTargetScores[player.index] = curScore
 
         self.targetPlayer = targetPlayer
+        self.targetPlayerObj = self._map.players[targetPlayer]
 
         # don't target big fish when there are other players left
         if self._map.remainingPlayers > 2 and playerScore < -100:
             self.targetPlayer = -1
+            self.targetPlayerObj = None
         if targetPlayer != -1:
             logging.info("target player: {} ({})".format(self._map.usernames[targetPlayer], int(playerScore)))
 

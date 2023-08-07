@@ -1,0 +1,114 @@
+Generals
+
+cd D:\2019_reformat_Backup\generals-bot\
+. .\run-bot.ps1
+
+
+Run-Blob -game ffa
+Run-Path -game ffa
+Run-SoraAI -game 1v1, ffa, 1v1
+Run-SoraAI -game ffa
+
+
+EklipZ_ai 14 7/24 = original timings and bugs from 2019, with connection code fixed
+EklipZ_ai 13 7/29 = 
+	more frequent 100 cycle timings, no quick-expand at all
+	all in based on enemy took city too aggressively, 
+	prioritize enemy tiles in path again, 
+	explore undiscovered starting turn 50 instead of 100
+	de-prioritize fog undiscovered upon discovering nearby neutrals. Increase army emergence fog distance to 10 from 6, first 3 tiles into undiscovered get same rating
+	git committed
+EklipZ_ai 12 7/31 = 
+	Hopefully defense off-by-one threat detection fixed
+	Additional panic gather defense added, defense now negatives all tiles in shortest path on attack path
+	undiscovered priority improvements
+	AGGRESSIVELY take cities while cramped. Cramped detection takes into account the distance to enemy territory
+	gather to enemy tiles inside territory more aggressively
+	play turns 25-50 more aggressively (too aggressively?)
+
+
+EklipZ_ai 11 8/04
+	improved 'vision tile' kill gathers to only gather for the quickexpand turns, and are included in the main gather phase with a 2 tile exclusion radius around them to prioritize killing them over gather path gather movement if adequate tile counts are near them.
+
+Current
+	slightly longer gather, slightly earlier launch
+
+
+
+
+run-bot -game 1v1, 1v1, 1v1, ffa -name "EklipZ_ai_14" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-07-24\bot_ek0x45.py
+run-bot -game 1v1, 1v1, ffa -name "EklipZ_ai_13" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-07-29\bot_ek0x45.py
+run-bot -game 1v1, ffa, 1v1 -name "EklipZ_ai_12" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-07-31\bot_ek0x45.py
+run-bot -game 1v1, ffa, 1v1, 1v1 -name "EklipZ_ai_11" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-04\BotHost.py
+
+
+current
+run-bot -game ffa -name "EklipZ_ai"
+run-bot -game 1v1 -name "EklipZ_ai" -right
+run-bot -game 1v1, 1v1, ffa, 1v1 -name "EklipZ_ai" -right
+
+#testing
+run-bot -game 1v1 -name "EklipZ_ai_14" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-07-24\bot_ek0x45.py -privateGame testing
+run-bot -game 1v1 -name "EklipZ_ai" -right -privateGame testing
+
+
+TODO
+kill threat should have two modes, one that prioritizes killing enemy tiles on the way, and one that prioritizes max army intercept (cur behav).
+kill threat needs to close distance to target as much as possible, space-wise, on every move. Right now it likes to run in parallel as long as possible for some reason.
+	Needs to understand that it can intercept one move behind the army on longer threat paths where that is safe.
+
+Write an adversarial army scrim tester, at least, if not a full test harness. Can serve as the basis for threat defense.
+
+During expansion, move-half when multiple expansion routes from current tile that are between self and enemy. Prioritize tiles equadistant from both generals near end of cycle.
+During expansion ^ and run away from enemy army.
+Figure out defensive cities as cities closer to general than half the distance to predicted enemy general, use those as launch points instead.
+Try variation of gather where the gather begins with a single max value target path to the launch path, but then use an MST gather from there to gather to that path. 
+	intelligently prune that until it reaches the point where it is some sort of full local gather around that block (like, don't gather from places that are closer to the other side of the gather path or whatever). Iterate if necessary with more additions with this method.
+
+LOSING BECAUSE
+Not gathering outer tiles (in later game? lots of 8/9s floating around edges when dies).
+Taking cities in enemy vision or too close to enemy and then not holding them.
+Not holding cities (friendly or enemy). should maintain a city contestation list of recently / in danger cities and gather to them.
+Attacking too deep in enemy territory early?
+Not blobbing around self as well as old versions...?
+gathering repeatedly from cities/general towards enemy vision tiles
+
+
+debug drawing atm
+
+GREEN TARGET: Threat save tile
+PURPLE TARGET: General defense threat save tile(...?)
+RED: Trying to kill danger tile, or targeting city
+
+PURPLE: max undiscovered area alone - purple
+	bottom right grid text = undiscovered area value
+		light x's around this undiscovered areas tiles that were included
+
+GOLD: general evaluation just based on undiscovered from enemy territory into fog, pre-emergence-army-calculations
+	bottom left grid text = ^ value
+
+BLUE: general evaluation ACTUAL approximation
+	mid right text = ^ value
+
+
+
+	text
+
+
+|                     |
+|                     |
+|                     |
+|                     |
+|           ACTUAL pri|
+|           emergence |
+|undis+fog  undisc exp|
+
+
+
+
+
+4 - 25 seems passable, 17 pretty bad, 21 bad, 26 good, 29 very good, 34 great
+6 - 45 passable, 27 real bad, 32 bad, 35 borderline ok, 48 pretty good, 60 great
+8 - 91 great, 80 pretty good, 75 ok, 55 meh, 52 bad, 48 terrible
+10 - not super useful <80 bad, >95 good
+

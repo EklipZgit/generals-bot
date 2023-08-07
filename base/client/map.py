@@ -1,12 +1,13 @@
 '''
-	@ Harris Christiansen (Harris@HarrisChristiansen.com)
-	January 2016
-	Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
-	Map: Objects for representing Generals IO Map and Tiles
+    @ Harris Christiansen (Harris@HarrisChristiansen.com)
+    January 2016
+    Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
+    Map: Objects for representing Generals IO Map and Tiles
 '''
 import json
 import logging
 import typing
+from collections import deque
 
 TILE_EMPTY = -1
 TILE_MOUNTAIN = -2
@@ -71,11 +72,11 @@ class Tile(object):
         self.army: int = army  # Integer Army Count
         self.isCity: bool = isCity  # Boolean isCity
         self.isGeneral: bool = isGeneral  # Boolean isGeneral
-        self.player: int = -1
+        self._player: int = -1
         if player is not None:
-            self.player = player
+            self._player = player
         elif tile >= 0:
-            self.player = tile
+            self._player = tile
 
         self.visible: bool = False
         self.discovered: bool = False
@@ -86,11 +87,21 @@ class Tile(object):
         self.adjacents: typing.List[Tile] = []
         self.moveable: typing.List[Tile] = []
 
+    @property
+    def player(self) -> int:
+        return self._player
+
+    @player.setter
+    def player(self, value):
+        if value >= 0:
+            self.tile = value
+        self._player = value
+
     def __repr__(self):
         return "(%d,%d) %d (%d)" % (self.x, self.y, self.tile, self.army)
 
     '''def __eq__(self, other):
-			return (other != None and self.x==other.x and self.y==other.y)'''
+            return (other != None and self.x==other.x and self.y==other.y)'''
 
     def __lt__(self, other):
         if other is None:
@@ -127,9 +138,9 @@ class Tile(object):
 
         # if (self.tile < 0 or tile >= 0 or (tile < TILE_MOUNTAIN and self.tile == map.player_index)): # Remember Discovered Tiles
         #	if (tile >= 0 and self.tile != tile):
-        #		if (self.player != tile):
+        #		if (self._player != tile):
         #			self.turn_captured = map.turn
-        #			self.player = tile
+        #			self._player = tile
         #			print("Tile " + str(self.x) + "," + str(self.y) + " captured by player " + str(tile))
         #	if (self.tile != tile):
         #		print("Tile " + str(self.x) + "," + str(self.y) + " from " + self.tileToString(self.tile) + " to " + self.tileToString(tile))
@@ -146,7 +157,7 @@ class Tile(object):
                 self.visible = True
         armyMovedHere = False
 
-        self.delta.oldOwner = self.player
+        self.delta.oldOwner = self._player
 
         if self.tile != tile:  # tile changed
             if tile < TILE_MOUNTAIN and self.discovered:  # lost sight of tile.
@@ -154,23 +165,23 @@ class Tile(object):
                 self.visible = False
                 self.lastSeen = map.turn - 1
 
-                if self.player == map.player_index or self.player in map.teammates:
+                if self._player == map.player_index or self._player in map.teammates:
                     # we lost the tile
                     # TODO Who might have captured it? for now set to unowned.
                     self.delta.friendlyCaptured = True
                     armyMovedHere = True
-                    self.player = -1
+                    self._player = -1
             elif tile == TILE_MOUNTAIN:
                 self.mountain = True
             elif tile >= 0:
-                self.player = tile
+                self._player = tile
 
             self.tile = tile
 
-        self.delta.newOwner = self.player
+        self.delta.newOwner = self._player
         if overridePlayer is not None:
             self.delta.newOwner = overridePlayer
-            self.player = overridePlayer
+            self._player = overridePlayer
 
         if (army == 0 and self.visible) or army > 0 and (
                 self.army != army or self.delta.oldOwner != self.delta.newOwner):  # Remember Discovered Armies
@@ -193,7 +204,7 @@ class Tile(object):
             if not self in map.cities:
                 map.cities.append(self)
 
-            # playerObj = map.players[self.player]
+            # playerObj = map.players[self._player]
 
             # if not self in playerObj.cities:
             #	playerObj.cities.append(self)
@@ -201,7 +212,7 @@ class Tile(object):
             if self in map.generals:
                 map.generals[self._general_index] = None
         elif isGeneral:
-            playerObj = map.players[self.player]
+            playerObj = map.players[self._player]
             playerObj.general = self
             self.isGeneral = True
             map.generals[tile] = self
@@ -248,7 +259,7 @@ class MapBase(object):
 
         self.usernames: typing.List[str] = user_names  # List of String Usernames
         self.players = [Player(x) for x in range(len(self.usernames))]
-        self.reachableTiles: typing.List[Tile] = []
+        self.reachableTiles: typing.Set[Tile] = set()
         self.notify_tile_captures = []
         self.notify_tile_deltas = []
         self.notify_city_found = []
@@ -264,18 +275,18 @@ class MapBase(object):
         self.grid: typing.List[typing.List[Tile]] = map_grid_y_x
         self.army_moved_grid: typing.List[typing.List[bool]] = []
 
+        # List of 8 Generals (None if not found)
+        self.generals: typing.List[typing.Union[Tile, None]] = [
+            None
+            for x
+            in range(8)]
+
         self.init_grid_moveable()
 
         self.turn: int = turn  # Integer Turn # (1 turn / 0.5 seconds)
         # List of City Tiles. Need concept of hidden cities from sim..? or maintain two maps, maybe. one the sim maintains perfect knowledge of, and one for each bot with imperfect knowledge from the sim.
         self.cities: typing.List[Tile] = []
         self.replay_url = replay_url
-
-        # List of 8 Generals (None if not found)
-        self.generals: typing.List[typing.Union[Tile, None]] = [
-            None
-            for x
-            in range(8)]
 
         self.scores: typing.List[Score] = [Score(x, 0, 0, False) for x in range(8)]  # List of Player Scores
         self.complete = False  # Boolean Game Complete
@@ -592,6 +603,27 @@ class MapBase(object):
                 adjTile = self.GetTile(x + 1, y + 1)
                 if adjTile is not None and adjTile not in tile.adjacents:
                     tile.adjacents.append(adjTile)
+
+                if tile.isGeneral:
+                    self.generals[tile.player] = tile
+
+            self.update_reachable()
+
+    def update_reachable(self):
+        self.reachableTiles = set()
+
+        queue = []
+
+        for gen in self.generals:
+            if gen is not None:
+                queue.append(gen)
+
+        while len(queue) > 0:
+            tile = queue.pop(0)
+            if tile not in self.reachableTiles and not (tile.isCity and tile.player == -1) and not tile.mountain and not tile.isobstacle():
+                self.reachableTiles.add(tile)
+                for moveable in tile.moveable:
+                    queue.append(moveable)
 
 
 # Actual live server map that interacts with the crazy array patch diffs.

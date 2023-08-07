@@ -7,6 +7,8 @@ from base.viewer import GeneralsViewer
 from bot_ek0x45 import EklipZBot
 
 FORCE_NO_VIEWER = False
+FORCE_PRIVATE = False
+
 
 class BotHost(object):
     def __init__(self):
@@ -28,6 +30,9 @@ class BotHost(object):
         self.eklipz_bot = EklipZBot(threadCount=42069)
         self._name = args['name']
         self._game_type = args['gameType']
+
+        if FORCE_PRIVATE and self._game_type != 'private':
+            raise AssertionError('Bot forced private only for the moment')
 
         # also creates the viewer, for now. Need to move that out to view sim games
         self.bot_client = bot_base.GeneralsBot(self.make_move,

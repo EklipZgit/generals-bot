@@ -176,3 +176,4 @@ class SearchUtilsTests(TestBase):
                 # self.assertEquals(1, val)
                 self.assertIsNotNone(path)
                 self.assertEquals(1, path.value)
+

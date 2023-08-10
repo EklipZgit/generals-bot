@@ -586,6 +586,9 @@ def _optimize_25_launch_segment(
 
         return priObj
 
+    countSearchedAroundGen = SearchUtils.Counter(0)
+    loopingGeneralSearchCutoff = 500
+
     def skip_func(
             nextTile,
             currentPriorityObject,
@@ -596,9 +599,13 @@ def _optimize_25_launch_segment(
         if repeats - force_wasted_moves > 0:
             return True
 
-        if maxGenDist > genDist and maxGenDist > 5:
-            # logging.info(f'bounded off loop path (skip)...? {str(fromTile)}->{str(nextTile)}')
-            return True
+        if maxGenDist > genDist:
+            countSearchedAroundGen.add(1)
+            if maxGenDist > 5:
+                # logging.info(f'bounded off loop path (skip)...? {str(fromTile)}->{str(nextTile)}')
+                return True
+            if countSearchedAroundGen.value > loopingGeneralSearchCutoff:
+                return True
 
         for tile, prio in reversed(pathList):
             if nextTile == tile:

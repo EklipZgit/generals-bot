@@ -30,8 +30,16 @@ EklipZ_ai 12 7/31 =
 EklipZ_ai 11 8/04
 	improved 'vision tile' kill gathers to only gather for the quickexpand turns, and are included in the main gather phase with a 2 tile exclusion radius around them to prioritize killing them over gather path gather movement if adequate tile counts are near them.
 
+EklipZ_ai_10 8/07
+	semi-optimal first 25, unit tests
+
+EklipZ_ai_09 8/08
+	tweaked gathers taking neutral / enemy tiles to include extra gather moves.
+	tweaked initial expansion.
+	tweaked optimal_expansion to include move-half when appropriate and draw the boundaries for when move-half is limited to closer-only moves and when it is limited to flankpath-or-closer-only moves.
+	reduced neutral city aggressiveness right before launch timings.
+
 Current
-	slightly longer gather, slightly earlier launch
 
 
 
@@ -40,6 +48,8 @@ run-bot -game 1v1, 1v1, 1v1, ffa -name "EklipZ_ai_14" -noui -nolog -path D:\2019
 run-bot -game 1v1, 1v1, ffa -name "EklipZ_ai_13" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-07-29\bot_ek0x45.py
 run-bot -game 1v1, ffa, 1v1 -name "EklipZ_ai_12" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-07-31\bot_ek0x45.py
 run-bot -game 1v1, ffa, 1v1, 1v1 -name "EklipZ_ai_11" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-04\BotHost.py
+run-bot -game 1v1, ffa, 1v1, 1v1, ffa, 1v1, 1v1 -name "EklipZ_ai_10" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-07\BotHost.py
+run-bot -game 1v1, ffa, 1v1, ffa, 1v1, 1v1, 1v1 -name "EklipZ_ai_09" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-08\BotHost.py
 
 
 current
@@ -61,6 +71,8 @@ Write an adversarial army scrim tester, at least, if not a full test harness. Ca
 
 During expansion, move-half when multiple expansion routes from current tile that are between self and enemy. Prioritize tiles equadistant from both generals near end of cycle.
 During expansion ^ and run away from enemy army.
+	^ take neutral tiles on way TOWARDS enemy territory, take enemy tiles while backing out. EG at start of game during 25-50 or 50-75, attack neutrals next to enemy path until path ends, then curve back onto enemy 1's and take them all the way back towards your gen.
+
 Figure out defensive cities as cities closer to general than half the distance to predicted enemy general, use those as launch points instead.
 Try variation of gather where the gather begins with a single max value target path to the launch path, but then use an MST gather from there to gather to that path. 
 	intelligently prune that until it reaches the point where it is some sort of full local gather around that block (like, don't gather from places that are closer to the other side of the gather path or whatever). Iterate if necessary with more additions with this method.

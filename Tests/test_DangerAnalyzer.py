@@ -180,3 +180,14 @@ class DangerAnalyzerTests(TestBase):
                     dangerAnalyzer.analyze(general, 11, {})
 
                     self.assertIsNone(dangerAnalyzer.fastestThreat)
+
+    def test_finds_threat_on_unfriendly_turn(self):
+        turn = 197
+        map, general = self.load_map_and_general('DangerAnalyzerTestMaps/missed_defense_by_one_turn_197', turn=turn, player_index=1)
+
+        # viewer = GeneralsViewer(name=inspect.stack()[0][3])
+        dangerAnalyzer = DangerAnalyzer(map)
+        dangerAnalyzer.analyze(general, 11, {})
+
+        self.assertIsNotNone(dangerAnalyzer.fastestThreat)
+        self.assertEquals(1, dangerAnalyzer.fastestThreat.threatValue)

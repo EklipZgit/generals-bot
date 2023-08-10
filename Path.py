@@ -8,14 +8,9 @@
 from __future__ import annotations
 import logging
 import typing
-from copy import deepcopy
-import time
-import json
 import math
 from DataModels import TreeNode, Move
 from collections import deque
-from queue import PriorityQueue
-from pprint import pprint,pformat
 
 from base.client.map import Tile
 
@@ -99,13 +94,14 @@ class Path(object):
                 node = node.next
         return list(self._tileList)
 
-    def add_next(self, nextTile):
+    def add_next(self, nextTile, move_half=False):
         move = PathMove(nextTile)
         move.prev = self.tail
         if self.start is None:
             self.start = move
         if self.tail is not None:
             self.tail.next = move
+            self.tail.move_half = move_half
         if self._tileList is not None:
             self._tileList.append(nextTile)
         self.tail = move
@@ -153,12 +149,11 @@ class Path(object):
         return dict
 
     def calculate_value(self, forPlayer: int) -> int:
-        # offset the first val = val - 1
+        # have to offset the first [val - 1] I guess since the first tile didn't get moved to
         val = 1
         node = self.start
         i = 0
         while node is not None:
-            val = val - 1
             tile = node.tile
             if tile.player == forPlayer:
                 val += tile.army
@@ -168,6 +163,12 @@ class Path(object):
                 val -= tile.army
                 if tile.isCity or tile.isGeneral and tile.player != -1:
                     val -= math.floor(max(0, i - 1) * 0.5)
+
+            if not node.move_half:
+                val = val - 1
+            else:
+                val = (val + 1) // 2
+
             node = node.next
             i += 1
         self.value = val

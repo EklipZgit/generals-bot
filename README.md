@@ -58,3 +58,8 @@ DO NOT run this on the human servers when it is not working. The reason bots wer
 @harrischristiansen [HarrisChristiansen.com](http://www.harrischristiansen.com) (harris@harrischristiansen.com)  Original source
 
 @EklipZgit (me) forked and wrote the bot portion from scratch for EklipZ_ai AKA Human.exe
+
+
+## Other interesting links:
+Another older bot that is fun (but not as good as EklipZ_ai anymore):
+Sora AI: https://github.com/toshima/generals-ai

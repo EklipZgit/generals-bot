@@ -18,7 +18,7 @@ from DataModels import PathNode, TreeNode, Move
 from Path import Path, PathMove
 from test.test_float import INF
 from ViewInfo import ViewInfo, PathColorer
-from base.client.map import Tile, MapBase
+from base.client.map import Tile, MapBase, new_value_matrix
 
 BYPASS_TIMEOUTS_FOR_DEBUGGING = False
 
@@ -29,16 +29,6 @@ class Counter(object):
 
     def add(self, value):
         self.value = self.value + value
-
-def new_map_matrix(map, initialValueXYFunc):
-    return [[initialValueXYFunc(x, y) for y in range(map.rows)] for x in range(map.cols)]
-
-def new_tile_matrix(map, initialValueTileFunc):
-    return [[initialValueTileFunc(map.grid[y][x]) for y in range(map.rows)] for x in range(map.cols)]
-
-def new_value_matrix(map, initValue) -> typing.List[typing.List[int]]:
-    return [[initValue] * map.rows for _ in range(map.cols)]
-
 
 
 def where(list, filter):
@@ -648,8 +638,12 @@ def greedy_backpack_gather(map, startTiles, turns, targetArmy = None, valueFunc 
                 logging.info("tile {} was not owned by searchingPlayer {}, adding its army {}".format(tile.toString(), searchingPlayer, tile.army))
                 startArmy = tile.army
 
+            initialDistance = 0
+            if distPriorityMap is not None:
+                initialDistance = distPriorityMap[tile.x][tile.y]
+
             logging.info("tile {} got base case startArmy {}, startingDist {}".format(tile.toString(), startArmy, startingDist))
-            return 0, 0, 0, startArmy, 0, startingDist, tile.x, tile.y, 0
+            return 0, 0, 0, startArmy, 0 - initialDistance, startingDist, tile.x, tile.y, 0
         baseCaseFunc = default_base_case_func
 
 
@@ -1008,15 +1002,16 @@ def breadth_first_dynamic_max(
                 nextVal = priorityFunc(next, prioVals)
                 if nextVal is not None:
                     if boundFunc is not None and boundFunc(next, nextVal, maxPrio):
-                        logging.info("Bounded off {}".format(next.toString()))
+                        if not noLog:
+                            logging.info("Bounded off {}".format(next.toString()))
                         continue
                     if skipFunc is not None and skipFunc(next, nextVal):
                         continue
                     newNodeList = list(nodeList)
                     newNodeList.append((next, nextVal))
                     frontier.put((nextVal, dist, next, current, newNodeList))
-    # if not noLog:
-    logging.info("BFS-DYNAMIC-MAX ITERATIONS {}, DURATION: {:.3f}, DEPTH: {}".format(iter, time.time() - start, depthEvaluated))
+    if not noLog:
+        logging.info("BFS-DYNAMIC-MAX ITERATIONS {}, DURATION: {:.3f}, DEPTH: {}".format(iter, time.time() - start, depthEvaluated))
     if foundDist >= 1000:
         if includePathValue:
             return None, None
@@ -1430,6 +1425,7 @@ def breadth_first_foreach(map: MapBase, startTiles, maxDepth, foreachFunc, negat
 
 def breadth_first_foreach_dist(map, startTiles, maxDepth, foreachFunc, negativeFunc = None, skipFunc = None, skipTiles = None, searchingPlayer = -2, noLog = False):
     '''
+    what's the difference between this and the other foreach...?
     skipped tiles are still foreached, they just aren't traversed
     '''
     if searchingPlayer == -2:

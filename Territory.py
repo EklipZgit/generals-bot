@@ -11,6 +11,9 @@ import json
 from SearchUtils import *
 from test.test_float import INF
 
+from base.client.map import new_map_matrix
+
+
 # attempts to classify tiles into territories.
 class TerritoryClassifier():
 	def __init__(self, map):

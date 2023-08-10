@@ -711,6 +711,51 @@ class Map(MapBase):
                                   data['generals']]  # returns [(y,x)]
 
 
+class MapMatrix:
+    def __init__(self, map: MapBase, initVal=False):
+        self.init_val = initVal
+        self.grid = new_value_matrix(map, initVal)
+
+    def add(self, item: Tile, value=True):
+        self.grid[item.x][item.y] = value
+
+    def __setitem__(self, key: Tile, item):
+        self.grid[key.x][key.y] = item
+
+    def __getitem__(self, key: Tile):
+        val = self.grid[key.x][key.y]
+        return val
+
+    def __repr__(self):
+        return repr(self.grid)
+
+    def values(self):
+        all = []
+        for row in self.grid:
+            for item in row:
+                if item != self.init_val:
+                    all.append(item)
+        return all
+
+    def __delitem__(self, key: Tile):
+        self.grid[key.x][key.y] = self.init_val
+
+    def __contains__(self, item):
+        return self.grid[item.x][item.y] != self.init_val
+
+
+def new_map_matrix(map, initialValueXYFunc):
+    return [[initialValueXYFunc(x, y) for y in range(map.rows)] for x in range(map.cols)]
+
+
+def new_tile_matrix(map, initialValueTileFunc):
+    return [[initialValueTileFunc(map.grid[y][x]) for y in range(map.rows)] for x in range(map.cols)]
+
+
+def new_value_matrix(map, initValue) -> typing.List[typing.List[int]]:
+    return [[initValue] * map.rows for _ in range(map.cols)]
+
+
 def evaluateTileDiffs(tile, candidateTile):
     # both visible
     if tile.visible and candidateTile.visible:

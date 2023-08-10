@@ -13,6 +13,8 @@ from collections import deque
 from queue import PriorityQueue
 from pprint import pprint,pformat
 
+from base.client.map import Tile
+
 
 class PathNode(object):
 	def __init__(self, tile, parent, value, turn, cityCount, pathDict):
@@ -109,11 +111,11 @@ class TreeNode(object):
 		return newNode
 
 class Move(object):
-	def __init__(self, source, dest, move_half = False):
-		self.source = source
-		self.dest = dest
+	def __init__(self, source: Tile, dest: Tile, move_half = False):
+		self.source: Tile = source
+		self.dest: Tile = dest
 		self.move_half = move_half
-		self.army_moved = source.army - 1
+		self.army_moved: int = source.army - 1
 		if self.move_half:
 			self.army_moved = (source.army - 1) // 2
 		self.non_friendly = self.source.player != self.dest.player

@@ -13,7 +13,7 @@ from SearchUtils import *
 from collections import deque 
 from queue import PriorityQueue 
 from Path import Path
-from base.client.map import Tile
+from base.client.map import Tile, MapMatrix
 
 
 class PathWay:
@@ -34,40 +34,6 @@ class InfPathWay:
 		self.seed_tile = tile
 		
 SENTINAL = "~"
-class MapMatrix:
-	def __init__(self, map, initVal = SENTINAL):
-		self.grid = new_value_matrix(map, initVal)
-
-	def add(self, item):
-		self.grid[item.x][item.y] = True
-
-	def __setitem__(self, key, item):
-		self.grid[key.x][key.y] = item
-
-	def __getitem__(self, key):
-		val = self.grid[key.x][key.y]
-		if val == SENTINAL:
-			raise KeyError((key.x,key.y))
-		return val
-
-	def __repr__(self):
-		return repr(self.grid)
-
-	def values(self):
-		all = []
-		for row in self.grid:
-			for item in row:
-				if item != SENTINAL:
-					all.append(item)
-		return all
-	
-	def __delitem__(self, key):
-		self.grid[key.x][key.y] = SENTINAL
-
-	def __contains__(self, item):
-		return self.grid[item.x][item.y] != SENTINAL
-
-
 
 class ArmyAnalyzer:
 	def __init__(self, map, armyA: Tile, armyB: Tile, maxDist = 1000):
@@ -77,7 +43,7 @@ class ArmyAnalyzer:
 		self.tileB: Tile = armyB
 		# path chokes are relative to the paths between A and B
 		self.pathChokes: typing.Set[Tile] = set()
-		self.pathways = MapMatrix(map)
+		self.pathways = MapMatrix(map, initVal=None)
 		self.shortestPathWay: PathWay = PathWay(distance=INF)
 
 		if type(armyA) is Army:

@@ -1,8 +1,8 @@
 '''
-	@ Harris Christiansen (Harris@HarrisChristiansen.com)
-	January 2016
-	Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
-	Game Viewer
+    @ Harris Christiansen (Harris@HarrisChristiansen.com)
+    January 2016
+    Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
+    Game Viewer
 '''
 import os
 import sys
@@ -81,40 +81,40 @@ Player information card readout:
 {Name} ([Stars])
 {Army} on {TileCount} ({CityCount}) [{TargetPriority*}]
 
-	*Target Priority is used to select which player to consider the current main opponent during an FFA
-	
+    *Target Priority is used to select which player to consider the current main opponent during an FFA
+    
 Information area:
 Top line
-	-> The THING the bot is currently doing, basically the evaluation that led to a move selection.
+    -> The THING the bot is currently doing, basically the evaluation that led to a move selection.
 Timings: C {CycleInterval} Q {QuickExpandTurns} G {Gather/AttackSplitTurn} L {LaunchTiming} Off {Offset} ({CurrentCycleTurn})
 
 black arrows 
-	-> intended gather lines
+    -> intended gather lines
 red arrows 
-	-> considered gather lines that were trimmed
+    -> considered gather lines that were trimmed
 green chevrons
-	-> the AI's current army movement path (used when launching timing attacks or attacks against cities etc).
+    -> the AI's current army movement path (used when launching timing attacks or attacks against cities etc).
 yellow chevrons
-	-> indicate a calculated kill-path against an enemy general that was found during other operations and took priority.
+    -> indicate a calculated kill-path against an enemy general that was found during other operations and took priority.
 pink chevrons 
-	-> intended tile-expansion path
+    -> intended tile-expansion path
 blue chevrons 
-	-> intended general hunt heuristic exploration path
+    -> intended general hunt heuristic exploration path
 red chevrons 
-	-> enemy threat path against general
+    -> enemy threat path against general
 little colored square in tile top right 
-	-> AI evaluates that this tile is probably enemy territory. Uses knowledge that it has about historical empty tiles
-		to eliminate tiles bridged by current-or-previous neutral tiles. This is used when predicting enemy general location
-		based on armies appearing from fog of war.
+    -> AI evaluates that this tile is probably enemy territory. Uses knowledge that it has about historical empty tiles
+        to eliminate tiles bridged by current-or-previous neutral tiles. This is used when predicting enemy general location
+        based on armies appearing from fog of war.
 red Xs 
-	-> tiles evaluated in a specific search that happened that turn. The more often a tile is evaluated, the darker the red X.
+    -> tiles evaluated in a specific search that happened that turn. The more often a tile is evaluated, the darker the red X.
 little green lines between tiles 
-	->
+    ->
 purple outline inside tiles
-	-> Indicates this tile is calculated to be a 'choke' tile on the set of tiles in the shortest path between generals.
-		This means that an attacking army from the enemy general must cross this tile, or take a less optimal path at least
-		two tiles longer. This lets the AI optimize defense 1-2 turns later than it would otherwise need to 
-		when attempting to intercept attacks.
+    -> Indicates this tile is calculated to be a 'choke' tile on the set of tiles in the shortest path between generals.
+        This means that an attacking army from the enemy general must cross this tile, or take a less optimal path at least
+        two tiles longer. This lets the AI optimize defense 1-2 turns later than it would otherwise need to 
+        when attempting to intercept attacks.
 
 
 
@@ -122,11 +122,20 @@ purple outline inside tiles
 
 
 class DirectionalShape(object):
-    def __init__(self, downShape):
+    def __init__(self, downShape, rotateInitial: int = 0):
+        if rotateInitial != 0:
+            downShape = pygame.transform.rotate(downShape, rotateInitial)
+
         self.downShape = downShape
         self.leftShape = pygame.transform.rotate(downShape, -90)
         self.rightShape = pygame.transform.rotate(downShape, 90)
         self.upShape = pygame.transform.rotate(downShape, 180)
+
+
+def clean_up_possible_float(value_to_render):
+    if isinstance(value_to_render, float):
+        return '{0:.0f}'.format(value_to_render)
+    return str(value_to_render)
 
 
 class GeneralsViewer(object):
@@ -337,15 +346,15 @@ class GeneralsViewer(object):
                         self._screen.blit(self._font.render(playerSubtext, True, WHITE),
                                           (score_width * i + 3, pos_top + 1 + self._font.get_height()))
             # for i, score in enumerate(self._scores):
-            #	score_color = PLAYER_COLORS[int(score['i'])]
-            #	if (score['dead'] == True):
-            #		score_color = GRAY_DARK
-            #	pygame.draw.rect(self._screen, score_color, [score_width * i, pos_top, score_width, SCORES_ROW_HEIGHT])
-            #	userString = self._map.usernames[int(score['i'])]
-            #	if (self._map.stars):
-            #		userString = userString + " (" + str(self._map.stars[int(score['i'])]) + ")"
-            #	self._screen.blit(self._font.render(userString, True, WHITE), (score_width * i + 3, pos_top + 1))
-            #	self._screen.blit(self._font.render(str(score['total']) + " on " + str(score['tiles']), True, WHITE), (score_width * i + 3, pos_top + 1 + self._font.get_height()))
+            #    score_color = PLAYER_COLORS[int(score['i'])]
+            #    if (score['dead'] == True):
+            #        score_color = GRAY_DARK
+            #    pygame.draw.rect(self._screen, score_color, [score_width * i, pos_top, score_width, SCORES_ROW_HEIGHT])
+            #    userString = self._map.usernames[int(score['i'])]
+            #    if (self._map.stars):
+            #        userString = userString + " (" + str(self._map.stars[int(score['i'])]) + ")"
+            #    self._screen.blit(self._font.render(userString, True, WHITE), (score_width * i + 3, pos_top + 1))
+            #    self._screen.blit(self._font.render(str(score['total']) + " on " + str(score['tiles']), True, WHITE), (score_width * i + 3, pos_top + 1 + self._font.get_height()))
 
             # Draw Grid
             # print("drawing grid")
@@ -383,12 +392,13 @@ class GeneralsViewer(object):
                             if tileTerritoryPlayer != -1:
                                 territoryColor = PLAYER_COLORS[tileTerritoryPlayer]
                                 pygame.draw.rect(self._screen, territoryColor,
-                                                 [pos_left + CELL_WIDTH - territoryMarkerSize, pos_top, territoryMarkerSize,
+                                                 [pos_left + CELL_WIDTH - territoryMarkerSize, pos_top,
+                                                  territoryMarkerSize,
                                                   territoryMarkerSize])
 
-            # Draw path
+            self.draw_board_chokes()
 
-            self.draw_armies()
+            self.draw_division_borders()
 
             if (self.ekBot.redTreeNodes != None):
                 redArrow = DirectionalShape(self.get_line_arrow(255, 0, 0, width=2))
@@ -396,11 +406,11 @@ class GeneralsViewer(object):
             if (self.ekBot.gatherNodes != None):
                 self.drawGathers(self.ekBot.gatherNodes, self.lineArrow)
 
-            self.draw_board_chokes()
-
             # if self.ekBot.board_analysis and self.ekBot.board_analysis.intergeneral_analysis:
-            # 	chokeColor = CHOKE_PURPLE # purple
-            # 	self.draw_army_analysis(self.ekBot.board_analysis.intergeneral_analysis, chokeColor, draw_pathways = True)
+            #     chokeColor = CHOKE_PURPLE # purple
+            #     self.draw_army_analysis(self.ekBot.board_analysis.intergeneral_analysis, chokeColor, draw_pathways = True)
+
+            self.draw_armies()
 
             if self.ekBot.targetingArmy != None:
                 self.draw_square(self.ekBot.targetingArmy.tile, 3, 1, 1, 1, 254, SQUARE_INNER_3)
@@ -521,23 +531,23 @@ class GeneralsViewer(object):
                         if (tile.x - tile.delta.toTile.x > 0):  # left
                             # print("left " + str(tile.x) + "," + str(tile.y))
                             pygame.draw.polygon(self._screen, GRAY_DARK, [(pos_left + CELL_WIDTH / 4, pos_top), (
-                            pos_left + CELL_WIDTH / 4, pos_top + CELL_HEIGHT), (pos_left - CELL_WIDTH / 4,
-                                                                                pos_top + CELL_HEIGHT / 2)])
+                                pos_left + CELL_WIDTH / 4, pos_top + CELL_HEIGHT), (pos_left - CELL_WIDTH / 4,
+                                                                                    pos_top + CELL_HEIGHT / 2)])
                         elif (tile.x - tile.delta.toTile.x < 0):  # right
                             # print("right " + str(tile.x) + "," + str(tile.y))
                             pygame.draw.polygon(self._screen, GRAY_DARK, [(pos_left + 3 * CELL_WIDTH / 4, pos_top), (
-                            pos_left + 3 * CELL_WIDTH / 4, pos_top + CELL_HEIGHT), (pos_left + 5 * CELL_WIDTH / 4,
-                                                                                    pos_top + CELL_HEIGHT / 2)])
+                                pos_left + 3 * CELL_WIDTH / 4, pos_top + CELL_HEIGHT), (pos_left + 5 * CELL_WIDTH / 4,
+                                                                                        pos_top + CELL_HEIGHT / 2)])
                         elif (tile.y - tile.delta.toTile.y > 0):  # up
                             # print("up " + str(tile.x) + "," + str(tile.y))
                             pygame.draw.polygon(self._screen, GRAY_DARK, [(pos_left, pos_top + CELL_HEIGHT / 4), (
-                            pos_left + CELL_WIDTH, pos_top + CELL_HEIGHT / 4), (pos_left + CELL_WIDTH / 2,
-                                                                                pos_top - CELL_HEIGHT / 4)])
+                                pos_left + CELL_WIDTH, pos_top + CELL_HEIGHT / 4), (pos_left + CELL_WIDTH / 2,
+                                                                                    pos_top - CELL_HEIGHT / 4)])
                         elif (tile.y - tile.delta.toTile.y < 0):  # down
                             # print("down " + str(tile.x) + "," + str(tile.y))
                             pygame.draw.polygon(self._screen, GRAY_DARK, [(pos_left, pos_top + 3 * CELL_HEIGHT / 4), (
-                            pos_left + CELL_WIDTH, pos_top + 3 * CELL_HEIGHT / 4), (pos_left + CELL_WIDTH / 2,
-                                                                                    pos_top + 5 * CELL_HEIGHT / 4)])
+                                pos_left + CELL_WIDTH, pos_top + 3 * CELL_HEIGHT / 4), (pos_left + CELL_WIDTH / 2,
+                                                                                        pos_top + 5 * CELL_HEIGHT / 4)])
 
             # print("drawing text")
             # draw text
@@ -568,7 +578,7 @@ class GeneralsViewer(object):
                     if (self.ekBot.leafValueGrid != None):
                         leafVal = self.ekBot.leafValueGrid[column][row]
                         if (leafVal != None):
-                            textVal = "{0:.0f}".format(leafVal)
+                            textVal = clean_up_possible_float(leafVal)
                             if (leafVal == -1000000):  # then was skipped
                                 textVal = "x"
                             self._screen.blit(self.small_font(textVal, color_font),
@@ -577,7 +587,7 @@ class GeneralsViewer(object):
                     if (self.ekBot.viewInfo.midRightGridText != None):
                         text = self.ekBot.viewInfo.midRightGridText[column][row]
                         if (text != None):
-                            textVal = "{0:.0f}".format(text)
+                            textVal = clean_up_possible_float(text)
                             if (text == -1000000):  # then was skipped
                                 textVal = "x"
                             self._screen.blit(self.small_font(textVal, color_font),
@@ -586,7 +596,7 @@ class GeneralsViewer(object):
                     if (self.ekBot.viewInfo.bottomRightGridText != None):
                         text = self.ekBot.viewInfo.bottomRightGridText[column][row]
                         if (text != None):
-                            textVal = "{0:.0f}".format(text)
+                            textVal = clean_up_possible_float(text)
                             if (text == -1000000):  # then was skipped
                                 textVal = "x"
                             self._screen.blit(self.small_font(textVal, color_font),
@@ -596,14 +606,14 @@ class GeneralsViewer(object):
                     if self.ekBot.targetPlayer != -1:
                         val = self.ekBot.armyTracker.emergenceLocationMap[self.ekBot.targetPlayer][column][row]
                         if val != 0:
-                            textVal = "{:.0f}".format(val)
+                            textVal = "e{:.0f}".format(val)
                             self._screen.blit(self.small_font(textVal, color_font),
                                               (pos_left + 3 * CELL_WIDTH / 4, pos_top + 1.6 * CELL_HEIGHT / 3))
 
                     if (self.ekBot.viewInfo.bottomLeftGridText != None):
                         text = self.ekBot.viewInfo.bottomLeftGridText[column][row]
                         if (text != None):
-                            textVal = "{0:.0f}".format(text)
+                            textVal = clean_up_possible_float(text)
                             if (text == -1000000):  # then was skipped
                                 textVal = "x"
                             self._screen.blit(self.small_font(textVal, color_font),
@@ -744,9 +754,9 @@ class GeneralsViewer(object):
                                 self.draw_line_between_tiles(tile, adj, (r, g, 55), 190)
                                 drawingFrontier.appendleft(adj)
                         # elif adj in pathways: # then check for closer path merge
-                        #	otherPath = pathways[adj]
-                        #	if otherPath.distance < pathway.distance:
-                        #		self.draw_between_tiles(self.yellow_line, tile, adj)
+                        #    otherPath = pathways[adj]
+                        #    if otherPath.distance < pathway.distance:
+                        #        self.draw_between_tiles(self.yellow_line, tile, adj)
 
     def draw_board_chokes(self, interChokeColor=None, innerChokeColor=None, outerChokeColor=None):
         if self.ekBot.board_analysis is None:
@@ -775,6 +785,18 @@ class GeneralsViewer(object):
                 (r, g, b) = outerChokeColor
                 self.draw_square(tile, 1, r, g, b, 255, SQUARE_INNER_3)
 
+    def draw_division_borders(self):
+        for (divisionMatrix, (r, g, b), alpha) in self.ekBot.viewInfo._divisions:
+            visited = set()
+            divisionLine = DirectionalShape(self.get_line(r, g, b, width=2), rotateInitial=90)
+            for tile in self._map.reachableTiles:
+                for move in tile.moveable:
+                    if move in visited or move.mountain or move.isobstacle() or (move.isCity and move.player == -1):
+                        continue
+                    if divisionMatrix[tile] != divisionMatrix[move]:
+                        self.draw_between_tiles(divisionLine, tile, move, alpha=alpha)
+                visited.add(tile)
+
     def draw_path(self, pathObject, R, G, B, alphaStart, alphaDec, alphaMin):
         if pathObject == None:
             return
@@ -793,11 +815,6 @@ class GeneralsViewer(object):
             # alpha value (transparency) of the surface
             tile = path.tile
             toTile = path.next.tile
-            # print("drawing path {},{} -> {},{}".format(tile.x, tile.y, toTile.x, toTile.y))
-            pos_left = (CELL_MARGIN + CELL_WIDTH) * tile.x + CELL_MARGIN
-            pos_top = (CELL_MARGIN + CELL_HEIGHT) * tile.y + CELL_MARGIN
-            xOffs = 0
-            yOffs = 0
             pygame.draw.polygon(s, color, self.Arrow)
             pygame.draw.polygon(s, BLACK, self.Arrow, 2)
             s.set_alpha(alpha)
@@ -823,7 +840,7 @@ class GeneralsViewer(object):
             if node.fromTile != None:
                 self.draw_between_tiles(shape, node.fromTile, node.tile)
 
-    def draw_between_tiles(self, shape, sourceTile, destTile, alpha=255):
+    def draw_between_tiles(self, shape: DirectionalShape, sourceTile, destTile, alpha=255):
         xDiff = destTile.x - sourceTile.x
         yDiff = destTile.y - sourceTile.y
         s = None

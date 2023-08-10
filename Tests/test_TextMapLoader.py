@@ -148,7 +148,7 @@ C43
         self.assertEqual(data.strip(), reStr.strip())
 
     def test_reads_test_files(self):
-        map = TextMapLoader.load_map_from_file("ExpandUtilsTests/ExpandUtilsTestMaps/forced_corner_combo")
+        map = TextMapLoader.load_map_from_file("EarlyExpandUtilsTestMaps/forced_corner_combo")
         self.assertTrue(map[0][0].isGeneral)
         self.assertEqual(1, map[0][0].army)
         self.assertEqual(0, map[0][0].player)

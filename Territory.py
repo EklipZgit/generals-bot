@@ -22,7 +22,7 @@ class TerritoryClassifier():
 		self.lastCalculatedTurn = -1
 		self.territoryMap = new_value_matrix(self.map, -1)
 		self.needToUpdateAroundTiles = set()
-		for tile in self.map.reachableTiles:
+		for tile in self.map.pathableTiles:
 			self.needToUpdateAroundTiles.add(tile)
 
 	def should_recalculate(self, turn):
@@ -37,9 +37,9 @@ class TerritoryClassifier():
 	def revealed_tile(self, tile):
 		self.territoryMap[tile.x][tile.y] = tile.player
 		if tile.player != -1:
-			for moveable in tile.moveable:
-				if not moveable.discovered:
-					self.territoryMap[moveable.x][moveable.y] = tile.player
+			for movable in tile.movable:
+				if not movable.discovered:
+					self.territoryMap[movable.x][movable.y] = tile.player
 
 	def scan(self):
 		logging.info("Scanning map for territories, aww geez")
@@ -52,7 +52,7 @@ class TerritoryClassifier():
 		# do a BFS foreach within a BFS foreach. Normal everyday stuff nbd
 		def foreach_near_updated_tiles(evaluatingTile):
 			def countFunc(tile):
-				if tile.mountain:
+				if tile.isMountain:
 					return
 				
 				currentTerritory = self.territoryMap[tile.x][tile.y]
@@ -103,7 +103,7 @@ class TerritoryClassifier():
 			self.territoryMap[evaluatingTile.x][evaluatingTile.y] = maxPlayer
 		startTiles = list(self.needToUpdateAroundTiles)
 		logging.info("  Scanning territory around {}".format(" - ".join([tile.toString() for tile in startTiles])))
-		breadth_first_foreach(self.map, startTiles, undiscoveredCounterDepth, foreach_near_updated_tiles, None, lambda tile: tile.mountain, None, self.map.player_index)
+		breadth_first_foreach(self.map, startTiles, undiscoveredCounterDepth, foreach_near_updated_tiles, None, lambda tile: tile.isMountain, None, self.map.player_index)
 		duration = time.time() - startTime
 			
 		logging.info("Completed scanning territories in {:.3f}".format(duration))

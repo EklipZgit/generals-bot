@@ -33,7 +33,7 @@ C43
         map = TextMapLoader.load_map_from_string(data, split_every=4)
         self.assertEqual(-1, map[0][1].player)
         self.assertEqual(0, map[0][1].army)
-        self.assertTrue(map[0][1].mountain)
+        self.assertTrue(map[0][1].isMountain)
 
     def test_loads_neutral_army(self):
         data = """
@@ -43,7 +43,7 @@ C43
         map = TextMapLoader.load_map_from_string(data, split_every=4)
         self.assertEqual(-1, map[0][1].player)
         self.assertEqual(100, map[0][1].army)
-        self.assertFalse(map[0][1].mountain)
+        self.assertFalse(map[0][1].isMountain)
         self.assertFalse(map[0][1].isCity)
 
     def test_loads_players(self):

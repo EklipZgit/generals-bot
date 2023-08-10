@@ -38,15 +38,15 @@ class BoardAnalyzer:
 		self.innerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
 		self.outerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
 		self.genDistMap = build_distance_map(self.map, [self.general])
-		for tile in self.map.reachableTiles:
+		for tile in self.map.pathableTiles:
 			logging.info("Rescanning chokes for {}".format(tile.toString()))
 			tileDist = self.genDistMap[tile.x][tile.y]
-			moveableInnerCount = count(tile.moveable, lambda adj: tileDist == self.genDistMap[adj.x][adj.y] - 1)
-			if moveableInnerCount == 1:
+			movableInnerCount = count(tile.movable, lambda adj: tileDist == self.genDistMap[adj.x][adj.y] - 1)
+			if movableInnerCount == 1:
 				self.outerChokes[tile.x][tile.y] = True
-			moveableOuterCount = count(tile.moveable, lambda adj: tileDist == self.genDistMap[adj.x][adj.y] + 1)
-			# checking moveableInner to avoid considering dead ends 'chokes'
-			if moveableOuterCount == 1 and moveableInnerCount >= 1:
+			movableOuterCount = count(tile.movable, lambda adj: tileDist == self.genDistMap[adj.x][adj.y] + 1)
+			# checking movableInner to avoid considering dead ends 'chokes'
+			if movableOuterCount == 1 and movableInnerCount >= 1:
 				self.innerChokes[tile.x][tile.y] = True
 			if self.map.turn > 4:
 				if oldInner != None and oldInner[tile.x][tile.y] != self.innerChokes[tile.x][tile.y]:

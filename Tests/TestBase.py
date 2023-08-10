@@ -27,34 +27,42 @@ class TestBase(unittest.TestCase):
         board = TextMapLoader.load_map_from_file(f"{mapFileName}")
 
         map = self.get_test_map(board, turn=turn)
-        general = next(t for t in map.reachableTiles if t.isGeneral)
+        general = next(t for t in map.pathableTiles if t.isGeneral)
         general.army = 1
         map.player_index = general.player
         map.generals[general.player] = general
 
         return map, general
 
-    def load_map_and_general(self, mapFilePath: str, turn: int, player_index: int) -> typing.Tuple[MapBase, Tile]:
+    def load_map_and_general(self, mapFilePath: str, turn: int, player_index: int = -1) -> typing.Tuple[MapBase, Tile]:
         board = TextMapLoader.load_map_from_file(mapFilePath)
 
         map = self.get_test_map(board, turn=turn)
-        general = next(t for t in map.reachableTiles if t.isGeneral and t.player == player_index)
-        map.player_index = player_index
-        map.generals[player_index] = general
+        general = next(t for t in map.pathableTiles if t.isGeneral and (t.player == player_index or player_index == -1))
+        map.player_index = general.player
+        map.generals[general.player] = general
 
         return map, general
 
-    def get_test_map(self, tiles: typing.List[typing.List[Tile]], turn: int = 1, player_index: int = 0, dont_set_seen_visible_discovered: bool = False) -> MapBase:
+    def get_test_map(self, tiles: typing.List[typing.List[Tile]], turn: int = 1, player_index: int = 0, dont_set_seen_visible_discovered: bool = False, num_players: int = -1) -> MapBase:
         self._initialize()
+        figureOutPlayerCount = num_players == -1
+        num_players = max(num_players, 2)
         if not dont_set_seen_visible_discovered:
             for row in tiles:
                 for tile in row:
                     tile.lastSeen = turn
                     tile.visible = True
                     tile.discovered = True
+                    if figureOutPlayerCount:
+                        num_players = max(num_players, tile.player + 1)
 
-        map = MapBase(player_index=player_index, teams=None, user_names=['a', 'b'], turn=turn, map_grid_y_x=tiles, replay_url='42069')
-        map.update_scores([Score(0, 100, 100, False), Score(1, 100, 100, False)])
+        fakeScores = [Score(n, 100, 100, False) for n in range(0, num_players)]
+
+        usernames = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+
+        map = MapBase(player_index=player_index, teams=None, user_names=usernames[0:num_players], turn=turn, map_grid_y_x=tiles, replay_url='42069')
+        map.update_scores(fakeScores)
         map.update_turn(turn)
         map.update()
         return map
@@ -74,7 +82,7 @@ class TestBase(unittest.TestCase):
         distMap = SearchUtils.build_distance_map(map, [general])
         maxDist = 0
         furthestTile: Tile = None
-        for tile in map.reachableTiles:
+        for tile in map.pathableTiles:
             tileDist = distMap[tile.x][tile.y]
             if tileDist > maxDist:
                 maxDist = tileDist

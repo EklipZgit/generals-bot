@@ -54,12 +54,12 @@ class ArmyAnalyzer:
 			
 		# a map of distances from point A
 		self.aMap = build_distance_map(self.map, [self.tileA], [self.tileB])
-		closestTile = min(self.tileB.moveable, key=lambda tile: self.aMap[tile.x][tile.y])
+		closestTile = min(self.tileB.movable, key=lambda tile: self.aMap[tile.x][tile.y])
 		self.aMap[self.tileB.x][self.tileB.y] = self.aMap[closestTile.x][closestTile.y] + 1
 		logging.info("set aMap({}) to {}".format(self.tileB.toString(), self.aMap[self.tileB.x][self.tileB.y]))
 		# a map of distances from point B
 		self.bMap = build_distance_map(self.map, [self.tileB], [self.tileA])
-		closestTile = min(self.tileA.moveable, key=lambda tile: self.bMap[tile.x][tile.y])
+		closestTile = min(self.tileA.movable, key=lambda tile: self.bMap[tile.x][tile.y])
 		self.bMap[self.tileA.x][self.tileA.y] = self.bMap[closestTile.x][closestTile.y] + 1
 		logging.info("set bMap({}) to {}".format(self.tileA.toString(), self.bMap[self.tileA.x][self.tileA.y]))
 
@@ -69,7 +69,7 @@ class ArmyAnalyzer:
 	def scan(self):
 		chokeCounterMap = {}
 		minPath = PathWay(distance=INF)
-		for tile in self.map.reachableTiles:
+		for tile in self.map.pathableTiles:
 			# build the pathway
 			if tile not in self.pathways:
 				path = self.build_pathway(tile)
@@ -84,13 +84,13 @@ class ArmyAnalyzer:
 				chokeCounterMap[chokeKey] += 1
 			
 
-		for tile in self.map.reachableTiles:
+		for tile in self.map.pathableTiles:
 			chokeKey = (self.aMap[tile.x][tile.y], self.bMap[tile.x][tile.y])
 			if tile in self.pathways:
 				path = self.pathways[tile]
 				if chokeCounterMap[chokeKey] == 1:
 					#logging.info("  (maybe) found choke at {}? Testing for shorter pathway joins".format(tile.toString()))
-					shorter = count(tile.moveable, lambda adjTile: adjTile in self.pathways and self.pathways[adjTile].distance < path.distance)
+					shorter = count(tile.movable, lambda adjTile: adjTile in self.pathways and self.pathways[adjTile].distance < path.distance)
 					if shorter == 0:
 						#logging.info("    OK WE DID FIND A CHOKEPOINT AT {}! adding to self.pathChokes".format(tile.toString()))
 						# Todo this should probably be on pathways lol
@@ -118,7 +118,7 @@ class ArmyAnalyzer:
 					path.add_tile(currentTile)
 					self.pathways[currentTile] = path
 
-					for adjacentTile in currentTile.moveable:
+					for adjacentTile in currentTile.movable:
 						queue.appendleft(adjacentTile)
 		return path
 

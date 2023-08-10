@@ -237,8 +237,8 @@ class ArmyTracker(object):
 			if lostVision or (army.value + 1 + expectedDelta != army.tile.army or army.tile.player != army.player):
 				# army probably moved. Check adjacents for the army
 
-				for adjacent in army.tile.moveable:
-					if adjacent.mountain:
+				for adjacent in army.tile.movable:
+					if adjacent.isMountain:
 						continue
 					expectedAdjDeltaArr = self.get_expected_dest_delta(adjacent)
 					for expectedAdjDelta in expectedAdjDeltaArr:
@@ -293,8 +293,8 @@ class ArmyTracker(object):
 					# now try fog movements?
 					fogBois = []
 					fogCount = 0
-					for adjacent in army.tile.moveable:
-						if adjacent.mountain or adjacent.isobstacle():
+					for adjacent in army.tile.movable:
+						if adjacent.isMountain or adjacent.isNotPathable:
 							continue
 						# fogged armies cant move to other fogged tiles when army is uncovered unless that player already owns the other fogged tile
 						legalFogMove = (army.visible or adjacent.player == army.player)
@@ -362,7 +362,7 @@ class ArmyTracker(object):
 		if tile.delta.armyDelta == 0:
 			return None
 		# todo check for 0 sums first before 2 >= x >= -2
-		for adjacent in tile.moveable:
+		for adjacent in tile.movable:
 			isMatch = False
 			if 2 >= tile.delta.armyDelta + adjacent.delta.armyDelta >= -2:
 				isMatch = True
@@ -486,10 +486,10 @@ class ArmyTracker(object):
 			armyMap = self.armies
 		# super fast depth 2 bfs effectively
 		nearbyArmies = []
-		for tile in army.tile.moveable:
+		for tile in army.tile.movable:
 			if tile in armyMap:
 				nearbyArmies.append(armyMap[tile])
-			for nextTile in tile.moveable:
+			for nextTile in tile.movable:
 				if nextTile != army.tile and nextTile in armyMap:
 					nearbyArmies.append(armyMap[nextTile])
 		for nearbyArmy in nearbyArmies:
@@ -500,10 +500,10 @@ class ArmyTracker(object):
 		logging.info("Finding new armies:")
 		playerLargest = [None for x in range(len(self.map.players))]
 		# don't do largest tile for now?
-		#for tile in self.map.reachableTiles:
+		#for tile in self.map.pathableTiles:
 		#	if tile.player != -1 and (playerLargest[tile.player] == None or tile.army > playerLargest[tile.player].army):
 		#		playerLargest[tile.player] = tile
-		for tile in self.map.reachableTiles:			
+		for tile in self.map.pathableTiles:			
 			notOurMove = (self.lastMove == None or (tile != self.lastMove.source and tile != self.lastMove.dest))
 			tileNewlyMovedByEnemy = (tile not in self.armies 
 									and not tile.delta.gainedSight 
@@ -579,7 +579,7 @@ class ArmyTracker(object):
 
 
 	def find_fog_source(self, tile):
-		if len(where(tile.moveable, lambda adj: not adj.isobstacle() and (adj.delta.gainedSight or not adj.visible))) == 0:
+		if len(where(tile.movable, lambda adj: not adj.isNotPathable and (adj.delta.gainedSight or not adj.visible))) == 0:
 			logging.info("        For new army at tile {} there were no adjacent fogBois, no search".format(tile.toString()))
 			return None
 		distPowFactor = 0.3

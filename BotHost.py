@@ -69,7 +69,7 @@ class BotHost(object):
         self._viewer.run_main_viewer_loop(not self.align_bottom, not self.align_right)
 
     def make_move(self, currentBot, currentMap):
-        self.eklipz_bot._bot = currentBot
+        self.eklipz_bot.client = currentBot
         self.eklipz_bot._map = currentMap
 
         command = currentBot.getLastCommand()

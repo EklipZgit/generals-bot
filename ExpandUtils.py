@@ -61,7 +61,7 @@ def get_optimal_expansion(
     withinGenPathMatrix = MapMatrix(map, initVal=False)
     withinTakeEverythingMatrix = MapMatrix(map, initVal=False)
 
-    for tile in map.reachableTiles:
+    for tile in map.pathableTiles:
         tileDistSum = enemyDistMap[tile.x][tile.y] + generalDistMap[tile.x][tile.y]
         if tileDistSum < withinGenPathThreshold:
             withinGenPathMatrix[tile] = True
@@ -215,7 +215,7 @@ def get_optimal_expansion(
                     # points for capping tiles in general
                     addedPriority += 2
                     # points for taking neutrals next to enemy tiles
-                    numEnemyNear = count(nextTile.moveable, lambda
+                    numEnemyNear = count(nextTile.movable, lambda
                         adjTile: adjTile not in adjacentSetSoFar and adjTile.player == targetPlayer)
                     if numEnemyNear > 0:
                         addedPriority += 2
@@ -252,7 +252,7 @@ def get_optimal_expansion(
                 nextAdjacentSet.add(adj)
             nextEnemyExpansionSet = enemyExpansionTileSet.copy()
             # deprioritize paths that allow counterplay
-            for adj in nextTile.moveable:
+            for adj in nextTile.movable:
                 if adj.army >= 3 and adj.player != searchingPlayer and adj.player != -1 and adj not in negativeTiles and adj not in tileSetSoFar and adj not in nextEnemyExpansionSet:
                     nextEnemyExpansionSet.add(adj)
                     enemyExpansionValue += (adj.army - 1) // 2
@@ -323,7 +323,7 @@ def get_optimal_expansion(
                 # points for capping tiles in general
                 addedPriority += 2
                 # points for taking neutrals next to enemy tiles
-                # numEnemyNear = count(nextTile.moveable, lambda adjTile: adjTile not in adjacentSetSoFar and adjTile.player == targetPlayer)
+                # numEnemyNear = count(nextTile.movable, lambda adjTile: adjTile not in adjacentSetSoFar and adjTile.player == targetPlayer)
                 # if numEnemyNear > 0:
                 #    addedPriority += 2
             else:  # our tiles and non-target enemy tiles get negatively weighted
@@ -359,7 +359,7 @@ def get_optimal_expansion(
             # nextEnemyExpansionSet = enemyExpansionTileSet.copy()
             nextEnemyExpansionSet = None
             # deprioritize paths that allow counterplay
-            # for adj in nextTile.moveable:
+            # for adj in nextTile.movable:
             #    if adj.army >= 3 and adj.player != searchingPlayer and adj.player != -1 and adj not in negativeTiles and adj not in tileSetSoFar and adj not in nextEnemyExpansionSet:
             #        nextEnemyExpansionSet.add(adj)
             #        enemyExpansionValue += (adj.army - 1) // 2
@@ -415,7 +415,7 @@ def get_optimal_expansion(
             startingEnemyExpansionTiles = set()
             enemyExpansionValue = 0
             tileCapturePoints = 0
-            for adj in tile.moveable:
+            for adj in tile.movable:
                 if adj.army > 3 and adj.player != searchingPlayer and adj.player != -1 and adj not in negativeTiles:
                     startingEnemyExpansionTiles.add(adj)
                     enemyExpansionValue += (adj.army - 1) // 2
@@ -782,8 +782,8 @@ def should_consider_path_move_half(
     pathTile: Tile = path.start.tile
     pathTileDistSum = enemyDistMap[pathTile.x][pathTile.y] + playerDistMap[pathTile.x][pathTile.y]
 
-    def filter_alternate_moveables(tile: Tile):
-        if tile.mountain:
+    def filter_alternate_movables(tile: Tile):
+        if tile.isMountain:
             return False
         if tile.isCity and tile.player != player:
             return False
@@ -807,7 +807,7 @@ def should_consider_path_move_half(
 
         altCappable = set()
         def filter_alternate_path(altTile: Tile):
-            if altTile.mountain:
+            if altTile.isMountain:
                 return
             if altTile in negativeTiles:
                 return
@@ -840,7 +840,7 @@ def should_consider_path_move_half(
 
         return False
 
-    if count(pathTile.moveable, filter_alternate_moveables) > 0:
+    if count(pathTile.movable, filter_alternate_movables) > 0:
         # TODO take into account whether the alt path would expand away from both generals
         return True
 

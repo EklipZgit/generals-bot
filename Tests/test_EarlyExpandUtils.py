@@ -1,4 +1,6 @@
 import inspect
+import os
+import pathlib
 import typing
 import unittest
 
@@ -62,7 +64,7 @@ class EarlyExpandUtilsTests(TestBase):
         weightMap = self.get_opposite_general_distance_map(map, general)
         plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=False)
         paths = plan.plan_paths
-        plan.plan_paths[-1].add_next(plan.plan_paths[-1].tail.tile.moveable[0])
+        plan.plan_paths[-1].add_next(plan.plan_paths[-1].tail.tile.movable[0])
         threw = False
         try:
             value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, turn, plan.plan_paths)
@@ -183,7 +185,7 @@ class EarlyExpandUtilsTests(TestBase):
         general = board[0][0]
         general.isGeneral = True
         general.player = 0
-        general.army = 2
+        general.army = 3
 
         underTile = board[1][0]
         underTile.player = 0
@@ -197,8 +199,14 @@ class EarlyExpandUtilsTests(TestBase):
 
         # self.render_plan(map, plan)
 
+        # 45 down 1
+        # 46 down 1 (cap 2,0 -- 3)
+        # 47 right 1 (cap 2,1 -- 4)
+        # 48 gen 2 right 1 (cap 1,0 -- 5)
+        # 49 no op
+
         self.assertEqual(5, value)
-        self.assertEqual(4, len(paths))
+        self.assertEqual(2, len(paths))
 
     def test_does_something_near_end_of_turn_47(self):
         # test both odd and even turns
@@ -217,25 +225,21 @@ class EarlyExpandUtilsTests(TestBase):
         weightMap = self.get_opposite_general_distance_map(map, general)
         plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=False)
         paths = plan.plan_paths
-        value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, turn, paths, noLog=False)
 
         # self.render_plan(map, plan)
 
-        self.assertEqual(5, value)
-        self.assertEqual(4, len(paths))
+        self.assertEqual(4, plan.tile_captures)
+        self.assertEqual(1, SearchUtils.count(paths, lambda path: path is not None))
 
     def test_does_something_near_end_of_turn_48(self):
         # test both odd and even turns
+
         turn = 48
         board = [[Tile(x, y, tile=TILE_EMPTY, army=0, player=-1) for x in range(2)] for y in range(3)]
         general = board[0][0]
         general.isGeneral = True
         general.player = 0
-        general.army = 2
-
-        underTile = board[1][0]
-        underTile.player = 0
-        underTile.army = 1
+        general.army = 3
 
         map = self.get_test_map(board, turn=turn)
         weightMap = self.get_opposite_general_distance_map(map, general)
@@ -245,8 +249,8 @@ class EarlyExpandUtilsTests(TestBase):
 
         # self.render_plan(map, plan)
 
-        self.assertEqual(5, value)
-        self.assertEqual(4, len(paths))
+        self.assertEqual(3, value)
+        self.assertEqual(1, SearchUtils.count(paths, lambda path: path is not None))
 
     def test_finds_optimal__empty_board__middle(self):
         turn = 1
@@ -312,7 +316,7 @@ class EarlyExpandUtilsTests(TestBase):
 
         map = self.get_test_map(board, turn=turn)
         weightMap = self.get_opposite_general_distance_map(map, general)
-        plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=False)
+        plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True)
         paths = plan.plan_paths
         # self.render_plan(map, plan)
         value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, turn, paths, noLog=False)
@@ -329,7 +333,7 @@ class EarlyExpandUtilsTests(TestBase):
         map = self.get_test_map(board, turn=turn)
         weightMap = self.get_opposite_general_distance_map(map, general)
 
-        plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=False)
+        plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True)
         paths = plan.plan_paths
         # self.render_plan(map, plan)
         value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, turn, paths, noLog=False)
@@ -357,7 +361,7 @@ class EarlyExpandUtilsTests(TestBase):
             turn=turn,
             prune_below=0,
             allow_wasted_moves=6,
-            no_log=True)
+            no_log=False)
 
         value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, map.turn, paths, noLog=False)
 
@@ -485,13 +489,22 @@ class EarlyExpandUtilsTests(TestBase):
         self.assertGreaterEqual(value, 23)
 
     def test_invalid_plan_that_thought_it_had_more_army(self):
-        plan = self.check_does_not_produce_invalid_plan('EarlyExpandUtilsTestMaps/produced_invalid_plan_01')
+        map, plan = self.check_does_not_produce_invalid_plan('EarlyExpandUtilsTestMaps/produced_invalid_plan_01')
         # self.render_plan(map, plan)
         self.assertEqual(plan.tile_captures, 25)
 
     def test_cramped_plan_performance__cramped_should_find_better_than_22(self):
-        plan = self.check_does_not_produce_invalid_plan('EarlyExpandUtilsTestMaps/cramped_should_find_better_than_22')
+        map, plan = self.check_does_not_produce_invalid_plan('EarlyExpandUtilsTestMaps/cramped_should_find_better_than_22')
         # self.render_plan(map, plan)
+        # 23 possible here: https://generals.io/replays/ZBdIA5bge
+        #  and here: https://generals.io/replays/ptHf8lX8V
+        # Basically, 13 launch hugging wall to preserve as much CONTIGUOUS space next to initial path as possible,
+        #  second path utilizes that space, ezpz from there.
+        # Need to find a way to search for path 1 and 2 together at the same time in cramped spawns, maybe...?
+        #  I don't see a heuristic that can get path 1 right from the start since in this spawn the path the algo takes
+        #  and the optimal path both cross the same key tiles at various points, meaning by that point the first half of
+        #  the path is already locked in, I think? Maybe track TWO sets of adjacents, one that is adjLeft and one adjRight
+        #  and take the max of the two when prioing the long path(s)? I still think that has same problem as above...
         self.assertGreater(plan.tile_captures, 22)
 
     def test_finds_optimal__empty_board__one_in_from_corner(self):
@@ -514,11 +527,47 @@ class EarlyExpandUtilsTests(TestBase):
                     self.assertEqual(25, value)
 
     def test_does_not_explode__exploded_turn_19(self):
-        plan = self.check_does_not_produce_invalid_plan('EarlyExpandUtilsTestMaps/exploded_turn_19')
+        map, plan = self.check_does_not_produce_invalid_plan('EarlyExpandUtilsTestMaps/exploded_turn_19')
         # self.render_plan(map, plan)
         self.assertEqual(plan.tile_captures, 25)
 
-    def check_does_not_produce_invalid_plan(self, mapFileName: str, turn: int = 1, noLog: bool = True) -> EarlyExpandUtils.ExpansionPlan:
+    def test_produces_plans_as_good_or_better_than_historical(self):
+        folderWithHistoricals = pathlib.Path(__file__).parent / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
+        files = os.listdir(folderWithHistoricals)
+        for file in files:
+            map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=50)
+            if SearchUtils.count(map.pathableTiles, lambda tile: tile.player >= 0 and not tile.player == general.player) > 0:
+                # skip maps where we ran into another player, those aren't fair tests
+                continue
+
+            with self.subTest(file=file.split('.')[0]):
+                playerTilesToMatchOrExceed = self.get_tiles_capped_on_50_count_and_reset_map(map, general)
+
+                weightMap = self.get_opposite_general_distance_map(map, general)
+                plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True)
+                self.assertGreaterEqual(plan.tile_captures, playerTilesToMatchOrExceed)
+                if plan.tile_captures > playerTilesToMatchOrExceed:
+                    self.skipTest(f"Produced a BETTER plan than original, {plan.tile_captures} vs {playerTilesToMatchOrExceed}")
+
+    def test__debug_targeted_historical(self):
+        file = 'rx0Rwof3h.txtmap'
+        map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=50)
+        playerTilesToMatchOrExceed = self.get_tiles_capped_on_50_count_and_reset_map(map, general)
+
+        weightMap = self.get_opposite_general_distance_map(map, general)
+        plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True)
+        self.assertGreaterEqual(plan.tile_captures, playerTilesToMatchOrExceed)
+        # self.render_plan(map, plan)
+        if plan.tile_captures > playerTilesToMatchOrExceed:
+            self.skipTest(f"Produced a BETTER plan than original, {plan.tile_captures} vs {playerTilesToMatchOrExceed}")
+
+
+    def check_does_not_produce_invalid_plan(
+            self,
+            mapFileName: str,
+            turn: int = 1,
+            noLog: bool = True
+    ) -> typing.Tuple[MapBase, EarlyExpandUtils.ExpansionPlan]:
         map, general = self.load_turn_1_map_and_general(mapFileName)
 
         weightMap = self.get_opposite_general_distance_map(map, general)
@@ -531,4 +580,17 @@ class EarlyExpandUtilsTests(TestBase):
         value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, map.turn, paths, noLog=False)
 
         self.assertEqual(plan.tile_captures, value)
-        return plan
+        return map, plan
+
+    def get_tiles_capped_on_50_count_and_reset_map(self, map, general) -> int:
+        playerTilesToMatchOrExceed = SearchUtils.count(map.pathableTiles, lambda tile: tile.player == general.player)
+        map.turn = 1
+        for tile in map.pathableTiles:
+            if tile.isGeneral:
+                tile.army = 1
+            else:
+                tile.army = 0
+                tile.player = -1
+        map.update()
+
+        return playerTilesToMatchOrExceed

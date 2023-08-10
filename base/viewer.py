@@ -559,7 +559,7 @@ class GeneralsViewer(object):
 
                     color_font = self.get_font_color(tile)
 
-                    if not tile in self.ekBot.reachableTiles and not tile.isobstacle() and not tile.isCity and not tile.mountain:
+                    if not tile in self.ekBot.pathableTiles and not tile.isNotPathable and not tile.isCity and not tile.isMountain:
                         textVal = "   X"
                         self._screen.blit(self._font.render(textVal, True, color_font),
                                           (pos_left + 2, pos_top + CELL_HEIGHT / 4))
@@ -745,7 +745,7 @@ class GeneralsViewer(object):
                 tile = drawingFrontier.pop()
                 if tile not in drawnFrom:
                     drawnFrom.add(tile)
-                    for adj in tile.moveable:
+                    for adj in tile.movable:
                         if adj not in drawnFrom:
                             if adj in pathway.tiles:
                                 g = rescale_value(pathway.distance, minLength, maxLength, 255, 55)
@@ -776,7 +776,7 @@ class GeneralsViewer(object):
                                     chokeColor=interChokeColor,
                                     draw_pathways=True)
 
-        for tile in self._map.reachableTiles:
+        for tile in self._map.pathableTiles:
             if self.ekBot.board_analysis.innerChokes[tile.x][tile.y]:
                 (r, g, b) = innerChokeColor
                 self.draw_square(tile, 1, r, g, b, 255, SQUARE_INNER_2)
@@ -789,9 +789,9 @@ class GeneralsViewer(object):
         for (divisionMatrix, (r, g, b), alpha) in self.ekBot.viewInfo._divisions:
             visited = set()
             divisionLine = DirectionalShape(self.get_line(r, g, b, width=2), rotateInitial=90)
-            for tile in self._map.reachableTiles:
-                for move in tile.moveable:
-                    if move in visited or move.mountain or move.isobstacle() or (move.isCity and move.player == -1):
+            for tile in self._map.pathableTiles:
+                for move in tile.movable:
+                    if move in visited or move.isMountain or move.isNotPathable or (move.isCity and move.player == -1):
                         continue
                     if divisionMatrix[tile] != divisionMatrix[move]:
                         self.draw_between_tiles(divisionLine, tile, move, alpha=alpha)
@@ -881,6 +881,8 @@ class GeneralsViewer(object):
                 except:
                     try:
                         mapStr = TextMapLoader.dump_map_to_string(self._map, split_every=6)
+                        ekBotData = self.ekBot.dump_turn_data_to_string()
+                        mapStr = f'{mapStr}\n{ekBotData}'
                     except:
                         exc_type, exc_value, exc_traceback = sys.exc_info()
                         lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
@@ -899,7 +901,7 @@ class GeneralsViewer(object):
         color_font = WHITE
         if tile.visible and tile.player == -1 and not tile.isCity:
             color_font = BLACK
-        elif tile.player >= 0 or tile.isobstacle() or not tile.discovered or (tile.isCity and tile.player == -1):
+        elif tile.player >= 0 or tile.isNotPathable or not tile.discovered or (tile.isCity and tile.player == -1):
             color_font = WHITE
         elif tile.visible:
             color_font = BLACK
@@ -908,7 +910,7 @@ class GeneralsViewer(object):
     def get_tile_color(self, tile) -> typing.Tuple[int, int, int]:
         color = WHITE
 
-        if tile.mountain:  # Mountain
+        if tile.isMountain:  # Mountain
             color = BLACK
         elif tile.player >= 0:
             playercolor = PLAYER_COLORS[tile.player]
@@ -924,7 +926,7 @@ class GeneralsViewer(object):
                 colorG = colorG / 2 + 40
                 colorB = colorB / 2 + 40
             color = (colorR, colorG, colorB)
-        elif tile.isobstacle():  # Obstacle
+        elif tile.isNotPathable:  # Obstacle
             color = GRAY_DARK
         elif not tile.discovered:
             color = UNDISCOVERED_GRAY

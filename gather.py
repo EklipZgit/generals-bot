@@ -48,7 +48,7 @@ from enum import Enum
 			
 #		if (current in visitedSet):
 #			continue
-#		if (current.mountain or not current.discovered and current.isobstacle()):
+#		if (current.isMountain or not current.discovered and current.isNotPathable):
 #			continue
 #		if (current.isCity and current.player != searchingPlayer and not current in startTiles):
 #			continue
@@ -65,7 +65,7 @@ from enum import Enum
 #		if dist > depthEvaluated:
 #			depthEvaluated = dist
 #		if (dist <= maxDepth):
-#			for next in current.moveable: #new spots to try
+#			for next in current.movable: #new spots to try
 #				if avoidTiles != None and next in avoidTiles:
 #					continue
 #				# self.viewInfo.evaluatedGrid[next.x][next.y] += 1
@@ -112,7 +112,7 @@ from enum import Enum
 #	thisNode = GatherNode(tile, fromTile, turn)
 #	if (tile.player == -1):
 #		thisNode.neutrals = 1
-#	for move in tile.moveable:
+#	for move in tile.movable:
 #		# logging.info("evaluating {},{}".format(move.x, move.y))
 #		if (move == fromTile):
 #			# logging.info("move == fromTile  |  {},{}".format(move.x, move.y))

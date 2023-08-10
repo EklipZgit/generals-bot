@@ -60,18 +60,30 @@ class TileDelta(object):
 
 
 class Tile(object):
-    def __init__(self, x, y, tile=TILE_EMPTY, army=0, isCity=False, isGeneral=False, player: typing.Union[None, int] = None, mountain=False,
+    def __init__(self, x, y, tile=TILE_EMPTY, army=0, isCity=False, isGeneral=False, player: typing.Union[None, int] = None, isMountain=False,
                  turnCapped=0):
         # Public Properties
-        self.x = x  # Integer X Coordinate
-        self.y = y  # Integer Y Coordinate
+        self.x = x
+        """Integer X Coordinate"""
 
-        # Integer Tile Type (TILE_OBSTACLE, TILE_FOG, TILE_MOUNTAIN, TILE_EMPTY, or 0-8 player_ID)
+        self.y = y
+        """Integer Y Coordinate"""
+
         self.tile: int = tile
-        self.turn_captured: int = turnCapped  # Integer Turn Tile Last Captured
-        self.army: int = army  # Integer Army Count
-        self.isCity: bool = isCity  # Boolean isCity
-        self.isGeneral: bool = isGeneral  # Boolean isGeneral
+        """Integer Tile Type (TILE_OBSTACLE, TILE_FOG, TILE_MOUNTAIN, TILE_EMPTY, or 0-8 player_ID)"""
+
+        self.turn_captured: int = turnCapped
+        """Integer Turn Tile Last Captured"""
+
+        self.army: int = army
+        """Integer Army Count"""
+
+        self.isCity: bool = isCity
+        """Boolean isCity"""
+
+        self.isGeneral: bool = isGeneral
+        """Boolean isGeneral"""
+
         self._player: int = -1
         if player is not None:
             self._player = player
@@ -82,19 +94,50 @@ class Tile(object):
         self.discovered: bool = False
         self.discoveredAsNeutral: bool = False
         self.lastSeen: int = -1
-        self.mountain: bool = mountain
+        """Turn the tile was last seen"""
+
+        self.isMountain: bool = isMountain
+
         self.delta: TileDelta = TileDelta()
+        """Tile's army/player/whatever delta since last turn"""
+
         self.adjacents: typing.List[Tile] = []
-        self.moveable: typing.List[Tile] = []
+        """Tiles VISIBLE from this tile (not necessarily movable, includes diagonals)"""
+
+        self.movable: typing.List[Tile] = []
+        """Tiles movable (left right up down) from this tile, including mountains, cities, obstacles."""
 
     @property
     def player(self) -> int:
+        """int player index"""
         return self._player
+
+    @property
+    def isNeutral(self) -> bool:
+        """True if neutral and not a mountain or undiscovered obstacle"""
+        return self._player == -1 and not self.isNotPathable
+
+    @property
+    def isUndiscoveredObstacle(self) -> bool:
+        """True if not discovered and is a map obstacle/mountain"""
+        return not self.discovered and self.tile == TILE_OBSTACLE
+
+    @property
+    def isNotPathable(self) -> bool:
+        """True if mountain or undiscovered obstacle, but NOT for discovered neutral city"""
+        return self.isMountain or self.isUndiscoveredObstacle
+
+    @property
+    def isObstacle(self) -> bool:
+        """True if mountain, undiscovered obstacle, or discovered neutral city"""
+        return self.isMountain or self.isUndiscoveredObstacle or (self.isCity and self.isNeutral)
 
     @player.setter
     def player(self, value):
         if value >= 0:
             self.tile = value
+        elif value == -1 and self.army == 0 and not self.isNotPathable and not self.isCity:
+            self.tile = TILE_EMPTY
         self._player = value
 
     def __repr__(self):
@@ -124,14 +167,11 @@ class Tile(object):
             return "Obstacle"
         return "Player " + str(tile)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.toString()
 
-    def toString(self):
+    def toString(self) -> str:
         return "{},{}".format(self.x, self.y)
-
-    def isobstacle(self):
-        return self.mountain or (not self.discovered and self.tile == TILE_OBSTACLE)
 
     # returns true if an army was likely moved to this tile, false if not.
     def update(self, map, tile, army, isCity=False, isGeneral=False, overridePlayer=None) -> bool:
@@ -146,7 +186,7 @@ class Tile(object):
         #		print("Tile " + str(self.x) + "," + str(self.y) + " from " + self.tileToString(self.tile) + " to " + self.tileToString(tile))
         #		self.tile = tile
         #		if (tile == TILE_MOUNTAIN):
-        #			self.mountain = True
+        #			self.isMountain = True
 
         self.delta = TileDelta()
         if tile >= TILE_MOUNTAIN:
@@ -172,7 +212,7 @@ class Tile(object):
                     armyMovedHere = True
                     self._player = -1
             elif tile == TILE_MOUNTAIN:
-                self.mountain = True
+                self.isMountain = True
             elif tile >= 0:
                 self._player = tile
 
@@ -245,7 +285,7 @@ class MapBase(object):
                  teams: typing.Union[None, typing.List[int]],  # the players index into this array gives the index of their teammate as the value.
                  user_names: typing.List[str],
                  turn: int,
-                 map_grid_y_x: typing.List[typing.List[Tile]],  # dont need to init moveable and stuff
+                 map_grid_y_x: typing.List[typing.List[Tile]],  # dont need to init movable and stuff
                  replay_url: str
                  ):
         # Start Data
@@ -259,7 +299,15 @@ class MapBase(object):
 
         self.usernames: typing.List[str] = user_names  # List of String Usernames
         self.players = [Player(x) for x in range(len(self.usernames))]
+        self.pathableTiles: typing.Set[Tile] = set()
+        """Tiles PATHABLE from the general spawn on the map, including neutral cities but not including mountains/undiscovered obstacles"""
+
         self.reachableTiles: typing.Set[Tile] = set()
+        """
+        Tiles REACHABLE from the general spawn on the map, this includes EVERYTHING from pathableTiles but ALSO 
+        includes mountains and undiscovered obstacles that are left/right/up/down adjacent to anything in pathableTiles
+        """
+
         self.notify_tile_captures = []
         self.notify_tile_deltas = []
         self.notify_city_found = []
@@ -281,7 +329,7 @@ class MapBase(object):
             for x
             in range(8)]
 
-        self.init_grid_moveable()
+        self.init_grid_movable()
 
         self.turn: int = turn  # Integer Turn # (1 turn / 0.5 seconds)
         # List of City Tiles. Need concept of hidden cities from sim..? or maintain two maps, maybe. one the sim maintains perfect knowledge of, and one for each bot with imperfect knowledge from the sim.
@@ -571,26 +619,26 @@ class MapBase(object):
         return self
 
 
-    def init_grid_moveable(self):
+    def init_grid_movable(self):
         for x in range(self.cols):
             for y in range(self.rows):
                 tile = self.grid[y][x]
-                moveableTile = self.GetTile(x - 1, y)
-                if moveableTile is not None and moveableTile not in tile.moveable:
-                    tile.adjacents.append(moveableTile)
-                    tile.moveable.append(moveableTile)
-                moveableTile = self.GetTile(x + 1, y)
-                if moveableTile is not None and moveableTile not in tile.moveable:
-                    tile.adjacents.append(moveableTile)
-                    tile.moveable.append(moveableTile)
-                moveableTile = self.GetTile(x, y - 1)
-                if moveableTile is not None and moveableTile not in tile.moveable:
-                    tile.adjacents.append(moveableTile)
-                    tile.moveable.append(moveableTile)
-                moveableTile = self.GetTile(x, y + 1)
-                if moveableTile is not None and moveableTile not in tile.moveable:
-                    tile.adjacents.append(moveableTile)
-                    tile.moveable.append(moveableTile)
+                movableTile = self.GetTile(x - 1, y)
+                if movableTile is not None and movableTile not in tile.movable:
+                    tile.adjacents.append(movableTile)
+                    tile.movable.append(movableTile)
+                movableTile = self.GetTile(x + 1, y)
+                if movableTile is not None and movableTile not in tile.movable:
+                    tile.adjacents.append(movableTile)
+                    tile.movable.append(movableTile)
+                movableTile = self.GetTile(x, y - 1)
+                if movableTile is not None and movableTile not in tile.movable:
+                    tile.adjacents.append(movableTile)
+                    tile.movable.append(movableTile)
+                movableTile = self.GetTile(x, y + 1)
+                if movableTile is not None and movableTile not in tile.movable:
+                    tile.adjacents.append(movableTile)
+                    tile.movable.append(movableTile)
                 adjTile = self.GetTile(x - 1, y - 1)
                 if adjTile is not None and adjTile not in tile.adjacents:
                     tile.adjacents.append(adjTile)
@@ -610,7 +658,8 @@ class MapBase(object):
             self.update_reachable()
 
     def update_reachable(self):
-        self.reachableTiles = set()
+        pathableTiles = set()
+        reachableTiles = set()
 
         queue = []
 
@@ -620,10 +669,14 @@ class MapBase(object):
 
         while len(queue) > 0:
             tile = queue.pop(0)
-            if tile not in self.reachableTiles and not (tile.isCity and tile.player == -1) and not tile.mountain and not tile.isobstacle():
-                self.reachableTiles.add(tile)
-                for moveable in tile.moveable:
-                    queue.append(moveable)
+            if tile not in pathableTiles and not tile.isUndiscoveredObstacle and not tile.isMountain:
+                pathableTiles.add(tile)
+                for movable in tile.movable:
+                    queue.append(movable)
+                    reachableTiles.add(movable)
+
+        self.pathableTiles = pathableTiles
+        self.reachableTiles = reachableTiles
 
 
 # Actual live server map that interacts with the crazy array patch diffs.

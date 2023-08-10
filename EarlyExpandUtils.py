@@ -135,7 +135,7 @@ def __evaluate_plan_value(
     def count_func(tile: Tile):
         if (tile not in pathTileSet
                 and tile not in already_visited
-                and not tile.isobstacle()
+                and not tile.isNotPathable
                 and not tile.isCity
                 and tile.player == -1
                 and tile.army == 0):
@@ -190,7 +190,7 @@ def optimize_first_25(
             turn=mapTurnAtStart,
             visited_set=visited,
             prune_below=0,
-            allow_wasted_moves=3,
+            allow_wasted_moves=5,
             dont_force_first=True,
             debug_view_info=debug_view_info,
             no_log=no_log)
@@ -202,9 +202,9 @@ def optimize_first_25(
     combinationsWithMaxOptimal = [
         (13, 24, 2),  # most likely to find high value paths first
         (11, 20, 6),
-        (12, 22, 4),
         (14, 26, 0),
-        (10, 20, 8)
+        (10, 20, 8),
+        (12, 22, 4),
     ]
 
     maxResult = None
@@ -505,27 +505,33 @@ def _optimize_25_launch_segment(
 
     i = SearchUtils.Counter(0)
 
-    def value_func(currentTile, priorityObject):
-        negGenDist, _, _, pathCappedNeg, negAdjWeight, repeats, cappedAdj = priorityObject
+    def value_func(currentTile, priorityObject, pathList: typing.List[Tile]):
+        _, currentGenDist, _, pathCappedNeg, negAdjWeight, repeats, cappedAdj, maxGenDist = priorityObject
+        # currentGenDist = 0 - negCurrentGenDist
         # higher better
         tileValue = 0 - tile_weight_map[currentTile.x][currentTile.y]
-        #
+
         if repeats - force_wasted_moves > 0:
             return None
 
         if pathCappedNeg == 0:
             return None
 
-        # if pathCappedNeg + genArmy <= 0:
-        #     logging.info(f'tile {str(currentTile)} ought to be skipped...?')
-        #     return None
-        valObj = 0 - pathCappedNeg, 0 - abs(repeats - force_wasted_moves), 0 - negGenDist, 0 - cappedAdj, tileValue - negAdjWeight / 3
+        # dont return paths that end in an already capped tile
+        if currentTile in visited_set:
+            return None
+
+        # if currentGenDist < fromTileGenDist:
+        #     logging.info(f'bounded off loop path (value)...? {str(fromTile)}->{str(currentTile)}')
+            # return None
+
+        valObj = 0 - pathCappedNeg, 0 - abs(repeats - force_wasted_moves), 0 - cappedAdj, currentGenDist, tileValue - negAdjWeight / 3
 
         return valObj
 
     # must always prioritize the tiles furthest from general first, to make sure we dequeue in the right order
-    def prio_func(nextTile, currentPriorityObject):
-        _, repeatAvoider, closerToEnemyNeg, pathCappedNeg, negAdjWeight, repeats, cappedAdj = currentPriorityObject
+    def prio_func(nextTile, currentPriorityObject, pathList: typing.List[Tile]):
+        repeatAvoider, _, closerToEnemyNeg, pathCappedNeg, negAdjWeight, repeats, cappedAdj, maxGenDist = currentPriorityObject
         visited = nextTile in visited_set
         if not visited:
             pathCappedNeg -= 1
@@ -552,43 +558,56 @@ def _optimize_25_launch_segment(
         remainingArmy = pathCappedNeg + gen_army
         if remainingArmy > 4:
             adjWeight += SearchUtils.count(
-                nextTile.moveable,
+                nextTile.movable,
                 lambda tile: tile not in visited_set
                              and distance_to_gen_map[tile.x][tile.y] >= distToGen  #and tile is further from general
                              and tile.player == -1
-                             and not tile.isobstacle()
+                             and not tile.isNotPathable
                              and not tile.isCity)
 
             adjWeight += SearchUtils.count(
-                nextTile.moveable,
+                nextTile.movable,
                 lambda tile: tile not in visited_set
                              and distance_to_gen_map[tile.x][tile.y] > distToGen  #and tile is further from general
                              and tile.player == -1
-                             and not tile.isobstacle()
+                             and not tile.isNotPathable
                              and not tile.isCity)
 
-        if distToGen < 4:
+        if distToGen < 4 and nextTile not in visited_set:
             cappedAdj += 1
             repeatAvoider += cappedAdj
 
         if debug_view_info:
             debug_view_info.midRightGridText[nextTile.x][nextTile.y] = adjWeight
 
-        priObj = 0 - distToGen, repeatAvoider, closerToEnemyNeg, pathCappedNeg, 0 - adjWeight, repeats, cappedAdj
+        maxGenDist = max(maxGenDist, distToGen)
+
+        priObj = repeatAvoider, distToGen, closerToEnemyNeg, pathCappedNeg, 0 - adjWeight, repeats, cappedAdj, maxGenDist
 
         return priObj
 
-    def skip_func(nextTile, currentPriorityObject):
-        _, _, _, pathCappedNeg, _, repeats, cappedAdj = currentPriorityObject
+    def skip_func(
+            nextTile,
+            currentPriorityObject,
+            pathList: typing.List[Tile]):
+        _, genDist, _, pathCappedNeg, _, repeats, cappedAdj, maxGenDist = currentPriorityObject
         remainingArmy = pathCappedNeg + gen_army
 
         if repeats - force_wasted_moves > 0:
             return True
 
+        if maxGenDist > genDist and maxGenDist > 5:
+            # logging.info(f'bounded off loop path (skip)...? {str(fromTile)}->{str(nextTile)}')
+            return True
+
+        for tile, prio in reversed(pathList):
+            if nextTile == tile:
+                return True
+
         return remainingArmy <= 0
 
     startVals: typing.Dict[Tile, typing.Tuple[object, int]] = {}
-    startVals[general] = ((0, 0, -1000, 0, 0, 0, 0), 0)
+    startVals[general] = ((0, 0, -1000, 0, 0, 0, 0, 0), 0)
     if not no_log:
         logging.info(f'finding segment for genArmy {gen_army}, force_wasted_moves {force_wasted_moves}, alreadyVisited {len(visited_set)}')
     path = breadth_first_dynamic_max(
@@ -599,6 +618,8 @@ def _optimize_25_launch_segment(
         priorityFunc=prio_func,
         skipFunc=skip_func,
         noLog=True,
-        maxDepth=turns_left)
+        maxDepth=turns_left,
+        useGlobalVisitedSet=False,
+        includePath=True)
 
     return path

@@ -41,7 +41,9 @@ class TextMapLoader(object):
         y = 0
         for row in rows[1:]:
             if row.startswith('|'):
-                continue
+                # stuff after this point is ekBot data etc
+                break
+
             cols = [Tile(x, y) for x in range(width)]
             textTiles = [row[i:i+split_every] for i in range(0, len(row), split_every)]
             x = 0
@@ -74,7 +76,7 @@ class TextMapLoader(object):
                 if tile.isCity:
                     outputToJoin.append('C')
                     charsLeft -= 1
-                if tile.mountain or (not tile.visible and tile.isobstacle()):
+                if tile.isMountain or (not tile.visible and tile.isNotPathable):
                     outputToJoin.append('M')
                     charsLeft -= 1
                 if tile.isGeneral:
@@ -140,7 +142,7 @@ class TextMapLoader(object):
                 tile.army = 0
                 tile.tile = TILE_MOUNTAIN
                 tile.player = -1
-                tile.mountain = True
+                tile.isMountain = True
                 return
             case 'a':
                 player = 0

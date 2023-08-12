@@ -1,0 +1,83 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+M    M              M              M                                  M
+M    M              M         M    M         M    M         M    M                                                      M
+          M                   M         M                        M                        M         M                             M
+                    M                                                 M    M              M    M    M    M         M
+M                                  M                                            M    M              M              M              M
+     M         M    M                             M    M                                  M    M                   M
+M                                                 M    M              M              M                                  M
+          M                   M         M              M    M              M                             M                   M
+                         M                        M              M                        M         M    M                        M
+               M              M    M         M    M                                            M         M    M         M
+                                                            M         M                        M                   M
+M                   M    M              M              M              M                   M    M                   M
+          M                             M    M         M                                       M                             M    M
+M    M         M                   M    M              M                                  M                        M
+     M    M    M    M              M                                                                                              M
+               M    M    M         M         e2   e2   e2        M    M                             M         M
+M    e2   e2   M    e2   e2   e2   e2   e2   e2   M    M    C45  M         M                                  M                   M
+M    eG3  e2   e2   e2   M                                  M                                                                     M
+     e2   e2   e2   M              M         M                   M    M
+M    e2   C48  e2        M                        M                             M    M         M                                  M
+     e2   e2   e2   e2   e2             M              M                                  M    M              M
+          C50                 M    M    M         M                             M         M    M         M    M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=17,14
+turn=50
+bot_player_index=4
+aTiles=18
+aScore=44
+aStandingArmy=26
+aStars=145
+aCityCount=1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=24
+bScore=50
+bStandingArmy=26
+bStars=147
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+cTiles=24
+cScore=50
+cStandingArmy=26
+cStars=148
+cCityCount=1
+cKnowsKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+dTiles=23
+dScore=49
+dStandingArmy=26
+dStars=147
+dCityCount=1
+dKnowsKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+eTiles=25
+eScore=51
+eStandingArmy=26
+eStars=147
+eCityCount=1
+eGeneral=1,17
+eKnowsKingLocation=False
+eDead=False
+eLeftGame=False
+eLeftGameTurn=-1
+fTiles=22
+fScore=48
+fStandingArmy=26
+fStars=145
+fCityCount=1
+fKnowsKingLocation=False
+fDead=False
+fLeftGame=False
+fLeftGameTurn=-1
+bot_target_player=-1

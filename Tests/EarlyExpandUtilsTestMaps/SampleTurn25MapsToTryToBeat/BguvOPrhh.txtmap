@@ -1,0 +1,54 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                                        M         M                             M
+               M                                  M
+                                                                           M    M
+          M                        M    M    M         M                        M    M
+                    M                                       M
+     M                                  a2   a2   M         M    M
+          M    a2   a2        M    M    M    a2                  a2        M
+          C49  M    a2   a2             M    a2   a2   a2        a2   M              M
+     M                   a2   a2   a2   a2   a2   a2   a2   a2   a2             M
+          M                                  M    M         aG3  a2
+M                                                 M    M    a2   a2
+                                             M                        M
+          M    M                             M                                       M
+          M                                       M              M              M
+                                        M                             M
+     M                   M    M         M                   M                        M    M
+                    M                   M                        M              M    M
+     M         M         M    M              M         M         M         M    M
+                                             M    M              M
+                         M    M              M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=4,13
+turn=50
+bot_player_index=0
+aTiles=25
+aScore=51
+aStandingArmy=26
+aStars=146
+aCityCount=1
+aGeneral=12,9
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=17
+bScore=43
+bStandingArmy=26
+bStars=146
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+cTiles=23
+cScore=49
+cStandingArmy=26
+cStars=147
+cCityCount=1
+cKnowsKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+bot_target_player=-1

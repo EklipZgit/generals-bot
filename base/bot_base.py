@@ -35,17 +35,17 @@ class GeneralsBot(object):
         self._map_update_callback = map_update_callback
         # Start Game Thread
         _create_thread(self._start_game_thread)
-        time.sleep(0.2)
+        time.sleep(0.1)
         # Start Chat Message Thead
         _create_thread(self._start_chat_thread)
         #time.sleep(0.2)
         # Start Game Move Thread
         _create_thread(self._start_moves_thread)
-        time.sleep(0.2)
+        time.sleep(0.1)
 
         for method in additional_thread_methods:
             _create_thread(method)
-            time.sleep(0.2)
+            time.sleep(0.1)
 
         while self._running:
             time.sleep(1.0)
@@ -88,7 +88,7 @@ class GeneralsBot(object):
             logging.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
             
             logging.info("Exit: Already in queue in _start_update_loop")
-            time.sleep(3)
+            time.sleep(5)
             os._exit(0) # End Program
         except:
             exc_type, exc_value, exc_traceback = sys.exc_info()
@@ -110,10 +110,11 @@ class GeneralsBot(object):
             if '_moves_realized' in dir(self):
                 logging.info("Moves: %d, Realized: %d" % (self._update.turn, self._moves_realized))
             self._running = False
-            time.sleep(2.0)
+            # why was this sleep here?
+            # time.sleep(2.0)
             logging.info("terminating")
             self._game._terminate()
-            time.sleep(1.0)
+            time.sleep(2.0)
             os._exit(0) # End Program
             return
 

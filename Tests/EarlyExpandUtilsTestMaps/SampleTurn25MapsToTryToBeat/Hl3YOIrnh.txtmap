@@ -1,0 +1,45 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                         M    M              M    M         M         M         M
+          M              M    M         M                   M         M
+                         M              M              M    M
+     M         M         M                        M    b2   b2   b2   b2   M
+     M                                            M         C47  b2   bG3  b2
+          M                                       C44       M    b2   b2   b2   M    M
+          M                   M                        b2   b2   b2   M    M
+M                                       M    b2   b2   b2        b2        M
+                         M              M                   b2   b2             M
+                         M                                  b2        M    M
+     M                                            M         b2   C43
+                              M    M    M    M         b2   b2                  M
+                              M                   b2   b2             M    M
+     M                                  M              M
+M                                                                          M    M
+     M                   M                                       M                   M
+               M              M                                            M    M
+M         M              M                                                      M
+               M              M                                       M
+M                                                      M    M              M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=5,14
+turn=50
+bot_player_index=1
+bot_target_player=-1
+aTiles=25
+aScore=51
+aStandingArmy=26
+aStars=54
+aCityCount=1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=25
+bScore=51
+bStandingArmy=26
+bStars=49
+bCityCount=1
+bGeneral=14,4
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1

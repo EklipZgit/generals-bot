@@ -5,7 +5,7 @@ from SearchUtils import dest_breadth_first_target
 from Tests.TestBase import TestBase
 from base.client.map import Tile
 from base.viewer import GeneralsViewer
-from dangerAnalyzer import DangerAnalyzer
+from DangerAnalyzer import DangerAnalyzer
 
 
 class SearchUtilsTests(TestBase):

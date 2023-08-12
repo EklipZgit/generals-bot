@@ -881,14 +881,16 @@ class GeneralsViewer(object):
                 except:
                     try:
                         mapStr = TextMapLoader.dump_map_to_string(self._map, split_every=6)
-                        ekBotData = self.ekBot.dump_turn_data_to_string()
-                        mapStr = f'{mapStr}\n{ekBotData}'
                     except:
                         exc_type, exc_value, exc_traceback = sys.exc_info()
                         lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
 
                         logging.info(f'failed to dump map, {lines}')
                         mapStr = f'failed to dump map, {lines}'
+
+                ekBotData = self.ekBot.dump_turn_data_to_string()
+                mapStr = f'{mapStr}\n{ekBotData}'
+
                 mapFilePath = "{}\\{}.txtmap".format(self.logDirectory, self._map.turn)
 
                 with open(mapFilePath, 'w') as mapFile:
@@ -961,6 +963,9 @@ def rescale_value(valToScale, valueMin, valueMax, newScaleMin, newScaleMax):
     # Figure out how 'wide' each range is
     leftSpan = valueMax - valueMin
     rightSpan = newScaleMax - newScaleMin
+
+    if leftSpan == 0:
+        leftSpan = 1
 
     # Convert the left range into a 0-1 range (float)
     valueScaled = float(valToScale - valueMin) / float(leftSpan)

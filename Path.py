@@ -138,8 +138,13 @@ class Path(object):
             self.tail.next = None
         return move
 
-    def convert_to_dist_dict(self) -> typing.Dict[Tile, int]:
-        dist = 0
+    def convert_to_dist_dict(self, offset: int = 0) -> typing.Dict[Tile, int]:
+        """
+        returns a dict[Tile, int] starting at offset(default 0) for path.start and working up from there.
+        @param offset:
+        @return:
+        """
+        dist = offset
         dict = {}
         node = self.start
         while node is not None:
@@ -194,12 +199,17 @@ class Path(object):
         newPath.value = self.value
         return newPath
 
-    # 10 things, want 3 end
     def get_subsegment(self, count, end=False) -> Path:
+        """
+        The subsegment path will be count moves long, count+1 TILES long
+        @param count:
+        @param end: If True, get the subsegment of the LAST {count} moves instead of FIRST {count} moves
+        @return:
+        """
         newPath = self.clone()
-        length = len(self._pathQueue)
         i = 0
-        while i < length - count:
+
+        while i < self.length - count:
             i += 1
             if end:
                 newPath.made_move()
@@ -234,3 +244,23 @@ class Path(object):
             prevPathTile = curPathNode.tile
             curPathNode = curPathNode.next
         return curTreeNode
+
+    def break_overflow_into_one_move_path_subsegments(self, lengthToKeepInOnePath: int = 1) -> typing.List[typing.Union[Path, None]]:
+        copy = self.clone()
+        if lengthToKeepInOnePath >= self.length:
+            segments = [copy]
+            # # can never happen in first 25 but may need to pad with Nones to keep it the original length...?
+            # for _ in range(self.length, lengthToKeepInOnePath):
+            #     segments.append(None)
+            return segments
+
+        # break the new path up into multiple segments, replacing the None's
+        firstSegment = self.get_subsegment(lengthToKeepInOnePath)
+        segments = [firstSegment]
+
+        newCopyEnd = self.get_subsegment(self.length - lengthToKeepInOnePath, end=True)
+        for i in range(newCopyEnd.length):
+            segments.append(newCopyEnd.get_subsegment(1))
+            newCopyEnd = newCopyEnd.get_subsegment(newCopyEnd.length - 1, end=True)
+
+        return segments

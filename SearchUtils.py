@@ -663,8 +663,13 @@ def greedy_backpack_gather(map, startTiles, turns, targetArmy = None, valueFunc 
 
     startTilesDict = {}
     if isinstance(startTiles, dict):
-        startTilesDict = startTiles
         for tile in startTiles.keys():
+            if isinstance(startTiles[tile], int):
+                distance = startTiles[tile]
+                startTilesDict[tile] = (baseCaseFunc(tile, distance), distance)
+            else:
+                startTilesDict = startTiles
+
             negativeTiles.add(tile)
     else:
         for tile in startTiles:

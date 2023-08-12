@@ -1,0 +1,44 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+M              M                                                           M                   M    M    M
+M         M    M    M    M                                       M                   M
+                                             M    M                   M    M
+                    M    M              M              M                                       M
+               M                                       M    M         M              M    M
+               M                                                      M                   M    M         M
+                                             M              M         M    M         M
+M                                  M                   M         M              M         M    M
+          M         M    M                                       M
+               M                                                                          M         M
+                                                                                     M    M
+M         M                   b2        M              M                             M    M
+          C44  b2   b2   b2   b2   M                                       M              M    M
+          b2   b2                            M    M                                                 M
+          b2        M    M                                                                               M
+     M    b2   M         M                        M
+M         b2   b2   b2   b2   b2   b2                  M         M                                  M
+     M    b2   b2   M    b2                                      M    M                   M    M
+b3   bG3  b2   b2   b2   b2   C42  M                   M                                  M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=10,5
+turn=50
+bot_player_index=1
+aTiles=22
+aScore=48
+aStandingArmy=26
+aStars=55
+aCityCount=1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=24
+bScore=50
+bStandingArmy=26
+bStars=51
+bCityCount=1
+bGeneral=1,18
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=-1

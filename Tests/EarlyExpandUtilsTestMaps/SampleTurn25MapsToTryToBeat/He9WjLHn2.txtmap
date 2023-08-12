@@ -1,0 +1,45 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                    M                                  M    M
+M                                            M              M
+               M    M              M         M                                       M
+     M                        M         M                   M
+                                   M                                            M
+                              M         M         M              M    M
+     M                                                      M         M              M
+     M              M              M                             M
+          M                             a2
+M    M    M         M              M    a2
+                                   a2   a2                       M    M    M
+          M              M         a2   M                                  M
+                         M         a2                                      M    M
+M                             M    a2                            M
+     M                             a2        a2   a2   M    M
+M         M    M    M              a2        a2        M         M              M
+M                             M    a2   a2   a2   M    M         M              M
+M                        a2   a2   a2   a2   M         M         M                   M
+M              M              a2   a2   a2   M              M              M    M
+                    M         a2   aG3  a2                       M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=11,6
+turn=50
+bot_player_index=0
+aTiles=25
+aScore=51
+aStandingArmy=26
+aStars=49
+aCityCount=1
+aGeneral=7,19
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=22
+bScore=48
+bStandingArmy=26
+bStars=57
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=-1

@@ -57,6 +57,36 @@ class TextMapLoader(object):
         return mapRows
 
     @staticmethod
+    def load_data_from_file(file_path_from_tests_folder: str) -> typing.Dict[str, str]:
+        if not file_path_from_tests_folder.endswith('.txtmap'):
+            file_path_from_tests_folder = f'{file_path_from_tests_folder}.txtmap'
+
+        filePath = pathlib.Path(__file__).parent / f'../Tests/{file_path_from_tests_folder}'
+
+        with open(filePath, 'r') as file:
+            data = file.read()
+            return TextMapLoader.load_data_from_string(data)
+
+    @staticmethod
+    def load_data_from_string(data: str) -> typing.Dict[str, str]:
+        mapData: typing.Dict[str, str] = {}
+        data = data.strip('\r\n')
+        rows = data.splitlines()
+        lastMapRow = 0
+        for i, row in enumerate(rows):
+            if row.startswith('|'):
+                lastMapRow = i
+
+        for i in range(lastMapRow + 1, len(rows)):
+            kvpStr = rows[i]
+            key, value = kvpStr.split('=')
+            if key in mapData:
+                raise AssertionError(f'key {key} in file twice')
+            mapData[key] = value
+
+        return mapData
+
+    @staticmethod
     def dump_map_to_string(map: MapBase, split_every: int = 5) -> str:
         outputToJoin = []
         for i in range(len(map.grid[0])):

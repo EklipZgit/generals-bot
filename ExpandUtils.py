@@ -50,7 +50,6 @@ def get_optimal_expansion(
     '''
     # allow exploration again
     fullLog = map.turn < 150
-    viewInfo.addAdditionalInfoLine("finishExp=True in get_optimal_expansion")
 
     general = map.generals[searchingPlayer]
 
@@ -68,8 +67,9 @@ def get_optimal_expansion(
         if tileDistSum < tilesOnMainPathDist:
             withinTakeEverythingMatrix[tile] = True
 
-    viewInfo.add_map_division(withinGenPathMatrix, (255, 200, 0))
-    viewInfo.add_map_division(withinTakeEverythingMatrix, (200, 0, 200))
+    if viewInfo:
+        viewInfo.add_map_division(withinGenPathMatrix, (255, 200, 0))
+        viewInfo.add_map_division(withinTakeEverythingMatrix, (200, 0, 200))
 
     ## The more turns remaining, the more we prioritize longer paths. Towards the end of expansion, we prioritize sheer captured tiles.
     ## This hopefully leads to finding more ideal expansion plans earlier on while being greedier later
@@ -127,7 +127,8 @@ def get_optimal_expansion(
             # negative these back to positive
             value = -1000
             dist = 1
-            viewInfo.evaluatedGrid[currentTile.x][currentTile.y] += 1
+            if viewInfo:
+                viewInfo.evaluatedGrid[currentTile.x][currentTile.y] += 1
             if currentTile in negativeTiles or negArmyRemaining >= 0 or distSoFar == 0:
                 return None
             if distSoFar > 0 and tileCapturePoints < 0:
@@ -283,7 +284,7 @@ def get_optimal_expansion(
 
             nextTileSet = tileSetSoFar.copy()
             nextTileSet.add(nextTile)
-            addedPriority = -13 - max(2, enemyDistMap[nextTile.x][nextTile.y] / 3)
+            addedPriority = -13 - max(2.0, enemyDistMap[nextTile.x][nextTile.y] / 3)
             # releventAdjacents = where(nextTile.adjacents, lambda adjTile: adjTile not in adjacentSetSoFar and adjTile not in tileSetSoFar)
             if negativeTiles is None or (nextTile not in negativeTiles):
                 if searchingPlayer == nextTile.player:
@@ -438,21 +439,34 @@ def get_optimal_expansion(
                 # or do nothing?
             else:
                 if tile.player == targetPlayer:
-                    value += 2.3
+                    value += 2.4
                 elif not tile.discovered and territoryMap[tile.x][tile.y] == targetPlayer:
-                    value += 2.3
+                    value += 2.0
                 elif not tile.visible and territoryMap[tile.x][tile.y] == targetPlayer:
                     value += 2.10
                 elif tile.player == -1:
                     value += 1.0
             sourceDist = enemyDistMap[last.x][last.y]
             destDist = enemyDistMap[tile.x][tile.y]
-            if destDist < sourceDist:
-                logging.info("move {}->{} was TOWARDS opponent".format(last.toString(), tile.toString()))
+            sourceGenDist = generalDistMap[last.x][last.y]
+            destGenDist = generalDistMap[tile.x][tile.y]
+
+            sourceDistSum = sourceDist + sourceGenDist
+            destDistSum = destDist + destGenDist
+
+            if destDistSum < sourceDistSum:
+                logging.info(f"move {last.toString()}->{tile.toString()} was TOWARDS shortest path")
                 value += 0.04
-            elif destDist == sourceDist:
-                logging.info("move {}->{} was adjacent to opponent".format(last.toString(), tile.toString()))
+            elif destDistSum == sourceDistSum:
+                logging.info(f"move {last.toString()}->{tile.toString()} was flanking parallel to shortest path")
                 value += 0.01
+
+            if abs(destDist - destGenDist) <= abs(sourceDist - sourceGenDist):
+                valueAdd = abs(destDist - destGenDist) / 30
+                logging.info(
+                    f"move {last.toString()}->{tile.toString()} was moving towards the center, valuing it {valueAdd} higher")
+                value += valueAdd
+
             last = tile
             nextNode = nextNode.next
         return value
@@ -463,10 +477,18 @@ def get_optimal_expansion(
         return int(0 - negArmyRemaining), distSoFar, tileSetSoFar
 
     if turns <= 0:
-        logging.info("turns <= 0 in optimal_expansion? Setting to 50")
-        turns = 50
+        logging.info(f"turns {turns} <= 0 in optimal_expansion... Setting to 25")
+        turns = 25
+
+    if turns > 25:
+        logging.info(f"turns {turns} < 25 in optimal_expansion... Setting to 25")
+        turns = 25
+
     remainingTurns = turns
-    sortedTiles = sorted(list(where(generalPlayer.tiles, lambda tile: tile.army > 2)), key=lambda tile: 0 - tile.army)
+    sortedTiles = sorted(list(where(generalPlayer.tiles, lambda tile: tile.army > 2 and tile not in negativeTiles)), key=lambda tile: 0 - tile.army)
+    if len(sortedTiles) == 0:
+        sortedTiles = sorted(list(where(generalPlayer.tiles, lambda tile: tile.army > 1 and tile not in negativeTiles)), key=lambda tile: 0 - tile.army)
+
     paths = []
     # fullCutoff
     fullCutoff = 10
@@ -602,7 +624,7 @@ def get_optimal_expansion(
                     remainingTurns, cutoffFactor))
 
     # expansionGather = greedy_backpack_gather(map, tilesLargerThanAverage, turns, None, valueFunc, baseCaseFunc, negativeTiles, None, searchingPlayer, priorityFunc, skipFunc = None)
-    if allowLeafMoves:
+    if allowLeafMoves and leafMoves is not None:
         logging.info("Allowing leafMoves as part of optimal expansion....")
         for leafMove in leafMoves:
             if (leafMove.source not in negativeTiles
@@ -632,8 +654,7 @@ def get_optimal_expansion(
     alphaDec = 2
     trimmable = {}
     if calculateTrimmable:
-        for pathTuple in paths:
-            friendlyCityCount, tilesCaptured, path = pathTuple
+        for friendlyCityCount, tilesCaptured, path in paths:
             tailNode = path.tail
             trimCount = 0
             while tailNode.tile.player == -1 and territoryMap[tailNode.tile.x][
@@ -643,13 +664,14 @@ def get_optimal_expansion(
             if trimCount > 0:
                 trimmable[path.start.tile] = (path, trimCount)
 
-            viewInfo.bottomRightGridText[path.start.tile.x][path.start.tile.y] = tilesCaptured
-            viewInfo.paths.appendleft(PathColorer(path, 180, 51, 254, alpha, alphaDec, minAlpha))
+            if viewInfo:
+                viewInfo.bottomRightGridText[path.start.tile.x][path.start.tile.y] = tilesCaptured
+                viewInfo.paths.appendleft(PathColorer(path, 180, 51, 254, alpha, alphaDec, minAlpha))
 
     intFactor = 100
     # build knapsack weights and values
-    weights = [pathTuple[2].length for pathTuple in paths]
-    values = [int(intFactor * pathTuple[1]) for pathTuple in paths]
+    weights = [path.length for friendlyCityCount, tilesCaptured, path in paths]
+    values = [int(intFactor * tilesCaptured) for friendlyCityCount, tilesCaptured, path in paths]
     logging.info("Feeding the following paths into knapsackSolver at turns {}...".format(turns))
     for i, pathTuple in enumerate(paths):
         friendlyCityCount, tilesCaptured, curPath = pathTuple
@@ -662,8 +684,7 @@ def get_optimal_expansion(
     if len(maxKnapsackedPaths) > 0:
         maxVal = (-10000, -1)
         totalTrimmable = 0
-        for pathTuple in maxKnapsackedPaths:
-            friendlyCityCount, tilesCaptured, curPath = pathTuple
+        for friendlyCityCount, tilesCaptured, curPath in maxKnapsackedPaths:
             if curPath.start.tile in trimmable:
                 logging.info("trimmable in current knapsack, {} (friendlyCityCount {}, tilesCaptured {})".format(
                     curPath.toString(), friendlyCityCount, tilesCaptured))
@@ -691,8 +712,7 @@ def get_optimal_expansion(
                                                                                   time.perf_counter() - trimmableStart))
         # Select which of the knapsack paths to move first
         logging.info("Selecting which of the above paths to move first")
-        for pathTuple in maxKnapsackedPaths:
-            friendlyCityCount, tilesCaptured, curPath = pathTuple
+        for friendlyCityCount, tilesCaptured, curPath in maxKnapsackedPaths:
             trimmableVal = 0
             if curPath.start.tile in trimmable:
                 trimmablePath, possibleTrim = trimmable[curPath.start.tile]
@@ -712,11 +732,12 @@ def get_optimal_expansion(
                 logging.info(
                     "NOT max val, eval [{}], path {}".format('], ['.join(str(x) for x in thisVal), curPath.toString()))
 
-            # draw other paths darker
-            alpha = 150
-            minAlpha = 150
-            alphaDec = 0
-            viewInfo.paths.appendleft(PathColorer(curPath, 200, 51, 204, alpha, alphaDec, minAlpha))
+            if viewInfo:
+                # draw other paths darker
+                alpha = 150
+                minAlpha = 150
+                alphaDec = 0
+                viewInfo.paths.appendleft(PathColorer(curPath, 200, 51, 204, alpha, alphaDec, minAlpha))
         logging.info("EXPANSION PLANNED HOLY SHIT? iterations {}, Duration {:.3f}, path {}".format(iter[0],
                                                                                                    time.perf_counter() - startTime,
                                                                                                    path.toString()))
@@ -733,8 +754,7 @@ def get_optimal_expansion(
 
     tilesInKnapsackOtherThanCurrent = set()
 
-    for pathTuple in maxKnapsackedPaths:
-        friendlyCityCount, tilesCaptured, curPath = pathTuple
+    for friendlyCityCount, tilesCaptured, curPath in maxKnapsackedPaths:
         if curPath != path:
             for tile in curPath.tileList:
                 tilesInKnapsackOtherThanCurrent.add(tile)
@@ -751,15 +771,15 @@ def get_optimal_expansion(
         enemyDistMap=enemyDistMap,
         playerDistMap=generalDistMap,
         withinGenPathThreshold=withinGenPathThreshold,
-        tilesOnMainPathDist=tilesOnMainPathDist,
-        viewInfo=viewInfo)
+        tilesOnMainPathDist=tilesOnMainPathDist)
 
     if not shouldConsiderMoveHalf:
         return path
 
     path.start.move_half = True
     val = path.calculate_value(searchingPlayer)
-    viewInfo.addAdditionalInfoLine(f'path move_half value was {val} (path {str(path)})')
+    if viewInfo:
+        viewInfo.addAdditionalInfoLine(f'path move_half value was {val} (path {str(path)})')
     if val <= 0:
         path.start.move_half = False
 
@@ -776,8 +796,7 @@ def should_consider_path_move_half(
         playerDistMap: typing.List[typing.List[int]],
         enemyDistMap: typing.List[typing.List[int]],
         withinGenPathThreshold: int,
-        tilesOnMainPathDist: int,
-        viewInfo: ViewInfo):
+        tilesOnMainPathDist: int):
 
     pathTile: Tile = path.start.tile
     pathTileDistSum = enemyDistMap[pathTile.x][pathTile.y] + playerDistMap[pathTile.x][pathTile.y]

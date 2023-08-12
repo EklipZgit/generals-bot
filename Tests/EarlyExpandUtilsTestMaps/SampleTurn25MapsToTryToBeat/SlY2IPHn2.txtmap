@@ -1,0 +1,45 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                                             M    M         M         M
+                    M                                  M                   M    M
+                                                       M    M                        M
+          M    M              M    M                        M              M
+                              M    M
+                                             M    M         M                        M    M
+     M                   M              M              M                                  M
+     M                                                                               M
+                    M                        M    M              M              M
+     M              M                                  M
+M              M                             M                                  M
+               M              M         M
+M                        C46  M                                  M    M         M
+                    a2   M    M         M              M         M         M              M
+          M         a2   a2   a2   M    a13       M         M
+     M         M         a2   a2   a2   a2   M                                  M         M
+                    C44  a2   a2   a2   aG4
+     M              M         M                             M
+M                                                 M         M         M    M              M
+                    M                             M                                  M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=8,4
+turn=50
+bot_player_index=0
+aTiles=13
+aScore=39
+aStandingArmy=26
+aStars=50
+aCityCount=1
+aGeneral=8,16
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=23
+bScore=49
+bStandingArmy=26
+bStars=50
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=-1

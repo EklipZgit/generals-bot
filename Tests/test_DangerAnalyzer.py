@@ -4,7 +4,7 @@ import unittest
 from Tests.TestBase import TestBase
 from base.client.map import Tile
 from base.viewer import GeneralsViewer
-from dangerAnalyzer import DangerAnalyzer
+from DangerAnalyzer import DangerAnalyzer
 
 
 class DangerAnalyzerTests(TestBase):

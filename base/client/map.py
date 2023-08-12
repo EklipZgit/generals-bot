@@ -128,6 +128,11 @@ class Tile(object):
         return self.isMountain or self.isUndiscoveredObstacle
 
     @property
+    def isPathable(self) -> bool:
+        """False if mountain or undiscovered obstacle, True for all other tiles INCLUDING for discovered neutral cities"""
+        return not self.isNotPathable
+
+    @property
     def isObstacle(self) -> bool:
         """True if mountain, undiscovered obstacle, or discovered neutral city"""
         return self.isMountain or self.isUndiscoveredObstacle or (self.isCity and self.isNeutral)
@@ -155,17 +160,6 @@ class Tile(object):
         if other is None:
             return True
         return self.army > other.army
-
-    def tileToString(self, tile):
-        if tile == TILE_EMPTY:
-            return "Empty"
-        elif tile == TILE_FOG:
-            return "Fog"
-        elif tile == TILE_MOUNTAIN:
-            return "Mountain"
-        elif tile == TILE_OBSTACLE:
-            return "Obstacle"
-        return "Player " + str(tile)
 
     def __str__(self) -> str:
         return self.toString()
@@ -669,7 +663,9 @@ class MapBase(object):
 
         while len(queue) > 0:
             tile = queue.pop(0)
-            if tile not in pathableTiles and not tile.isUndiscoveredObstacle and not tile.isMountain:
+            isNeutCity = tile.isCity and tile.isNeutral
+            tileIsPathable = not tile.isNotPathable
+            if tile not in pathableTiles and tileIsPathable and not isNeutCity:
                 pathableTiles.add(tile)
                 for movable in tile.movable:
                     queue.append(movable)

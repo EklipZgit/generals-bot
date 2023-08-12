@@ -35,27 +35,35 @@ class TestBase(unittest.TestCase):
         return map, general
 
     def load_map_and_general(self, mapFilePath: str, turn: int, player_index: int = -1) -> typing.Tuple[MapBase, Tile]:
-        board = TextMapLoader.load_map_from_file(mapFilePath)
+        try:
+            board = TextMapLoader.load_map_from_file(mapFilePath)
+            data = TextMapLoader.load_data_from_file(mapFilePath)
 
-        map = self.get_test_map(board, turn=turn)
-        general = next(t for t in map.pathableTiles if t.isGeneral and (t.player == player_index or player_index == -1))
-        map.player_index = general.player
-        map.generals[general.player] = general
+            map = self.get_test_map(board, turn=turn)
+            general = next(t for t in map.pathableTiles if t.isGeneral and (t.player == player_index or player_index == -1))
+            map.player_index = general.player
+            map.generals[general.player] = general
 
-        return map, general
+            self.load_map_data(map, general, data)
+
+            return map, general
+        except:
+            logging.info(f'failed to load file {mapFilePath}')
+            raise
 
     def get_test_map(self, tiles: typing.List[typing.List[Tile]], turn: int = 1, player_index: int = 0, dont_set_seen_visible_discovered: bool = False, num_players: int = -1) -> MapBase:
         self._initialize()
         figureOutPlayerCount = num_players == -1
         num_players = max(num_players, 2)
-        if not dont_set_seen_visible_discovered:
-            for row in tiles:
-                for tile in row:
+        for row in tiles:
+            for tile in row:
+                if not dont_set_seen_visible_discovered:
                     tile.lastSeen = turn
                     tile.visible = True
                     tile.discovered = True
-                    if figureOutPlayerCount:
-                        num_players = max(num_players, tile.player + 1)
+                if figureOutPlayerCount:
+                    num_players = max(num_players, tile.player + 1)
+
 
         fakeScores = [Score(n, 100, 100, False) for n in range(0, num_players)]
 
@@ -67,8 +75,8 @@ class TestBase(unittest.TestCase):
         map.update()
         return map
 
-    def get_empty_weight_map(self, map: MapBase):
-        return [[0 for y in map.grid] for x in map.grid[0]]
+    def get_empty_weight_map(self, map: MapBase, empty_value = 0):
+        return [[empty_value for y in map.grid] for x in map.grid[0]]
 
     def get_from_general_weight_map(self, map: MapBase, general: Tile, negate: bool = False):
         distMap = SearchUtils.build_distance_map(map, [general])
@@ -125,3 +133,28 @@ class TestBase(unittest.TestCase):
             r = max(0, r)
             b = min(255, b)
         viewer.run_main_viewer_loop()
+
+    def get_player_char_index_map(self):
+        return [
+            ('a', 0),
+            ('b', 1),
+            ('c', 2),
+            ('d', 3),
+            ('e', 4),
+            ('f', 5),
+            ('g', 6),
+            ('h', 7),
+        ]
+
+    def load_map_data(self, map: MapBase, general: Tile, data: typing.Dict[str, str]):
+        playerCharMap = self.get_player_char_index_map()
+        for player in map.players:
+            char, index = playerCharMap[player.index]
+
+            tileKey = f'{char}Tiles'
+            if tileKey in data:
+                player.tileCount = int(data[tileKey])
+
+            scoreKey = f'{char}Score'
+            if scoreKey in data:
+                player.score = int(data[scoreKey])

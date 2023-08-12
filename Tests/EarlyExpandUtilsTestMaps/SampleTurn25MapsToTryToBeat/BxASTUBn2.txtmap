@@ -1,0 +1,46 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M                   M         M    bG5  b2   b2   b2   b2   b2   b2                       M
+     M         M                        M    b2   b2   M              b2   M         M         M
+M                             M              M    b2   b2   M    M    b2             M    M
+M    M                                  M         b2   b3   M    M         M              M
+M    M                                            b2                            M         M
+M    M                                            b2   M
+     M         M                             C41  b2                       M
+          M    M    M                   M    M    b2        M
+                              M         b2   b2   b2                                      M
+M    M    M                                            C49                                M
+          M         M    M                                  M         M
+                              M                        M    M    M    M    M
+                    M    M    M              M                        M
+          M    M         M                   M    M         M                             M
+                                        M         M                        M    M
+     M                        M                             M         M         M
+M                                                 M                                  M    M
+                              M         M                        M                        M
+               M                                                      M                        M
+     M                   M         M         M    M    M    M              M    M              M
+                         M                             M              M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=7,15
+turn=50
+bot_player_index=1
+aTiles=24
+aScore=50
+aStandingArmy=26
+aStars=57
+aCityCount=1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=22
+bScore=48
+bStandingArmy=26
+bStars=49
+bCityCount=1
+bGeneral=8,0
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=-1

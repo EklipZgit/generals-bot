@@ -1,6 +1,7 @@
 import inspect
 import os
 import pathlib
+import time
 import typing
 import unittest
 
@@ -531,8 +532,39 @@ class EarlyExpandUtilsTests(TestBase):
         # self.render_plan(map, plan)
         self.assertEqual(plan.tile_captures, 25)
 
+    def test__only_got_24_when_seems_easy_25__turn50(self):
+        map, plan = self.check_does_not_produce_invalid_plan('EarlyExpandUtilsTestMaps/only_got_24_when_seems_easy_25__turn50')
+        # self.render_plan(map, plan)
+        self.assertEqual(plan.tile_captures, 25)
+
     def test_produces_plans_as_good_or_better_than_historical(self):
-        folderWithHistoricals = pathlib.Path(__file__).parent / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
+        projRoot = pathlib.Path(__file__).parent
+        folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
+        files = os.listdir(folderWithHistoricals)
+        for file in files:
+            map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=50)
+            if SearchUtils.count(map.pathableTiles, lambda tile: tile.player >= 0 and not tile.player == general.player) > 0:
+                # remove maps where we ran into another player, those aren't fair tests
+                safeFile = file.split('.')[0] + '.txtmap'
+                toRemove = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{safeFile}'
+                os.remove(toRemove)
+                continue
+
+            with self.subTest(file=file.split('.')[0]):
+                playerTilesToMatchOrExceed = self.get_tiles_capped_on_50_count_and_reset_map(map, general)
+
+                weightMap = self.get_opposite_general_distance_map(map, general)
+                timeStart = time.perf_counter()
+                plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True)
+                timeSpent = time.perf_counter() - timeStart
+                self.assertLessEqual(timeSpent, 3.0, 'took longer than we consider safe for finding starts')
+                self.assertGreaterEqual(plan.tile_captures, playerTilesToMatchOrExceed)
+                if plan.tile_captures > playerTilesToMatchOrExceed:
+                    self.skipTest(f"Produced a BETTER plan than original, {plan.tile_captures} vs {playerTilesToMatchOrExceed}")
+
+    def test_check_forced_variations_against_historical_bests(self):
+        projRoot = pathlib.Path(__file__).parent
+        folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
         files = os.listdir(folderWithHistoricals)
         for file in files:
             map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=50)
@@ -544,13 +576,16 @@ class EarlyExpandUtilsTests(TestBase):
                 playerTilesToMatchOrExceed = self.get_tiles_capped_on_50_count_and_reset_map(map, general)
 
                 weightMap = self.get_opposite_general_distance_map(map, general)
+                timeStart = time.perf_counter()
                 plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True)
+                timeSpent = time.perf_counter() - timeStart
+                self.assertLessEqual(timeSpent, 3.0, 'took longer than we consider safe for finding starts')
                 self.assertGreaterEqual(plan.tile_captures, playerTilesToMatchOrExceed)
                 if plan.tile_captures > playerTilesToMatchOrExceed:
                     self.skipTest(f"Produced a BETTER plan than original, {plan.tile_captures} vs {playerTilesToMatchOrExceed}")
 
     def test__debug_targeted_historical(self):
-        file = 'rx0Rwof3h.txtmap'
+        file = 'BgEs3ym22.txtmap'
         map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=50)
         playerTilesToMatchOrExceed = self.get_tiles_capped_on_50_count_and_reset_map(map, general)
 
@@ -569,6 +604,8 @@ class EarlyExpandUtilsTests(TestBase):
             noLog: bool = True
     ) -> typing.Tuple[MapBase, EarlyExpandUtils.ExpansionPlan]:
         map, general = self.load_turn_1_map_and_general(mapFileName)
+
+        self.get_tiles_capped_on_50_count_and_reset_map(map, general)
 
         weightMap = self.get_opposite_general_distance_map(map, general)
         if turn != 1:

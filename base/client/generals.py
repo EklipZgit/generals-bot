@@ -98,7 +98,7 @@ class Generals(object):
         #
         # self._send(["get_username", userid, username, self.bot_key])
 
-        time.sleep(1)
+        time.sleep(0.25)
 
         self._send(["stars_and_rank", userid, self.bot_key])
 
@@ -456,7 +456,7 @@ class Generals(object):
             self._send(["clear_moves"])
 
     def _send_forcestart(self):
-        time.sleep(3)
+        time.sleep(2)
         while 'replay_id' not in self._start_data:
             if self._gameid is not None:
                 # map size
@@ -469,13 +469,13 @@ class Generals(object):
                 # }
 
                 # self._send(["set_custom_options", self._gameid, options
-                time.sleep(0.5)
+                time.sleep(0.2)
                 if not self.isPrivate:
                     self._send(["make_custom_public", self._gameid])
-                time.sleep(0.5)
+                time.sleep(0.2)
             self._send(["set_force_start", self._gameid, True])
             logging.info("Sent force_start")
-            time.sleep(5)
+            time.sleep(2)
 
     def _start_sending_heartbeat(self):
         while True:
@@ -498,7 +498,7 @@ class Generals(object):
                 message = self.chatQueued[0]
                 self.chatQueued.remove(message)
                 self.send_chat(message)
-            time.sleep(2)
+            time.sleep(3)
 
     def _send(self, msg):
         try:

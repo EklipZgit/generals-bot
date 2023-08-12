@@ -2,7 +2,9 @@ import argparse
 import logging
 import time
 
+from PerformanceTimer import PerformanceTimer
 from base import bot_base
+from base.client.map import MapBase
 from base.viewer import GeneralsViewer
 from bot_ek0x45 import EklipZBot
 
@@ -68,7 +70,10 @@ class BotHost(object):
         # Consumes thread
         self._viewer.run_main_viewer_loop(not self.align_bottom, not self.align_right)
 
-    def make_move(self, currentBot, currentMap):
+    def make_move(self, currentBot, currentMap: MapBase):
+        timer: PerformanceTimer = self.eklipz_bot.perf_timer
+        timer.record_update(currentMap.turn)
+
         self.eklipz_bot.client = currentBot
         self.eklipz_bot._map = currentMap
 
@@ -76,15 +81,17 @@ class BotHost(object):
         # if (command == "-s"):
         #    return
         startTime = time.perf_counter()
-        move = self.eklipz_bot.find_move()
-        duration = time.perf_counter() - startTime
-        self.eklipz_bot.viewInfo.lastMoveDuration = duration
-        if move is not None:
-            if not self.place_move(move.source, move.dest, currentBot, move.move_half):
-                logging.info(
-                    "!!!!!!!!! {},{} -> {},{} was an illegal / bad move!!!! This turn will do nothing :(".format(
-                        move.source.x, move.source.y,
-                        move.dest.x, move.dest.y))
+        with timer.begin_move(currentMap.turn) as moveTimer:
+            move = self.eklipz_bot.find_move()
+            duration = time.perf_counter() - startTime
+            self.eklipz_bot.viewInfo.lastMoveDuration = duration
+            if move is not None:
+                with moveTimer.begin_event(f'Sending move {str(move)} to server'):
+                    if not self.place_move(move.source, move.dest, currentBot, move.move_half):
+                        logging.info(
+                            "!!!!!!!!! {},{} -> {},{} was an illegal / bad move!!!! This turn will do nothing :(".format(
+                                move.source.x, move.source.y,
+                                move.dest.x, move.dest.y))
         return
 
     # returns whether the placed move was valid

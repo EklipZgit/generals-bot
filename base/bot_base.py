@@ -34,17 +34,17 @@ class GeneralsBot(object):
     def run(self, additional_thread_methods: list, map_update_callback = None):
         self._map_update_callback = map_update_callback
         # Start Game Thread
-        _create_thread(self._start_game_thread)
+        create_thread(self._start_game_thread)
         time.sleep(0.1)
         # Start Chat Message Thead
-        _create_thread(self._start_chat_thread)
+        create_thread(self._start_chat_thread)
         #time.sleep(0.2)
         # Start Game Move Thread
-        _create_thread(self._start_moves_thread)
+        create_thread(self._start_moves_thread)
         time.sleep(0.1)
 
         for method in additional_thread_methods:
-            _create_thread(method)
+            create_thread(method)
             time.sleep(0.1)
 
         while self._running:
@@ -80,7 +80,6 @@ class GeneralsBot(object):
                 selfDir = dir(self)
 
                 if self._map_update_callback is not None:
-                    logging.info("map update callback...?")
                     self._map_update_callback(update)
         except ValueError: # Already in match, restart    
             exc_type, exc_value, exc_traceback = sys.exc_info()
@@ -129,7 +128,7 @@ class GeneralsBot(object):
                 self._move_event.wait()
                 self._move_event.clear()
                 self._make_move()
-                self._moves_realized+=1
+                self._moves_realized += 1
             except:
                 exc_type, exc_value, exc_traceback = sys.exc_info()
                 lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
@@ -141,7 +140,7 @@ class GeneralsBot(object):
                 logging.error(''.join('!! ' + line for line in lines))  # Log it or whatever here
 
     def _make_move(self):
-        self._updateMethod(self, self._update)
+        self._updateMethod(self._update)
 
 
     ######################### Chat Messages #########################
@@ -169,11 +168,13 @@ class GeneralsBot(object):
     def validPosition(self, x, y):
         return 0 <= y < self._update.rows and 0 <= x < self._update.cols and self._update._tile_grid[y][x] != generals.map.TILE_MOUNTAIN
 
+    def send_clear_moves(self):
+        self._game.send_clear_moves()
 
 
 ######################### Global Helpers #########################
 
-def _create_thread(f):
+def create_thread(f):
     t = threading.Thread(target=f)
     t.daemon = True
     t.start()

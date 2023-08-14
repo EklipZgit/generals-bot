@@ -1,0 +1,44 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          M                        C50                                     M         M    M
+M    M    b2   b2   b2   M         M                   M         M         M
+     b2   b2   b2   b2   b2   b2                  M                   C44  M
+b2   bG12 b2   M    b2   b2             M                                  M    M
+b2   b2   b2   M         C48                           M         M         M
+M    b2   M                   M                   M                   M         M
+     b2   b2   b2   b2   b2   b2   b2   b2   M
+M         M         b2        M    b2   b2   b2   b2        M
+                    b2   C50  b2   b2   b2        M         M    b1   b1        M         M
+M                   b2   b1   b1   M    b2        C45       C40  M    b1   b1   M    C44
+               M    b2        b1   b1   M    M         b2   b1   b2   b1   b1   M    M    M
+                    b2   M    b1   b2   b2   b1   b1   b3   M
+                    b2        b1   b1   b1   b1   b1   b11       M    b1   b1   M
+     M              b2   b2   M    b1   M    M    M    b1   M         b1   b1   b1
+     M    M    M         b2   C47  b1   b2   M         b1        C48  b2   b1   b1
+                    M    b2   b2   b1   M         M    M         b2   b1   M
+          M    C44  b2   b2   b2   b1   b2   M    b1   b1   b1   b1   b1   C40  M
+                         M    b1   bC17 b1   b1   b1   b1   b1   b2   M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=7,17
+turn=151
+bot_player_index=1
+aTiles=0
+aScore=0
+aStandingArmy=0
+aStars=42
+aCityCount=1
+aGeneral=7,17
+aKnowsKingLocation=False
+aDead=True
+aLeftGame=True
+aLeftGameTurn=151
+bTiles=104
+bScore=199
+bStandingArmy=95
+bStars=52
+bCityCount=2
+bGeneral=1,3
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=-1

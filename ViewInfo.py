@@ -53,9 +53,13 @@ class ViewInfo(object):
         self.rows = rows
         self.paths = deque()
         self.readyToDraw = False
-        self.bottomRightGridText = [[None for x in range(self.rows)] for y in range(self.cols)]
-        self.bottomLeftGridText = [[None for x in range(self.rows)] for y in range(self.cols)]
-        self.midRightGridText = [[None for x in range(self.rows)] for y in range(self.cols)]
+        self.topRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
+        self.midRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
+        self.bottomMidRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
+        self.bottomRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
+        self.bottomLeftGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
+        self.bottomMidLeftGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
+        self.midLeftGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
         self.lastMoveDuration = 0.0
         self.addlTimingsLineText: str = ""
         self.addlInfoLines: typing.List[str] = []
@@ -64,9 +68,13 @@ class ViewInfo(object):
         self.addlTimingsLineText = ""
         self.addlInfoLines = []
         self._divisions = []
-        self.bottomRightGridText = [[None for x in range(self.rows)] for y in range(self.cols)]
-        self.bottomLeftGridText = [[None for x in range(self.rows)] for y in range(self.cols)]
-        self.midRightGridText = [[None for x in range(self.rows)] for y in range(self.cols)]
+        self.topRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
+        self.midRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
+        self.bottomMidRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
+        self.bottomRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
+        self.bottomLeftGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
+        self.bottomMidLeftGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
+        self.midLeftGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
         countHist = len(self.redTargetedTileHistory)
         for i in range(countHist):
             if (i == countHist - 2):
@@ -77,8 +85,8 @@ class ViewInfo(object):
 
         self.lastEvaluatedGrid = self.evaluatedGrid
         if len(self.lastEvaluatedGrid) == 0:
-            self.lastEvaluatedGrid = [[0 for x in range(self.rows)] for y in range(self.cols)]
-        self.evaluatedGrid = [[0 for x in range(self.rows)] for y in range(self.cols)]
+            self.lastEvaluatedGrid = [[0 for y in range(self.rows)] for x in range(self.cols)]
+        self.evaluatedGrid = [[0 for y in range(self.rows)] for x in range(self.cols)]
 
     def add_targeted_tile(self, tile: Tile, targetStyle: TargetStyle = TargetStyle.RED):
         self.redTargetedTiles.append((tile, targetStyle))

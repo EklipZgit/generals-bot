@@ -1,0 +1,45 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+M    M         M    a1   M    M    a1   a1   M    a1   M    a1   a1   a1   a2   a1   C47
+               M    a1   a1   a1   a1   a1   a1   a1   a1   a1   a1   a1   a1
+M              C42  M    a1   a1   a1   a1   M    a1   M    M    a1   a6   a2
+M                   M    a1   a1   M    aC20 M    a1   M    a2   a1   a6   M
+          M    M    M    M    a1   a1   a1   M    a1   a1   a2   a1   a2   a3   a2
+M         M              M    M    a1   M    a1   M    a1   C42  C49  a2   a2
+M              M              M    a1   aC4  a4   a1   a1   a1   M    a3   a2   a2   M
+M    M              a1   a1   a1   a1   a1   M    a1   M    a2   a1   a1   M    C45
+M    M              a1   M    a1   a1   a1   a1   a1   a1   M    a4   a2   a3   a2   a2
+M         M         a1   a1   a1   a1   a1   a1   M    M    M    a2   a2   a2   a2   a3
+               M    M    a1   M    a1   a1   a50  a1   a1   M    M    a2   a3   a2   a3
+                         a2   a1   a1   M    a1   a3   a185 a3   a4   a3   a1   a1   a3
+               M    M    M    a1   M    C49  a4   a1   a1   a1   a3   a3   M    a1   a1
+                              a1             M    a1   a2   a1   aC6  a1   a1   a1   a3
+                    M    M    a1   M         a2   a1   a2   a2   a1   M    a1   a1   M
+     M                   M    a1   a3   a3   a2   a2   a2   a2   a2   M    a1   a1   a1
+M    C46                      a2   M    a2   a2   M    a2   M    a2   a2   aG13 M    a1
+M              M              a2   a2   a2        M    M    aC15 a1   a1   a1   a1   a1
+                         M                        M    M    a1   a1   a1   a3   a1   a1
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=8,3
+turn=548
+bot_player_index=0
+aTiles=174
+aScore=553
+aStandingArmy=379
+aStars=53
+aCityCount=5
+aGeneral=15,16
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=0
+bScore=0
+bStandingArmy=0
+bStars=51
+bCityCount=1
+bGeneral=8,3
+bKnowsKingLocation=False
+bDead=True
+bLeftGame=True
+bLeftGameTurn=548
+bot_target_player=-1

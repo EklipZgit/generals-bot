@@ -1,0 +1,45 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          M    C45            M    M    M              M         M    M
+                                                                                     M    M
+               M              C45  M                   M         M                        M
+               M                                  M                   C47
+                         M              M              M         M
+               M         M              M    M    M                   M
+                         M    M                             M    M              M    M
+M    a1   a1   a1   M              M              M                   M
+a1   a1   C44  a1                  C42            M              a1   a1   a1             M
+a1   a1   a1   M    M    M                             C49       M    M    a1   M
+M    M    a1   a1   a1   a1   a1   a1   M                        M    a1   aG11 M
+          a1   a1   a1   a1        a1        C45            M    a1   a1   a1   a1   M
+     a1   a1   a1   a1                  M                   M    a1   a1   a1   a1   a1
+M    a1   a1   M    a1        M         M    a1   a1   a1   a1   a1   M    a1   a1   a1
+     M    a1   M    a1   M    a1   a1   a1   a1        C42            M    a1   a1   a1   M
+a1   a1   a1   a4   a1   a1   a1        M                   M         M    a1   C50  a1
+a1   a1   a1   M    M    a1   M                             M    M    a1   a1   M    a1   M
+a1   a1   aC2  a1   a1   a1   M    a1                  M    M    M
+M         M    M    M    a1   a1   a1        M    C44  M              M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=2,17
+turn=142
+bot_player_index=0
+aTiles=85
+aScore=99
+aStandingArmy=14
+aStars=53
+aCityCount=2
+aGeneral=15,10
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=0
+bScore=0
+bStandingArmy=0
+bStars=55
+bCityCount=1
+bGeneral=2,17
+bKnowsKingLocation=False
+bDead=True
+bLeftGame=True
+bLeftGameTurn=142
+bot_target_player=-1

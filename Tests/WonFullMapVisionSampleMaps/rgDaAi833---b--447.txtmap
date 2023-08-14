@@ -1,0 +1,44 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+M    C49                           M    b3   b3   b3   b2   M    M    b1   M    b1   M
+M              M              M    b2   b1   b2   b2   b2   b2   M    b1   b1   b1   b1
+                         M    b1   b1   b1   M    M    b1   b1   b1   b2   b1   b1   b1
+M                   M    M    b1   C41  M    C41  b1   b1   M    bC63 M    b1   b1   b1
+M              M    M    b1   b1   b1   b1   b1   M    M    b1   b1   b1   b1   bC5  b2
+                    M    b1   b1   b1   b1   b1   b1   b1   b1   M    b2   b4   b1   M
+                    M    b1   M    b1   b1   C47  b1   b2   M    b2   M    b1   b1   b1
+M    M         M    b1   b1   b1   b1   b1   b1   b1   b1   b2   b2   b2   b1   M    b1
+          b1   b1   b2   M    b2   b1   b1   M    b2   M    M    M    b1   b1   M    b1
+                    M    b2   b2   b3   b1   b2   b2   M    C47  b1   b1   b1   b2   b2
+               M         b2   b2   b2   b1   b2   M    M    b3   b1   b2   M    b2   b2
+          M    M         b2   b2   b2   b11  b1   b3   M    b3   M    b2        M    b1
+               M    C45  b2   b1   b2   b1   b2   b2   b2   b2   M    M         b1   b1
+M              b2   b1   b1   b1   b2   b1   b1   M    M    b2                  M
+C46  M    b3   b2   b3   b1   b1   b1   b1   C50  b3   b2   b2   M                   M
+          b4   b1   b3   M    b1   bG10 M    M    bC17 b2   b3   M    M
+               M    b3   M    b1   b1   b1   b1   b1   b1   M    b1   b2   M
+               b2   b2   b1   b1   M    b2             b1   b1   b1   b2        M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=13,3
+turn=447
+bot_player_index=1
+aTiles=0
+aScore=0
+aStandingArmy=0
+aStars=51
+aCityCount=2
+aGeneral=13,3
+aKnowsKingLocation=False
+aDead=True
+aLeftGame=True
+aLeftGameTurn=447
+bTiles=171
+bScore=356
+bStandingArmy=185
+bStars=53
+bCityCount=4
+bGeneral=7,15
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=-1

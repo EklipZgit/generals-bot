@@ -108,7 +108,7 @@ class EarlyExpandUtilsTests(TestBase):
         weightMap = self.get_opposite_general_distance_map(map, general)
         plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=False)
         paths = plan.plan_paths
-        # self.render_plan(map, plan)
+        # self.render_expansion_plan(map, plan)
         self.assertEqual(3, plan.tile_captures)
         value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, turn, paths, noLog=False)
         self.assertEqual(3, value)
@@ -127,7 +127,7 @@ class EarlyExpandUtilsTests(TestBase):
         weightMap = self.get_opposite_general_distance_map(map, general)
         plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=False)
         paths = plan.plan_paths
-        # self.render_plan(map, plan)
+        self.render_expansion_plan(map, plan)
         self.assertEqual(5, plan.tile_captures)
         value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, turn, paths, noLog=False)
         self.assertEqual(5, value)
@@ -148,7 +148,7 @@ class EarlyExpandUtilsTests(TestBase):
         weightMap = self.get_opposite_general_distance_map(map, general)
         plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=False)
         paths = plan.plan_paths
-        # self.render_plan(map, plan)
+        # self.render_expansion_plan(map, plan)
         self.assertEqual(4, plan.tile_captures)
         value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, turn, paths, noLog=False)
         self.assertEqual(4, value)
@@ -174,7 +174,7 @@ class EarlyExpandUtilsTests(TestBase):
         paths = plan.plan_paths
         value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, turn, paths, noLog=False)
 
-        # self.render_plan(map, plan)
+        # self.render_expansion_plan(map, plan)
 
         self.assertEqual(5, value)
         self.assertEqual(4, len(paths))
@@ -198,7 +198,7 @@ class EarlyExpandUtilsTests(TestBase):
         paths = plan.plan_paths
         value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, turn, paths, noLog=False)
 
-        # self.render_plan(map, plan)
+        # self.render_expansion_plan(map, plan)
 
         # 45 down 1
         # 46 down 1 (cap 2,0 -- 3)
@@ -227,7 +227,7 @@ class EarlyExpandUtilsTests(TestBase):
         plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=False)
         paths = plan.plan_paths
 
-        # self.render_plan(map, plan)
+        # self.render_expansion_plan(map, plan)
 
         self.assertEqual(4, plan.tile_captures)
         self.assertEqual(1, SearchUtils.count(paths, lambda path: path is not None))
@@ -248,7 +248,7 @@ class EarlyExpandUtilsTests(TestBase):
         paths = plan.plan_paths
         value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, turn, paths, noLog=False)
 
-        # self.render_plan(map, plan)
+        # self.render_expansion_plan(map, plan)
 
         self.assertEqual(3, value)
         self.assertEqual(1, SearchUtils.count(paths, lambda path: path is not None))
@@ -301,7 +301,7 @@ class EarlyExpandUtilsTests(TestBase):
                 weightMap = self.get_opposite_general_distance_map(map, general)
                 plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True)
                 paths = plan.plan_paths
-                # self.render_plan(map, plan)
+                # self.render_expansion_plan(map, plan)
                 value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, turn, paths, noLog=False)
                 self.assertEqual(25, value)
 
@@ -319,7 +319,7 @@ class EarlyExpandUtilsTests(TestBase):
         weightMap = self.get_opposite_general_distance_map(map, general)
         plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True)
         paths = plan.plan_paths
-        # self.render_plan(map, plan)
+        # self.render_expansion_plan(map, plan)
         value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, turn, paths, noLog=False)
         self.assertEqual(25, value)
 
@@ -336,7 +336,7 @@ class EarlyExpandUtilsTests(TestBase):
 
         plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True)
         paths = plan.plan_paths
-        # self.render_plan(map, plan)
+        # self.render_expansion_plan(map, plan)
         value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, turn, paths, noLog=False)
         self.assertEqual(25, value)
 
@@ -454,7 +454,7 @@ class EarlyExpandUtilsTests(TestBase):
                         general,
                         weightMap)
 
-                    # self.render_plan(map, plan)
+                    # self.render_expansion_plan(map, plan)
                     self.assertEqual(20, plan.launch_turn)
                     self.assertEqual(25, plan.tile_captures)
 
@@ -466,7 +466,7 @@ class EarlyExpandUtilsTests(TestBase):
 
         plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True)
         paths = plan.plan_paths
-        # self.render_plan(map, plan)
+        # self.render_expansion_plan(map, plan)
         self.assertGreater(plan.tile_captures, 22)
         value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, map.turn, paths, noLog=False)
         # 23 is possible, https://generals.io/replays/ta0ZuXvBq
@@ -483,7 +483,7 @@ class EarlyExpandUtilsTests(TestBase):
 
         plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True)
         paths = plan.plan_paths
-        # self.render_plan(map, plan)
+        # self.render_expansion_plan(map, plan)
         value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, map.turn, paths, noLog=False)
         # we must be able to do better than 22...
         # indeed! Found a 23 :D
@@ -491,12 +491,12 @@ class EarlyExpandUtilsTests(TestBase):
 
     def test_invalid_plan_that_thought_it_had_more_army(self):
         map, plan = self.check_does_not_produce_invalid_plan('EarlyExpandUtilsTestMaps/produced_invalid_plan_01')
-        # self.render_plan(map, plan)
+        # self.render_expansion_plan(map, plan)
         self.assertEqual(plan.tile_captures, 25)
 
     def test_cramped_plan_performance__cramped_should_find_better_than_22(self):
         map, plan = self.check_does_not_produce_invalid_plan('EarlyExpandUtilsTestMaps/cramped_should_find_better_than_22')
-        # self.render_plan(map, plan)
+        # self.render_expansion_plan(map, plan)
         # 23 possible here: https://generals.io/replays/ZBdIA5bge
         #  and here: https://generals.io/replays/ptHf8lX8V
         # Basically, 13 launch hugging wall to preserve as much CONTIGUOUS space next to initial path as possible,
@@ -529,12 +529,12 @@ class EarlyExpandUtilsTests(TestBase):
 
     def test_does_not_explode__exploded_turn_19(self):
         map, plan = self.check_does_not_produce_invalid_plan('EarlyExpandUtilsTestMaps/exploded_turn_19')
-        # self.render_plan(map, plan)
+        # self.render_expansion_plan(map, plan)
         self.assertEqual(plan.tile_captures, 25)
 
     def test__only_got_24_when_seems_easy_25__turn50(self):
         map, plan = self.check_does_not_produce_invalid_plan('EarlyExpandUtilsTestMaps/only_got_24_when_seems_easy_25__turn50')
-        # self.render_plan(map, plan)
+        # self.render_expansion_plan(map, plan)
         self.assertEqual(plan.tile_captures, 25)
 
     def test_produces_plans_as_good_or_better_than_historical(self):
@@ -585,14 +585,14 @@ class EarlyExpandUtilsTests(TestBase):
                     self.skipTest(f"Produced a BETTER plan than original, {plan.tile_captures} vs {playerTilesToMatchOrExceed}")
 
     def test__debug_targeted_historical(self):
-        file = 'BgEs3ym22.txtmap'
+        file = 'BgRfjvS3h.txtmap'
         map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=50)
         playerTilesToMatchOrExceed = self.get_tiles_capped_on_50_count_and_reset_map(map, general)
 
         weightMap = self.get_opposite_general_distance_map(map, general)
         plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True)
         self.assertGreaterEqual(plan.tile_captures, playerTilesToMatchOrExceed)
-        # self.render_plan(map, plan)
+        # self.render_expansion_plan(map, plan)
         if plan.tile_captures > playerTilesToMatchOrExceed:
             self.skipTest(f"Produced a BETTER plan than original, {plan.tile_captures} vs {playerTilesToMatchOrExceed}")
 
@@ -631,3 +631,6 @@ class EarlyExpandUtilsTests(TestBase):
         map.update()
 
         return playerTilesToMatchOrExceed
+
+    def render_expansion_plan(self, map: MapBase, plan: EarlyExpandUtils.ExpansionPlan):
+        self.render_paths(map, plan.plan_paths, f'{str(plan.tile_captures)}')

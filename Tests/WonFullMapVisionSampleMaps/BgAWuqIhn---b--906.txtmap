@@ -1,0 +1,45 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          C49                 M                   M    b2   b2   b2   b1   b1   b1   b1   b1   M    bC488b4
+          M                                  M    b2   b5   b3   b3   b3   M    M    b1   b1   b1   b1   b3
+                              M    M    b2   b2   b2   b2   b2   M    M    M    b3   b1   b1   b1   b1   b3
+                                        b2   b2   M    M    b2   b2   b2   M    b1   b1   M    M    b1   b3
+     M    M                   M    b2   b2   b2   b2        C45  b2   b2   b1   b1   b2   b2   b1   b1   b2
+     M         M         C45  b1   b2   b2   b2             M    b2   M    b1   M    M    b2   b1   b1   b2
+               M              b2        M    b1   b2   M    b13  b2   b2   b1   b1   M    M    b2   C43  b2
+                    M              M    M    b108 M    b6   b6   b3   M    b1   b1   b1   b1   b2   b2   b2
+          M              M    M    b2   b2   b3   b1   b10  b1   b3   b3   b1   b1   b32  b1   b1   b1   C47
+          b2   b2   b2   b2   b2   b2   b2   b1   bC8  b1   M    M    b1   b5   b1   b1   b1   b1   b1   b2
+M              M    b2   b2   b2   b2   b2   M    b1   b1   b1   M    b1   b8   M    b2   b2   b2   b2   M
+C44            M    b3   b3   b3   b2   C48       M    b2   M    b2   M    b2   M    b2   b1   b1   b2   b2
+          M                        b3             M    b2   b2   b1   b2   b2   b2   b2   b1   b1   b2   b2
+               M         M    M    M              M    M    b2   b2   b2   b2   b2   b2   b4   M    b4   b2
+     M                             M              M         M    b2   M    b2   b2   b2   M    b2   b2   b2
+M                                                           M    b2   bC14 b2   b2   b3   b3   b2   b2
+                    M         M         M                        M    M    M    b2   bC16 b2   b2   b2
+                         M                   M                   M    b3   b3   bG14 b2   M              M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=20,0
+turn=906
+bot_player_index=1
+aTiles=0
+aScore=0
+aStandingArmy=0
+aStars=42
+aCityCount=2
+aGeneral=20,0
+aKnowsKingLocation=True
+aDead=True
+aLeftGame=True
+aLeftGameTurn=906
+bTiles=187
+bScore=1064
+bStandingArmy=877
+bStars=52
+bCityCount=5
+bGeneral=16,17
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=-1
+bot_targeting_army=19,5

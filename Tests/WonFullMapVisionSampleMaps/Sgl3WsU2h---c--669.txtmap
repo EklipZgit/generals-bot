@@ -1,0 +1,65 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          M         c3   c8   c10  c3   c7   c8   c8   c8   M    c4   c4   c2   c4   M    M
+M         c3   M    c3   c7   c5   c7   c4   M    M    c8   c4   c4   c4   c3   M    M
+     M    cC26 c2   c3   c3   c2   c65  c5   c7   c9   M    c2   c4   c6   c3   c2   M
+cC23 M    c3   c2   c2   c2   cC20 M    c2   c7   M    c4   c3   c3   c3   c2   c3   c1   c3
+c2   c2   c50  c2   c5   M    c5   c5   M    c7   c14  c2   c4   M    c4   c4   c2   c2   M
+c2   M    c3   M    c5   c4   M    M    c1   M    c4   c4   c4   M    c5   M    M    c2
+c2   c2   c2   c3   c2   c2   c2   c4   c1   M    c1   c1   c1   c1   c1   c1   M    c3   M
+          M    c3   c27  c2   c3   c1   c1   c1   c1   c1   c1   M    c1   c1   M    c1   M
+     M    c3   cC39 c2   c2   c2   c1   M    c1   c1   c6   M    c1   c1   c1   c1   c1   c6   c4
+M    c3   c3   c3   c2   M    M    c2   c2   c1   c78  M    c1   c1   c1   c2   c1   c2   M    c3
+c3   c3   c3   c4   c2   c2   c2   c2   M    c1   c1   c1   M    c6   cC8  c1   c1   M    c4   c3
+c5   c3   c3   c2   c2   M    c2   c2   M    M    c2   c1   c5   M    c1   M    c1   M    c4   c3
+M    M    M    c2   M    c6   M    c3   c3   C45  c2   c1   c1   C49  c1   c1   c1   c6   c5   c4
+c9   c2   c2   c2   c6   c6   M    c6   C43  c2   c2   M    c1   c5   M    c1   c1   c6   c6   M
+c6   c3   M    M    c6   c6   M    M    c5   c2   c2   c2   c1   M    c6   M    c1   C46  c6   M
+c6   c3   c6   M    c6   c6   c6   c6   C42  c2   M    c3   c1   c1   c1   M    c1   c1   c1   c2
+M    c3   c3   M    M    c6   c6   M         c1   C48  C48  c3   c3   c1   c1   c1   c1   c27  c2
+M    c5   cC42 c3   c3   M    c6   M         c3             C44  c3   M    c5   c1   c1   c1   c1
+c3   c7   c3   c3   c3   M    M                        M    c6   c3   c3   c3   c1   c1   c1   cC41
+cG91 c7   cC43 c3   c3   c3   M              M              M    c6   c6   c6   c6   c6   c6   C44
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=19,18
+turn=669
+bot_player_index=2
+aTiles=0
+aScore=0
+aStandingArmy=0
+aStars=149
+aCityCount=2
+aGeneral=19,18
+aKnowsKingLocation=False
+aDead=True
+aLeftGame=True
+aLeftGameTurn=669
+bTiles=0
+bScore=0
+bStandingArmy=0
+bStars=148
+bCityCount=2
+bGeneral=6,3
+bKnowsKingLocation=False
+bDead=True
+bLeftGame=True
+bLeftGameTurn=357
+cTiles=275
+cScore=1469
+cStandingArmy=1194
+cStars=149
+cCityCount=9
+cGeneral=0,19
+cKnowsKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+dTiles=0
+dScore=0
+dStandingArmy=0
+dStars=151
+dCityCount=1
+dKnowsKingLocation=False
+dDead=True
+dLeftGame=True
+dLeftGameTurn=189
+bot_target_player=-1

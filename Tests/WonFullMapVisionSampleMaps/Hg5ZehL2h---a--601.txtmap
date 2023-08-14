@@ -1,0 +1,44 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                              M    C46  M                                  M
+     a2                                                M
+     a2   M    C43  M                   M    M
+     a1   a1   C40                 M    a2   a2   a2   M    a3        M         M
+     a1   a1   a1   M    M    a2   a2   a2   C40  a7   a5   a6                  M
+     M    a1   a1   a3   C44  M    a2   a2   M    M    a5   a4   M    a7
+a2   M    a2   a1   a1   aC58 M    a2   a2   a1   a1   M    a3   a3   a7   M    M    a7
+a2   a1   a1   M    M    a1   M    M    M    a1   a1   a1   M    a3   a7   a8   a8   a7
+M    a2   a1   a3   M    a2   a2   a2   a2   a2   M    a1   a1   a3   C43  a6   a8   a6
+     M    M    a3   a2   a2   a2   C49  M    a2   a2   M    a1   a3   M    a5   M    M
+          a2   a3   a3   C48  a2   a1   a2   a2   M    a19  a1   a1   M    a5   a4   a5
+     M    a2   a2   a2   a2   a2   a2   M    a2   M    M    a4   a3   M    a5   aC20
+     M         M    a1   a2   a1   a2   a2   M    a4   a4   a4   a4   a6   M    a2   a3
+M    M              a1   a1   a1   M    a2   a2   a2   a2   M    a3   a3   a2   a2   M
+     M                   a1   a3        M    a2   M    a2   a2   a2   a2   a2   M
+                    M         a3   a2   a2   a2   a2   M    a4   a2   a4   a2   a2   M
+                                   M    M         aC15 M    a2   aG11 a2   a4   a7   a2
+     M         M         M         M         M    a4   a4   a4   a3   a2   a2   a2   a5
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=5,6
+turn=601
+bot_player_index=0
+aTiles=153
+aScore=523
+aStandingArmy=370
+aStars=53
+aCityCount=4
+aGeneral=13,16
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=0
+bScore=0
+bStandingArmy=0
+bStars=42
+bCityCount=1
+bGeneral=5,6
+bKnowsKingLocation=True
+bDead=True
+bLeftGame=True
+bLeftGameTurn=601
+bot_target_player=-1

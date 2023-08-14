@@ -1,0 +1,47 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          M         a1   aC14 a1   aG10 M                   M                   C48       M
+     a1   a1   a1   a1        M    a1   a1   M              M    M
+     a3   M    a1   a1   a1   a1   a1   M         M    M                        M
+          M    a2   a1   a1   a1   a1   C42  M              M                        M
+M              M    a3   a1   a1   a1   M                             M         M
+     M              M    a3   a1   a1   a1   a1   a1        M              M
+                         M    a5   a1   a1   a1   a1   M                   M              M
+a1   a1   a1   a1   a2   a1   a1   M    a1   a1   a1             M         M         M
+a1   M    a2   M    M    M    M    a1   a1   a2   a2             M    M    M              M
+a1   a1   a1   a1   M    a2   a1   a1   a2   a1   a1   a1   M         M
+a1   a1   a1   a1   a1   a2   a1   a1   a1   a1   a1   a1   M              M         C46
+     a1   a1   M    a1   a1   a1   a1   a2   M    M    M         M                   M    M
+M    a1   a1   a1   a1   M    a1   a1   a1   a3   a1             C45                      M
+M    C48  C46  a1   aC6  a1   M    a1   a1        a1   a1   M
+M         M    a1   a1   a1   M    M    a8   M    a1   a1   C46
+     M         a1   a1   a1   a1   a1   a1   a1   a1   M
+               a1   a1   a1        M    M    a1   a1   a1   a1   a1
+               a1   a2   a1        M    a1   a1   M    M         M         M
+                         M              M    a1   a1   a2                                 M
+M                   C42            M         a2                  M
+                         M                                            C43            M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=4,13
+turn=297
+bot_player_index=0
+aTiles=129
+aScore=187
+aStandingArmy=58
+aStars=52
+aCityCount=3
+aGeneral=7,0
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=0
+bScore=0
+bStandingArmy=0
+bStars=53
+bCityCount=1
+bGeneral=4,13
+bKnowsKingLocation=False
+bDead=True
+bLeftGame=True
+bLeftGameTurn=297
+bot_target_player=-1

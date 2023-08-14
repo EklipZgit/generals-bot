@@ -4,6 +4,8 @@ REFACTOR QUEUE TO DO NEXT COMMIT:
 
 
 TODO
+during 50-100, just straight up run a gather to ALL undiscovered tiles within like, 6 tiles of the predicted enemy general location, see what behavior results...?
+
 kill threat should have two modes, one that prioritizes killing enemy tiles on the way, and one that prioritizes max army intercept (cur behav).
 kill threat needs to close distance to target as much as possible, space-wise, on every move. Right now it likes to run in parallel as long as possible for some reason.
 	Needs to understand that it can intercept one move behind the army on longer threat paths where that is safe.

@@ -7,6 +7,7 @@
 import json
 import logging
 import typing
+import uuid
 from collections import deque
 
 TILE_EMPTY = -1
@@ -280,7 +281,8 @@ class MapBase(object):
                  user_names: typing.List[str],
                  turn: int,
                  map_grid_y_x: typing.List[typing.List[Tile]],  # dont need to init movable and stuff
-                 replay_url: str
+                 replay_url: str,
+                 replay_id: typing.Union[None, str] = None
                  ):
         # Start Data
         self.player_index: int = player_index  # Integer Player Index
@@ -329,12 +331,21 @@ class MapBase(object):
         # List of City Tiles. Need concept of hidden cities from sim..? or maintain two maps, maybe. one the sim maintains perfect knowledge of, and one for each bot with imperfect knowledge from the sim.
         self.cities: typing.List[Tile] = []
         self.replay_url = replay_url
+        self.replay_id = replay_id
+        if self.replay_id is None:
+            self.replay_id = f'TEST:{str(uuid.uuid4())}'
 
         self.scores: typing.List[Score] = [Score(x, 0, 0, False) for x in range(8)]  # List of Player Scores
         self.complete = False  # Boolean Game Complete
         self.result = False  # Boolean Game Result (True = Won)
         self.scoreHistory: typing.List[typing.Union[None, typing.List[Score]]] = [None for i in range(25)]
         self.remainingPlayers = 0
+
+    def get_all_tiles(self) -> typing.Generator[Tile, None, None]:
+        for row in self.grid:
+            for tile in row:
+                yield tile
+
 
     def GetTile(self, x, y) -> typing.Union[None, Tile]:
         if x < 0 or x >= self.cols or y < 0 or y >= self.rows:
@@ -602,6 +613,8 @@ class MapBase(object):
                 if curTile.player >= 0:
                     self.players[curTile.player].tiles.append(curTile)
 
+        self.update_reachable()
+
         # we know our players city count + his general because we can see all our own cities
         self.players[self.player_index].cityCount = len(self.players[self.player_index].cities) + 1
         self._update_player_information()
@@ -649,7 +662,7 @@ class MapBase(object):
                 if tile.isGeneral:
                     self.generals[tile.player] = tile
 
-            self.update_reachable()
+        self.update_reachable()
 
     def update_reachable(self):
         pathableTiles = set()
@@ -692,7 +705,7 @@ class Map(MapBase):
         if 'teams' in start_data:
             teams = start_data['teams']
 
-        super().__init__(start_data['playerIndex'], teams, start_data['usernames'], data['turn'], map_grid_y_x, replay_url)
+        super().__init__(start_data['playerIndex'], teams, start_data['usernames'], data['turn'], map_grid_y_x, replay_url, start_data['replay_id'])
 
         self.apply_server_update(data)
 

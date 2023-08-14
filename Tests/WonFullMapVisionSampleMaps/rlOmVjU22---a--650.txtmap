@@ -1,0 +1,55 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M    a3   a3   M         M    M    M    a7   a7   a7   M    a6   a6   M              M    a2   a2   a2
+a3   a3   a3   a3        M    a5   M    a6   a6   a6   a6   a6   a6   a6   M         M    C41  a2   a2   a2
+a3   a3   C41  a3   C45  a6   a4   a6   a6   a6   M    a6   a6   M    a6   a6   M    a2   a2   aC1149a2   a2
+C46  a3   a3   aC32 a4   a3   a6   a6   a6   a2   a6   M    M    M    a6   M    a2   a4   C50  a2   a2   M
+M    M    a3   a3   a3   a2   M    a6   M    a5                       M    a2   a2   a2   a2   a2   a2   a2
+M    M    M    C40  M    a2   a2   M    a3   M    M    M    M    M    a2   C45  M    a2   M    a2   a2   a2
+M    a4   a4   a3   a3   a2   a3   M    a2   a2   a2   a2   a2   a2   a2   a2   a2   a2   a2   M    a2   a2
+a4   a4   M    a2   a2   a2   a2   a2   a2   a2   a2   a4   a3   M    a2   a3   a2   a2   a2   a2   M    M
+a4             M         a2   M    M    M         M    a4   a5   a2   a2   M    a2   a2   a2   a2   a2   a2
+a4             M         a2   a2   M    M    M    a7   a4   a4   a4   a2   a2   a2   a2   a4   a2   M    a2
+a4             M    M    M    a2   a2   a3   a3   M    a4   a4   a4   a2   C48  a2   a2   a2   a2   a2   a2
+a4   M    M    a7   a9   M    a2   a6   a3   a5   a5   a4   a4   a7   a2   a5   a2   M    C45  C48  a2   M
+a4   M    a7   a7   a8   M    a2   a6   a3   a5   a5   a5   a4   a9   a5   a5   M         a2   a2   a2
+aC77 a6   a6   a6   a6   a3   a2   a6   a3   M    a5   M    a4   a4   a4   a4   a4   a4   a4   M
+a3   a7   a7   a7   a7   M    a2   a8   a5   a5   a5   M    a4   a5   M              M
+a3   a7   M    a3   a3   aG29 a2   a18  a3   M    a5   M    a4   a6   a7   M    M
+a5   a3   a3   a3   a3   a3   a2   M    a3   a3   M    a9   a5   a6   a2   a7
+a5   M    a3   a3   a3   a3   a2   aC27 M    a3   a9   a9   a5   a6   a6   a6   a2   a2   a5   M
+M    M    a3   a3   M    a3   a7   a3   a3   a3   a7   M    M    a6   a2   a2   a2   a4
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=19,2
+turn=650
+bot_player_index=0
+aTiles=273
+aScore=2326
+aStandingArmy=2053
+aStars=150
+aCityCount=5
+aGeneral=5,15
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=0
+bScore=0
+bStandingArmy=0
+bStars=149
+bCityCount=1
+bGeneral=19,2
+bKnowsKingLocation=False
+bDead=True
+bLeftGame=True
+bLeftGameTurn=650
+cTiles=0
+cScore=0
+cStandingArmy=0
+cStars=150
+cCityCount=1
+cGeneral=3,3
+cKnowsKingLocation=False
+cDead=True
+cLeftGame=True
+cLeftGameTurn=449
+bot_target_player=-1

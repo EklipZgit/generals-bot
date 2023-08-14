@@ -16,14 +16,14 @@ from Path import Path
 
 
 class BoardAnalyzer:
-	def __init__(self, map, general):
+	def __init__(self, map: MapBase, general: Tile):
 		startTime = time.time()
-		self.map = map
-		self.general = general
+		self.map: MapBase = map
+		self.general: Tile = general
 		self.should_rescan = False
 
-		self.innerChokes: typing.List[typing.List[bool]] = []
-		self.outerChokes: typing.List[typing.List[bool]] = []
+		self.innerChokes: typing.List[typing.List[bool]] = None
+		self.outerChokes: typing.List[typing.List[bool]] = None
 
 		self.intergeneral_analysis: ArmyAnalyzer = None
 

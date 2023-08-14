@@ -1,0 +1,44 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          M         M    M                        M    M    C48
+M                                                           a1        M    M    C40
+          M    M              a1   a1   a1   a1   M    M    a1   a1   M              M
+                         a1   a1   a1   a1   a1   a1   a1   a1   M              M    M
+               C42                 a1   a1   M    aC47 a1   M
+M         M    a1   a1   a1   a1   a1   a1   a1   a1   a1   a1   a1   a1        M
+     M    a1   a1   a2   a2   M    a1   a2   a1   a1   a1   a1   a1
+a1   a1   a1   a1        C49  a1   a1   a1   a1   a1   a1   a1   a1        M
+M    a3   M    C44       M    a1   a1   a1   a1   a1   a2   a1   a2   C40
+M    a3   a4   M    M         a1        M    a1   M    a2   a3   a2   C49
+a3   a3   a4   M              a1   M    a2   a1   a3   a4   M    a1             M
+M    a3   a3   M    M         a4   a1   a1   a1   a3   a3   a3   a3   M         M
+M    a3   M    a2   M    M    M    M    a1   a3   a1   M    a4   a3   M    a6
+a3   a3   a2   a1   a1   a2   a2   a2   a1   a1   a1   M    a4   a3   a3   a1   a2
+     M    a2   aG10 a1   a1   a1   a1   a1   a3   a5   a6   a5   M    a1   a2
+a3   a3   a2   a2   a2   aC16 M    a1   a1   M    a5   M    M    a3   a1
+a5   a4   a4   a2   a2   a1   M    a1   a1   a1   a1   a1   a1   C41  a1   a2
+a5   M    a1   a1   a1   a1   a1   a1   M    M    a1   a1   a1   a3   a5   M    C45
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=10,4
+turn=698
+bot_player_index=0
+aTiles=163
+aScore=361
+aStandingArmy=198
+aStars=52
+aCityCount=3
+aGeneral=3,14
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=0
+bScore=0
+bStandingArmy=0
+bStars=54
+bCityCount=1
+bGeneral=10,4
+bKnowsKingLocation=True
+bDead=True
+bLeftGame=True
+bLeftGameTurn=698
+bot_target_player=-1

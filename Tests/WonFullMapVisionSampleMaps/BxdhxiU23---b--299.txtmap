@@ -1,0 +1,45 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+M                                  M         M                   M
+M         M                                                                M
+M              M                   M                        M    M         C41       M
+                              M         M                                  M    M
+                                                                           M
+               M         b1   b1   b1   b1   b1                  C46  M
+               b2   b1   b1   b1   M    M    b2   b3                  b1   b1   M
+     M         M    b1   b1   b1             M         M    b1   b1   b1   b1   b1   C46
+M         C49  M    b2   M    b1   b1   b1   M         b2   M         M    M    b1   M
+M                   b2   b1   b1   M    b1   b1   b1   b4   b1   M    b1   b1   b1   M
+     M         b2   b1   b1   bG10 M    b2   b2   b1   b1   M    M    M    M    b1   b2
+          M    b2   b1   b1   b1   C44  b2        M    b1   b1   b2   b1   b1   b1   b2
+     M         C48  b1   M    C41  b2   b2   M    b1   b1   b1   b1   b3   b1   b1   b2
+          M         b1   b1   M    b1   b1   M    b1   b1   b1   b1   b1   M    b1   M
+          M         M    b1   b2   b1   b1   b2   b2   M    C48  b1   M    b1   b1   b1
+                    b1   b1   b2   b2   b1   M    b2   b1   b1   b1   b1   M    b1   M
+     M              b1   b1   b2   b2   b1   b1   b1   b1   M    M    b1   bC7  b1   b1
+               M    M    C43  b2        M    b1   M    b1   b1   b1   b1   b1   M    b1
+M                   M    M              M         C50  M    M    b1   C40  b1   M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=15,16
+turn=299
+bot_player_index=1
+aTiles=0
+aScore=0
+aStandingArmy=0
+aStars=41
+aCityCount=1
+aGeneral=15,16
+aKnowsKingLocation=False
+aDead=True
+aLeftGame=True
+aLeftGameTurn=299
+bTiles=124
+bScore=171
+bStandingArmy=47
+bStars=52
+bCityCount=2
+bGeneral=6,10
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=-1

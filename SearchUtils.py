@@ -8,16 +8,12 @@
 import logging
 import math
 import typing
-from copy import deepcopy
 import time
-import json
 from collections import deque
 from queue import PriorityQueue
-from pprint import pprint,pformat
 from DataModels import PathNode, TreeNode, Move
-from Path import Path, PathMove
+from Path import Path
 from test.test_float import INF
-from ViewInfo import ViewInfo, PathColorer
 from base.client.map import Tile, MapBase, new_value_matrix
 
 BYPASS_TIMEOUTS_FOR_DEBUGGING = False
@@ -595,7 +591,7 @@ def greedy_backpack_gather(map, startTiles, turns, targetArmy = None, valueFunc 
     # TODO factor in cities, right now they're not even incrementing. need to factor them into the timing and calculate when they'll be moved.
     if searchingPlayer == -2:
         if isinstance(startTiles, dict):
-            searchingPlayer = startTiles.keys()[0].player
+            searchingPlayer = [t for t in startTiles.keys()][0].player
         else:
             searchingPlayer = startTiles[0].player
 
@@ -1425,12 +1421,25 @@ def breadth_first_find_queue(
 
 
 
-def breadth_first_foreach(map: MapBase, startTiles, maxDepth, foreachFunc, negativeFunc = None, skipFunc = None, skipTiles = None, searchingPlayer = -2, noLog = False):
-    '''
-    skipped tiles are still foreached, they just aren't traversed
-    '''
-    if searchingPlayer == -2:
-        searchingPlayer = map.player_index
+def breadth_first_foreach(map: MapBase, startTiles, maxDepth, foreachFunc, negativeFunc = None, skipFunc = None, skipTiles = None, noLog = False, bypassDefaultSkip: bool = False):
+    """
+    WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
+    (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
+    Does NOT skip neutral cities by default.
+    Skip func runs AFTER the foreach func is evaluated.
+    Same as breath_first_foreach_dist, except the foreach function does not get the distance parameter passed to it.
+
+    @param map:
+    @param startTiles:
+    @param maxDepth:
+    @param foreachFunc:
+    @param negativeFunc:
+    @param skipFunc: Evaluated BEFORE the foreach runs on a tile
+    @param skipTiles: Evaluated BEFORE the foreach runs on a tile
+    @param noLog:
+    @param bypassDefaultSkip: If true, does NOT skip mountains / undiscovered obstacles
+    @return:
+    """
     frontier = deque()
     globalVisited = new_value_matrix(map, False)
     if skipTiles is not None:
@@ -1465,7 +1474,7 @@ def breadth_first_foreach(map: MapBase, startTiles, maxDepth, foreachFunc, negat
         if globalVisited[current.x][current.y]:
             continue
         globalVisited[current.x][current.y] = True
-        if current.isMountain or (not current.discovered and current.isNotPathable):
+        if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)):
             continue
         foreachFunc(current)
         # intentionally placed after the foreach func, skipped tiles are still foreached, they just aren't traversed
@@ -1484,13 +1493,25 @@ def breadth_first_foreach(map: MapBase, startTiles, maxDepth, foreachFunc, negat
 
 
 
-def breadth_first_foreach_dist(map, startTiles, maxDepth, foreachFunc, negativeFunc = None, skipFunc = None, skipTiles = None, searchingPlayer = -2, noLog = False):
-    '''
-    what's the difference between this and the other foreach...?
-    skipped tiles are still foreached, they just aren't traversed
-    '''
-    if searchingPlayer == -2:
-        searchingPlayer = map.player_index
+def breadth_first_foreach_dist(map, startTiles, maxDepth, foreachFunc, negativeFunc = None, skipFunc = None, skipTiles = None, noLog = False, bypassDefaultSkip: bool = False):
+    """
+    WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
+    (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
+    Does NOT skip neutral cities by default.
+    Skip func runs AFTER the foreach func is evaluated.
+    Same as breath_first_foreach, except the foreach function also gets the distance parameter passed to it.
+
+    @param map:
+    @param startTiles:
+    @param maxDepth:
+    @param foreachFunc:
+    @param negativeFunc:
+    @param skipFunc: Evaluated BEFORE the foreach runs on a tile
+    @param skipTiles: Evaluated BEFORE the foreach runs on a tile
+    @param noLog:
+    @param bypassDefaultSkip: If true, does NOT skip mountains / undiscovered obstacles
+    @return:
+    """
     frontier = deque()
     globalVisited = new_value_matrix(map, False)
     if skipTiles is not None:
@@ -1520,7 +1541,7 @@ def breadth_first_foreach_dist(map, startTiles, maxDepth, foreachFunc, negativeF
         if globalVisited[current.x][current.y]:
             continue
         globalVisited[current.x][current.y] = True
-        if current.isMountain or (not current.discovered and current.isNotPathable):
+        if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)):
             continue
         foreachFunc(current, dist)
         # intentionally placed after the foreach func, skipped tiles are still foreached, they just aren't traversed
@@ -1537,7 +1558,7 @@ def breadth_first_foreach_dist(map, startTiles, maxDepth, foreachFunc, negativeF
 
 
 def build_distance_map(map, startTiles, skipTiles = None) -> typing.List[typing.List[int]]:
-    distanceMap = new_value_matrix(map, INF)
+    distanceMap = new_value_matrix(map, 1000)
 
     if skipTiles is None:
         skipTiles = None
@@ -1561,7 +1582,11 @@ def build_distance_map(map, startTiles, skipTiles = None) -> typing.List[typing.
 
 # Prints the items which are put in a  
 # knapsack of capacity W 
-def solve_knapsack(items, capacity, weights, values):
+def solve_knapsack(
+        items: typing.List[typing.Any],
+        capacity: int,
+        weights: typing.List[int],
+        values: typing.List[int]):
     timeStart = time.time()
     n = len(items)
     K = [[0 for w in range(capacity + 1)]
@@ -1585,7 +1610,6 @@ def solve_knapsack(items, capacity, weights, values):
     includedItems = []
     w = capacity
     for i in range(n, 0, -1):
-        # lol 0.1 because float rounding error???
         if res <= 0:
             break
         if i == 0:

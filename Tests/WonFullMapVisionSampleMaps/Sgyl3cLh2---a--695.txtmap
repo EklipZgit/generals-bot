@@ -1,0 +1,47 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+M    M              a1   a1   a1   a1   a1   a1   a3             M    C46       M
+M              M    a1   C44       M    a1   a1   a1   a1   a1             M         M
+          a3   M    a1   a3   C43  a2   a1   a1   M    a1   M
+M    M    a1   a3   a1   a1   a1   a1   a1   a1   a1   a1   a1   a1   M    M         M
+a1   a1   a1   a3   a6   M    M    a1   M         M    a2   M    a2   a2   a3   a4
+M    a1   a1   a1   a1   M    M    a1   a3   M    a3   a2   a2   a2   M    M    a4
+M    a5   a2   a1   a1   C43  M    M    M    M    a1   a2   a3   a1   a1   a5   a4   M
+aC104a1   a1   a20  a1   a1   a1             M    a1   a6   a1   a2   a2   C43  a3   a4
+a1   a1   M    a2   a2   a2             C50  M    a1   a3   a1   M    a2   a4   a4   a4
+M    a1   a1   a1   a3   a3        M    M    a2   a1   a5   M    M    a5   a4   a5   a4
+a1   a3   C49  M    M    a3   M         M    a4   a2   a3   a4   a4   M    a6   a8   a4
+a1   a2   a1   a1   a2   a2        M         M    M    a3   M    a4   a5   M    a4   a4
+a3   a1   M    a1   M    a2   M                   M    a1   a1   a1   M    M    a6   aC23
+M         C42  a1   a1   a2   a2   M         a1   a1   a1   a1   a1   a3   M    a6   a1
+               M    a1   a2   a2   a2   M    a1   a1   M    aC15 a1   a1   a1   a1   a1
+          M         a1   a1   a3   a2   a2   a1   M    a1   a1   a2   a1   a4   a7   a1
+M    M              a1   a1   a1   a1   a1   a1   M    a3   a1   a2   M    a9   a7   M
+                    a1   M    M              M    a7   a3   a1   a1   aG18 a2   aC25 a4
+          M    M    a1             M    M    M    M    a3   a3   M    a9   M    a2
+          M         M    M                   M    a3   a3   M         M    M    a16
+          M                             a3   a2   a4   a10  M                   M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=0,7
+turn=695
+bot_player_index=0
+aTiles=203
+aScore=674
+aStandingArmy=471
+aStars=51
+aCityCount=5
+aGeneral=14,17
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=0
+bScore=0
+bStandingArmy=0
+bStars=42
+bCityCount=1
+bGeneral=0,7
+bKnowsKingLocation=False
+bDead=True
+bLeftGame=True
+bLeftGameTurn=695
+bot_target_player=-1

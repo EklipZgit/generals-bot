@@ -1,0 +1,44 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                    M    M                                                           M
+M         M         M                        M
+                                        M    C47       M                        C45
+               M                   M         M                             b1        C45
+M              M                   M    M    M              b1   b1   b1   b1   M    M
+                    b1   b1   b1   b1                  M    b1   b1   M    b1   b1   b1
+     M    M         M    b1   b1   M    b1   b1   b1   b1   b1   M    bG12 b1   b1   b1
+          M    C47  b1   b1   b1   b1   b1   M    M    b1   b1   b1   b1   M    b1
+               b1   b1   b1   M    b1   M    b1   b1   b1   M    C42  M         b1
+M    b1   b1   b1   b1   M         b1   b1   b1   b1   M         M         M    M    M
+b1   b1   b1   b1   b1   b1   C46  b1   b1                  M              M
+b1   C40  M    b1   b1   b1   M    M    M    C44  M    M              M              M
+M              M    M    b1   b1   b1   b1   M    b1                  C45  M
+C48  M    M         M    M    bC14 b1   b1   M    b1   b1                       M
+               M    M         M    b1   b1   b1   b1   b2   M                        M
+M    M                        M    b1   b1   b1   b1   b1   M
+     M                   b1   b1   b1   b1   b1        M         C50            M
+                    M    b1   b1   b1   b1        M              M              M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=6,13
+turn=148
+bot_player_index=1
+aTiles=0
+aScore=0
+aStandingArmy=0
+aStars=55
+aCityCount=1
+aGeneral=6,13
+aKnowsKingLocation=False
+aDead=True
+aLeftGame=True
+aLeftGameTurn=148
+bTiles=92
+bScore=117
+bStandingArmy=25
+bStars=53
+bCityCount=2
+bGeneral=14,6
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=-1

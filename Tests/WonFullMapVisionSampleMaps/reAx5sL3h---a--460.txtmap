@@ -1,0 +1,46 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                         M                                  M         M                        M
+                                        M              C49  M         M    a4   M
+          M                   a1   a3   M              a3   a2   a3   a3   a3   a3                            M
+M              a1   C45  C48  a1   a2   M              C42  M    a3   a3   a3   a3   a3
+a1   a1   a1   a1   a1   a2   a1   M    C43  a2   M    a2   a2   a2   a2   a2   a4   a3   a3   a3
+a1   a1   a1   a1   a1   a1   aC11 a1   M    a2   a2   a2   M    a2   a2   M    a3   a3             M
+          a3   M    a2   a2   a1   a1   a1   a1   a2   a2   a2   a2   a2   a3   a3   M              M
+                    a2   a2   a1   a2   a2   a2   M    a2   a2   a2   a2   a3   a3   a3   M                   M
+     M              a2   a2   a1   M    a2   a2   a2   a2   C44  a4   a2   a2   M    a2                  M    M
+     M         M    a2   a1   a1   a1   a2   M    a2   a2   a1   M    M    a2   a3   a2             M
+     M         a1   a1   a1   a1   a1   a1   a4   a2   a2   a10  a4   a4   a3   a3   a3   M    M    a2
+                         a1   a1   a1   a1   a65  a2   a2   a2   M    a4   a3   a3   a4   a13  a2   a2   M    M
+          M                   C44  a1   a5   M    a2   a2   a2   a2   a4   M    a3   a3   a3   a2   a2   a2   M
+               M         M         M    a1   a1   a3   M    a2   a2   a3   M    a3   M    M    a2   a3   M
+          M              M    a2   a1   a1   a1   M    a2   a2   a2   a2   a2   aC8  a1   M    a4   a3   M    a5
+                                   M    a6   a1   a3   a4   M    a3   a3   a2   a3   a1   a5   a5   a3   a3   a4
+                                   M    a3   a1   M    a5   M    C40  M    a2   M    a1   a2   a2   a2   a5   M
+     C43       M    M         M    M    M    a1   a1   a1   a1   M    a2   aC5  a3   aG4  a2   a2   M    M
+          M                        M    M    a1   a1   M    a1   a1   a1   a1   a1   a2   M    M              M
+M                                       M    M    a5   M    M    a2   a4   a4   a2   a2   a2   a4   M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=6,5
+turn=460
+bot_player_index=0
+aTiles=214
+aScore=571
+aStandingArmy=357
+aStars=53
+aCityCount=4
+aGeneral=17,17
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=0
+bScore=0
+bStandingArmy=0
+bStars=51
+bCityCount=1
+bGeneral=6,5
+bKnowsKingLocation=True
+bDead=True
+bLeftGame=True
+bLeftGameTurn=460
+bot_target_player=-1

@@ -2,19 +2,17 @@ import EarlyExpandUtils
 from BotHost import BotHostBase
 from DataModels import Move
 from Sim.GameSimulator import GameSimulator, GameSimulatorHost
+from Sim.TextMapLoader import TextMapLoader
 from TestBase import TestBase
-from base.client.map import MapBase
+from base.client.map import MapBase, Tile
 from bot_ek0x45 import EklipZBot
 
 
 class DefenseTests(TestBase):
 
     def test_simulates_a_failed_defense_scenario(self):
-        map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/242.txtmap', 242, player_index=1)
-        fakeEnemyGen = map.GetTile(2, 16)
-        fakeEnemyGen.isGeneral = True
-        fakeEnemyGen.player = 0
-        fakeEnemyGen.army = 7
+        mapFile = 'Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/242.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 242, player_index=1)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
         # assert map loaded correctly
@@ -31,8 +29,8 @@ class DefenseTests(TestBase):
         self.assertTrue(map.GetTile(6, 10).visible)
 
         # simHost = GameSimulatorHost(map, player_with_viewer=general.player)
-        simHost = GameSimulatorHost(map, player_with_viewer=fakeEnemyGen.player)
-        simHost.sim.reveal_player_general(playerToReveal=general.player, playerToRevealTo=fakeEnemyGen.player)
+        simHost = GameSimulatorHost(map, player_with_viewer=enemyGeneral.player)
+        simHost.sim.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         p0Map = simHost.sim.players[0].map
         p1Map = simHost.sim.players[1].map
@@ -63,34 +61,19 @@ class DefenseTests(TestBase):
         self.assertEqual(33, p0Map.GetTile(6, 10).army)
         self.assertTrue(p0Map.GetTile(6, 10).visible)
 
-        simHost.run_sim(run_real_time=True, turn_time=10.0)
+        simHost.run_sim(run_real_time=True, turn_time=3.0)
 
-
-    def test_simulates_a_game(self):
-        map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/243.txtmap', 243, player_index=1)
-        fakeEnemyGen = map.GetTile(2, 16)
-        fakeEnemyGen.isGeneral = True
-        fakeEnemyGen.player = 0
-        fakeEnemyGen.army = 7
+    def test_should_not_spin_on_defense_gathers_against_sitting_cities(self):
+        mapFile = 'GameContinuationEntries/should_not_spin_on_defense_gathers_against_sitting_cities___BelzKSdhh---b--275.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 275)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
+        # simHost = GameSimulatorHost(map)
         simHost = GameSimulatorHost(map, player_with_viewer=general.player)
+        # alert both players of each others general
+        simHost.sim.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+        simHost.sim.reveal_player_general(playerToReveal=enemyGeneral.player, playerToRevealTo=general.player)
 
-        simHost.run_sim(run_real_time=True, turn_time=10.0)
+        simHost.run_sim(run_real_time=True, turn_time=0.5)
 
-
-    def test_simulates_a_game_from_turn_1(self):
-        map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/243.txtmap', 243, player_index=1)
-        fakeEnemyGen = map.GetTile(2, 16)
-        fakeEnemyGen.isGeneral = True
-        fakeEnemyGen.player = 0
-        fakeEnemyGen.army = 1
-
-        self.reset_map(map)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        simHost = GameSimulatorHost(map, player_with_viewer=0)
-
-        simHost.run_sim(run_real_time=True, turn_time=0.25)

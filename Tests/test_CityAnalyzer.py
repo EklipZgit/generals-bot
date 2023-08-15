@@ -137,45 +137,17 @@ class CityAnalyzerTests(TestBase):
 
     def render_city_analysis_main_scores(self, map: MapBase, boardAnalysis: BoardAnalyzer, cityAnalysis: CityAnalyzer):
         viewInfo = self.get_view_info(map)
-        tileScores = []
-        enemyTileScores = []
-        for tile in map.get_all_tiles():
-            score = None
-            if tile in cityAnalysis.city_scores:
-                score = cityAnalysis.city_scores[tile]
-            if tile in cityAnalysis.enemy_city_scores:
-                score = cityAnalysis.enemy_city_scores[tile]
-            if tile in cityAnalysis.player_city_scores:
-                score = cityAnalysis.player_city_scores[tile]
-            if tile in cityAnalysis.undiscovered_mountain_scores:
-                score = cityAnalysis.undiscovered_mountain_scores[tile]
-
-            if score is None:
-                continue
-
-            viewInfo.topRightGridText[tile.x][tile.y] = f'r{f"{score.city_relevance_score:.2f}".strip("0")}'
-            viewInfo.midRightGridText[tile.x][tile.y] = f'e{f"{score.city_expandability_score:.2f}".strip("0")}'
-            viewInfo.bottomMidRightGridText[tile.x][tile.y] = f'd{f"{score.city_defensability_score:.2f}".strip("0")}'
-            viewInfo.bottomRightGridText[tile.x][tile.y] = f'g{f"{score.city_general_defense_score:.2f}".strip("0")}'
-
-            if tile.player >= 0:
-                scoreVal = score.get_weighted_enemy_capture_value()
-                viewInfo.bottomLeftGridText[tile.x][tile.y] = f'e{f"{scoreVal:.2f}".strip("0")}'
-                enemyTileScores.append((scoreVal, tile))
-            else:
-                scoreVal = score.get_weighted_neutral_value()
-                viewInfo.bottomLeftGridText[tile.x][tile.y] = f'n{f"{scoreVal:.2f}".strip("0")}'
-                tileScores.append((scoreVal, tile))
-
         tileScores = cityAnalysis.get_sorted_neutral_scores()
         enemyTileScores = cityAnalysis.get_sorted_enemy_scores()
 
         for i, ts in enumerate(tileScores):
             tile, cityScore = ts
             viewInfo.midLeftGridText[tile.x][tile.y] = f'c{i}'
+            EklipZBot.add_city_score_to_view_info(cityScore, viewInfo)
 
         for i, ts in enumerate(enemyTileScores):
             tile, cityScore = ts
             viewInfo.midLeftGridText[tile.x][tile.y] = f'm{i}'
+            EklipZBot.add_city_score_to_view_info(cityScore, viewInfo)
 
         self.render_view_info(map, viewInfo, 'whatever')

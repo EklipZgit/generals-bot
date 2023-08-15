@@ -3,6 +3,7 @@ from BotHost import BotHostBase
 from DataModels import Move
 from Sim.GameSimulator import GameSimulator, GameSimulatorHost
 from TestBase import TestBase
+from ViewInfo import ViewInfo
 from base.client.map import MapBase, Tile, TILE_FOG
 from bot_ek0x45 import EklipZBot
 
@@ -165,9 +166,252 @@ class GameSimulatorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player)
+        # alert red of blues general location so it continues the attack
+        simHost.sim.players[0].map.update_visible_tile(general.x, general.y, general.player, general.army, is_city=False, is_general=True)
+        # simHost = GameSimulatorHost(map)
 
-        simHost.run_sim(run_real_time=True, turn_time=10.0)
+        simHost.run_sim(run_real_time=True, turn_time=2.5)
 
+
+    def test_game_simulator__correctly_updates_client_fog_of_war__robust_against_manually_tweaked_maps(self):
+        map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/243.txtmap', 243, player_index=1)
+        fakeEnemyGen = map.GetTile(2, 16)
+        fakeEnemyGen.isGeneral = True
+        fakeEnemyGen.player = 0
+        fakeEnemyGen.army = 7
+
+        self.reset_map_to_just_generals(map, turn=12)
+        self.assertEqual(fakeEnemyGen, map.generals[0])
+        self.assertEqual(general, map.generals[1])
+
+        """
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                         M                                            M
+M              M                   M              M                             M
+          M                        M              M    M    M              M         M
+                                   M                                            M
+     C48  M                                                      M
+                                             M         M                   M
+               M                                       M              M
+          C42       M    M                        M    M                        M
+          M    C48  M                   bG1                           M              M
+     M                                  M                     
+          M    M    M                             M                   M
+          M    M                                       M    M         M
+                    C41  C45       M              M         M
+     M                                                      M    M                   M
+               M                   C43  M           
+M                             M                                  M              M    M
+          aG7  !b1  !b1                 M         M                   M         M
+                                             M         M                   M
+          M                             M
+     M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+"""
+
+        p1TileNextToEnemy = map.GetTile(3, 16)
+        p1TileNextToEnemy.player = 1
+        p1TileNextToEnemy.army = 1
+        # tile still -1
+
+        p1TileNextToEnemyCorrectTile = map.GetTile(4, 16)
+        p1TileNextToEnemyCorrectTile.player = 1
+        p1TileNextToEnemyCorrectTile.army = 1
+        p1TileNextToEnemyCorrectTile.tile = 1
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        # loading the game simulator should correct all inconsistencies with the map data for a base map,
+        # player tiles should be synced up, mountain vs obstacle should be corrected etc.
+        sim = GameSimulator(map, ignore_illegal_moves=False)
+        self.assertPlayerTileVisibleAndCorrect(fakeEnemyGen.x, fakeEnemyGen.y, sim, general.player)
+        self.assertPlayerTileVisibleAndCorrect(p1TileNextToEnemy.x, p1TileNextToEnemy.y, sim, general.player)
+        self.assertPlayerTileVisibleAndCorrect(p1TileNextToEnemyCorrectTile.x, p1TileNextToEnemyCorrectTile.y, sim, general.player)
+
+        self.assertPlayerTileVisibleAndCorrect(fakeEnemyGen.x, fakeEnemyGen.y, sim, fakeEnemyGen.player)
+        self.assertPlayerTileVisibleAndCorrect(p1TileNextToEnemy.x, p1TileNextToEnemy.y, sim, fakeEnemyGen.player)
+        # enemy gen can't see p1s tile two tiles away
+        self.assertPlayerTileNotVisible(p1TileNextToEnemyCorrectTile.x, p1TileNextToEnemyCorrectTile.y, sim, fakeEnemyGen.player)
+
+        # p0 captures p1s tile
+        sim.make_move(0, Move(fakeEnemyGen, p1TileNextToEnemy))
+        sim.make_move(1, Move(general, general.movable[0]))
+        sim.execute_turn()
+        self.assertEqual(13, map.turn)
+        self.assertEqual(13, sim.players[0].map.turn)
+        self.assertEqual(13, sim.players[1].map.turn)
+
+        self.assertPlayerTileLostVision(fakeEnemyGen.x, fakeEnemyGen.y, sim, general.player)
+        # assert the tiles that that tile exclusively was granting vision of, are lost vision too
+        self.assertPlayerTileLostVision(2, 17, sim, general.player)
+        self.assertPlayerTileLostVision(2, 15, sim, general.player)
+        self.assertPlayerTileVisibleAndCorrect(p1TileNextToEnemy.x, p1TileNextToEnemy.y, sim, general.player)
+        self.assertPlayerTileVisibleAndCorrect(p1TileNextToEnemyCorrectTile.x, p1TileNextToEnemyCorrectTile.y, sim, general.player)
+
+        self.assertPlayerTileVisibleAndCorrect(fakeEnemyGen.x, fakeEnemyGen.y, sim, fakeEnemyGen.player)
+        self.assertPlayerTileVisibleAndCorrect(p1TileNextToEnemy.x, p1TileNextToEnemy.y, sim, fakeEnemyGen.player)
+        # enemy gen can see our tile two tiles away now
+        self.assertPlayerTileVisibleAndCorrect(p1TileNextToEnemyCorrectTile.x, p1TileNextToEnemyCorrectTile.y, sim, fakeEnemyGen.player)
+
+        # p0 captures p1s final tile down there
+        sim.make_move(0, Move(p1TileNextToEnemy, p1TileNextToEnemyCorrectTile))
+        sim.make_move(1, Move(general.movable[0], general.movable[0].movable[0]))
+        sim.execute_turn()
+
+        self.assertPlayerTileNotVisible(fakeEnemyGen.x, fakeEnemyGen.y, sim, general.player)
+        # should have lost vision of BOTH of these tiles, and the tiles around them
+        self.assertPlayerTileLostVision(p1TileNextToEnemy.x, p1TileNextToEnemy.y, sim, general.player)
+        self.assertPlayerTileLostVision(p1TileNextToEnemyCorrectTile.x, p1TileNextToEnemyCorrectTile.y, sim, general.player)
+        for adj in p1TileNextToEnemy.adjacents:
+            self.assertPlayerTileNotVisible(adj.x, adj.y, sim, general.player)
+        for adj in p1TileNextToEnemyCorrectTile.adjacents:
+            self.assertPlayerTileLostVision(adj.x, adj.y, sim, general.player)
+
+        self.assertPlayerTileVisibleAndCorrect(fakeEnemyGen.x, fakeEnemyGen.y, sim, fakeEnemyGen.player)
+        self.assertPlayerTileVisibleAndCorrect(p1TileNextToEnemy.x, p1TileNextToEnemy.y, sim, fakeEnemyGen.player)
+        # enemy gen can see our tile two tiles away now
+        self.assertPlayerTileVisibleAndCorrect(p1TileNextToEnemyCorrectTile.x, p1TileNextToEnemyCorrectTile.y, sim, fakeEnemyGen.player)
+
+
+    def test_game_simulator__collided_armies_have_correct_deltas__both_move_to_same_tile(self):
+
+        # (a army amount, b army amount, target tile player, target tile army)
+        testCases = [
+            # neutral target
+            (10, 10, -1, 0),
+            (10, 2, -1, 0),
+            (2, 10, -1, 0),
+            (100, 10, -1, 0),
+            (10, 100, -1, 0),
+
+            # player target, '1' tile
+            (10, 10, 0, 1),
+            (10, 2, 0, 1),
+            (2, 10, 0, 1),
+            (10, 3, 0, 1),
+            (3, 10, 0, 1),
+            (100, 10, 0, 1),
+            (10, 100, 0, 1),
+
+            # player target, larger tile
+            (10, 10, 0, 20),
+            (10, 2, 0, 20),
+            (2, 10, 0, 20),
+            (100, 10, 0, 20),
+            (10, 100, 0, 20),
+        ]
+
+        for aArmyAmount, bArmyAmount, targetTilePlayer, targetTileArmy in testCases:
+            for turn in [50, 51]:
+                with self.subTest(aArmyAmount=aArmyAmount, bArmyAmount=bArmyAmount, targetTilePlayer=targetTilePlayer, targetTileArmy=targetTileArmy, turn=turn):
+                    self.run_corner_collision_test(aArmyAmount, bArmyAmount, targetTilePlayer, targetTileArmy, turn)
+
+    def test_specific_corner_collision(self):
+        self.run_corner_collision_test(10, 10, -1, 0, 50)
+
+    def run_corner_collision_test(self, aArmyAmount: int, bArmyAmount: int, targetTilePlayer: int, targetTileArmy: int, turn: int, render: bool = False):
+        # note Turn parameterized because odd/evenness impact p1 vs p2 tiebreaks
+        mapRaw = """
+|    |    |    |
+aG7
+     a1
+          b1
+               bG7
+|    |    |    |
+"""
+        map, general = self.load_map_and_general_raw(mapRaw, turn=turn, player_index=0)
+
+        enemyGen = map.GetTile(3, 3)
+
+        aCollisionSource = map.GetTile(1, 1)
+        aCollisionSource.army = aArmyAmount
+
+        bCollisionSource = map.GetTile(2, 2)
+        bCollisionSource.army = bArmyAmount
+
+        collisionTarget = map.GetTile(1, 2)
+        collisionTarget.player = targetTilePlayer
+        collisionTarget.army = targetTileArmy
+
+        glitchyTile = map.GetTile(1, 3)
+        self.assertEqual(0, glitchyTile.army)
+        self.assertEqual(-1, glitchyTile.player)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        # loading the game simulator should correct all inconsistencies with the map data for a base map,
+        # player tiles should be synced up, mountain vs obstacle should be corrected etc.
+        sim = GameSimulator(map, ignore_illegal_moves=False)
+        self.assertPlayerTileVisibleAndCorrect(general.x, general.y, sim, general.player)
+        self.assertPlayerTileVisibleAndCorrect(aCollisionSource.x, aCollisionSource.y, sim, general.player)
+        self.assertPlayerTileVisibleAndCorrect(bCollisionSource.x, bCollisionSource.y, sim, general.player)
+
+        self.assertPlayerTileVisibleAndCorrect(enemyGen.x, enemyGen.y, sim, enemyGen.player)
+        self.assertPlayerTileVisibleAndCorrect(aCollisionSource.x, aCollisionSource.y, sim, enemyGen.player)
+        self.assertPlayerTileVisibleAndCorrect(bCollisionSource.x, bCollisionSource.y, sim, enemyGen.player)
+
+        glitchyTile = map.GetTile(1, 3)
+        self.assertEqual(0, glitchyTile.army)
+        self.assertEqual(-1, glitchyTile.player)
+        self.assertPlayerTileCorrect(1, 3, sim, 0)
+        self.assertPlayerTileCorrect(1, 3, sim, 1)
+
+        # armies collide
+        sim.make_move(0, Move(aCollisionSource, collisionTarget))
+        sim.make_move(1, Move(bCollisionSource, collisionTarget))
+        sim.execute_turn()
+
+        if render:
+            self.render_sim_map_from_all_perspectives(sim)
+
+        glitchyTile = map.GetTile(1, 3)
+        self.assertEqual(0, glitchyTile.army)
+        self.assertEqual(-1, glitchyTile.player)
+        self.assertPlayerTileCorrect(1, 3, sim, 0)
+        self.assertPlayerTileCorrect(1, 3, sim, 1)
+
+        # assert all the players still have all the correct base tile information:
+        self.assertPlayerTileVisibleAndCorrect(general.x, general.y, sim, general.player)
+        self.assertPlayerTileVisibleAndCorrect(aCollisionSource.x, aCollisionSource.y, sim, general.player)
+        self.assertPlayerTileVisibleAndCorrect(bCollisionSource.x, bCollisionSource.y, sim, general.player)
+
+        self.assertPlayerTileVisibleAndCorrect(enemyGen.x, enemyGen.y, sim, enemyGen.player)
+        self.assertPlayerTileVisibleAndCorrect(aCollisionSource.x, aCollisionSource.y, sim, enemyGen.player)
+        self.assertPlayerTileVisibleAndCorrect(bCollisionSource.x, bCollisionSource.y, sim, enemyGen.player)
+
+        # ok NOW lets see what it thinks about armies nearby
+        for tile in aCollisionSource.adjacents:
+            if tile == general:
+                # b doesn't have perfect information about a's gen
+                continue
+            self.assertPlayerTileCorrect(tile.x, tile.y, sim, 0)
+            self.assertPlayerTileCorrect(tile.x, tile.y, sim, 1)
+
+        for tile in bCollisionSource.adjacents:
+            if tile == enemyGen:
+                # a doesn't have perfect information about b's gen
+                continue
+            self.assertPlayerTileCorrect(tile.x, tile.y, sim, 0)
+            self.assertPlayerTileCorrect(tile.x, tile.y, sim, 1)
+
+        aMovedAmount = aArmyAmount - 1
+        bMovedAmount = bArmyAmount - 1
+
+        # assert army deltas correct
+        p0aSourceTile = self.get_player_tile(aCollisionSource.x, aCollisionSource.y, sim, 0)
+        self.assertEqual(0 - aMovedAmount, p0aSourceTile.delta.armyDelta)
+        p1aSourceTile = self.get_player_tile(aCollisionSource.x, aCollisionSource.y, sim, 1)
+        self.assertEqual(0 - aMovedAmount, p1aSourceTile.delta.armyDelta)
+        p0bSourceTile = self.get_player_tile(bCollisionSource.x, bCollisionSource.y, sim, 0)
+        self.assertEqual(0 - bMovedAmount, p0bSourceTile.delta.armyDelta)
+        p1bSourceTile = self.get_player_tile(bCollisionSource.x, bCollisionSource.y, sim, 1)
+        self.assertEqual(0 - bMovedAmount, p1bSourceTile.delta.armyDelta)
+        # abs's because these will be positive or negative per player depending who won the tiebreak and
+        # i don't know how the server tiebreaks currently so don't want to bother asserting
+        p0targetTile = self.get_player_tile(collisionTarget.x, collisionTarget.y, sim, 0)
+        self.assertEqual(abs(aMovedAmount - bMovedAmount), abs(p0targetTile.delta.armyDelta))
+        p1targetTile = self.get_player_tile(collisionTarget.x, collisionTarget.y, sim, 1)
+        self.assertEqual(abs(aMovedAmount - bMovedAmount), abs(p1targetTile.delta.armyDelta))
 
     def test_simulates_a_game_from_turn_1(self):
         map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/243.txtmap', 243, player_index=1)
@@ -176,10 +420,13 @@ class GameSimulatorTests(TestBase):
         fakeEnemyGen.player = 0
         fakeEnemyGen.army = 1
 
-        self.reset_map(map)
+        self.reset_map_to_just_generals(map)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         simHost = GameSimulatorHost(map, player_with_viewer=1)
 
-        simHost.run_sim(run_real_time=True, turn_time=0.1)
+        simHost.run_sim(run_real_time=True, turn_time=0.3)
+
+
+

@@ -34,6 +34,7 @@ class Army(object):
 		self.player = tile.player
 		self.visible = tile.visible
 		self.value = 0
+		"""Always the value of the tile, minus one. For some reason."""
 		self.update_tile(tile)
 		self.expectedPath = None
 		self.distMap = None
@@ -81,7 +82,13 @@ class Army(object):
 		return newDude
 
 	def toString(self):
-		return "{} ({})".format(self.tile.toString(), self.name)
+		return "({}) {}".format(self.name, self.tile.toString())
+
+	def __str__(self):
+		return self.toString()
+
+	def __repr__(self):
+		return self.toString()
 
 
 class PlayerAggressionTracker(object):
@@ -184,12 +191,11 @@ class ArmyTracker(object):
 			if armyTile not in self.armies:
 				logging.info("Skipped armyTile {} because no longer in self.armies?".format(armyTile.toString()))
 				continue
-			army = self.armies[armyTile]
+			# army = self.armies[armyTile]
 			if army.tile != armyTile:
 				raise Exception("bitch, army key {} didn't match army tile {}".format(armyTile.toString(), army.toString()))
-			expectedDelta = self.get_expected_delta(army.tile)
-			armyRealTileDelta = 0 - army.tile.delta.armyDelta - expectedDelta
-			logging.info("{} army.value {} expectedDelta {} actual delta {}, armyRealTileDelta {}".format(army.toString(), army.value, expectedDelta, army.tile.delta.armyDelta, armyRealTileDelta))
+			armyRealTileDelta = 0 - army.tile.delta.armyDelta
+			logging.info("{} army.value {} actual delta {}, armyRealTileDelta {}".format(army.toString(), army.value, army.tile.delta.armyDelta, armyRealTileDelta))
 			foundLocation = False
 			#if army.tile.delta.armyDelta == expectedDelta:
 			#	# army did not move and we attacked it?
@@ -234,7 +240,8 @@ class ArmyTracker(object):
 			lostVision = (army.visible and not army.tile.visible)
 			# lostVision breaking stuff?
 			lostVision = False
-			if lostVision or (army.value + 1 + expectedDelta != army.tile.army or army.tile.player != army.player):
+			# wheres this fucking + 1 come from...?
+			if lostVision or (army.value + 1 + army.tile.delta.expectedDelta != army.tile.army or army.tile.player != army.player):
 				# army probably moved. Check adjacents for the army
 
 				for adjacent in army.tile.movable:
@@ -313,7 +320,7 @@ class ArmyTracker(object):
 									(not army.tile.visible and 
 												adjacent.visible and 
 												adjacent.delta.armyDelta != expectedAdjDelta)) and
-									adjDelta - armyRealTileDelta == expectedDelta):
+									adjDelta - armyRealTileDelta == army.tile.delta.expectedDelta):
 								foundLocation = True
 								logging.info("    Army (Based on expected delta?) probably moved from {} to {}".format(army.toString(), adjacent.toString()))
 								self.army_moved(army, adjacent)
@@ -443,12 +450,12 @@ class ArmyTracker(object):
 	# returns an array due to the possibility of winning or losing the move-first coinflip, 
 	# and need to account for both when the inspected tile is the source tile of our last army move
 	def get_expected_dest_delta(self, tile):
-		baseExpected = 0		
-		if tile.player != -1 and tile.isCity and self.isCityBonus:
-			if tile.delta.oldOwner != tile.delta.newOwner:
-				baseExpected = 1
-			else:
-				baseExpected = -1
+		baseExpected = 0
+		if tile.delta.oldOwner != tile.delta.newOwner:
+			baseExpected = tile.delta.expectedDelta
+		else:
+			baseExpected = 0 - tile.delta.expectedDelta
+
 		expected = [baseExpected]
 		if self.lastMove != None and tile == self.lastMove.dest:
 			wonFight = self.lastMove.dest.player == self.map.player_index

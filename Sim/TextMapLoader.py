@@ -9,6 +9,8 @@ a# = tile for player 0 with # army
 bC# = city for player 1 with # army
 empty space = empty tile
 N# = a neutral tile with army on it
+
+Bot state data is below the second |  |  |  |  |  | and is ignored when loading MAPs but not when loading BOTs.
 """
 import pathlib
 import typing
@@ -22,14 +24,8 @@ from base.client.map import Tile, TILE_EMPTY, TILE_MOUNTAIN, MapBase
 class TextMapLoader(object):
     @staticmethod
     def load_map_from_file(file_path_from_tests_folder: str, split_every: int = 5) -> typing.List[typing.List[Tile]]:
-        if not file_path_from_tests_folder.endswith('.txtmap'):
-            file_path_from_tests_folder = f'{file_path_from_tests_folder}.txtmap'
-
-        filePath = pathlib.Path(__file__).parent / f'../Tests/{file_path_from_tests_folder}'
-
-        with open(filePath, 'r') as file:
-            data = file.read()
-            return TextMapLoader.load_map_from_string(data, split_every=split_every)
+        data = TextMapLoader.get_map_raw_string_from_file(file_path_from_tests_folder)
+        return TextMapLoader.load_map_from_string(data, split_every=split_every)
 
     @staticmethod
     def load_map_from_string(data: str, split_every: int = 5) -> typing.List[typing.List[Tile]]:
@@ -58,14 +54,8 @@ class TextMapLoader(object):
 
     @staticmethod
     def load_data_from_file(file_path_from_tests_folder: str) -> typing.Dict[str, str]:
-        if not file_path_from_tests_folder.endswith('.txtmap'):
-            file_path_from_tests_folder = f'{file_path_from_tests_folder}.txtmap'
-
-        filePath = pathlib.Path(__file__).parent / f'../Tests/{file_path_from_tests_folder}'
-
-        with open(filePath, 'r') as file:
-            data = file.read()
-            return TextMapLoader.load_data_from_string(data)
+        data = TextMapLoader.get_map_raw_string_from_file(file_path_from_tests_folder)
+        return TextMapLoader.load_data_from_string(data)
 
     @staticmethod
     def load_data_from_string(data: str) -> typing.Dict[str, str]:
@@ -210,3 +200,14 @@ class TextMapLoader(object):
             tile.tile = player
 
         tile.army = army
+
+    @staticmethod
+    def get_map_raw_string_from_file(file_path_from_tests_folder):
+        if not file_path_from_tests_folder.endswith('.txtmap'):
+            file_path_from_tests_folder = f'{file_path_from_tests_folder}.txtmap'
+
+        filePath = pathlib.Path(__file__).parent / f'../Tests/{file_path_from_tests_folder}'
+
+        with open(filePath, 'r') as file:
+            data = file.read()
+            return data

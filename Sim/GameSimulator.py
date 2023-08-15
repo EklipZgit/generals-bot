@@ -107,6 +107,10 @@ class GameSimulator(object):
             if tile.tile == TILE_OBSTACLE or tile.isMountain:
                 tile.tile = TILE_MOUNTAIN
 
+        # force the map to internalize the above changes
+        map_raw.init_grid_movable()
+        map_raw.update()
+
         self.players: typing.List[GamePlayer] = [GamePlayer(map_raw, i) for i in range(len(map_raw.players))]
         self.turn: int = map_raw.turn
         self.sim_map: MapBase = map_raw
@@ -142,8 +146,18 @@ class GameSimulator(object):
         self.tiles_updated_this_cycle = set()
 
     def is_game_over(self) -> bool:
+        for player in self.players:
+            if player.map.complete:
+                player.dead = True
+
         if count(self.players, lambda player: not player.dead) > 1:
             return False
+
+        for player in self.players:
+            if not player.dead:
+                player.map.complete = True
+                player.map.result = True
+
         return True
 
     def _execute_move(self, player_index: int, move: Move):
@@ -152,12 +166,13 @@ class GameSimulator(object):
         sourceTile = self.sim_map.GetTile(move.source.x, move.source.y)
         destTile = self.sim_map.GetTile(move.dest.x, move.dest.y)
         if sourceTile.player != player_index:
-            # if not self.ignore_illegal_moves:
-            #     raise AssertionError(f'player {player_index} made a move from a tile they dont own. {str(move)}')
+            if not self.ignore_illegal_moves and sourceTile not in self.tiles_updated_this_cycle:
+                raise AssertionError(f'player {player_index} made a move from a tile they dont own. {str(move)}')
             return
 
         if sourceTile.army <= 1:
-            if not self.ignore_illegal_moves:
+            # this happens when the tile they are moving gets attacked and is not necessarily a problem
+            if not self.ignore_illegal_moves and sourceTile not in self.tiles_updated_this_cycle:
                 raise AssertionError(f'player {player_index} made a move from a {sourceTile.army} army tile. {str(move)}')
             return
 
@@ -195,9 +210,6 @@ class GameSimulator(object):
 
         self.tiles_updated_this_cycle.add(sourceTile)
         self.tiles_updated_this_cycle.add(destTile)
-
-        if self.is_game_over():
-            self.end_game()
 
     def _stage_tile_captured_events(self, captured_tile: Tile, capturing_player: GamePlayer, captured_player: GamePlayer | None):
         if captured_player is not None:
@@ -267,38 +279,23 @@ class GameSimulator(object):
         # send updates for tiles they lost vision of
         # send updates for tiles they can see
         for tile in self.sim_map.get_all_tiles():
-            if tile in self.tiles_updated_this_cycle:
-                for player in self.players:
-                    playerHasVision = tile.player == player.index or any(filter(lambda adj: adj.player == player.index, tile.adjacents))
-                    if playerHasVision:
-                        player.map.update_visible_tile(tile.x, tile.y, tile.tile, tile.army, tile.isCity, tile.isGeneral)
-                    else:
-                        tileLost = tile in player.tiles_lost_this_turn
-                        adjacentLost = any(filter(lambda adj: adj in player.tiles_lost_this_turn, tile.adjacents))
-                        playerLostVision = tileLost or adjacentLost
-                        if playerLostVision:
-                            self._send_player_lost_vision_of_tile(player, tile)
+            # the way the game client works, it always 'updates' every tile on the players map even if it didn't get a server update, that's why the deltas were ghosting in the sim
+            # if tile in self.tiles_updated_this_cycle:
+            for player in self.players:
+                playerHasVision = tile.player == player.index or any(filter(lambda adj: adj.player == player.index, tile.adjacents))
+                if playerHasVision:
+                    player.map.update_visible_tile(tile.x, tile.y, tile.tile, tile.army, tile.isCity, tile.isGeneral)
+                else:
+                    self._send_player_lost_vision_of_tile(player, tile)
 
         for player in self.players:
-            for tile in player.tiles_lost_this_turn:
-                # tile itself already covered in updates
-                for adj in tile.adjacents:
-                    if adj not in self.tiles_updated_this_cycle and not any(filter(lambda adj: adj.player == player.index, tile.adjacents)):
-                        self._send_player_lost_vision_of_tile(player, adj)
-
-            for tile in player.tiles_gained_this_turn:
-                # tile itself already covered in updates
-                for adj in tile.adjacents:
-                    if adj not in self.tiles_updated_this_cycle:
-                        player.map.update_visible_tile(adj.x, adj.y, adj.tile, adj.army, adj.isCity, adj.isGeneral)
-
             player.map.update()
             player.tiles_lost_this_turn = set()
             player.tiles_gained_this_turn = set()
 
     def _send_player_lost_vision_of_tile(self, player: GamePlayer, tile: Tile):
         tileVal = TILE_FOG
-        if tile.isMountain or tile.isCity:
+        if (tile.isMountain or tile.isCity) and not tile.isGeneral:
             tileVal = TILE_OBSTACLE
         # pretend we're the game server
         player.map.update_visible_tile(tile.x, tile.y, tileVal, tile_army=0, is_city=False, is_general=False)
@@ -347,20 +344,11 @@ class GameSimulatorHost(object):
 
     def run_sim(self, run_real_time: bool = True, turn_time: float = 0.5):
         try:
-            p0Tile = self.sim.players[0].map.GetTile(5, 8)
-            p1Tile = self.sim.players[1].map.GetTile(5, 8)
-            simTile = self.sim.sim_map.GetTile(5, 8)
-            logging.info(f'PRE PRE: p0  tile 5,8 {str(p0Tile)} (p{p0Tile.player}, a{p0Tile.army}, t{p0Tile.tile}, v{p0Tile.visible})')
-            logging.info(f'PRE PRE: p1  tile 5,8 {str(p1Tile)} (p{p1Tile.player}, a{p1Tile.army}, t{p1Tile.tile}, v{p1Tile.visible})')
-            logging.info(f'PRE PRE: sim tile 5,8 {str(simTile)} (p{simTile.player}, a{simTile.army}, t{simTile.tile}, v{simTile.visible})')
             for botHost in self.bot_hosts:
                 if botHost.has_viewer:
                     create_thread(botHost.run_viewer_loop)
             while self.sim.turn < 1000:
                 logging.info(f'sim starting turn {self.sim.turn}')
-                logging.info(f'PRE: p0  tile 5,8 {str(p0Tile)} (p{p0Tile.player}, a{p0Tile.army}, t{p0Tile.tile}, v{p0Tile.visible})')
-                logging.info(f'PRE: p1  tile 5,8 {str(p1Tile)} (p{p1Tile.player}, a{p1Tile.army}, t{p1Tile.tile}, v{p1Tile.visible})')
-                logging.info(f'PRE: sim tile 5,8 {str(simTile)} (p{simTile.player}, a{simTile.army}, t{simTile.tile}, v{simTile.visible})')
                 start = time.perf_counter()
                 for playerIndex, botHost in enumerate(self.bot_hosts):
                     player = self.sim.players[playerIndex]
@@ -372,12 +360,6 @@ class GameSimulatorHost(object):
                         time.sleep(turn_time - elapsed)
 
                 self.sim.execute_turn(dont_require_all_players_to_move=True)
-                p0Tile = self.sim.players[0].map.GetTile(5, 8)
-                p1Tile = self.sim.players[1].map.GetTile(5, 8)
-                simTile = self.sim.sim_map.GetTile(5, 8)
-                logging.info(f'p0  tile 5,8 {str(p0Tile)} (p{p0Tile.player}, a{p0Tile.army}, t{p0Tile.tile}, v{p0Tile.visible})')
-                logging.info(f'p1  tile 5,8 {str(p1Tile)} (p{p1Tile.player}, a{p1Tile.army}, t{p1Tile.tile}, v{p1Tile.visible})')
-                logging.info(f'sim tile 5,8 {str(simTile)} (p{simTile.player}, a{simTile.army}, t{simTile.tile}, v{simTile.visible})')
 
                 if self.sim.is_game_over():
                     self.sim.end_game()

@@ -456,13 +456,13 @@ def get_optimal_expansion(
 
             if destDistSum < sourceDistSum:
                 logging.info(f"move {last.toString()}->{tile.toString()} was TOWARDS shortest path")
-                value += 0.04
+                value += 0.05
             elif destDistSum == sourceDistSum:
                 logging.info(f"move {last.toString()}->{tile.toString()} was flanking parallel to shortest path")
-                value += 0.01
+                value += 0.02
 
             if abs(destDist - destGenDist) <= abs(sourceDist - sourceGenDist):
-                valueAdd = abs(destDist - destGenDist) / 30
+                valueAdd = abs(destDist - destGenDist) / 200
                 logging.info(
                     f"move {last.toString()}->{tile.toString()} was moving towards the center, valuing it {valueAdd} higher")
                 value += valueAdd

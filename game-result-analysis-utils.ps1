@@ -98,3 +98,62 @@ function Copy-WinMapsToWonMapsDirectory {
 		Copy-Item -Path $maxFilePath -Destination "$DestFolder\$newName.txtmap"
 	}
 }
+
+
+function Create-TestContinuingGameFrom {
+	Param(
+		$TestName = "shouldnt_die_in_some_scenario",
+		$TestCategory = "Defense",
+		$TestMapFile = "path to test map file",
+		$DestFolderRoot = "D:\2019_reformat_Backup\generals-bot\Tests\"
+	)
+
+	$destFolder = "$DestFolderRoot\GameContinuationEntries"
+	if (-not (Test-Path $destFolder))
+	{
+		mkdir $destFolder -Force
+	}
+
+	if ($TestMapFile.EndsWith('png'))
+	{
+		$TestMapFile = $TestMapFile.Replace(".png", ".txtmap")
+	}
+	
+	$map = Get-Item $TestMapFile
+	$turn = $map.BaseName
+
+
+
+	$earlyFile = Get-Item "$($map.Directory.FullName)/20.txtmap"
+	$earlyContent = $earlyFile | get-content -raw
+	$match = $earlyContent -cmatch '[a-h]G'
+	$player = $MATCHES[0].Trim('G')
+
+	$newName = ($map.Directory.BaseName -split '---') | Select -Last 1
+	$newName = "$newName---$player--$turn"
+	$newName = "$($TestName)___$newName.txtmap"
+	$map | Copy-Item -Destination "$DestFolder\$newName" -ErrorAction Stop
+
+	$testFile = "$DestFolderRoot\test_$TestCategory.py"
+	$testFileContent = Get-Content $testFile -ErrorAction Stop
+
+	$testFileContent += @"
+    
+    def test_$TestName(self):
+        mapFile = 'GameContinuationEntries/$newName'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, $turn)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        # simHost = GameSimulatorHost(map)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player)
+        # alert both players of each others general
+        simHost.sim.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+        simHost.sim.reveal_player_general(playerToReveal=enemyGeneral.player, playerToRevealTo=general.player)
+
+        simHost.run_sim(run_real_time=True, turn_time=0.5)
+
+"@
+
+	$testFileContent | Set-Content $testFile -Encoding utf8
+}

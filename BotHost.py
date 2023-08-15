@@ -34,11 +34,12 @@ class BotHostBase(object):
         self._viewer.run_main_viewer_loop(not self.align_bottom, not self.align_right)
 
     def make_move(self, currentMap: MapBase):
+        # todo most of this logic / timing / whatever should move into EklipZbot...
         timer: PerformanceTimer = self.eklipz_bot.perf_timer
         timer.record_update(currentMap.turn)
 
-        self.eklipz_bot._map = currentMap
-        # if self.eklipz_bot._map is None:
+        if self.eklipz_bot._map is None:
+            self.eklipz_bot._map = currentMap
 
         startTime = time.perf_counter()
         with timer.begin_move(currentMap.turn) as moveTimer:
@@ -46,12 +47,15 @@ class BotHostBase(object):
             duration = time.perf_counter() - startTime
             self.eklipz_bot.viewInfo.lastMoveDuration = duration
             if move is not None:
-                with moveTimer.begin_event(f'Sending move {str(move)} to server'):
-                    if not self.place_move_func(move.source, move.dest, move.move_half):
-                        logging.info(
-                            "!!!!!!!!! {},{} -> {},{} was an illegal / bad move!!!! This turn will do nothing :(".format(
-                                move.source.x, move.source.y,
-                                move.dest.x, move.dest.y))
+                if move.source.army == 1 or move.source.army == 0 or move.source.player != self.eklipz_bot.general.player:
+                    logging.info(f"!!!!!!!!! {move.source.x},{move.source.y} -> {move.dest.x},{move.dest.y} was a bad move from enemy / 1 tile!!!! This turn will do nothing :(")
+                else:
+                    with moveTimer.begin_event(f'Sending move {str(move)} to server'):
+                        if not self.place_move_func(move.source, move.dest, move.move_half):
+                            logging.info(
+                                "!!!!!!!!! {},{} -> {},{} was an illegal move!!!! This turn will do nothing :(".format(
+                                    move.source.x, move.source.y,
+                                    move.dest.x, move.dest.y))
 
             if self.has_viewer:
                 self._viewer.updateGrid(currentMap)
@@ -64,6 +68,7 @@ class BotHostBase(object):
         self._viewer.ekBot = self.eklipz_bot
 
     def notify_game_over(self):
+        self.eklipz_bot._map.complete = True
         if self.has_viewer:
             self._viewer.kill()
 

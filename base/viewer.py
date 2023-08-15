@@ -6,6 +6,7 @@
 '''
 import os
 import sys
+import time
 import traceback
 
 import pygame
@@ -257,11 +258,16 @@ class GeneralsViewer(object):
         done = False
         while not done:
             if self._killed:
+                done = True  # Flag done
+                # self._map.result = False
+                self._map.complete = True
                 break
 
             if self.ekBot.viewInfo and self.ekBot.viewInfo.readyToDraw:
                 self.ekBot.viewInfo.readyToDraw = False
-                self._drawGrid()
+                with self.ekBot.perf_timer.begin_move_event('Viewer Draw Grid loop'):
+                    self._drawGrid()
+                time.sleep(0.1)
                 self._readyRender = True
             for event in pygame.event.get():  # User did something
                 if event.type == pygame.QUIT:  # User clicked quit
@@ -278,7 +284,7 @@ class GeneralsViewer(object):
 
                     print("Click ", pos, "Grid coordinates: ", row, column)
 
-            time.sleep(0.05)
+            time.sleep(0.02)
         logging.info('Pygame closed, exiting')
         time.sleep(1.0)
         pygame.quit()  # Done.  Quit pygame.
@@ -419,11 +425,6 @@ class GeneralsViewer(object):
             # if self.ekBot.board_analysis and self.ekBot.board_analysis.intergeneral_analysis:
             #     chokeColor = CHOKE_PURPLE # purple
             #     self.draw_army_analysis(self.ekBot.board_analysis.intergeneral_analysis, chokeColor, draw_pathways = True)
-
-            self.draw_armies()
-
-            if self.ekBot.targetingArmy != None:
-                self.draw_square(self.ekBot.targetingArmy.tile, 3, 1, 1, 1, 254, self.square_inner_3)
 
             # LINE TESTING CODE
             # gen = self.ekBot.general
@@ -639,11 +640,16 @@ class GeneralsViewer(object):
                             self._screen.blit(self.small_font(textVal, color_small_font),
                                               (pos_left + 2, pos_top + self.cellHeight / 3))
 
-            # Limit to 60 frames per second
-            self._clock.tick(60)
+            self.draw_armies()
+
+            if self.ekBot.targetingArmy != None:
+                self.draw_square(self.ekBot.targetingArmy.tile, 3, 1, 1, 1, 254, self.square_inner_3)
 
             # Go ahead and update the screen with what we've drawn.
             pygame.display.flip()
+
+            # Limit to 60 frames per second
+            self._clock.tick(15)
         except:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             lines = traceback.format_exception(exc_type, exc_value, exc_traceback)

@@ -134,11 +134,11 @@ class EklipZBot(object):
         self._minAllowableArmy = -1
         self.giving_up_counter = 0
         self.all_in_counter = 0
-        self.threat: ThreatObj = None
+        self.threat: ThreatObj | None = None
         self.pathableTiles = set()
         self.history = History()
-        self.timings = None
-        self.armyTracker = None
+        self.timings: Timings | None = None
+        self.armyTracker: ArmyTracker = None
         self.finishingExploration = True
         self.targetPlayerExpectedGeneralLocation = None
         self.lastPlayerKilled = None
@@ -367,40 +367,16 @@ class EklipZBot(object):
 
         self.lastTurnTime = now
         logging.info("\n       ~~~\n       Turn {}   ({:.3f})\n       ~~~\n".format(self._map.turn, timeSinceLastUpdate))
-        if self.general is None:
-            self.general = self._map.generals[self._map.player_index]
-            self.player = self._map.players[self.general.player]
+        if self.general is not None:
+            self._gen_distances = build_distance_map(self._map, [self.general])
+
+        if not self.loggingSetUp and self._map is not None:
+            self.initialize_map_for_first_time(self._map)
 
         self._minAllowableArmy = -1
-        self._gen_distances = build_distance_map(self._map, [self.general])
         self.enemyCities = []
         if self._map.turn - 3 > self.lastTimingTurn:
             self.lastTimingFactor = -1
-
-        if not self.loggingSetUp and self._map is not None:
-            self.dangerAnalyzer = DangerAnalyzer(self._map)
-            self.cityAnalyzer = CityAnalyzer(self._map, self.general)
-            self.viewInfo = ViewInfo(2, self._map.cols, self._map.rows)
-            self.loggingSetUp = True
-            print("replay " + self._map.replay_id)
-            file = 'D:\\GeneralsLogs\\' + self._map.replay_id + '.log'
-            print("file: " + file)
-            logging.basicConfig(format='%(levelname)s:%(message)s', filename="D:\\GeneralsLogs\\test.txt", level=logging.DEBUG)
-
-            self._map.notify_city_found.append(self.handle_city_found)
-            self._map.notify_tile_captures.append(self.handle_tile_captures)
-            self._map.notify_tile_deltas.append(self.handle_tile_deltas)
-            self._map.notify_tile_discovered.append(self.handle_tile_discovered)
-            self._map.notify_tile_revealed.append(self.handle_tile_revealed)
-            self._map.notify_player_captures.append(self.handle_player_captures)
-            if self.territories is None:
-                self.territories = TerritoryClassifier(self._map)
-
-            self.armyTracker = ArmyTracker(self._map)
-            self.armyTracker.notify_unresolved_army_emerged.append(self.handle_tile_revealed)
-            self.targetPlayerExpectedGeneralLocation = self.general.movable[0]
-            self.launchPoints.add(self.general)
-            self.board_analysis = BoardAnalyzer(self._map, self.general)
 
         lastMove = None
 
@@ -978,23 +954,18 @@ class EklipZBot(object):
         gatherTargets = self.target_player_gather_path.tileList
         paths: typing.List[Path] = []
         if not self.is_all_in():
-            logging.info("*\\*\\*\\*\\*\\*\n  Checking for city captures ({:.3f} in)".format(time.perf_counter() - start))
-            # TODO REDUCE CITYDEPTHSEARCH NOW THAT WE HAVE CITY FIGHTING BASIC IMPL
-            cityDepthSearch = 1 + int(self._map.players[self.general.player].tileCount**0.5 / 2)
-            #if (len(self.enemyCities) > 5):
-            #    cityDepthSearch = 5
-            for enemyCity in self.enemyCities:
-                logging.info("{} searching for depth {} dest bfs kill on city {},{}".format(self.get_elapsed(), cityDepthSearch, enemyCity.x, enemyCity.y))
-                self.viewInfo.add_targeted_tile(enemyCity, TargetStyle.RED)
-                armyToSearch = self.get_target_army_inc_adjacent_enemy(enemyCity)
-                killPath = dest_breadth_first_target(self._map, [enemyCity], armyToSearch, 0.1, cityDepthSearch, defenceCriticalTileSet, searchingPlayer = self.general.player, dontEvacCities=True)
-                if killPath is not None:
-                    self.info("{} found depth {} dest bfs kill on city {},{} \n{}".format(self.get_elapsed(), killPath.length, enemyCity.x, enemyCity.y, killPath.toString()))
-                    if killPath.start.tile.isCity and self.should_kill_path_move_half(killPath, armyToSearch - enemyCity.army):
-                        killPath.start.move_half = True
-                    paths.append(killPath)
+            with self.perf_timer.begin_move_event('City Analyzer'):
+                self.cityAnalyzer.re_scan(self.board_analysis)
+
+            with self.perf_timer.begin_move_event('city_quick_kill'):
+                path = self.get_quick_kill_on_enemy_cities(defenceCriticalTileSet)
+            if path is not None:
+                self.info(f'Quick Kill on enemy city: {str(path)}')
+                paths.append(path)
+
             if len(paths) == 0:
-                (cityPath, gatherMove) = self.capture_cities(defenceCriticalTileSet)
+                with self.perf_timer.begin_move_event(f'capture_cities'):
+                    (cityPath, gatherMove) = self.capture_cities(defenceCriticalTileSet)
                 if cityPath is not None:
                     logging.info("{} returning capture_cities cityPath {}".format(self.get_elapsed(), cityPath.toString()))
                     paths.append(cityPath)
@@ -1078,6 +1049,10 @@ class EklipZBot(object):
             path = self.explore_target_player_undiscovered(undiscNeg)
             if path is not None:
                 self.viewInfo.paths.appendleft(PathColorer(path, 120, 150, 127, 200, 12, 100))
+                valueSubsegment = self.get_value_per_turn_subsegment(path)
+                if valueSubsegment.length != path.length:
+                    logging.info(f"BAD explore_target_player_undiscovered")
+                    self.info(f"WHOAH, tried to make a bad exploration path...? Fixed with {str(valueSubsegment)}")
                 move = self.get_first_path_move(path)
                 self.info("Hunting: allIn {} finishingExp {} or demolishingTP {}: {}".format(self.allIn, self.finishingExploration, demolishingTargetPlayer, path.toString()))
                 return move
@@ -3391,20 +3366,19 @@ class EklipZBot(object):
         maxDist = maxDist // 1
         isNeutCity = False
 
-        with self.perf_timer.begin_move_event('City Analyzer'):
-            self.cityAnalyzer.re_scan(self.board_analysis)
         with self.perf_timer.begin_move_event('Print City Analyzer'):
-            for city in self.cityAnalyzer.city_scores.keys():
-                score = self.cityAnalyzer.city_scores[city]
-                self.viewInfo.midRightGridText[city.x][city.y] = f'e{score.city_expandability_score:.1f}'
-                self.viewInfo.bottomRightGridText[city.x][city.y] = f'r{score.city_relevance_score:.1f}'
-                self.viewInfo.bottomLeftGridText[city.x][city.y] = f'd{score.city_defensability_score:.1f}'
-                self.viewInfo.topRightGridText[city.x][city.y] = f'g{score.city_general_defense_score:.1f}'
-            for city in self.cityAnalyzer.enemy_city_scores.keys():
-                score = self.cityAnalyzer.enemy_city_scores[city]
-                self.viewInfo.midRightGridText[city.x][city.y] = f'e{score.city_expandability_score:.1f}'
-                self.viewInfo.bottomRightGridText[city.x][city.y] = f'r{score.city_relevance_score:.1f}'
-                self.viewInfo.bottomLeftGridText[city.x][city.y] = f'd{score.city_defensability_score:.1f}'
+            tileScores = self.cityAnalyzer.get_sorted_neutral_scores()
+            enemyTileScores = self.cityAnalyzer.get_sorted_enemy_scores()
+
+            for i, ts in enumerate(tileScores):
+                tile, cityScore = ts
+                self.viewInfo.midLeftGridText[tile.x][tile.y] = f'c{i}'
+                EklipZBot.add_city_score_to_view_info(cityScore, self.viewInfo)
+
+            for i, ts in enumerate(enemyTileScores):
+                tile, cityScore = ts
+                self.viewInfo.midLeftGridText[tile.x][tile.y] = f'm{i}'
+                EklipZBot.add_city_score_to_view_info(cityScore, self.viewInfo)
 
         path = self.find_enemy_city_path(negativeTiles)
         if path:
@@ -4857,8 +4831,9 @@ class EklipZBot(object):
                 if tile and maxAmount < self.undiscovered_priorities[x][y] and self.distance_from_general(tile) > minSpawnDist:
                     maxAmount = self.undiscovered_priorities[x][y]
                     maxTile = tile
-                if self.undiscovered_priorities[x][y] > 0:
-                    self.viewInfo.bottomRightGridText[x][y] = f'u{self.undiscovered_priorities[x][y]}'
+                if self.targetPlayer == -1:
+                    if self.undiscovered_priorities[x][y] > 0:
+                        self.viewInfo.bottomRightGridText[x][y] = f'u{self.undiscovered_priorities[x][y]}'
 
         if self.targetPlayer == -1:
             self.viewInfo.add_targeted_tile(maxTile, TargetStyle.PURPLE)
@@ -5745,3 +5720,65 @@ class EklipZBot(object):
             newArmy = Army(tile)
             self.armyTracker.armies[tile] = newArmy
             return newArmy
+
+    def initialize_map_for_first_time(self, map):
+        self._map = map
+        self.general = self._map.generals[self._map.player_index]
+        self.player = self._map.players[self.general.player]
+        self._gen_distances = build_distance_map(self._map, [self.general])
+        self.dangerAnalyzer = DangerAnalyzer(self._map)
+        self.cityAnalyzer = CityAnalyzer(self._map, self.general)
+        self.viewInfo = ViewInfo(2, self._map.cols, self._map.rows)
+        self.loggingSetUp = True
+        print("replay " + self._map.replay_id)
+        file = 'D:\\GeneralsLogs\\' + self._map.replay_id + '.log'
+        print("file: " + file)
+        logging.basicConfig(format='%(levelname)s:%(message)s', filename="D:\\GeneralsLogs\\test.txt", level=logging.DEBUG)
+
+        self._map.notify_city_found.append(self.handle_city_found)
+        self._map.notify_tile_captures.append(self.handle_tile_captures)
+        self._map.notify_tile_deltas.append(self.handle_tile_deltas)
+        self._map.notify_tile_discovered.append(self.handle_tile_discovered)
+        self._map.notify_tile_revealed.append(self.handle_tile_revealed)
+        self._map.notify_player_captures.append(self.handle_player_captures)
+        if self.territories is None:
+            self.territories = TerritoryClassifier(self._map)
+
+        self.armyTracker = ArmyTracker(self._map)
+        self.armyTracker.notify_unresolved_army_emerged.append(self.handle_tile_revealed)
+        self.targetPlayerExpectedGeneralLocation = self.general.movable[0]
+        self.launchPoints.add(self.general)
+        self.board_analysis = BoardAnalyzer(self._map, self.general)
+
+    @staticmethod
+    def add_city_score_to_view_info(score: CityScoreData, viewInfo: ViewInfo):
+        tile = score.tile
+        viewInfo.topRightGridText[tile.x][tile.y] = f'r{f"{score.city_relevance_score:.2f}".strip("0")}'
+        viewInfo.midRightGridText[tile.x][tile.y] = f'e{f"{score.city_expandability_score:.2f}".strip("0")}'
+        viewInfo.bottomMidRightGridText[tile.x][tile.y] = f'd{f"{score.city_defensability_score:.2f}".strip("0")}'
+        viewInfo.bottomRightGridText[tile.x][tile.y] = f'g{f"{score.city_general_defense_score:.2f}".strip("0")}'
+
+        if tile.player >= 0:
+            scoreVal = score.get_weighted_enemy_capture_value()
+            viewInfo.bottomLeftGridText[tile.x][tile.y] = f'e{f"{scoreVal:.2f}".strip("0")}'
+        else:
+            scoreVal = score.get_weighted_neutral_value()
+            viewInfo.bottomLeftGridText[tile.x][tile.y] = f'n{f"{scoreVal:.2f}".strip("0")}'
+
+    def get_quick_kill_on_enemy_cities(self, defenceCriticalTileSet: typing.Set[Tile]) -> Path | None:
+        # TODO REDUCE CITYDEPTHSEARCH NOW THAT WE HAVE CITY FIGHTING BASIC IMPL
+        cityDepthSearch = max(2, int(self._map.players[self.general.player].tileCount**0.5 / 2))
+        #if (len(self.enemyCities) > 5):
+        #    cityDepthSearch = 5
+        enemyCitiesOrderedByPriority = self.cityAnalyzer.get_sorted_enemy_scores()
+        for enemyCity, score in enemyCitiesOrderedByPriority:
+            logging.info("{} searching for depth {} dest bfs kill on city {},{}".format(self.get_elapsed(), cityDepthSearch, enemyCity.x, enemyCity.y))
+            self.viewInfo.add_targeted_tile(enemyCity, TargetStyle.RED)
+            armyToSearch = self.get_target_army_inc_adjacent_enemy(enemyCity)
+            killPath = dest_breadth_first_target(self._map, [enemyCity], armyToSearch, 0.1, cityDepthSearch, defenceCriticalTileSet, searchingPlayer = self.general.player, dontEvacCities=True)
+            if killPath is not None:
+                self.info("{} found depth {} dest bfs kill on city {},{} \n{}".format(self.get_elapsed(), killPath.length, enemyCity.x, enemyCity.y, killPath.toString()))
+                if killPath.start.tile.isCity and self.should_kill_path_move_half(killPath, armyToSearch - enemyCity.army):
+                    killPath.start.move_half = True
+                return killPath
+        return None

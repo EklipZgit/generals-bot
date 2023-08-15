@@ -56,8 +56,24 @@ class TileDelta(object):
         # true when this was a friendly tile and was captured
         self.friendlyCaptured = False
         self.armyDelta = 0
+        """
+        Positive means friendly army was moved ON to this tile (or army bonuses happened), 
+        negative means army moved off or was attacked for not full damage OR was captured by opp.
+        This includes city/turn25 army bonuses, so should ALWAYS be 0 UNLESS a player interacted 
+        with the tile (or the tile was just discovered?). A capped neutral tile will have a negative army delta.
+        """
+
         self.fromTile = None
+        """If this tile is suspected to have been the target of a move last turn, this is the tile the map algo thinks the move is from."""
+
         self.toTile = None
+        """If this tile is suspected to have had its army moved, this is the tile the map algo thinks it moved to."""
+
+        self.armyMovedHere: bool = False
+        """Indicates whether the tile update thinks an army MAY have moved here."""
+
+        self.expectedDelta: int = 0
+        """The EXPECTED army delta of the tile, this turn."""
 
 
 class Tile(object):
@@ -108,10 +124,6 @@ class Tile(object):
         self.movable: typing.List[Tile] = []
         """Tiles movable (left right up down) from this tile, including mountains, cities, obstacles."""
 
-    @property
-    def player(self) -> int:
-        """int player index"""
-        return self._player
 
     @property
     def isNeutral(self) -> bool:
@@ -138,12 +150,17 @@ class Tile(object):
         """True if mountain, undiscovered obstacle, or discovered neutral city"""
         return self.isMountain or self.isUndiscoveredObstacle or (self.isCity and self.isNeutral)
 
+    @property
+    def player(self) -> int:
+        """int player index"""
+        return self._player
+
     @player.setter
     def player(self, value):
         if value >= 0:
             self.tile = value
         elif value == -1 and self.army == 0 and not self.isNotPathable and not self.isCity:
-            self.tile = TILE_EMPTY
+            self.tile = TILE_EMPTY # this whole thing seems wrong, needs to be updated carefully with tests as the delta logic seems to rely on it...
         self._player = value
 
     def __repr__(self):
@@ -169,20 +186,15 @@ class Tile(object):
         return "{},{}".format(self.x, self.y)
 
     # returns true if an army was likely moved to this tile, false if not.
-    def update(self, map, tile, army, isCity=False, isGeneral=False, overridePlayer=None) -> bool:
-
-        # if (self.tile < 0 or tile >= 0 or (tile < TILE_MOUNTAIN and self.tile == map.player_index)): # Remember Discovered Tiles
-        #	if (tile >= 0 and self.tile != tile):
-        #		if (self._player != tile):
-        #			self.turn_captured = map.turn
-        #			self._player = tile
-        #			print("Tile " + str(self.x) + "," + str(self.y) + " captured by player " + str(tile))
-        #	if (self.tile != tile):
-        #		print("Tile " + str(self.x) + "," + str(self.y) + " from " + self.tileToString(self.tile) + " to " + self.tileToString(tile))
-        #		self.tile = tile
-        #		if (tile == TILE_MOUNTAIN):
-        #			self.isMountain = True
-
+    def update(
+        self,
+        map,
+        tile: int,
+        army: int,
+        isCity=False,
+        isGeneral=False,
+        overridePlayer: int | None = None
+    ) -> bool:
         self.delta = TileDelta()
         if tile >= TILE_MOUNTAIN:
             self.discovered = True
@@ -190,6 +202,7 @@ class Tile(object):
             if not self.visible:
                 self.delta.gainedSight = True
                 self.visible = True
+
         armyMovedHere = False
 
         self.delta.oldOwner = self._player
@@ -204,6 +217,7 @@ class Tile(object):
                     # we lost the tile
                     # TODO Who might have captured it? for now set to unowned.
                     self.delta.friendlyCaptured = True
+                    logging.info(f'tile captured, losing vision, army moved here true for {str(self)}')
                     armyMovedHere = True
                     self._player = -1
             elif tile == TILE_MOUNTAIN:
@@ -213,22 +227,40 @@ class Tile(object):
 
             self.tile = tile
 
+        # can only 'expect' army deltas for tiles we can see. Visible is already calculated above at this point.
+        if self.visible:
+            expectedDelta: int = 0
+            if (self.isCity or self.isGeneral) and self.player >= 0 and map.turn % 2 == 0:
+                expectedDelta += 1
+
+            if self.player >= 0 and map.turn % 50 == 0:
+                expectedDelta += 1
+
+            self.delta.expectedDelta = expectedDelta
+
         self.delta.newOwner = self._player
         if overridePlayer is not None:
             self.delta.newOwner = overridePlayer
             self._player = overridePlayer
 
         if (army == 0 and self.visible) or army > 0 and (
-                self.army != army or self.delta.oldOwner != self.delta.newOwner):  # Remember Discovered Armies
-            if self.army == 0 or self.army - army > 1 or self.army - army < -1:
-                armyMovedHere = True
+                self.army + self.delta.expectedDelta != army or self.delta.oldOwner != self.delta.newOwner):  # Remember Discovered Armies
             oldArmy = self.army
             # logging.info("assigning tile {} with oldArmy {} new army {}?".format(self.toString(), oldArmy, army))
             self.army = army
             if self.delta.oldOwner != self.delta.newOwner:
-                self.delta.armyDelta = 0 - (self.army + oldArmy)
+                # tile captures happen before bonuses, so the new owner gets any expected delta.
+                # city with 3 on turn 49, gets captured by a 4 army. Army is 3 again on 50 with city+army bonus, the delta should be -4
+                #                      0 - (3  +  3 - 2) = -4
+                self.delta.armyDelta = 0 - (self.army + oldArmy - self.delta.expectedDelta)
             else:
-                self.delta.armyDelta = self.army - oldArmy
+                # city with 3 on turn 49, moves 2 army to tile adjacent. Army is 3 again on 50 with city+army bonus, the delta should be -2
+                # city with 3 on turn 49, gets attacked for 2 by enemy. Army is 3 again on 50 with city+army bonus, the delta should be -2
+                # city with 3 on turn 49 does nothing, armyDelta should be 0 when it has 5 army on 50
+                self.delta.armyDelta = self.army - (oldArmy + self.delta.expectedDelta)
+
+            if self.delta.armyDelta != 0:
+                armyMovedHere = True
 
         if isCity:
             self.isCity = True
@@ -236,6 +268,7 @@ class Tile(object):
             # if self in map.cities:
             #	map.cities.remove(self)
             # map.cities.append(self)
+            # TODO remove, this should NOT happen here
             if not self in map.cities:
                 map.cities.append(self)
 
@@ -244,14 +277,29 @@ class Tile(object):
             # if not self in playerObj.cities:
             #	playerObj.cities.append(self)
 
+            # TODO remove, this should NOT happen here
             if self in map.generals:
                 map.generals[self._general_index] = None
         elif isGeneral:
             playerObj = map.players[self._player]
             playerObj.general = self
             self.isGeneral = True
+            # TODO remove, this should NOT happen here
             map.generals[tile] = self
             self._general_index = self.tile
+
+        if self.delta.oldOwner != self.delta.newOwner:
+            # TODO  and not self.delta.gainedSight ?
+            logging.info(f'oldOwner != newOwner for {str(self)}')
+            armyMovedHere = True
+
+        # if self.delta.oldOwner == self.delta.newOwner and self.delta.armyDelta == 0:
+        #     armyMovedHere = False
+
+        self.delta.armyMovedHere = armyMovedHere
+
+        if armyMovedHere:
+            logging.info(f'armyMovedHere True for {str(self)} (expected delta was {self.delta.expectedDelta}, actual was {self.delta.armyDelta})')
 
         return armyMovedHere
 
@@ -336,8 +384,13 @@ class MapBase(object):
             self.replay_id = f'TEST:{str(uuid.uuid4())}'
 
         self.scores: typing.List[Score] = [Score(x, 0, 0, False) for x in range(8)]  # List of Player Scores
-        self.complete = False  # Boolean Game Complete
-        self.result = False  # Boolean Game Result (True = Won)
+
+        self.complete: bool = False
+        """Game Complete"""
+
+        self.result: bool = False
+        """Game Result (True = Won)"""
+
         self.scoreHistory: typing.List[typing.Union[None, typing.List[Score]]] = [None for i in range(25)]
         self.remainingPlayers = 0
 
@@ -516,7 +569,19 @@ class MapBase(object):
 
     # Emulates a tile update event from the server. Changes player tile ownership, or mountain to city, etc, and fires events
     def update_visible_tile(self, x: int, y: int, tile_type: int, tile_army: int, is_city: bool, is_general: bool):
-        curTile = self.grid[y][x]
+        """
+        Call this AFTER calling map.update_turn
+        ONLY call this once per turn per tile, or deltas will be messed up
+
+        @param x:
+        @param y:
+        @param tile_type:
+        @param tile_army:
+        @param is_city:
+        @param is_general:
+        @return:
+        """
+        curTile: Tile = self.grid[y][x]
         wasCity = curTile.isCity
         wasVisible = curTile.visible
         wasDiscovered = curTile.discovered
@@ -552,7 +617,6 @@ class MapBase(object):
     def update(self):
         for player in self.players:
             if player is not None:
-                # WHY ARE WE DOING THIS....?
                 player.cities = []
                 player.tiles = []
 
@@ -573,7 +637,7 @@ class MapBase(object):
                     # look for candidate tiles that army may have come from
                     bestCandTile = None
                     bestCandValue = -1
-                    if x - 1 > 0:  # examine left
+                    if x - 1 >= 0:  # examine left
                         candidateTile = self.grid[y][x - 1]
                         candValue = evaluateTileDiffs(curTile, candidateTile)
                         if candValue > bestCandValue:
@@ -585,7 +649,7 @@ class MapBase(object):
                         if candValue > bestCandValue:
                             bestCandValue = candValue
                             bestCandTile = candidateTile
-                    if y - 1 > 0:  # examine top
+                    if y - 1 >= 0:  # examine top
                         candidateTile = self.grid[y - 1][x]
                         candValue = evaluateTileDiffs(curTile, candidateTile)
                         if candValue > bestCandValue:
@@ -600,7 +664,9 @@ class MapBase(object):
 
                     if bestCandTile is not None:
                         self.army_moved_grid[bestCandTile.y][bestCandTile.x] = False
-                        self.army_moved_grid[y][x] = False
+                        if bestCandValue >= 100:
+                            # only say the army is completely covered if the confidence was high, otherwise we can have two armies move here from diff players
+                            self.army_moved_grid[y][x] = False
                         if curTile.player == -1:
                             curTile.player = bestCandTile.player
                         curTile.delta.fromTile = bestCandTile
@@ -720,10 +786,9 @@ class Map(MapBase):
 
         self.update_scores(Score.from_server_scores(self._get_raw_scores_from_data(data)))
 
-        for x in range(self.cols):  # Update Each Tile
+        # Check each tile for updates indiscriminately
+        for x in range(self.cols):
             for y in range(self.rows):
-                # if (self._tile_grid[y][x] != oldTiles[y][x]):
-                # tile changed ownership or visibility
                 tile_type = self._tile_grid[y][x]
                 army_count = self._army_grid[y][x]
                 isCity = (y, x) in self._visible_cities
@@ -818,41 +883,83 @@ def new_value_matrix(map, initValue) -> typing.List[typing.List[int]]:
     return [[initValue] * map.rows for _ in range(map.cols)]
 
 
-def evaluateTileDiffs(tile, candidateTile):
+def evaluateTileDiffs(tile: Tile, candidateTile: Tile):
     # both visible
-    if tile.visible and candidateTile.visible:
-        return evaluateDualVisibleTileDiffs(tile, candidateTile)
-    if tile.visible and not candidateTile.visible:
-        return evaluateMoveFromFog(tile, candidateTile)
-    if not tile.visible:
-        # print("evaluating fog island. friendlyCaptured: " + str(tile.delta.friendlyCaptured))
+    if tile.visible:
+        if candidateTile.visible:
+            return evaluateDualVisibleTileDiffs(tile, candidateTile)
+        else:
+            return evaluateMoveFromFog(tile, candidateTile)
+    else:
         return evaluateIslandFogMove(tile, candidateTile)
-    return -100
 
 
 def evaluateDualVisibleTileDiffs(tile, candidateTile):
-    if (
-            tile.delta.oldOwner == tile.delta.newOwner and candidateTile.delta.oldOwner == candidateTile.delta.newOwner and candidateTile.player == tile.player):
+    if tile.delta.oldOwner != tile.delta.newOwner:
+        if tile.delta != 0:
+            deltasMatch = tile.delta.armyDelta == candidateTile.delta.armyDelta
+            if deltasMatch:
+                return 1000
+
+        else:
+            # something fishy happened here because by getting into this method, we KNOW the tile was interacted with
+            # but if its delta is zero then it means two armies collided. Just look for a candidate tile with a delta, then.
+
+            if candidateTile.delta.armyDelta < 0 and candidateTile.player == tile.delta.newOwner:
+                logging.info(f'evaluateDualVisibleTileDiffs {str(tile)} capped by {str(candidateTile)} despite collision, as determined by tile delta player match')
+                return 1000
+
+            if candidateTile.delta.armyDelta < 0:
+                # then may have collided without capping it
+                return 75
+    elif (candidateTile.delta.oldOwner == candidateTile.delta.newOwner
+            and candidateTile.player == tile.player):
         return evaluateSameOwnerMoves(tile, candidateTile)
-    if (
-            tile.delta.oldOwner == -1 and candidateTile.delta.oldOwner == candidateTile.delta.newOwner and candidateTile.player == tile.player):
-        return evaluateSameOwnerMoves(tile, candidateTile)
+    # elif (tile.delta.oldOwner == -1
+    #         and candidateTile.delta.oldOwner == candidateTile.delta.newOwner
+    #         and candidateTile.player == tile.player):
+    #     return evaluateSameOwnerMoves(tile, candidateTile)
     # return evaluateSameOwnerMoves(tile, candidateTile)
     return -100
 
 
 def evaluateMoveFromFog(tile, candidateTile):
-    if tile.delta.oldOwner == tile.delta.newOwner:
+    """returns an int where negative means definitely not and positive int means probably"""
+    # if tile.delta.oldOwner == tile.delta.newOwner:
+    #     return -100
+    if candidateTile.visible:
         return -100
+
+    if tile.delta.armyDelta == 0:
+        # then we're in this weird situation where we KNOW the tile was captured or something but armies collided in the process
+        # if ONLY one tile adjacent is fog, then MUST have come from there, or we'd have already picked a visible tile with a delta
+        if candidateTile.army > 0:
+            logging.info(f'candidateTile.army > 0 '
+                         f'{candidateTile.x},{candidateTile.y}({candidateTile.delta.armyDelta})'
+                         f'->{tile.x},{tile.y}({tile.delta.armyDelta})')
+            return 10
+
+        logging.info(f'tile.delta.armyDelta == 0 '
+                     f'{candidateTile.x},{candidateTile.y}({candidateTile.delta.armyDelta})'
+                     f'->{tile.x},{tile.y}({tile.delta.armyDelta})')
+        return -100
+
     candidateDelta = candidateTile.army + tile.delta.armyDelta
-    if candidateDelta >= 0 and candidateDelta <= 2:
-        candidateTile.army = 1
-        logging.info(
-            " (evaluateMoveFromFog) candidateTile {} army to {}".format(candidateTile.toString(), candidateTile.army))
+    if candidateDelta == 0:
+        logging.info(f'(evaluateMoveFromFog) candidateDelta == 0 '
+                     f'{candidateTile.x},{candidateTile.y}({candidateTile.delta.armyDelta})'
+                     f'->{tile.x},{tile.y}({tile.delta.armyDelta})')
+        # return 40
         return 100
-    halfDelta = (candidateTile.army / 2) + tile.delta.armyDelta
-    if halfDelta >= 0 and halfDelta <= 2:
-        return 50
+
+    halfMoveAmount = (candidateTile.army // 2)
+    halfDelta = halfMoveAmount + tile.delta.armyDelta
+    if halfMoveAmount > 0 and halfDelta == 0:
+        logging.info(f'halfMoveAmount > 0 and halfDelta == 0 '
+                     f'{candidateTile.x},{candidateTile.y}({candidateTile.delta.armyDelta})'
+                     f'->{tile.x},{tile.y}({tile.delta.armyDelta})')
+        return 35
+
     return -100
 
 
@@ -865,7 +972,7 @@ def evaluateIslandFogMove(tile, candidateTile):
         candidateTile.army = 1
         logging.info(" (islandFog 1) tile {} army to {}".format(tile.toString(), tile.army))
         logging.info(" (islandFog 1) candTile {} army to 1".format(candidateTile.toString()))
-        return 50
+        return 40
     if tile.army - candidateTile.army < -1 and candidateTile.player != -1:
         tile.player = candidateTile.player
         tile.delta.newOwner = candidateTile.player
@@ -881,9 +988,17 @@ def evaluateSameOwnerMoves(tile, candidateTile):
     if tile.delta.armyDelta > 0:
         delta = tile.delta.armyDelta + candidateTile.delta.armyDelta
         if delta == 0:
+            logging.info(f'same owner tile delta evaludation of '
+                         f'{candidateTile.x},{candidateTile.y}({candidateTile.delta.armyDelta})'
+                         f'->{tile.x},{tile.y}({tile.delta.armyDelta}) '
+                         f'resulted in a delta of {delta}, obviously was correct movement')
             return 100
-        if delta <= 2 and delta >= 0:
-            return 50
+        if candidateTile.delta.armyDelta < 0:
+            logging.info(f'same owner tile delta evaluation of '
+                         f'{candidateTile.x},{candidateTile.y}({candidateTile.delta.armyDelta})'
+                         f'->{tile.x},{tile.y}({tile.delta.armyDelta}) '
+                         f'resulted in a delta of {delta}')
+            return 75
     return -100
 
 

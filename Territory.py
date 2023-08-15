@@ -30,11 +30,13 @@ class TerritoryClassifier():
 			return True
 		return False
 
-	# When a tile is initially discovered, it should be used to weight territories as the player
-    # it was discovered as (to prevent the creep of neutral weighted discovery).
-	# Note that this gets immediately overwritten by the actual territory value for this tile, 
-	# it is just used to weight the tiles around it during that cycle.
 	def revealed_tile(self, tile):
+		"""
+		When a tile is initially discovered, it should be used to weight territories as the player
+		it was discovered as (to prevent the creep of neutral weighted discovery).
+		Note that this gets immediately overwritten by the actual territory value for this tile,
+		it is just used to weight the tiles around it during that cycle.
+		"""
 		self.territoryMap[tile.x][tile.y] = tile.player
 		if tile.player != -1:
 			for movable in tile.movable:

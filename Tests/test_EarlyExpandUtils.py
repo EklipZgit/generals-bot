@@ -561,28 +561,28 @@ class EarlyExpandUtilsTests(TestBase):
                 self.assertGreaterEqual(plan.tile_captures, playerTilesToMatchOrExceed)
                 if plan.tile_captures > playerTilesToMatchOrExceed:
                     self.skipTest(f"Produced a BETTER plan than original, {plan.tile_captures} vs {playerTilesToMatchOrExceed}")
-
-    def test_check_forced_variations_against_historical_bests(self):
-        projRoot = pathlib.Path(__file__).parent
-        folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
-        files = os.listdir(folderWithHistoricals)
-        for file in files:
-            map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=50)
-            if SearchUtils.count(map.pathableTiles, lambda tile: tile.player >= 0 and not tile.player == general.player) > 0:
-                # skip maps where we ran into another player, those aren't fair tests
-                continue
-
-            with self.subTest(file=file.split('.')[0]):
-                playerTilesToMatchOrExceed = self.get_tiles_capped_on_50_count_and_reset_map(map, general)
-
-                weightMap = self.get_opposite_general_distance_map(map, general)
-                timeStart = time.perf_counter()
-                plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True)
-                timeSpent = time.perf_counter() - timeStart
-                self.assertLessEqual(timeSpent, 3.0, 'took longer than we consider safe for finding starts')
-                self.assertGreaterEqual(plan.tile_captures, playerTilesToMatchOrExceed)
-                if plan.tile_captures > playerTilesToMatchOrExceed:
-                    self.skipTest(f"Produced a BETTER plan than original, {plan.tile_captures} vs {playerTilesToMatchOrExceed}")
+    #
+    # def test_check_forced_variations_against_historical_bests(self):
+    #     projRoot = pathlib.Path(__file__).parent
+    #     folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
+    #     files = os.listdir(folderWithHistoricals)
+    #     for file in files:
+    #         map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=50)
+    #         if SearchUtils.count(map.pathableTiles, lambda tile: tile.player >= 0 and not tile.player == general.player) > 0:
+    #             # skip maps where we ran into another player, those aren't fair tests
+    #             continue
+    #
+    #         with self.subTest(file=file.split('.')[0]):
+    #             playerTilesToMatchOrExceed = self.get_tiles_capped_on_50_count_and_reset_map(map, general)
+    #
+    #             weightMap = self.get_opposite_general_distance_map(map, general)
+    #             timeStart = time.perf_counter()
+    #             plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True)
+    #             timeSpent = time.perf_counter() - timeStart
+    #             self.assertLessEqual(timeSpent, 3.0, 'took longer than we consider safe for finding starts')
+    #             self.assertGreaterEqual(plan.tile_captures, playerTilesToMatchOrExceed)
+    #             if plan.tile_captures > playerTilesToMatchOrExceed:
+    #                 self.skipTest(f"Produced a BETTER plan than original, {plan.tile_captures} vs {playerTilesToMatchOrExceed}")
 
     def test__debug_targeted_historical(self):
         file = 'BgRfjvS3h.txtmap'

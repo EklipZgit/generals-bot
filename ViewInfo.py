@@ -15,6 +15,13 @@ from enum import Enum
 from queue import PriorityQueue
 from pprint import pprint,pformat
 
+from ArmyTracker import Army, ArmyTracker
+from BoardAnalyzer import BoardAnalyzer
+from DangerAnalyzer import DangerAnalyzer
+from DataModels import TreeNode
+from Directives import Timings
+from Path import Path
+from Territory import TerritoryClassifier
 from base.client.map import Tile, MapMatrix
 
 
@@ -40,6 +47,29 @@ class ViewInfo(object):
         # list of true/false matrixes and the color to color the border
         self._divisions: typing.List[typing.Tuple[MapMatrix, typing.Tuple[int, int, int], int]] = []
         # Draws the red target circles
+
+        # self.ekBot.dump_turn_data_to_string()
+        self.board_analysis: BoardAnalyzer | None = None
+        self.targetingArmy: Army | None = None
+        self.armyTracker: ArmyTracker | None = None
+        self.dangerAnalyzer: DangerAnalyzer | None = None
+        self.currentPath: Path | None = None
+        self.gatherNodes: typing.List[TreeNode] | None = None
+        self.redGatherNodes: typing.List[TreeNode] | None = None
+        self.territories: TerritoryClassifier | None = None
+        self.allIn: bool = False
+        self.timings: Timings | None = None
+        self.allInCounter: int = 0
+        self.targetPlayer: int = -1
+        self.generalApproximations: typing.List[typing.Tuple[float, float, int, Tile | None]] = []
+        """
+        List of general location approximation data as averaged by enemy tiles bordering undiscovered and euclid averaged.
+        Tuple is (xAvg, yAvg, countUsed, generalTileIfKnown)
+        Used for player targeting (we do the expensive approximation only for the target player?)
+        This is aids.
+        """
+        self.playerTargetScores: typing.List[int] = []
+
         self.redTargetedTiles: typing.List[typing.Tuple[Tile, TargetStyle]] = []
         self.redTargetedTileHistory: typing.List[typing.List[typing.Tuple[Tile, TargetStyle]]] = []
         for i in range(countHist):
@@ -52,7 +82,6 @@ class ViewInfo(object):
         self.cols = cols
         self.rows = rows
         self.paths = deque()
-        self.readyToDraw = False
         self.topRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
         self.midRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
         self.bottomMidRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
@@ -68,6 +97,19 @@ class ViewInfo(object):
         self.addlTimingsLineText = ""
         self.addlInfoLines = []
         self._divisions = []
+        self.board_analysis: BoardAnalyzer | None = None
+        self.targetingArmy: Army | None = None
+        self.armyTracker: ArmyTracker | None = None
+        self.dangerAnalyzer: DangerAnalyzer | None = None
+        self.currentPath: Path | None = None
+        self.gatherNodes: typing.List[TreeNode] | None = None
+        self.paths = deque()
+        self.redGatherNodes: typing.List[TreeNode] | None = None
+        self.territories: TerritoryClassifier | None = None
+        self.allIn: bool = False
+        self.timings: Timings | None = None
+        self.allInCounter: int = 0
+        self.targetPlayer: int = -1
         self.topRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
         self.midRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
         self.bottomMidRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]

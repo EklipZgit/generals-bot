@@ -75,5 +75,5 @@ class DefenseTests(TestBase):
         simHost.sim.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
         simHost.sim.reveal_player_general(playerToReveal=enemyGeneral.player, playerToRevealTo=general.player)
 
-        simHost.run_sim(run_real_time=True, turn_time=0.5)
+        simHost.run_sim(run_real_time=True, turn_time=1.5)
 

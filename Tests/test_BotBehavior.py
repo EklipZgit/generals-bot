@@ -34,11 +34,11 @@ class BotBehaviorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # simHost = GameSimulatorHost(map)
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player)
+        simHost = GameSimulatorHost(map, player_with_viewer=-2)
         # alert both players of each others general
         simHost.sim.players[enemyGeneral.player].map.update_visible_tile(general.x, general.y, general.player, general.army, is_city=False, is_general=True)
         simHost.sim.players[general.player].map.update_visible_tile(enemyGeneral.x, enemyGeneral.y, enemyGeneral.player, enemyGeneral.army, is_city=False, is_general=True)
 
-        simHost.run_sim(run_real_time=True, turn_time=1.5)
+        simHost.run_sim(run_real_time=True, turn_time=0.5)
         # TODO fix fog increment shit
 

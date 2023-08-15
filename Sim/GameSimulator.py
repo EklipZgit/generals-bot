@@ -1,5 +1,6 @@
 import logging
 import time
+import traceback
 import typing
 
 from BotHost import BotHostBase
@@ -138,11 +139,10 @@ class GameSimulator(object):
             self._execute_move(player, move)
 
         self.turn = self.turn + 1
+        self.moves = [None for _ in self.moves]
         self._update_map_values()
         self._update_scores()
         self._send_updates_to_player_maps()
-
-        self.moves = [None for _ in self.moves]
         self.tiles_updated_this_cycle = set()
 
     def is_game_over(self) -> bool:
@@ -346,8 +346,8 @@ class GameSimulatorHost(object):
         try:
             for botHost in self.bot_hosts:
                 if botHost.has_viewer:
-                    create_thread(botHost.run_viewer_loop)
-            while self.sim.turn < 1000:
+                    botHost.run_viewer_loop()
+            while self.sim.turn < 2500:
                 logging.info(f'sim starting turn {self.sim.turn}')
                 start = time.perf_counter()
                 for playerIndex, botHost in enumerate(self.bot_hosts):
@@ -361,15 +361,28 @@ class GameSimulatorHost(object):
 
                 self.sim.execute_turn(dont_require_all_players_to_move=True)
 
-                if self.sim.is_game_over():
+                gameEndedByUser = False
+                for botHost in self.bot_hosts:
+                    if botHost.has_viewer and botHost.is_viewer_closed_by_user():
+                        gameEndedByUser = True
+
+                if self.sim.is_game_over() or gameEndedByUser:
                     self.sim.end_game()
                     for botHost in self.bot_hosts:
                         botHost.notify_game_over()
                     break
         except:
             self.sim.end_game()
-            for botHost in self.bot_hosts:
-                botHost.notify_game_over()
+            try:
+                for botHost in self.bot_hosts:
+                    botHost.notify_game_over()
+            except:
+                logging.info("(error v notifying bots of game over, less important than real error below)")
+                logging.info(traceback.format_exc())
+                logging.info("(error ^ notifying bots of game over, less important than real error below)")
+
+            logging.info("(error v running bot sim)")
+            logging.info(traceback.format_exc())
             raise
 
         self.sim.end_game()

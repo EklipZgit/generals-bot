@@ -358,7 +358,7 @@ function Start-WindowsTerminalLiveBots {
 	wt -w LiveBots new-tab pwsh -NoExit -c { 
 		cd "D:\2019_reformat_Backup\generals-bot\"; 
 		. .\run-bot.ps1;
-		$command = 'run-bot -game ffa -name "EklipZ_ai"'
+		$command = 'run-bot -game ffa -name "EklipZ_ai_live"'
 		try {
 			Invoke-Expression $command
 		} finally {
@@ -376,7 +376,7 @@ function Start-WindowsTerminalLiveBots {
 	wt -w LiveBots new-tab pwsh -NoExit -c { 
 		cd "D:\2019_reformat_Backup\generals-bot\"; 
 		. .\run-bot.ps1;
-		$command = 'run-bot -game 1v1 -name "EklipZ_ai" -right'
+		$command = 'run-bot -game 1v1 -name "EklipZ_ai_live" -right'
 		try {
 			Invoke-Expression $command
 		} finally {
@@ -390,7 +390,7 @@ function Start-WindowsTerminalLiveBots {
 	wt -w LiveBots new-tab pwsh -NoExit -c { 
 		cd "D:\2019_reformat_Backup\generals-bot\"; 
 		. .\run-bot.ps1;
-		$command = 'run-bot -game 1v1, 1v1, ffa, 1v1 -name "EklipZ_ai" -right'
+		$command = 'run-bot -game 1v1, 1v1, ffa, 1v1 -name "EklipZ_ai_live" -right'
 		try {
 			Invoke-Expression $command
 		} finally {
@@ -427,7 +427,7 @@ function Start-WindowsTerminalLiveBots {
 	wt -w LiveBots new-tab pwsh -NoExit -c { 
 		cd "D:\2019_reformat_Backup\generals-bot\"; 
 		. .\run-bot.ps1;
-		$command = 'run-bot -game 1v1 -name "EklipZ_ai" -right -privateGame testing'
+		$command = 'run-bot -game 1v1 -name "EklipZ_ai_live" -right -privateGame testing'
 		try {
 			Invoke-Expression $command
 		} finally {

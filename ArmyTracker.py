@@ -28,16 +28,15 @@ class Army(object):
 			Army.curLetter = chr(ord(ch) + 1)
 		return ch
 
-	def __init__(self, tile):
-		self.tile = tile
-		self.path = Path()
-		self.player = tile.player
-		self.visible = tile.visible
-		self.value = 0
+	def __init__(self, tile: Tile):
+		self.tile: Tile = tile
+		self.path: Path = Path()
+		self.player: int = tile.player
+		self.visible: bool = tile.visible
+		self.value: int = 0
 		"""Always the value of the tile, minus one. For some reason."""
 		self.update_tile(tile)
-		self.expectedPath = None
-		self.distMap = None
+		self.expectedPath: Path | None = None
 		self.entangledArmies = []
 		self.name = self.get_letter()
 		self.entangledValue = None
@@ -75,7 +74,6 @@ class Army(object):
 		newDude.value = self.value
 		if self.expectedPath != None:
 			newDude.expectedPath = self.expectedPath.clone()
-		newDude.distMap = self.distMap
 		newDude.entangledArmies = list(self.entangledArmies)
 		newDude.name = self.name
 		newDude.scrapped = self.scrapped
@@ -112,6 +110,18 @@ class ArmyTracker(object):
 		self.notify_unresolved_army_emerged = []
 		self.player_aggression_ratings = [PlayerAggressionTracker(z) for z in range(len(self.map.players))]
 		self.lastTurn = 0
+
+	def __getstate__(self):
+		state = self.__dict__.copy()
+
+		if 'notify_unresolved_army_emerged' in state:
+			del state['notify_unresolved_army_emerged']
+
+		return state
+
+	def __setstate__(self, state):
+		self.__dict__.update(state)
+		self.notify_unresolved_army_emerged = []
 
 	# distMap used to determine how to move armies under fog
 	def scan(self, distMap, lastMove, turn):

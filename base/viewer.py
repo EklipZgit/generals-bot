@@ -5,17 +5,16 @@
     Game Viewer
 '''
 import os
+import queue
 import sys
-import time
 import traceback
+from multiprocessing import Queue
 
 import pygame
 from pygame import *
 from ArmyAnalyzer import *
 
-from Sim.TextMapLoader import TextMapLoader
-from ViewInfo import TargetStyle
-from base.client.generals import _spawn
+from ViewInfo import TargetStyle, ViewInfo
 from base.client.map import MapBase, Score
 
 # Color Definitions
@@ -54,8 +53,6 @@ LEFT_ARROW = "<"
 RIGHT_ARROW = ">"
 
 CELL_MARGIN = 1
-
-FORCE_NO_UI = True
 
 """
 LEGEND
@@ -102,6 +99,7 @@ purple outline inside tiles
 
 """
 
+
 class DirectionalShape(object):
     def __init__(self, downShape, rotateInitial: int = 0):
         if rotateInitial != 0:
@@ -121,32 +119,34 @@ def clean_up_possible_float(value_to_render):
 
 class GeneralsViewer(object):
     def __init__(
-        self,
-        name=None,
-        ekBot=None,
-        cell_width=35,
-        cell_height=35
+            self,
+            update_queue: "Queue[typing.Tuple[ViewInfo | None, MapBase | None, bool]]",
+            pygame_event_queue: "Queue[bool]",
+            name=None,
+            cell_width=35,
+            cell_height=35,
     ):
         self._killed = False
+        self._update_queue: "Queue[typing.Tuple[ViewInfo | None, MapBase | None, bool]]" = update_queue
+        self._event_queue: "Queue[bool]" = pygame_event_queue
         self._scores: typing.List[Score] = []
         self._map: MapBase = None
         self._name = name
+        self.last_update_received: float = time.perf_counter()
         self._receivedUpdate = False
-        self._readyRender = False
         self.Arrow = None
         self.lineArrow = None
         self.line = None
-        self.ekBot = ekBot
         self.noLog: bool = False
         # Table Properies
         self.cellWidth = cell_width
         self.cellHeight = cell_height
         self.scoreRowHeight = self.cellHeight + 3
-        
+
         self.infoRowHeight = 170
         self.infoLineHeight = 17
         self.infoSpaceFromLeft = 180
-        
+
         self.plusDepth = 9
         self.offset1080Above1440p = 276  # 320 was too far right...?
         self.square = Rect(0, 0, self.cellWidth, self.cellHeight)
@@ -156,12 +156,12 @@ class GeneralsViewer(object):
         self.square_inner_4 = Rect(4, 4, self.cellWidth - 8, self.cellHeight - 8)
         self.square_inner_5 = Rect(5, 5, self.cellWidth - 10, self.cellHeight - 10)
 
-    def updateGrid(self, update: MapBase):
-        self._map = update
-
-        self._scores = sorted(update.scores, key=lambda score: score.total, reverse=True)  # Sort Scores
-
-        self._receivedUpdate = True
+    def updateGrid(self, viewInfo: ViewInfo, map: MapBase):
+        if viewInfo is not None:
+            self._viewInfo = viewInfo
+        if map is not None:
+            self._map = map
+            self._scores = sorted(map.scores, key=lambda score: score.total, reverse=True)  # Sort Scores
 
     def get_line_arrow(self, r, g, b, width=3):
         s = pygame.Surface((self.cellWidth + 2 * CELL_MARGIN, self.cellHeight + 2 * CELL_MARGIN))
@@ -195,7 +195,8 @@ class GeneralsViewer(object):
         pygame.init()
 
         # Set Window Size
-        window_height = self._map.rows * (self.cellHeight + CELL_MARGIN) + CELL_MARGIN + self.scoreRowHeight + self.infoRowHeight
+        window_height = self._map.rows * (
+                    self.cellHeight + CELL_MARGIN) + CELL_MARGIN + self.scoreRowHeight + self.infoRowHeight
         window_width = self._map.cols * (self.cellWidth + CELL_MARGIN) + CELL_MARGIN
         self._window_size = [window_width, window_height]
         self._screen = pygame.display.set_mode(self._window_size)
@@ -214,7 +215,8 @@ class GeneralsViewer(object):
         self._clock = pygame.time.Clock()
 
         self.pathAlphas = []
-        self.Arrow = [(self.cellWidth / 2, 0), (self.cellWidth / 8, self.cellHeight / 2), (self.cellWidth / 2, self.cellHeight / 4),
+        self.Arrow = [(self.cellWidth / 2, 0), (self.cellWidth / 8, self.cellHeight / 2),
+                      (self.cellWidth / 2, self.cellHeight / 4),
                       (7 * self.cellWidth / 8, self.cellHeight / 2)]
         # self.Arrow = [(self.cellWidth / 2, 0), (self.cellWidth / 8, self.cellHeight / 2), (self.cellWidth / 2, self.cellHeight / 4), (7 * self.cellWidth / 8, self.cellHeight / 2)]
 
@@ -237,13 +239,25 @@ class GeneralsViewer(object):
                 os.makedirs(self.logDirectory)
             except:
                 logging.info("Couldn't create dir")
-        if not self.noLog:
-            _spawn(self.save_images)
 
     def run_main_viewer_loop(self, alignTop=True, alignLeft=True):
         while not self._receivedUpdate:  # Wait for first update
-            # logging.info("viewer waiting for first update...")
-            time.sleep(0.2)
+            try:
+                viewInfo, map, isComplete = self._update_queue.get(block=True, timeout=0.2)
+                if viewInfo is not None:
+                    self._receivedUpdate = True
+                    self.updateGrid(viewInfo, map)
+                else:
+                    self.last_update_received = time.perf_counter()
+            except queue.Empty:
+                elapsed = time.perf_counter() - self.last_update_received
+                # TODO add a server ping callback here so while we're waiting in a lobby for a while we can keep the viewer thread alive
+                if elapsed > 200.0:
+                    logging.info(f'GeneralsViewer zombied with no game start, self-terminating after 10 seconds')
+                    self._event_queue.put(False)
+                    self._killed = True
+                    break
+                pass
 
         x = 3 + self.offset1080Above1440p
         if not alignLeft:
@@ -256,6 +270,13 @@ class GeneralsViewer(object):
         self._initViewier((x, y))
 
         done = False
+
+        closedByUser = False
+
+        viewInfo: ViewInfo | None = None
+        map: MapBase | None = None
+        isComplete: bool = False
+
         while not done:
             if self._killed:
                 done = True  # Flag done
@@ -263,17 +284,41 @@ class GeneralsViewer(object):
                 self._map.complete = True
                 break
 
-            if self.ekBot.viewInfo and self.ekBot.viewInfo.readyToDraw:
-                self.ekBot.viewInfo.readyToDraw = False
-                with self.ekBot.perf_timer.begin_move_event('Viewer Draw Grid loop'):
-                    self._drawGrid()
-                time.sleep(0.1)
-                self._readyRender = True
+            try:
+                logging.info("GeneralsViewer waiting for queue event:")
+                viewInfo, map, isComplete = self._update_queue.get(block=True, timeout=1.0)
+                self.last_update_received = time.perf_counter()
+                # if self.verbose:
+                #     BL.info('Watcher: Oh, shit, got ticker {} out of the queue???'.format(ticker))
+                if isComplete:
+                    logging.info("GeneralsViewer received done event!")
+                    done = True
+
+                logging.info("GeneralsViewer received an event! Updating grid")
+
+                self.updateGrid(viewInfo, map)
+
+                logging.info("GeneralsViewer drawing grid:")
+                self._drawGrid()
+
+                logging.info("GeneralsViewer saving image:")
+                if not self.noLog:
+                    self.save_image()
+            except queue.Empty:
+                elapsed = time.perf_counter() - self.last_update_received
+                logging.info(f'No GeneralsViewer update received in {elapsed:.2f} seconds')
+                if elapsed > 10.0:
+                    logging.info(f'GeneralsViewer zombied, self-terminating after 10 seconds')
+                    done = True
+                    self._event_queue.put(False)
+                pass
+
             for event in pygame.event.get():  # User did something
                 if event.type == pygame.QUIT:  # User clicked quit
                     done = True  # Flag done
-                    self._map.result = False
-                    self._map.complete = True
+                    logging.info('GeneralsViewer pygame exited by user, setting done and exiting')
+                    closedByUser = True
+                    break
 
                 elif event.type == pygame.MOUSEBUTTONDOWN:  # Mouse Click
                     pos = pygame.mouse.get_pos()
@@ -284,8 +329,9 @@ class GeneralsViewer(object):
 
                     print("Click ", pos, "Grid coordinates: ", row, column)
 
-            time.sleep(0.02)
-        logging.info('Pygame closed, exiting')
+        logging.info(f'Pygame closed in GeneralsViewer, sending closedByUser {closedByUser} back to main threads')
+        self._event_queue.put(closedByUser)
+        logging.info('Pygame closed in GeneralsViewer, exiting')
         time.sleep(1.0)
         pygame.quit()  # Done.  Quit pygame.
 
@@ -294,31 +340,31 @@ class GeneralsViewer(object):
             self._screen.fill(BLACK)  # Set BG Color
             self._transparent.fill((0, 0, 0, 0))  # transparent
             allInText = " "
-            if self.ekBot.allIn:
+            if self._viewInfo.allIn:
                 allInText = "+"
 
             # Draw Bottom Info Text
             self._screen.blit(self._fontLrg.render(
-                "Turn: {}, ({})".format(self._map.turn, ("%.2f" % self.ekBot.viewInfo.lastMoveDuration).lstrip('0')),
+                "Turn: {}, ({})".format(self._map.turn, ("%.2f" % self._viewInfo.lastMoveDuration).lstrip('0')),
                 True, WHITE), (10, self._window_size[1] - self.infoRowHeight + 4))
             curInfoTextHeight = 0
-            self._screen.blit(self._font.render(self.ekBot.viewInfo.infoText, True, WHITE),
+            self._screen.blit(self._font.render(self._viewInfo.infoText, True, WHITE),
                               (self.infoSpaceFromLeft, self._window_size[1] - self.infoRowHeight))
             curInfoTextHeight += self.infoLineHeight
-            if self.ekBot.timings:
-                timings = self.ekBot.timings
+            if self._viewInfo.timings:
+                timings = self._viewInfo.timings
                 timingTurn = (self._map.turn + timings.offsetTurns) % timings.cycleTurns
                 self._screen.blit(
                     self._font.render(
                         "Timings: {} ({})   - {}{}       {}".format(
-                            timings.toString(), timingTurn, allInText, self.ekBot.all_in_counter,
-                            self.ekBot.viewInfo.addlTimingsLineText),
+                            timings.toString(), timingTurn, allInText, self._viewInfo.allInCounter,
+                            self._viewInfo.addlTimingsLineText),
                         True,
                         WHITE),
                     (self.infoSpaceFromLeft, self._window_size[1] - self.infoRowHeight + curInfoTextHeight))
                 curInfoTextHeight += self.infoLineHeight
 
-            for addlInfo in self.ekBot.viewInfo.addlInfoLines:
+            for addlInfo in self._viewInfo.addlInfoLines:
                 self._screen.blit(
                     self._font.render(
                         addlInfo,
@@ -343,7 +389,7 @@ class GeneralsViewer(object):
                             score_color = GRAY_DARK
                         pygame.draw.rect(self._screen, score_color,
                                          [score_width * i, pos_top, score_width, self.scoreRowHeight])
-                        if (self.ekBot.targetPlayer == player.index):
+                        if (self._viewInfo.targetPlayer == player.index):
                             pygame.draw.rect(self._screen, GRAY,
                                              [score_width * i, pos_top, score_width, self.scoreRowHeight], 1)
                         userName = self._map.usernames[player.index]
@@ -358,7 +404,7 @@ class GeneralsViewer(object):
 
                         playerSubtext = "{} on {} ({})".format(player.score, player.tileCount, player.cityCount)
                         if player.index != self._map.player_index:
-                            playerSubtext += " [{}]".format(str(int(self.ekBot.playerTargetScores[player.index])))
+                            playerSubtext += " [{}]".format(str(int(self._viewInfo.playerTargetScores[player.index])))
                         self._screen.blit(self._font.render(playerSubtext, True, WHITE),
                                           (score_width * i + 3, pos_top + 1 + self._font.get_height()))
             # for i, score in enumerate(self._scores):
@@ -386,23 +432,26 @@ class GeneralsViewer(object):
                     if (tile in self._map.generals):  # General
                         # Draw Plus
                         pygame.draw.rect(self._screen, color,
-                                         [pos_left + self.plusDepth, pos_top, self.cellWidth - self.plusDepth * 2, self.cellHeight])
+                                         [pos_left + self.plusDepth, pos_top, self.cellWidth - self.plusDepth * 2,
+                                          self.cellHeight])
                         pygame.draw.rect(self._screen, color,
-                                         [pos_left, pos_top + self.plusDepth, self.cellWidth, self.cellHeight - self.plusDepth * 2])
+                                         [pos_left, pos_top + self.plusDepth, self.cellWidth,
+                                          self.cellHeight - self.plusDepth * 2])
                     elif (tile.isCity):  # City
                         # Draw Circle
 
                         pos_left_circle = int(pos_left + (self.cellWidth / 2))
                         pos_top_circle = int(pos_top + (self.cellHeight / 2))
-                        pygame.draw.circle(self._screen, color, [pos_left_circle, pos_top_circle], int(self.cellWidth / 2))
+                        pygame.draw.circle(self._screen, color, [pos_left_circle, pos_top_circle],
+                                           int(self.cellWidth / 2))
                     else:
                         # Draw Rect
                         pygame.draw.rect(self._screen, color, [pos_left, pos_top, self.cellWidth, self.cellHeight])
 
                     # mark tile territories
-                    if self.ekBot.territories is not None:
+                    if self._viewInfo.territories is not None:
                         territoryMarkerSize = 5
-                        tileTerritoryPlayer = self.ekBot.territories.territoryMap[tile.x][tile.y]
+                        tileTerritoryPlayer = self._viewInfo.territories.territoryMap[tile.x][tile.y]
                         if tile.player != tileTerritoryPlayer:
                             territoryColor = None
                             if tileTerritoryPlayer != -1:
@@ -416,18 +465,18 @@ class GeneralsViewer(object):
 
             self.draw_division_borders()
 
-            if (self.ekBot.redTreeNodes != None):
+            if (self._viewInfo.redGatherNodes != None):
                 redArrow = DirectionalShape(self.get_line_arrow(255, 0, 0, width=2))
-                self.drawGathers(self.ekBot.redTreeNodes, redArrow)
-            if (self.ekBot.gatherNodes != None):
-                self.drawGathers(self.ekBot.gatherNodes, self.lineArrow)
+                self.drawGathers(self._viewInfo.redGatherNodes, redArrow)
+            if (self._viewInfo.gatherNodes != None):
+                self.drawGathers(self._viewInfo.gatherNodes, self.lineArrow)
 
-            # if self.ekBot.board_analysis and self.ekBot.board_analysis.intergeneral_analysis:
+            # if self._viewInfo.board_analysis and self._viewInfo.board_analysis.intergeneral_analysis:
             #     chokeColor = CHOKE_PURPLE # purple
-            #     self.draw_army_analysis(self.ekBot.board_analysis.intergeneral_analysis, chokeColor, draw_pathways = True)
+            #     self.draw_army_analysis(self._viewInfo.board_analysis.intergeneral_analysis, chokeColor, draw_pathways = True)
 
             # LINE TESTING CODE
-            # gen = self.ekBot.general
+            # gen = self._viewInfo.general
             # left = self._map.grid[gen.y][gen.x - 1]
             # leftDown = self._map.grid[gen.y + 1][gen.x - 1]
             # down = self._map.grid[gen.y + 1][gen.x]
@@ -439,8 +488,8 @@ class GeneralsViewer(object):
 
             # s(self._map.grid[1][1],
 
-            while len(self.ekBot.viewInfo.paths) > 0:
-                pColorer = self.ekBot.viewInfo.paths.pop()
+            while len(self._viewInfo.paths) > 0:
+                pColorer = self._viewInfo.paths.pop()
                 self.draw_path(pColorer.path, pColorer.color[0], pColorer.color[1], pColorer.color[2], pColorer.alpha,
                                pColorer.alphaDecreaseRate, pColorer.alphaMinimum)
 
@@ -448,14 +497,14 @@ class GeneralsViewer(object):
             alphaDec = 4
             alphaMin = 135
             path = None
-            if self.ekBot.curPath != None:
-                path = self.ekBot.curPath
+            if self._viewInfo.currentPath != None:
+                path = self._viewInfo.currentPath
             self.draw_path(path, 0, 200, 50, alpha, alphaDec, alphaMin)
 
-            if self.ekBot.dangerAnalyzer != None and self.ekBot.dangerAnalyzer.anyThreat:
+            if self._viewInfo.dangerAnalyzer != None and self._viewInfo.dangerAnalyzer.anyThreat:
 
-                for threat in [self.ekBot.dangerAnalyzer.fastestVisionThreat, self.ekBot.dangerAnalyzer.fastestThreat,
-                               self.ekBot.dangerAnalyzer.highestThreat]:
+                for threat in [self._viewInfo.dangerAnalyzer.fastestVisionThreat, self._viewInfo.dangerAnalyzer.fastestThreat,
+                               self._viewInfo.dangerAnalyzer.highestThreat]:
                     if threat == None:
                         continue
                     # Draw danger path
@@ -465,34 +514,38 @@ class GeneralsViewer(object):
                     alphaMin = 145
                     self.draw_path(threat.path, 150, 0, 0, alpha, alphaDec, alphaMin)
 
-            for (tile, targetStyle) in self.ekBot.viewInfo.redTargetedTiles:
+            for (tile, targetStyle) in self._viewInfo.redTargetedTiles:
                 pos_left = (CELL_MARGIN + self.cellWidth) * tile.x + CELL_MARGIN
                 pos_top = (CELL_MARGIN + self.cellHeight) * tile.y + CELL_MARGIN
                 pos_left_circle = int(pos_left + (self.cellWidth / 2))
                 pos_top_circle = int(pos_top + (self.cellHeight / 2))
                 targetColor = self.get_color_from_target_style(targetStyle)
-                pygame.draw.circle(self._screen, BLACK, [pos_left_circle, pos_top_circle], int(self.cellWidth / 2 - 2), 7)
+                pygame.draw.circle(self._screen, BLACK, [pos_left_circle, pos_top_circle], int(self.cellWidth / 2 - 2),
+                                   7)
                 pygame.draw.circle(self._screen, targetColor, [pos_left_circle, pos_top_circle],
                                    int(self.cellWidth / 2) - 5, 1)
-            for approx in self.ekBot.generalApproximations:
+            for i, approx in enumerate(self._viewInfo.generalApproximations):
                 if (approx[2] > 0):
+                    pColor = PLAYER_COLORS[i]
                     pos_left = (CELL_MARGIN + self.cellWidth) * approx[0] + CELL_MARGIN
                     pos_top = (CELL_MARGIN + self.cellHeight) * approx[1] + CELL_MARGIN
                     pos_left_circle = int(pos_left + (self.cellWidth / 2))
                     pos_top_circle = int(pos_top + (self.cellHeight / 2))
-                    pygame.draw.circle(self._screen, BLACK, [pos_left_circle, pos_top_circle], int(self.cellWidth / 2 - 2),
+                    pygame.draw.circle(self._screen, BLACK, [pos_left_circle, pos_top_circle],
+                                       int(self.cellWidth / 2 - 2),
                                        7)
-                    pygame.draw.circle(self._screen, RED, [pos_left_circle, pos_top_circle], int(self.cellWidth / 2) - 5, 1)
-                # pygame.draw.circle(self._screen, RED, [pos_left_circle, pos_top_circle], int(self.cellWidth / 2) - 10, 1)
+                    pygame.draw.circle(self._screen, pColor, [pos_left_circle, pos_top_circle],
+                                       int(self.cellWidth / 2) - 5, 1)
             # print("history")
             s = pygame.Surface((self.cellWidth, self.cellHeight))
             s.fill(WHITE)
             s.set_colorkey(WHITE)
 
-            pygame.draw.circle(s, BLACK, [int(self.cellWidth / 2), int(self.cellHeight / 2)], int(self.cellWidth / 2 - 2), 7)
+            pygame.draw.circle(s, BLACK, [int(self.cellWidth / 2), int(self.cellHeight / 2)],
+                               int(self.cellWidth / 2 - 2), 7)
             # pygame.draw.circle(s, RED, [int(self.cellWidth / 2), int(self.cellHeight / 2)], int(self.cellWidth / 2) - 10, 1)
-            for i in range(len(self.ekBot.viewInfo.redTargetedTileHistory)):
-                hist = self.ekBot.viewInfo.redTargetedTileHistory[i]
+            for i in range(len(self._viewInfo.redTargetedTileHistory)):
+                hist = self._viewInfo.redTargetedTileHistory[i]
                 alpha = 150 - 30 * i
                 s.set_alpha(alpha)
                 for (tile, targetStyle) in hist:
@@ -513,14 +566,14 @@ class GeneralsViewer(object):
             pygame.draw.line(s, BLACK, (0, self.cellHeight), (self.cellWidth, 0), 4)
             pygame.draw.line(s, RED, (0, self.cellHeight), (self.cellWidth, 0), 2)
             # print("val")
-            if (self._map != None and self.ekBot != None and self.ekBot.viewInfo.evaluatedGrid != None and len(
-                    self.ekBot.viewInfo.evaluatedGrid) > 0):
+            if (self._map != None and self._viewInfo != None and self._viewInfo.evaluatedGrid != None and len(
+                    self._viewInfo.evaluatedGrid) > 0):
                 # print("if")
                 for row in range(self._map.rows):
                     for column in range(self._map.cols):
                         # print("loop")
-                        countEvaluated = int(self.ekBot.viewInfo.evaluatedGrid[column][row] +
-                                             self.ekBot.viewInfo.lastEvaluatedGrid[column][row]);
+                        countEvaluated = int(self._viewInfo.evaluatedGrid[column][row] +
+                                             self._viewInfo.lastEvaluatedGrid[column][row])
                         # print("loopVal")
                         if (countEvaluated > 0):
                             # print("CountVal: {},{}: {}".format(column, row, countEvaluated))
@@ -556,7 +609,8 @@ class GeneralsViewer(object):
                                           (pos_left + 2, pos_top + self.cellHeight / 4))
 
                     # Draw Text Value
-                    if tile.army != 0 and (tile.discovered or tile in self.ekBot.armyTracker.armies):  # Don't draw on empty tiles
+                    if tile.army != 0 and (
+                            tile.discovered or tile in self._viewInfo.armyTracker.armies):  # Don't draw on empty tiles
                         textVal = str(tile.army)
                         textWidth = self._lrgFontWidth * len(textVal)
                         self._screen.blit(self._font.render(textVal, True, color_font),
@@ -567,8 +621,8 @@ class GeneralsViewer(object):
                                       (pos_left, pos_top - 2))
 
                     # bottom mid
-                    # if (self.ekBot.leafValueGrid != None):
-                    #     leafVal = self.ekBot.leafValueGrid[column][row]
+                    # if (self._viewInfo.leafValueGrid != None):
+                    #     leafVal = self._viewInfo.leafValueGrid[column][row]
                     #     if (leafVal != None):
                     #         textVal = clean_up_possible_float(leafVal)
                     #         if (leafVal == -1000000):  # then was skipped
@@ -576,45 +630,48 @@ class GeneralsViewer(object):
                     #         self._screen.blit(self.small_font(textVal, color_font),
                     #                           (pos_left + self.cellWidth / 3, pos_top + 2.2 * self.cellHeight / 3))
 
-                    if (self.ekBot.viewInfo.topRightGridText != None):
-                        text = self.ekBot.viewInfo.topRightGridText[column][row]
+                    if (self._viewInfo.topRightGridText != None):
+                        text = self._viewInfo.topRightGridText[column][row]
                         if (text != None):
                             textVal = clean_up_possible_float(text)
                             if (text == -1000000):  # then was skipped
                                 textVal = "x"
                             self._screen.blit(self.small_font(textVal, color_small_font),
-                                              (pos_left + self.cellWidth - self.get_text_offset_from_right(textVal), pos_top - 2))
+                                              (pos_left + self.cellWidth - self.get_text_offset_from_right(textVal),
+                                               pos_top - 2))
 
-                    if (self.ekBot.viewInfo.midRightGridText != None):
-                        text = self.ekBot.viewInfo.midRightGridText[column][row]
+                    if (self._viewInfo.midRightGridText != None):
+                        text = self._viewInfo.midRightGridText[column][row]
                         if (text != None):
                             textVal = clean_up_possible_float(text)
                             if (text == -1000000):  # then was skipped
                                 textVal = "x"
                             self._screen.blit(self.small_font(textVal, color_small_font),
-                                              (pos_left + self.cellWidth - self.get_text_offset_from_right(textVal), pos_top + self.cellHeight / 3))
+                                              (pos_left + self.cellWidth - self.get_text_offset_from_right(textVal),
+                                               pos_top + self.cellHeight / 3))
 
-                    if (self.ekBot.viewInfo.bottomMidRightGridText != None):
-                        text = self.ekBot.viewInfo.bottomMidRightGridText[column][row]
+                    if (self._viewInfo.bottomMidRightGridText != None):
+                        text = self._viewInfo.bottomMidRightGridText[column][row]
                         if (text != None):
                             textVal = clean_up_possible_float(text)
                             if (text == -1000000):  # then was skipped
                                 textVal = "x"
                             self._screen.blit(self.small_font(textVal, color_small_font),
-                                              (pos_left + self.cellWidth - self.get_text_offset_from_right(textVal), pos_top + 1.6 * self.cellHeight / 3))
+                                              (pos_left + self.cellWidth - self.get_text_offset_from_right(textVal),
+                                               pos_top + 1.6 * self.cellHeight / 3))
 
-                    if (self.ekBot.viewInfo.bottomRightGridText != None):
-                        text = self.ekBot.viewInfo.bottomRightGridText[column][row]
+                    if (self._viewInfo.bottomRightGridText != None):
+                        text = self._viewInfo.bottomRightGridText[column][row]
                         if (text != None):
                             textVal = clean_up_possible_float(text)
                             if (text == -1000000):  # then was skipped
                                 textVal = "x"
                             self._screen.blit(self.small_font(textVal, color_small_font),
-                                              (pos_left + self.cellWidth - self.get_text_offset_from_right(textVal), pos_top + 2.2 * self.cellHeight / 3))
+                                              (pos_left + self.cellWidth - self.get_text_offset_from_right(textVal),
+                                               pos_top + 2.2 * self.cellHeight / 3))
 
-
-                    if (self.ekBot.viewInfo.bottomLeftGridText != None):
-                        text = self.ekBot.viewInfo.bottomLeftGridText[column][row]
+                    if (self._viewInfo.bottomLeftGridText != None):
+                        text = self._viewInfo.bottomLeftGridText[column][row]
                         if (text != None):
                             textVal = clean_up_possible_float(text)
                             if (text == -1000000):  # then was skipped
@@ -622,8 +679,8 @@ class GeneralsViewer(object):
                             self._screen.blit(self.small_font(textVal, color_small_font),
                                               (pos_left + 2, pos_top + 2.2 * self.cellHeight / 3))
 
-                    if (self.ekBot.viewInfo.bottomMidLeftGridText != None):
-                        text = self.ekBot.viewInfo.bottomMidLeftGridText[column][row]
+                    if (self._viewInfo.bottomMidLeftGridText != None):
+                        text = self._viewInfo.bottomMidLeftGridText[column][row]
                         if (text != None):
                             textVal = clean_up_possible_float(text)
                             if (text == -1000000):  # then was skipped
@@ -631,8 +688,8 @@ class GeneralsViewer(object):
                             self._screen.blit(self.small_font(textVal, color_small_font),
                                               (pos_left + 2, pos_top + 1.6 * self.cellHeight / 3))
 
-                    if (self.ekBot.viewInfo.midLeftGridText != None):
-                        text = self.ekBot.viewInfo.midLeftGridText[column][row]
+                    if (self._viewInfo.midLeftGridText != None):
+                        text = self._viewInfo.midLeftGridText[column][row]
                         if (text != None):
                             textVal = clean_up_possible_float(text)
                             if (text == -1000000):  # then was skipped
@@ -642,8 +699,8 @@ class GeneralsViewer(object):
 
             self.draw_armies()
 
-            if self.ekBot.targetingArmy != None:
-                self.draw_square(self.ekBot.targetingArmy.tile, 3, 1, 1, 1, 254, self.square_inner_3)
+            if self._viewInfo.targetingArmy != None:
+                self.draw_square(self._viewInfo.targetingArmy.tile, 3, 1, 1, 1, 254, self.square_inner_3)
 
             # Go ahead and update the screen with what we've drawn.
             pygame.display.flip()
@@ -653,10 +710,10 @@ class GeneralsViewer(object):
         except:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-            #logging.info("inf")  # Log it or whatever here
-            #logging.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
-            #logging.info("warn")  # Log it or whatever here
-            #logging.warning(''.join('!! ' + line for line in lines))  # Log it or whatever here
+            # logging.info("inf")  # Log it or whatever here
+            # logging.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
+            # logging.info("warn")  # Log it or whatever here
+            # logging.warning(''.join('!! ' + line for line in lines))  # Log it or whatever here
             logging.info("err")  # Log it or whatever here
             logging.error(''.join('!! ' + line for line in lines))  # Log it or whatever here
             raise
@@ -712,8 +769,8 @@ class GeneralsViewer(object):
         self._screen.blit(self._font.render(army.name, True, WHITE), (pos_left + self.cellWidth - 10, pos_top))
 
     def draw_armies(self):
-        if self.ekBot.armyTracker is not None:
-            for army in list(self.ekBot.armyTracker.armies.values()):
+        if self._viewInfo.armyTracker is not None:
+            for army in list(self._viewInfo.armyTracker.armies.values()):
                 if army.scrapped:
                     self.draw_army(army, 200, 200, 200, 70)
                 else:
@@ -793,7 +850,7 @@ class GeneralsViewer(object):
                         #        self.draw_between_tiles(self.yellow_line, tile, adj)
 
     def draw_board_chokes(self, interChokeColor=None, innerChokeColor=None, outerChokeColor=None):
-        if self.ekBot.board_analysis is None:
+        if self._viewInfo.board_analysis is None:
             return
 
         if interChokeColor is None:
@@ -805,22 +862,22 @@ class GeneralsViewer(object):
         if outerChokeColor is None:
             outerChokeColor = P_TEAL
 
-        if self.ekBot.board_analysis.intergeneral_analysis is not None:
-            self.draw_army_analysis(self.ekBot.board_analysis.intergeneral_analysis,
+        if self._viewInfo.board_analysis.intergeneral_analysis is not None:
+            self.draw_army_analysis(self._viewInfo.board_analysis.intergeneral_analysis,
                                     chokeColor=interChokeColor,
                                     draw_pathways=True)
 
         for tile in self._map.pathableTiles:
-            if self.ekBot.board_analysis.innerChokes[tile.x][tile.y]:
+            if self._viewInfo.board_analysis.innerChokes[tile.x][tile.y]:
                 (r, g, b) = innerChokeColor
                 self.draw_square(tile, 1, r, g, b, 255, self.square_inner_2)
 
-            if self.ekBot.board_analysis.outerChokes[tile.x][tile.y]:
+            if self._viewInfo.board_analysis.outerChokes[tile.x][tile.y]:
                 (r, g, b) = outerChokeColor
                 self.draw_square(tile, 1, r, g, b, 255, self.square_inner_3)
 
     def draw_division_borders(self):
-        for (divisionMatrix, (r, g, b), alpha) in self.ekBot.viewInfo._divisions:
+        for (divisionMatrix, (r, g, b), alpha) in self._viewInfo._divisions:
             visited = set()
             divisionLine = DirectionalShape(self.get_line(r, g, b, width=2), rotateInitial=90)
             for tile in self._map.pathableTiles:
@@ -870,9 +927,9 @@ class GeneralsViewer(object):
         # after drawing the circle, we can set the
         # alpha value (transparency) of the surface
         triangle = [
-            (5,                 2 * self.cellHeight // 3 + 1),
-            (self.cellWidth // 2,   self.cellHeight // 3 - 3),
-            (self.cellWidth - 5,        2 * self.cellHeight // 3 + 1)
+            (5, 2 * self.cellHeight // 3 + 1),
+            (self.cellWidth // 2, self.cellHeight // 3 - 3),
+            (self.cellWidth - 5, 2 * self.cellHeight // 3 + 1)
         ]
         pygame.draw.polygon(s, GRAY_DARK, triangle)
 
@@ -926,33 +983,6 @@ class GeneralsViewer(object):
         pos_left = (CELL_MARGIN + self.cellWidth) * tile.x + CELL_MARGIN
         pos_top = (CELL_MARGIN + self.cellHeight) * tile.y + CELL_MARGIN
         return (pos_left, pos_top)
-
-    def save_images(self):
-        while True:
-            if self._readyRender:
-                pygame.image.save(self._screen, "{}\\{}.png".format(self.logDirectory, self._map.turn))
-                try:
-                    mapStr = TextMapLoader.dump_map_to_string(self._map, split_every=5)
-                except:
-                    try:
-                        mapStr = TextMapLoader.dump_map_to_string(self._map, split_every=6)
-                    except:
-                        exc_type, exc_value, exc_traceback = sys.exc_info()
-                        lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-
-                        logging.info(f'failed to dump map, {lines}')
-                        mapStr = f'failed to dump map, {lines}'
-
-                ekBotData = self.ekBot.dump_turn_data_to_string()
-                mapStr = f'{mapStr}\n{ekBotData}'
-
-                mapFilePath = "{}\\{}.txtmap".format(self.logDirectory, self._map.turn)
-
-                with open(mapFilePath, 'w') as mapFile:
-                    mapFile.write(mapStr)
-
-                self._readyRender = False
-            time.sleep(0.1)
 
     def get_font_color(self, tile) -> typing.Tuple[int, int, int]:
         color_font = WHITE
@@ -1031,6 +1061,9 @@ class GeneralsViewer(object):
 
     def get_text_offset_from_right(self, text: str) -> int:
         return len(text) * self._smallFontWidth + 3
+
+    def save_image(self):
+        pygame.image.save(self._screen, "{}\\{}.png".format(self.logDirectory, self._map.turn))
 
 
 def rescale_value(valToScale, valueMin, valueMax, newScaleMin, newScaleMax):

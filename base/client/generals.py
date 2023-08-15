@@ -2,10 +2,11 @@
     Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
     Client Adopted from @toshima Generals Python Client - https://github.com/toshima/generalsio
 '''
-import os, errno
+import os
 import random
 import sys
 import traceback
+
 import certifi
 import logging
 import json
@@ -408,8 +409,13 @@ class Generals(object):
                 sleepDuration = random.choice(range(20, 60))
                 logging.info("TOO MANY CONNECTION ATTEMPTS? {}\n:( sleeping and then trying again in {}".format(msg, sleepDuration))
                 time.sleep(sleepDuration)
-                logging.info("Terminating")
+                logging.info('Calling _terminate from game loop')
                 self._terminate()
+                logging.info('Game loop _terminate complete')
+                #TODO I just added this
+                time.sleep(2)
+                logging.info('Game loop calling exit()')
+                exit(2)
             else:
                 logging.info("Unknown message type: {}".format(msg))
 
@@ -434,21 +440,26 @@ class Generals(object):
     def _make_result(self, update, data):
         result = self._map.updateResult(update)
         self.result = result
+        logging.info('make result calling _terminate...')
         self._terminate()
+        logging.info('make result -> _terminate complete.')
         return result
 
     def _start_killswitch_timer(self):
         while time.time() - self.lastCommunicationTime < 60:
             time.sleep(10)
-        os._exit(2)  # End Program
+        exit(2)  # End Program
 
     def _terminate(self):
+        self._running = False
         logging.info(
             "\n\n        IN TERMINATE {}  (won? {})   \n\n".format(self._start_data['replay_id'], self._map.result))
         with self._lock:
             # self._send(["leave_game"])
+            logging.info(" in lock IN TERMINATE, calling self.close()")
             # time.sleep(1)
             self.close()
+            logging.info(" self.close() done")
 
     def send_clear_moves(self):
         logging.info("\n\nSending clear_moves")

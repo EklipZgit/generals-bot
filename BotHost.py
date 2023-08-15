@@ -1,12 +1,15 @@
 import argparse
 import logging
+import sys
 import time
+import traceback
 import typing
 
 from PerformanceTimer import PerformanceTimer
+from Sim.TextMapLoader import TextMapLoader
+from Viewer.ViewerProcessHost import ViewerHost
 from base import bot_base
 from base.client.map import MapBase, Tile
-from base.viewer import GeneralsViewer
 from bot_ek0x45 import EklipZBot
 
 FORCE_NO_VIEWER = False
@@ -14,7 +17,14 @@ FORCE_PRIVATE = False
 
 
 class BotHostBase(object):
-    def __init__(self, name: str, placeMoveFunc: typing.Callable[[Tile, Tile, bool], bool],  gameType: str, noUi: bool = True, alignBottom: bool = False, alignRight: bool = False):
+    def __init__(
+            self,
+            name: str,
+            placeMoveFunc: typing.Callable[[Tile, Tile, bool], bool],
+            gameType: str,
+            noUi: bool = True,
+            alignBottom: bool = False,
+            alignRight: bool = False):
         self._name = name
         self._game_type = gameType
 
@@ -26,20 +36,20 @@ class BotHostBase(object):
         self.align_bottom: bool = alignBottom
         self.align_right: bool = alignRight
 
-        self._viewer: GeneralsViewer = None
+        self._viewer: ViewerHost | None = None
 
-    # Consumes thread
     def run_viewer_loop(self):
-        # Consumes thread
-        self._viewer.run_main_viewer_loop(not self.align_bottom, not self.align_right)
+        logging.info("attempting to start viewer loop")
+        self._viewer.start()
 
     def make_move(self, currentMap: MapBase):
         # todo most of this logic / timing / whatever should move into EklipZbot...
         timer: PerformanceTimer = self.eklipz_bot.perf_timer
         timer.record_update(currentMap.turn)
 
-        if self.eklipz_bot._map is None:
-            self.eklipz_bot._map = currentMap
+        if not self.eklipz_bot.isInitialized:
+            self.eklipz_bot.initialize_map_for_first_time(currentMap)
+        self.eklipz_bot._map = currentMap
 
         startTime = time.perf_counter()
         with timer.begin_move(currentMap.turn) as moveTimer:
@@ -58,18 +68,54 @@ class BotHostBase(object):
                                     move.dest.x, move.dest.y))
 
             if self.has_viewer:
-                self._viewer.updateGrid(currentMap)
+                with moveTimer.begin_event(f'Sending turn {currentMap.turn} update to Viewer'):
+                    self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, currentMap, currentMap.complete)
+
+            with moveTimer.begin_event(f'Dump {currentMap.turn}.txtmap to disk'):
+                self.save_txtmap(currentMap)
+            with moveTimer.begin_event(f'Main thread check for pygame exit'):
+                if self.is_viewer_closed_by_user():
+                    currentMap.complete = True
+                    currentMap.result = False
+                    self.notify_game_over()
 
         return
 
+    def save_txtmap(self, map: MapBase):
+        try:
+            mapStr = TextMapLoader.dump_map_to_string(map, split_every=5)
+        except:
+            try:
+                mapStr = TextMapLoader.dump_map_to_string(map, split_every=6)
+            except:
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
+
+                logging.info(f'failed to dump map, {lines}')
+                mapStr = f'failed to dump map, {lines}'
+
+        ekBotData = self.eklipz_bot.dump_turn_data_to_string()
+
+        mapStr = f'{mapStr}\n{ekBotData}'
+
+        mapFilePath = "{}\\{}.txtmap".format(self.eklipz_bot.logDirectory, map.turn)
+
+        with open(mapFilePath, 'w') as mapFile:
+            mapFile.write(mapStr)
+
     def initialize_viewer(self):
         window_title = "%s (%s)" % (self._name, self._game_type)
-        self._viewer = GeneralsViewer(window_title)
-        self._viewer.ekBot = self.eklipz_bot
+        self._viewer = ViewerHost(window_title, alignTop=not self.align_bottom, alignLeft=not self.align_right)
+
+    def is_viewer_closed_by_user(self) -> bool:
+        if self.has_viewer and self._viewer.check_viewer_closed():
+            return True
+        return False
 
     def notify_game_over(self):
         self.eklipz_bot._map.complete = True
         if self.has_viewer:
+            self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, self.eklipz_bot._map, True)
             self._viewer.kill()
 
 
@@ -78,7 +124,8 @@ class BotHost(BotHostBase):
             self,
             name: str,
             gameType: str,
-            roomId: typing.Union[None, str],
+            roomId: str | None,
+            userId: str | None,
             isPublic: bool,
             noUi: bool,
             alignBottom: bool,
@@ -93,6 +140,7 @@ class BotHost(BotHostBase):
         self.bot_client = bot_base.GeneralsBot(
             self.make_move,
             name=self._name,
+            userId=userId,
             gameType=self._game_type,
             privateRoomID=roomId,
             public_server=isPublic)
@@ -112,27 +160,33 @@ class BotHost(BotHostBase):
     # consumes main thread until game complete
     def run(self):
         addlThreads = []
-        viewerUpdateCallback = None
 
         # Start Game Viewer
         if self.has_viewer:
+            logging.info("attempting to initialize viewer")
             self.initialize_viewer()
-            addlThreads.append(self.run_viewer_loop)
-            viewerUpdateCallback = self._viewer.updateGrid
+            self.run_viewer_loop()
 
-        self.bot_client.run(addlThreads, viewerUpdateCallback)
+        logging.info("attempting to run bot_client")
+        try:
+            self.bot_client.run(addlThreads)
+        except KeyboardInterrupt:
+            logging.info('keyboard interrupt received, killing viewer if any')
+            self.notify_game_over()
 
 
 if __name__ == '__main__':
     # raise AssertionError("stop")
     parser = argparse.ArgumentParser()
-    parser.add_argument('-name', metavar='str', type=str, default='42069',
+    parser.add_argument('-name', metavar='str', type=str, default='helpImAlive2',
                         help='Name of Bot')
+    parser.add_argument('-userID', metavar='str', type=str, default='--',
+                        help='User ID to use')
     parser.add_argument('-g', '--gameType', metavar='str', type=str,
                         choices=["private", "custom", "1v1", "ffa", "team"],
-                        default="ffa", help='Game Type: private, custom, 1v1, ffa, or team')
-    # parser.add_argument('--roomID', metavar='str', type=str, default="EklipZ_ai", help='Private Room ID (optional)')
-    parser.add_argument('--roomID', metavar='str', type=str, help='Private Room ID (optional)')
+                        default="private", help='Game Type: private, custom, 1v1, ffa, or team')
+    parser.add_argument('--roomID', metavar='str', type=str, default="testing", help='Private Room ID (optional)')
+    # parser.add_argument('--roomID', metavar='str', type=str, help='Private Room ID (optional)')
     parser.add_argument('--right', action='store_true')
     parser.add_argument('--bottom', action='store_true')
     parser.add_argument('--no-ui', action='store_true', help="Hide UI (no game viewer)")
@@ -140,6 +194,9 @@ if __name__ == '__main__':
     args = vars(parser.parse_args())
 
     name: str = args['name']
+    userId: str | None = args['userID']
+    if userId == '--':
+        userId = None
     gameType: str = args['gameType']
     roomId = args['roomID']
     isPublic: bool = args['public']
@@ -147,5 +204,8 @@ if __name__ == '__main__':
     alignBottom: bool = args['bottom']
     alignRight: bool = args['right']
 
-    host = BotHost(name, gameType, roomId, isPublic, noUi, alignBottom, alignRight)
+    logging.info("newing up bot host")
+    host = BotHost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight)
+
+    logging.info("running bot host")
     host.run()

@@ -8,6 +8,7 @@ from Path import Path
 from Sim.GameSimulator import GameSimulator
 from Sim.TextMapLoader import TextMapLoader
 from ViewInfo import ViewInfo, PathColorer
+from Viewer.ViewerProcessHost import ViewerHost
 from base.client.map import MapBase, Tile, Score, Player, TILE_FOG, TILE_OBSTACLE
 from base.viewer import GeneralsViewer
 from bot_ek0x45 import EklipZBot
@@ -315,16 +316,11 @@ class TestBase(unittest.TestCase):
         return ViewInfo(1, map.cols, map.rows)
 
     def render_view_info(self, map: MapBase, viewInfo: ViewInfo, infoString: str):
-        viewer = GeneralsViewer(infoString, cell_width=45, cell_height=45)
-        viewer.ekBot = EklipZBot(10)
-        viewer.ekBot.initialize_map_for_first_time(map)
+        viewer = ViewerHost(infoString, cell_width=45, cell_height=45)
         viewer.noLog = True
-        viewer.ekBot.viewInfo = viewInfo
-        viewer.ekBot.viewInfo.readyToDraw = True
-        viewer.ekBot.viewInfo.infoText = infoString
-        viewer.updateGrid(map)
-        viewer.run_main_viewer_loop()
-
+        viewInfo.infoText = infoString
+        viewer.start()
+        viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
 
 
     def assertPlayerTileVisibleAndCorrect(self, x: int, y: int, sim: GameSimulator, player_index: int):

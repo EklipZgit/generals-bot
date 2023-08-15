@@ -4,6 +4,7 @@
     Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
     EklipZ bot - Tries to play generals lol
 '''
+import os
 import random
 
 import EarlyExpandUtils
@@ -11,9 +12,8 @@ from CityAnalyzer import CityAnalyzer, CityScoreData
 from ExpandUtils import get_optimal_expansion
 from PerformanceTimer import PerformanceTimer
 from BoardAnalyzer import *
-from ViewInfo import ViewInfo, PathColorer
+from ViewInfo import ViewInfo, PathColorer, TargetStyle
 from base.client.map import Player, new_tile_matrix
-from base.viewer import TargetStyle
 from DangerAnalyzer import DangerAnalyzer, ThreatType, ThreatObj
 from DataModels import get_tile_set_from_path, get_player_army_amount_on_path, get_tile_list_from_path
 from Directives import *
@@ -75,6 +75,7 @@ THREAD_COUNT = 6
 
 class EklipZBot(object):
     def __init__(self, threadCount):
+        self.logDirectory: str = None
         self.perf_timer = PerformanceTimer()
         self.cities_gathered_this_cycle: typing.Set[Tile] = set()
         self.player: Player = None
@@ -109,7 +110,14 @@ class EklipZBot(object):
         self.allIn = False
         self.lastTargetAttackTurn = 0
 
-        self.generalApproximations = []
+        self.generalApproximations: typing.List[typing.Tuple[float, float, int, Tile | None]] = []
+        """
+        List of general location approximation data as averaged by enemy tiles bordering undiscovered and euclid averaged.
+        Tuple is (xAvg, yAvg, countUsed, generalTileIfKnown)
+        Used for player targeting (we do the expensive approximation only for the target player?)
+        This is aids.
+        """
+
         self.allUndiscovered = []
         self.lastGeneralGatherTurn = -2
         self.targetPlayer = -1
@@ -120,7 +128,7 @@ class EklipZBot(object):
         self.general: Tile = None
         self.gatherNodes = None
         self.redTreeNodes = None
-        self.loggingSetUp = False
+        self.isInitialized = False
         self.makingUpTileDeficit = False
         self.territories: TerritoryClassifier = None
 
@@ -129,7 +137,7 @@ class EklipZBot(object):
         self.shortest_path_to_target_player = None
         self.shortest_path_to_target_player_distances = None
 
-        self.viewInfo = None
+        self.viewInfo: ViewInfo = None
 
         self._minAllowableArmy = -1
         self.giving_up_counter = 0
@@ -206,7 +214,7 @@ class EklipZBot(object):
             self.history.moveHistory[self._map.turn] = []
         self.history.moveHistory[self._map.turn].append(move)
 
-        self.viewInfo.readyToDraw = True
+        self.prep_view_info_for_render()
 
         return move
 
@@ -370,7 +378,7 @@ class EklipZBot(object):
         if self.general is not None:
             self._gen_distances = build_distance_map(self._map, [self.general])
 
-        if not self.loggingSetUp and self._map is not None:
+        if not self.isInitialized and self._map is not None:
             self.initialize_map_for_first_time(self._map)
 
         self._minAllowableArmy = -1
@@ -5721,7 +5729,7 @@ class EklipZBot(object):
             self.armyTracker.armies[tile] = newArmy
             return newArmy
 
-    def initialize_map_for_first_time(self, map):
+    def initialize_map_for_first_time(self, map: MapBase):
         self._map = map
         self.general = self._map.generals[self._map.player_index]
         self.player = self._map.players[self.general.player]
@@ -5729,11 +5737,23 @@ class EklipZBot(object):
         self.dangerAnalyzer = DangerAnalyzer(self._map)
         self.cityAnalyzer = CityAnalyzer(self._map, self.general)
         self.viewInfo = ViewInfo(2, self._map.cols, self._map.rows)
-        self.loggingSetUp = True
+        self.isInitialized = True
         print("replay " + self._map.replay_id)
         file = 'D:\\GeneralsLogs\\' + self._map.replay_id + '.log'
         print("file: " + file)
         logging.basicConfig(format='%(levelname)s:%(message)s', filename="D:\\GeneralsLogs\\test.txt", level=logging.DEBUG)
+
+        fileSafeUserName = self._map.usernames[self._map.player_index]
+        fileSafeUserName = fileSafeUserName.replace("[Bot] ", "")
+        fileSafeUserName = fileSafeUserName.replace("[Bot]", "")
+        # logging.info("\n\n\nFILE SAFE USERNAME\n {}\n\n".format(fileSafeUserName))
+        self.logDirectory = "D:\\GeneralsLogs\\{}-{}".format(fileSafeUserName, self._map.replay_id)
+
+        if not os.path.exists(self.logDirectory):
+            try:
+                os.makedirs(self.logDirectory)
+            except:
+                logging.info("Couldn't create dir")
 
         self._map.notify_city_found.append(self.handle_city_found)
         self._map.notify_tile_captures.append(self.handle_tile_captures)
@@ -5749,6 +5769,12 @@ class EklipZBot(object):
         self.targetPlayerExpectedGeneralLocation = self.general.movable[0]
         self.launchPoints.add(self.general)
         self.board_analysis = BoardAnalyzer(self._map, self.general)
+
+    def __getstate__(self):
+        raise AssertionError("EklipZBot Should never be serialized")
+
+    def __setstate__(self, state):
+        raise AssertionError("EklipZBot Should never be de-serialized")
 
     @staticmethod
     def add_city_score_to_view_info(score: CityScoreData, viewInfo: ViewInfo):
@@ -5782,3 +5808,19 @@ class EklipZBot(object):
                     killPath.start.move_half = True
                 return killPath
         return None
+
+    def prep_view_info_for_render(self):
+        self.viewInfo.board_analysis = self.board_analysis
+        self.viewInfo.targetingArmy = self.targetingArmy
+        self.viewInfo.armyTracker = self.armyTracker
+        self.viewInfo.dangerAnalyzer = self.dangerAnalyzer
+        self.viewInfo.currentPath = self.curPath
+        self.viewInfo.gatherNodes = self.gatherNodes
+        self.viewInfo.redGatherNodes = self.redTreeNodes
+        self.viewInfo.territories = self.territories
+        self.viewInfo.allIn = self.allIn
+        self.viewInfo.timings = self.timings
+        self.viewInfo.allInCounter = self.all_in_counter
+        self.viewInfo.targetPlayer = self.targetPlayer
+        self.viewInfo.generalApproximations = self.generalApproximations
+        self.viewInfo.playerTargetScores = self.playerTargetScores

@@ -2,3 +2,4 @@ websocket-client
 pygame
 certifi
 requests
+# dill

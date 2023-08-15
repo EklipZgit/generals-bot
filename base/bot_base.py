@@ -17,22 +17,23 @@ from .client.map import MapBase
 
 
 class GeneralsBot(object):
-    def __init__(self, updateMethod, name="PurdueBot", gameType="private", privateRoomID="PurdueBot", public_server=False):
+    def __init__(self, updateMethod, name="PurdueBot", userId=None, gameType="private", privateRoomID="PurdueBot", public_server=False):
         # Save Config
         self._updateMethod = updateMethod
         self._name = name
+        if userId is None:
+            userId = "efg" + self._name
+        self._userId = userId
         self._gameType = gameType
         self._privateRoomID = privateRoomID
         self._public_server = public_server
-        self._map_update_callback = None
 
         # ----- Start Game -----
         
         self._running = True
         self._move_event = threading.Event()
 
-    def run(self, additional_thread_methods: list, map_update_callback = None):
-        self._map_update_callback = map_update_callback
+    def run(self, additional_thread_methods: list):
         # Start Game Thread
         create_thread(self._start_game_thread)
         time.sleep(0.1)
@@ -51,7 +52,7 @@ class GeneralsBot(object):
             time.sleep(1.0)
 
         time.sleep(1.0)
-        os._exit(0) # End Program
+        exit(0) # End Program
 
     ######################### Handle Updates From Server #########################
     
@@ -61,9 +62,9 @@ class GeneralsBot(object):
     def _start_game_thread(self):
         # Create Game
         if self._gameType in ['1v1', 'ffa', 'private']:
-            self._game = generals.Generals("efg" + self._name, self._name, self._gameType, gameid=self._privateRoomID, public_server=self._public_server)
+            self._game = generals.Generals(self._userId, self._name, self._gameType, gameid=self._privateRoomID, public_server=self._public_server)
         elif self._gameType == "team": # team
-            self._game = generals.Generals("efg" + self._name, self._name, 'team')
+            self._game = generals.Generals(self._userId, self._name, 'team')
 
         logging.info("game start...?")
 
@@ -73,14 +74,8 @@ class GeneralsBot(object):
                 self._set_update(update)
 
                 # Perform Make Move
-                #self._make_move()
                 self._move_event.set()
 
-                # Update GeneralsViewer Grid
-                selfDir = dir(self)
-
-                if self._map_update_callback is not None:
-                    self._map_update_callback(update)
         except ValueError: # Already in match, restart    
             exc_type, exc_value, exc_traceback = sys.exc_info()
             lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
@@ -88,7 +83,7 @@ class GeneralsBot(object):
             
             logging.info("Exit: Already in queue in _start_update_loop")
             time.sleep(5)
-            os._exit(0) # End Program
+            exit(0) # End Program
         except:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
@@ -101,7 +96,7 @@ class GeneralsBot(object):
 
         logging.info("crashed out of update loop, quitting")
         time.sleep(3)
-        os._exit(0) # End Program
+        exit(0) # End Program
 
     def _set_update(self, update):
         if update.complete:
@@ -111,10 +106,14 @@ class GeneralsBot(object):
             self._running = False
             # why was this sleep here?
             # time.sleep(2.0)
-            logging.info("terminating")
+            logging.info("terminating in _set_update")
             self._game._terminate()
             time.sleep(2.0)
-            os._exit(0) # End Program
+            logging.info("os.exiting...?")
+            try:
+                exit(0) # End Program
+            except:
+                logging.info(traceback.format_exc())
             return
 
         self._update = update

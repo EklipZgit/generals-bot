@@ -4,11 +4,9 @@
     Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
     Map: Objects for representing Generals IO Map and Tiles
 '''
-import json
 import logging
 import typing
 import uuid
-from collections import deque
 
 TILE_EMPTY = -1
 TILE_MOUNTAIN = -2
@@ -23,12 +21,12 @@ _REPLAY_URLS = {
 
 class Player(object):
     def __init__(self, player_index):
-        self.cities = []
-        self.general = None
+        self.cities: typing.List[Tile] = []
+        self.general: Tile | None = None
         self.index = player_index
         self.stars = 0
         self.score = 0
-        self.tiles = []
+        self.tiles: typing.List[Tile] = []
         self.tileCount = 0
         self.standingArmy = 0
         self.cityCount = 1
@@ -63,10 +61,10 @@ class TileDelta(object):
         with the tile (or the tile was just discovered?). A capped neutral tile will have a negative army delta.
         """
 
-        self.fromTile = None
+        self.fromTile: Tile | None = None
         """If this tile is suspected to have been the target of a move last turn, this is the tile the map algo thinks the move is from."""
 
-        self.toTile = None
+        self.toTile: Tile | None = None
         """If this tile is suspected to have had its army moved, this is the tile the map algo thinks it moved to."""
 
         self.armyMovedHere: bool = False
@@ -75,6 +73,23 @@ class TileDelta(object):
         self.expectedDelta: int = 0
         """The EXPECTED army delta of the tile, this turn."""
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+
+        if self.fromTile is not None:
+            state["fromTile"] = f'{self.fromTile.x},{self.fromTile.y}'
+        if self.toTile is not None:
+            state["toTile"] = f'{self.toTile.x},{self.toTile.y}'
+        return state
+
+    def __setstate__(self, state):
+        if state['fromTile'] is not None:
+            x, y = state['fromTile'].split(',')
+            state["fromTile"] = Tile(int(x), int(y))
+        if state['toTile'] is not None:
+            x, y = state['toTile'].split(',')
+            state["toTile"] = Tile(int(x), int(y))
+        self.__dict__.update(state)
 
 class Tile(object):
     def __init__(self, x, y, tile=TILE_EMPTY, army=0, isCity=False, isGeneral=False, player: typing.Union[None, int] = None, isMountain=False,
@@ -124,6 +139,18 @@ class Tile(object):
         self.movable: typing.List[Tile] = []
         """Tiles movable (left right up down) from this tile, including mountains, cities, obstacles."""
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        if "movable" in state:
+            del state["movable"]
+        if "adjacents" in state:
+            del state["adjacents"]
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.movable = []
+        self.adjacents = []
 
     @property
     def isNeutral(self) -> bool:
@@ -243,8 +270,7 @@ class Tile(object):
             self.delta.newOwner = overridePlayer
             self._player = overridePlayer
 
-        if (army == 0 and self.visible) or army > 0 and (
-                self.army + self.delta.expectedDelta != army or self.delta.oldOwner != self.delta.newOwner):  # Remember Discovered Armies
+        if self.visible:  # Remember Discovered Armies
             oldArmy = self.army
             # logging.info("assigning tile {} with oldArmy {} new army {}?".format(self.toString(), oldArmy, army))
             self.army = army
@@ -381,7 +407,7 @@ class MapBase(object):
         self.replay_url = replay_url
         self.replay_id = replay_id
         if self.replay_id is None:
-            self.replay_id = f'TEST:{str(uuid.uuid4())}'
+            self.replay_id = f'TEST__{str(uuid.uuid4())}'
 
         self.scores: typing.List[Score] = [Score(x, 0, 0, False) for x in range(8)]  # List of Player Scores
 
@@ -393,6 +419,36 @@ class MapBase(object):
 
         self.scoreHistory: typing.List[typing.Union[None, typing.List[Score]]] = [None for i in range(25)]
         self.remainingPlayers = 0
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+
+        if 'notify_tile_captures' in state:
+            del state['notify_tile_captures']
+        if 'notify_tile_deltas' in state:
+            del state['notify_tile_deltas']
+        if 'notify_city_found' in state:
+            del state['notify_city_found']
+        if 'notify_tile_discovered' in state:
+            del state['notify_tile_discovered']
+        if 'notify_tile_revealed' in state:
+            del state['notify_tile_revealed']
+        if 'notify_general_revealed' in state:
+            del state['notify_general_revealed']
+        if 'notify_player_captures' in state:
+            del state['notify_player_captures']
+
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.notify_tile_captures = []
+        self.notify_tile_deltas = []
+        self.notify_city_found = []
+        self.notify_tile_discovered = []
+        self.notify_tile_revealed = []
+        self.notify_general_revealed = []
+        self.notify_player_captures = []
 
     def get_all_tiles(self) -> typing.Generator[Tile, None, None]:
         for row in self.grid:
@@ -631,6 +687,8 @@ class MapBase(object):
         for x in range(self.cols):
             for y in range(self.rows):
                 curTile = self.grid[y][x]
+
+                # logging.info(f'MAP: {self.turn} : {str(curTile)}, {curTile.army}')
                 if curTile.isCity and curTile.player != -1:
                     self.players[curTile.player].cities.append(curTile)
                 if self.army_moved_grid[y][x]:
@@ -775,9 +833,14 @@ class Map(MapBase):
 
         self.apply_server_update(data)
 
-        # TODO get scores to base class somehow
-        #super().up
-        # self.scores = self._getScores(data)  # List of Player Scores
+
+    def __getstate__(self):
+        state = super().__getstate__()
+
+        return state
+
+    def __setstate__(self, state):
+        super().__dict__.update(state)
 
     def apply_server_update(self, data):
         self._apply_server_patch(data)

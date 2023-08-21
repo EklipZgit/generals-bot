@@ -5,13 +5,7 @@
 	EklipZ bot - Tries to play generals lol
 '''
 
-import logging
-from copy import deepcopy
-import time
-import json
-from collections import deque
-from queue import PriorityQueue
-from pprint import pprint, pformat
+import typing
 
 from base.client.map import Tile
 
@@ -76,17 +70,19 @@ def get_player_army_amount_on_path(path, player, startIdx=0, endIdx=1000):
 
 
 class TreeNode(object):
-    def __init__(self, tile, fromTile, turn):
-        self.tile = tile
-        self.fromTile = fromTile
-        self.value = 0
-        self.trunkValue = 0
-        self.trunkDistance = 0
-        self.turn = turn
-        self.gatherTurns = 0
-        self.neutrals = 0
-        self.children = []
-        self.pruned = []
+    def __init__(self, tile: Tile, fromTile: Tile | None, turn: int):
+        self.tile: Tile = tile
+        self.fromTile: Tile | None = fromTile
+        self.value: int = 0
+        self.trunkValue: int = 0
+        self.trunkDistance: int = 0
+        self.turn: int = turn
+        self.gatherTurns: int = 0
+        self.neutrals: int = 0
+        self.children: typing.List[TreeNode] = []
+        """Child gather tree nodes"""
+        self.pruned: typing.List[TreeNode] = []
+        """Children that have been pruned from the actual gather"""
 
     def __gt__(self, other):
         if other == None:
@@ -113,6 +109,12 @@ class TreeNode(object):
         newNode.pruned = [node.deep_clone() for node in self.pruned]
         return newNode
 
+    def __str__(self):
+        return f'[{str(self.tile)} f{str(self.fromTile)} v{self.value} tv{self.trunkValue}]'
+
+    def __repr__(self):
+        return str(self)
+
 
 class Move(object):
     def __init__(self, source: Tile, dest: Tile, move_half=False):
@@ -124,6 +126,7 @@ class Move(object):
             self.army_moved = (source.army - 1) // 2
         self.non_friendly = self.source.player != self.dest.player
 
+
     def __gt__(self, other):
         if other == None:
             return True
@@ -134,16 +137,20 @@ class Move(object):
             return False
         return self.source.army - self.dest.army < other.source.army - other.dest.army
 
-    def __eq__(self, other):
-        if None == other:
-            return False
-        return self.source.army - self.dest.army == other.source.army - other.dest.army
-
     def __str__(self):
         return self.toString()
 
     def __repr__(self):
         return self.toString()
+
+    def __hash__(self):
+        return hash((self.source.x, self.source.y, self.dest.x, self.dest.y, self.move_half))
+
+    def __eq__(self, other):
+        if isinstance(other, Move):
+            return self.source.x == other.source.x and self.source.y == other.source.y and self.dest.x == other.dest.x and self.dest.y and self.move_half == other.move_half
+
+        return False
 
     def toString(self):
         moveHalfString = ""

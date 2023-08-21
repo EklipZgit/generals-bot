@@ -2,158 +2,178 @@
 
 #>
 function Copy-Turn25StartResultsToUnitTest {
-	Param(
-		$DestFolder = "D:\2019_reformat_Backup\generals-bot\Tests\EarlyExpandUtilsTestMaps\SampleTurn25MapsToTryToBeat",
-		$LogFolder = "D:\GeneralsLogs\GroupedLogs"
-	)
-	
-	$items = Get-ChildItem -Path $LogFolder -Recurse -Filter '50.txtmap'
-	foreach ($item in $items)
-	{
-		$newName = ($item.DirectoryName -split '---') | Select -Last 1
-		$item | Copy-Item -Destination "$DestFolder\$newName.txtmap"
-	}
+    Param(
+        $DestFolder = "D:\2019_reformat_Backup\generals-bot\Tests\EarlyExpandUtilsTestMaps\SampleTurn25MapsToTryToBeat",
+        $LogFolder = "D:\GeneralsLogs\GroupedLogs"
+    )
+    
+    $items = Get-ChildItem -Path $LogFolder -Recurse -Filter '50.txtmap'
+    foreach ($item in $items)
+    {
+        $newName = ($item.DirectoryName -split '---') | Select -Last 1
+        $item | Copy-Item -Destination "$DestFolder\$newName.txtmap"
+    }
 }
 
 
 function Copy-WinMapsToWonMapsDirectory {
-	Param(
-		$DestFolder = "D:\2019_reformat_Backup\generals-bot\Tests\WonFullMapVisionSampleMaps",
-		$LogFolder = "D:\GeneralsLogs\GroupedLogs"
-	)
+    Param(
+        $DestFolder = "D:\2019_reformat_Backup\generals-bot\Tests\WonFullMapVisionSampleMaps",
+        $LogFolder = "D:\GeneralsLogs\GroupedLogs"
+    )
 
-	if (-not (Test-Path $DestFolder))
-	{
-		mkdir $DestFolder -Force
-	}
-	
-	$folders = Get-ChildItem -Path $LogFolder -Directory
-	foreach ($folder in $folders)
-	{
-		$mapFiles = Get-ChildItem -Path $folder.FullName -Filter '*.txtmap'
-		$maxFileInt = $mapFiles.BaseName | % { [int] $_ } | Sort -Descending | Select -First 1
-		$maxFileName = "$maxFileInt.txtmap"
-		$maxFileName
-		$maxFilePath = "$($folder.FullName)/$maxFileName"
-		$contentLines = Get-Content -Path $maxFilePath | Select -Skip 1
-		$countsByPlayer = @{
-			([char]'a') = 0;
-			([char]'b') = 0;
-			([char]'c') = 0;
-			([char]'d') = 0;
-			([char]'e') = 0;
-			([char]'f') = 0;
-			([char]'g') = 0;
-			([char]'h') = 0;
-		}
+    if (-not (Test-Path $DestFolder))
+    {
+        mkdir $DestFolder -Force
+    }
+    
+    $folders = Get-ChildItem -Path $LogFolder -Directory
+    foreach ($folder in $folders)
+    {
+        $mapFiles = Get-ChildItem -Path $folder.FullName -Filter '*.txtmap'
+        $maxFileInt = $mapFiles.BaseName | % { [int] $_ } | Sort -Descending | Select -First 1
+        $maxFileName = "$maxFileInt.txtmap"
+        $maxFileName
+        $maxFilePath = "$($folder.FullName)/$maxFileName"
+        $contentLines = Get-Content -Path $maxFilePath | Select -Skip 1
+        $countsByPlayer = @{
+            ([char]'a') = 0;
+            ([char]'b') = 0;
+            ([char]'c') = 0;
+            ([char]'d') = 0;
+            ([char]'e') = 0;
+            ([char]'f') = 0;
+            ([char]'g') = 0;
+            ([char]'h') = 0;
+        }
 
-		foreach ($contentLine in $contentLines)
-		{
-			if ($contentLine.Contains('|'))
-			{
-				break;
-			}
-			
-			foreach ($char in $contentLine.ToCharArray())
-			{
-				if ([char]::IsUpper($char))
-				{
-					continue
-				}
+        foreach ($contentLine in $contentLines)
+        {
+            if ($contentLine.Contains('|'))
+            {
+                break;
+            }
+            
+            foreach ($char in $contentLine.ToCharArray())
+            {
+                if ([char]::IsUpper($char))
+                {
+                    continue
+                }
 
-				if ($countsByPlayer.ContainsKey([char]$char))
-				{
-					$count = $countsByPlayer[[char]$char]
-					$countsByPlayer[[char]$char] = $count + 1
-				}
-			}
-		}
+                if ($countsByPlayer.ContainsKey([char]$char))
+                {
+                    $count = $countsByPlayer[[char]$char]
+                    $countsByPlayer[[char]$char] = $count + 1
+                }
+            }
+        }
 
-		$foundPlayer = $null
-		$wasWin = $false
-		foreach ($char in $countsByPlayer.Keys)
-		{
-			$count = $countsByPlayer[$char]
-			if ($count -gt 0)
-			{
-				if ($null -ne $foundPlayer)
-				{
-					$wasWin = $false
-					break
-				}
+        $foundPlayer = $null
+        $wasWin = $false
+        foreach ($char in $countsByPlayer.Keys)
+        {
+            $count = $countsByPlayer[$char]
+            if ($count -gt 0)
+            {
+                if ($null -ne $foundPlayer)
+                {
+                    $wasWin = $false
+                    break
+                }
 
-				$wasWin = $true
+                $wasWin = $true
 
-				$foundPlayer = $char
-			}
-		}
+                $foundPlayer = $char
+            }
+        }
 
-		if (-not $wasWin)
-		{
-			continue
-		}
+        if (-not $wasWin)
+        {
+            continue
+        }
 
-		$newName = ($folder.BaseName -split '---') | Select -Last 1
-		$newName = "$newName---$foundPlayer--$maxFileInt"
-		Copy-Item -Path $maxFilePath -Destination "$DestFolder\$newName.txtmap"
-	}
+        $newName = ($folder.BaseName -split '---') | Select -Last 1
+        $newName = "$newName---$foundPlayer--$maxFileInt"
+        Copy-Item -Path $maxFilePath -Destination "$DestFolder\$newName.txtmap"
+    }
 }
 
 
 function Create-TestContinuingGameFrom {
-	Param(
-		$TestName = "shouldnt_die_in_some_scenario",
-		$TestCategory = "Defense",
-		$TestMapFile = "path to test map file",
-		$DestFolderRoot = "D:\2019_reformat_Backup\generals-bot\Tests\"
-	)
+    Param(
+        [Parameter(ValueFromPipeline = $true)]
+        $TestMapFile = "path to test map file",
 
-	$destFolder = "$DestFolderRoot\GameContinuationEntries"
-	if (-not (Test-Path $destFolder))
-	{
-		mkdir $destFolder -Force
-	}
+        $TestName = "shouldnt_die_in_some_scenario",
 
-	if ($TestMapFile.EndsWith('png'))
-	{
-		$TestMapFile = $TestMapFile.Replace(".png", ".txtmap")
-	}
-	
-	$map = Get-Item $TestMapFile
-	$turn = $map.BaseName
+        $TestCategory = "Defense",
 
+        $DestFolderRoot = "D:\2019_reformat_Backup\generals-bot\Tests\"
+    )
 
+    $destFolder = "$DestFolderRoot\GameContinuationEntries"
+    if (-not (Test-Path $destFolder))
+    {
+        mkdir $destFolder -Force
+    }
 
-	$earlyFile = Get-Item "$($map.Directory.FullName)/20.txtmap"
-	$earlyContent = $earlyFile | get-content -raw
-	$match = $earlyContent -cmatch '[a-h]G'
-	$player = $MATCHES[0].Trim('G')
+    if ($TestMapFile.EndsWith('png'))
+    {
+        $TestMapFile = $TestMapFile.Replace(".png", ".txtmap")
+    }
+    
+    $map = Get-Item $TestMapFile
+    $turn = $map.BaseName
 
-	$newName = ($map.Directory.BaseName -split '---') | Select -Last 1
-	$newName = "$newName---$player--$turn"
-	$newName = "$($TestName)___$newName.txtmap"
-	$map | Copy-Item -Destination "$DestFolder\$newName" -ErrorAction Stop
+    $earlyFile = Get-Item "$($map.Directory.FullName)/20.txtmap"
+    $earlyContent = $earlyFile | get-content -raw
+    $match = $earlyContent -cmatch '[a-h]G'
+    $player = $MATCHES[0].Trim('G')
 
-	$testFile = "$DestFolderRoot\test_$TestCategory.py"
-	$testFileContent = Get-Content $testFile -ErrorAction Stop
+    $newName = ($map.Directory.BaseName -split '---') | Select -Last 1
+    $newName = "$newName---$player--$turn"
+    $newName = "$($TestName)___$newName.txtmap"
+    $map | Copy-Item -Destination "$DestFolder\$newName" -ErrorAction Stop
 
-	$testFileContent += @"
+    $testFile = "$DestFolderRoot\test_$TestCategory.py"
+    $testFileContent = Get-Content $testFile -ErrorAction Stop
+
+    $countsByPlayer = @{
+        ([char]'a') = 0;
+        ([char]'b') = 0;
+        ([char]'c') = 0;
+        ([char]'d') = 0;
+        ([char]'e') = 0;
+        ([char]'f') = 0;
+        ([char]'g') = 0;
+        ([char]'h') = 0;
+    }
+
+    $testFileContent += @"
     
     def test_$TestName(self):
+        debugMode = True
         mapFile = 'GameContinuationEntries/$newName'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, $turn)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        # simHost = GameSimulatorHost(map)
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player)
-        # alert both players of each others general
+        # Grant the general the same fog vision they had at the turn the map was exported
+        rawMap, _ = self.load_map_and_general(mapFile, $turn)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+
+        # simHost.make_player_afk(enemyGeneral.player)
+
+        # alert enemy of the player general
         simHost.sim.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
-        simHost.sim.reveal_player_general(playerToReveal=enemyGeneral.player, playerToRevealTo=general.player)
 
-        simHost.run_sim(run_real_time=True, turn_time=0.5)
+        self.begin_capturing_logging()
+        simHost.run_sim(run_real_time=debugMode, turn_time=2.0)
 
+        # TODO add asserts for $TestName
 "@
 
-	$testFileContent | Set-Content $testFile -Encoding utf8
+    $testFileContent | Set-Content $testFile -Encoding utf8
 }

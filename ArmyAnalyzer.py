@@ -36,20 +36,25 @@ class InfPathWay:
 SENTINAL = "~"
 
 class ArmyAnalyzer:
-	def __init__(self, map, armyA: Tile, armyB: Tile, maxDist = 1000):
+	def __init__(self, map, armyA: Tile | Army, armyB: Tile | Army, maxDist = 1000):
 		startTime = time.time()
 		self.map = map
-		self.tileA: Tile = armyA
-		self.tileB: Tile = armyB
-		# path chokes are relative to the paths between A and B
-		self.pathChokes: typing.Set[Tile] = set()
-		self.pathways = MapMatrix(map, initVal=None)
-		self.shortestPathWay: PathWay = PathWay(distance=INF)
-
 		if type(armyA) is Army:
 			self.tileA = armyA.tile
+		else:
+			self.tileA: Tile = armyA
+
 		if type(armyB) is Army:
 			self.tileB = armyB.tile
+		else:
+			self.tileB: Tile = armyB
+
+		# path chokes are relative to the paths between A and B
+		self.pathChokes: typing.Set[Tile] = set()
+		self.pathWayLookupMatrix = MapMatrix(map, initVal=None)
+		self.pathWays: typing.List[PathWay] = []
+		self.shortestPathWay: PathWay = PathWay(distance=INF)
+
 		logging.info("ArmyAnalyzer analyzing {} and {}".format(self.tileA.toString(), self.tileB.toString()))
 			
 		# a map of distances from point A
@@ -66,13 +71,24 @@ class ArmyAnalyzer:
 		self.scan()
 		logging.info("ArmyAnalyzer completed for tiles {} and {} in {:.3f}".format(self.tileA.toString(), self.tileB.toString(), time.time() - startTime))
 
+	def __getstate__(self):
+		state = self.__dict__.copy()
+		if "map" in state:
+			del state["map"]
+		return state
+
+	def __setstate__(self, state):
+		self.__dict__.update(state)
+		self.map = None
+
 	def scan(self):
 		chokeCounterMap = {}
 		minPath = PathWay(distance=INF)
 		for tile in self.map.pathableTiles:
 			# build the pathway
-			if tile not in self.pathways:
+			if tile not in self.pathWayLookupMatrix:
 				path = self.build_pathway(tile)
+				self.pathWays.append(path)
 				if path.distance < minPath.distance:
 					minPath = path
 
@@ -86,11 +102,11 @@ class ArmyAnalyzer:
 
 		for tile in self.map.pathableTiles:
 			chokeKey = (self.aMap[tile.x][tile.y], self.bMap[tile.x][tile.y])
-			if tile in self.pathways:
-				path = self.pathways[tile]
+			if tile in self.pathWayLookupMatrix:
+				path = self.pathWayLookupMatrix[tile]
 				if chokeCounterMap[chokeKey] == 1:
 					#logging.info("  (maybe) found choke at {}? Testing for shorter pathway joins".format(tile.toString()))
-					shorter = count(tile.movable, lambda adjTile: adjTile in self.pathways and self.pathways[adjTile].distance < path.distance)
+					shorter = count(tile.movable, lambda adjTile: adjTile in self.pathWayLookupMatrix and self.pathWayLookupMatrix[adjTile].distance < path.distance)
 					if shorter == 0:
 						#logging.info("    OK WE DID FIND A CHOKEPOINT AT {}! adding to self.pathChokes".format(tile.toString()))
 						# Todo this should probably be on pathways lol
@@ -108,7 +124,7 @@ class ArmyAnalyzer:
 		queue.appendleft(tile)
 		while not len(queue) == 0:
 			currentTile = queue.pop()
-			if currentTile in self.pathways:
+			if currentTile in self.pathWayLookupMatrix:
 				continue
 			currentTileDistance = self.aMap[currentTile.x][currentTile.y] + self.bMap[currentTile.x][currentTile.y]
 			if currentTileDistance < 300:
@@ -116,7 +132,7 @@ class ArmyAnalyzer:
 				if currentTileDistance == distance:
 					#logging.info("    adding tile {}".format(currentTile.toString()))
 					path.add_tile(currentTile)
-					self.pathways[currentTile] = path
+					self.pathWayLookupMatrix[currentTile] = path
 
 					for adjacentTile in currentTile.movable:
 						queue.appendleft(adjacentTile)

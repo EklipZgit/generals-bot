@@ -151,3 +151,25 @@ class CityAnalyzerTests(TestBase):
             EklipZBot.add_city_score_to_view_info(cityScore, viewInfo)
 
         self.render_view_info(map, viewInfo, 'whatever')
+    
+    def test_should_take_city_as_quick_as_possible(self):
+        debugMode = True
+        mapFile = 'GameContinuationEntries/should_take_city_as_quick_as_possible___HltY61xph---b--100.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 100)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        # Grant the general the same fog vision they had at the turn the map was exported
+        rawMap, _ = self.load_map_and_general(mapFile, 100)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+
+        # simHost.make_player_afk(enemyGeneral.player)
+
+        # alert enemy of the player general
+        simHost.sim.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        simHost.run_sim(run_real_time=debugMode, turn_time=2.0)
+
+        # TODO add asserts for should_take_city_as_quick_as_possible

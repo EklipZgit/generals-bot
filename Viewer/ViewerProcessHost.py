@@ -55,9 +55,10 @@ class ViewerHost(object):
         logging.info("putting Complete viewer update in queue")
         self._update_queue.put((None, None, True))
         logging.info("joining viewer")
-        self.process.join(1.0)
-        logging.info("killing viewer")
-        self.process.kill()
+        if self.process.is_alive():
+            self.process.join(1.0)
+            logging.info("killing viewer")
+            self.process.kill()
 
     def check_viewer_closed(self) -> bool:
         try:

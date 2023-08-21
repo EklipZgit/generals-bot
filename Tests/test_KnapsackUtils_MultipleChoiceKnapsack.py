@@ -1,0 +1,251 @@
+import inspect
+import random
+import time
+import typing
+import unittest
+
+import KnapsackUtils
+import SearchUtils
+from SearchUtils import dest_breadth_first_target
+from Tests.TestBase import TestBase
+from base.client.map import Tile
+from base.viewer import GeneralsViewer
+from DangerAnalyzer import DangerAnalyzer
+
+
+class KnapsackUtils_MCKP_Tests(TestBase):
+
+
+    def test_multiple_choice_knapsack_solver__more_capacity_than_items__0_1_base_case__includes_all(self):
+        groupItemWeightValues = [
+            (0, 'a', 1, 1),
+            (0, 'b', 1, 1),
+            (0, 'c', 1, 1),
+            (0, 'd', 1, 1),
+            (0, 'e', 1, 1),
+            (0, 'f', 1, 1),
+            (0, 'g', 1, 1),
+            (0, 'h', 1, 1),
+            (0, 'i', 1, 1),
+            (0, 'j', 1, 1),
+            (0, 'k', 1, 1),
+            (0, 'l', 1, 1),
+            (0, 'm', 1, 1),
+            (0, 'n', 1, 1),
+            (0, 'o', 1, 1),
+            (0, 'p', 1, 1),
+            (0, 'q', 1, 1),
+            (0, 'r', 1, 1),
+            (0, 's', 1, 1),
+            (0, 't', 1, 1),
+            (0, 'u', 1, 1),
+            (0, 'v', 1, 1),
+            (0, 'w', 1, 1),
+            (0, 'x', 1, 1),
+            (0, 'y', 1, 1),
+            (0, 'z', 1, 1)
+        ]
+
+        # give each own group for this test
+        i = 0
+        for groupItemWeightValue in groupItemWeightValues:
+            (group, item, weight, value) = groupItemWeightValue
+            groupItemWeightValues[i] = i, item, weight, value
+            i += 1
+
+        maxValue, items = self.execute_multiple_choice_knapsack_with_tuples(groupItemWeightValues, capacity=50)
+
+        #should have included every letter once, as this boils down to the 0-1 knapsack problem
+        self.assertEqual(26, maxValue)
+        self.assertEqual(26, len(items))
+
+    def test_multiple_choice_knapsack_solver__respects_groups(self):
+        groupItemWeightValues = [
+            (0, 'a', 1, 2),
+            (0, 'b', 1, 1),
+            (0, 'c', 1, 1),
+            (0, 'd', 1, 1),
+            (0, 'e', 1, 1),
+            (0, 'f', 1, 1),
+            (0, 'g', 1, 1),
+            (0, 'h', 1, 1),
+            (0, 'i', 1, 1),
+            (0, 'j', 1, 1),
+            (0, 'k', 1, 1),
+            (0, 'l', 1, 1),
+            (0, 'm', 1, 1),
+            (0, 'n', 1, 1),
+            (0, 'o', 1, 1),
+            (0, 'p', 1, 1),
+            (0, 'q', 1, 1),
+            (0, 'r', 1, 1),
+            (0, 's', 1, 1),
+            (0, 't', 1, 1),
+            (0, 'u', 1, 1),
+            (0, 'v', 1, 1),
+            (0, 'w', 1, 1),
+            (0, 'x', 1, 1),
+            (0, 'y', 1, 1),
+            (0, 'z', 1, 1)
+        ]
+
+        # give first 10 own group, rest are 0
+        i = 0
+        for groupItemWeightValue in groupItemWeightValues:
+            if i >= 10:
+                break
+            (group, item, weight, value) = groupItemWeightValue
+            groupItemWeightValues[i] = i, item, weight, value
+            i += 1
+
+
+        maxValue, items = self.execute_multiple_choice_knapsack_with_tuples(groupItemWeightValues, capacity=50)
+
+        #should have included every letter from first 10 once, and a should be the group '0' entry worth 2, so value 11
+        self.assertEqual(11, maxValue)
+        self.assertEqual(10, len(items))
+
+
+    def test_multiple_choice_knapsack_solver__with_constrained_capacity__finds_best_group_subset(self):
+        groupItemWeightValues = [
+            (0, 'a', 7, 10),
+            (0, 'b', 5, 8),
+            (0, 'c', 2, 5),
+            (1, 'd', 5, 5),
+            (1, 'e', 2, 3),
+        ]
+
+        maxValue, items = self.execute_multiple_choice_knapsack_with_tuples(groupItemWeightValues, capacity=7)
+
+        # at 7 capacity, we expect it to pick b (5, 8) and e (2, 3) for 11 at weight 7
+        self.assertEqual(11, maxValue)
+        self.assertEqual(2, len(items))
+
+
+    def test_multiple_choice_knapsack_solver__with_constrained_capacity__handles_group_gaps(self):
+        groupItemWeightValues = [
+            (0, 'a', 7, 10),
+            (0, 'b', 5, 8),
+            (0, 'c', 2, 5),
+            (1, 'd', 5, 5),
+            (1, 'e', 2, 3),
+        ]
+
+        maxValue, items = self.execute_multiple_choice_knapsack_with_tuples(groupItemWeightValues, capacity=7)
+
+        # at 7 capacity, we expect it to pick b (5, 8) and e (2, 3) for 11 at weight 7
+        self.assertEqual(11, maxValue)
+        self.assertEqual(2, len(items))
+
+
+
+    def test_multiple_choice_knapsack_solver__should_not_have_insane_time_complexity(self):
+        # envision our worst case gather scenario, lets say a depth 75 gather. We might want to run this 50 times against 200 items from maybe 40 groups each time
+        # gathers may have a large max value so lets generate values on the scale of 150
+        simulatedItemCount = 200
+        simulatedGroupCount = 50
+        maxValuePerItem = 150
+        maxWeightPerItem = 5
+        capacity = 75
+
+        groupItemWeightValues = self.generate_item_test_set(simulatedItemCount, simulatedGroupCount, maxWeightPerItem, maxValuePerItem)
+
+        start = time.perf_counter()
+        maxValue, items = self.execute_multiple_choice_knapsack_with_tuples(groupItemWeightValues, capacity=capacity)
+        self.assertGreater(maxValue, 0)
+        # doubt we ever find less than this
+        self.assertGreater(len(items), 20)
+        endTime = time.perf_counter()
+        duration = endTime - start
+        self.assertLess(duration, 0.03)
+
+    def test_multiple_choice_knapsack_solver__should_not_have_insane_time_complexity__high_item_count_low_group_count(self):
+        # envision our worst case gather scenario, lets say a depth 75 gather. We might want to run this 50 times against 200 items from maybe 40 groups each time
+        # gathers may have a large max value so lets generate values on the scale of 150
+        simulatedItemCount = 400
+        simulatedGroupCount = 21
+        maxValuePerItem = 150
+        maxWeightPerItem = 20
+        capacity = 75
+
+        groupItemWeightValues = self.generate_item_test_set(simulatedItemCount, simulatedGroupCount, maxWeightPerItem, maxValuePerItem)
+
+        start = time.perf_counter()
+        maxValue, items = self.execute_multiple_choice_knapsack_with_tuples(groupItemWeightValues, capacity=capacity)
+        self.assertGreater(maxValue, 0)
+        # doubt we ever find less than this
+        self.assertGreater(len(items), 20)
+        endTime = time.perf_counter()
+        duration = endTime - start
+        self.assertLess(duration, 0.03)
+
+    def test_multiple_choice_knapsack_solver__should_not_have_insane_time_complexity__low_item_count_same_group_count(self):
+        # TIME PERFORMANCE NOTES:
+        # Scales exponentially with item count, 100 items = 15ms, 200 items = 50ms, 400 items = 160ms
+        # Lower numbers of groups slightly increase the runtime by like 20% linearly (so, 50 ms 0-1 to 56ms ish with a pure 50/50 split on groups).
+        # value does not matter at all to runtime
+        # average item weight does slightly change it, see below for how it interacts with capacity
+        # capacity is the big one, the less items you can fit in the solution regardless of input size, the faster it runs.
+        # capacity 750 with 200 items = 570ms (now 80ms)
+        # capacity 750 with 100 items = 138ms (now 27ms)
+        # capacity 75 with 400 items = 138ms (now 20ms)
+        # capacity 75 with 400 items, avg weight 10 = 217ms (now 15ms)
+        # capacity 75 with 400 items, avg weight 2 = 246ms (now 20ms)
+        simulatedItemCount = 400
+        simulatedGroupCount = 1
+        maxValuePerItem = 150
+        maxWeightPerItem = 5
+        capacity = 750
+
+        groupItemWeightValues = self.generate_item_test_set(simulatedItemCount, simulatedGroupCount, maxWeightPerItem, maxValuePerItem)
+
+        start = time.perf_counter()
+        maxValue, items = self.execute_multiple_choice_knapsack_with_tuples(groupItemWeightValues, capacity=capacity)
+        self.assertGreater(maxValue, 0)
+        # doubt we ever find less than this
+        self.assertEqual(len(items), simulatedGroupCount)
+        endTime = time.perf_counter()
+        duration = endTime - start
+
+        self.assertLess(duration, 0.15)
+
+    def execute_multiple_choice_knapsack_with_tuples(
+            self,
+            groupItemWeightValues: typing.List[typing.Tuple[int, object, int, int]],
+            capacity: int):
+        groupItemWeightValues = [t for t in sorted(groupItemWeightValues)]
+        items = []
+        groups = []
+        weights = []
+        values = []
+
+        for (group, item, weight, value) in groupItemWeightValues:
+            items.append(item)
+            groups.append(group)
+            weights.append(weight)
+            values.append(value)
+
+        return KnapsackUtils.solve_multiple_choice_knapsack(items, capacity, weights, values, groups, noLog=False, forceLongRun=True)
+
+    def generate_item_test_set(self, simulatedItemCount, simulatedGroupCount, maxWeightPerItem, maxValuePerItem):
+        groupItemWeightValues = []
+        r = random.Random()
+
+        # at least one per group
+        for i in range(simulatedGroupCount):
+            item = i
+            group = i
+            value = r.randint(0, maxValuePerItem)
+            weight = r.randint(1, maxWeightPerItem)
+            groupItemWeightValues.append((group, item, weight, value))
+
+        # then random groups after that
+        for i in range(simulatedItemCount - simulatedGroupCount):
+            item = i + simulatedGroupCount
+            group = r.randint(0, simulatedGroupCount - 1)
+            value = r.randint(0, maxValuePerItem)
+            weight = r.randint(1, maxWeightPerItem)
+            groupItemWeightValues.append((group, item, weight, value))
+
+        return groupItemWeightValues
+

@@ -1,0 +1,14 @@
+|    |    |    |    |    |    |
+b5   b1   M
+b5   b5   M
+     bG1  M
+M    b1   M    M    M    M    M
+M    b1   b10  b1   b1   b20  b1
+b1   a18  M    M    M    M    M
+M    a1   b1   M    M    M    M
+b1   a1   M    M    M    M    M
+M    a1   b9   b1   b1   b1   b1
+M    a1   a1   a1   a1   a1   aG42
+|    |    |    |    |    |    |
+bot_player_index=1
+loadAsIs=True

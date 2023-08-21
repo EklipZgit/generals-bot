@@ -1,0 +1,47 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+M              M    M              M                                       M    M
+          M         M    M    M         M              M                   M    M
+M                                            M                             M
+               M    M              M    M                        M    M
+M                                            M         M    M         M    b3   M    M
+     M                                                           a7   a1   b3   b3   b3
+               M    M                             a2   a7   a3   a3   b4   b1   b2   b2
+     M    M    M         M              M         a2   a2   a3   M    b4   b4   b3   b3
+M    M                        M         a2   M    M    a15  a2   a3   a4   b4   b3   b5
+                    M                   a2   a2   a15  a2   a2   b2   b2   b4   b4
+     M                   M    M         a3   a2   M    a3   b3   M    b4   b3   b4
+          M              C40       M    a1   a18  b2   M    b2   b5   b5   b3   b4
+          M    M         a2        a2   a2   a3   b4   b2   b2   M    M    b3
+M         M              a2   M    M    a2   b2   b2   b5   b5   b2   b2   b4   a3
+                    M    a2             a2   M    b5   M    b2   b2   b2   b2
+M              M    a2   a2   M    M    a2   b2   b2   b2   b2   b2   M    b2   a6
+                    a2   M    a4   a4   a2   a2   a2   a2   b2   M    a3   b4   M
+     M         M    a3   a2   a2   M    a3   a3   M    a2   M    a4   a5   a3   a4
+          M         b1   b1   a6   a3   a3   M    b1   b1   a3   a3        M         M
+          M    M    b3   b1   M    b2   a39  a1   a1   a1   a1        M
+               M    bC7  b1   M    b4   b6   b2   M    a1   M         M
+                    bC8  bG97 b3   b3   b8   b2   b2   b2        M    M              M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=9,6
+turn=406
+bot_player_index=1
+aTiles=91
+aScore=334
+aStandingArmy=243
+aStars=55
+aCityCount=3
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=73
+bScore=313
+bStandingArmy=240
+bStars=49
+bCityCount=3
+bGeneral=5,21
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=0

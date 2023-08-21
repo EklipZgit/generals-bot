@@ -191,7 +191,7 @@ class Tile(object):
         self._player = value
 
     def __repr__(self):
-        return "(%d,%d) %d (%d)" % (self.x, self.y, self.tile, self.army)
+        return f"({self.x:d},{self.y:d}) t{self.tile:d} a({self.army:d})"
 
     '''def __eq__(self, other):
             return (other != None and self.x==other.x and self.y==other.y)'''
@@ -210,7 +210,15 @@ class Tile(object):
         return self.toString()
 
     def toString(self) -> str:
-        return "{},{}".format(self.x, self.y)
+        return f"{self.x},{self.y}"
+
+    def __hash__(self):
+        return hash((self.x, self.y))
+
+    def __eq__(self, other):
+        if isinstance(other, Tile):
+            return self.x == other.x and self.y == other.y
+        return False
 
     # returns true if an army was likely moved to this tile, false if not.
     def update(
@@ -754,6 +762,9 @@ class MapBase(object):
         for x in range(self.cols):
             for y in range(self.rows):
                 tile = self.grid[y][x]
+                if len(tile.adjacents) != 0:
+                    continue
+
                 movableTile = self.GetTile(x - 1, y)
                 if movableTile is not None and movableTile not in tile.movable:
                     tile.adjacents.append(movableTile)
@@ -797,6 +808,7 @@ class MapBase(object):
         for gen in self.generals:
             if gen is not None:
                 queue.append(gen)
+                self.players[gen.player].general = gen
 
         while len(queue) > 0:
             tile = queue.pop(0)

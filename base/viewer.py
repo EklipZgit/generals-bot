@@ -8,10 +8,14 @@ import os
 import queue
 import sys
 import traceback
+import typing
 from multiprocessing import Queue
 
 import pygame
 from pygame import *
+
+import BotLogging
+import SearchUtils
 from ArmyAnalyzer import *
 
 from ViewInfo import TargetStyle, ViewInfo
@@ -161,6 +165,7 @@ class GeneralsViewer(object):
             self._viewInfo = viewInfo
         if map is not None:
             self._map = map
+            self._map.init_grid_movable()
             self._scores = sorted(map.scores, key=lambda score: score.total, reverse=True)  # Sort Scores
 
     def get_line_arrow(self, r, g, b, width=3):
@@ -169,11 +174,11 @@ class GeneralsViewer(object):
         # setting this color as colorkey, so the surface is empty
         s.fill(WHITE)
         s.set_colorkey(WHITE)
-        pygame.draw.line(s, (r, g, b), ((self.cellWidth) // 2 + CELL_MARGIN, 0),
-                         ((self.cellWidth) // 2 + CELL_MARGIN, self.cellHeight), width)
-        pygame.draw.line(s, (r, g, b), ((self.cellWidth) // 2 + CELL_MARGIN, self.cellHeight),
+        pygame.draw.line(s, (r, g, b), (self.cellWidth // 2 + CELL_MARGIN, 0),
+                         (self.cellWidth // 2 + CELL_MARGIN, self.cellHeight), width)
+        pygame.draw.line(s, (r, g, b), (self.cellWidth // 2 + CELL_MARGIN, self.cellHeight),
                          (self.cellWidth * 2.5 / 8 + CELL_MARGIN, self.cellHeight * 5 / 8), width)
-        pygame.draw.line(s, (r, g, b), ((self.cellWidth) // 2 + CELL_MARGIN, self.cellHeight),
+        pygame.draw.line(s, (r, g, b), (self.cellWidth // 2 + CELL_MARGIN, self.cellHeight),
                          (self.cellWidth * 5.5 / 8 + CELL_MARGIN, self.cellHeight * 5 / 8), width)
         return s
 
@@ -184,8 +189,8 @@ class GeneralsViewer(object):
         s.fill(WHITE)
         s.set_colorkey(WHITE)
         # pygame.draw.line(s, (r, g, b), ((CELL_MARGIN + self.cellWidth) // 2, 0), ((CELL_MARGIN + self.cellWidth) // 2, self.cellHeight + 1), width)
-        pygame.draw.line(s, (r, g, b), ((self.cellWidth) // 2 + CELL_MARGIN, 0),
-                         ((self.cellWidth) // 2 + CELL_MARGIN, self.cellHeight), width)
+        pygame.draw.line(s, (r, g, b), (self.cellWidth // 2 + CELL_MARGIN, 0),
+                         (self.cellWidth // 2 + CELL_MARGIN, self.cellHeight), width)
         return s
 
     def _initViewier(self, position):
@@ -228,17 +233,8 @@ class GeneralsViewer(object):
         self.red_line = DirectionalShape(self.get_line(225, 15, 15))
         self.repId = self._map.replay_url.split("/").pop()
 
-        fileSafeUserName = self._map.usernames[self._map.player_index]
-        fileSafeUserName = fileSafeUserName.replace("[Bot] ", "")
-        fileSafeUserName = fileSafeUserName.replace("[Bot]", "")
-        # logging.info("\n\n\nFILE SAFE USERNAME\n {}\n\n".format(fileSafeUserName))
-        self.logDirectory = "D:\\GeneralsLogs\\{}-{}".format(fileSafeUserName, self.repId)
+        self.logDirectory = BotLogging.get_file_logging_directory(self._map.usernames[self._map.player_index], self.repId)
 
-        if not os.path.exists(self.logDirectory):
-            try:
-                os.makedirs(self.logDirectory)
-            except:
-                logging.info("Couldn't create dir")
 
     def run_main_viewer_loop(self, alignTop=True, alignLeft=True):
         while not self._receivedUpdate:  # Wait for first update
@@ -256,7 +252,8 @@ class GeneralsViewer(object):
                     logging.info(f'GeneralsViewer zombied with no game start, self-terminating after 10 seconds')
                     self._event_queue.put(False)
                     self._killed = True
-                    break
+                    self._receivedUpdate = True
+                    return
                 pass
 
         x = 3 + self.offset1080Above1440p
@@ -265,7 +262,7 @@ class GeneralsViewer(object):
 
         y = 3 - 1080
         if not alignTop:
-            y = 3 + (self.cellHeight + CELL_MARGIN) * self._map.rows - 1080
+            y = 20 # bottom monitor
 
         self._initViewier((x, y))
 
@@ -307,7 +304,7 @@ class GeneralsViewer(object):
             except queue.Empty:
                 elapsed = time.perf_counter() - self.last_update_received
                 logging.info(f'No GeneralsViewer update received in {elapsed:.2f} seconds')
-                if elapsed > 10.0:
+                if elapsed > 60.0:
                     logging.info(f'GeneralsViewer zombied, self-terminating after 10 seconds')
                     done = True
                     self._event_queue.put(False)
@@ -377,19 +374,19 @@ class GeneralsViewer(object):
             pos_top = self._window_size[1] - self.infoRowHeight - self.scoreRowHeight
             score_width = self._window_size[0] / len(self._map.players)
             # self._scores = sorted(update.scores, key=lambda general: general['total'], reverse=True)
-            if (self._map != None):
+            if self._map is not None:
                 playersByScore = sorted(self._map.players, key=lambda player: player.score, reverse=True)  # Sort Scores
 
                 for i, player in enumerate(playersByScore):
-                    if player != None:
+                    if player is not None:
                         score_color = PLAYER_COLORS[player.index]
-                        if (player.leftGame):
+                        if player.leftGame:
                             score_color = BLACK
-                        if (player.dead):
+                        if player.dead:
                             score_color = GRAY_DARK
                         pygame.draw.rect(self._screen, score_color,
                                          [score_width * i, pos_top, score_width, self.scoreRowHeight])
-                        if (self._viewInfo.targetPlayer == player.index):
+                        if self._viewInfo.targetPlayer == player.index:
                             pygame.draw.rect(self._screen, GRAY,
                                              [score_width * i, pos_top, score_width, self.scoreRowHeight], 1)
                         userName = self._map.usernames[player.index]
@@ -429,7 +426,7 @@ class GeneralsViewer(object):
                     pos_left = (CELL_MARGIN + self.cellWidth) * column + CELL_MARGIN
                     pos_top = (CELL_MARGIN + self.cellHeight) * row + CELL_MARGIN
 
-                    if (tile in self._map.generals):  # General
+                    if tile in self._map.generals:  # General
                         # Draw Plus
                         pygame.draw.rect(self._screen, color,
                                          [pos_left + self.plusDepth, pos_top, self.cellWidth - self.plusDepth * 2,
@@ -437,9 +434,8 @@ class GeneralsViewer(object):
                         pygame.draw.rect(self._screen, color,
                                          [pos_left, pos_top + self.plusDepth, self.cellWidth,
                                           self.cellHeight - self.plusDepth * 2])
-                    elif (tile.isCity):  # City
+                    elif tile.isCity:  # City
                         # Draw Circle
-
                         pos_left_circle = int(pos_left + (self.cellWidth / 2))
                         pos_top_circle = int(pos_top + (self.cellHeight / 2))
                         pygame.draw.circle(self._screen, color, [pos_left_circle, pos_top_circle],
@@ -465,10 +461,10 @@ class GeneralsViewer(object):
 
             self.draw_division_borders()
 
-            if (self._viewInfo.redGatherNodes != None):
+            if self._viewInfo.redGatherNodes is not None:
                 redArrow = DirectionalShape(self.get_line_arrow(255, 0, 0, width=2))
                 self.drawGathers(self._viewInfo.redGatherNodes, redArrow)
-            if (self._viewInfo.gatherNodes != None):
+            if self._viewInfo.gatherNodes is not None:
                 self.drawGathers(self._viewInfo.gatherNodes, self.lineArrow)
 
             # if self._viewInfo.board_analysis and self._viewInfo.board_analysis.intergeneral_analysis:
@@ -497,15 +493,15 @@ class GeneralsViewer(object):
             alphaDec = 4
             alphaMin = 135
             path = None
-            if self._viewInfo.currentPath != None:
+            if self._viewInfo.currentPath is not None:
                 path = self._viewInfo.currentPath
             self.draw_path(path, 0, 200, 50, alpha, alphaDec, alphaMin)
 
-            if self._viewInfo.dangerAnalyzer != None and self._viewInfo.dangerAnalyzer.anyThreat:
+            if self._viewInfo.dangerAnalyzer is not None and self._viewInfo.dangerAnalyzer.anyThreat:
 
                 for threat in [self._viewInfo.dangerAnalyzer.fastestVisionThreat, self._viewInfo.dangerAnalyzer.fastestThreat,
                                self._viewInfo.dangerAnalyzer.highestThreat]:
-                    if threat == None:
+                    if threat is None:
                         continue
                     # Draw danger path
                     # print("drawing path")
@@ -515,6 +511,8 @@ class GeneralsViewer(object):
                     self.draw_path(threat.path, 150, 0, 0, alpha, alphaDec, alphaMin)
 
             for (tile, targetStyle) in self._viewInfo.redTargetedTiles:
+                if tile is None:
+                    continue
                 pos_left = (CELL_MARGIN + self.cellWidth) * tile.x + CELL_MARGIN
                 pos_top = (CELL_MARGIN + self.cellHeight) * tile.y + CELL_MARGIN
                 pos_left_circle = int(pos_left + (self.cellWidth / 2))
@@ -525,7 +523,7 @@ class GeneralsViewer(object):
                 pygame.draw.circle(self._screen, targetColor, [pos_left_circle, pos_top_circle],
                                    int(self.cellWidth / 2) - 5, 1)
             for i, approx in enumerate(self._viewInfo.generalApproximations):
-                if (approx[2] > 0):
+                if approx[2] > 0:
                     pColor = PLAYER_COLORS[i]
                     pos_left = (CELL_MARGIN + self.cellWidth) * approx[0] + CELL_MARGIN
                     pos_top = (CELL_MARGIN + self.cellHeight) * approx[1] + CELL_MARGIN
@@ -566,7 +564,7 @@ class GeneralsViewer(object):
             pygame.draw.line(s, BLACK, (0, self.cellHeight), (self.cellWidth, 0), 4)
             pygame.draw.line(s, RED, (0, self.cellHeight), (self.cellWidth, 0), 2)
             # print("val")
-            if (self._map != None and self._viewInfo != None and self._viewInfo.evaluatedGrid != None and len(
+            if (self._map is not None and self._viewInfo is not None and self._viewInfo.evaluatedGrid is not None and len(
                     self._viewInfo.evaluatedGrid) > 0):
                 # print("if")
                 for row in range(self._map.rows):
@@ -575,7 +573,7 @@ class GeneralsViewer(object):
                         countEvaluated = int(self._viewInfo.evaluatedGrid[column][row] +
                                              self._viewInfo.lastEvaluatedGrid[column][row])
                         # print("loopVal")
-                        if (countEvaluated > 0):
+                        if countEvaluated > 0:
                             # print("CountVal: {},{}: {}".format(column, row, countEvaluated))
                             pos_left = (CELL_MARGIN + self.cellWidth) * column + CELL_MARGIN
                             pos_top = (CELL_MARGIN + self.cellHeight) * row + CELL_MARGIN
@@ -630,76 +628,76 @@ class GeneralsViewer(object):
                     #         self._screen.blit(self.small_font(textVal, color_font),
                     #                           (pos_left + self.cellWidth / 3, pos_top + 2.2 * self.cellHeight / 3))
 
-                    if (self._viewInfo.topRightGridText != None):
+                    if self._viewInfo.topRightGridText is not None:
                         text = self._viewInfo.topRightGridText[column][row]
-                        if (text != None):
+                        if text is not None:
                             textVal = clean_up_possible_float(text)
-                            if (text == -1000000):  # then was skipped
+                            if text == -1000000:  # then was skipped
                                 textVal = "x"
                             self._screen.blit(self.small_font(textVal, color_small_font),
                                               (pos_left + self.cellWidth - self.get_text_offset_from_right(textVal),
                                                pos_top - 2))
 
-                    if (self._viewInfo.midRightGridText != None):
+                    if self._viewInfo.midRightGridText is not None:
                         text = self._viewInfo.midRightGridText[column][row]
-                        if (text != None):
+                        if text is not None:
                             textVal = clean_up_possible_float(text)
-                            if (text == -1000000):  # then was skipped
+                            if text == -1000000:  # then was skipped
                                 textVal = "x"
                             self._screen.blit(self.small_font(textVal, color_small_font),
                                               (pos_left + self.cellWidth - self.get_text_offset_from_right(textVal),
                                                pos_top + self.cellHeight / 3))
 
-                    if (self._viewInfo.bottomMidRightGridText != None):
+                    if self._viewInfo.bottomMidRightGridText is not None:
                         text = self._viewInfo.bottomMidRightGridText[column][row]
-                        if (text != None):
+                        if text is not None:
                             textVal = clean_up_possible_float(text)
-                            if (text == -1000000):  # then was skipped
+                            if text == -1000000:  # then was skipped
                                 textVal = "x"
                             self._screen.blit(self.small_font(textVal, color_small_font),
                                               (pos_left + self.cellWidth - self.get_text_offset_from_right(textVal),
                                                pos_top + 1.6 * self.cellHeight / 3))
 
-                    if (self._viewInfo.bottomRightGridText != None):
+                    if self._viewInfo.bottomRightGridText is not None:
                         text = self._viewInfo.bottomRightGridText[column][row]
-                        if (text != None):
+                        if text is not None:
                             textVal = clean_up_possible_float(text)
-                            if (text == -1000000):  # then was skipped
+                            if text == -1000000:  # then was skipped
                                 textVal = "x"
                             self._screen.blit(self.small_font(textVal, color_small_font),
                                               (pos_left + self.cellWidth - self.get_text_offset_from_right(textVal),
                                                pos_top + 2.2 * self.cellHeight / 3))
 
-                    if (self._viewInfo.bottomLeftGridText != None):
+                    if self._viewInfo.bottomLeftGridText is not None:
                         text = self._viewInfo.bottomLeftGridText[column][row]
-                        if (text != None):
+                        if text is not None:
                             textVal = clean_up_possible_float(text)
-                            if (text == -1000000):  # then was skipped
+                            if text == -1000000:  # then was skipped
                                 textVal = "x"
                             self._screen.blit(self.small_font(textVal, color_small_font),
                                               (pos_left + 2, pos_top + 2.2 * self.cellHeight / 3))
 
-                    if (self._viewInfo.bottomMidLeftGridText != None):
+                    if self._viewInfo.bottomMidLeftGridText is not None:
                         text = self._viewInfo.bottomMidLeftGridText[column][row]
-                        if (text != None):
+                        if text is not None:
                             textVal = clean_up_possible_float(text)
-                            if (text == -1000000):  # then was skipped
+                            if text == -1000000:  # then was skipped
                                 textVal = "x"
                             self._screen.blit(self.small_font(textVal, color_small_font),
                                               (pos_left + 2, pos_top + 1.6 * self.cellHeight / 3))
 
-                    if (self._viewInfo.midLeftGridText != None):
+                    if self._viewInfo.midLeftGridText is not None:
                         text = self._viewInfo.midLeftGridText[column][row]
-                        if (text != None):
+                        if text is not None:
                             textVal = clean_up_possible_float(text)
-                            if (text == -1000000):  # then was skipped
+                            if text == -1000000:  # then was skipped
                                 textVal = "x"
                             self._screen.blit(self.small_font(textVal, color_small_font),
                                               (pos_left + 2, pos_top + self.cellHeight / 3))
 
             self.draw_armies()
 
-            if self._viewInfo.targetingArmy != None:
+            if self._viewInfo.targetingArmy is not None:
                 self.draw_square(self._viewInfo.targetingArmy.tile, 3, 1, 1, 1, 254, self.square_inner_3)
 
             # Go ahead and update the screen with what we've drawn.
@@ -725,7 +723,7 @@ class GeneralsViewer(object):
         return WHITE
 
     def draw_square(self, tile, width, R, G, B, alpha, shape=None):
-        if shape == None:
+        if shape is None:
             shape = self.square
         key = BLACK
         color = (min(255, R), min(255, G), min(255, B))
@@ -761,7 +759,7 @@ class GeneralsViewer(object):
 
         # self.draw_path(army.path, R, G, B, alphaStart, 0, 0)
 
-        if army.expectedPath != None:
+        if army.expectedPath is not None:
             self.draw_path(army.expectedPath, 255, 0, 0, 150, 10, 100)
 
         pos_left = (CELL_MARGIN + self.cellWidth) * tile.x + CELL_MARGIN
@@ -784,7 +782,7 @@ class GeneralsViewer(object):
                 self.draw_square(choke, 1, chokeColor[0], chokeColor[1], chokeColor[2], 230, self.square_inner_1)
 
         if draw_pathways:
-            self.draw_pathways(analysis.pathways)
+            self.draw_path_ways(analysis.pathWays, (20, 150, 150), (255, 50, 50))
 
     def draw_line_between_tiles(self, sourceTile: Tile, destTile: Tile, color: typing.Tuple[int, int, int], alpha=255):
         pos_left = 0
@@ -796,53 +794,61 @@ class GeneralsViewer(object):
         (r, g, b) = color
         line = self.get_line(r, g, b)
 
-        if (xDiff > 0):
+        if xDiff > 0:
             pos_left = (CELL_MARGIN + self.cellWidth) * sourceTile.x + self.cellWidth // 2 + CELL_MARGIN
             pos_top = (CELL_MARGIN + self.cellHeight) * sourceTile.y + CELL_MARGIN
             line = pygame.transform.rotate(line, -90)
-        if (xDiff < 0):
+        if xDiff < 0:
             pos_left = (CELL_MARGIN + self.cellWidth) * sourceTile.x - self.cellWidth // 2 + CELL_MARGIN
             pos_top = (CELL_MARGIN + self.cellHeight) * sourceTile.y + CELL_MARGIN
             line = pygame.transform.rotate(line, 90)
-        if (yDiff > 0):
+        if yDiff > 0:
             pos_left = (CELL_MARGIN + self.cellWidth) * sourceTile.x + CELL_MARGIN
             pos_top = (CELL_MARGIN + self.cellHeight) * sourceTile.y + self.cellHeight // 2 + CELL_MARGIN
             line = pygame.transform.rotate(line, 180)
-        if (yDiff < 0):
+        if yDiff < 0:
             pos_left = (CELL_MARGIN + self.cellWidth) * sourceTile.x + CELL_MARGIN
             pos_top = (CELL_MARGIN + self.cellHeight) * sourceTile.y - self.cellHeight // 2 + CELL_MARGIN
 
         line.set_alpha(alpha)
         self._screen.blit(line, (pos_left - 1, pos_top - 1))
 
-    def draw_pathways(self, pathways: MapMatrix):
-        allPathWays = pathways.values()
-        uniquePathways: typing.Set[PathWay] = set(allPathWays)
-        logging.info(
-            "pathways.values() {} vs uniquePathways {}".format(len(allPathWays), len(uniquePathways)))
+    def draw_path_ways(
+            self,
+            pathWays: typing.List[PathWay],
+            shortestColor: typing.Tuple[int, int, int],
+            longestColor: typing.Tuple[int, int, int]):
         minLength = INF
         maxLength = 0 - INF
-        for pathway in uniquePathways:
-            if minLength > pathway.distance:
-                minLength = pathway.distance
-            if maxLength < pathway.distance and len(pathway.tiles) > 1:
-                maxLength = pathway.distance
+        for pathWay in pathWays:
+            if minLength > pathWay.distance:
+                minLength = pathWay.distance
+            if maxLength < pathWay.distance and len(pathWay.tiles) > 1:
+                maxLength = pathWay.distance
 
-        for pathway in uniquePathways:
+        for pathWay in pathWays:
             drawnFrom = set()
             drawingFrontier = deque()
-            drawingFrontier.appendleft(pathway.seed_tile)
+            drawingFrontier.appendleft(pathWay.seed_tile)
+            if pathWay.seed_tile is None:
+                logging.info('WTF, pathway seed tile was none...?')
+                continue
             while len(drawingFrontier) != 0:
                 tile = drawingFrontier.pop()
+                tile = self._map.GetTile(tile.x, tile.y)
+                if tile is None:
+                    logging.info('WTF, none tile in pathway draw frontier??')
+                    continue
                 if tile not in drawnFrom:
                     drawnFrom.add(tile)
                     for adj in tile.movable:
+                        if adj is None:
+                            logging.info(f'WTF, moveable tile was none in tile {str(tile)}...?')
+                            continue
                         if adj not in drawnFrom:
-                            if adj in pathway.tiles:
-                                g = rescale_value(pathway.distance, minLength, maxLength, 255, 55)
-                                r = rescale_value(pathway.distance, minLength, maxLength, 55, 255)
-
-                                self.draw_line_between_tiles(tile, adj, (r, g, 55), 190)
+                            if adj in pathWay.tiles:
+                                (r, g, b) = rescale_color(pathWay.distance, minLength, maxLength, shortestColor, longestColor)
+                                self.draw_line_between_tiles(tile, adj, (r, g, b), 210)
                                 drawingFrontier.appendleft(adj)
                         # elif adj in pathways: # then check for closer path merge
                         #    otherPath = pathways[adj]
@@ -878,42 +884,42 @@ class GeneralsViewer(object):
 
     def draw_division_borders(self):
         for (divisionMatrix, (r, g, b), alpha) in self._viewInfo._divisions:
-            visited = set()
             divisionLine = DirectionalShape(self.get_line(r, g, b, width=2), rotateInitial=90)
-            for tile in self._map.pathableTiles:
+
+            def draw_border_func(tile):
                 for move in tile.movable:
-                    if move in visited or move.isMountain or move.isNotPathable or (move.isCity and move.player == -1):
+                    if move.isMountain or move.isNotPathable:
                         continue
+
                     if divisionMatrix[tile] != divisionMatrix[move]:
                         self.draw_between_tiles(divisionLine, tile, move, alpha=alpha)
-                visited.add(tile)
+            if len(self._viewInfo.board_analysis.intergeneral_analysis.shortestPathWay.tiles) > 0:
+                startTiles = [t for t in self._viewInfo.board_analysis.intergeneral_analysis.shortestPathWay.tiles]
+                SearchUtils.breadth_first_foreach(self._map, startTiles, 1000, draw_border_func)
 
     def draw_path(self, pathObject, R, G, B, alphaStart, alphaDec, alphaMin):
-        if pathObject == None:
+        if pathObject is None:
             return
         path = pathObject.start
         alpha = alphaStart
         key = WHITE
         color = (R, G, B)
-        while (path != None and path.next != None):
+        while path is not None and path.next is not None:
             s = pygame.Surface((self.cellWidth, self.cellHeight))
             s.set_colorkey(key)
             # first, "erase" the surface by filling it with a color and
             # setting this color as colorkey, so the surface is empty
             s.fill(key)
 
-            # after drawing the circle, we can set the
-            # alpha value (transparency) of the surface
             tile = path.tile
             toTile = path.next.tile
             pygame.draw.polygon(s, color, self.Arrow)
             pygame.draw.polygon(s, BLACK, self.Arrow, 2)
-            s.set_alpha(alpha)
-            self.draw_between_tiles(DirectionalShape(s), tile, toTile)
+            self.draw_between_tiles(DirectionalShape(s), tile, toTile, alpha)
 
             path = path.next
             alpha -= alphaDec
-            if (alpha < alphaMin):
+            if alpha < alphaMin:
                 alpha = alphaMin
 
     def get_delta_arrow(self):
@@ -940,14 +946,14 @@ class GeneralsViewer(object):
         q = deque()
         for node in nodes:
             q.appendleft((node, True))
-        while (len(q) > 0):
+        while len(q) > 0:
             node, unpruned = q.pop()
             for child in node.children:
                 q.appendleft((child, unpruned))
             for prunedChild in node.pruned:
                 q.appendleft((prunedChild, False))
 
-            if node.fromTile != None:
+            if node.fromTile is not None:
                 self.draw_between_tiles(shape, node.fromTile, node.tile)
 
     def draw_between_tiles(self, shape: DirectionalShape, sourceTile, destTile, alpha=255):
@@ -956,19 +962,19 @@ class GeneralsViewer(object):
         pos_left = 0
         pos_top = 0
         s = None
-        if (xDiff > 0):
+        if xDiff > 0:
             pos_left = (CELL_MARGIN + self.cellWidth) * sourceTile.x + self.cellWidth // 2 + CELL_MARGIN
             pos_top = (CELL_MARGIN + self.cellHeight) * sourceTile.y + CELL_MARGIN
             s = shape.leftShape
-        if (xDiff < 0):
+        if xDiff < 0:
             pos_left = (CELL_MARGIN + self.cellWidth) * sourceTile.x - self.cellWidth // 2 + CELL_MARGIN
             pos_top = (CELL_MARGIN + self.cellHeight) * sourceTile.y + CELL_MARGIN
             s = shape.rightShape
-        if (yDiff > 0):
+        if yDiff > 0:
             pos_left = (CELL_MARGIN + self.cellWidth) * sourceTile.x + CELL_MARGIN
             pos_top = (CELL_MARGIN + self.cellHeight) * sourceTile.y + self.cellHeight // 2 + CELL_MARGIN
             s = shape.upShape
-        if (yDiff < 0):
+        if yDiff < 0:
             pos_left = (CELL_MARGIN + self.cellWidth) * sourceTile.x + CELL_MARGIN
             pos_top = (CELL_MARGIN + self.cellHeight) * sourceTile.y - self.cellHeight // 2 + CELL_MARGIN
             s = shape.downShape
@@ -977,12 +983,12 @@ class GeneralsViewer(object):
 
     def getCenter(self, tile):
         left, top = self.getTopLeft(tile)
-        return (left + self.cellWidth / 2, top + self.cellHeight / 2)
+        return left + self.cellWidth / 2, top + self.cellHeight / 2
 
     def getTopLeft(self, tile):
         pos_left = (CELL_MARGIN + self.cellWidth) * tile.x + CELL_MARGIN
         pos_top = (CELL_MARGIN + self.cellHeight) * tile.y + CELL_MARGIN
-        return (pos_left, pos_top)
+        return pos_left, pos_top
 
     def get_font_color(self, tile) -> typing.Tuple[int, int, int]:
         color_font = WHITE
@@ -1014,11 +1020,11 @@ class GeneralsViewer(object):
             colorR = playercolor[0]
             colorG = playercolor[1]
             colorB = playercolor[2]
-            if (tile.isCity or tile.isGeneral):
+            if tile.isCity or tile.isGeneral:
                 colorR = colorR + KING_COLOR_OFFSET if colorR <= 255 - KING_COLOR_OFFSET else 255
                 colorG = colorG + KING_COLOR_OFFSET if colorG <= 255 - KING_COLOR_OFFSET else 255
                 colorB = colorB + KING_COLOR_OFFSET if colorB <= 255 - KING_COLOR_OFFSET else 255
-            if (not tile.visible):
+            if not tile.visible:
                 colorR = colorR / 2 + 40
                 colorG = colorG / 2 + 40
                 colorB = colorB / 2 + 40
@@ -1029,7 +1035,7 @@ class GeneralsViewer(object):
             color = UNDISCOVERED_GRAY
         elif tile.isCity and tile.player == -1:
             color = NEUT_CITY_GRAY
-            if (not tile.visible):
+            if not tile.visible:
                 colorR = color[0] / 2 + 40
                 colorG = color[1] / 2 + 40
                 colorB = color[2] / 2 + 40
@@ -1044,9 +1050,9 @@ class GeneralsViewer(object):
         if targetStyle == TargetStyle.RED:
             return RED
         if targetStyle == TargetStyle.BLUE:
-            return (50, 50, 255)
+            return 50, 50, 255
         if targetStyle == TargetStyle.GOLD:
-            return (255, 215, 0)
+            return 255, 215, 0
         if targetStyle == TargetStyle.GREEN:
             return P_DARK_GREEN
         if targetStyle == TargetStyle.PURPLE:
@@ -1064,6 +1070,24 @@ class GeneralsViewer(object):
 
     def save_image(self):
         pygame.image.save(self._screen, "{}\\{}.png".format(self.logDirectory, self._map.turn))
+
+
+def rescale_color(
+        valToScale,
+        valueMin,
+        valueMax,
+        colorMin: typing.Tuple[int, int, int],
+        colorMax: typing.Tuple[int, int, int]
+) -> typing.Tuple[int, int, int]:
+    rMin, gMin, bMin = colorMin
+    rMax, gMax, bMax = colorMax
+
+    r = int(rescale_value(valToScale, valueMin, valueMax, rMin, rMax))
+    g = int(rescale_value(valToScale, valueMin, valueMax, gMin, gMax))
+    b = int(rescale_value(valToScale, valueMin, valueMax, bMin, bMax))
+
+    return r, g, b
+
 
 
 def rescale_value(valToScale, valueMin, valueMax, newScaleMin, newScaleMax):

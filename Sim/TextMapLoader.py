@@ -39,6 +39,7 @@ class TextMapLoader(object):
             if row.startswith('|'):
                 # stuff after this point is ekBot data etc
                 break
+            row = row.rstrip()
 
             cols = [Tile(x, y) for x in range(width)]
             textTiles = [row[i:i+split_every] for i in range(0, len(row), split_every)]
@@ -211,3 +212,48 @@ class TextMapLoader(object):
         with open(filePath, 'r') as file:
             data = file.read()
             return data
+
+    @staticmethod
+    def get_player_char_index_map():
+        return [
+            ('a', 0),
+            ('b', 1),
+            ('c', 2),
+            ('d', 3),
+            ('e', 4),
+            ('f', 5),
+            ('g', 6),
+            ('h', 7),
+        ]
+
+    @staticmethod
+    def load_map_data_into_map(map: MapBase, data: typing.Dict[str, str]):
+        playerCharMap = TextMapLoader.get_player_char_index_map()
+        # set the base scores in case the map doesn't have the string data
+        for player in map.players:
+            player.score = 0
+            player.tileCount = 0
+
+        for tile in map.get_all_tiles():
+            if tile.player > -1:
+                map.players[tile.player].score += tile.army
+                map.players[tile.player].tileCount += 1
+
+        for player in map.players:
+            char, index = playerCharMap[player.index]
+
+            tileKey = f'{char}Tiles'
+            if tileKey in data:
+                player.tileCount = int(data[tileKey])
+
+            scoreKey = f'{char}Score'
+            if scoreKey in data:
+                player.score = int(data[scoreKey])
+
+            cityKey = f'{char}CityCount'
+            if cityKey in data:
+                player.cityCount = int(data[cityKey])
+
+            deadKey = f'{char}Dead'
+            if deadKey in data:
+                player.dead = data[deadKey].lower() == 'true'

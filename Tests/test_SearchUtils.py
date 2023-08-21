@@ -1,6 +1,7 @@
 import inspect
 import unittest
 
+import SearchUtils
 from SearchUtils import dest_breadth_first_target
 from Tests.TestBase import TestBase
 from base.client.map import Tile
@@ -42,6 +43,7 @@ class SearchUtilsTests(TestBase):
                 # self.assertEquals(1, val)
                 self.assertIsNotNone(path)
                 self.assertEquals(1, path.value)
+
 
     def test_dest_breadth_first_target__calculates_longer_path_values_correctly__targeting_normal_tile(self):
         # test both odd and even turns

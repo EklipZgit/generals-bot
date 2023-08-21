@@ -153,21 +153,22 @@ class Path(object):
             dist += 1
         return dict
 
-    def calculate_value(self, forPlayer: int) -> int:
+    def calculate_value(self, forPlayer: int, negativeTiles: None | typing.Set[Tile] | typing.Dict[Tile, typing.Any] = None) -> int:
         # have to offset the first [val - 1] I guess since the first tile didn't get moved to
         val = 1
         node = self.start
         i = 0
         while node is not None:
             tile = node.tile
-            if tile.player == forPlayer:
-                val += tile.army
-                if tile.isCity or tile.isGeneral:
-                    val += math.floor(max(0, i - 1) * 0.5)
-            else:
-                val -= tile.army
-                if tile.isCity or tile.isGeneral and tile.player != -1:
-                    val -= math.floor(max(0, i - 1) * 0.5)
+            if negativeTiles is None or tile not in negativeTiles:
+                if tile.player == forPlayer:
+                    val += tile.army
+                    if tile.isCity or tile.isGeneral:
+                        val += math.floor(max(0, i - 1) * 0.5)
+                else:
+                    val -= tile.army
+                    if tile.isCity or tile.isGeneral and tile.player != -1:
+                        val -= math.floor(max(0, i - 1) * 0.5)
 
             if not node.move_half:
                 val = val - 1
@@ -221,12 +222,12 @@ class Path(object):
         return self.toString()
 
     def toString(self) -> str:
-        val = "[{} len {}] ".format(self.value, self.length)
         node = self.start
+        nodeStrs = []
         while node is not None:
-            val = val + str(node.tile.x) + "," + str(node.tile.y) + " "
+            nodeStrs.append(f'{node.tile.x},{node.tile.y}')
             node = node.next
-        return val
+        return f"[{self.value} len {self.length}] {' -> '.join(nodeStrs)}"
 
     def __repr__(self) -> str:
         return str(self)

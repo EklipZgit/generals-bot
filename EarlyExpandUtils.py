@@ -625,7 +625,7 @@ def _optimize_25_launch_segment(
         priorityFunc=prio_func,
         skipFunc=skip_func,
         noLog=True,
-        maxDepth=turns_left,
+        maxTurns=turns_left,
         useGlobalVisitedSet=False,
         includePath=True)
 

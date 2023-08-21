@@ -16,7 +16,7 @@ from .client import generals
 from .client.map import MapBase
 
 
-class GeneralsBot(object):
+class GeneralsClientHost(object):
     def __init__(self, updateMethod, name="PurdueBot", userId=None, gameType="private", privateRoomID="PurdueBot", public_server=False):
         # Save Config
         self._updateMethod = updateMethod
@@ -29,7 +29,7 @@ class GeneralsBot(object):
         self._public_server = public_server
 
         # ----- Start Game -----
-        
+
         self._running = True
         self._move_event = threading.Event()
 
@@ -51,8 +51,9 @@ class GeneralsBot(object):
         while self._running:
             time.sleep(1.0)
 
+        logging.info(f'No longer self._running=True in bot_base.py, exiting')
         time.sleep(1.0)
-        exit(0) # End Program
+        # exit(0) # End Program
 
     ######################### Handle Updates From Server #########################
     
@@ -62,9 +63,9 @@ class GeneralsBot(object):
     def _start_game_thread(self):
         # Create Game
         if self._gameType in ['1v1', 'ffa', 'private']:
-            self._game = generals.Generals(self._userId, self._name, self._gameType, gameid=self._privateRoomID, public_server=self._public_server)
+            self._game = generals.GeneralsClient(self._userId, self._name, self._gameType, gameid=self._privateRoomID, public_server=self._public_server)
         elif self._gameType == "team": # team
-            self._game = generals.Generals(self._userId, self._name, 'team')
+            self._game = generals.GeneralsClient(self._userId, self._name, 'team')
 
         logging.info("game start...?")
 
@@ -82,8 +83,8 @@ class GeneralsBot(object):
             logging.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
             
             logging.info("Exit: Already in queue in _start_update_loop")
-            time.sleep(5)
-            exit(0) # End Program
+            self._running = False
+            self._game._terminate()
         except:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
@@ -93,10 +94,11 @@ class GeneralsBot(object):
             #logging.warning(''.join('!! ' + line for line in lines))  # Log it or whatever here
             logging.info("err")  # Log it or whatever here
             logging.error(''.join('!! ' + line for line in lines))  # Log it or whatever here
+            self._running = False
 
         logging.info("crashed out of update loop, quitting")
-        time.sleep(3)
-        exit(0) # End Program
+        # time.sleep(3)
+        # exit(0) # End Program
 
     def _set_update(self, update):
         if update.complete:

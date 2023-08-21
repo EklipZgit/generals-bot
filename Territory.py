@@ -25,6 +25,16 @@ class TerritoryClassifier():
 		for tile in self.map.pathableTiles:
 			self.needToUpdateAroundTiles.add(tile)
 
+	def __getstate__(self):
+		state = self.__dict__.copy()
+		if "map" in state:
+			del state["map"]
+		return state
+
+	def __setstate__(self, state):
+		self.__dict__.update(state)
+		self.map = None
+
 	def should_recalculate(self, turn):
 		if len(self.needToUpdateAroundTiles) > 0:
 			return True

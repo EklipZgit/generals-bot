@@ -31,12 +31,26 @@ class BoardAnalyzer:
 
 		logging.info("BoardAnalyzer completed in {:.3f}".format(time.time() - startTime))
 
+	def __getstate__(self):
+		state = self.__dict__.copy()
+		if "map" in state:
+			del state["map"]
+		return state
+
+	def __setstate__(self, state):
+		self.__dict__.update(state)
+		self.map = None
+
 	def rescan_chokes(self):
 		self.should_rescan = False
 		oldInner = self.innerChokes
 		oldOuter = self.outerChokes
 		self.innerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
+		"""What are these???"""
+
 		self.outerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
+		"""What are these???"""
+
 		self.genDistMap = build_distance_map(self.map, [self.general])
 		for tile in self.map.pathableTiles:
 			logging.info("Rescanning chokes for {}".format(tile.toString()))
@@ -57,19 +71,42 @@ class BoardAnalyzer:
 	def rebuild_intergeneral_analysis(self, opponentGeneral):
 		self.intergeneral_analysis = ArmyAnalyzer(self.map, self.general, opponentGeneral)
 
+	def get_tile_usefulness_score(self, x: int, y: int):
+		# score a tile based on how far out of the play area it is and whether it is on a good flank path
+		return 100
+
+	def get_flank_pathways(
+			self,
+			filter_out_players: typing.List[int] | None = None,
+	) -> typing.Set[Tile]:
+		flankDistToCheck = int(self.intergeneral_analysis.shortestPathWay.distance * 1.5)
+		flankPathTiles = set()
+		for pathway in self.intergeneral_analysis.pathWays:
+			if pathway.distance < flankDistToCheck and len(pathway.tiles) >= self.intergeneral_analysis.shortestPathWay.distance:
+				for tile in pathway.tiles:
+					if filter_out_players is None or tile.player not in filter_out_players:
+						flankPathTiles.add(tile)
+
+		return flankPathTiles
+
 	# minAltPathCount will force that many paths to be included even if they are greater than maxAltLength
-	def find_flank_leaves(self, leafMoves, minAltPathCount, maxAltLength):
-		goodLeaves = []
+	def find_flank_leaves(
+			self,
+			leafMoves,
+			minAltPathCount,
+			maxAltLength
+	) -> typing.List[Move]:
+		goodLeaves: typing.List[Move] = []
 
 		# order by: totalDistance, then pick tile by closestToOpponent
-
+		cutoffDist = self.intergeneral_analysis.shortestPathWay.distance // 4
 		includedPathways = set()
 		for move in leafMoves:
 			# sometimes these might be cut off by only being routed through the general
 			neutralCity = (move.dest.isCity and move.dest.player == -1)
-			if not neutralCity and move.dest in self.intergeneral_analysis.pathways and move.source in self.intergeneral_analysis.pathways:
-				pathwaySource = self.intergeneral_analysis.pathways[move.source]
-				pathwayDest = self.intergeneral_analysis.pathways[move.dest]
+			if not neutralCity and move.dest in self.intergeneral_analysis.pathWayLookupMatrix and move.source in self.intergeneral_analysis.pathWayLookupMatrix:
+				pathwaySource = self.intergeneral_analysis.pathWayLookupMatrix[move.source]
+				pathwayDest = self.intergeneral_analysis.pathWayLookupMatrix[move.dest]
 				if pathwaySource.distance <= maxAltLength:
 					#if pathwaySource not in includedPathways:
 					if pathwaySource.distance > pathwayDest.distance or pathwaySource.distance == pathwayDest.distance:
@@ -77,7 +114,7 @@ class BoardAnalyzer:
 						# If getting further from our general (and by extension closer to opp since distance is equal)
 						gettingFurtherFromOurGen = self.intergeneral_analysis.aMap[move.source.x][move.source.y] < self.intergeneral_analysis.aMap[move.dest.x][move.dest.y]
 						# not more than cutoffDist tiles behind our general, effectively
-						cutoffDist = 5
+
 						reasonablyCloseToTheirGeneral = self.intergeneral_analysis.bMap[move.dest.x][move.dest.y] < cutoffDist + self.intergeneral_analysis.aMap[self.intergeneral_analysis.tileB.x][self.intergeneral_analysis.tileB.y]
 					
 						if (gettingFurtherFromOurGen and reasonablyCloseToTheirGeneral):

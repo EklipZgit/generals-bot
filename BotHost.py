@@ -104,7 +104,7 @@ class BotHostBase(object):
             mapFile.write(mapStr)
 
     def initialize_viewer(self):
-        window_title = "%s (%s)" % (self._name, self._game_type)
+        window_title = "%s (%s)" % (self._name.split('_')[-1], self._game_type)
         self._viewer = ViewerHost(window_title, alignTop=not self.align_bottom, alignLeft=not self.align_right)
 
     def is_viewer_closed_by_user(self) -> bool:
@@ -114,12 +114,12 @@ class BotHostBase(object):
 
     def notify_game_over(self):
         self.eklipz_bot._map.complete = True
-        if self.has_viewer:
+        if self.has_viewer and self._viewer is not None:
             self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, self.eklipz_bot._map, True)
             self._viewer.kill()
 
 
-class BotHost(BotHostBase):
+class BotHostLiveServer(BotHostBase):
     def __init__(
             self,
             name: str,
@@ -137,7 +137,7 @@ class BotHost(BotHostBase):
             raise AssertionError('Bot forced private only for the moment')
 
         # also creates the viewer, for now. Need to move that out to view sim games
-        self.bot_client = bot_base.GeneralsBot(
+        self.bot_client = bot_base.GeneralsClientHost(
             self.make_move,
             name=self._name,
             userId=userId,
@@ -173,9 +173,19 @@ class BotHost(BotHostBase):
         except KeyboardInterrupt:
             logging.info('keyboard interrupt received, killing viewer if any')
             self.notify_game_over()
+        except:
+            logging.info('unknown error occurred in bot_client.run(), notifying game over. Error was:')
+            logging.info(traceback.format_exc())
+
+            self.notify_game_over()
 
 
 if __name__ == '__main__':
+    import BotLogging
+
+    BotLogging.set_up_logger()
+    BotLogging.set_up_logger()
+
     # raise AssertionError("stop")
     parser = argparse.ArgumentParser()
     parser.add_argument('-name', metavar='str', type=str, default='helpImAlive2',
@@ -205,7 +215,7 @@ if __name__ == '__main__':
     alignRight: bool = args['right']
 
     logging.info("newing up bot host")
-    host = BotHost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight)
+    host = BotHostLiveServer(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight)
 
     logging.info("running bot host")
     host.run()

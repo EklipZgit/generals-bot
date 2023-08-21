@@ -1,26 +1,30 @@
 import logging
+import time
 import typing
 import unittest
 
 import EarlyExpandUtils
 import SearchUtils
+from DataModels import Move
 from Path import Path
 from Sim.GameSimulator import GameSimulator
 from Sim.TextMapLoader import TextMapLoader
 from ViewInfo import ViewInfo, PathColorer
 from Viewer.ViewerProcessHost import ViewerHost
 from base.client.map import MapBase, Tile, Score, Player, TILE_FOG, TILE_OBSTACLE
-from base.viewer import GeneralsViewer
-from bot_ek0x45 import EklipZBot
 
 
 class TestBase(unittest.TestCase):
     # __test__ = False
-    def _set_up_log_stream(self):
-        logging.basicConfig(format='%(message)s', level=logging.DEBUG)
+    def begin_capturing_logging(self):
+        # without force=True, the first time a logging.log* is called earlier in the code, the config gets set to
+        # default: WARN and basicConfig after that point has no effect without force=True
+        logging.basicConfig(format='%(message)s', level=logging.DEBUG, force=True)
+        time.sleep(0.1)
+        logging.info("TESTING TESTING 123")
 
     def _initialize(self):
-        self._set_up_log_stream()
+        # self._set_up_log_stream()
         self.disable_search_time_limits_and_enable_debug_asserts()
 
     def load_turn_1_map_and_general(self, mapFileName: str) -> typing.Tuple[MapBase, Tile]:
@@ -35,40 +39,93 @@ class TestBase(unittest.TestCase):
 
         return map, general
 
-    def load_map_and_general_raw(self, rawMapDataString: str, turn: int, player_index: int = -1) -> typing.Tuple[MapBase, Tile]:
+    def load_map_and_general_from_string(self, rawMapDataString: str, turn: int, player_index: int = -1) -> typing.Tuple[MapBase, Tile]:
         board = TextMapLoader.load_map_from_string(rawMapDataString)
         data = TextMapLoader.load_data_from_string(rawMapDataString)
 
         map = self.get_test_map(board, turn=turn)
+        TextMapLoader.load_map_data_into_map(map, data)
         general = next(t for t in map.pathableTiles if t.isGeneral and (t.player == player_index or player_index == -1))
         map.player_index = general.player
         map.generals[general.player] = general
-
-        self.load_map_data(map, general, data)
 
         return map, general
 
     def load_map_and_general(self, mapFilePath: str, turn: int, player_index: int = -1) -> typing.Tuple[MapBase, Tile]:
         try:
+            if player_index == -1:
+                gameData = TextMapLoader.load_data_from_file(mapFilePath)
+                if 'bot_player_index' in gameData:
+                    player_index = int(gameData['bot_player_index'])
             rawMapStr = TextMapLoader.get_map_raw_string_from_file(mapFilePath)
-            return self.load_map_and_general_raw(rawMapStr, turn, player_index)
+            return self.load_map_and_general_from_string(rawMapStr, turn, player_index)
         except:
             logging.info(f'failed to load file {mapFilePath}')
             raise
 
     def load_map_and_generals(self, mapFilePath: str, turn: int, player_index: int = -1) -> typing.Tuple[MapBase, Tile, Tile]:
-        map, general = self.load_map_and_general(mapFilePath, turn, player_index)
+        rawData = TextMapLoader.get_map_raw_string_from_file(mapFilePath)
+        return self.load_map_and_generals_from_string(rawData, turn, player_index)
+
+    def load_map_and_generals_from_string(self, rawMapStr: str, turn: int, player_index: int = -1) -> typing.Tuple[MapBase, Tile, Tile]:
+        gameData = TextMapLoader.load_data_from_string(rawMapStr)
+        if player_index == -1 and 'bot_player_index' in gameData:
+            player_index = int(gameData['bot_player_index'])
+
+        map, general = self.load_map_and_general_from_string(rawMapStr, turn, player_index)
+
+        botTargetPlayer = None
+        if 'bot_target_player' in gameData:
+            botTargetPlayer = int(gameData['bot_target_player'])
 
         enemyGen: Tile = None
-        if any(filter(lambda gen: gen is not None and gen != general, map.generals)):
-            enemyGen = next(filter(lambda gen: gen is not None and gen != general, map.generals))
-        else:
-            gameData = TextMapLoader.load_data_from_file(mapFilePath)
+        if botTargetPlayer is not None and map.generals[botTargetPlayer] is not None:
+            enemyGen = map.generals[botTargetPlayer]
+        elif 'targetPlayerExpectedGeneralLocation' in gameData:
             x, y = gameData['targetPlayerExpectedGeneralLocation'].split(',')
             enemyGen = map.GetTile(int(x), int(y))
             enemyGen.isGeneral = True
-            enemyGen.player = (general.player + 1) % 2
+            enemyGen.player = botTargetPlayer
             enemyGen.army = 10
+            map.generals[enemyGen.player] = enemyGen
+            map.players[enemyGen.player].general = enemyGen
+        elif any(filter(lambda gen: gen is not None and gen != general, map.generals)):
+            enemyGen = next(filter(lambda gen: gen is not None and gen != general, map.generals))
+        else:
+            raise AssertionError("Unable to produce an enemy general from given map data file...")
+
+        for i, player in enumerate(map.players):
+            if i != general.player and i != enemyGen.player:
+                player.dead = True
+
+        skipTileRework = False
+        if 'loadAsIs' in gameData and (gameData['loadAsIs']).lower() == 'true':
+            skipTileRework = True
+
+        if not skipTileRework:
+            chars = TextMapLoader.get_player_char_index_map()
+            enemyChar, _ = chars[enemyGen.player]
+
+            enemyScore = None
+            enemyTiles = None
+            enemyCities = 1
+
+            if f'{enemyChar}Score' in gameData:
+                enemyScore = int(gameData[f'{enemyChar}Score'])
+            if f'{enemyChar}Tiles' in gameData:
+                enemyTiles = int(gameData[f'{enemyChar}Tiles'])
+            if f'{enemyChar}CityCount' in gameData:
+                enemyCities = int(gameData[f'{enemyChar}CityCount'])
+
+            playerChar, _ = chars[general.player]
+            playerScore = None
+            playerTiles = None
+            if f'{playerChar}Score' in gameData:
+                playerScore = int(gameData[f'{playerChar}Score'])
+            if f'{playerChar}Tiles' in gameData:
+                playerTiles = int(gameData[f'{playerChar}Tiles'])
+
+            self.ensure_player_tiles_and_scores(map, general, playerTiles, playerScore, enemyGen, enemyTiles, enemyScore, enemyCities)
 
         return map, general, enemyGen
 
@@ -99,7 +156,7 @@ class TestBase(unittest.TestCase):
         return [[empty_value for y in map.grid] for x in map.grid[0]]
 
     def get_from_general_weight_map(self, map: MapBase, general: Tile, negate: bool = False):
-        distMap = SearchUtils.build_distance_map(map, [general])
+        distMap = SearchUtils.build_distance_map_incl_mountains(map, [general])
         if negate:
             for x in range(len(distMap)):
                 for y in range(len(distMap[0])):
@@ -109,7 +166,7 @@ class TestBase(unittest.TestCase):
     def get_opposite_general_distance_map(self, map: MapBase, general: Tile, negate: bool = False):
         furthestTile = self.get_furthest_tile_from_general(map, general)
 
-        furthestMap = SearchUtils.build_distance_map(map, [furthestTile])
+        furthestMap = SearchUtils.build_distance_map_incl_mountains(map, [furthestTile])
         if negate:
             for x in range(len(furthestMap)):
                 for y in range(len(furthestMap[0])):
@@ -128,7 +185,7 @@ class TestBase(unittest.TestCase):
             if path is not None:
                 encounteredFirst = True
                 viewInfo.paths.appendleft(
-                    PathColorer(path, r, g, b, alpha=10, alphaDecreaseRate=5, alphaMinimum=10))
+                    PathColorer(path, r, g, b, alpha=150, alphaDecreaseRate=5, alphaMinimum=10))
             elif encounteredFirst:
                 b += 50
             else:
@@ -141,30 +198,54 @@ class TestBase(unittest.TestCase):
 
         self.render_view_info(map, viewInfo, infoStr)
 
-    def get_player_char_index_map(self):
-        return [
-            ('a', 0),
-            ('b', 1),
-            ('c', 2),
-            ('d', 3),
-            ('e', 4),
-            ('f', 5),
-            ('g', 6),
-            ('h', 7),
-        ]
+    def render_moves(self, map: MapBase, infoStr: str, moves1: typing.List[Move | None], moves2: typing.List[Move | None] = None):
+        viewInfo = self.get_view_info(map)
 
-    def load_map_data(self, map: MapBase, general: Tile, data: typing.Dict[str, str]):
-        playerCharMap = self.get_player_char_index_map()
-        for player in map.players:
-            char, index = playerCharMap[player.index]
+        r = 255
+        g = 0
+        b = 0
+        encounteredFirst = False
+        for move in moves1:
+            if move is not None:
+                encounteredFirst = True
+                path = Path()
+                path.add_next(move.source)
+                path.add_next(move.dest, move.move_half)
+                viewInfo.paths.appendleft(
+                    PathColorer(path, r, g, b, alpha=150, alphaDecreaseRate=5, alphaMinimum=10))
+            elif encounteredFirst:
+                b += 40
+            else:
+                continue
+            r -= 20
+            g += 20
+            g = min(255, g)
+            r = max(0, r)
+            b = min(255, b)
 
-            tileKey = f'{char}Tiles'
-            if tileKey in data:
-                player.tileCount = int(data[tileKey])
+        r = 0
+        g = 0
+        b = 255
+        if moves2 is not None:
+            for move in moves2:
+                if move is not None:
+                    encounteredFirst = True
+                    path = Path()
+                    path.add_next(move.source)
+                    path.add_next(move.dest, move.move_half)
+                    viewInfo.paths.appendleft(
+                        PathColorer(path, r, g, b, alpha=150, alphaDecreaseRate=5, alphaMinimum=10))
+                elif encounteredFirst:
+                    r += 40
+                else:
+                    continue
+                b -= 20
+                g += 20
+                g = min(255, g)
+                b = max(0, b)
+                r = min(255, r)
 
-            scoreKey = f'{char}Score'
-            if scoreKey in data:
-                player.score = int(data[scoreKey])
+        self.render_view_info(map, viewInfo, infoStr)
 
     def disable_search_time_limits_and_enable_debug_asserts(self):
         SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING = True
@@ -235,12 +316,7 @@ class TestBase(unittest.TestCase):
 
         enemyGen: Tile = None
         if map.generals[0] is None or map.generals[1] is None:
-            map.generals[general.player] = general
-            furthestTile = self.get_furthest_tile_from_general(map, general)
-            furthestTile.player = (general.player + 1) % 2
-            furthestTile.isGeneral = True
-            map.generals[furthestTile.player] = furthestTile
-            enemyGen = furthestTile
+            enemyGen = self.generate_enemy_general_opposite_general(map, general)
         else:
             enemyGen = next(filter(lambda g: g is not None and g != general, map.generals))
 
@@ -272,56 +348,34 @@ class TestBase(unittest.TestCase):
         """
         enemyGeneral = self.reset_map_with_enemy_general_discovered_and_gen_as_p0(map, general)
 
-        enemyMap = self.get_from_general_weight_map(map, enemyGeneral)
-        genDistMap = self.get_from_general_weight_map(map, general)
+        targetScore = tileAmount * armyOnTiles + general.army
 
-        countTilesEnemy = SearchUtils.Counter(1)
-        countTilesGeneral = SearchUtils.Counter(1)
-        countScoreEnemy = SearchUtils.Counter(enemyGeneral.army)
-        countScoreGeneral = SearchUtils.Counter(general.army)
-        def generateTilesFunc(tile: Tile, dist: int):
-            if tile.isObstacle:
-                return
-            if tile == general or tile == enemyGeneral:
-                return
-
-            tileToGen = genDistMap[tile.x][tile.y]
-            tileToOp = enemyMap[tile.x][tile.y]
-            if tileToGen < tileToOp:
-                if countTilesGeneral.value < tileAmount:
-                    tile.player = general.player
-                    tile.army = armyOnTiles
-                    countTilesGeneral.add(1)
-                    countScoreGeneral.add(tile.army)
-            else:
-                if countTilesEnemy.value < tileAmount:
-                    tile.player = enemyGeneral.player
-                    tile.army = armyOnTiles
-                    countTilesEnemy.add(1)
-                    countScoreEnemy.add(tile.army)
-
-        SearchUtils.breadth_first_foreach_dist(map, [general, enemyGeneral], 100, generateTilesFunc, skipFunc=lambda tile: tile.isCity and tile.isNeutral)
-
-        scores = []
-        scores.append(Score(general.player, countScoreGeneral.value, countTilesGeneral.value, dead=False))
-        scores.append(Score(enemyGeneral.player, countScoreEnemy.value, countTilesEnemy.value, dead=False))
-        scores = sorted(scores, key=lambda score: score.player)
-
-        map.update_scores(scores)
-        map.update()
+        self.ensure_player_tiles_and_scores(
+            map,
+            general,
+            tileAmount,
+            targetScore,
+            enemyGeneral,
+            tileAmount,
+            targetScore)
 
         return enemyGeneral
 
     def get_view_info(self, map: MapBase) -> ViewInfo:
-        return ViewInfo(1, map.cols, map.rows)
+        viewInfo = ViewInfo(1, map.cols, map.rows)
+        viewInfo.playerTargetScores = [0 for p in map.players]
+        return viewInfo
 
     def render_view_info(self, map: MapBase, viewInfo: ViewInfo, infoString: str):
-        viewer = ViewerHost(infoString, cell_width=45, cell_height=45)
+        viewer = ViewerHost(infoString, cell_width=45, cell_height=45, alignTop=False, alignLeft=False)
         viewer.noLog = True
         viewInfo.infoText = infoString
         viewer.start()
         viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
 
+        while not viewer.check_viewer_closed():
+            viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
+            time.sleep(0.1)
 
     def assertPlayerTileVisibleAndCorrect(self, x: int, y: int, sim: GameSimulator, player_index: int):
         playerTile = self.get_player_tile(x, y, sim, player_index)
@@ -378,3 +432,128 @@ class TestBase(unittest.TestCase):
         for player in sim.players:
             playerViewInfo = ViewInfo(3, player.map.cols, player.map.rows)
             self.render_view_info(player.map, playerViewInfo, f'p{player.index} view')
+
+    def ensure_player_tiles_and_scores(
+            self,
+            map: MapBase,
+            general: Tile,
+            generalTileCount: int,
+            generalTargetScore: int | None = None,
+            enemyGeneral: Tile = None,
+            enemyGeneralTileCount: int = None,
+            enemyGeneralTargetScore: int = None,
+            enemyCityCount: int = 1):
+        """
+        Leave enemy params empty to match the general values evenly (and create an enemy general opposite general)
+        -1 means leave the map alone, keep whatever tiles and army amounts are already on the map
+        """
+
+        if enemyGeneral is None:
+            enemyGeneral = map.generals[(general.player + 1) % 2]
+        if enemyGeneral is None:
+            enemyGeneral = self.generate_enemy_general_opposite_general(map, general)
+
+        if enemyGeneralTargetScore is None:
+            enemyGeneralTargetScore = generalTargetScore
+
+        if enemyGeneralTileCount is None:
+            enemyGeneralTileCount = generalTileCount
+
+        enemyMap = self.get_from_general_weight_map(map, enemyGeneral)
+        countTilesEnemy = SearchUtils.Counter(SearchUtils.count(map.pathableTiles, lambda tile: tile.player == enemyGeneral.player))
+        countScoreEnemy = SearchUtils.Counter(enemyGeneral.army)
+        countCitiesEnemy = SearchUtils.Counter(SearchUtils.count(map.pathableTiles, lambda tile: tile.player == enemyGeneral.player and (tile.isGeneral or tile.isCity)))
+
+        newTiles = set()
+
+        genDistMap = self.get_from_general_weight_map(map, general)
+        countTilesGeneral = SearchUtils.Counter(
+            SearchUtils.count(map.pathableTiles, lambda tile: tile.player == general.player))
+        countScoreGeneral = SearchUtils.Counter(general.army)
+
+        if enemyGeneralTileCount == -1:
+            enemyGeneralTileCount = countTilesEnemy.value
+        if enemyGeneralTargetScore == -1:
+            enemyGeneralTargetScore = map.players[enemyGeneral.player].score
+
+        if generalTileCount == -1:
+            generalTileCount = countTilesGeneral.value
+        if generalTargetScore == -1:
+            generalTargetScore = map.players[general.player].score
+
+        def generateTilesFunc(tile: Tile, dist: int):
+            if tile == general or tile == enemyGeneral:
+                return
+
+            tileToGen = genDistMap[tile.x][tile.y]
+            tileToOp = enemyMap[tile.x][tile.y]
+
+            if tile.isObstacle:
+                countPlayerAdj = SearchUtils.count(tile.adjacents, lambda t: t.player == general.player)
+                if countPlayerAdj == 0 and countCitiesEnemy.value < enemyCityCount and tileToOp < tileToGen:
+                    tile.player = enemyGeneral.player
+                    tile.army = 1
+                    tile.isCity = True
+                    tile.isMountain = False
+                    tile.tile = enemyGeneral.player
+                    countTilesEnemy.add(1)
+                    countCitiesEnemy.add(1)
+                    newTiles.add(tile)
+                return
+
+            if tile.isNeutral and not tile.isCity:
+                if tileToGen < tileToOp:
+                    if countTilesGeneral.value < generalTileCount:
+                        tile.player = general.player
+                        tile.army = 1
+                        countTilesGeneral.add(1)
+                        newTiles.add(tile)
+                else:
+                    if countTilesEnemy.value < enemyGeneralTileCount:
+                        tile.player = enemyGeneral.player
+                        tile.army = 1
+                        countTilesEnemy.add(1)
+                        newTiles.add(tile)
+            if tile.player == general.player:
+                countScoreGeneral.add(tile.army)
+            if tile.player == enemyGeneral.player:
+                countScoreEnemy.add(tile.army)
+
+        SearchUtils.breadth_first_foreach_dist(map, [general, enemyGeneral], 100, generateTilesFunc,
+                                               skipFunc=lambda tile: tile.isObstacle, bypassDefaultSkip=True)
+
+        if enemyGeneralTargetScore is not None and countScoreEnemy.value > enemyGeneralTargetScore:
+            countScoreEnemy.value = countScoreEnemy.value - enemyGeneral.army + 1
+            enemyGeneral.army = 1
+
+        if enemyGeneralTargetScore is not None and countScoreEnemy.value > enemyGeneralTargetScore:
+            raise AssertionError(f"countScoreEnemy.value {countScoreEnemy.value} > enemyGeneralTargetScore {enemyGeneralTargetScore}. Have to implement reducing the army on non-visible tiles from the snapshot here")
+
+        while enemyGeneralTargetScore is not None and countScoreEnemy.value < enemyGeneralTargetScore:
+            for tile in newTiles:
+                if tile.player == enemyGeneral.player and countScoreEnemy.value < enemyGeneralTargetScore:
+                    countScoreEnemy.add(1)
+                    tile.army += 1
+
+        while generalTargetScore is not None and countScoreGeneral.value < generalTargetScore:
+            for tile in map.get_all_tiles():
+                if tile.player == general.player and countScoreGeneral.value < generalTargetScore:
+                    countScoreGeneral.add(1)
+                    tile.army += 1
+
+
+        scores: typing.List[None | Score] = [None for _ in map.players]
+        scores[general.player] = Score(general.player, countScoreGeneral.value, countTilesGeneral.value, dead=False)
+        scores[enemyGeneral.player] = Score(enemyGeneral.player, countScoreEnemy.value, countTilesEnemy.value, dead=False)
+
+        map.update_scores(scores)
+        map.update()
+
+    def generate_enemy_general_opposite_general(self, map: MapBase, general: Tile) -> Tile:
+        map.generals[general.player] = general
+        furthestTile = self.get_furthest_tile_from_general(map, general)
+        furthestTile.player = (general.player + 1) % 2
+        furthestTile.isGeneral = True
+        map.generals[furthestTile.player] = furthestTile
+        enemyGen = furthestTile
+        return enemyGen

@@ -23,12 +23,7 @@ _ENDPOINT_PUBLIC = "://ws.generals.io/socket.io/?EIO=4"
 
 _LOG_WS = False
 
-
-# _BOT_KEY = None
-# _BOT_KEY = "eklipzai"
-# _BOT_KEY = "ekbot42"
-
-class Generals(object):
+class GeneralsClient(object):
     def __init__(self, userid, username, mode="1v1", gameid=None,
                  force_start=False, public_server=False):
         if username is None:
@@ -379,13 +374,11 @@ class Generals(object):
                 else:
                     logging.info("Message: %s" % chat_msg["text"])
                     if self.writingFile or (
-                            not self.chatLogFile is None and not " surrendered" in chat_msg["text"] and not " left" in
-                                                                                                            chat_msg[
-                                                                                                                "text"] and not " quit" in
-                                                                                                                                chat_msg[
-                                                                                                                                    "text"] and not " wins!" in
-                                                                                                                                                    chat_msg[
-                                                                                                                                                        "text"]):
+                            not self.chatLogFile is None
+                            and not " surrendered" in chat_msg["text"]
+                            and not " left" in chat_msg["text"]
+                            and not " quit" in chat_msg["text"]
+                            and not " wins!" in chat_msg["text"]):
                         self.writingFile = True
                         try:
                             with open(self.chatLogFile, "a+") as myfile:
@@ -395,7 +388,7 @@ class Generals(object):
                                 "!!!!!!!!!!\n!!!!!!!!!!!!!\n!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!\ncouldn't write unknown message to file")
             elif msg[0] == "error_user_id":
                 logging.info("error_user_id, Already in game???")
-                time.sleep(20)
+                time.sleep(2)
                 raise ValueError("Already in game")
             elif msg[0] == "server_down":
                 logging.info("server_down, Server is down???")
@@ -407,15 +400,16 @@ class Generals(object):
                 logging.info("error_set_username, ???")
             elif msg[0] == "error_banned":
                 sleepDuration = random.choice(range(20, 60))
-                logging.info("TOO MANY CONNECTION ATTEMPTS? {}\n:( sleeping and then trying again in {}".format(msg, sleepDuration))
+                logging.info(
+                    f"TOO MANY CONNECTION ATTEMPTS? {msg}\n:( sleeping and then trying again in {sleepDuration}")
                 time.sleep(sleepDuration)
                 logging.info('Calling _terminate from game loop')
                 self._terminate()
                 logging.info('Game loop _terminate complete')
-                #TODO I just added this
-                time.sleep(2)
-                logging.info('Game loop calling exit()')
-                exit(2)
+                # TODO I just added this
+                # time.sleep(2)
+                # logging.info('Game loop calling exit()')
+                # exit(2)
             else:
                 logging.info("Unknown message type: {}".format(msg))
 
@@ -440,7 +434,7 @@ class Generals(object):
     def _make_result(self, update, data):
         result = self._map.updateResult(update)
         self.result = result
-        logging.info('make result calling _terminate...')
+        logging.info(f'make result calling _terminate... data {data}')
         self._terminate()
         logging.info('make result -> _terminate complete.')
         return result
@@ -448,12 +442,25 @@ class Generals(object):
     def _start_killswitch_timer(self):
         while time.time() - self.lastCommunicationTime < 60:
             time.sleep(10)
-        exit(2)  # End Program
+        logging.info('killswitch elapsed on no communication')
+        if self._map is not None:
+            self._map.complete = True
+            self._map.result = False
+        self._terminate()
+        # exit(2)  # End Program
 
     def _terminate(self):
         self._running = False
-        logging.info(
-            "\n\n        IN TERMINATE {}  (won? {})   \n\n".format(self._start_data['replay_id'], self._map.result))
+        if self._map is not None:
+            try:
+                repId = 'none'
+                if self._start_data is not None and 'replay_id' in self._start_data:
+                    repId = self._start_data['replay_id']
+                logging.info(
+                    "\n\n        IN TERMINATE {}  (won? {})   \n\n".format(repId, self._map.result))
+            except:
+                logging.info(traceback.format_exc())
+
         with self._lock:
             # self._send(["leave_game"])
             logging.info(" in lock IN TERMINATE, calling self.close()")
@@ -486,19 +493,20 @@ class Generals(object):
                 time.sleep(0.2)
             self._send(["set_force_start", self._gameid, True])
             logging.info("Sent force_start")
-            time.sleep(2)
+            time.sleep(1)
 
     def _start_sending_heartbeat(self):
         while True:
             try:
+                toSend = "3"
                 with self._lock:
-                    self._ws.send("3")
+                    self._ws.send(toSend)
                 if _LOG_WS:
                     if self.logFile is None:
-                        self.earlyLogs.append("\n2")
+                        self.earlyLogs.append(f"\n{toSend}")
                     else:
                         with open(self.logFile, "a+") as myfile:
-                            myfile.write("\n2")
+                            myfile.write(f"\n{toSend}")
             except WebSocketConnectionClosedException:
                 break
             time.sleep(19)

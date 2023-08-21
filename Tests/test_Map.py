@@ -21,7 +21,7 @@ aG7
 
 | 
 """
-        map, general = self.load_map_and_general_raw(mapRaw, turn=12, player_index=0)
+        map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=0)
 
         targetTile = map.GetTile(0, 1)
         genArmyMoved = general.army - 1
@@ -46,7 +46,7 @@ a1
 
 | 
 """
-        map, general = self.load_map_and_general_raw(mapRaw, turn=12, player_index=0)
+        map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=0)
 
         targetTile = map.GetTile(0, 1)
         genArmyMoved = general.army - 1
@@ -71,7 +71,7 @@ b1
 
 | 
 """
-        map, general = self.load_map_and_general_raw(mapRaw, turn=12, player_index=0)
+        map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=0)
 
         targetTile = map.GetTile(0, 1)
         genArmyMoved = general.army - 1
@@ -97,7 +97,7 @@ b1
 
     | 
     """
-            map, general = self.load_map_and_general_raw(mapRaw, turn=12, player_index=0)
+            map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=0)
 
             targetTile = map.GetTile(0, 1)
             genArmyMoved = general.army - 1
@@ -125,7 +125,7 @@ C5
 
 | 
 """
-        map, general = self.load_map_and_general_raw(mapRaw, turn=13, player_index=0)
+        map, general = self.load_map_and_general_from_string(mapRaw, turn=13, player_index=0)
 
         targetTile = map.GetTile(0, 1)
         genArmyMoved = general.army - 1

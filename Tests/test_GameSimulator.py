@@ -170,6 +170,7 @@ class GameSimulatorTests(TestBase):
         simHost.sim.players[0].map.update_visible_tile(general.x, general.y, general.player, general.army, is_city=False, is_general=True)
         # simHost = GameSimulatorHost(map)
 
+        self.begin_capturing_logging()
         simHost.run_sim(run_real_time=True, turn_time=2.5)
 
 
@@ -319,7 +320,7 @@ aG7
                bG7
 |    |    |    |
 """
-        map, general = self.load_map_and_general_raw(mapRaw, turn=turn, player_index=0)
+        map, general = self.load_map_and_general_from_string(mapRaw, turn=turn, player_index=0)
 
         enemyGen = map.GetTile(3, 3)
 
@@ -414,6 +415,7 @@ aG7
         self.assertEqual(abs(aMovedAmount - bMovedAmount), abs(p1targetTile.delta.armyDelta))
 
     def test_simulates_a_game_from_turn_1(self):
+        self.begin_capturing_logging()
         map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/243.txtmap', 243, player_index=1)
         fakeEnemyGen = map.GetTile(2, 16)
         fakeEnemyGen.isGeneral = True
@@ -426,7 +428,7 @@ aG7
 
         simHost = GameSimulatorHost(map, player_with_viewer=1)
 
-        simHost.run_sim(run_real_time=True, turn_time=0.3)
+        simHost.run_sim(run_real_time=True, turn_time=0.1)
 
 
 

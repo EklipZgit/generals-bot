@@ -63,6 +63,16 @@ class DangerAnalyzer(object):
 
         self.largeVisibleEnemyTiles: typing.List[Tile] = []
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        if "map" in state:
+            del state["map"]
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.map = None
+
     def analyze(self, general: Tile, depth: int, armies: typing.Dict[Tile, Army]):
         self.scan(general)
 
@@ -123,7 +133,7 @@ class DangerAnalyzer(object):
                     and player.index != general.player
                     and player.index not in self.map.teammates
                     and len(self.playerTiles[player.index]) > 0
-                    and self.map.players[player.index].tileCount > 10):
+                    and self.map.players[player.index].tileCount > 2):
                 path = dest_breadth_first_target(
                     map=self.map,
                     goalList=[general],

@@ -70,6 +70,16 @@ class CityAnalyzer(object):
         self.enemy_city_scores: typing.Dict[Tile, CityScoreData] = {}
         self.undiscovered_mountain_scores: typing.Dict[Tile, CityScoreData] = {}
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        if "map" in state:
+            del state["map"]
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.map = None
+
     def re_scan(self, board_analysis: BoardAnalyzer):
         self.city_scores: typing.Dict[Tile, CityScoreData] = {}
         self.player_city_scores: typing.Dict[Tile, CityScoreData] = {}
@@ -79,7 +89,8 @@ class CityAnalyzer(object):
         for tile in self.map.reachableTiles:
             # TODO calculate predicted enemy city locations in fog and explore mountains more in places we would WANT cities to be
             tileMightBeUndiscCity = not tile.discovered and tile.isObstacle and tile in self.map.reachableTiles
-            if not (tile.isCity or tileMightBeUndiscCity):
+            # if not (tile.isCity or tileMightBeUndiscCity):
+            if not tile.isCity:
                 continue
 
             score = CityScoreData(tile)
@@ -125,7 +136,7 @@ class CityAnalyzer(object):
 
         score.intergeneral_distance_differential = currentShortest - score.intergeneral_distance_through_city
 
-        score.general_distances_ratio = score.distance_from_player_general / score.distance_from_enemy_general
+        score.general_distances_ratio = score.distance_from_player_general / max(1, score.distance_from_enemy_general)
 
         # make this MUCH more impactful to the score, but cap it so we don't massively prioritize cities behind us
         distanceRatioSquared = score.general_distances_ratio * score.general_distances_ratio
@@ -140,7 +151,7 @@ class CityAnalyzer(object):
         else:
             scaleOffset = tile.army - 34
 
-        score.city_general_defense_score = 0.3 + 1.0 / (score.distance_from_player_general + scaleOffset) / max(0.2, score.general_distances_ratio)
+        score.city_general_defense_score = 0.3 + 1.0 / max(1, score.distance_from_player_general + scaleOffset) / max(0.2, score.general_distances_ratio)
 
         tilesNearbyFriendlyCounter = Counter(3)
         tilesNearbyEnemyCounter = Counter(3)

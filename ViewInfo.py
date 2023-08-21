@@ -81,7 +81,7 @@ class ViewInfo(object):
         self.infoText = "(replace with whatever text here)"
         self.cols = cols
         self.rows = rows
-        self.paths = deque()
+        self.paths: typing.Deque[PathColorer] = deque()
         self.topRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
         self.midRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
         self.bottomMidRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]

@@ -5,7 +5,7 @@ import typing
 
 from BotHost import BotHostBase
 from DataModels import Move
-from SearchUtils import count
+from SearchUtils import count, where
 from base.bot_base import create_thread
 from base.client.map import MapBase, Tile, TILE_EMPTY, TILE_OBSTACLE, Score, TILE_FOG, TILE_MOUNTAIN
 
@@ -86,12 +86,18 @@ class GamePlayer(object):
         self.move_history: typing.List[typing.Union[None, Move]] = []
         self.tiles_gained_this_turn: typing.Set[Tile] = set()
         self.tiles_lost_this_turn: typing.Set[Tile] = set()
-        self.dead: bool = False
+        self.dead: bool = map_raw.players[player_index].dead
         self.captured_by: int = -1
 
     def set_captured(self, captured_by_player: int):
         self.dead = True
         self.captured_by = captured_by_player
+
+    def __str__(self):
+        return f'{self.index} {"alive" if not self.dead else "dead"}'
+
+    def __repr__(self):
+        return str(self)
 
 
 class GameSimulator(object):
@@ -141,8 +147,7 @@ class GameSimulator(object):
         self.turn = self.turn + 1
         self.moves = [None for _ in self.moves]
         self._update_map_values()
-        self._update_scores()
-        self._send_updates_to_player_maps()
+        self.send_update_to_player_maps()
         self.tiles_updated_this_cycle = set()
 
     def is_game_over(self) -> bool:
@@ -152,6 +157,8 @@ class GameSimulator(object):
 
         if count(self.players, lambda player: not player.dead) > 1:
             return False
+
+        logging.info(f'Detected game win')
 
         for player in self.players:
             if not player.dead:
@@ -275,6 +282,9 @@ class GameSimulator(object):
 
             playerScoreClone = [Score(score.player, score.total, score.tiles, score.dead) for score in self.sim_map.scores]
             player.map.update_scores(playerScoreClone)
+            # give all players in the game perfect information about each others cities like they would have in a normal game by that turn
+            for i, otherPlayer in enumerate(self.players):
+                player.map.players[i].cityCount = otherPlayer.map.players[otherPlayer.map.player_index].cityCount
 
         # send updates for tiles they lost vision of
         # send updates for tiles they can see
@@ -305,20 +315,42 @@ class GameSimulator(object):
             player.map.result = False
             player.map.complete = True
 
-    def reveal_player_general(self, playerToReveal, playerToRevealTo):
+    def set_general_vision(self, playerToReveal, playerToRevealTo, hidden=False):
         revealGeneral = self.sim_map.generals[playerToReveal]
 
         player = self.players[playerToRevealTo]
+        if not hidden:
+            player.map.update_visible_tile(revealGeneral.x, revealGeneral.y, revealGeneral.player, revealGeneral.army, is_city=False, is_general=True)
+            player.map.update_visible_tile(revealGeneral.x, revealGeneral.y, TILE_FOG, 0, is_city=False, is_general=False)
+        else:
+            # we're hiding the general
+            playerTile = player.map.GetTile(revealGeneral.x, revealGeneral.y)
+            playerTile.visible = False
+            playerTile.discovered = False
+            playerTile.tile = TILE_FOG
+            playerTile.isCity = False
+            playerTile.isGeneral = False
+            playerTile.army = 0
+            playerTile.player = -1
+            player.map.generals[playerToReveal] = None
 
-        player.map.update_visible_tile(revealGeneral.x, revealGeneral.y, revealGeneral.player, revealGeneral.army, is_city=False, is_general=True)
-        player.map.update_visible_tile(revealGeneral.x, revealGeneral.y, TILE_FOG, 0, is_city=False, is_general=False)
+    def send_update_to_player_maps(self):
+        self._update_scores()
+        self._send_updates_to_player_maps()
 
 
 class GameSimulatorHost(object):
-    def __init__(self, map: MapBase, player_with_viewer: int = -1):
+    def __init__(self, map: MapBase, player_with_viewer: int = -1, playerMapVision: MapBase | None = None, afkPlayers: None | typing.List[int] = None, allAfkExceptViewer: bool =False):
         self.sim = GameSimulator(map, ignore_illegal_moves=False)
 
         self.bot_hosts: typing.List[BotHostBase | None] = [None for player in self.sim.players]
+
+        self.forced_afk_players: typing.List[int] = []
+        if afkPlayers is not None:
+            self.forced_afk_players = afkPlayers
+
+        if allAfkExceptViewer:
+            self.forced_afk_players = [i for i in where(range(len(map.players)), lambda p: p != player_with_viewer)]
 
         charMap = {
             0: 'a',
@@ -333,6 +365,9 @@ class GameSimulatorHost(object):
 
         for i in range(len(self.bot_hosts)):
             char = charMap[i]
+            if i in self.forced_afk_players:
+                # just leave the botHost as None for the afk player
+                continue
             hasUi = i == player_with_viewer or player_with_viewer == -2
             # i=i captures the current value of i in the lambda, otherwise all players lambdas would send the last players player index...
             botMover = lambda source, dest, moveHalf, i=i: self.sim.make_move(player_index=i, move=Move(source, dest, moveHalf))
@@ -342,18 +377,55 @@ class GameSimulatorHost(object):
 
             self.bot_hosts[i] = botHost
 
-    def run_sim(self, run_real_time: bool = True, turn_time: float = 0.5):
+        if playerMapVision is not None:
+            self.apply_map_vision(playerMapVision.player_index, rawMap=playerMapVision)
+
+        self.sim.send_update_to_player_maps()
+
+        for playerIndex, botHost in enumerate(self.bot_hosts):
+            if botHost is None:
+                continue
+            player = self.sim.players[playerIndex]
+            # this actually just initializes the bots viewers and stuff, we throw this first move away
+            botHost.eklipz_bot.initialize_map_for_first_time(player.map)
+            botHost.eklipz_bot.targetPlayer = (botHost.eklipz_bot.general.player + 1) % 2
+            botHost.eklipz_bot.targetPlayerObj = botHost.eklipz_bot._map.players[botHost.eklipz_bot.targetPlayer]
+            botHost.make_move(player.map)
+
+        # throw the initialized moves away
+        self.sim.moves = [None for move in self.sim.moves]
+
+    def run_sim(self, run_real_time: bool = True, turn_time: float = 0.5, turns: int = 10000) -> int | None:
+        """
+        Runs a sim for some number of turns and returns the player who won in that time (or None if no winner).
+
+        @param run_real_time:
+        @param turn_time:
+        @param turns:
+        @return:
+        """
+        for playerIndex, botHost in enumerate(self.bot_hosts):
+            if botHost is None:
+                continue
+            player = self.sim.players[playerIndex]
+            if botHost.has_viewer and run_real_time:
+                botHost.run_viewer_loop()
+
+        if run_real_time:
+            # time to look at the first move
+            time.sleep(2)
+
+        winner = None
         try:
-            for botHost in self.bot_hosts:
-                if botHost.has_viewer:
-                    botHost.run_viewer_loop()
-            while self.sim.turn < 2500:
+            turnsRun = 0
+            while turnsRun < turns:
                 logging.info(f'sim starting turn {self.sim.turn}')
                 start = time.perf_counter()
                 for playerIndex, botHost in enumerate(self.bot_hosts):
                     player = self.sim.players[playerIndex]
-                    if not player.dead:
+                    if not player.dead and not player.index in self.forced_afk_players:
                         botHost.make_move(player.map)
+
                 if run_real_time:
                     elapsed = time.perf_counter() - start
                     if elapsed < turn_time:
@@ -363,18 +435,32 @@ class GameSimulatorHost(object):
 
                 gameEndedByUser = False
                 for botHost in self.bot_hosts:
+                    if botHost is None:
+                        continue
                     if botHost.has_viewer and botHost.is_viewer_closed_by_user():
                         gameEndedByUser = True
 
                 if self.sim.is_game_over() or gameEndedByUser:
                     self.sim.end_game()
+                    for player in self.sim.players:
+                        if not player.dead:
+                            if winner is None:
+                                winner = player.index
+                            else:
+                                winner = -1
                     for botHost in self.bot_hosts:
+                        if botHost is None:
+                            continue
                         botHost.notify_game_over()
                     break
+
+                turnsRun += 1
         except:
-            self.sim.end_game()
             try:
+                self.sim.end_game()
                 for botHost in self.bot_hosts:
+                    if botHost is None:
+                        continue
                     botHost.notify_game_over()
             except:
                 logging.info("(error v notifying bots of game over, less important than real error below)")
@@ -387,6 +473,44 @@ class GameSimulatorHost(object):
 
         self.sim.end_game()
         for botHost in self.bot_hosts:
+            if botHost is None:
+                continue
             botHost.notify_game_over()
 
-        logging.info('game over!')
+        if winner == -1:
+            winner = None
+        return winner
+
+    def make_player_afk(self, player: int):
+        self.forced_afk_players.append(player)
+
+    def reveal_player_general(self, playerToReveal, playerToRevealTo, hidden=False):
+        self.sim.set_general_vision(playerToReveal, playerToRevealTo, hidden=hidden)
+        revealPlayer = self.sim.players[playerToRevealTo]
+        revealGeneral = self.sim.sim_map.generals[playerToReveal]
+
+        if hidden:
+            botHost = self.bot_hosts[playerToRevealTo]
+            playerTile = revealPlayer.map.GetTile(revealGeneral.x, revealGeneral.y)
+            if botHost is not None and playerTile in botHost.eklipz_bot.armyTracker.armies:
+                del botHost.eklipz_bot.armyTracker.armies[playerTile]
+
+
+
+    def apply_map_vision(self, player: int, rawMap: MapBase):
+        playerToGiveVision = self.sim.players[player]
+        for tile in rawMap.get_all_tiles():
+            playerTile = playerToGiveVision.map.GetTile(tile.x, tile.y)
+            if tile.army != 0 and not playerTile.visible:
+                playerTile.army = tile.army
+                playerTile.player = tile.player
+                playerTile.discovered = True
+                playerTile.visible = False
+                playerTile.isCity = tile.isCity
+                playerTile.isMountain = tile.isMountain
+                playerTile.isGeneral = tile.isGeneral
+                # playerTile.tile = tile.tile
+            if playerTile.isGeneral:
+                playerToGiveVision.map.players[playerTile.player].general = playerTile
+                playerToGiveVision.map.generals[playerTile.player] = playerTile
+

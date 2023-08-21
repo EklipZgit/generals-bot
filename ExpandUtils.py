@@ -5,6 +5,7 @@ from collections import deque
 
 from DataModels import Move
 from Path import Path
+from PerformanceTimer import PerformanceTimer
 from SearchUtils import breadth_first_foreach, count, solve_knapsack, build_distance_map, where, \
     breadth_first_dynamic_max
 from ViewInfo import PathColorer, ViewInfo
@@ -31,7 +32,9 @@ def get_optimal_expansion(
         skipFunc = None,
         boundFunc = None,
         allowLeafMoves = True,
-        calculateTrimmable = True) -> typing.Union[None, Path]:
+        calculateTrimmable = True,
+        perfTimer: PerformanceTimer | None = None
+) -> typing.Union[None, Path]:
 
     '''
     f(n) = node priority in queue
@@ -48,6 +51,7 @@ def get_optimal_expansion(
 
     what about estimated cost is distance to
     '''
+
     # allow exploration again
     fullLog = map.turn < 150
 
@@ -68,8 +72,8 @@ def get_optimal_expansion(
             withinTakeEverythingMatrix[tile] = True
 
     if viewInfo:
-        viewInfo.add_map_division(withinGenPathMatrix, (255, 200, 0))
-        viewInfo.add_map_division(withinTakeEverythingMatrix, (200, 0, 200))
+        viewInfo.add_map_division(withinGenPathMatrix, (255, 230, 0), alpha=100)
+        viewInfo.add_map_division(withinTakeEverythingMatrix, (250, 0, 250), alpha=100)
 
     ## The more turns remaining, the more we prioritize longer paths. Towards the end of expansion, we prioritize sheer captured tiles.
     ## This hopefully leads to finding more ideal expansion plans earlier on while being greedier later
@@ -547,13 +551,9 @@ def get_optimal_expansion(
             lambda tile: (negativeTiles is None or tile not in negativeTiles) and tile.army > tilePercentile[-1].army)
 
         tilesLargerThanAverage = tilePercentile
-        logging.info('cutoffFactor {}/{}, largestTile {}: {} army, smallestTile {}: {} army'
-                     .format(cutoffFactor,
-                             fullCutoff,
-                             tilePercentile[0].toString(),
-                             tilePercentile[0].army,
-                             tilePercentile[-1].toString(),
-                             tilePercentile[-1].army))
+        logging.info(
+            f'cutoffFactor {cutoffFactor}/{fullCutoff}, numTiles {len(tilesLargerThanAverage)}, largestTile {tilePercentile[0].toString()}: {tilePercentile[0].army} army, smallestTile {tilePercentile[-1].toString()}: {tilePercentile[-1].army} army')
+        logging.info(f'about to run an optimal expansion max for remainingTurns {remainingTurns}')
 
         # hack,  see what happens TODO
         # tilesLargerThanAverage = where(generalPlayer.tiles, lambda tile: tile.army > 1)
@@ -576,6 +576,7 @@ def get_optimal_expansion(
             valueFunc,
             0.03,
             remainingTurns,
+            maxDepth=remainingTurns,
             noNeutralCities=(not expandIntoNeutralCities),
             negativeTiles=negativeTiles,
             searchingPlayer=searchingPlayer,
@@ -649,7 +650,7 @@ def get_optimal_expansion(
                         "Did NOT add leafMove {} to knapsack input because its value was high. Why wasn't it already input if it is a good move?".format(
                             leafMove.toString()))
 
-    alpha = 75
+    alpha = 150
     minAlpha = 50
     alphaDec = 2
     trimmable = {}

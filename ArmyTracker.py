@@ -95,8 +95,8 @@ class PlayerAggressionTracker(object):
 
 
 class ArmyTracker(object):
-	def __init__(self, map):
-		self.map = map
+	def __init__(self, map: MapBase):
+		self.map: MapBase = map
 		self.armies: typing.Dict[Tile, Army] = {}
 		# used to keep track of armies while attempting to resolve where they went
 		self.trackingArmies: typing.Dict[Tile, Army] = {}
@@ -130,6 +130,12 @@ class ArmyTracker(object):
 		if turn > self.lastTurn:
 			self.lastTurn = turn
 			self.move_fogged_army_paths()
+
+		# if we have perfect info about a players general / cities, we don't need to track emergence, clear the emergence map
+		for player in self.map.players:
+			if self.has_perfect_information_of_player(player.index):
+				self.emergenceLocationMap[player.index] = [[0 for x in range(self.map.rows)] for y in range(self.map.cols)]
+
 		self.fogPaths = []
 		self.clean_up_armies()
 		self.distMap = distMap
@@ -561,20 +567,28 @@ class ArmyTracker(object):
 
 
 	def new_army_emerged(self, emergedTile, armyEmergenceValue):
-		logging.info("running new_army_emerged for tile {}".format(emergedTile.toString()))
-		distance = 11
-		#armyEmergenceValue = 
-		armyEmergenceValue = 2 + (armyEmergenceValue ** 0.8)
-		if armyEmergenceValue > 50:
-			armyEmergenceValue = 50
+		"""
+		when an army can't be resolved to coming from the fog from a known source, this method gets called to track its emergence location.
+		@param emergedTile:
+		@param armyEmergenceValue:
+		@return:
+		"""
+
+		if not self.has_perfect_information_of_player(emergedTile.player):
+			logging.info("running new_army_emerged for tile {}".format(emergedTile.toString()))
+			distance = 11
+			#armyEmergenceValue =
+			armyEmergenceValue = 2 + (armyEmergenceValue ** 0.8)
+			if armyEmergenceValue > 50:
+				armyEmergenceValue = 50
 
 
-		def foreachFunc(tile, dist): 
-			self.emergenceLocationMap[emergedTile.player][tile.x][tile.y] += 3 * armyEmergenceValue // max(7, (dist + 1))
+			def foreachFunc(tile, dist):
+				self.emergenceLocationMap[emergedTile.player][tile.x][tile.y] += 3 * armyEmergenceValue // max(7, (dist + 1))
 
-		negativeLambda = lambda tile: tile.discovered
-		skipFunc = lambda tile: (tile.visible or tile.discoveredAsNeutral) and tile != emergedTile
-		breadth_first_foreach_dist(self.map, [emergedTile], distance, foreachFunc, negativeLambda, skipFunc)
+			negativeLambda = lambda tile: tile.discovered
+			skipFunc = lambda tile: (tile.visible or tile.discoveredAsNeutral) and tile != emergedTile
+			breadth_first_foreach_dist(self.map, [emergedTile], distance, foreachFunc, negativeLambda, skipFunc)
 
 		for handler in self.notify_unresolved_army_emerged:
 			handler(emergedTile)
@@ -743,3 +757,11 @@ class ArmyTracker(object):
 			largerArmy.update_tile(finalTile)
 		self.armies[finalTile] = largerArmy
 		largerArmy.update()
+
+	def has_perfect_information_of_player(self, player: int):
+		mapPlayer = self.map.players[player]
+		if mapPlayer.general is not None and len(mapPlayer.cities) == mapPlayer.cityCount - 1:
+			# then we have perfect information about the player, no point in tracking emergence values
+			return True
+
+		return False

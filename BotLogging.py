@@ -18,7 +18,7 @@ def add_file_log_output(botName: str, gameMode: str, replayId: str, logFolder: s
     rootLogger.addHandler(fileHandler)
 
 
-def set_up_logger():
+def set_up_logger(logLevel: int):
     global LOGGING_SET_UP
 
     if LOGGING_SET_UP:
@@ -29,7 +29,7 @@ def set_up_logger():
     # logging.basicConfig(format='%(message)s', level=logging.DEBUG, force=True)
     # logging.basicConfig(format='%(levelname)s:%(message)s', filename="D:\\GeneralsLogs\\test.txt", level=logging.DEBUG, force=True)
     rootLogger = logging.getLogger()
-    rootLogger.setLevel(logging.DEBUG)
+    rootLogger.setLevel(logLevel)
 
     consoleHandler = logging.StreamHandler()
     consoleHandler.setFormatter(LOG_FORMATTER)

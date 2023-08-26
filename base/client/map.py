@@ -7,6 +7,7 @@
 import logging
 import typing
 import uuid
+from collections import deque
 
 TILE_EMPTY = -1
 TILE_MOUNTAIN = -2
@@ -72,6 +73,21 @@ class TileDelta(object):
 
         self.expectedDelta: int = 0
         """The EXPECTED army delta of the tile, this turn."""
+
+    def __str__(self):
+        pieces = [f'{self.armyDelta:+d}']
+        if self.oldOwner != self.newOwner:
+            pieces.append(f'p{self.oldOwner}->p{self.newOwner}')
+        if self.fromTile:
+            pieces.append(f'<- {repr(self.fromTile)}')
+        if self.toTile:
+            pieces.append(f'-> {repr(self.toTile)}')
+        if self.armyMovedHere:
+            pieces.append(f'<-?')
+        return ' '.join(pieces)
+
+    def __repr__(self):
+        return str(self)
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -230,7 +246,7 @@ class Tile(object):
         isGeneral=False,
         overridePlayer: int | None = None
     ) -> bool:
-        self.delta = TileDelta()
+        self.delta: TileDelta = TileDelta()
         if tile >= TILE_MOUNTAIN:
             self.discovered = True
             self.lastSeen = map.turn
@@ -250,11 +266,15 @@ class Tile(object):
 
                 if self._player == map.player_index or self._player in map.teammates:
                     # we lost the tile
-                    # TODO Who might have captured it? for now set to unowned.
+                    # I think this is handled by the Fog Island handler during map update...?
                     self.delta.friendlyCaptured = True
                     logging.info(f'tile captured, losing vision, army moved here true for {str(self)}')
                     armyMovedHere = True
                     self._player = -1
+                elif self._player >= 0 and self.army > 1:
+                    # we lost SIGHT of enemy tile, IF this tile has positive army, then army could have come from here TO another tile.
+                    logging.info(f'enemy tile adjacent to vision lost was lost, army moved here true for {str(self)}')
+                    # armyMovedHere = True
             elif tile == TILE_MOUNTAIN:
                 self.isMountain = True
             elif tile >= 0:
@@ -265,10 +285,10 @@ class Tile(object):
         # can only 'expect' army deltas for tiles we can see. Visible is already calculated above at this point.
         if self.visible:
             expectedDelta: int = 0
-            if (self.isCity or self.isGeneral) and self.player >= 0 and map.turn % 2 == 0:
+            if (self.isCity or self.isGeneral) and self.player >= 0 and map.is_city_bonus_turn:
                 expectedDelta += 1
 
-            if self.player >= 0 and map.turn % 50 == 0:
+            if self.player >= 0 and map.is_army_bonus_turn:
                 expectedDelta += 1
 
             self.delta.expectedDelta = expectedDelta
@@ -324,7 +344,7 @@ class Tile(object):
 
         if self.delta.oldOwner != self.delta.newOwner:
             # TODO  and not self.delta.gainedSight ?
-            logging.info(f'oldOwner != newOwner for {str(self)}')
+            logging.debug(f'oldOwner != newOwner for {str(self)}')
             armyMovedHere = True
 
         # if self.delta.oldOwner == self.delta.newOwner and self.delta.armyDelta == 0:
@@ -333,7 +353,7 @@ class Tile(object):
         self.delta.armyMovedHere = armyMovedHere
 
         if armyMovedHere:
-            logging.info(f'armyMovedHere True for {str(self)} (expected delta was {self.delta.expectedDelta}, actual was {self.delta.armyDelta})')
+            logging.debug(f'armyMovedHere True for {str(self)} (expected delta was {self.delta.expectedDelta}, actual was {self.delta.armyDelta})')
 
         return armyMovedHere
 
@@ -409,7 +429,9 @@ class MapBase(object):
 
         self.init_grid_movable()
 
-        self.turn: int = turn  # Integer Turn # (1 turn / 0.5 seconds)
+        self._turn: int = turn  # Integer Turn # (1 turn / 0.5 seconds)
+        self.is_city_bonus_turn: bool = turn & 1 == 0
+        self.is_army_bonus_turn: bool = turn % 50 == 0
         # List of City Tiles. Need concept of hidden cities from sim..? or maintain two maps, maybe. one the sim maintains perfect knowledge of, and one for each bot with imperfect knowledge from the sim.
         self.cities: typing.List[Tile] = []
         self.replay_url = replay_url
@@ -425,8 +447,26 @@ class MapBase(object):
         self.result: bool = False
         """Game Result (True = Won)"""
 
-        self.scoreHistory: typing.List[typing.Union[None, typing.List[Score]]] = [None for i in range(25)]
+        self.scoreHistory: typing.List[typing.Union[None, typing.List[Score]]] = [None for i in range(50)]
         self.remainingPlayers = 0
+
+    @property
+    def turn(self) -> int:
+        return self._turn
+
+    @turn.setter
+    def turn(self, val: int):
+        if val & 1 == 0:
+            self.is_city_bonus_turn = True
+            if val % 50 == 0:
+                self.is_army_bonus_turn = True
+            else:
+                self.is_army_bonus_turn = False
+        else:
+            self.is_army_bonus_turn = False
+            self.is_city_bonus_turn = False
+
+        self._turn = val
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -532,28 +572,24 @@ class MapBase(object):
             if not player.dead and player != myPlayer:
                 otherPlayer = player
 
-        expectCityBonus = self.turn % 2 == 0
-        expectArmyBonus = self.turn % 50 == 0
-        if expectArmyBonus or not expectCityBonus:
-            logging.info("do nothing, we can't calculate cities on a non-even turn, or on army bonus turns!")
+        if not self.is_city_bonus_turn:
+            logging.info("do nothing, we can't calculate cities on a non-even turn")
             return
-        # if player.cityCount < cityCounts[i]:
-        #	player.cityCount = cityCounts[i]
-        #	player.cityGainedTurn = self.turn
-        # if player.cityCount > cityCounts[i] and cityCounts[i] > 0:
-        #	player.cityCount = cityCounts[i]
-        #	player.cityLostTurn = self.turn
+
         expectedPlayerDelta = 0
-        if expectCityBonus:
-            # +1 for general bonus
+        expectedEnemyDelta = 0
+        if self.is_city_bonus_turn:
             expectedPlayerDelta += myPlayer.cityCount
 
-        expectedEnemyDelta = 0
+        if self.is_army_bonus_turn:
+            expectedPlayerDelta += myPlayer.tileCount
+            expectedEnemyDelta += otherPlayer.tileCount
 
         lastScores = self.scoreHistory[1]
         if lastScores is None:
             logging.info("no last scores?????")
             return
+
         logging.info(f"myPlayer score {myPlayer.score}, lastScores myPlayer total {lastScores[myPlayer.index].total}")
         actualPlayerDelta = myPlayer.score - lastScores[myPlayer.index].total
         logging.info(
@@ -573,7 +609,7 @@ class MapBase(object):
         elif realEnemyCities >= 30 and actualPlayerDelta < -30:
             # then our player just took a neutral city, noop
             logging.info(
-                "myPlayer just took a city? ignoring realEnemyCities this turn, realEnemyCities >= 38 and actualPlayerDelta < -30")
+                "myPlayer just took a city? (or fighting in ffa) ignoring realEnemyCities this turn, realEnemyCities >= 38 and actualPlayerDelta < -30")
         else:
             otherPlayer.cityCount = realEnemyCities
             logging.info(
@@ -629,13 +665,22 @@ class MapBase(object):
         self.army_moved_grid = [[False for x in range(self.cols)] for y in range(self.rows)]
 
     def update_scores(self, scores: typing.List[Score]):
+        """ONLY call this when simulating the game"""
         self.scores = scores
 
     # Emulates a tile update event from the server. Changes player tile ownership, or mountain to city, etc, and fires events
-    def update_visible_tile(self, x: int, y: int, tile_type: int, tile_army: int, is_city: bool, is_general: bool):
+    def update_visible_tile(
+            self,
+            x: int,
+            y: int,
+            tile_type: int,
+            tile_army: int,
+            is_city: bool = False,
+            is_general: bool = False):
         """
-        Call this AFTER calling map.update_turn
-        ONLY call this once per turn per tile, or deltas will be messed up
+        Call this AFTER calling map.update_turn.
+        ONLY call this once per turn per tile, or deltas will be messed up.
+        THEN once all tile updates are queued, call map.update() to process all the updates into tile movements.
 
         @param x:
         @param y:
@@ -696,33 +741,14 @@ class MapBase(object):
             for y in range(self.rows):
                 curTile = self.grid[y][x]
 
-                # logging.info(f'MAP: {self.turn} : {str(curTile)}, {curTile.army}')
                 if curTile.isCity and curTile.player != -1:
                     self.players[curTile.player].cities.append(curTile)
-                if self.army_moved_grid[y][x]:
+                maybeMovedTo = self.army_moved_grid[y][x]
+                if maybeMovedTo:
                     # look for candidate tiles that army may have come from
                     bestCandTile = None
                     bestCandValue = -1
-                    if x - 1 >= 0:  # examine left
-                        candidateTile = self.grid[y][x - 1]
-                        candValue = evaluateTileDiffs(curTile, candidateTile)
-                        if candValue > bestCandValue:
-                            bestCandValue = candValue
-                            bestCandTile = candidateTile
-                    if x + 1 < self.cols:  # examine right
-                        candidateTile = self.grid[y][x + 1]
-                        candValue = evaluateTileDiffs(curTile, candidateTile)
-                        if candValue > bestCandValue:
-                            bestCandValue = candValue
-                            bestCandTile = candidateTile
-                    if y - 1 >= 0:  # examine top
-                        candidateTile = self.grid[y - 1][x]
-                        candValue = evaluateTileDiffs(curTile, candidateTile)
-                        if candValue > bestCandValue:
-                            bestCandValue = candValue
-                            bestCandTile = candidateTile
-                    if y + 1 < self.rows:  # examine bottom
-                        candidateTile = self.grid[y + 1][x]
+                    for candidateTile in curTile.movable:
                         candValue = evaluateTileDiffs(curTile, candidateTile)
                         if candValue > bestCandValue:
                             bestCandValue = candValue
@@ -731,19 +757,27 @@ class MapBase(object):
                     if bestCandTile is not None:
                         self.army_moved_grid[bestCandTile.y][bestCandTile.x] = False
                         if bestCandValue >= 100:
+                            if not bestCandTile.visible:
+                                bestCandTile.army += curTile.delta.armyDelta
+                                bestCandTile.delta.armyDelta = 0 - curTile.delta.armyDelta
                             # only say the army is completely covered if the confidence was high, otherwise we can have two armies move here from diff players
                             self.army_moved_grid[y][x] = False
                         if curTile.player == -1:
                             curTile.player = bestCandTile.player
                         curTile.delta.fromTile = bestCandTile
                         bestCandTile.delta.toTile = curTile
-                if (not curTile.visible and (
-                        curTile.isCity or curTile.isGeneral) and curTile.player >= 0 and self.turn % 2 == 0):
-                    curTile.army += 1
-                if not curTile.visible and curTile.player >= 0 and self.turn % 50 == 0:
-                    curTile.army += 1
+
                 if curTile.player >= 0:
                     self.players[curTile.player].tiles.append(curTile)
+
+        for x in range(self.cols):
+            for y in range(self.rows):
+                curTile = self.grid[y][x]
+                if (not curTile.visible and (
+                        curTile.isCity or curTile.isGeneral) and curTile.player >= 0 and self.is_city_bonus_turn):
+                    curTile.army += 1
+                if not curTile.visible and curTile.player >= 0 and self.is_army_bonus_turn:
+                    curTile.army += 1
 
         self.update_reachable()
 
@@ -803,7 +837,7 @@ class MapBase(object):
         pathableTiles = set()
         reachableTiles = set()
 
-        queue = []
+        queue = deque()
 
         for gen in self.generals:
             if gen is not None:
@@ -811,7 +845,7 @@ class MapBase(object):
                 self.players[gen.player].general = gen
 
         while len(queue) > 0:
-            tile = queue.pop(0)
+            tile = queue.popleft()
             isNeutCity = tile.isCity and tile.isNeutral
             tileIsPathable = not tile.isNotPathable
             if tile not in pathableTiles and tileIsPathable and not isNeutCity:
@@ -822,6 +856,16 @@ class MapBase(object):
 
         self.pathableTiles = pathableTiles
         self.reachableTiles = reachableTiles
+
+    def clear_deltas(self):
+        self.scoreHistory = [None for i in range(50)]
+        for tile in self.get_all_tiles():
+            tile.delta = TileDelta()
+            # Make the deltas look normal, otherwise loading a map mid-game looks to the bot like these tiles all got attacked by something on army bonus turns etc.
+            if self.is_army_bonus_turn and tile.player >= 0:
+                tile.delta.armyDelta += 1
+            if self.is_city_bonus_turn and tile.player >= 0 and (tile.isGeneral or tile.isCity):
+                tile.delta.armyDelta += 1
 
 
 # Actual live server map that interacts with the crazy array patch diffs.
@@ -844,7 +888,6 @@ class Map(MapBase):
         super().__init__(start_data['playerIndex'], teams, start_data['usernames'], data['turn'], map_grid_y_x, replay_url, start_data['replay_id'])
 
         self.apply_server_update(data)
-
 
     def __getstate__(self):
         state = super().__getstate__()
@@ -1019,7 +1062,7 @@ def evaluateMoveFromFog(tile, candidateTile):
                      f'->{tile.x},{tile.y}({tile.delta.armyDelta})')
         return -100
 
-    candidateDelta = candidateTile.army + tile.delta.armyDelta
+    candidateDelta = candidateTile.army + tile.delta.armyDelta - 1
     if candidateDelta == 0:
         logging.info(f'(evaluateMoveFromFog) candidateDelta == 0 '
                      f'{candidateTile.x},{candidateTile.y}({candidateTile.delta.armyDelta})'
@@ -1039,22 +1082,38 @@ def evaluateMoveFromFog(tile, candidateTile):
 
 
 def evaluateIslandFogMove(tile, candidateTile):
+    if tile.visible:
+        raise AssertionError("wtf, can't call this for visible tiles my guy")
+
     # print(str(tile.army) + " : " + str(candidateTile.army))
-    if candidateTile.visible and tile.army + candidateTile.delta.armyDelta < -1 and candidateTile.player != -1:
+    if candidateTile.visible:
+        if tile.army + candidateTile.delta.armyDelta < -1 and candidateTile.player != -1:
+            tile.player = candidateTile.player
+            tile.delta.newOwner = candidateTile.player
+            oldArmy = tile.army
+            tile.army = 0 - candidateTile.delta.armyDelta - tile.army
+            # THIS HANDLED EXTERNAL IN THE UPDATE LOOP, AFTER THIS LOGIC HAPPENS
+            # if tile.isCity and isCityBonusTurn:
+            #     tile.army += 1
+            # if isArmyBonusTurn:
+            #     tile.army += 1
+            logging.info(f" (islandFog 1) tile {tile.toString()} army from {oldArmy} to {tile.army}")
+            return 40
+    elif tile.army - candidateTile.army < -1 and candidateTile.player != -1:
         tile.player = candidateTile.player
         tile.delta.newOwner = candidateTile.player
-        tile.army = 0 - candidateTile.delta.armyDelta - tile.army
-        candidateTile.army = 1
-        logging.info(" (islandFog 1) tile {} army to {}".format(tile.toString(), tile.army))
-        logging.info(" (islandFog 1) candTile {} army to 1".format(candidateTile.toString()))
-        return 40
-    if tile.army - candidateTile.army < -1 and candidateTile.player != -1:
-        tile.player = candidateTile.player
-        tile.delta.newOwner = candidateTile.player
+        oldArmy = tile.army
         tile.army = candidateTile.army - tile.army - 1
+        oldCandArmy = candidateTile.army
         candidateTile.army = 1
-        logging.info(" (islandFog 2) tile {} army to {}".format(tile.toString(), tile.army))
-        logging.info(" (islandFog 2) candTile {} army to 1".format(candidateTile.toString()))
+        # THIS HANDLED EXTERNAL IN THE UPDATE LOOP, AFTER THIS LOGIC HAPPENS
+        # if candidateTile.isCity and isCityBonusTurn:
+        #     candidateTile.army += 1
+        # if isArmyBonusTurn:
+        #     candidateTile.army += 1
+        logging.info(f" (islandFog 2) tile {tile.toString()} army from {oldArmy} to {tile.army}")
+        logging.info(
+            f" (islandFog 2) candTile {candidateTile.toString()} army from {oldCandArmy} to {candidateTile.army}")
         return 30
     return -100
 

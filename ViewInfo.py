@@ -57,6 +57,7 @@ class ViewInfo(object):
         self.gatherNodes: typing.List[TreeNode] | None = None
         self.redGatherNodes: typing.List[TreeNode] | None = None
         self.territories: TerritoryClassifier | None = None
+        self.perfEvents: typing.List[str] = []
         self.allIn: bool = False
         self.timings: Timings | None = None
         self.allInCounter: int = 0
@@ -70,10 +71,10 @@ class ViewInfo(object):
         """
         self.playerTargetScores: typing.List[int] = []
 
-        self.redTargetedTiles: typing.List[typing.Tuple[Tile, TargetStyle]] = []
-        self.redTargetedTileHistory: typing.List[typing.List[typing.Tuple[Tile, TargetStyle]]] = []
-        for i in range(countHist):
-            self.redTargetedTileHistory.append([])
+        self.targetedTiles: typing.List[typing.Tuple[Tile, TargetStyle]] = []
+        # self.redTargetedTileHistory: typing.List[typing.List[typing.Tuple[Tile, TargetStyle]]] = []
+        # for i in range(countHist):
+        #     self.redTargetedTileHistory.append([])
 
         # per-tile int that darkens the red 'evaluated' X drawn on evaluated tiles.
         self.evaluatedGrid: typing.List[typing.List[int]] = []
@@ -103,6 +104,7 @@ class ViewInfo(object):
         self.dangerAnalyzer: DangerAnalyzer | None = None
         self.currentPath: Path | None = None
         self.gatherNodes: typing.List[TreeNode] | None = None
+        self.perfEvents = []
         self.paths = deque()
         self.redGatherNodes: typing.List[TreeNode] | None = None
         self.territories: TerritoryClassifier | None = None
@@ -117,13 +119,13 @@ class ViewInfo(object):
         self.bottomLeftGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
         self.bottomMidLeftGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
         self.midLeftGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
-        countHist = len(self.redTargetedTileHistory)
-        for i in range(countHist):
-            if (i == countHist - 2):
-                break
-            self.redTargetedTileHistory[countHist - i - 1] = self.redTargetedTileHistory[countHist - i - 2]
-        self.redTargetedTileHistory[0] = self.redTargetedTiles
-        self.redTargetedTiles = []
+        # countHist = len(self.redTargetedTileHistory)
+        # for i in range(countHist):
+        #     if (i == countHist - 2):
+        #         break
+        #     self.redTargetedTileHistory[countHist - i - 1] = self.redTargetedTileHistory[countHist - i - 2]
+        # self.redTargetedTileHistory[0] = self.targetedTiles
+        self.targetedTiles = []
 
         self.lastEvaluatedGrid = self.evaluatedGrid
         if len(self.lastEvaluatedGrid) == 0:
@@ -131,7 +133,7 @@ class ViewInfo(object):
         self.evaluatedGrid = [[0 for y in range(self.rows)] for x in range(self.cols)]
 
     def add_targeted_tile(self, tile: Tile, targetStyle: TargetStyle = TargetStyle.RED):
-        self.redTargetedTiles.append((tile, targetStyle))
+        self.targetedTiles.append((tile, targetStyle))
 
     def addAdditionalInfoLine(self, additionalInfo: str):
         logging.info(additionalInfo)
@@ -139,3 +141,6 @@ class ViewInfo(object):
 
     def add_map_division(self, withinGenPathMatrix: MapMatrix, color: typing.Tuple[int, int, int], alpha: int = 128):
         self._divisions.append((withinGenPathMatrix, color, alpha))
+
+    def color_path(self, pathColorer: PathColorer):
+        self.paths.append(pathColorer)

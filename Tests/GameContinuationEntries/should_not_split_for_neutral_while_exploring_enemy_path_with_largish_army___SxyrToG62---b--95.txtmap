@@ -1,0 +1,45 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M                   M                   M         M                   M    M
+     M    M              b1   b1   b1   b1   M         a1   a1   a1   M         M    M
+                         M    b1   b1   b1   b1   b12  a1   M    a1
+     M              b1   b1   b1   M    bG2  b1   b1   M         a1
+                    b1        b1        M    M    b1   M
+               M    b1        b1                  b1   C49       M         M         M
+               M    b1        b1   b1             b1   M              M
+     M                   M         b1        M    b1   M         M
+                         M    C43  a2   a1   b1   b1   M    M    M                   M
+          M    M              C45  a4   a1   b1             M              M
+     M         M                        M    b1   M    M    a1   M    M              M
+                              M    M         b1   b1   b1   b1   b1   a11  a1
+                    M              M    M    a1   M    M    M    a3   M    a1
+M    M                        M         M         M         a1   a1   a1   a1   M    M
+          M         M    M         M    M                   a1   M    b1   M
+     M                                            M              M    b1   b1
+                                             M                   M
+     M              M                   M         M    M              M
+                                                                      M    M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=16,12
+loadAsIs=True
+turn=95
+bot_player_index=1
+aTiles=37
+aScore=50
+aStandingArmy=13
+aStars=53
+aCityCount=1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=39
+bScore=51
+bStandingArmy=12
+bStars=52
+bCityCount=1
+bGeneral=8,3
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=0

@@ -19,7 +19,9 @@ import SearchUtils
 from ArmyAnalyzer import *
 
 from ViewInfo import TargetStyle, ViewInfo
-from base.client.map import MapBase, Score
+from base.client.map import MapBase, Score, TILE_MOUNTAIN
+
+MIN_WINDOW_WIDTH = 14
 
 # Color Definitions
 BLACK = (0, 0, 0)
@@ -135,6 +137,7 @@ class GeneralsViewer(object):
         self._event_queue: "Queue[bool]" = pygame_event_queue
         self._scores: typing.List[Score] = []
         self._map: MapBase = None
+        self._real_width = 0
         self._name = name
         self.last_update_received: float = time.perf_counter()
         self._receivedUpdate = False
@@ -149,7 +152,6 @@ class GeneralsViewer(object):
 
         self.infoRowHeight = 170
         self.infoLineHeight = 17
-        self.infoSpaceFromLeft = 180
 
         self.plusDepth = 9
         self.offset1080Above1440p = 276  # 320 was too far right...?
@@ -165,6 +167,12 @@ class GeneralsViewer(object):
             self._viewInfo = viewInfo
         if map is not None:
             self._map = map
+            # self._real_width = self._map.cols
+            # if self._map.cols < 11:
+            #     for y, row in enumerate(self._map.grid):
+            #         for x in range(self._map.cols, 11):
+            #             row.append(Tile(x, y, TILE_MOUNTAIN, 0))
+            #     self._map.cols = 11
             self._map.init_grid_movable()
             self._scores = sorted(map.scores, key=lambda score: score.total, reverse=True)  # Sort Scores
 
@@ -202,20 +210,24 @@ class GeneralsViewer(object):
         # Set Window Size
         window_height = self._map.rows * (
                     self.cellHeight + CELL_MARGIN) + CELL_MARGIN + self.scoreRowHeight + self.infoRowHeight
-        window_width = self._map.cols * (self.cellWidth + CELL_MARGIN) + CELL_MARGIN
+        window_width = max(MIN_WINDOW_WIDTH, self._map.cols) * (self.cellWidth + CELL_MARGIN) + CELL_MARGIN
         self._window_size = [window_width, window_height]
         self._screen = pygame.display.set_mode(self._window_size)
         self._transparent = pygame.Surface(self._window_size, pygame.SRCALPHA)
 
         window_title = str(self._name)
         pygame.display.set_caption(window_title)
-        self._font = pygame.font.SysFont('Arial', int(self.cellHeight // 2) - 2)
-        smallFontHeight = min(15, int(self.cellHeight // 4))
-        self._fontSmall = pygame.font.SysFont('Arial', smallFontHeight)
-        self._smallFontWidth = smallFontHeight // 2 - 1
-        self._lrgHeight = int(3 * self.cellHeight // 4)
-        self._fontLrg = pygame.font.SysFont('Arial', self._lrgHeight)
-        self._lrgFontWidth = self._lrgHeight // 3 - 1
+        self._medFontHeight = int(self.cellHeight // 2) - 2
+        self._smallFontHeight = min(15, int(self.cellHeight // 4))
+        self._lrgFontHeight = int(3 * self.cellHeight // 4)
+        self._medFont = pygame.font.SysFont('Arial', self._medFontHeight)
+        self._smallFont = pygame.font.SysFont('Arial', self._smallFontHeight)
+        self._lrgFont = pygame.font.SysFont('Arial', self._lrgFontHeight)
+        self._smallFontWidth = self._smallFontHeight / 2.27
+        self._medFontWidth = self._medFontHeight / 2.27
+        self._lrgFontWidth = self._lrgFontHeight / 2.27
+        # self.infoSpaceFromLeft = self.get_large_text_offset_from_right("Turn: 1000, (.50) ")
+        self.infoSpaceFromLeft = self.get_med_text_offset_from_right(".004 Rebuilding intergeneral_an ") # we actually allow extra room for the bottom stuff now
 
         self._clock = pygame.time.Clock()
 
@@ -309,6 +321,10 @@ class GeneralsViewer(object):
                     done = True
                     self._event_queue.put(False)
                 pass
+            except BrokenPipeError:
+                logging.info('pipe died')
+                done = True
+                break
 
             for event in pygame.event.get():  # User did something
                 if event.type == pygame.QUIT:  # User clicked quit
@@ -341,18 +357,18 @@ class GeneralsViewer(object):
                 allInText = "+"
 
             # Draw Bottom Info Text
-            self._screen.blit(self._fontLrg.render(
+            self._screen.blit(self._lrgFont.render(
                 "Turn: {}, ({})".format(self._map.turn, ("%.2f" % self._viewInfo.lastMoveDuration).lstrip('0')),
                 True, WHITE), (10, self._window_size[1] - self.infoRowHeight + 4))
             curInfoTextHeight = 0
-            self._screen.blit(self._font.render(self._viewInfo.infoText, True, WHITE),
+            self._screen.blit(self._medFont.render(self._viewInfo.infoText, True, WHITE),
                               (self.infoSpaceFromLeft, self._window_size[1] - self.infoRowHeight))
             curInfoTextHeight += self.infoLineHeight
             if self._viewInfo.timings:
                 timings = self._viewInfo.timings
                 timingTurn = (self._map.turn + timings.offsetTurns) % timings.cycleTurns
                 self._screen.blit(
-                    self._font.render(
+                    self._medFont.render(
                         "Timings: {} ({})   - {}{}       {}".format(
                             timings.toString(), timingTurn, allInText, self._viewInfo.allInCounter,
                             self._viewInfo.addlTimingsLineText),
@@ -362,13 +378,27 @@ class GeneralsViewer(object):
                 curInfoTextHeight += self.infoLineHeight
 
             for addlInfo in self._viewInfo.addlInfoLines:
+                if addlInfo == self._viewInfo.infoText:
+                    continue
                 self._screen.blit(
-                    self._font.render(
+                    self._medFont.render(
                         addlInfo,
                         True,
                         WHITE),
                     (self.infoSpaceFromLeft, self._window_size[1] - self.infoRowHeight + curInfoTextHeight))
                 curInfoTextHeight += self.infoLineHeight
+
+            perfEventHeight = 30
+            for perfEvent in self._viewInfo.perfEvents:
+                if perfEvent == self._viewInfo.infoText:
+                    continue
+                self._screen.blit(
+                    self._medFont.render(
+                        perfEvent,
+                        True,
+                        WHITE),
+                    (0, self._window_size[1] - self.infoRowHeight + perfEventHeight))
+                perfEventHeight += self.infoLineHeight
 
             # Draw Scores
             pos_top = self._window_size[1] - self.infoRowHeight - self.scoreRowHeight
@@ -392,18 +422,18 @@ class GeneralsViewer(object):
                         userName = self._map.usernames[player.index]
                         userString = "{} ({})".format(userName, player.stars)
                         try:
-                            self._screen.blit(self._font.render(userString, True, WHITE),
+                            self._screen.blit(self._medFont.render(userString, True, WHITE),
                                               (score_width * i + 3, pos_top + 1))
                         except:
                             userString = "{} ({})".format("INVALID_NAME", player.stars)
-                            self._screen.blit(self._font.render(userString, True, WHITE),
+                            self._screen.blit(self._medFont.render(userString, True, WHITE),
                                               (score_width * i + 3, pos_top + 1))
 
                         playerSubtext = "{} on {} ({})".format(player.score, player.tileCount, player.cityCount)
                         if player.index != self._map.player_index:
                             playerSubtext += " [{}]".format(str(int(self._viewInfo.playerTargetScores[player.index])))
-                        self._screen.blit(self._font.render(playerSubtext, True, WHITE),
-                                          (score_width * i + 3, pos_top + 1 + self._font.get_height()))
+                        self._screen.blit(self._medFont.render(playerSubtext, True, WHITE),
+                                          (score_width * i + 3, pos_top + 1 + self._medFont.get_height()))
             # for i, score in enumerate(self._scores):
             #    score_color = PLAYER_COLORS[int(score['i'])]
             #    if (score['dead'] == True):
@@ -416,7 +446,6 @@ class GeneralsViewer(object):
             #    self._screen.blit(self._font.render(str(score['total']) + " on " + str(score['tiles']), True, WHITE), (score_width * i + 3, pos_top + 1 + self._font.get_height()))
 
             # Draw Grid
-            # print("drawing grid")
             for row in range(self._map.rows):
                 for column in range(self._map.cols):
                     tile = self._map.grid[row][column]
@@ -504,13 +533,12 @@ class GeneralsViewer(object):
                     if threat is None:
                         continue
                     # Draw danger path
-                    # print("drawing path")
                     alpha = 200
                     alphaDec = 6
                     alphaMin = 145
                     self.draw_path(threat.path, 150, 0, 0, alpha, alphaDec, alphaMin)
 
-            for (tile, targetStyle) in self._viewInfo.redTargetedTiles:
+            for (tile, targetStyle) in self._viewInfo.targetedTiles:
                 if tile is None:
                     continue
                 pos_left = (CELL_MARGIN + self.cellWidth) * tile.x + CELL_MARGIN
@@ -534,28 +562,13 @@ class GeneralsViewer(object):
                                        7)
                     pygame.draw.circle(self._screen, pColor, [pos_left_circle, pos_top_circle],
                                        int(self.cellWidth / 2) - 5, 1)
-            # print("history")
             s = pygame.Surface((self.cellWidth, self.cellHeight))
             s.fill(WHITE)
             s.set_colorkey(WHITE)
 
             pygame.draw.circle(s, BLACK, [int(self.cellWidth / 2), int(self.cellHeight / 2)],
                                int(self.cellWidth / 2 - 2), 7)
-            # pygame.draw.circle(s, RED, [int(self.cellWidth / 2), int(self.cellHeight / 2)], int(self.cellWidth / 2) - 10, 1)
-            for i in range(len(self._viewInfo.redTargetedTileHistory)):
-                hist = self._viewInfo.redTargetedTileHistory[i]
-                alpha = 150 - 30 * i
-                s.set_alpha(alpha)
-                for (tile, targetStyle) in hist:
-                    targetColor = self.get_color_from_target_style(targetStyle)
-                    pos_left = (CELL_MARGIN + self.cellWidth) * tile.x + CELL_MARGIN
-                    pos_top = (CELL_MARGIN + self.cellHeight) * tile.y + CELL_MARGIN
-                    pygame.draw.circle(s, targetColor, [int(self.cellWidth / 2), int(self.cellHeight / 2)],
-                                       int(self.cellWidth / 2) - 5, 1)
-                    # first, "erase" the surface by filling it with a color and
-                    # setting this color as colorkey, so the surface is empty
-                    self._screen.blit(s, (pos_left, pos_top))
-            # print("surface")
+
             s = pygame.Surface((self.cellWidth, self.cellHeight))
             s.fill(WHITE)
             s.set_colorkey(WHITE)
@@ -563,25 +576,18 @@ class GeneralsViewer(object):
             pygame.draw.line(s, RED, (0, 0), (self.cellWidth, self.cellHeight), 2)
             pygame.draw.line(s, BLACK, (0, self.cellHeight), (self.cellWidth, 0), 4)
             pygame.draw.line(s, RED, (0, self.cellHeight), (self.cellWidth, 0), 2)
-            # print("val")
             if (self._map is not None and self._viewInfo is not None and self._viewInfo.evaluatedGrid is not None and len(
                     self._viewInfo.evaluatedGrid) > 0):
-                # print("if")
                 for row in range(self._map.rows):
                     for column in range(self._map.cols):
-                        # print("loop")
                         countEvaluated = int(self._viewInfo.evaluatedGrid[column][row] +
                                              self._viewInfo.lastEvaluatedGrid[column][row])
-                        # print("loopVal")
                         if countEvaluated > 0:
-                            # print("CountVal: {},{}: {}".format(column, row, countEvaluated))
                             pos_left = (CELL_MARGIN + self.cellWidth) * column + CELL_MARGIN
                             pos_top = (CELL_MARGIN + self.cellHeight) * row + CELL_MARGIN
                             alpha = int(75 + countEvaluated * 3)
                             s.set_alpha(alpha if alpha < 255 else 255)
                             self._screen.blit(s, (pos_left, pos_top))
-            # print("deltas")
-            # print("drawing deltas")
             # Draw deltas
             for row in range(self._map.rows):
                 for column in range(self._map.cols):
@@ -590,7 +596,6 @@ class GeneralsViewer(object):
                     if tile.delta.toTile:
                         self.draw_between_tiles(self.delta_arrow, tile, tile.delta.toTile)
 
-            # print("drawing text")
             # draw text
             for row in range(self._map.rows):
                 for column in range(self._map.cols):
@@ -603,15 +608,15 @@ class GeneralsViewer(object):
 
                     if not tile in self._map.pathableTiles and not tile.isNotPathable and not tile.isCity and not tile.isMountain:
                         textVal = "   X"
-                        self._screen.blit(self._font.render(textVal, True, color_font),
+                        self._screen.blit(self._medFont.render(textVal, True, color_font),
                                           (pos_left + 2, pos_top + self.cellHeight / 4))
 
                     # Draw Text Value
                     if tile.army != 0 and (
                             tile.discovered or tile in self._viewInfo.armyTracker.armies):  # Don't draw on empty tiles
                         textVal = str(tile.army)
-                        textWidth = self._lrgFontWidth * len(textVal)
-                        self._screen.blit(self._font.render(textVal, True, color_font),
+                        textWidth = self._medFontWidth * len(textVal)
+                        self._screen.blit(self._medFont.render(textVal, True, color_font),
                                           (pos_left + (self.cellWidth - textWidth) / 2, pos_top + self.cellHeight / 4))
                     # Draw coords
                     textVal = "{},{}".format(tile.x, tile.y)
@@ -715,7 +720,6 @@ class GeneralsViewer(object):
             logging.info("err")  # Log it or whatever here
             logging.error(''.join('!! ' + line for line in lines))  # Log it or whatever here
             raise
-        # print("Unexpected error:", sys.exc_info()[0])
 
     def tile_text_colorer(self, tile) -> typing.Tuple[int, int, int]:
         if tile.player == -1 and tile.visible:
@@ -764,7 +768,7 @@ class GeneralsViewer(object):
 
         pos_left = (CELL_MARGIN + self.cellWidth) * tile.x + CELL_MARGIN
         pos_top = (CELL_MARGIN + self.cellHeight) * tile.y + CELL_MARGIN
-        self._screen.blit(self._font.render(army.name, True, WHITE), (pos_left + self.cellWidth - 10, pos_top))
+        self._screen.blit(self._medFont.render(army.name, True, WHITE), (pos_left + self.cellWidth - 10, pos_top))
 
     def draw_armies(self):
         if self._viewInfo.armyTracker is not None:
@@ -905,22 +909,26 @@ class GeneralsViewer(object):
         key = WHITE
         color = (R, G, B)
         while path is not None and path.next is not None:
-            s = pygame.Surface((self.cellWidth, self.cellHeight))
-            s.set_colorkey(key)
-            # first, "erase" the surface by filling it with a color and
-            # setting this color as colorkey, so the surface is empty
-            s.fill(key)
+            try:
+                s = pygame.Surface((self.cellWidth, self.cellHeight))
+                s.set_colorkey(key)
+                # first, "erase" the surface by filling it with a color and
+                # setting this color as colorkey, so the surface is empty
+                s.fill(key)
 
-            tile = path.tile
-            toTile = path.next.tile
-            pygame.draw.polygon(s, color, self.Arrow)
-            pygame.draw.polygon(s, BLACK, self.Arrow, 2)
-            self.draw_between_tiles(DirectionalShape(s), tile, toTile, alpha)
+                tile = path.tile
+                toTile = path.next.tile
+                pygame.draw.polygon(s, color, self.Arrow)
+                pygame.draw.polygon(s, BLACK, self.Arrow, 2)
+                self.draw_between_tiles(DirectionalShape(s), tile, toTile, alpha)
 
-            path = path.next
-            alpha -= alphaDec
-            if alpha < alphaMin:
-                alpha = alphaMin
+                path = path.next
+                alpha -= alphaDec
+                if alpha < alphaMin:
+                    alpha = alphaMin
+            except:
+                logging.error(f'wtf, couldnt draw path {str(path)}')
+                path = path.next
 
     def get_delta_arrow(self):
         key = WHITE
@@ -1054,19 +1062,37 @@ class GeneralsViewer(object):
         if targetStyle == TargetStyle.GOLD:
             return 255, 215, 0
         if targetStyle == TargetStyle.GREEN:
-            return P_DARK_GREEN
+            return P_GREEN
         if targetStyle == TargetStyle.PURPLE:
-            return DARK_PURPLE
+            return P_PURPLE
         return GRAY
 
     def small_font(self, text_val: str, color_font: typing.Tuple[int, int, int]):
-        return self._fontSmall.render(text_val, True, color_font)
+        return self._smallFont.render(text_val, True, color_font)
 
     def kill(self):
         self._killed = True
 
     def get_text_offset_from_right(self, text: str) -> int:
-        return len(text) * self._smallFontWidth + 3
+        return self.get_any_text_width(text, self._smallFontWidth) + 1
+
+    def get_med_text_offset_from_right(self, text: str) -> int:
+        return self.get_any_text_width(text, self._medFontWidth) + 2
+
+    def get_large_text_offset_from_right(self, text: str) -> int:
+        return self.get_any_text_width(text, self._lrgFontWidth) + 3
+
+    def get_text_center_offset(self, text: str) -> int:
+        return self.get_any_text_width(text, self._smallFontWidth) // 2
+
+    def get_med_text_center_offset(self, text: str) -> int:
+        return self.get_any_text_width(text, self._medFontWidth) // 2
+
+    def get_large_text_center_offset(self, text: str) -> int:
+        return self.get_any_text_width(text, self._lrgFontWidth) // 2
+
+    def get_any_text_width(self, text: str, estFontWidthPx: float) -> int:
+        return int(len(text) * estFontWidthPx)
 
     def save_image(self):
         pygame.image.save(self._screen, "{}\\{}.png".format(self.logDirectory, self._map.turn))

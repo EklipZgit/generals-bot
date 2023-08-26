@@ -3,11 +3,13 @@ import time
 import typing
 import unittest
 
+import BotHost
 import EarlyExpandUtils
 import SearchUtils
+from ArmyEngine import ArmySimResult
 from DataModels import Move
 from Path import Path
-from Sim.GameSimulator import GameSimulator
+from Sim.GameSimulator import GameSimulator, GameSimulatorHost
 from Sim.TextMapLoader import TextMapLoader
 from ViewInfo import ViewInfo, PathColorer
 from Viewer.ViewerProcessHost import ViewerHost
@@ -16,10 +18,10 @@ from base.client.map import MapBase, Tile, Score, Player, TILE_FOG, TILE_OBSTACL
 
 class TestBase(unittest.TestCase):
     # __test__ = False
-    def begin_capturing_logging(self):
+    def begin_capturing_logging(self, logLevel: int = logging.INFO):
         # without force=True, the first time a logging.log* is called earlier in the code, the config gets set to
         # default: WARN and basicConfig after that point has no effect without force=True
-        logging.basicConfig(format='%(message)s', level=logging.DEBUG, force=True)
+        logging.basicConfig(format='%(message)s', level=logLevel, force=True)
         time.sleep(0.1)
         logging.info("TESTING TESTING 123")
 
@@ -63,11 +65,11 @@ class TestBase(unittest.TestCase):
             logging.info(f'failed to load file {mapFilePath}')
             raise
 
-    def load_map_and_generals(self, mapFilePath: str, turn: int, player_index: int = -1) -> typing.Tuple[MapBase, Tile, Tile]:
+    def load_map_and_generals(self, mapFilePath: str, turn: int, player_index: int = -1, fill_out_tiles=False) -> typing.Tuple[MapBase, Tile, Tile]:
         rawData = TextMapLoader.get_map_raw_string_from_file(mapFilePath)
-        return self.load_map_and_generals_from_string(rawData, turn, player_index)
+        return self.load_map_and_generals_from_string(rawData, turn, player_index, fill_out_tiles)
 
-    def load_map_and_generals_from_string(self, rawMapStr: str, turn: int, player_index: int = -1) -> typing.Tuple[MapBase, Tile, Tile]:
+    def load_map_and_generals_from_string(self, rawMapStr: str, turn: int, player_index: int = -1, fill_out_tiles=False) -> typing.Tuple[MapBase, Tile, Tile]:
         gameData = TextMapLoader.load_data_from_string(rawMapStr)
         if player_index == -1 and 'bot_player_index' in gameData:
             player_index = int(gameData['bot_player_index'])
@@ -98,11 +100,7 @@ class TestBase(unittest.TestCase):
             if i != general.player and i != enemyGen.player:
                 player.dead = True
 
-        skipTileRework = False
-        if 'loadAsIs' in gameData and (gameData['loadAsIs']).lower() == 'true':
-            skipTileRework = True
-
-        if not skipTileRework:
+        if fill_out_tiles:
             chars = TextMapLoader.get_player_char_index_map()
             enemyChar, _ = chars[enemyGen.player]
 
@@ -198,8 +196,13 @@ class TestBase(unittest.TestCase):
 
         self.render_view_info(map, viewInfo, infoStr)
 
-    def render_moves(self, map: MapBase, infoStr: str, moves1: typing.List[Move | None], moves2: typing.List[Move | None] = None):
+    def render_moves(self, map: MapBase, infoStr: str, moves1: typing.List[Move | None], moves2: typing.List[Move | None] = None, addlViewInfoLogLines: typing.List[str] | None = None):
         viewInfo = self.get_view_info(map)
+
+        if len(moves1) > 0 and moves1[0] is not None and moves1[0].source.player == 1:
+            temp = moves1
+            moves1 = moves2
+            moves2 = temp
 
         r = 255
         g = 0
@@ -245,15 +248,28 @@ class TestBase(unittest.TestCase):
                 b = max(0, b)
                 r = min(255, r)
 
+        if addlViewInfoLogLines is not None:
+            for line in addlViewInfoLogLines:
+                viewInfo.addAdditionalInfoLine(line)
+
         self.render_view_info(map, viewInfo, infoStr)
+
+    def render_sim_analysis(self, map: MapBase, simResult: ArmySimResult):
+        aMoves = [aMove for aMove, bMove in simResult.expected_best_moves]
+        bMoves = [bMove for aMove, bMove in simResult.expected_best_moves]
+
+        addlLines = [l.strip() for l in simResult.best_result_state.get_moves_string().split('\n')]
+        self.render_moves(map, str(simResult), aMoves, bMoves, addlLines)
 
     def disable_search_time_limits_and_enable_debug_asserts(self):
         SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING = True
         EarlyExpandUtils.DEBUG_ASSERTS = True
+        BotHost.FORCE_NO_VIEWER = False
 
     def enable_search_time_limits_and_disable_debug_asserts(self):
         SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING = False
         EarlyExpandUtils.DEBUG_ASSERTS = False
+        BotHost.FORCE_NO_VIEWER = False
 
 
     def reset_map_to_just_generals(self, map: MapBase, turn: int = 16):
@@ -376,6 +392,32 @@ class TestBase(unittest.TestCase):
         while not viewer.check_viewer_closed():
             viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
             time.sleep(0.1)
+
+    def assertNoRepetition(self, simHost: GameSimulatorHost, minForRepetition=3):
+        moved: typing.List[typing.Dict[Tile, int]] = [{} for player in simHost.bot_hosts]
+
+        for histEntry in simHost.sim.moves_history:
+            for i, move in enumerate(histEntry):
+                if move is None:
+                    continue
+                if move.dest not in moved[i]:
+                    moved[i][move.dest] = 0
+
+                moved[i][move.dest] = moved[i][move.dest] + 1
+
+        failures = []
+        for player in range(len(simHost.bot_hosts)):
+            playerMoves = moved[player]
+            for tile, repetitions in sorted(playerMoves.items(), key=lambda kvp: kvp[1], reverse=True):
+                if repetitions > minForRepetition:
+                    failures.append(f'player {player} had {repetitions} repetitions of {str(tile)}.')
+
+        if len(failures) > 0:
+            self.fail('\r\n' + '\r\n'.join(failures))
+
+    def assertPlayerTileCount(self, simHost: GameSimulatorHost, player: int, tileCount: int):
+        simPlayer = simHost.sim.players[player]
+        self.assertEqual(tileCount, simPlayer.map.players[player].tileCount)
 
     def assertPlayerTileVisibleAndCorrect(self, x: int, y: int, sim: GameSimulator, player_index: int):
         playerTile = self.get_player_tile(x, y, sim, player_index)
@@ -546,8 +588,8 @@ class TestBase(unittest.TestCase):
         scores[general.player] = Score(general.player, countScoreGeneral.value, countTilesGeneral.value, dead=False)
         scores[enemyGeneral.player] = Score(enemyGeneral.player, countScoreEnemy.value, countTilesEnemy.value, dead=False)
 
-        map.update_scores(scores)
         map.update()
+        map.clear_deltas()
 
     def generate_enemy_general_opposite_general(self, map: MapBase, general: Tile) -> Tile:
         map.generals[general.player] = general

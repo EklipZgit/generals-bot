@@ -9,6 +9,7 @@ from multiprocessing.managers import SyncManager
 from multiprocessing.process import BaseProcess
 
 import TestPickle
+from PerformanceTimer import PerformanceTimer
 from ViewInfo import ViewInfo
 from base.client.map import MapBase
 
@@ -68,10 +69,21 @@ class ViewerHost(object):
             return True
         except queue.Empty:
             return False
+        except BrokenPipeError:
+            return True
 
 
-    def send_update_to_viewer(self, viewInfo: ViewInfo, map: MapBase, isComplete: bool):
+    def send_update_to_viewer(self, viewInfo: ViewInfo, map: MapBase, isComplete: bool = False, timer: PerformanceTimer | None = None):
         try:
+            if timer:
+                max = 7
+                cur = 0
+                for entry in sorted(timer.current_move.event_list, key=lambda e: e.get_duration(), reverse=True):
+                    viewInfo.perfEvents.append(f'{entry.get_duration():.3f} {entry.event_name}'.lstrip('0')[:31])
+                    cur += 1
+                    if cur > max:
+                        break
+
             obj = (viewInfo, map, isComplete)
             # import dill
             # try:

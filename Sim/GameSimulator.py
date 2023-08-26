@@ -5,9 +5,10 @@ import typing
 
 from BotHost import BotHostBase
 from DataModels import Move
+from Path import Path
 from SearchUtils import count, where
 from base.bot_base import create_thread
-from base.client.map import MapBase, Tile, TILE_EMPTY, TILE_OBSTACLE, Score, TILE_FOG, TILE_MOUNTAIN
+from base.client.map import MapBase, Tile, TILE_EMPTY, TILE_OBSTACLE, Score, TILE_FOG, TILE_MOUNTAIN, TileDelta
 
 
 def generate_player_map(player_index: int, map_raw: MapBase) -> MapBase:
@@ -99,6 +100,22 @@ class GamePlayer(object):
     def __repr__(self):
         return str(self)
 
+    def set_map_vision(self, rawMap: MapBase):
+        for tile in rawMap.get_all_tiles():
+            playerTile = self.map.GetTile(tile.x, tile.y)
+            if tile.army != 0 and not playerTile.visible:
+                playerTile.army = tile.army
+                playerTile.player = tile.player
+                playerTile.discovered = True
+                playerTile.visible = False
+                playerTile.isCity = tile.isCity
+                playerTile.isMountain = tile.isMountain
+                playerTile.isGeneral = tile.isGeneral
+                # playerTile.tile = tile.tile
+            if playerTile.isGeneral:
+                self.map.players[playerTile.player].general = playerTile
+                self.map.generals[playerTile.player] = playerTile
+
 
 class GameSimulator(object):
     def __init__(self, map_raw: MapBase, ignore_illegal_moves: bool = False):
@@ -122,18 +139,20 @@ class GameSimulator(object):
         self.turn: int = map_raw.turn
         self.sim_map: MapBase = map_raw
         self.moves: typing.List[typing.Union[None, Move]] = [None for i in range(len(map_raw.players))]
+        self.moves_history: typing.List[typing.List[typing.Union[None, Move]]] = []
         self.tiles_updated_this_cycle: typing.Set[Tile] = set()
         self.ignore_illegal_moves = ignore_illegal_moves
 
-    def make_move(self, player_index: int, move: Move) -> bool:
+    def make_move(self, player_index: int, move: Move, force: bool = False) -> bool:
         if self.moves[player_index] is not None:
-            raise AssertionError(f'player {player_index} already has a move queued this turn, {str(self.moves[player_index])}')
+            if not force:
+                raise AssertionError(f'player {player_index} already has a move queued this turn, {str(self.moves[player_index])}')
         self.moves[player_index] = move
         return True
 
     def execute_turn(self, dont_require_all_players_to_move=False):
         moveOrder = [pair for pair in enumerate(self.moves)]
-        if self.turn % 2 == 0:
+        if self.turn & 1 == 1:
             moveOrder = reversed(moveOrder)
 
         for player, move in moveOrder:
@@ -145,6 +164,7 @@ class GameSimulator(object):
             self._execute_move(player, move)
 
         self.turn = self.turn + 1
+        self.moves_history.append(self.moves)
         self.moves = [None for _ in self.moves]
         self._update_map_values()
         self.send_update_to_player_maps()
@@ -270,7 +290,7 @@ class GameSimulator(object):
 
         self.sim_map.update_scores(scores)
 
-    def _send_updates_to_player_maps(self):
+    def _send_updates_to_player_maps(self, noDeltas=False):
         # actual server client map executes in this order:
         # turn
         # scores
@@ -299,6 +319,8 @@ class GameSimulator(object):
                     self._send_player_lost_vision_of_tile(player, tile)
 
         for player in self.players:
+            if noDeltas:
+                player.map.clear_deltas()
             player.map.update()
             player.tiles_lost_this_turn = set()
             player.tiles_gained_this_turn = set()
@@ -334,13 +356,32 @@ class GameSimulator(object):
             playerTile.player = -1
             player.map.generals[playerToReveal] = None
 
-    def send_update_to_player_maps(self):
+    def set_tile_vision(self, playerToRevealTo, x, y, hidden=False, undiscovered=False):
+        player = self.players[playerToRevealTo]
+        tile = self.sim_map.GetTile(x, y)
+        if not undiscovered:
+            player.map.update_visible_tile(tile.x, tile.y, tile.player, tile.army, is_city=tile.isCity, is_general=tile.isGeneral)
+            if hidden:
+                player.map.update_visible_tile(tile.x, tile.y, TILE_OBSTACLE if tile.isCity or tile.isMountain else TILE_FOG, 0, is_city=False, is_general=False)
+        else:
+            # we're hiding the general
+            playerTile = player.map.GetTile(tile.x, tile.y)
+            playerTile.visible = False
+            playerTile.discovered = False
+            playerTile.tile = TILE_OBSTACLE if tile.isCity or tile.isMountain else TILE_FOG
+            playerTile.isCity = False
+            playerTile.isGeneral = False
+            playerTile.army = 0
+            playerTile.player = -1
+
+    def send_update_to_player_maps(self, noDeltas=False):
         self._update_scores()
-        self._send_updates_to_player_maps()
+        self._send_updates_to_player_maps(noDeltas)
 
 
 class GameSimulatorHost(object):
     def __init__(self, map: MapBase, player_with_viewer: int = -1, playerMapVision: MapBase | None = None, afkPlayers: None | typing.List[int] = None, allAfkExceptViewer: bool =False):
+        self.move_queue: typing.List[typing.List[Move | None]] = [[] for player in map.players]
         self.sim = GameSimulator(map, ignore_illegal_moves=False)
 
         self.bot_hosts: typing.List[BotHostBase | None] = [None for player in self.sim.players]
@@ -371,7 +412,7 @@ class GameSimulatorHost(object):
             hasUi = i == player_with_viewer or player_with_viewer == -2
             # i=i captures the current value of i in the lambda, otherwise all players lambdas would send the last players player index...
             botMover = lambda source, dest, moveHalf, i=i: self.sim.make_move(player_index=i, move=Move(source, dest, moveHalf))
-            botHost = BotHostBase(char, botMover, 'test', noUi=not hasUi, alignBottom=True)
+            botHost = BotHostBase(char, botMover, 'test', noUi=not hasUi, alignBottom=True, throw=True)
             if hasUi:
                 botHost.initialize_viewer()
 
@@ -380,7 +421,12 @@ class GameSimulatorHost(object):
         if playerMapVision is not None:
             self.apply_map_vision(playerMapVision.player_index, rawMap=playerMapVision)
 
-        self.sim.send_update_to_player_maps()
+        self.sim.send_update_to_player_maps(noDeltas=True)
+        # # clear all the tile deltas and stuff.
+        # for player in self.sim.players:
+        #     player.map.update_turn(self.sim.sim_map.turn)
+        #
+        #     player.map.update()
 
         for playerIndex, botHost in enumerate(self.bot_hosts):
             if botHost is None:
@@ -407,7 +453,6 @@ class GameSimulatorHost(object):
         for playerIndex, botHost in enumerate(self.bot_hosts):
             if botHost is None:
                 continue
-            player = self.sim.players[playerIndex]
             if botHost.has_viewer and run_real_time:
                 botHost.run_viewer_loop()
 
@@ -419,41 +464,9 @@ class GameSimulatorHost(object):
         try:
             turnsRun = 0
             while turnsRun < turns:
-                logging.info(f'sim starting turn {self.sim.turn}')
-                start = time.perf_counter()
-                for playerIndex, botHost in enumerate(self.bot_hosts):
-                    player = self.sim.players[playerIndex]
-                    if not player.dead and not player.index in self.forced_afk_players:
-                        botHost.make_move(player.map)
-
-                if run_real_time:
-                    elapsed = time.perf_counter() - start
-                    if elapsed < turn_time:
-                        time.sleep(turn_time - elapsed)
-
-                self.sim.execute_turn(dont_require_all_players_to_move=True)
-
-                gameEndedByUser = False
-                for botHost in self.bot_hosts:
-                    if botHost is None:
-                        continue
-                    if botHost.has_viewer and botHost.is_viewer_closed_by_user():
-                        gameEndedByUser = True
-
-                if self.sim.is_game_over() or gameEndedByUser:
-                    self.sim.end_game()
-                    for player in self.sim.players:
-                        if not player.dead:
-                            if winner is None:
-                                winner = player.index
-                            else:
-                                winner = -1
-                    for botHost in self.bot_hosts:
-                        if botHost is None:
-                            continue
-                        botHost.notify_game_over()
+                winner = self.execute_turn(run_real_time=run_real_time, turn_time=turn_time)
+                if winner is not None:
                     break
-
                 turnsRun += 1
         except:
             try:
@@ -495,22 +508,101 @@ class GameSimulatorHost(object):
             if botHost is not None and playerTile in botHost.eklipz_bot.armyTracker.armies:
                 del botHost.eklipz_bot.armyTracker.armies[playerTile]
 
+    def reveal_player_tile(self, playerToTileTo, x, y):
+        self.sim.set_general_vision(playerToReveal, playerToRevealTo, hidden=hidden)
+        revealPlayer = self.sim.players[playerToRevealTo]
+        revealGeneral = self.sim.sim_map.generals[playerToReveal]
+
+        if hidden:
+            botHost = self.bot_hosts[playerToRevealTo]
+            playerTile = revealPlayer.map.GetTile(revealGeneral.x, revealGeneral.y)
+            if botHost is not None and playerTile in botHost.eklipz_bot.armyTracker.armies:
+                del botHost.eklipz_bot.armyTracker.armies[playerTile]
+
 
 
     def apply_map_vision(self, player: int, rawMap: MapBase):
         playerToGiveVision = self.sim.players[player]
-        for tile in rawMap.get_all_tiles():
-            playerTile = playerToGiveVision.map.GetTile(tile.x, tile.y)
-            if tile.army != 0 and not playerTile.visible:
-                playerTile.army = tile.army
-                playerTile.player = tile.player
-                playerTile.discovered = True
-                playerTile.visible = False
-                playerTile.isCity = tile.isCity
-                playerTile.isMountain = tile.isMountain
-                playerTile.isGeneral = tile.isGeneral
-                # playerTile.tile = tile.tile
-            if playerTile.isGeneral:
-                playerToGiveVision.map.players[playerTile.player].general = playerTile
-                playerToGiveVision.map.generals[playerTile.player] = playerTile
+        playerToGiveVision.set_map_vision(rawMap)
 
+    def queue_player_moves_str(self, player: int, moves_str: str):
+        playerObj = self.sim.players[player]
+        paths = moves_str.split('  ')
+        for path_str in paths:
+            if path_str.strip().lower() == 'none':
+                self.move_queue[player].append(None)
+                continue
+
+            moves = path_str.split('->')
+            prevTile: Tile | None = None
+            for move_str in moves:
+                xStr, yStr = move_str.strip().split(',')
+                moveHalf=False
+                if yStr.endswith('z'):
+                    moveHalf = True
+                    yStr.strip('z')
+
+                currentTile = playerObj.map.GetTile(int(xStr), int(yStr))
+                if prevTile is not None:
+                    self.move_queue[player].append(Move(prevTile, currentTile, moveHalf))
+                prevTile = currentTile
+
+    def queue_player_move(self, player: int, move: Move | None):
+        playerObj = self.sim.players[player]
+        if move is None:
+            self.move_queue[player].append(move)
+            return
+
+        self.move_queue[player].append(Move(playerObj.map.GetTile(move.source.x, move.source.y), playerObj.map.GetTile(move.dest.x, move.dest.y), move.move_half))
+
+    def execute_turn(self, run_real_time: bool = False, turn_time: float = 0.5) -> int | None:
+        """
+        Runs a turn of the sim, and returns None or the player ID of the winner, if the game ended this turn.
+        @param run_real_time:
+        @param turn_time:
+        @return:
+        """
+        logging.info(f'sim starting turn {self.sim.turn}')
+        start = time.perf_counter()
+        winner = None
+        for playerIndex, botHost in enumerate(self.bot_hosts):
+            player = self.sim.players[playerIndex]
+
+            if not player.dead and not player.index in self.forced_afk_players:
+                botHost.make_move(player.map)
+
+            # if we have a move queued explicitly, overwrite their move with the test-forced move.
+            if len(self.move_queue[playerIndex]) > 0:
+                move = self.move_queue[playerIndex].pop(0)
+                self.sim.make_move(playerIndex, move, force=True)
+
+        if run_real_time:
+            elapsed = time.perf_counter() - start
+            if elapsed < turn_time:
+                time.sleep(turn_time - elapsed)
+
+        self.sim.execute_turn(dont_require_all_players_to_move=True)
+
+        gameEndedByUser = False
+        for botHost in self.bot_hosts:
+            if botHost is None:
+                continue
+            if botHost.has_viewer and botHost.is_viewer_closed_by_user():
+                gameEndedByUser = True
+
+        if self.sim.is_game_over() or gameEndedByUser:
+            self.sim.end_game()
+            for player in self.sim.players:
+                if not player.dead:
+                    if winner is None:
+                        winner = player.index
+                    else:
+                        winner = -1
+            for botHost in self.bot_hosts:
+                if botHost is None:
+                    continue
+                botHost.notify_game_over()
+
+        if winner == -1:
+            winner = None
+        return winner

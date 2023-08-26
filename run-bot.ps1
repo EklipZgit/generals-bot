@@ -342,7 +342,22 @@ function Start-WindowsTerminalHistoricalBots {
     map data loader
     first get_optimal_expansion unit test +
         bugfixed early expansion not using 2's
+    Army Engine, brute force, all known bugs fixed except repetition being undervalued vs end board state.
+    Bugfixed tons of fog army issues
+    Bugfixed tile delta issues
+    iterative gather pruning (still sometimes gathers stupid small bits at end for some reason...?)
     #>
+    wt -w HistBots new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'run-bot -game 1v1, ffa, ffa, 1v1, ffa, 1v1, 1v1 -name "EklipZ_ai_08" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-26\BotHost.py'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
 }
 
 

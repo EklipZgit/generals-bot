@@ -173,3 +173,25 @@ class CityAnalyzerTests(TestBase):
         simHost.run_sim(run_real_time=debugMode, turn_time=2.0)
 
         # TODO add asserts for should_take_city_as_quick_as_possible
+    
+    def test_should_not_take_city_in_middle_of_map_right_in_front_of_enemy_army_lol(self):
+        debugMode = True
+        mapFile = 'GameContinuationEntries/should_not_take_city_in_middle_of_map_right_in_front_of_enemy_army_lol___Se6KaySp2---a--186.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 186)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        # Grant the general the same fog vision they had at the turn the map was exported
+        rawMap, _ = self.load_map_and_general(mapFile, 186)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+
+        # simHost.make_player_afk(enemyGeneral.player)
+
+        # alert enemy of the player general
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
+        self.assertIsNone(winner)
+
+        # TODO add asserts for should_not_take_city_in_middle_of_map_right_in_front_of_enemy_army_lol

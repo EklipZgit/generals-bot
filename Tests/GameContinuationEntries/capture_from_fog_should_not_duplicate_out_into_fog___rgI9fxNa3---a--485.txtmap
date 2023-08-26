@@ -1,0 +1,46 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          a1   a1   a1   a1   M    a1   a1   aC9  a3
+M    M    a1   M    a1   a1   a1   a1   a2   a2   a3
+M    a1   a1   M    M    a1   a1   aG7  a2   M    a1                  M         M         M
+     M    M                   a1   M    M    a1   a1   M         M    M                             M
+               M         M    a1   M         a1   aC10                                              M
+                    M    a2   a104 a2   a2   a1   a2                       M              M    M
+     a1   a1   a1   a1   aC3  a52  a2   a5   a41  b2   b2   b1   b1   M    M
+     a1   M              M    M    a2   a1   a2   M    C50  M    b3   M
+M    a2   M    M    M         M    a2   a1   a4   a3   b3   b3   b2   b4
+     a2   a2   a2   a2   a2   a2   a2   a1   b5   M    b3        b4                            M    M
+     a2   b2   b3   M    a2   a2   C45  M    b1   b3   b3   M    b4   M         M         M
+     M    b2   b2   b1   M    a2   a2   a2   M    b4   b4   a5   b4                                 M
+M    M         b5   N1   b3   M    a2   a5   M    b3   b4   M    M    M         M                   M
+M    M         b2   b3   b3   M    a2   M    b1   b0   b1   b1        M         M
+M    M    a4   a2   M    b2   a45  a2   a25  b7   b1   b1   b1   b1   M              M
+M         M    b2   b2   b3   b3   a97  b6   M    M    b1   b1   b1                  M    M
+               M    b2   M    b2   b101 b3   b1   b1   b1   b1   N1                  M         M    M
+M         M    b2   b2   M    b7   b1   b1   b1   M    b1   b6                  M
+M         b2   b2   b8   b2   b2   b6   b6   b1   b1   b1   C48       M         M         M
+          M    M    M    M    b6   b6   M                   M         M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=10,19
+loadAsIs=True
+turn=485
+bot_player_index=0
+aTiles=77
+aScore=513
+aStandingArmy=436
+aStars=50
+aCityCount=4
+aGeneral=7,2
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=110
+bScore=613
+bStandingArmy=503
+bStars=52
+bCityCount=4
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=1

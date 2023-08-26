@@ -1,6 +1,21 @@
 Generals
+human, (sponsor) user id for EklipZ
 
 REFACTOR QUEUE TO DO NEXT COMMIT:
+
+
+
+
+
+
+
+HOW MANY VERTICES IN A GRID??
+v = 2(W*H) - W - H
+(all from top left to bot right, each node adds 2 new vertices except the right and bottom edges, which all add 1 except the bottom right corner, which adds 0).
+
+largest map is maybe 30x30 = 1740
+dijkstras would be v^2 so 3.02mil
+
 
 
 TODO

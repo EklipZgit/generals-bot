@@ -15,7 +15,7 @@ from DataModels import PathNode, TreeNode, Move
 from KnapsackUtils import solve_knapsack
 from Path import Path
 from test.test_float import INF
-from base.client.map import Tile, MapBase, new_value_matrix
+from base.client.map import Tile, MapBase, new_value_matrix, MapMatrix
 
 BYPASS_TIMEOUTS_FOR_DEBUGGING = False
 
@@ -741,7 +741,10 @@ def breadth_first_dynamic_max(
 
     while not frontier.empty():
         iter += 1
-        if iter & 256 == 0 and time.time() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING or iter > maxIterations:
+        if (iter & 256 == 0
+            and time.time() - start > maxTime
+            # and not BYPASS_TIMEOUTS_FOR_DEBUGGING
+        ) or iter > maxIterations:
             logging.info("BFS-DYNAMIC-MAX BREAKING EARLY")
             break
 
@@ -1938,6 +1941,36 @@ def build_distance_map(map, startTiles, skipTiles=None) -> typing.List[typing.Li
         if dist < distanceMap[tile.x][tile.y]:
             distanceMap[tile.x][tile.y] = dist
 
-    breadth_first_foreach_dist(map, startTiles, 1000, bfs_dist_mapper, skipTiles=skipTiles,
-                               skipFunc=lambda tile: tile.isNeutral and tile.isCity)
+    breadth_first_foreach_dist(
+        map,
+        startTiles,
+        1000,
+        bfs_dist_mapper,
+        skipTiles=skipTiles,
+        skipFunc=lambda tile: tile.isNeutral and tile.isCity)
+    return distanceMap
+
+
+def build_distance_map_matrix(map, startTiles, skipTiles=None) -> MapMatrix:
+    distanceMap = MapMatrix(map, 1000)
+
+    if skipTiles is None:
+        skipTiles = None
+    elif not isinstance(skipTiles, set):
+        newSkipTiles = set()
+        for tile in skipTiles:
+            newSkipTiles.add(tile)
+        skipTiles = newSkipTiles
+
+    def bfs_dist_mapper(tile, dist):
+        if dist < distanceMap[tile]:
+            distanceMap[tile] = dist
+
+    breadth_first_foreach_dist(
+        map,
+        startTiles,
+        1000,
+        bfs_dist_mapper,
+        skipTiles=skipTiles,
+        skipFunc=lambda tile: tile.isNeutral and tile.isCity)
     return distanceMap

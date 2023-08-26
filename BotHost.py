@@ -5,6 +5,7 @@ import time
 import traceback
 import typing
 
+from DataModels import Move
 from PerformanceTimer import PerformanceTimer
 from Sim.TextMapLoader import TextMapLoader
 from Viewer.ViewerProcessHost import ViewerHost
@@ -13,7 +14,7 @@ from base.client.map import MapBase, Tile
 from bot_ek0x45 import EklipZBot
 
 FORCE_NO_VIEWER = False
-FORCE_PRIVATE = False
+FORCE_PRIVATE = True
 
 
 class BotHostBase(object):
@@ -24,7 +25,20 @@ class BotHostBase(object):
             gameType: str,
             noUi: bool = True,
             alignBottom: bool = False,
-            alignRight: bool = False):
+            alignRight: bool = False,
+            throw: bool = False
+    ):
+        """
+
+        @param name:
+        @param placeMoveFunc:
+        @param gameType:
+        @param noUi:
+        @param alignBottom:
+        @param alignRight:
+        @param throw: whether to let exceptions from the bot throw, or just log them.
+        (Generally throw in sim / tests, but not in game or else we dont write the bad map state etc)
+        """
         self._name = name
         self._game_type = gameType
 
@@ -37,6 +51,7 @@ class BotHostBase(object):
         self.align_right: bool = alignRight
 
         self._viewer: ViewerHost | None = None
+        self.rethrow = throw
 
     def run_viewer_loop(self):
         logging.info("attempting to start viewer loop")
@@ -53,12 +68,23 @@ class BotHostBase(object):
 
         startTime = time.perf_counter()
         with timer.begin_move(currentMap.turn) as moveTimer:
-            move = self.eklipz_bot.find_move()
+            move: Move | None = None
+            try:
+                move = self.eklipz_bot.find_move()
+            except:
+                errMsg = traceback.format_exc()
+                self.eklipz_bot.viewInfo.addAdditionalInfoLine(f'ERROR: {errMsg}')
+                logging.error('ERROR IN EKBOT.find_move():')
+                logging.error(errMsg)
+                if self.rethrow:
+                    raise
+
             duration = time.perf_counter() - startTime
             self.eklipz_bot.viewInfo.lastMoveDuration = duration
             if move is not None:
                 if move.source.army == 1 or move.source.army == 0 or move.source.player != self.eklipz_bot.general.player:
-                    logging.info(f"!!!!!!!!! {move.source.x},{move.source.y} -> {move.dest.x},{move.dest.y} was a bad move from enemy / 1 tile!!!! This turn will do nothing :(")
+                    logging.info(
+                        f"!!!!!!!!! {move.source.x},{move.source.y} -> {move.dest.x},{move.dest.y} was a bad move from enemy / 1 tile!!!! This turn will do nothing :(")
                 else:
                     with moveTimer.begin_event(f'Sending move {str(move)} to server'):
                         if not self.place_move_func(move.source, move.dest, move.move_half):
@@ -69,7 +95,7 @@ class BotHostBase(object):
 
             if self.has_viewer:
                 with moveTimer.begin_event(f'Sending turn {currentMap.turn} update to Viewer'):
-                    self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, currentMap, currentMap.complete)
+                    self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, currentMap, currentMap.complete, timer)
 
             with moveTimer.begin_event(f'Dump {currentMap.turn}.txtmap to disk'):
                 self.save_txtmap(currentMap)
@@ -115,7 +141,11 @@ class BotHostBase(object):
     def notify_game_over(self):
         self.eklipz_bot._map.complete = True
         if self.has_viewer and self._viewer is not None:
-            self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, self.eklipz_bot._map, True)
+            self._viewer.send_update_to_viewer(
+                self.eklipz_bot.viewInfo,
+                self.eklipz_bot._map,
+                isComplete=True,
+                timer=self.eklipz_bot.perf_timer)
             self._viewer.kill()
 
 
@@ -183,8 +213,8 @@ class BotHostLiveServer(BotHostBase):
 if __name__ == '__main__':
     import BotLogging
 
-    BotLogging.set_up_logger()
-    BotLogging.set_up_logger()
+    BotLogging.set_up_logger(logging.INFO)
+    BotLogging.set_up_logger(logging.INFO)
 
     # raise AssertionError("stop")
     parser = argparse.ArgumentParser()

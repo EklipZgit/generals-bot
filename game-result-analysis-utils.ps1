@@ -167,10 +167,10 @@ function Create-TestContinuingGameFrom {
         # simHost.make_player_afk(enemyGeneral.player)
 
         # alert enemy of the player general
-        simHost.sim.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=2.0)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
+        self.assertIsNone(winner)
 
         # TODO add asserts for $TestName
 "@

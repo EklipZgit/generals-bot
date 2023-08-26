@@ -1,0 +1,105 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+a6   a6   a6   M    g8   g8   g8   a5   a5   a7   M    M    a6   M         M    g8   g7   g7   g7   gG52 g3   g3   g4
+M    g4   g4   g4   a6   M    a7   a4   a7   g15  a6   g10  a6   M    g2   C42  g8   g8   M    g10  g3   g7   g7   M
+g5   g5   M    a7   a6   M    g8   M    M    M    a6   g10  M    g2   g2   g7   g5   g5   g5   g3   g3   g8   g8   g9
+g5   M    M    aC60 a6   g4   g4   a6   M    M    g46  g2   g2   g2   g2   g2   g3   M         g3   gC51 g7   M    M
+g5   g5   a6   a4   a5   C46  g4   g4   g4   g4   M    M         M         M    g3   g8   M    gC49 g4   g8   g10  g10
+M    g5   g5   a4   a7   M    g5   g4   g4   g3   g3   M    M    g2   M    g8   g3   M    g7   g3   g4   gC85 g7   M
+a5   a5   g5   a5   C45  a6   g5   M    g5   g5   g3   M    g4   g2   g3   M    g3   g7   g3   g3   g4   M    g10  M
+     M    M    a4   a1   C46  g5   g2   M    g5   g2   g2   g7   g2   g2   g3   g3   g3   g3   M    g4   g9   M    g8
+          a1   a1   a1   a4   g5   g2   g2   gC13 g2   g2   a5   M    g2   g4   g4   g6   g9   g4   g4   g8   g4   g8
+M    M    a5   M    M    a4   a4   M    M    M    g2   g2   a5   g16  gC224M    g4   g7   g3   g4   M    g9   g4
+     a2   g1   g1   a1   a1   M    a12  M    a2   g2   g2   g2   g2   g2   g2   g2   g2   g2   g2   g2   g4   g4   M
+     a9   g12  M    a6   M    a3   g1   g1   g1   g1   g2   a3   a7   C49  g2   M    M    C49  M    gC20 M    M
+     a1   a14  M    a1   a0   a9   g1   a2   M    M    a5   a3   a3   a5   M    a4   a4   a4   a4   g2   a2   M
+     M    M    M    a1   M    a2   a2   a2        M    a4   M    a3   M    a4   a8   a8   a5   g2   gC11 g8   g9   M
+M                   M                                  M    M    a3   a3   a13  a2   g141 g143 g3   M    a4   M    M
+                                                            M    a8   M    M    M    M    g9   M    M         M
+M                             M    M                                            M    M    M    a5
+M                                                                M    M                        M    M
+M                                       M                             M    M                   M    M
+M              M              M         M                             M                   M         M
+     M                   M    M    M    M              M                   M                             M
+     M                   M              M    M
+M                   M    M    M                             M                        M                   M         M
+M                                                           M         M    M         M              M
+     M                   M              M                   M                   M                        M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=9,13
+turn=864
+bot_player_index=6
+aTiles=267
+aScore=2081
+aStandingArmy=1814
+aStars=171
+aCityCount=7
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=0
+bScore=0
+bStandingArmy=0
+bStars=158
+bCityCount=1
+bGeneral=20,11
+bKnowsKingLocation=False
+bDead=True
+bLeftGame=True
+bLeftGameTurn=465
+cTiles=0
+cScore=0
+cStandingArmy=0
+cStars=170
+cCityCount=1
+cKnowsKingLocation=False
+cDead=True
+cLeftGame=True
+cLeftGameTurn=512
+dTiles=0
+dScore=0
+dStandingArmy=0
+dStars=170
+dCityCount=1
+dKnowsKingLocation=False
+dDead=True
+dLeftGame=True
+dLeftGameTurn=105
+eTiles=0
+eScore=0
+eStandingArmy=0
+eStars=171
+eCityCount=4
+eKnowsKingLocation=True
+eDead=True
+eLeftGame=True
+eLeftGameTurn=737
+fTiles=0
+fScore=0
+fStandingArmy=0
+fStars=173
+fCityCount=1
+fKnowsKingLocation=False
+fDead=True
+fLeftGame=True
+fLeftGameTurn=292
+gTiles=167
+gScore=1558
+gStandingArmy=1391
+gStars=171
+gCityCount=8
+gGeneral=20,0
+gKnowsKingLocation=False
+gDead=False
+gLeftGame=False
+gLeftGameTurn=-1
+hTiles=0
+hScore=0
+hStandingArmy=0
+hStars=171
+hCityCount=1
+hKnowsKingLocation=False
+hDead=True
+hLeftGame=True
+hLeftGameTurn=484
+bot_target_player=0

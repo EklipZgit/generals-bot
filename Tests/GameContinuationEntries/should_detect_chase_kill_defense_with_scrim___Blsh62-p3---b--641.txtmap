@@ -1,0 +1,44 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          M    b1   bG37 b2   b2   b1   b1   b4   b1   M         M    M         M         M    M    M
+     b3   b3   b3   M    b2   b2   b9   b1   b1   b4   b4   M    M    a2
+M    b3        M    b2   b2   a98  a1   a1   a1   a1   a1   M    b3   M    M
+     b3   M    b2   b2   b1   b52  M    a1   a2   a2   a1   b3   b3   b1   M                   M    M
+M    b3   M    b2   b2   b1   b1   b3   M    a4   M    a1   a1   a1   a1   M    a2   M
+     b1   bC5  b1   b1   b1   b1   b2   b4   b4   b1   M    b1   M    a1   b3   C47       M    a5   a6
+          b3   b2   b1   M    b1   b1   b1   b1   b1   b1   M    a3   a1   M    M    M    a5   a5   a6
+               b3   b2   b3   M    b2   b2   b1   b1   M    a3   a2   a1   a2   a2   a2   a2   a2   a6
+               M    b1   b1   M    b2   b2   M    M    M    a2   a2   a1   M    a3   M    a7   a2   a6
+          M    M    b1   M    b2   b2   b4   b3   b5   b1   b2   C49  a1   a4   a3   a3   a6   a2   M
+     M    b4   b1   b1   b3   C42  b2   b3   b3   b1   b12  b5   M    a1   a4   M    a3   a3   a2   a3
+     M              b2   b1   b1   b2   b2   b2   b1   b3   b3   M    a1   a1   a1   a1   a1   a2   M
+     M         M    b2   M    b3   b3   b3   b1   b1   b2   b2   a2   M    M    a3   a3   a1   M
+M    M         M    b2        M    C49  b3   a1   b17  M    M    a3                  M         M
+          M              M    b2   b4   b3   a1   a1   a1   a8                            M    M
+     M    M                   b2   b2   M    b2        M              M                        M    M
+M                                  M                        M    M         M    M                   M
+     M                                                      M                        M    M    M
+     M    M                   M              M         M         M              M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=19,4
+turn=641
+bot_player_index=1
+aTiles=96
+aScore=336
+aStandingArmy=240
+aStars=58
+aCityCount=2
+aKnowsKingLocation=True
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=112
+bScore=353
+bStandingArmy=241
+bStars=50
+bCityCount=2
+bGeneral=4,0
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=0

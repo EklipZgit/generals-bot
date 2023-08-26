@@ -74,7 +74,7 @@ class Path(object):
 
     @property
     def length(self) -> int:
-        return len(self._pathQueue) - 1
+        return max(0, len(self._pathQueue) - 1)
 
     @property
     def tileSet(self) -> typing.Set[Tile]:
@@ -200,7 +200,7 @@ class Path(object):
         newPath.value = self.value
         return newPath
 
-    def get_subsegment(self, count, end=False) -> Path:
+    def get_subsegment(self, count: int, end: bool=False) -> Path:
         """
         The subsegment path will be count moves long, count+1 TILES long
         @param count:

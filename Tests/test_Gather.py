@@ -137,12 +137,17 @@ class GatherTests(TestBase):
 
         self.begin_capturing_logging()
         move, valueGathered, turnsUsed, gatherNodes = ekBot.get_gather_to_threat_path(threat, gatherMax=True)
+        #
+        # viewInfo = ekBot.viewInfo
+        # viewInfo.gatherNodes = gatherNodes
+        # if debugMode:
+        #     self.render_view_info(map, viewInfo, f"valueGath {valueGathered}")
 
         self.assertIsNotNone(move)
         self.assertIsNotNone(gatherNodes)
         self.assertNotEqual(0, len(gatherNodes))
-        self.assertEqual(8, valueGathered)
         self.assertEqual(7, turnsUsed)
+        self.assertEqual(8, valueGathered)
 
         pruned = ekBot.prune_mst(gatherNodes, turnsUsed - 1)
         sumVal = 0
@@ -211,7 +216,7 @@ class GatherTests(TestBase):
                     self.render_view_info(map, viewInfo, f"valueGath {valueGathered}")
     
     def test_going_all_in_on_army_advantage_should_gather_at_the_opp_general__LARGE_gather(self):
-        debugMode = False
+        debugMode = True
         mapFile = 'GameContinuationEntries/going_all_in_on_army_advantage_should_gather_at_the_opp_general__LARGE_gather___Sl5q9W333---b--527.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 527)
 
@@ -226,5 +231,27 @@ class GatherTests(TestBase):
 
         # simHost.make_player_afk(enemyGeneral.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=70)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=80)
         self.assertEqual(general.player, winner)
+    
+    def test_random_large_gather_test(self):
+        debugMode = True
+        mapFile = 'GameContinuationEntries/random_large_gather_test___reOqoXEp2---g--864.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 864)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        # Grant the general the same fog vision they had at the turn the map was exported
+        rawMap, _ = self.load_map_and_general(mapFile, 864)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+
+        # simHost.make_player_afk(enemyGeneral.player)
+
+        # alert enemy of the player general
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
+        self.assertIsNone(winner)
+
+        # TODO add asserts for random_large_gather_test

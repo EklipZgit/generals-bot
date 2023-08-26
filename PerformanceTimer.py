@@ -16,6 +16,12 @@ class MoveEvent(object):
         self.event_end_time = time.perf_counter()
         logging.info(f'--------------------\nComplete: {self.event_name} ({self.event_end_time - self.event_start_time:.3f})\n^^^--------------^^^')
 
+    def get_duration(self):
+        endTime = self.event_end_time
+        if endTime is None:
+            endTime = time.perf_counter()
+        return endTime - self.event_start_time
+
 
 class MoveTimer(object):
     def __init__(self, turn: int):

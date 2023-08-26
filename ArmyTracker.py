@@ -67,12 +67,12 @@ class Army(object):
 
 	def clone(self):
 		newDude = Army(self.tile)
-		if self.path != None:
+		if self.path is not None:
 			newDude.path = self.path.clone()
 		newDude.player = self.player
 		newDude.visible = self.visible
 		newDude.value = self.value
-		if self.expectedPath != None:
+		if self.expectedPath is not None:
 			newDude.expectedPath = self.expectedPath.clone()
 		newDude.entangledArmies = list(self.entangledArmies)
 		newDude.name = self.name
@@ -100,14 +100,13 @@ class ArmyTracker(object):
 		self.armies: typing.Dict[Tile, Army] = {}
 		# used to keep track of armies while attempting to resolve where they went
 		self.trackingArmies: typing.Dict[Tile, Army] = {}
-		self.isArmyBonus = map.turn % 50 == 0
-		self.isCityBonus = map.turn % 2 == 0
 		self.distMap = None
 		self.lastMove = None
 		self.track_threshold = 10
 		self.fogPaths = []
 		self.emergenceLocationMap = [[[0 for x in range(self.map.rows)] for y in range(self.map.cols)] for z in range(len(self.map.players))]
-		self.notify_unresolved_army_emerged = []
+		self.notify_unresolved_army_emerged: typing.List[typing.Callable[[Tile], None]] = []
+		self.notify_army_moved: typing.List[typing.Callable[[Tile], None]] = []
 		self.player_aggression_ratings = [PlayerAggressionTracker(z) for z in range(len(self.map.players))]
 		self.lastTurn = 0
 
@@ -117,16 +116,19 @@ class ArmyTracker(object):
 		if 'notify_unresolved_army_emerged' in state:
 			del state['notify_unresolved_army_emerged']
 
+		if 'notify_army_moved' in state:
+			del state['notify_army_moved']
+
 		return state
 
 	def __setstate__(self, state):
 		self.__dict__.update(state)
 		self.notify_unresolved_army_emerged = []
+		self.notify_army_moved = []
 
 	# distMap used to determine how to move armies under fog
 	def scan(self, distMap, lastMove, turn):
 		self.lastMove = lastMove
-		logging.info("ARMY TRACKER SCANNING BEEEEEEEEEEEEEEEEEEEEEEEEEEP BOOOOOOOOOOOOP")
 		if turn > self.lastTurn:
 			self.lastTurn = turn
 			self.move_fogged_army_paths()
@@ -139,16 +141,16 @@ class ArmyTracker(object):
 		self.fogPaths = []
 		self.clean_up_armies()
 		self.distMap = distMap
-		self.isArmyBonus = self.map.turn % 50 == 0
-		self.isCityBonus = self.map.turn % 2 == 0
-		start = time.time()
 		self.track_army_movement()
 		self.find_new_armies()
-		logging.info("ARMY TRACKER TOOK {:.3f}\n".format(time.time() - start))
 
 	def move_fogged_army_paths(self):
 		for army in list(self.armies.values()):
-			if not army.tile.visible and army.expectedPath != None:
+			if (not army.tile.visible
+					and army.expectedPath is not None
+					and army.expectedPath.start is not None
+					and army.expectedPath.start.next is not None
+					and army.expectedPath.start.next.tile is not None):
 				nextTile = army.expectedPath.start.next.tile
 				if not nextTile.visible:
 					logging.info("Moving fogged army {} along expected path {}".format(army.toString(), army.expectedPath.toString()))
@@ -216,14 +218,13 @@ class ArmyTracker(object):
 			#if army.tile.delta.armyDelta == expectedDelta:
 			#	# army did not move and we attacked it?
 
-	
 			if army.player == army.tile.player and army.value < army.tile.army - 1 and army.tile.visible:
 				logging.info("Army {} tile was just gathered to, nbd, update it.".format(army.toString()))
 				source = self.find_visible_source(army.tile)
-				if source == None:
+				if source is None:
 					logging.info("Army {} must have been gathered to from under the fog, searching:".format(army.toString()))
 					sourceFogArmyPath = self.find_fog_source(army.tile)
-					if sourceFogArmyPath != None:
+					if sourceFogArmyPath is not None:
 						self.fogPaths.append(sourceFogArmyPath.get_reversed())	
 						minRatio = 1.8
 						isGoodResolution = sourceFogArmyPath.value > army.tile.army * minRatio
@@ -264,20 +265,22 @@ class ArmyTracker(object):
 					if adjacent.isMountain:
 						continue
 					expectedAdjDeltaArr = self.get_expected_dest_delta(adjacent)
+					adjDelta = 0
 					for expectedAdjDelta in expectedAdjDeltaArr:
 						logging.info("  adjacent {} delta raw {} expectedAdjDelta {}".format(adjacent.toString(), adjacent.delta.armyDelta, expectedAdjDelta))
 						adjDelta = abs(adjacent.delta.armyDelta + expectedAdjDelta)
 						logging.info("  armyDeltas: army {} {} - adj {} {}  -  lostVision {}".format(army.toString(), armyRealTileDelta, adjacent.toString(), adjDelta, lostVision))
 						# if this was our move
-						if (self.lastMove != None and self.lastMove.source == army.tile and self.lastMove.dest == adjacent):
+						if (self.lastMove is not None
+								and self.lastMove.source == army.tile
+								and self.lastMove.dest == adjacent):
 							foundLocation = True
 							logging.info("    Army (lastMove) probably moved from {} to {}".format(army.toString(), adjacent.toString()))
 							self.army_moved(army, adjacent)
 							break
-						## if this tile was taken by army player and army tile delta was negative
-						#if 
 
-					if foundLocation: break
+					if foundLocation:
+						break
 
 					if armyRealTileDelta > 0 and adjDelta - armyRealTileDelta == 0:
 						foundLocation = True
@@ -289,7 +292,7 @@ class ArmyTracker(object):
 						logging.info("    Army (WishyWashyFog) probably moved from {} to {}".format(army.toString(), adjacent.toString()))
 						self.army_moved(army, adjacent)
 						break
-					elif adjDelta != 0 and adjDelta - (army.value) == 0:
+					elif adjDelta != 0 and adjDelta - army.value == 0:
 						# handle fog moves?
 						foundLocation = True
 						logging.info("    Army (SOURCE FOGGED?) probably moved from {} to {}. adj (dest) visible? {}".format(army.toString(), adjacent.toString(), adjacent.visible))
@@ -298,20 +301,23 @@ class ArmyTracker(object):
 							newArmy = 1 + army.value - adjDelta
 							logging.info("Updating tile {} army from {} to {}".format(oldTile.toString(), oldTile.army, newArmy))
 							oldTile.army = army.value - adjDelta
+
 						self.army_moved(army, adjacent)
 						break
-					elif self.isArmyBonus and armyRealTileDelta > 0 and abs(adjDelta - armyRealTileDelta) == 2:
-						# handle bonus turn capture moves?
-						foundLocation = True
-						logging.info("    Army (BONUS CAPTURE?) probably moved from {} to {}".format(army.toString(), adjacent.toString()))
-						self.army_moved(army, adjacent)
-						break
+					# elif self.isArmyBonus and armyRealTileDelta > 0 and abs(adjDelta - armyRealTileDelta) == 2:
+					# 	# handle bonus turn capture moves?
+					# 	foundLocation = True
+					# 	logging.info("    Army (BONUS CAPTURE?) probably moved from {} to {}".format(army.toString(), adjacent.toString()))
+					# 	self.army_moved(army, adjacent)
+					# 	break
+
 				if not foundLocation:
 					# first check if the map decided where it went
-					if army.tile.delta.toTile != None:
+					if army.tile.delta.toTile is not None:
 						foundLocation = True
 						logging.info("  army.tile.delta.toTile != None, using {}".format(army.tile.delta.toTile.toString()))
 						self.army_moved(army, army.tile.delta.toTile)
+
 				if not foundLocation:
 					# now try fog movements?
 					fogBois = []
@@ -319,6 +325,7 @@ class ArmyTracker(object):
 					for adjacent in army.tile.movable:
 						if adjacent.isMountain or adjacent.isNotPathable:
 							continue
+
 						# fogged armies cant move to other fogged tiles when army is uncovered unless that player already owns the other fogged tile
 						legalFogMove = (army.visible or adjacent.player == army.player)
 						if not adjacent.visible and self.army_could_capture(army, adjacent) and legalFogMove:
@@ -326,6 +333,7 @@ class ArmyTracker(object):
 							#	closestFog = adjacent
 							fogBois.append(adjacent)
 							fogCount += 1
+
 						expectedAdjDeltaArr = self.get_expected_dest_delta(adjacent)
 						for expectedAdjDelta in expectedAdjDeltaArr:
 							logging.info("  adjacent delta raw {} expectedAdjDelta {}".format(adjacent.delta.armyDelta, expectedAdjDelta))
@@ -341,7 +349,10 @@ class ArmyTracker(object):
 								logging.info("    Army (Based on expected delta?) probably moved from {} to {}".format(army.toString(), adjacent.toString()))
 								self.army_moved(army, adjacent)
 								break
-						if foundLocation: break
+
+						if foundLocation:
+							break
+
 					if not foundLocation and len(fogBois) > 0 and army.player != self.map.player_index and (army.tile.visible or army.tile.delta.lostSight): # prevent entangling and moving fogged cities and stuff that we stopped incrementing
 						fogArmies = []
 						if len(fogBois) == 1:
@@ -362,9 +373,11 @@ class ArmyTracker(object):
 								self.move_fogged_army(entangledArmies[i], fogBoi)
 								self.army_moved(entangledArmies[i], fogBoi)
 						continue
+
 					if army.player != army.tile.player and army.tile.visible:
 						logging.info("  Army {} got eated? Scrapped for not being the right player anymore".format(army.toString()))
 						self.scrap_army(army)
+
 				army.update()
 			else:
 				army.update()
@@ -372,12 +385,7 @@ class ArmyTracker(object):
 				if (army.tile.visible and army.value < self.track_threshold - 1) or (not army.tile.visible and army.value < 3):
 					logging.info("  Army {} Stopped moving. Scrapped for being low value".format(army.toString()))
 					self.scrap_army(army)
-				#else:
-				#	if army.tile in self.trackingArmies:
-				#		# don't continue to track on this army because it didn't move and wont be valuable for evaluating tiles that aren't basic tracking
-				#		del self.trackingArmies[army.tile]
-				#	else: 
-				#		logging.info("    WTF? Army {} no longer in self.trackingArmies, can't remove it?".format(army.toString()))
+
 		for army in self.trackingArmies.values():
 			self.armies[army.tile] = army
 	
@@ -396,8 +404,6 @@ class ArmyTracker(object):
 
 		return None
 
-
-
 	def army_moved(self, army, tile):
 		if army.tile in self.armies:
 			del self.armies[army.tile]
@@ -406,6 +412,8 @@ class ArmyTracker(object):
 		if army.value < 0 or (army.player != army.tile.player and army.tile.visible):
 			logging.info("    Army {} scrapped for being low value or run into larger tile".format(army.toString()))
 			self.scrap_army(army)
+		for listener in self.notify_army_moved:
+			listener(army.tile)
 
 	def scrap_army(self, army):
 		army.scrapped = True
@@ -434,7 +442,7 @@ class ArmyTracker(object):
 			return army.value > fogTargetTile.army
 		return True
 
-	def move_fogged_army(self, army, fogTargetTile):
+	def move_fogged_army(self, army: Army, fogTargetTile: Tile):
 		if army.tile in self.armies:
 			del self.armies[army.tile]
 		if fogTargetTile.player == army.player:
@@ -447,21 +455,8 @@ class ArmyTracker(object):
 		#fogTargetTile.player = army.player
 		army.update_tile(fogTargetTile)
 		self.armies[fogTargetTile] = army
-		
-	def get_expected_delta(self, tile):
-		if self.map.players[tile.player].dead:
-			return 0
-		expected = 0
-		if (tile.isCity or tile.isGeneral) and self.isCityBonus:
-			expected += 1
-		if self.lastMove != None and tile == self.lastMove.dest:
-			if self.lastMove.non_friendly and self.lastMove.dest.delta.oldOwner != self.lastMove.dest.delta.newOwner:
-				expected -= self.lastMove.army_moved
-			else:
-				expected += self.lastMove.army_moved
-			logging.info("    {} delta lastMove.dest: non_friendly {} army_moved {} to change expected delta to {}".format(self.lastMove.dest.toString(), self.lastMove.non_friendly, self.lastMove.army_moved, expected))
-
-		return expected
+		for listener in self.notify_army_moved:
+			listener(army.tile)
 
 	# returns an array due to the possibility of winning or losing the move-first coinflip, 
 	# and need to account for both when the inspected tile is the source tile of our last army move
@@ -473,7 +468,7 @@ class ArmyTracker(object):
 			baseExpected = 0 - tile.delta.expectedDelta
 
 		expected = [baseExpected]
-		if self.lastMove != None and tile == self.lastMove.dest:
+		if self.lastMove is not None and tile == self.lastMove.dest:
 			wonFight = self.lastMove.dest.player == self.map.player_index
 			logging.info("    {} dest_delta lastMove.dest: delta {} armyMoved {} nonFriendly {} wonFight {}".format(self.lastMove.dest.toString(), self.lastMove.dest.delta.armyDelta, self.lastMove.army_moved, self.lastMove.non_friendly, wonFight))
 			# 4 cases. 
@@ -488,7 +483,7 @@ class ArmyTracker(object):
 			expected[0] += baseExpected
 			logging.info("      expected delta to {} (baseExpected {})".format(expected[0], baseExpected))
 		
-		if self.lastMove != None and tile == self.lastMove.source:
+		if self.lastMove is not None and tile == self.lastMove.source:
 			expected = [baseExpected,0]
 			wonFight = self.lastMove.source.player == self.map.player_index
 			logging.info("    {} dest_delta  lastMove.source: delta {} armyMoved {} wonFight {}".format(self.lastMove.source.toString(), self.lastMove.source.delta.armyDelta, self.lastMove.army_moved, wonFight))
@@ -505,7 +500,7 @@ class ArmyTracker(object):
 
 
 	def get_nearby_armies(self, army, armyMap = None):
-		if armyMap == None:
+		if armyMap is None:
 			armyMap = self.armies
 		# super fast depth 2 bfs effectively
 		nearbyArmies = []
@@ -527,7 +522,7 @@ class ArmyTracker(object):
 		#	if tile.player != -1 and (playerLargest[tile.player] == None or tile.army > playerLargest[tile.player].army):
 		#		playerLargest[tile.player] = tile
 		for tile in self.map.pathableTiles:			
-			notOurMove = (self.lastMove == None or (tile != self.lastMove.source and tile != self.lastMove.dest))
+			notOurMove = (self.lastMove is None or (tile != self.lastMove.source and tile != self.lastMove.dest))
 			tileNewlyMovedByEnemy = (tile not in self.armies 
 									and not tile.delta.gainedSight 
 									and tile.player != self.map.player_index 
@@ -540,14 +535,14 @@ class ArmyTracker(object):
 			if tile in self.armies:
 				tileArmy = self.armies[tile]
 
-			if (tileArmy == None or tileArmy.scrapped) and tile.player != -1 and (playerLargest[tile.player] == tile or tile.army >= self.track_threshold or tileNewlyMovedByEnemy):
+			if (tileArmy is None or tileArmy.scrapped) and tile.player != -1 and (playerLargest[tile.player] == tile or tile.army >= self.track_threshold or tileNewlyMovedByEnemy):
 				logging.info("{} Discovered as Army! (tile.army {}, tile.delta {}) Determining if came from fog".format(tile.toString(), tile.army, tile.delta.armyDelta))
 				resolvedFogSourceArmy = False
 				resolvedReasonableFogValuePath = False
 				if abs(tile.delta.armyDelta) > tile.army / 2:
 					# maybe this came out of the fog?
 					sourceFogArmyPath = self.find_fog_source(tile)
-					if sourceFogArmyPath != None:
+					if sourceFogArmyPath is not None:
 						self.fogPaths.append(sourceFogArmyPath.get_reversed())
 						resolvedFogSourceArmy = True
 						minRatio = 1.8
@@ -565,8 +560,7 @@ class ArmyTracker(object):
 					self.new_army_emerged(tile, tile.army - 1)
 				# if tile WAS bordered by fog find the closest fog army and remove it (not tile.visible or tile.delta.gainedSight)
 
-
-	def new_army_emerged(self, emergedTile, armyEmergenceValue):
+	def new_army_emerged(self, emergedTile: Tile, armyEmergenceValue: int):
 		"""
 		when an army can't be resolved to coming from the fog from a known source, this method gets called to track its emergence location.
 		@param emergedTile:
@@ -692,7 +686,7 @@ class ArmyTracker(object):
 											priorityFunc=pathSortFunc,
 											skipFunc=fogSkipFunc,
 											searchingPlayer = tile.player, logResultValues = True)
-		if (fogSourcePath != None):
+		if (fogSourcePath is not None):
 			logging.info("        For new army at tile {} we found fog source path???? {}".format(tile.toString(), fogSourcePath.toString()))
 		else:
 			logging.info("        NO fog source path for new army at {}".format(tile.toString()))
@@ -707,7 +701,7 @@ class ArmyTracker(object):
 				armiesFromFog.append(existingArmy)
 
 		node = sourceFogArmyPath.start.next
-		while node != None:
+		while node is not None:
 			logging.info("resolve_fog_emergence tile {}".format(node.tile.toString()))
 			if node.tile in self.armies:
 				logging.info("  was army {}".format(node.tile.toString()))
@@ -718,10 +712,10 @@ class ArmyTracker(object):
 
 		maxArmy = None
 		for army in armiesFromFog:
-			if maxArmy == None or maxArmy.value < army.value:
+			if maxArmy is None or maxArmy.value < army.value:
 				maxArmy = army
 
-		if maxArmy != None:
+		if maxArmy is not None:
 			if maxArmy.tile in self.armies:
 				del self.armies[maxArmy.tile]
 
@@ -730,7 +724,7 @@ class ArmyTracker(object):
 			while node.tile != maxArmy.tile:
 				node = node.next
 			node = node.next
-			while node != None:
+			while node is not None:
 				maxArmy.update_tile(node.tile)
 				node = node.next
 

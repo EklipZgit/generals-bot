@@ -2,4 +2,6 @@ websocket-client
 pygame
 certifi
 requests
+nashpy
+numpy
 # dill

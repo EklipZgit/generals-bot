@@ -154,6 +154,7 @@ def get_optimal_expansion(
     #    posPathPrio = 0-pathPriorityDivided
     #    #return (posPathPrio, 0-armyRemaining, distSoFar)
     #    return (0-(enemyTiles*2 + neutralTiles) / (max(1, distSoFar)), 0-enemyTiles / (max(1, distSoFar)), posPathPrio, distSoFar)
+
     ENEMY_EXPANSION_TILE_PENALTY = 0.7
 
     if not priorityFunc:
@@ -195,12 +196,15 @@ def get_optimal_expansion(
                 tileCapturePoints += tileModScaled
                 usefulMove = True
                 # enemytiles or enemyterritory undiscovered tiles
-                if targetPlayer != -1 and (nextTile.player == targetPlayer or (
-                        not nextTile.visible and territoryMap[nextTile.x][
-                    nextTile.y] == targetPlayer)):
-                    if nextTile.player == -1:
-                        # these are usually 1 or more army since usually after army bonus
-                        armyRemaining -= 1
+                if (targetPlayer != -1
+                    and (
+                        nextTile.player == targetPlayer
+                        or (not nextTile.visible and territoryMap[nextTile.x][nextTile.y] == targetPlayer)
+                    )
+                ):
+                    # if not nextTile.visible:
+                    #     # these are usually 1 or more army since usually after army bonus
+                    #     armyRemaining -= 1
                     addedPriority += 8
                     tileCapturePoints -= 2.3
                     enemyTiles -= 1
@@ -529,12 +533,14 @@ def get_optimal_expansion(
         stage1 = 0.10
         stage2 = 0.15
         breakStage = 0.22
+        inStage2 = False
         if timeUsed > stage1:
             logging.info("timeUsed > {} ({})... Breaking loop and knapsacking...".format(stage1, timeUsed))
         if timeUsed > stage2:
             logging.info(
                 "timeUsed > {} ({})... Switching to using all tiles, cutoffFactor = fullCutoff...".format(stage2,
                                                                                                           timeUsed))
+            inStage2 = True
             cutoffFactor = fullCutoff
         if timeUsed > breakStage:
             logging.info("timeUsed > {} ({})... breaking...".format(breakStage, timeUsed))
@@ -581,7 +587,7 @@ def get_optimal_expansion(
             negativeTiles=negativeTiles,
             searchingPlayer=searchingPlayer,
             priorityFunc=priorityFunc,
-            useGlobalVisitedSet=False,
+            useGlobalVisitedSet=inStage2,
             skipFunc=skipFunc,
             logResultValues=logStuff,
             fullOnly=False,
@@ -590,8 +596,7 @@ def get_optimal_expansion(
 
         if path is not None and path:
             logging.info(
-                "Path found for maximizing army usage? Duration {:.3f} path {}".format(time.perf_counter() - startTime,
-                                                                                       path.toString()))
+                f"Path found for maximizing army usage? Duration {time.perf_counter() - startTime:.3f} path {path.toString()}")
 
             # BYPASSED THIS BECAUSE KNAPSACK...
             # remainingTurns -= path.length
@@ -615,14 +620,12 @@ def get_optimal_expansion(
                 paths.append((friendlyCityCount, value, path))
             else:
                 logging.info(
-                    "Trimming value {:.2f} Path {} and incrementing cutoffFactor because low value".format(value,
-                                                                                                           path.toString()))
+                    f"Trimming value {value:.2f} Path {path.toString()} and incrementing cutoffFactor because low value")
                 cutoffFactor += 3
         else:
             cutoffFactor += 3
             logging.info(
-                "Didn't find a super duper cool optimized expansion pathy thing for remainingTurns {}, cutoffFactor {}. Incrementing cutoffFactor :(".format(
-                    remainingTurns, cutoffFactor))
+                f"Didn't find a super duper cool optimized expansion pathy thing for remainingTurns {remainingTurns}, cutoffFactor {cutoffFactor}. Incrementing cutoffFactor :(")
 
     # expansionGather = greedy_backpack_gather(map, tilesLargerThanAverage, turns, None, valueFunc, baseCaseFunc, negativeTiles, None, searchingPlayer, priorityFunc, skipFunc = None)
     if allowLeafMoves and leafMoves is not None:
@@ -634,7 +637,7 @@ def get_optimal_expansion(
                 if leafMove.source.army < 30:
                     if leafMove.source.army - 1 <= leafMove.dest.army:
                         continue
-                    logging.info("adding leafMove {} to knapsack input".format(leafMove.toString()))
+                    logging.info(f"adding leafMove {leafMove.toString()} to knapsack input")
                     path = Path(leafMove.source.army - leafMove.dest.army - 1)
                     path.add_next(leafMove.source)
                     path.add_next(leafMove.dest)
@@ -647,8 +650,7 @@ def get_optimal_expansion(
                     negativeTiles.add(leafMove.dest)
                 else:
                     logging.info(
-                        "Did NOT add leafMove {} to knapsack input because its value was high. Why wasn't it already input if it is a good move?".format(
-                            leafMove.toString()))
+                        f"Did NOT add leafMove {leafMove.toString()} to knapsack input because its value was high. Why wasn't it already input if it is a good move?")
 
     alpha = 150
     minAlpha = 50
@@ -673,13 +675,13 @@ def get_optimal_expansion(
     # build knapsack weights and values
     weights = [path.length for friendlyCityCount, tilesCaptured, path in paths]
     values = [int(intFactor * tilesCaptured) for friendlyCityCount, tilesCaptured, path in paths]
-    logging.info("Feeding the following paths into knapsackSolver at turns {}...".format(turns))
+    logging.info(f"Feeding the following paths into knapsackSolver at turns {turns}...")
     for i, pathTuple in enumerate(paths):
         friendlyCityCount, tilesCaptured, curPath = pathTuple
-        logging.info("{}:  cap {:.2f} length {} path {}".format(i, tilesCaptured, curPath.length, curPath.toString()))
+        logging.info(f"{i}:  cap {tilesCaptured:.2f} length {curPath.length} path {curPath.toString()}")
 
     totalValue, maxKnapsackedPaths = solve_knapsack(paths, turns, weights, values)
-    logging.info("maxKnapsackedPaths value {} length {},".format(totalValue, len(maxKnapsackedPaths)))
+    logging.info(f"maxKnapsackedPaths value {totalValue} length {len(maxKnapsackedPaths)},")
 
     path: typing.Union[None, Path] = None
     if len(maxKnapsackedPaths) > 0:
@@ -687,11 +689,11 @@ def get_optimal_expansion(
         totalTrimmable = 0
         for friendlyCityCount, tilesCaptured, curPath in maxKnapsackedPaths:
             if curPath.start.tile in trimmable:
-                logging.info("trimmable in current knapsack, {} (friendlyCityCount {}, tilesCaptured {})".format(
-                    curPath.toString(), friendlyCityCount, tilesCaptured))
+                logging.info(
+                    f"trimmable in current knapsack, {curPath.toString()} (friendlyCityCount {friendlyCityCount}, tilesCaptured {tilesCaptured})")
                 trimmablePath, possibleTrim = trimmable[curPath.start.tile]
                 totalTrimmable += possibleTrim
-        logging.info("totalTrimmable! {}".format(totalTrimmable))
+        logging.info(f"totalTrimmable! {totalTrimmable}")
 
         if totalTrimmable > 0:
             trimmableStart = time.perf_counter()
@@ -702,15 +704,14 @@ def get_optimal_expansion(
                 otherValue, otherKnapsackedPaths = solve_knapsack(paths, turns + i, weights, values)
                 # offset by i to compensate for the skipped moves
                 otherValueWeightedByTrim = otherValue - i * intFactor
-                logging.info("i {} - otherKnapsackedPaths value {} weightedValue {} length {}".format(i, otherValue,
-                                                                                                      otherValueWeightedByTrim,
-                                                                                                      len(otherKnapsackedPaths)))
+                logging.info(
+                    f"i {i} - otherKnapsackedPaths value {otherValue} weightedValue {otherValueWeightedByTrim} length {len(otherKnapsackedPaths)}")
                 if otherValueWeightedByTrim > maxKnapsackVal:
                     maxKnapsackVal = otherValueWeightedByTrim
                     maxKnapsackedPaths = otherKnapsackedPaths
-                    logging.info("NEW MAX {}".format(maxKnapsackVal))
-            logging.info("(Time spent on {} trimmable iterations: {:.3f})".format(trimRange,
-                                                                                  time.perf_counter() - trimmableStart))
+                    logging.info(f"NEW MAX {maxKnapsackVal}")
+            logging.info(
+                f"(Time spent on {trimRange} trimmable iterations: {time.perf_counter() - trimmableStart:.3f})")
         # Select which of the knapsack paths to move first
         logging.info("Selecting which of the above paths to move first")
         for friendlyCityCount, tilesCaptured, curPath in maxKnapsackedPaths:
@@ -728,10 +729,10 @@ def get_optimal_expansion(
                 maxVal = thisVal
                 path = curPath
                 logging.info(
-                    "new max val, eval [{}], path {}".format('], ['.join(str(x) for x in maxVal), path.toString()))
+                    f"new max val, eval [{'], ['.join(str(x) for x in maxVal)}], path {path.toString()}")
             else:
                 logging.info(
-                    "NOT max val, eval [{}], path {}".format('], ['.join(str(x) for x in thisVal), curPath.toString()))
+                    f"NOT max val, eval [{'], ['.join(str(x) for x in thisVal)}], path {curPath.toString()}")
 
             if viewInfo:
                 # draw other paths darker
@@ -739,9 +740,8 @@ def get_optimal_expansion(
                 minAlpha = 150
                 alphaDec = 0
                 viewInfo.paths.appendleft(PathColorer(curPath, 200, 51, 204, alpha, alphaDec, minAlpha))
-        logging.info("EXPANSION PLANNED HOLY SHIT? iterations {}, Duration {:.3f}, path {}".format(iter[0],
-                                                                                                   time.perf_counter() - startTime,
-                                                                                                   path.toString()))
+        logging.info(
+            f"EXPANSION PLANNED HOLY SHIT? iterations {iter[0]}, Duration {time.perf_counter() - startTime:.3f}, path {path.toString()}")
         # draw maximal path darker
         alpha = 255
         minAlpha = 200
@@ -751,7 +751,7 @@ def get_optimal_expansion(
             viewInfo.paths.appendleft(PathColorer(path, 255, 100, 200, alpha, alphaDec, minAlpha))
     else:
         logging.info(
-            "No expansion plan.... :( iterations {}, Duration {:.3f}".format(iter[0], time.perf_counter() - startTime))
+            f"No expansion plan.... :( iterations {iter[0]}, Duration {time.perf_counter() - startTime:.3f}")
 
     tilesInKnapsackOtherThanCurrent = set()
 
@@ -799,6 +799,8 @@ def should_consider_path_move_half(
         withinGenPathThreshold: int,
         tilesOnMainPathDist: int):
 
+    largeTileThreshold = int(map.players[general.player].score ** 0.5)
+
     pathTile: Tile = path.start.tile
     pathTileDistSum = enemyDistMap[pathTile.x][pathTile.y] + playerDistMap[pathTile.x][pathTile.y]
 
@@ -837,6 +839,8 @@ def should_consider_path_move_half(
                 return
             if altTile.player == player:
                 return
+            if altTile.isNeutral and capArmy > 3:
+                return
             if altTile == tile:
                 return
 
@@ -855,7 +859,11 @@ def should_consider_path_move_half(
         canCapTile = capArmy - 1 > tile.army
         isEnemyTileThatCanRecapture = tile.player >= 0 and tile.army > 2
         canProbablyCaptureNearbyTiles = len(altCappable) > capArmy // 2
-        if (canCapTile and canProbablyCaptureNearbyTiles) or isEnemyTileThatCanRecapture:
+
+        altPathSplitThresh = largeTileThreshold * 2
+
+        if ((canCapTile and canProbablyCaptureNearbyTiles and tile.army < altPathSplitThresh)
+                or (isEnemyTileThatCanRecapture and tile.army < largeTileThreshold)):
             return True
 
         return False

@@ -380,7 +380,7 @@ class GameSimulator(object):
 
 
 class GameSimulatorHost(object):
-    def __init__(self, map: MapBase, player_with_viewer: int = -1, playerMapVision: MapBase | None = None, afkPlayers: None | typing.List[int] = None, allAfkExceptViewer: bool =False):
+    def __init__(self, map: MapBase, player_with_viewer: int = -1, playerMapVision: MapBase | None = None, afkPlayers: None | typing.List[int] = None, allAfkExceptMapPlayer: bool =False):
         self.move_queue: typing.List[typing.List[Move | None]] = [[] for player in map.players]
         self.sim = GameSimulator(map, ignore_illegal_moves=False)
 
@@ -390,8 +390,8 @@ class GameSimulatorHost(object):
         if afkPlayers is not None:
             self.forced_afk_players = afkPlayers
 
-        if allAfkExceptViewer:
-            self.forced_afk_players = [i for i in where(range(len(map.players)), lambda p: p != player_with_viewer)]
+        if allAfkExceptMapPlayer:
+            self.forced_afk_players = [i for i in where(range(len(map.players)), lambda p: p != map.player_index)]
 
         charMap = {
             0: 'a',
@@ -508,16 +508,16 @@ class GameSimulatorHost(object):
             if botHost is not None and playerTile in botHost.eklipz_bot.armyTracker.armies:
                 del botHost.eklipz_bot.armyTracker.armies[playerTile]
 
-    def reveal_player_tile(self, playerToTileTo, x, y):
-        self.sim.set_general_vision(playerToReveal, playerToRevealTo, hidden=hidden)
-        revealPlayer = self.sim.players[playerToRevealTo]
-        revealGeneral = self.sim.sim_map.generals[playerToReveal]
-
-        if hidden:
-            botHost = self.bot_hosts[playerToRevealTo]
-            playerTile = revealPlayer.map.GetTile(revealGeneral.x, revealGeneral.y)
-            if botHost is not None and playerTile in botHost.eklipz_bot.armyTracker.armies:
-                del botHost.eklipz_bot.armyTracker.armies[playerTile]
+    # def reveal_player_tile(self, playerToTileTo, x, y):
+    #     self.sim.set_general_vision(playerToReveal, playerToRevealTo, hidden=hidden)
+    #     revealPlayer = self.sim.players[playerToRevealTo]
+    #     revealGeneral = self.sim.sim_map.generals[playerToReveal]
+    #
+    #     if hidden:
+    #         botHost = self.bot_hosts[playerToRevealTo]
+    #         playerTile = revealPlayer.map.GetTile(revealGeneral.x, revealGeneral.y)
+    #         if botHost is not None and playerTile in botHost.eklipz_bot.armyTracker.armies:
+    #             del botHost.eklipz_bot.armyTracker.armies[playerTile]
 
 
 

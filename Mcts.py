@@ -22,7 +22,7 @@ import time
 
 import numpy as np
 
-import pyspiel
+# import pyspiel
 
 
 class Evaluator(object):

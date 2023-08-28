@@ -143,3 +143,45 @@ class ArmyEngineGameTests(TestBase):
         self.assertIsNone(winner)
 
         # TODO add asserts for should_not_cycle_sideways
+    
+    def test_should_not_let_general_die_scrim_path(self):
+        debugMode = True
+        mapFile = 'GameContinuationEntries/should_not_let_general_die_scrim_path___HeTqrYFT3---a--740.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 740, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        # Grant the general the same fog vision they had at the turn the map was exported
+        rawMap, _ = self.load_map_and_general(mapFile, 740)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+
+        # simHost.make_player_afk(enemyGeneral.player)
+
+        # alert enemy of the player general
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.01, turns=15)
+        self.assertIsNone(winner)
+    
+    def test_should_not_let_general_die_scrim_path__turn_before(self):
+        debugMode = True
+        mapFile = 'GameContinuationEntries/should_not_let_general_die_scrim_path__turn_before___HeTqrYFT3---a--739.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 739, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        # Grant the general the same fog vision they had at the turn the map was exported
+        rawMap, _ = self.load_map_and_general(mapFile, 739)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+
+        # simHost.make_player_afk(enemyGeneral.player)
+
+        # alert enemy of the player general
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.01, turns=15)
+        self.assertIsNone(winner)

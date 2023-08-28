@@ -1,7 +1,10 @@
 import logging
 
+import SearchUtils
+from SearchUtils import Counter
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
+from base.client.map import Tile
 
 
 class BotBehaviorTests(TestBase):
@@ -35,7 +38,7 @@ class BotBehaviorTests(TestBase):
 
                 # simHost = GameSimulatorHost(map)
                 rawMap, _ = self.load_map_and_general(mapFile, 242)
-                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptViewer=afk)
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=afk)
                 # alert both players of each others general
                 simHost.sim.players[enemyGeneral.player].map.update_visible_tile(general.x, general.y, general.player, general.army, is_city=False, is_general=True)
                 simHost.sim.players[general.player].map.update_visible_tile(enemyGeneral.x, enemyGeneral.y, enemyGeneral.player, enemyGeneral.army, is_city=False, is_general=True)
@@ -95,7 +98,7 @@ class BotBehaviorTests(TestBase):
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, 238)
 
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptViewer=True)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.bot_hosts[general.player].eklipz_bot.next_scrimming_army_tile = self.get_player_tile(10, 13, simHost.sim, general.player)
         simHost.sim.ignore_illegal_moves = True
         # some of these will be illegal if the bot does its thing and properly kills the inbound army
@@ -255,3 +258,79 @@ class BotBehaviorTests(TestBase):
         self.assertIsNone(winner)
 
         # TODO add asserts for should_intercept_army_and_not_loop_on_threatpath
+    
+    def test_should_not_panic_gather_and_complete_the_general_search_kill(self):
+        debugMode = False
+        mapFile = 'GameContinuationEntries/should_not_panic_gather_and_complete_the_general_search_kill___SgBVnDtph---b--893.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 893, fill_out_tiles=True)
+        genPlayer = general.player
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        # Grant the general the same fog vision they had at the turn the map was exported
+        rawMap, _ = self.load_map_and_general(mapFile, 893)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+        simHost.queue_player_moves_str(enemyGeneral.player, '3,7->3,8->3,9->3,10->3,11->4,11->5,11->5,12')
+        simHost.bot_hosts[enemyGeneral.player].eklipz_bot.allIn = True
+        simHost.bot_hosts[enemyGeneral.player].eklipz_bot.all_in_counter = 200
+        simHost.bot_hosts[general.player].eklipz_bot.armyTracker.emergenceLocationMap[enemyGeneral.player][0][3] = 150
+        simHost.bot_hosts[general.player].eklipz_bot.armyTracker.emergenceLocationMap[enemyGeneral.player][0][8] = 100
+        # simHost.bot_hosts[general.player].eklipz_bot.all_in_counter = 200
+
+        # simHost.make_player_afk(enemyGeneral.player)
+
+        # alert enemy of the player general
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+        # simHost.reveal_player_general(playerToReveal=enemyGeneral.player, playerToRevealTo=general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=150)
+        self.assertEqual(winner, genPlayer)
+    
+    def test_should_begin_killing_enemy_territory_nearby_general(self):
+        debugMode = True
+        cases = [
+            ('GameContinuationEntries/should_begin_killing_enemy_territory_nearby_general___HeTmhYF6h---b--300.txtmap', 300),
+            ('GameContinuationEntries/should_begin_killing_enemy_territory_nearby_general__v3___HeTmhYF6h---b--600.txtmap', 600),
+            ('GameContinuationEntries/should_begin_killing_enemy_territory_nearby_general__v2___HeTmhYF6h---b--450.txtmap', 450)
+        ]
+        for mapName, turn in cases:
+            with self.subTest(mapName=mapName.split('/')[1], turn=turn):
+                map, general, enemyGeneral = self.load_map_and_generals(mapName, turn, fill_out_tiles=True)
+                enTiles = [
+                    (8,15),
+                    (8,16),
+                    (8,14),
+                    (9,16),
+                    (10,15),
+                    (10,16),
+                    (10,17),
+                ]
+
+                for x, y in enTiles:
+                    tile = map.GetTile(x, y)
+                    tile.player = enemyGeneral.player
+                    tile.army = 2
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+
+                # Grant the general the same fog vision they had at the turn the map was exported
+                rawMap, _ = self.load_map_and_general(mapName, turn)
+
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+                for x, y in enTiles:
+                    simHost.sim.set_tile_vision(playerToRevealTo=general.player, x=x, y=y, hidden=True, undiscovered=True)
+
+                # simHost.make_player_afk(enemyGeneral.player)
+
+                # alert enemy of the player general
+                simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=50)
+                self.assertIsNone(winner)
+                self.assertGatheredNear(simHost, general.player, x=15, y=12, radius=5, requiredAvgTileValue=2.5)
+                self.assertCleanedUpTilesNear(simHost, general.player, x=9, y=14, radius=4, capturedWithinLastTurns=39, requireCountCapturedInWindow=8)
+                self.assertNoRepetition(simHost, minForRepetition=1)

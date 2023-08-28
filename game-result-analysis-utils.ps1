@@ -155,7 +155,7 @@ function Create-TestContinuingGameFrom {
     def test_$TestName(self):
         debugMode = True
         mapFile = 'GameContinuationEntries/$newName'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, $turn)
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, $turn, fill_out_tiles=True)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
@@ -169,6 +169,7 @@ function Create-TestContinuingGameFrom {
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
+        self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
         self.assertIsNone(winner)
 

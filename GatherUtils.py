@@ -128,7 +128,8 @@ def build_tree_node_lookup(
         treeNodeLookup,
         startTilesDict,
         searchingPlayer,
-        shouldLog
+        shouldLog,
+        force=True
     )
 
 def extend_tree_node_lookup(
@@ -138,7 +139,8 @@ def extend_tree_node_lookup(
         searchingPlayer: int,
         useTrueValueGathered: bool = False,
         # negativeTiles: typing.Set[Tile],
-        shouldLog: bool = False
+        shouldLog: bool = False,
+        force: bool = False
 ) -> typing.Dict[Tile, TreeNode]:
     """
     Returns the remaining turns after adding the paths, and the new tree nodes list, and the new startingTileDict.
@@ -158,7 +160,7 @@ def extend_tree_node_lookup(
         if valuePerTurnPath.tail.tile.army <= 1 or valuePerTurnPath.tail.tile.player != searchingPlayer:
             # THIS should never happen since we are supposed to nuke these already in the startTilesDict builder
             logging.error(
-                f"TERMINATING knapsack-bfs-gather PATH BUILDING DUE TO TAIL TILE {valuePerTurnPath.tail.tile.toString()} THAT WAS < 1 OR NOT OWNED BY US. PATH: {valuePerTurnPath.toString()}")
+                f"TERMINATING extend_tree_node_lookup PATH BUILDING DUE TO TAIL TILE {valuePerTurnPath.tail.tile.toString()} THAT WAS < 1 OR NOT OWNED BY US. PATH: {valuePerTurnPath.toString()}")
             continue
 
         if shouldLog:
@@ -178,8 +180,11 @@ def extend_tree_node_lookup(
         if node.tile in treeNodeLookup:
             currentTreeNode = treeNodeLookup[node.tile]
         else:
+            if not force:
+                raise AssertionError('Should never get here with no root tree node.')
             currentTreeNode = TreeNode(node.tile, None, distance)
-            currentTreeNode.gatherTurns = 1
+            # currentTreeNode.gatherTurns = 1
+            treeNodeLookup[node.tile] = currentTreeNode
         # runningValue = valuePerTurnPath.value - node.tile.army
         runningValue = valuePerTurnPath.value
         if node.tile.player == searchingPlayer:
@@ -187,7 +192,6 @@ def extend_tree_node_lookup(
         elif useTrueValueGathered:
             runningValue += node.tile.army
         currentTreeNode.value += runningValue
-        treeNodeLookup[node.tile] = currentTreeNode
         # negativeTiles.add(node.tile)
         # skipping because first tile is actually already on the path
         node = node.next
@@ -200,12 +204,19 @@ def extend_tree_node_lookup(
             #	viewInfo.bottomRightGridText[node.tile.x][node.tile.y] = newDist
             nextTreeNode = TreeNode(node.tile, currentTreeNode.tile, newDist)
             nextTreeNode.value = runningValue
-            nextTreeNode.gatherTurns = 1
+            # nextTreeNode.gatherTurns = 1
             if node.tile.player == searchingPlayer:
                 runningValue -= node.tile.army
             elif useTrueValueGathered:
                 runningValue += node.tile.army
-            currentTreeNode.children.append(nextTreeNode)
+            if nextTreeNode not in currentTreeNode.children:
+                currentTreeNode.children.append(nextTreeNode)
+                prunedToRemove = None
+                for p in currentTreeNode.pruned:
+                    if p.tile == nextTreeNode.tile:
+                        prunedToRemove = p
+                if prunedToRemove is not None:
+                    currentTreeNode.pruned.remove(prunedToRemove)
             currentTreeNode = nextTreeNode
             treeNodeLookup[node.tile] = currentTreeNode
             addlDist += 1
@@ -238,7 +249,7 @@ def build_next_level_start_dict(
     for valuePerTurnPath in newPaths:
         if valuePerTurnPath.tail.tile.army <= 1 or valuePerTurnPath.tail.tile.player != searchingPlayer:
             logging.info(
-                f"TERMINATING knapsack-bfs-gather PATH BUILDING DUE TO TAIL TILE {valuePerTurnPath.tail.tile.toString()} THAT WAS < 1 OR NOT OWNED BY US. PATH: {valuePerTurnPath.toString()}")
+                f"TERMINATING build_next_level_start_dict PATH BUILDING DUE TO TAIL TILE {valuePerTurnPath.tail.tile.toString()} THAT WAS < 1 OR NOT OWNED BY US. PATH: {valuePerTurnPath.toString()}")
             # in theory this means you fucked up your value function; your value function should return none when the path under evaluation isn't even worth considering
             hadInvalidPath = True
             continue
@@ -476,7 +487,7 @@ def _knapsack_levels_gather_recurse(
 def _knapsack_levels_gather_iterative_prune(
         itr: SearchUtils.Counter,
         map: MapBase,
-        startTilesDict,
+        startTilesDict: typing.Dict[Tile, typing.Tuple[typing.Any, int]],
         # treeNodeLookup: typing.Dict[Tile, TreeNode],
         remainingTurns: int,
         fullTurns: int,
@@ -490,7 +501,7 @@ def _knapsack_levels_gather_iterative_prune(
         skipFunc=None,
         priorityTiles=None,
         ignoreStartTile=False,
-        incrementBackward=False,
+        incrementBackward=True,
         preferNeutral=False,
         viewInfo=None,
         distPriorityMap=None,
@@ -528,13 +539,16 @@ def _knapsack_levels_gather_iterative_prune(
 
     rootNodes: typing.List[TreeNode] = []
 
-    maxPerIteration = max(10, fullTurns // 20 - 5)
+    maxPerIteration = max(5, fullTurns // 5 - 5)
 
     turnsSoFar = 0
     totalValue = 0
     newStartTilesDict = startTilesDict.copy()
     # turnsToTry = min(maxPerIteration, fullTurns - turnsSoFar)
     treeNodeLookup: typing.Dict[Tile, TreeNode] = {}
+    for tile, data in startTilesDict.items():
+        (_, dist) = data
+        treeNodeLookup[tile] = TreeNode(tile, fromTile=None, turn=dist)
 
     prevBest = 0
     valueSoFar = 0
@@ -569,35 +583,22 @@ def _knapsack_levels_gather_iterative_prune(
             logging.info('no new paths found, breaking knapsack stuff')
             break
 
-        turnsUsed = 0
+        turnsUsedByNewPaths = 0
         for path in newPaths:
-            turnsUsed += path.length
-        calculatedLeftOverTurns = remainingTurns - turnsUsed
-
-        prePruneStartTilesDict = newStartTilesDict.copy()
-        for rootNode in rootNodes:
-            (startPriorityObject, distance) = startTilesDict[rootNode.tile]
-            add_tree_nodes_to_start_tiles_dict_recurse(
-                rootNode,
-                prePruneStartTilesDict,
-                searchingPlayer,
-                calculatedLeftOverTurns,
-                # negativeTiles,
-                baseCaseFunc,
-                dist=distance
-            )
-
+            turnsUsedByNewPaths += path.length
+        calculatedLeftOverTurns = remainingTurns - turnsUsedByNewPaths
+                
         extend_tree_node_lookup(
             newPaths,
             treeNodeLookup,
-            prePruneStartTilesDict,
+            newStartTilesDict,
             searchingPlayer,
             useTrueValueGathered=useTrueValueGathered,
             # negativeTiles
             shouldLog=shouldLog
         )
 
-        rootNodes = list(where(treeNodeLookup.values(), lambda treeNode: treeNode.fromTile is None))
+        rootNodes = list(where(treeNodeLookup.values(), lambda treeNode: treeNode.tile in origStartTilesDict))
         totalValue = 0
         totalTurns = 0
         for node in rootNodes:
@@ -615,12 +616,11 @@ def _knapsack_levels_gather_iterative_prune(
             logging.info(f'gather iteration {itr.value} for turns {turnsToGather} value {totalValue} > {prevBest}!')
         elif prevBest > 0 and prevBest > totalValue:
             raise AssertionError(f'gather iteration {itr.value} for turns {turnsToGather} value {totalValue} WORSE than prev {prevBest}? This should be impossible.')
-
         # if totalValue != newGatheredArmy + valueSoFar:
         #     if not SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING:
         #         raise AssertionError(f'recalculated gather value {totalValue} didnt match algo output gather value {newGatheredArmy}')
-        if totalTurns != turnsUsed + turnsSoFar:
-            msg = f'recalc gather turns {totalTurns} didnt match algo turns {turnsUsed}'
+        if totalTurns != turnsUsedByNewPaths + turnsSoFar:
+            msg = f'recalc gather turns {totalTurns} didnt match algo turns turnsUsedByNewPaths {turnsUsedByNewPaths} + turnsSoFar {turnsSoFar}'
             if SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING:
                 # TODO figure this shit the fuck out, what the fuck
                 raise AssertionError(msg)
@@ -630,7 +630,16 @@ def _knapsack_levels_gather_iterative_prune(
         # keep only the maxPerIteration best from each gather level
         pruneToTurns = lastPrunedTo + maxPerIteration
         maxPerIteration = max(maxPerIteration - 1, 1)
-        rootNodes = prune_mst(rootNodes, turns=pruneToTurns, searchingPlayer=searchingPlayer, viewInfo=viewInfo, noLog=not shouldLog)
+
+        rootNodes = prune_mst_to_turns(
+            rootNodes,
+            turns=pruneToTurns,
+            searchingPlayer=searchingPlayer,
+            viewInfo=viewInfo,
+            noLog=not shouldLog,
+            # noLog=False,
+            treeNodeLookupToPrune=treeNodeLookup)
+
         totalValue = 0
         totalTurns = 0
         for node in rootNodes:
@@ -643,11 +652,10 @@ def _knapsack_levels_gather_iterative_prune(
                 viewInfo=viewInfo)
             totalValue += node.value
             totalTurns += node.gatherTurns
-
         if totalTurns > pruneToTurns:
             raise AssertionError(f'Pruned turns {totalTurns} was more than the amount requested, {pruneToTurns}')
 
-        newStartTilesDict = newStartTilesDict.copy()
+        newStartTilesDict = origStartTilesDict.copy()
         for rootNode in rootNodes:
             (startPriorityObject, distance) = startTilesDict[rootNode.tile]
             add_tree_nodes_to_start_tiles_dict_recurse(
@@ -660,12 +668,36 @@ def _knapsack_levels_gather_iterative_prune(
                 dist=distance
             )
 
+        # _debug_print_diff_between_start_dict_and_treenodes(treeNodeLookup, newStartTilesDict)
+
         lastPrunedTo = pruneToTurns
         turnsSoFar = totalTurns
         valueSoFar = totalValue
 
     return totalValue, rootNodes
 
+def _debug_print_diff_between_start_dict_and_treenodes(
+        treeNodes: typing.Dict[Tile, TreeNode],
+        startDict: typing.Dict[Tile, typing.Tuple[typing.Any, int]]
+):
+    if len(treeNodes) != len(startDict):
+        logging.info(f'~~startDict: {len(startDict)}, vs treeNodes {len(treeNodes)}')
+    else:
+        logging.info(f'startDict: {len(startDict)}, vs treeNodes {len(treeNodes)}')
+
+    for tile, node in sorted(treeNodes.items()):
+        if tile not in startDict:
+            path = Path()
+            curNode = node
+            while curNode is not None:
+                path.add_next(curNode.tile)
+                curNode = treeNodes.get(curNode.fromTile, None)
+            logging.info(f'  missing from startDict: {str(tile)}  ({str(node)}), path {str(path)}')
+
+    for tile, val in sorted(startDict.items()):
+        (prioThing, dist) = val
+        if tile not in treeNodes:
+            logging.info(f'  missing from treeNodes: {str(tile)}  (dist {dist}, [{str(prioThing)}])')
 
 def knapsack_levels_backpack_gather(
         map: MapBase,
@@ -681,7 +713,7 @@ def knapsack_levels_backpack_gather(
         skipFunc=None,
         priorityTiles=None,
         ignoreStartTile=False,
-        incrementBackward=False,
+        incrementBackward=True,
         preferNeutral=False,
         viewInfo=None,
         distPriorityMap=None,
@@ -765,8 +797,10 @@ def knapsack_levels_backpack_gather(
 
             if negArmySum >= 0:
                 return None
+            if currentTile.army < 2 or currentTile.player != searchingPlayer:
+                return None
 
-            value = 0 - (negGatheredSum / (max(1, realDist)))
+            value = 0 - negGatheredSum
             prioObj = (value,  # most army per turn
                        dist,
                        # then by the furthest 'distance' (which when gathering to a path, weights short paths to the top of the path higher which is important)
@@ -1208,7 +1242,7 @@ def recalculate_tree_values(
     # we leave one node behind at each tile, except the root tile.
     turns = 1
     sum = -1
-    if currentNode.tile in startTilesDict:
+    if currentNode.fromTile is None:
         isStartNode = True
         sum = 0
         turns = 0
@@ -1231,10 +1265,17 @@ def recalculate_tree_values(
     currentNode.gatherTurns = turns
 
 
-def get_tree_move(gathers, priorityFunc, valueFunc) -> typing.Union[None, Move]:
+def get_tree_move(
+        gathers: typing.List[TreeNode],
+        priorityFunc: typing.Callable[[Tile, typing.Tuple | None], typing.Tuple],
+        valueFunc: typing.Callable[[Tile, typing.Tuple], typing.Tuple | None]
+) -> typing.Union[None, Move]:
     if len(gathers) == 0:
         logging.info("get_tree_move... len(gathers) == 0?")
         return None
+
+    # TODO this is just an iterate-all-leaves-and-keep-max function, why the hell are we using a priority queue?
+    #  we don't call this often so who cares I guess, but wtf copy paste, normal queue would do fine.
     q = PriorityQueue()
 
     for gather in gathers:
@@ -1248,15 +1289,20 @@ def get_tree_move(gathers, priorityFunc, valueFunc) -> typing.Union[None, Move]:
         if len(curGather.children) == 0:
             # WE FOUND OUR FIRST MOVE!
             thisValue = valueFunc(curGather.tile, curPrio)
-            if curGather.fromTile is not None and (highestValue is None or thisValue > highestValue):
+            if (thisValue is not None
+                    and curGather.fromTile is not None
+                    and (highestValue is None or thisValue > highestValue)
+            ):
                 highestValue = thisValue
                 highestValueMove = Move(curGather.tile, curGather.fromTile)
                 logging.info(f"new highestValueMove {highestValueMove.toString()}!")
         for gather in curGather.children:
             nextPrio = priorityFunc(gather.tile, curPrio)
             q.put((nextPrio, gather))
+
     if highestValueMove is None:
         return None
+
     logging.info(f"highestValueMove in get_tree_move was {highestValueMove.toString()}!")
     return highestValueMove
 
@@ -1264,21 +1310,21 @@ def get_tree_move(gathers, priorityFunc, valueFunc) -> typing.Union[None, Move]:
 def calculate_mst_trunk_values_and_build_leaf_queue_and_node_map(
         treeNodes: typing.List[TreeNode],
         searchingPlayer: int,
-        moveValidFunc: typing.Callable[[TreeNode], bool],
+        invalidMoveFunc: typing.Callable[[TreeNode], bool],
         viewInfo: ViewInfo | None = None,
         noLog: bool = True
-) -> typing.Tuple[int, PriorityQueue, typing.Dict[Tile, TreeNode]]:
+) -> typing.Tuple[int, typing.Dict[Tile, TreeNode]]:
     """
-    Returns (numNodesInTree, priorityQueue of leaves, lowest value first, lookup from Tile to TreeNode)
+    Returns (numNodesInTree, priorityQueue of leaves, lowest value first, lookup from Tile to TreeNode).
+    Does not queue root nodes (nodes where fromTile is None) into the leaf queue.
     @param treeNodes:
     @param searchingPlayer:
-    @param moveValidFunc:
+    @param invalidMoveFunc: Should return True for invalid moves that should ALWAYS be pruned as leaves. (Generally moves that would try to move negative army, or whatever).
     @param viewInfo:
     @param noLog:
     @return:
     """
 
-    leaves = PriorityQueue()
     nodeMap = {}
 
     count = 0
@@ -1295,18 +1341,6 @@ def calculate_mst_trunk_values_and_build_leaf_queue_and_node_map(
             count += 1
         if not noLog:
             logging.info(" current {}, count {}".format(current.tile.toString(), count))
-
-        if current.fromTile is not None and len(current.children) == 0:
-            # then we're a leaf. Add to heap
-            value = current.trunkValue / max(1, current.trunkDistance)
-            validMove = 1
-            if moveValidFunc(current):
-                if not noLog:
-                    logging.info("tile {} will be eliminated due to invalid move, army {}".format(current.tile.toString(), current.tile.army))
-                validMove = 0
-            if not noLog:
-                logging.info("  tile {} had value {:.1f}, trunkDistance {}".format(current.tile.toString(), value, current.trunkDistance))
-            leaves.put((validMove, value, current.trunkDistance, current))
         for child in current.children:
             child.trunkValue = current.trunkValue
             child.trunkDistance = current.trunkDistance + 1
@@ -1319,80 +1353,188 @@ def calculate_mst_trunk_values_and_build_leaf_queue_and_node_map(
                 viewInfo.bottomLeftGridText[child.tile.x][child.tile.y] = child.trunkValue
             queue.appendleft(child)
 
-    return count, leaves, nodeMap
+    return count, nodeMap
 
-def prune_mst(
-        treeNodes,
-        turns,
+def prune_mst_to_turns(
+        rootNodes: typing.List[TreeNode],
+        turns: int,
         searchingPlayer: int,
         viewInfo: ViewInfo | None = None,
-        noLog = True
+        noLog: bool = True,
+        treeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
+        invalidMoveFunc: typing.Callable[[TreeNode], bool] | None = None
 ) -> typing.List[TreeNode]:
     """
-    @param treeNodes: The MST to prune
+    Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
+    O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
+    TODO optimize to reuse existing treenode lookup map instead of rebuilding...?
+    TODO make sure no recalculate tree nodes is necessary.
+
+    @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
     @param turns: The number of turns to prune the MST down to.
     @param searchingPlayer:
     @param viewInfo:
     @param noLog:
-    @return:
+    @param treeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
+    @param invalidMoveFunc: func(TreeNode) -> bool, return true if you want a leaf TreeNode to always be prune. For example, pruning gather nodes that begin at an enemy tile or that are 1's.
+
+    @return: The list same list of rootnodes passed in, modified.
     """
     start = time.perf_counter()
 
-    moveValidFunc = lambda node: node.tile.army <= 1 or node.tile.player != searchingPlayer
+    if invalidMoveFunc is None:
+        def invalid_move_func(node: TreeNode):
+            if node.value <= 0:
+                return True
+            if node.tile.player != searchingPlayer:
+                return True
+        invalidMoveFunc = invalid_move_func
 
-    count, leaves, nodeMap = calculate_mst_trunk_values_and_build_leaf_queue_and_node_map(treeNodes, searchingPlayer, moveValidFunc, viewInfo=viewInfo, noLog=noLog)
+    count, nodeMap = calculate_mst_trunk_values_and_build_leaf_queue_and_node_map(rootNodes, searchingPlayer, invalidMoveFunc, viewInfo=viewInfo, noLog=noLog)
 
-    logging.info(f'MST prune beginning with {count} nodes ({len(leaves.queue)} leaves)')
+    count, totalValue, rootNodes = prune_mst_until(
+        rootNodes,
+        untilFunc=lambda node, _, turnsLeft, curValue: turnsLeft <= turns,
+        priorityFunc=lambda node, curObj: (node.value, node.trunkDistance),
+        invalidMoveFunc=invalidMoveFunc,
+        viewInfo=viewInfo,
+        noLog=noLog,
+        treeNodeLookupToPrune=treeNodeLookupToPrune
+    )
+
+    return rootNodes
+
+def prune_mst_until(
+        rootNodes: typing.List[TreeNode],
+        untilFunc: typing.Callable[[TreeNode, typing.Tuple, int, int], bool],
+        priorityFunc: typing.Callable[[TreeNode, typing.Tuple | None], typing.Tuple],
+        invalidMoveFunc: typing.Callable[[TreeNode], bool],
+        viewInfo: ViewInfo | None = None,
+        noLog: bool = True,
+        treeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
+) -> typing.Tuple[int, int, typing.List[TreeNode]]:
+    """
+    Prunes excess / bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
+    O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
+    TODO optimize to reuse existing treenode lookup map instead of rebuilding...?
+    TODO make sure no recalculate tree nodes is necessary.
+
+    @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
+    @param untilFunc: Func[curNode, curPriorityObject, treeNodeCountRemaining, curValue] -> bool (should return False to continue pruning, True to return the tree).
+    @param priorityFunc: Func[curNode, curPriorityObject]
+    @param viewInfo:
+    @param noLog:
+    @param treeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
+    @param invalidMoveFunc: func(TreeNode) -> bool, return true if you want a leaf TreeNode to always be prune. For example, pruning gather nodes that begin at an enemy tile or that are 1's.
+
+    @return: (totalCount, totalValue, The list same list of rootnodes passed in, modified).
+    """
+    start = time.perf_counter()
+
+    nodeMap: typing.Dict[Tile, TreeNode] = {}
+    leaves = PriorityQueue()
+
+
+    def leafAdder(current: TreeNode):
+        nodeMap[current.tile] = current
+        if current.fromTile is not None and len(current.children) == 0:
+            # then we're a leaf. Add to heap
+            # value = current.trunkValue / max(1, current.trunkDistance)
+            value = current.value
+            validMove = 1
+            if invalidMoveFunc(current):
+                if not noLog:
+                    logging.info("tile {} will be eliminated due to invalid move, army {}".format(current.tile.toString(), current.tile.army))
+                validMove = 0
+            if not noLog:
+                logging.info("  tile {} had value {:.1f}, trunkDistance {}".format(current.tile.toString(), value, current.trunkDistance))
+            leaves.put((validMove, priorityFunc(current, None), current))
+
+    iterate_tree_nodes(rootNodes, leafAdder)
+
+    curValue = 0
+    for node in rootNodes:
+        curValue += node.value
+
+    count = len(nodeMap) - len(rootNodes)
+    if not noLog:
+        logging.info(f'MST prune beginning with {count} nodes ({len(leaves.queue)} leaves)')
 
     if not noLog:
         logging.info("DEQUEUEING")
 
     # now we have all the leaves, smallest value first
     while not leaves.empty():
-        validMove, value, negLength, current = leaves.get()
-        if validMove > 0 and count <= turns:
-            # Then this was a valid move, and we've pruned enough leaves out.
-            # Thus we should break. Otherwise if validMove == 0, we want to keep popping invalid moves off until they're valid again.
-            break
+        validMove, prioObj, current = leaves.get()
+        if current.fromTile is None:
+            continue
+        if untilFunc(current, prioObj, count, curValue):
+            if validMove > 0:
+                # Then this was a valid move, and we've pruned enough leaves out.
+                # Thus we should break. Otherwise if validMove == 0, we want to keep popping invalid moves off until they're valid again.
+                break
+            else:
+                logging.info(f'pruning extra invalid tree node despite untilFunc == True: {str(current)}')
+
+        if not noLog:
+            logging.info(f'pruning tree node {str(current)}')
+
         # now remove this leaf from its parent and bubble the value change all the way up
         parent = None
-        if current.fromTile is not None:
-            if current.fromTile == current.tile:
-                if not noLog:
-                    logging.info("OHHHHHH it was the fromTile == tile thing... tile {}".format(current.tile.toString()))
-            else:
-                count -= 1
-                parent = nodeMap[current.fromTile]
+        count -= 1
+        curValue -= current.value
+        parent = nodeMap[current.fromTile]
         realParent = parent
         if parent is not None:
             parent.children.remove(current)
+            parent.pruned.append(current)
 
-        if not noLog:
-            logging.info("    popped/pruned {} value {:.1f} count {} turns {}".format(current.tile.toString(), current.value, count, turns))
         while parent is not None:
             parent.value -= current.value
             parent.gatherTurns -= 1
             if parent.fromTile is None:
                 break
             parent = nodeMap[parent.fromTile]
-        if realParent is not None and len(realParent.children) == 0:
+
+        if treeNodeLookupToPrune is not None:
+            treeNodeLookupToPrune.pop(current.tile, None)
+        if not noLog:
+            logging.info("    popped/pruned {} value {:.1f} count {}".format(current.tile.toString(), current.value, count))
+
+        if realParent is not None and len(realParent.children) == 0 and realParent.fromTile is not None:
             #(value, length) = self.get_prune_point(nodeMap, realParent)
-            value = realParent.trunkValue / max(1, realParent.trunkDistance)
+            # value = realParent.trunkValue / max(1, realParent.trunkDistance)
+            value = realParent.value
             parentValidMove = 1
-            if moveValidFunc(realParent):
+            if invalidMoveFunc(realParent):
                 logging.info("parent {} will be eliminated due to invalid move, army {}".format(realParent.tile.toString(), realParent.tile.army))
                 parentValidMove = 0
 
             if not noLog:
                 logging.info("  Appending parent {} (valid {}) had value {:.1f}, trunkDistance {}".format(realParent.tile.toString(), parentValidMove, value, realParent.trunkDistance))
-            leaves.put((parentValidMove, value, realParent.trunkDistance, realParent))
+
+            nextPrioObj = priorityFunc(realParent, prioObj)
+            leaves.put((parentValidMove, nextPrioObj, realParent))
 
     #while not leaves.empty():
-    sum = 0
-    for node in treeNodes:
+    totalValue = 0
+    for node in rootNodes:
         # the root tree nodes need + 1 to their value
-        node.value += 1
-        sum += node.value
-    logging.info("  Pruned MST to turns {} (actual {}) with value {} in duration {:.3f}".format(turns, count, sum, time.perf_counter() - start))
-    return treeNodes
+        # node.value += 1
+        totalValue += node.value
+    if not noLog:
+        logging.info("  Pruned MST to turns {} with value {} in duration {:.3f}".format(count, totalValue, time.perf_counter() - start))
+    return count, totalValue, rootNodes
 
+def iterate_tree_nodes(
+        treeNodes: typing.List[TreeNode],
+        forEachFunc: typing.Callable[[TreeNode], None]
+):
+    q: typing.Deque[TreeNode] = deque()
+    for n in treeNodes:
+        q.append(n)
+    while len(q) > 0:
+        cur = q.popleft()
+        forEachFunc(cur)
+        for c in cur.children:
+            q.append(c)

@@ -59,7 +59,7 @@ class ExpansionTests(TestBase):
         # # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, 94)
         
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptViewer=True)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
         simHost.sim.set_tile_vision(general.player, 12, 1, hidden=True, undiscovered=False)
         simHost.sim.set_tile_vision(general.player, 13, 1, hidden=True, undiscovered=True)

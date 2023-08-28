@@ -22,8 +22,13 @@ class BoardAnalyzer:
 		self.general: Tile = general
 		self.should_rescan = False
 
-		self.innerChokes: typing.List[typing.List[bool]] = None
-		self.outerChokes: typing.List[typing.List[bool]] = None
+		self.innerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
+		"""Tiles that only have one outward path away from our general."""
+
+		self.outerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
+		"""Tiles that only have a single inward path towards our general."""
+
+		# TODO probably calc these chokes for the enemy, too?
 
 		self.intergeneral_analysis: ArmyAnalyzer = None
 
@@ -46,27 +51,29 @@ class BoardAnalyzer:
 		oldInner = self.innerChokes
 		oldOuter = self.outerChokes
 		self.innerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
-		"""What are these???"""
 
 		self.outerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
-		"""What are these???"""
 
 		self.genDistMap = build_distance_map(self.map, [self.general])
 		for tile in self.map.pathableTiles:
-			logging.info("Rescanning chokes for {}".format(tile.toString()))
+			# logging.info("Rescanning chokes for {}".format(tile.toString()))
 			tileDist = self.genDistMap[tile.x][tile.y]
 			movableInnerCount = count(tile.movable, lambda adj: tileDist == self.genDistMap[adj.x][adj.y] - 1)
+			movableOuterCount = count(tile.movable, lambda adj: tileDist == self.genDistMap[adj.x][adj.y] + 1)
 			if movableInnerCount == 1:
 				self.outerChokes[tile.x][tile.y] = True
-			movableOuterCount = count(tile.movable, lambda adj: tileDist == self.genDistMap[adj.x][adj.y] + 1)
 			# checking movableInner to avoid considering dead ends 'chokes'
-			if movableOuterCount == 1 and movableInnerCount >= 1:
+			if (movableOuterCount == 1
+					# and movableInnerCount >= 1
+			):
 				self.innerChokes[tile.x][tile.y] = True
 			if self.map.turn > 4:
-				if oldInner != None and oldInner[tile.x][tile.y] != self.innerChokes[tile.x][tile.y]:
-					logging.info("  inner choke change: tile {}, old {}, new {}".format(tile.toString(), oldInner[tile.x][tile.y], self.innerChokes[tile.x][tile.y]))
-				if oldOuter != None and oldOuter[tile.x][tile.y] != self.outerChokes[tile.x][tile.y]:
-					logging.info("  outer choke change: tile {}, old {}, new {}".format(tile.toString(), oldOuter[tile.x][tile.y], self.outerChokes[tile.x][tile.y]))
+				if oldInner[tile.x][tile.y] != self.innerChokes[tile.x][tile.y]:
+					logging.info(
+						f"  inner choke change: tile {tile.toString()}, old {oldInner[tile.x][tile.y]}, new {self.innerChokes[tile.x][tile.y]}")
+				if oldOuter[tile.x][tile.y] != self.outerChokes[tile.x][tile.y]:
+					logging.info(
+						f"  outer choke change: tile {tile.toString()}, old {oldOuter[tile.x][tile.y]}, new {self.outerChokes[tile.x][tile.y]}")
 
 	def rebuild_intergeneral_analysis(self, opponentGeneral):
 		self.intergeneral_analysis = ArmyAnalyzer(self.map, self.general, opponentGeneral)

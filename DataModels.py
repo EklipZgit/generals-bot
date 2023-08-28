@@ -110,7 +110,7 @@ class TreeNode(object):
         return newNode
 
     def __str__(self):
-        return f'[{str(self.tile)} f{str(self.fromTile)} v{self.value} tv{self.trunkValue}, ch{len(self.children)}]'
+        return f'[{str(self.tile)}<-{str(self.fromTile)} t{str(self.gatherTurns)} v{self.value} tv{self.trunkValue}, ch{len(self.children)}]'
 
     def __repr__(self):
         return str(self)

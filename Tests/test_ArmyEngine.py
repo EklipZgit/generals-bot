@@ -26,6 +26,7 @@ class ArmyEngineTests(TestBase):
         genPlayer = aTile.player
         enemyPlayer = bTile.player
         map = sim.players[genPlayer].map
+        engine.map = map
         self.render_sim_analysis(map, result)
         if result.best_result_state.depth > 0:
             frMove, enMove = result.expected_best_moves[0]
@@ -82,9 +83,8 @@ class ArmyEngineTests(TestBase):
 
         return Army(generalArmy), Army(enemyArmy)
 
-
     def test_brute_force__armies_suicide(self):
-        debugMode = True
+        debugMode = False
         rawMap = """
 |    |    |    |    |    
           aG1          
@@ -103,16 +103,15 @@ bot_target_player=1
 aTiles=20
 bTiles=20
 """
-        # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
-        # Both should have half the board if this gens correctly..
-        map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102)
-        self.ensure_player_tiles_and_scores(map, general, generalTileCount=20)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         for turn in [0, 1]:
             with self.subTest(turn=turn):
-                map.turn = map.turn + turn
+                # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
+                # Both should have half the board if this gens correctly..
+                map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102 + turn)
+                self.ensure_player_tiles_and_scores(map, general, generalTileCount=20)
                 self.begin_capturing_logging()
                 aArmy, bArmy = self.get_test_army_tiles(map, general, enemyGen)
 
@@ -125,8 +124,17 @@ bTiles=20
                 armyEngine.allow_enemy_no_op = True
                 result = armyEngine.scan(4)
                 if debugMode:
-                    self.render_sim_analysis(map, result)
-                self.assertEqual(0, result.best_result_state.tile_differential)
+                    sim = GameSimulator(map_raw=map, ignore_illegal_moves=True)
+                    sim.players[general.player].set_map_vision(map)
+                    # self.render_sim_analysis(map, result)
+                    self.render_step_engine_analysis(armyEngine, sim, result, aArmy, bArmy)
+
+                # this should be +2 / -2 if we're considering no-op moves to be worth 1 economy, otherwise this is +1 -1
+                if ArmyEngine.player_has_priority(general.player, turn):
+                    self.assertEqual(-2, result.best_result_state.tile_differential)
+                else:
+                    self.assertEqual(2, result.best_result_state.tile_differential)
+
                 self.assertEqual(0, result.best_result_state.city_differential)
                 self.assertGreater(len(result.expected_best_moves), 1)
 
@@ -303,7 +311,7 @@ bot_target_player=1
 aTiles=20
 bTiles=20
 """
-        debugMode = True
+        debugMode = False
         # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
         # Both should have half the board if this generates correctly..
         map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102)
@@ -321,7 +329,7 @@ bTiles=20
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
                 armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
                 armyEngine.friendly_has_kill_threat = True
-                armyEngine.enemy_has_kill_threat = True
+                armyEngine.enemy_has_kill_threat = False
                 baseState = armyEngine.get_base_board_state()
                 self.assertEqual(0, baseState.tile_differential)
                 self.assertEqual(0, baseState.city_differential)
@@ -489,7 +497,7 @@ bTiles=20
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
                 armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
                 armyEngine.friendly_has_kill_threat = True
-                armyEngine.enemy_has_kill_threat = True
+                armyEngine.enemy_has_kill_threat = False
                 armyEngine.allow_enemy_no_op = True
                 armyEngine.allow_friendly_no_op = True
                 armyEngine.repetition_threshold = 3
@@ -498,7 +506,7 @@ bTiles=20
                 self.assertEqual(0, baseState.tile_differential)
                 self.assertEqual(0, baseState.city_differential)
 
-                result = armyEngine.scan(3, logEvals=True)
+                result = armyEngine.scan(4, logEvals=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
                 if not ArmyEngine.player_has_priority(enemyGen.player, turn):
@@ -783,7 +791,7 @@ bot_target_player=1
 aTiles=20
 bTiles=20
 """
-        debugMode = True
+        debugMode = False
         # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
         # Both should have half the board if this gens correctly..
 
@@ -1133,9 +1141,8 @@ bTiles=20
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = True
                 # TODO switch to this method of parameterizing this
-                armyEngine.enemy_cannot_move_away = True
-                result = armyEngine.scan(5)
                 armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(map, [general])
+                result = armyEngine.scan(5)
                 if debugMode:
                     self.render_sim_analysis(map, result)
                 # both players should have moves until they cancel out
@@ -1221,7 +1228,7 @@ bTiles=20
                 # self.assertPlayerTileCount(simHost, enemyGeneral.player, 66)
     
     def test_should_just_kill_army_not_dodge_off_general_into_death(self):
-        debugMode = True
+        debugMode = False
         mapFile = 'GameContinuationEntries/should_just_kill_army_not_dodge_off_general_into_death___re2uZGNTn---b--445.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 445, fill_out_tiles=True)
 
@@ -1257,6 +1264,7 @@ bTiles=20
         # player b should be capping as many tiles as possible
         for aMove, bMove in result.expected_best_moves:
             self.assertIsNotNone(bMove)
+
     def test_should_not_blow_up(self):
         debugMode = False
         mapFile = 'GameContinuationEntries/should_not_blow_up___Se9iLCLpn---b--291.txtmap'

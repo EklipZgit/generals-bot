@@ -730,7 +730,7 @@ def breadth_first_dynamic_max(
             startList.append((tile, startVal))
             frontier.put((startVal, dist, tile, None, startList))
 
-    start = time.time()
+    start = time.perf_counter()
     iter = 0
     foundDist = 1000
     endNode = None
@@ -741,8 +741,8 @@ def breadth_first_dynamic_max(
 
     while not frontier.empty():
         iter += 1
-        if (iter & 256 == 0
-            and time.time() - start > maxTime
+        if (iter & 128 == 0
+            and time.perf_counter() - start > maxTime
             # and not BYPASS_TIMEOUTS_FOR_DEBUGGING
         ) or iter > maxIterations:
             logging.info("BFS-DYNAMIC-MAX BREAKING EARLY")

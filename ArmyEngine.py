@@ -212,14 +212,14 @@ class ArmySimState(object):
         if self.captured_by_enemy:
             econDiff -= 10000
         # skipped moves are worth 0.7 econ each
-        econDiff += self.friendly_skipped_move_count * 8
-        # enemy skipped moves are worth slightly less..? than ours?
-        econDiff -= self.enemy_skipped_move_count * 7
+        econDiff += self.friendly_skipped_move_count * 5
+        #enemy skipped moves are worth slightly less..? than ours?
+        econDiff -= self.enemy_skipped_move_count * 4
 
-        if self.kills_all_enemy_armies:
-            econDiff += 5
-        if self.kills_all_friendly_armies:
-            econDiff -= 5
+        # if self.kills_all_enemy_armies:
+        #     econDiff += 5
+        # if self.kills_all_friendly_armies:
+        #     econDiff -= 5
 
         return econDiff
 
@@ -254,7 +254,7 @@ class ArmySimResult(object):
         """
 
     def calculate_value(self) -> typing.Tuple:
-        return self.best_result_state.calculate_value()
+        return (self.best_result_state.calculate_value_int(), False)
 
     def __str__(self):
         return f'({self.net_economy_differential:+d}) {str(self.best_result_state)}'
@@ -305,6 +305,7 @@ class ArmyEngine(object):
         self.enemy_player = enemyArmies[0].player
         self.iterations: int = 0
         self.nash_eq_iterations: int = 0
+        self.time_in_nash_eq: float = 0.0
         self.time_in_nash: float = 0.0
 
         ## CONFIGURATION PARAMETERS
@@ -380,6 +381,7 @@ class ArmyEngine(object):
         """
         self.iterations: int = 0
         self.nash_eq_iterations: int = 0
+        self.time_in_nash_eq: float = 0.0
         self.time_in_nash: float = 0.0
 
         if logEvals:
@@ -445,7 +447,7 @@ class ArmyEngine(object):
                 parentEn = curEn
 
         duration = time.perf_counter() - start
-        logging.info(f'brute force army scrim depth {turns} complete in {duration:.3f} after iter {self.iterations} ({self.nash_eq_iterations} nash, {self.time_in_nash:.3f} in nash)')
+        logging.info(f'brute force army scrim depth {turns} complete in {duration:.3f} after iter {self.iterations} (nash {self.time_in_nash:.3f} - {self.nash_eq_iterations} eq itr, {self.time_in_nash_eq:.3f} in eq)')
 
         # moves are appended in reverse order, so reverse them
         # result.expected_best_moves = [m for m in reversed(result.expected_best_moves)]
@@ -495,20 +497,20 @@ class ArmyEngine(object):
 
         for frIdx, frMove in enumerate(frMoves):
             for enIdx, enMove in enumerate(enMoves):
-                # if (1 == 1
-                #         and frMove is not None
-                #         and frMove.dest.x == 1
-                #         and frMove.dest.y == 9
-                #         and frMove.source.x == 0
-                #         and frMove.source.y == 9
-                #         and enMove is not None
-                #         and enMove.dest.x == 1
-                #         and enMove.dest.y == 9
-                #         and enMove.source.x == 2
-                #         and enMove.source.y == 9
-                #         and boardState.depth < 5
-                # ):
-                #     logging.info('gotcha')
+                if (1 == 1
+                        and frMove is not None
+                        and frMove.dest.x == 3
+                        and frMove.dest.y == 4
+                        # and frMove.source.x == 0
+                        # and frMove.source.y == 9
+                        and enMove is not None
+                        and enMove.dest.x == 3
+                        and enMove.dest.y == 3
+                        and enMove.source.x == 3
+                        and enMove.source.y == 4
+                        and boardState.depth < 2
+                ):
+                    logging.info('gotcha')
                 nextBoardState = self.get_next_board_state(nextTurn, boardState, frMove, enMove)
                 nextResult = self.simulate_recursive_brute_force(
                     nextBoardState,
@@ -524,100 +526,31 @@ class ArmyEngine(object):
 
         frEqMoves = [e for e in enumerate(frMoves)]
         enEqMoves = [e for e in enumerate(enMoves)]
-        if boardState.depth < 4:
+        if boardState.depth < 2:
             nashStart = time.perf_counter()
-            self.nash_eq_iterations += 1
             nashA = numpy.array(nashPayoffs)
             nashB = -nashA
             game = nashpy.Game(nashA, nashB)
-            if boardState.depth < 1:
-                equilibria = [e for e in game.support_enumeration(tol=10**-15, non_degenerate=True)]
-                self.time_in_nash += time.perf_counter() - nashStart
-                if len(equilibria) > 0:
-                    frEqMoves = []
-                    enEqMoves = []
-                    for eq in equilibria:
-                        aEq, bEq = eq
-                        # get the nash equilibria moves
-                        for moveIdx, val in enumerate(aEq):
-                            if val >= 0.5:
-                                frEqMoves.append((moveIdx, frMoves[moveIdx]))
-                        for moveIdx, val in enumerate(bEq):
-                            if val >= 0.5:
-                                enEqMoves.append((moveIdx, enMoves[moveIdx]))
-
-                    if len(frEqMoves) == 0 and len(frMoves) > 0:
-                        raise AssertionError(f'No fr moves returned...?')
-                    if len(enEqMoves) == 0 and len(enMoves) > 0:
-                        raise AssertionError(f'No en moves returned...?')
-
-                    if len(frEqMoves) > 1:
-                        logging.warning(f'{len(frEqMoves)} fr moves returned...? {", ".join([str(move) for move in frEqMoves])}')
-                    if len(enEqMoves) > 1:
-                        logging.warning(f'{len(enEqMoves)} en moves returned...? {", ".join([str(move) for move in enEqMoves])}')
+            self.time_in_nash += time.perf_counter() - nashStart
+            if boardState.depth >= 0:
+                frEqMoves, enEqMoves = self.get_nash_moves_based_on_lemke_howson(
+                    boardState,
+                    game,
+                    frEqMoves,
+                    enEqMoves,
+                    payoffs)
+            else:
+                frEqMoves, enEqMoves = self.get_nash_moves_based_on_support_enumeration(
+                    boardState,
+                    game,
+                    frEqMoves,
+                    enEqMoves,
+                    payoffs)
 
         if self.log_everything or boardState.depth < self.log_payoff_depth:
             self.render_payoffs(boardState, frMoves, enMoves, payoffs)
 
-        # enemy is going to choose the move that results in the lowest maximum board state
-
-        # build response matrix
-
-        bestEnemyMove: Move | None = None
-        bestEnemyMoveExpectedFriendlyMove: Move | None = None
-        bestEnemyMoveWorstCaseFriendlyResponse: ArmySimResult | None = None
-        for enIdx, enMove in enEqMoves:
-            curEnemyMoveWorstCaseFriendlyResponse: ArmySimResult | None = None
-            curEnemyExpectedFriendly = None
-            for frIdx, frMove in frEqMoves:
-                state = payoffs[frIdx][enIdx]
-                if curEnemyMoveWorstCaseFriendlyResponse is None or state.calculate_value() > curEnemyMoveWorstCaseFriendlyResponse.calculate_value():
-                    curEnemyMoveWorstCaseFriendlyResponse = state
-                    curEnemyExpectedFriendly = frMove
-            if bestEnemyMoveWorstCaseFriendlyResponse is None or curEnemyMoveWorstCaseFriendlyResponse.calculate_value() < bestEnemyMoveWorstCaseFriendlyResponse.calculate_value():
-                bestEnemyMoveWorstCaseFriendlyResponse = curEnemyMoveWorstCaseFriendlyResponse
-                bestEnemyMove = enMove
-                bestEnemyMoveExpectedFriendlyMove = curEnemyExpectedFriendly
-
-        # we can assume that any moves we have where the opponent move results in a better state is a move the opponent MUST NOT make because we have already determined that they must make a weaker move?
-
-        # friendly is going to choose the move that results in the highest minimum board state
-        bestFriendlyMove: Move | None = None
-        bestFriendlyMoveExpectedEnemyMove: Move | None = None
-        bestFriendlyMoveWorstCaseOpponentResponse: ArmySimResult = None
-        for frIdx, frMove in frEqMoves:
-            curFriendlyMoveWorstCaseOpponentResponse: ArmySimResult = None
-            curFriendlyExpectedEnemy = None
-            for enIdx, enMove in enEqMoves:
-                state = payoffs[frIdx][enIdx]
-                # if logEvals:
-                #     logging.info(
-                #         f'opponent cant make this move :D   {str(state)} <= {str(bestEnemyMoveWorstCaseFriendlyResponse)}')
-                if curFriendlyMoveWorstCaseOpponentResponse is None or state.calculate_value() < curFriendlyMoveWorstCaseOpponentResponse.calculate_value():
-                    curFriendlyMoveWorstCaseOpponentResponse = state
-                    curFriendlyExpectedEnemy = enMove
-            if bestFriendlyMoveWorstCaseOpponentResponse is None or curFriendlyMoveWorstCaseOpponentResponse.calculate_value() > bestFriendlyMoveWorstCaseOpponentResponse.calculate_value():
-                bestFriendlyMoveWorstCaseOpponentResponse = curFriendlyMoveWorstCaseOpponentResponse
-                bestFriendlyMove = frMove
-                bestFriendlyMoveExpectedEnemyMove = curFriendlyExpectedEnemy
-
-        if self.log_everything or boardState.depth < self.log_payoff_depth:
-            if bestFriendlyMoveExpectedEnemyMove != bestEnemyMove or bestFriendlyMove != bestEnemyMoveExpectedFriendlyMove or bestFriendlyMoveWorstCaseOpponentResponse != bestEnemyMoveWorstCaseFriendlyResponse:
-                logging.info(f'~~~  diverged, why?\r\n    FR fr: ({str(bestFriendlyMove)}) en: ({str(bestFriendlyMoveExpectedEnemyMove)})  eval {str(bestFriendlyMoveWorstCaseOpponentResponse.best_result_state)}\r\n    EN fr: ({str(bestEnemyMoveExpectedFriendlyMove)}) en: ({str(bestEnemyMove)})  eval {str(bestEnemyMoveWorstCaseFriendlyResponse.best_result_state)}\r\n')
-            else:
-                logging.info(f'~~~  both players agreed  fr: ({str(bestFriendlyMove)}) en: ({str(bestEnemyMove)}) eval {str(bestEnemyMoveWorstCaseFriendlyResponse.best_result_state)}\r\n')
-
-        worstCaseForUs = bestFriendlyMoveWorstCaseOpponentResponse
-        # worstCaseForUs = bestEnemyMoveWorstCaseFriendlyResponse
-        # DONT do this, the opponent is forced to make worse plays than we think they might due to the threats we have.
-        # if bestEnemyMoveWorstCaseFriendlyResponse.calculate_value() < bestFriendlyMoveWorstCaseOpponentResponse.calculate_value():
-        #     worstCaseForUs = bestEnemyMoveWorstCaseFriendlyResponse
-        #
-        # worstCaseForUs.expected_best_moves.insert(0, (bestFriendlyMove, bestEnemyMove))
-        # if logEvals:
-        #     logging.info(f'\r\nworstCase tileCap {worstCaseForUs.best_result_state.tile_differential}' + '\r\n'.join([f"{str(aMove)}, {str(bMove)}" for aMove, bMove in worstCaseForUs.expected_best_moves]))
-        return worstCaseForUs
-
+        return self.get_comparison_based_expected_result_state(boardState, frEqMoves, enEqMoves, payoffs)
 
     def get_next_board_state(
             self,
@@ -897,180 +830,8 @@ class ArmyEngine(object):
         boardState.tile_differential += frEstFinalDamage
         # make skipped moves worth one extra tile diff as the bot should be able to use those moves for something else useful.
         boardState.tile_differential += boardState.friendly_skipped_move_count
+        boardState.tile_differential -= boardState.enemy_skipped_move_count
         boardState.tile_differential -= enEstFinalDamage
-
-    def scan_mcts(self):
-        """thiefed from https://pastebin.com/bUcRrKwF / https://www.youtube.com/watch?v=gvlO_-Fdk9w"""
-        ### The Monte Carlo Search Tree AI
-
-        ### 1 - It takes the current game state
-
-        ### 2 - It runs multiple random game simulations starting from this game state
-
-        ### 3 - For each simulation, the final state is evaluated by a score (higher score = better outcome)
-
-        ### 4 - It only remembers the next move of each simulation and accumulates the scores for that move
-
-        ### 5 - Finally, it returns the next move with the highest score
-
-        import random
-        import ast
-
-        userPlayer = 'O'
-        # boardSize = 3
-        numberOfSimulations = 200
-
-        startingPlayer = 'X'
-        currentPlayer = startingPlayer
-
-        def getBoardCopy(board):
-            boardCopy = []
-
-            for row in board:
-                boardCopy.append(row.copy())
-
-            return boardCopy
-
-        def hasMovesLeft(board):
-            for y in range(boardSize):
-                for x in range(boardSize):
-                    if board[y][x] == '.':
-                        return True
-
-            return False
-
-        def getNextMoves(currentBoard, player):
-            nextMoves = []
-
-            for y in range(boardSize):
-                for x in range(boardSize):
-                    if currentBoard[y][x] == '.':
-                        boardCopy = getBoardCopy(currentBoard)
-                        boardCopy[y][x] = player
-                        nextMoves.append(boardCopy)
-
-            return nextMoves
-
-        def hasWon(currentBoard, player):
-            winningSet = [player for _ in range(boardSize)]
-
-            for row in currentBoard:
-                if row == winningSet:
-                    return True
-
-            for y in range(len(currentBoard)):
-                column = [currentBoard[index][y] for index in range(boardSize)]
-
-                if column == winningSet:
-                    return True
-
-            diagonal1 = []
-            diagonal2 = []
-            for index in range(len(currentBoard)):
-                diagonal1.append(currentBoard[index][index])
-                diagonal2.append(currentBoard[index][boardSize - index - 1])
-
-            if diagonal1 == winningSet or diagonal2 == winningSet:
-                return True
-
-            return False
-
-        def getNextPlayer(currentPlayer):
-            if currentPlayer == 'X':
-                return 'O'
-
-            return 'X'
-
-        def getBestNextMove(currentBoard, currentPlayer):
-            evaluations = {}
-
-            for generation in range(numberOfSimulations):
-                player = currentPlayer
-                boardCopy = getBoardCopy(currentBoard)
-
-                simulationMoves = []
-                nextMoves = getNextMoves(boardCopy, player)
-
-                score = boardSize * boardSize
-
-                while nextMoves != []:
-                    roll = random.randint(1, len(nextMoves)) - 1
-                    boardCopy = nextMoves[roll]
-
-                    simulationMoves.append(boardCopy)
-
-                    if hasWon(boardCopy, player):
-                        break
-
-                    score -= 1
-
-                    player = getNextPlayer(player)
-                    nextMoves = getNextMoves(boardCopy, player)
-
-                firstMove = simulationMoves[0]
-                lastMove = simulationMoves[-1]
-
-                firstMoveKey = repr(firstMove)
-
-                if player == userPlayer and hasWon(boardCopy, player):
-                    score *= -1
-
-                if firstMoveKey in evaluations:
-                    evaluations[firstMoveKey] += score
-                else:
-                    evaluations[firstMoveKey] = score
-
-            bestMove = []
-            highestScore = 0
-            firstRound = True
-
-            for move, score in evaluations.items():
-                if firstRound or score > highestScore:
-                    highestScore = score
-                    bestMove = ast.literal_eval(move)
-                    firstRound = False
-
-            return bestMove
-
-        def printBoard(board):
-            firstRow = True
-
-            for index in range(boardSize):
-                if firstRow:
-                    print('  012')
-                    firstRow = False
-
-                print(str(index) + ' ' + ''.join(board[index]))
-
-        def getPlayerMove(board, currentPlayer):
-            isMoveValid = False
-            while isMoveValid == False:
-                print('')
-                userMove = input('X,Y? ')
-                userX, userY = map(int, userMove.split(','))
-
-                if board[userY][userX] == '.':
-                    isMoveValid = True
-
-            board[userY][userX] = currentPlayer
-            return board
-
-        printBoard(board)
-
-        while hasMovesLeft(board):
-            if currentPlayer == userPlayer:
-                board = getPlayerMove(board, currentPlayer)
-            else:
-                board = getBestNextMove(board, currentPlayer)
-
-            print('')
-            printBoard(board)
-
-            if hasWon(board, currentPlayer):
-                print('Player ' + currentPlayer + ' has won!')
-                break
-
-            currentPlayer = getNextPlayer(currentPlayer)
 
     def render_payoffs(self, boardState: ArmySimState, frMoves, enMoves, payoffs):
         colWidth = 16
@@ -1099,3 +860,366 @@ class ArmyEngine(object):
         if threatTile is not None and saveTile is not None and threatTile in saveTile.movable:
             return True
         return False
+
+    #
+    # def scan_mcts(self):
+    #     """thiefed from https://pastebin.com/bUcRrKwF / https://www.youtube.com/watch?v=gvlO_-Fdk9w"""
+    #     ### The Monte Carlo Search Tree AI
+    #
+    #     ### 1 - It takes the current game state
+    #
+    #     ### 2 - It runs multiple random game simulations starting from this game state
+    #
+    #     ### 3 - For each simulation, the final state is evaluated by a score (higher score = better outcome)
+    #
+    #     ### 4 - It only remembers the next move of each simulation and accumulates the scores for that move
+    #
+    #     ### 5 - Finally, it returns the next move with the highest score
+    #
+    #     import random
+    #     import ast
+    #
+    #     userPlayer = 'O'
+    #     # boardSize = 3
+    #     numberOfSimulations = 200
+    #
+    #     startingPlayer = 'X'
+    #     currentPlayer = startingPlayer
+    #
+    #     def getBoardCopy(board):
+    #         boardCopy = []
+    #
+    #         for row in board:
+    #             boardCopy.append(row.copy())
+    #
+    #         return boardCopy
+    #
+    #     def hasMovesLeft(board):
+    #         for y in range(boardSize):
+    #             for x in range(boardSize):
+    #                 if board[y][x] == '.':
+    #                     return True
+    #
+    #         return False
+    #
+    #     def getNextMoves(currentBoard, player):
+    #         nextMoves = []
+    #
+    #         for y in range(boardSize):
+    #             for x in range(boardSize):
+    #                 if currentBoard[y][x] == '.':
+    #                     boardCopy = getBoardCopy(currentBoard)
+    #                     boardCopy[y][x] = player
+    #                     nextMoves.append(boardCopy)
+    #
+    #         return nextMoves
+    #
+    #     def hasWon(currentBoard, player):
+    #         winningSet = [player for _ in range(boardSize)]
+    #
+    #         for row in currentBoard:
+    #             if row == winningSet:
+    #                 return True
+    #
+    #         for y in range(len(currentBoard)):
+    #             column = [currentBoard[index][y] for index in range(boardSize)]
+    #
+    #             if column == winningSet:
+    #                 return True
+    #
+    #         diagonal1 = []
+    #         diagonal2 = []
+    #         for index in range(len(currentBoard)):
+    #             diagonal1.append(currentBoard[index][index])
+    #             diagonal2.append(currentBoard[index][boardSize - index - 1])
+    #
+    #         if diagonal1 == winningSet or diagonal2 == winningSet:
+    #             return True
+    #
+    #         return False
+    #
+    #     def getNextPlayer(currentPlayer):
+    #         if currentPlayer == 'X':
+    #             return 'O'
+    #
+    #         return 'X'
+    #
+    #     def getBestNextMove(currentBoard, currentPlayer):
+    #         evaluations = {}
+    #
+    #         for generation in range(numberOfSimulations):
+    #             player = currentPlayer
+    #             boardCopy = getBoardCopy(currentBoard)
+    #
+    #             simulationMoves = []
+    #             nextMoves = getNextMoves(boardCopy, player)
+    #
+    #             score = boardSize * boardSize
+    #
+    #             while nextMoves != []:
+    #                 roll = random.randint(1, len(nextMoves)) - 1
+    #                 boardCopy = nextMoves[roll]
+    #
+    #                 simulationMoves.append(boardCopy)
+    #
+    #                 if hasWon(boardCopy, player):
+    #                     break
+    #
+    #                 score -= 1
+    #
+    #                 player = getNextPlayer(player)
+    #                 nextMoves = getNextMoves(boardCopy, player)
+    #
+    #             firstMove = simulationMoves[0]
+    #             lastMove = simulationMoves[-1]
+    #
+    #             firstMoveKey = repr(firstMove)
+    #
+    #             if player == userPlayer and hasWon(boardCopy, player):
+    #                 score *= -1
+    #
+    #             if firstMoveKey in evaluations:
+    #                 evaluations[firstMoveKey] += score
+    #             else:
+    #                 evaluations[firstMoveKey] = score
+    #
+    #         bestMove = []
+    #         highestScore = 0
+    #         firstRound = True
+    #
+    #         for move, score in evaluations.items():
+    #             if firstRound or score > highestScore:
+    #                 highestScore = score
+    #                 bestMove = ast.literal_eval(move)
+    #                 firstRound = False
+    #
+    #         return bestMove
+    #
+    #     def printBoard(board):
+    #         firstRow = True
+    #
+    #         for index in range(boardSize):
+    #             if firstRow:
+    #                 print('  012')
+    #                 firstRow = False
+    #
+    #             print(str(index) + ' ' + ''.join(board[index]))
+    #
+    #     def getPlayerMove(board, currentPlayer):
+    #         isMoveValid = False
+    #         while isMoveValid == False:
+    #             print('')
+    #             userMove = input('X,Y? ')
+    #             userX, userY = map(int, userMove.split(','))
+    #
+    #             if board[userY][userX] == '.':
+    #                 isMoveValid = True
+    #
+    #         board[userY][userX] = currentPlayer
+    #         return board
+    #
+    #     printBoard(board)
+    #
+    #     while hasMovesLeft(board):
+    #         if currentPlayer == userPlayer:
+    #             board = getPlayerMove(board, currentPlayer)
+    #         else:
+    #             board = getBestNextMove(board, currentPlayer)
+    #
+    #         print('')
+    #         printBoard(board)
+    #
+    #         if hasWon(board, currentPlayer):
+    #             print('Player ' + currentPlayer + ' has won!')
+    #             break
+    #
+    #         currentPlayer = getNextPlayer(currentPlayer)
+    def get_comparison_based_expected_result_state(
+            self,
+            boardState: ArmySimState,
+            frEqMoves: typing.List[typing.Tuple[int, Move | None]],
+            enEqMoves: typing.List[typing.Tuple[int, Move | None]],
+            payoffs: typing.List[typing.List[ArmySimResult]]
+    ) -> ArmySimResult:
+        # enemy is going to choose the move that results in the lowest maximum board state
+
+        # build response matrix
+
+        bestEnemyMove: Move | None = None
+        bestEnemyMoveExpectedFriendlyMove: Move | None = None
+        bestEnemyMoveWorstCaseFriendlyResponse: ArmySimResult | None = None
+        for enIdx, enMove in enEqMoves:
+            curEnemyMoveWorstCaseFriendlyResponse: ArmySimResult | None = None
+            curEnemyExpectedFriendly = None
+            for frIdx, frMove in frEqMoves:
+                state = payoffs[frIdx][enIdx]
+                if curEnemyMoveWorstCaseFriendlyResponse is None or state.calculate_value() > curEnemyMoveWorstCaseFriendlyResponse.calculate_value():
+                    curEnemyMoveWorstCaseFriendlyResponse = state
+                    curEnemyExpectedFriendly = frMove
+            if bestEnemyMoveWorstCaseFriendlyResponse is None or curEnemyMoveWorstCaseFriendlyResponse.calculate_value() < bestEnemyMoveWorstCaseFriendlyResponse.calculate_value():
+                bestEnemyMoveWorstCaseFriendlyResponse = curEnemyMoveWorstCaseFriendlyResponse
+                bestEnemyMove = enMove
+                bestEnemyMoveExpectedFriendlyMove = curEnemyExpectedFriendly
+
+        # we can assume that any moves we have where the opponent move results in a better state is a move the opponent MUST NOT make because we have already determined that they must make a weaker move?
+
+        # friendly is going to choose the move that results in the highest minimum board state
+        bestFriendlyMove: Move | None = None
+        bestFriendlyMoveExpectedEnemyMove: Move | None = None
+        bestFriendlyMoveWorstCaseOpponentResponse: ArmySimResult = None
+        for frIdx, frMove in frEqMoves:
+            curFriendlyMoveWorstCaseOpponentResponse: ArmySimResult = None
+            curFriendlyExpectedEnemy = None
+            for enIdx, enMove in enEqMoves:
+                state = payoffs[frIdx][enIdx]
+                # if logEvals:
+                #     logging.info(
+                #         f'opponent cant make this move :D   {str(state)} <= {str(bestEnemyMoveWorstCaseFriendlyResponse)}')
+                if curFriendlyMoveWorstCaseOpponentResponse is None or state.calculate_value() < curFriendlyMoveWorstCaseOpponentResponse.calculate_value():
+                    curFriendlyMoveWorstCaseOpponentResponse = state
+                    curFriendlyExpectedEnemy = enMove
+            if bestFriendlyMoveWorstCaseOpponentResponse is None or curFriendlyMoveWorstCaseOpponentResponse.calculate_value() > bestFriendlyMoveWorstCaseOpponentResponse.calculate_value():
+                bestFriendlyMoveWorstCaseOpponentResponse = curFriendlyMoveWorstCaseOpponentResponse
+                bestFriendlyMove = frMove
+                bestFriendlyMoveExpectedEnemyMove = curFriendlyExpectedEnemy
+
+        if self.log_everything or boardState.depth < self.log_payoff_depth:
+            if bestFriendlyMoveExpectedEnemyMove != bestEnemyMove or bestFriendlyMove != bestEnemyMoveExpectedFriendlyMove or bestFriendlyMoveWorstCaseOpponentResponse != bestEnemyMoveWorstCaseFriendlyResponse:
+                logging.info(f'~~~  diverged, why?\r\n    FR fr: ({str(bestFriendlyMove)}) en: ({str(bestFriendlyMoveExpectedEnemyMove)})  eval {str(bestFriendlyMoveWorstCaseOpponentResponse.best_result_state)}\r\n    EN fr: ({str(bestEnemyMoveExpectedFriendlyMove)}) en: ({str(bestEnemyMove)})  eval {str(bestEnemyMoveWorstCaseFriendlyResponse.best_result_state)}\r\n')
+            else:
+                logging.info(f'~~~  both players agreed  fr: ({str(bestFriendlyMove)}) en: ({str(bestEnemyMove)}) eval {str(bestEnemyMoveWorstCaseFriendlyResponse.best_result_state)}\r\n')
+
+        worstCaseForUs = bestFriendlyMoveWorstCaseOpponentResponse
+        # worstCaseForUs = bestEnemyMoveWorstCaseFriendlyResponse
+        # DONT do this, the opponent is forced to make worse plays than we think they might due to the threats we have.
+        # if bestEnemyMoveWorstCaseFriendlyResponse.calculate_value() < bestFriendlyMoveWorstCaseOpponentResponse.calculate_value():
+        #     worstCaseForUs = bestEnemyMoveWorstCaseFriendlyResponse
+        #
+        # worstCaseForUs.expected_best_moves.insert(0, (bestFriendlyMove, bestEnemyMove))
+        # if logEvals:
+        #     logging.info(f'\r\nworstCase tileCap {worstCaseForUs.best_result_state.tile_differential}' + '\r\n'.join([f"{str(aMove)}, {str(bMove)}" for aMove, bMove in worstCaseForUs.expected_best_moves]))
+        return worstCaseForUs
+
+    def get_nash_game_comparison_expected_result_state(
+            self,
+            game: nashpy.Game,
+            boardState: ArmySimState,
+            frEnumMoves: typing.List[typing.Tuple[int, Move | None]],
+            enEnumMoves: typing.List[typing.Tuple[int, Move | None]],
+            payoffs: typing.List[typing.List[ArmySimResult]]
+    ) -> typing.Tuple[typing.List[typing.Tuple[int, Move | None]], typing.List[typing.Tuple[int, Move | None]]]:
+        # hack do this for now
+        # return self.get_comparison_based_expected_result_state(boardState, frEnumMoves, enEnumMoves, payoffs)
+
+        return self.get_nash_moves_based_on_lemke_howson(boardState, game, frEnumMoves, enEnumMoves, payoffs)
+        # for frMoveIdx, frMove in frEnumMoves:
+        #     for enMoveIdx, enMove in enEnumMoves:
+
+
+    def get_nash_moves_based_on_support_enumeration(
+            self,
+            boardState: ArmySimState,
+            game: nashpy.Game,
+            frEnumMoves: typing.List[typing.Tuple[int, Move | None]],
+            enEnumMoves: typing.List[typing.Tuple[int, Move | None]],
+            payoffs: typing.List[typing.List[ArmySimResult]]
+    ) -> typing.Tuple[typing.List[typing.Tuple[int, Move | None]], typing.List[typing.Tuple[int, Move | None]]]:
+        """
+        Returns just the enumeration of the moves that are part of the equilibrium.
+
+        @param boardState:
+        @param game:
+        @param frEnumMoves:
+        @param enEnumMoves:
+        @param payoffs:
+        @return:
+        """
+        nashEqStart = time.perf_counter()
+        frEqMoves = frEnumMoves
+        enEqMoves = enEnumMoves
+
+        self.nash_eq_iterations += 1
+        equilibria = [e for e in game.support_enumeration(tol=10 ** -15, non_degenerate=True)]
+        if len(equilibria) > 0:
+            frEqMoves = []
+            enEqMoves = []
+            for eq in equilibria:
+                aEq, bEq = eq
+                # get the nash equilibria moves
+                for moveIdx, val in enumerate(aEq):
+                    if val >= 0.5:
+                        frEqMoves.append(frEnumMoves[moveIdx])
+                for moveIdx, val in enumerate(bEq):
+                    if val >= 0.5:
+                        enEqMoves.append(enEnumMoves[moveIdx])
+
+            if len(frEqMoves) == 0 and len(frEnumMoves) > 0:
+                raise AssertionError(f'No fr moves returned...?')
+            if len(enEqMoves) == 0 and len(enEnumMoves) > 0:
+                raise AssertionError(f'No en moves returned...?')
+
+            if len(frEqMoves) > 1:
+                logging.warning(
+                    f'{len(frEqMoves)} fr moves returned...? {", ".join([str(move) for move in frEqMoves])}')
+            if len(enEqMoves) > 1:
+                logging.warning(
+                    f'{len(enEqMoves)} en moves returned...? {", ".join([str(move) for move in enEqMoves])}')
+        self.time_in_nash_eq += time.perf_counter() - nashEqStart
+        return frEqMoves, enEqMoves
+
+    def get_nash_moves_based_on_lemke_howson(
+            self,
+            boardState: ArmySimState,
+            game: nashpy.Game,
+            frEnumMoves: typing.List[typing.Tuple[int, Move | None]],
+            enEnumMoves: typing.List[typing.Tuple[int, Move | None]],
+            payoffs: typing.List[typing.List[ArmySimResult]]
+    ) -> typing.Tuple[typing.List[typing.Tuple[int, Move | None]], typing.List[typing.Tuple[int, Move | None]]]:
+        """
+        Returns just the enumeration of the moves that are part of the equilibrium.
+
+        @param boardState:
+        @param game:
+        @param frEnumMoves:
+        @param enEnumMoves:
+        @param payoffs:
+        @return:
+        """
+        nashEqStart = time.perf_counter()
+        frEqMoves = frEnumMoves
+        enEqMoves = enEnumMoves
+
+        self.nash_eq_iterations += 1
+        if len(frEqMoves) < 2 or len(enEqMoves) < 2:
+            return self.get_nash_moves_based_on_support_enumeration(boardState, game, frEnumMoves, enEnumMoves, payoffs)
+
+        equilibria = game.lemke_howson(initial_dropped_label=0)
+        if equilibria is not None:
+            eq = equilibria
+        # if len(equilibria) > 0:
+            frEqMoves = []
+            enEqMoves = []
+        #     for eq in equilibria:
+            aEq, bEq = eq
+            # get the nash equilibria moves
+            for moveIdx, val in enumerate(aEq):
+                if val >= 0.5:
+                    frEqMoves.append(frEnumMoves[moveIdx])
+            for moveIdx, val in enumerate(bEq):
+                if val >= 0.5:
+                    enEqMoves.append(enEnumMoves[moveIdx])
+
+        if len(frEqMoves) == 0 and len(frEnumMoves) > 0:
+            frEqMoves = frEnumMoves
+        if len(enEqMoves) == 0 and len(enEnumMoves) > 0:
+            enEqMoves = enEnumMoves
+
+        if len(frEqMoves) > 1:
+            logging.warning(
+                f'{len(frEqMoves)} fr moves returned...? {", ".join([str(move) for move in frEqMoves])}')
+        if len(enEqMoves) > 1:
+            logging.warning(
+                f'{len(enEqMoves)} en moves returned...? {", ".join([str(move) for move in enEqMoves])}')
+        self.time_in_nash_eq += time.perf_counter() - nashEqStart
+        return frEqMoves, enEqMoves
+

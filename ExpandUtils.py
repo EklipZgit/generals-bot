@@ -530,20 +530,19 @@ def get_optimal_expansion(
         # first 0.1s, use large tiles and shift smaller. (do nothing)
         # second 0.1s, use all tiles (to make sure our small tiles are included)
         # third 0.1s - knapsack optimal stuff outside this loop i guess?
-        stage1 = 0.10
-        stage2 = 0.15
-        breakStage = 0.22
+        stage1 = 0.05
+        stage2 = 0.1
+        breakStage = 0.14
         inStage2 = False
-        if timeUsed > stage1:
-            logging.info("timeUsed > {} ({})... Breaking loop and knapsacking...".format(stage1, timeUsed))
+        if timeUsed > stage1 and timeUsed < stage2:
+            logging.info(f"timeUsed > {stage1} ({timeUsed})... Breaking loop and knapsacking...")
         if timeUsed > stage2:
             logging.info(
-                "timeUsed > {} ({})... Switching to using all tiles, cutoffFactor = fullCutoff...".format(stage2,
-                                                                                                          timeUsed))
+                f"timeUsed > {stage2} ({timeUsed})... Switching to using all tiles, cutoffFactor = fullCutoff...")
             inStage2 = True
             cutoffFactor = fullCutoff
         if timeUsed > breakStage:
-            logging.info("timeUsed > {} ({})... breaking...".format(breakStage, timeUsed))
+            logging.info(f"timeUsed > {breakStage} ({timeUsed})... breaking and knapsacking...")
             break
 
         # startIdx = max(0, ((cutoffFactor - 1) * len(sortedTiles))//fullCutoff)
@@ -583,7 +582,7 @@ def get_optimal_expansion(
             0.03,
             remainingTurns,
             maxDepth=remainingTurns,
-            noNeutralCities=(not expandIntoNeutralCities),
+            noNeutralCities=True,
             negativeTiles=negativeTiles,
             searchingPlayer=searchingPlayer,
             priorityFunc=priorityFunc,
@@ -592,7 +591,8 @@ def get_optimal_expansion(
             logResultValues=logStuff,
             fullOnly=False,
             fullOnlyArmyDistFunc=fullOnly_func,
-            boundFunc=boundFunc)
+            boundFunc=boundFunc,
+            noLog=True)
 
         if path is not None and path:
             logging.info(

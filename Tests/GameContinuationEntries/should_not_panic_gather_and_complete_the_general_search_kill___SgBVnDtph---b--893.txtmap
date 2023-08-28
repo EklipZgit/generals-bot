@@ -1,0 +1,44 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          M         a5   a5   a1   MN1  a1   M
+     M    a2   a2   a2   a4   a1   N1   a1   b215 M         M         M
+M    M    M    a1   a1   a1   a1   M    M    b2   a1   a1   M    M         M
+     a3   a1   a1   M    aM0  a1   a4   b2   a6   a1   a1   M                        M    M
+M    M    a1   M    a4   b4   a4   bC128b2   M    a3   M         M         M         M
+M    a1   a1   a2   b2   b5   M    M    b2   b2   b2   M    b2                       M
+a1   a1   a1   a1   b3   b4   b2   b2   b2   C43  b2   b2   b2   a4   b4   M              M
+a3   a3   a1   a112 a1   a2   M    b2   a4   a2   M    b2   a3   a3   b4
+     M    M    a2   b1   a5   M    b2   a3   a2   M    b1   M    b4                  M
+M    a3   a1   a110 b3   b1   b2   b1   M    a2   a2   b1        b1             M    M
+     a2   M    a2   a2   a1   a1   a0   a1   a2   a2   b13  b1   b1   M
+     a2   a2   a2   a3   a14  M    b1   b1   b1   b6   b3   M    b3        M    M
+     a8   a2   M    M    b1   M    bC9  b1   M    b4   b10  b1   b1
+a5   a1   M    b1   b1   b3   b1   b1   bC5  b3   b3   b3   a3   a5   a5
+     a1   b3   b3   b1   a0   b1   b1   b36  b4   M    b8   b1   b1   M
+     M              M    a2   a0   b39  a0   a2   a2   a0   b1   b3   M         M         M
+M                                  M    b1   M    b3   b12  M    b3   M
+               M                        M    M    b3   bG44 M              M
+                                   M              M    M         M                        M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=0,3
+turn=893
+bot_player_index=1
+aTiles=90
+aScore=423
+aStandingArmy=333
+aStars=51
+aCityCount=2
+aKnowsKingLocation=True
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=78
+bScore=662
+bStandingArmy=584
+bStars=49
+bCityCount=4
+bGeneral=11,17
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=0

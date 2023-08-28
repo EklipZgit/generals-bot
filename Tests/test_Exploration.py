@@ -56,7 +56,7 @@ class ExplorationTests(TestBase):
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, 490, player_index=4)
         
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptViewer=True)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)

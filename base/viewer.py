@@ -142,7 +142,8 @@ class GeneralsViewer(object):
         self.last_update_received: float = time.perf_counter()
         self._receivedUpdate = False
         self.Arrow = None
-        self.lineArrow = None
+        self.lineArrow: DirectionalShape = None
+        self.redLineArrow: DirectionalShape = None
         self.line = None
         self.noLog: bool = False
         # Table Properies
@@ -238,6 +239,7 @@ class GeneralsViewer(object):
         # self.Arrow = [(self.cellWidth / 2, 0), (self.cellWidth / 8, self.cellHeight / 2), (self.cellWidth / 2, self.cellHeight / 4), (7 * self.cellWidth / 8, self.cellHeight / 2)]
 
         self.lineArrow = DirectionalShape(self.get_line_arrow(0, 0, 0))
+        self.redLineArrow = DirectionalShape(self.get_line_arrow(255, 0, 0, width=1))
         self.line = DirectionalShape(self.get_line(0, 0, 0))
         self.delta_arrow = DirectionalShape(self.get_delta_arrow())
         self.green_line = DirectionalShape(self.get_line(0, 185, 35))
@@ -491,10 +493,9 @@ class GeneralsViewer(object):
             self.draw_division_borders()
 
             if self._viewInfo.redGatherNodes is not None:
-                redArrow = DirectionalShape(self.get_line_arrow(255, 0, 0, width=2))
-                self.drawGathers(self._viewInfo.redGatherNodes, redArrow)
+                self.drawGathers(self._viewInfo.redGatherNodes, self.redLineArrow, self.redLineArrow)
             if self._viewInfo.gatherNodes is not None:
-                self.drawGathers(self._viewInfo.gatherNodes, self.lineArrow)
+                self.drawGathers(self._viewInfo.gatherNodes, self.lineArrow, self.redLineArrow)
 
             # if self._viewInfo.board_analysis and self._viewInfo.board_analysis.intergeneral_analysis:
             #     chokeColor = CHOKE_PURPLE # purple
@@ -949,7 +950,7 @@ class GeneralsViewer(object):
 
         return s
 
-    def drawGathers(self, nodes, shape):
+    def drawGathers(self, nodes, shape, prunedShape):
         # pruneArrow = self.get_line_arrow(190, 30, 0)
         q = deque()
         for node in nodes:
@@ -962,7 +963,10 @@ class GeneralsViewer(object):
                 q.appendleft((prunedChild, False))
 
             if node.fromTile is not None:
-                self.draw_between_tiles(shape, node.fromTile, node.tile)
+                if unpruned:
+                    self.draw_between_tiles(shape, node.fromTile, node.tile)
+                else:
+                    self.draw_between_tiles(prunedShape, node.fromTile, node.tile)
 
     def draw_between_tiles(self, shape: DirectionalShape, sourceTile, destTile, alpha=255):
         xDiff = destTile.x - sourceTile.x

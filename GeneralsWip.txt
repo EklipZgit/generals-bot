@@ -82,3 +82,28 @@ BLUE: general evaluation ACTUAL approximation
 8 - 91 great, 80 pretty good, 75 ok, 55 meh, 52 bad, 48 terrible
 10 - not super useful <80 bad, >95 good
 
+
+
+
+
+HOW GATHER ITER WORKS:
+
+origStartDict = startDict.copy
+newStartDict = startDict.copy
+Build tree node lookup from startdict
+	Gather to max turns
+	put all those paths in the tree nodes
+	recalc tree values (maaaaaaaybe leaves gatherTurns 1 on empty root nodes in some situations?)
+	rootNodes = tree node lookup intersection with origStartDict
+	prune mst down to some point OR LOWER, cleans up things in tree nodes but not newStartDict (but, we haven't added anything to newStartDict yet)
+	recalc tree values again (leaves gatherTurns 1 on empty root nodes in some situations?)
+	add shit to 
+
+
+
+EXPANSION v2
+build 'gather' tree INTO enemy territory (and/or cleaning up enemy tiles), so we have a plan on what to DO with gathered army.
+Put a cap on the amount of army we want to send down those routes so we don't gather all our army to random places.
+Have the main attack path(s) (@gen, @enemy cities) be an 'infinite' army sink to allow infinite army amounts towards it.
+THEN tweak existing gather to gather towards those target points.
+Have both expansion-plan and gather-plan be pruned simultaneously until we find the 'best' balance of time spent gathering vs expected tiles captured. Somehow factor in time for defending enemy pushes (may need to recalculate this every turn...? Yikes)

@@ -1,0 +1,44 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+               M    b3   b2   b2   b2   b2   b2   b2   b1   b2   b2   b3   b3   b3   b1   b1
+M    M              b3   b2   M    M    b2   M    M    b3   bG25 b3   bC25 b2   b2   b8   b1
+                    b2   b2   b3   b2   M    M    b2   b2   b3   M    b2   b3   M    bC47 b1
+               M    b2   b3   b4   a2   a2   M    b2   b2   b3   M    b2   M         M
+          M              b3   b4   M    a2   a2   b2   b1   b3   M    M
+          M              b2   b2   b2   M    a2   a2   b1   M    C41                 M
+                         b2   M    C41  M    b2   b2   b9   b2   M    M    M    M
+          M    M    M         b2   a2   a2   M    a1   b1   b2   b2   b2   b2   b2
+     M    M         M    M    M    b3   a4   M    a2   b1   M    M    M    b2             M
+               M    N1   a2   b3   b4   a5   a3   a2   b1   M    M         b5
+               M         a5   a3   b3   a3   a5   M    a2   a2        M    M    M
+          M         M    a2   a4   b3   a3   M    b2   a16  aC4       M         M    M    M
+                         a2   a2   M    b3   b3   a2   a2   a3   N1   M         M         M
+                         a2   a2   a2   a2   M    b1   b1   M    a3        M    M    M    M
+          M                   M    MN1  a2   a2   a2   M
+                    M                        a2   M
+     M              M    M         M    M              M    M
+M    M              M    M                                                                M
+                    M         M    M    M                        M    M              M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=6,15
+turn=510
+bot_player_index=1
+aTiles=99
+aScore=332
+aStandingArmy=233
+aStars=59
+aCityCount=3
+aKnowsKingLocation=True
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=79
+bScore=279
+bStandingArmy=200
+bStars=53
+bCityCount=3
+bGeneral=12,1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=0

@@ -18,6 +18,10 @@ from base.client.map import MapBase, Tile, Score, Player, TILE_FOG, TILE_OBSTACL
 
 class TestBase(unittest.TestCase):
     # __test__ = False
+    def __init__(self, methodName: str = ...):
+        super().__init__(methodName)
+        self._initialized: bool = False
+
     def begin_capturing_logging(self, logLevel: int = logging.INFO):
         # without force=True, the first time a logging.log* is called earlier in the code, the config gets set to
         # default: WARN and basicConfig after that point has no effect without force=True
@@ -26,8 +30,10 @@ class TestBase(unittest.TestCase):
         logging.info("TESTING TESTING 123")
 
     def _initialize(self):
-        # self._set_up_log_stream()
-        self.disable_search_time_limits_and_enable_debug_asserts()
+        if not self._initialized:
+            self._initialized = True
+            # self._set_up_log_stream()
+            self.disable_search_time_limits_and_enable_debug_asserts()
 
     def load_turn_1_map_and_general(self, mapFileName: str) -> typing.Tuple[MapBase, Tile]:
         turn = 1
@@ -271,7 +277,6 @@ class TestBase(unittest.TestCase):
         EarlyExpandUtils.DEBUG_ASSERTS = False
         BotHost.FORCE_NO_VIEWER = False
 
-
     def reset_map_to_just_generals(self, map: MapBase, turn: int = 16):
         """
         Resets a map to a specific turn, leaving only generals around at whatever army they'd have at that point.
@@ -393,17 +398,17 @@ class TestBase(unittest.TestCase):
             viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
             time.sleep(0.1)
 
-    def assertNoRepetition(self, simHost: GameSimulatorHost, minForRepetition=3):
+    def assertNoRepetition(self, simHost: GameSimulatorHost, minForRepetition=3, msg="Expected no move repetition."):
         moved: typing.List[typing.Dict[Tile, int]] = [{} for player in simHost.bot_hosts]
 
         for histEntry in simHost.sim.moves_history:
             for i, move in enumerate(histEntry):
                 if move is None:
                     continue
-                if move.dest not in moved[i]:
-                    moved[i][move.dest] = 0
+                if move.source not in moved[i]:
+                    moved[i][move.source] = 0
 
-                moved[i][move.dest] = moved[i][move.dest] + 1
+                moved[i][move.source] = moved[i][move.source] + 1
 
         failures = []
         for player in range(len(simHost.bot_hosts)):
@@ -413,7 +418,7 @@ class TestBase(unittest.TestCase):
                     failures.append(f'player {player} had {repetitions} repetitions of {str(tile)}.')
 
         if len(failures) > 0:
-            self.fail('\r\n' + '\r\n'.join(failures))
+            self.fail(msg + '\r\n' + '\r\n'.join(failures))
 
     def assertPlayerTileCount(self, simHost: GameSimulatorHost, player: int, tileCount: int):
         simPlayer = simHost.sim.players[player]
@@ -462,6 +467,51 @@ class TestBase(unittest.TestCase):
         self.assertEqual(mapTile.army, playerTile.army, f'tile {x},{y} army mismatched for p{player_index}')
         self.assertEqual(sim.turn - 1, playerTile.lastSeen, f'tile {x},{y} lastSeen wasnt last turn for p{player_index}')
         return playerTile
+
+    def assertGatheredNear(
+            self,
+            simHost: GameSimulatorHost,
+            player: int,
+            x: int,
+            y: int,
+            radius: int,
+            requiredAvgTileValue: float = 2
+    ):
+        sumArmy = SearchUtils.Counter(0)
+        countTiles = SearchUtils.Counter(0)
+        map = simHost.sim.players[player].map
+        sourceTile = map.GetTile(x, y)
+
+        def countFunc(tile: Tile):
+            if tile.player == player:
+                sumArmy.add(tile.army)
+                countTiles.add(1)
+        SearchUtils.breadth_first_foreach(map, [sourceTile], radius, countFunc)
+
+        armyPerTile = sumArmy.value / countTiles.value
+        if armyPerTile > requiredAvgTileValue:
+            self.fail(f'dist {radius} from {str(sourceTile)} had avg {armyPerTile:.1f} army per tile which exceeded {requiredAvgTileValue}. Had {sumArmy.value} army on {countTiles.value} tiles.')
+
+    def assertCleanedUpTilesNear(
+            self,
+            simHost: GameSimulatorHost,
+            player: int,
+            x: int,
+            y: int,
+            radius: int,
+            capturedWithinLastTurns: int = 15,
+            requireCountCapturedInWindow: int = 10):
+        countCaptured = SearchUtils.Counter(0)
+        map = simHost.sim.players[player].map
+        sourceTile = map.GetTile(x, y)
+
+        def countFunc(tile: Tile):
+            if tile.player == player and tile.turn_captured > map.turn - capturedWithinLastTurns:
+                countCaptured.add(1)
+        SearchUtils.breadth_first_foreach(map, [sourceTile], radius, countFunc)
+
+        if countCaptured.value < requireCountCapturedInWindow:
+            self.fail(f'dist {radius} from {str(sourceTile)} only had {countCaptured.value} captured tiles, required {requireCountCapturedInWindow}.')
 
     def get_player_tile(self, x: int, y: int, sim: GameSimulator, player_index: int) -> Tile:
         player = sim.players[player_index]

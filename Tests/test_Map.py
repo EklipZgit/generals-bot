@@ -154,7 +154,7 @@ C5
 
         if debugMode:
             map, general, enemyGeneral = self.load_map_and_generals(mapFile, 166)
-            simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptViewer=True)
+            simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
             simHost.queue_player_moves_str(enemyGeneral.player, "6,16 -> 6,15 -> 6,14 -> 6,13")
             simHost.queue_player_moves_str(general.player, "5,5 -> 6,5 -> 7,5 -> 8,5")
@@ -265,7 +265,7 @@ C5
         if debugMode:
             map, general, enemyGeneral = self.load_map_and_generals(mapFile, 399)
 
-            simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptViewer=True)
+            simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
             simHost.queue_player_moves_str(general.player, "14,6 -> 15,6 -> 16,6 -> 17,6")
             simHost.queue_player_moves_str(enemyGeneral.player, "12,13 -> 12,12 -> 12,11 -> 12,10")
@@ -351,7 +351,7 @@ C5
         if debugMode:
             map, general, enemyGeneral = self.load_map_and_generals(mapFile, 451)
 
-            simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptViewer=True)
+            simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
             simHost.queue_player_moves_str(general.player, "8,12 -> 7,12 -> 8,12 -> 7,12")
             simHost.queue_player_moves_str(enemyGeneral.player, "10,13 -> 10,14")
@@ -402,7 +402,7 @@ C5
         if debugMode:
             map, general, enemyGeneral = self.load_map_and_generals(mapFile, 485)
 
-            simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptViewer=True)
+            simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
             simHost.queue_player_moves_str(general.player, "8,12 -> 7,12 -> 8,12 -> 7,12")
             simHost.queue_player_moves_str(enemyGeneral.player, "7,16 -> 7,15")

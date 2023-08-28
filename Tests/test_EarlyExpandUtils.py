@@ -7,12 +7,51 @@ import unittest
 
 import EarlyExpandUtils
 import SearchUtils
+from Sim.GameSimulator import GameSimulatorHost
 from Sim.TextMapLoader import TextMapLoader
 from Tests.TestBase import TestBase
 from base.client.map import Tile, TILE_EMPTY, TILE_MOUNTAIN, MapBase
 
 
 class EarlyExpandUtilsTests(TestBase):
+    def check_does_not_produce_invalid_plan(
+            self,
+            mapFileName: str,
+            turn: int = 1,
+            noLog: bool = True
+    ) -> typing.Tuple[MapBase, EarlyExpandUtils.ExpansionPlan]:
+        map, general = self.load_turn_1_map_and_general(mapFileName)
+
+        self.get_tiles_capped_on_50_count_and_reset_map(map, general)
+
+        weightMap = self.get_opposite_general_distance_map(map, general)
+        if turn != 1:
+            map.turn = turn
+            general.army = turn // 2 + 1
+
+        plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=noLog)
+        paths = plan.plan_paths
+        value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, map.turn, paths, noLog=False)
+
+        self.assertEqual(plan.tile_captures, value)
+        return map, plan
+
+    def get_tiles_capped_on_50_count_and_reset_map(self, map, general) -> int:
+        playerTilesToMatchOrExceed = SearchUtils.count(map.pathableTiles, lambda tile: tile.player == general.player)
+        map.turn = 1
+        for tile in map.pathableTiles:
+            if tile.isGeneral:
+                tile.army = 1
+            else:
+                tile.army = 0
+                tile.player = -1
+        map.update()
+
+        return playerTilesToMatchOrExceed
+
+    def render_expansion_plan(self, map: MapBase, plan: EarlyExpandUtils.ExpansionPlan):
+        self.render_paths(map, plan.plan_paths, f'{str(plan.tile_captures)}')
+
     def test_takes_1_move_final_move(self):
         debugMode = False
         # test both odd and even turns
@@ -681,41 +720,9 @@ class EarlyExpandUtilsTests(TestBase):
         if plan.tile_captures > playerTilesToMatchOrExceed:
             self.skipTest(f"Produced a BETTER plan than original, {plan.tile_captures} vs {playerTilesToMatchOrExceed}")
 
-
-    def check_does_not_produce_invalid_plan(
-            self,
-            mapFileName: str,
-            turn: int = 1,
-            noLog: bool = True
-    ) -> typing.Tuple[MapBase, EarlyExpandUtils.ExpansionPlan]:
-        map, general = self.load_turn_1_map_and_general(mapFileName)
-
-        self.get_tiles_capped_on_50_count_and_reset_map(map, general)
-
-        weightMap = self.get_opposite_general_distance_map(map, general)
-        if turn != 1:
-            map.turn = turn
-            general.army = turn // 2 + 1
-
-        plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=noLog)
-        paths = plan.plan_paths
-        value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, map.turn, paths, noLog=False)
-
-        self.assertEqual(plan.tile_captures, value)
-        return map, plan
-
-    def get_tiles_capped_on_50_count_and_reset_map(self, map, general) -> int:
-        playerTilesToMatchOrExceed = SearchUtils.count(map.pathableTiles, lambda tile: tile.player == general.player)
-        map.turn = 1
-        for tile in map.pathableTiles:
-            if tile.isGeneral:
-                tile.army = 1
-            else:
-                tile.army = 0
-                tile.player = -1
-        map.update()
-
-        return playerTilesToMatchOrExceed
-
-    def render_expansion_plan(self, map: MapBase, plan: EarlyExpandUtils.ExpansionPlan):
-        self.render_paths(map, plan.plan_paths, f'{str(plan.tile_captures)}')
+    def test_shouldnt_hang_13_seconds(self):
+        debugMode = True
+        map, plan = self.check_does_not_produce_invalid_plan('GameContinuationEntries/shouldnt_hang_13_seconds___SxauNnYTh---a--20.txtmap')
+        if debugMode:
+            self.render_expansion_plan(map, plan)
+        self.assertEqual(plan.tile_captures, 22)

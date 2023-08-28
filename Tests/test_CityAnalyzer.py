@@ -1,16 +1,8 @@
-import logging
-import os
-import pathlib
-
-import EarlyExpandUtils
-import SearchUtils
 from BoardAnalyzer import BoardAnalyzer
-from BotHost import BotHostBase
 from CityAnalyzer import CityAnalyzer
-from DataModels import Move
-from Sim.GameSimulator import GameSimulator, GameSimulatorHost
+from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
-from base.client.map import MapBase, Tile, Score
+from base.client.map import MapBase
 from bot_ek0x45 import EklipZBot
 
 
@@ -195,3 +187,29 @@ class CityAnalyzerTests(TestBase):
         self.assertIsNone(winner)
 
         # TODO add asserts for should_not_take_city_in_middle_of_map_right_in_front_of_enemy_army_lol
+    
+    def test_should_never_take_city_so_far_from_play_area__should_contest_red_city_instead(self):
+        debugMode = True
+        mapFile = 'GameContinuationEntries/should_never_take_city_so_far_from_play_area__should_contest_red_city_instead___BlFGDfup2---b--510.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 510, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        # Grant the general the same fog vision they had at the turn the map was exported
+        rawMap, _ = self.load_map_and_general(mapFile, 510)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=-2, playerMapVision=rawMap)
+
+        # simHost.make_player_afk(enemyGeneral.player)
+
+        # alert enemy of the player general
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=450)
+        self.assertIsNone(winner)
+        badCity = self.get_player_tile(13,5, simHost.sim, general.player)
+        self.assertEqual(-1, badCity.player)
+
+        enemyCityToContest = self.get_player_tile(12, 11, simHost.sim, general.player)
+        self.assertGreater(enemyCityToContest.turn_captured, 520, 'should have tried to contest the city, if not own it outright')

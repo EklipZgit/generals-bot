@@ -14,7 +14,7 @@ from base.client.map import MapBase, Tile
 from bot_ek0x45 import EklipZBot
 
 FORCE_NO_VIEWER = False
-FORCE_PRIVATE = True
+FORCE_PRIVATE = False
 
 
 class BotHostBase(object):

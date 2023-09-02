@@ -129,8 +129,8 @@ class GeneralsViewer(object):
             update_queue: "Queue[typing.Tuple[ViewInfo | None, MapBase | None, bool]]",
             pygame_event_queue: "Queue[bool]",
             name=None,
-            cell_width=35,
-            cell_height=35,
+            cell_width: int | None = None,
+            cell_height: int | None = None,
     ):
         self._killed = False
         self._update_queue: "Queue[typing.Tuple[ViewInfo | None, MapBase | None, bool]]" = update_queue
@@ -147,21 +147,21 @@ class GeneralsViewer(object):
         self.line = None
         self.noLog: bool = False
         # Table Properies
-        self.cellWidth = cell_width
-        self.cellHeight = cell_height
-        self.scoreRowHeight = self.cellHeight + 3
+        self.cellWidth: int = cell_width
+        self.cellHeight: int = cell_height
 
-        self.infoRowHeight = 170
-        self.infoLineHeight = 17
+        self.infoLineHeight = 0
+        self.infoRowHeight = 0
 
         self.plusDepth = 9
         self.offset1080Above1440p = 276  # 320 was too far right...?
-        self.square = Rect(0, 0, self.cellWidth, self.cellHeight)
-        self.square_inner_1 = Rect(1, 1, self.cellWidth - 2, self.cellHeight - 2)
-        self.square_inner_2 = Rect(2, 2, self.cellWidth - 4, self.cellHeight - 4)
-        self.square_inner_3 = Rect(3, 3, self.cellWidth - 6, self.cellHeight - 6)
-        self.square_inner_4 = Rect(4, 4, self.cellWidth - 8, self.cellHeight - 8)
-        self.square_inner_5 = Rect(5, 5, self.cellWidth - 10, self.cellHeight - 10)
+        self.scoreRowHeight: int = 0
+        self.square: Rect = None
+        self.square_inner_1: Rect = None
+        self.square_inner_2: Rect = None
+        self.square_inner_3: Rect = None
+        self.square_inner_4: Rect = None
+        self.square_inner_5: Rect = None
 
     def updateGrid(self, viewInfo: ViewInfo, map: MapBase):
         if viewInfo is not None:
@@ -202,11 +202,37 @@ class GeneralsViewer(object):
                          (self.cellWidth // 2 + CELL_MARGIN, self.cellHeight), width)
         return s
 
-    def _initViewier(self, position):
+    def _initViewier(self, alignTop: bool, alignLeft: bool):
+        self.infoLineHeight = 17
+        self.infoRowHeight = 250
+
+        if self.cellHeight is None:
+            self.cellHeight = min(60, (1080 - self.infoRowHeight - self.scoreRowHeight) // (self._map.rows + 1) - 2)
+            self.cellHeight = max(35, self.cellHeight)
+            self.cellWidth = self.cellHeight
+
+        x = 3 + self.offset1080Above1440p
+        if not alignLeft:
+            x = self.offset1080Above1440p + 1920 - 3 - (self.cellWidth + CELL_MARGIN) * self._map.cols
+
+        y = 3 - 1080
+        if not alignTop:
+            y = 20 # bottom monitor
+
+        position = (x, y)
+
         os.environ['SDL_VIDEO_WINDOW_POS'] = "%d,%d" % position
         os.environ['SDL_VIDEO_ALLOW_SCREENSAVER'] = "1"
         os.environ['SDL_HINT_VIDEO_ALLOW_SCREENSAVER'] = "1"
         pygame.init()
+
+        self.scoreRowHeight = self.cellHeight + 3
+        self.square = Rect(0, 0, self.cellWidth, self.cellHeight)
+        self.square_inner_1 = Rect(1, 1, self.cellWidth - 2, self.cellHeight - 2)
+        self.square_inner_2 = Rect(2, 2, self.cellWidth - 4, self.cellHeight - 4)
+        self.square_inner_3 = Rect(3, 3, self.cellWidth - 6, self.cellHeight - 6)
+        self.square_inner_4 = Rect(4, 4, self.cellWidth - 8, self.cellHeight - 8)
+        self.square_inner_5 = Rect(5, 5, self.cellWidth - 10, self.cellHeight - 10)
 
         # Set Window Size
         window_height = self._map.rows * (
@@ -218,17 +244,20 @@ class GeneralsViewer(object):
 
         window_title = str(self._name)
         pygame.display.set_caption(window_title)
-        self._medFontHeight = int(self.cellHeight // 2) - 2
-        self._smallFontHeight = min(15, int(self.cellHeight // 4))
-        self._lrgFontHeight = int(3 * self.cellHeight // 4)
+        self._medFontHeight = 2 * self.cellHeight // 5
+        self._smallFontHeight = self.cellHeight // 4
+        self._lrgFontHeight = 3 * self.cellHeight // 4
         self._medFont = pygame.font.SysFont('Arial', self._medFontHeight)
+        self._infoFont = pygame.font.SysFont('Arial', self.infoLineHeight)
         self._smallFont = pygame.font.SysFont('Arial', self._smallFontHeight)
         self._lrgFont = pygame.font.SysFont('Arial', self._lrgFontHeight)
         self._smallFontWidth = self._smallFontHeight / 2.27
         self._medFontWidth = self._medFontHeight / 2.27
         self._lrgFontWidth = self._lrgFontHeight / 2.27
         # self.infoSpaceFromLeft = self.get_large_text_offset_from_right("Turn: 1000, (.50) ")
-        self.infoSpaceFromLeft = self.get_med_text_offset_from_right(".004 Rebuilding intergeneral_an ") # we actually allow extra room for the bottom stuff now
+        samplePerfText = ".004 Rebuilding intergeneral_analysis "
+        self.perfWidthCutoff = len(samplePerfText)
+        self.infoSpaceFromLeft = self.get_any_text_width(samplePerfText, self.infoLineHeight / 2.27) + 1
 
         self._clock = pygame.time.Clock()
 
@@ -271,15 +300,7 @@ class GeneralsViewer(object):
                     return
                 pass
 
-        x = 3 + self.offset1080Above1440p
-        if not alignLeft:
-            x = self.offset1080Above1440p + 1920 - 3 - (self.cellWidth + CELL_MARGIN) * self._map.cols
-
-        y = 3 - 1080
-        if not alignTop:
-            y = 20 # bottom monitor
-
-        self._initViewier((x, y))
+        self._initViewier(alignTop=alignTop, alignLeft=alignLeft)
 
         done = False
 
@@ -364,14 +385,14 @@ class GeneralsViewer(object):
                 "Turn: {}, ({})".format(self._map.turn, ("%.2f" % self._viewInfo.lastMoveDuration).lstrip('0')),
                 True, WHITE), (10, self._window_size[1] - self.infoRowHeight + 4))
             curInfoTextHeight = 0
-            self._screen.blit(self._medFont.render(self._viewInfo.infoText, True, WHITE),
+            self._screen.blit(self._infoFont.render(self._viewInfo.infoText, True, WHITE),
                               (self.infoSpaceFromLeft, self._window_size[1] - self.infoRowHeight))
             curInfoTextHeight += self.infoLineHeight
             if self._viewInfo.timings:
                 timings = self._viewInfo.timings
                 timingTurn = (self._map.turn + timings.offsetTurns) % timings.cycleTurns
                 self._screen.blit(
-                    self._medFont.render(
+                    self._infoFont.render(
                         "Timings: {} ({})   - {}{}       {}".format(
                             timings.toString(), timingTurn, allInText, self._viewInfo.allInCounter,
                             self._viewInfo.addlTimingsLineText),
@@ -384,20 +405,20 @@ class GeneralsViewer(object):
                 if addlInfo == self._viewInfo.infoText:
                     continue
                 self._screen.blit(
-                    self._medFont.render(
+                    self._infoFont.render(
                         addlInfo,
                         True,
                         WHITE),
                     (self.infoSpaceFromLeft, self._window_size[1] - self.infoRowHeight + curInfoTextHeight))
                 curInfoTextHeight += self.infoLineHeight
 
-            perfEventHeight = 30
+            perfEventHeight = self._lrgFontHeight
             for perfEvent in self._viewInfo.perfEvents:
                 if perfEvent == self._viewInfo.infoText:
                     continue
                 self._screen.blit(
-                    self._medFont.render(
-                        perfEvent,
+                    self._infoFont.render(
+                        perfEvent[:self.perfWidthCutoff],
                         True,
                         WHITE),
                     (0, self._window_size[1] - self.infoRowHeight + perfEventHeight))

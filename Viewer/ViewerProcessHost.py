@@ -18,8 +18,8 @@ class ViewerHost(object):
     def __init__(
             self,
             window_title: str,
-            cell_width=35,
-            cell_height=35,
+            cell_width: int | None = None,
+            cell_height: int | None = None,
             alignTop: bool = True,
             alignLeft: bool = True,
             ctx: BaseContext | None = None
@@ -77,17 +77,8 @@ class ViewerHost(object):
             return True
 
 
-    def send_update_to_viewer(self, viewInfo: ViewInfo, map: MapBase, isComplete: bool = False, timer: PerformanceTimer | None = None):
+    def send_update_to_viewer(self, viewInfo: ViewInfo, map: MapBase, isComplete: bool = False):
         try:
-            if timer:
-                max = 7
-                cur = 0
-                for entry in sorted(timer.current_move.event_list, key=lambda e: e.get_duration(), reverse=True):
-                    viewInfo.perfEvents.append(f'{entry.get_duration():.3f} {entry.event_name}'.lstrip('0')[:31])
-                    cur += 1
-                    if cur > max:
-                        break
-
             obj = (viewInfo, map, isComplete)
             # import dill
             # try:

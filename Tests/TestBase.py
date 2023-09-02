@@ -391,7 +391,7 @@ class TestBase(unittest.TestCase):
         return viewInfo
 
     def render_view_info(self, map: MapBase, viewInfo: ViewInfo, infoString: str):
-        viewer = ViewerHost(infoString, cell_width=45, cell_height=45, alignTop=False, alignLeft=False)
+        viewer = ViewerHost(infoString, cell_width=None, cell_height=None, alignTop=False, alignLeft=False)
         viewer.noLog = True
         viewInfo.infoText = infoString
         viewer.start()

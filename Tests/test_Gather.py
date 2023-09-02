@@ -13,10 +13,10 @@ class GatherTests(TestBase):
             testMapStr: str,
             targetXYs: typing.List[typing.Tuple[int, int]],
             depth: int,
-            expectedGather: int,
+            expectedGather: int | None,
             inclNegative: bool,
             useTrueVal: bool = False,
-            targetsAreEnemy: bool = True,
+            targetsAreEnemy: bool | None = None,
             testTiming: bool = False,
             debugMode: bool = False,
             incGreedy: bool = True,
@@ -25,14 +25,15 @@ class GatherTests(TestBase):
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testMapStr, 102, player_index=0)
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general_from_string(testMapStr, 102)
-        for x, y in targetXYs:
-            mapTg = map.GetTile(x, y)
-            rawMapTg = rawMap.GetTile(x, y)
+        if targetsAreEnemy is not None:
             tgPlayer = general.player
             if targetsAreEnemy:
                 tgPlayer = enemyGeneral.player
-            mapTg.player = tgPlayer
-            rawMapTg.player = tgPlayer
+            for x, y in targetXYs:
+                mapTg = map.GetTile(x, y)
+                rawMapTg = rawMap.GetTile(x, y)
+                mapTg.player = tgPlayer
+                rawMapTg.player = tgPlayer
 
         self.begin_capturing_logging()
         self.disable_search_time_limits_and_enable_debug_asserts()
@@ -114,8 +115,8 @@ class GatherTests(TestBase):
 
             if incGreedy and greedyValGathered > valGathered:
                 self.fail(f'gather depth {depth} gathered {valGathered} compared to greedy {greedyValGathered}')
-
-            self.assertEqual(expectedGather, valGathered)
+            if expectedGather is not None:
+                self.assertEqual(expectedGather, valGathered)
             self.assertEqual(depth, turnsUsed)
 
         if testTiming:
@@ -519,6 +520,13 @@ b1   b1   b1   b1   b1   b1   bG1
         self.assertEqual(35, value)
 
     def test_gather__adversarial_to_large_iterative_gather_to_small_tileset(self):
+        """
+        Produces a scenario where gathers max value paths produce results away from the main cluster, and
+         where leaves on suboptimal parts of the cluster are intentionally larger than leaves on optimal parts of the
+         cluster to try to induce suboptimal prunes that prune the lower value leaves from the higher value cluster
+         over the higher value leaves from the poorer-value-per-turn offshoots, leaving a suboptimal gather plan.
+        @return:
+        """
         debugMode = False
         testData = """
 |    |    |    |    |    |    |    |
@@ -557,9 +565,23 @@ bot_player_index=0
             (15, 187),  # swap the 3 for 6 + 2 (so 183 - 2 + 6)
             (16, 197),  # swap the 11 for reaching for 21 + 2.  198 is possible but bot prioritizes returning to trunk, which is desireable, so i wont assert the 198.
             (17, 207),  # add the 11 back in. 208 ditto above
-            (18, 214),  #
-            (19, 224),  #
-            (20, 226),  # drop the 11, reach out for the 3 and 21 in corner
+            (18, 214),
+            (19, 224),
+            (20, 226),
+            (21, 230),
+            (22, 232),
+            (23, 233),
+            (24, 235),
+            (25, 236),
+            (26, 237),
+            (27, 238),
+            (28, 239),
+            (29, 240),
+        ]
+
+        targetsAreEnemyCases = [
+            False,
+            True,
         ]
 
         targetXYs = [
@@ -575,15 +597,17 @@ bot_player_index=0
         for depth, expectedGather in cases:
             if depth > 10:
                 debugMode = False
-            with self.subTest(depth=depth, expectedGather=expectedGather):
-                self.run_adversarial_gather_test_all_algorithms(
-                    testData,
-                    targetXYs,
-                    depth,
-                    expectedGather,
-                    inclNegative,
-                    testTiming=False,
-                    debugMode=debugMode)
+            for targetsAreEnemy in targetsAreEnemyCases:
+                with self.subTest(depth=depth, expectedGather=expectedGather, targetsAreEnemy=targetsAreEnemy):
+                    self.run_adversarial_gather_test_all_algorithms(
+                        testData,
+                        targetXYs,
+                        depth,
+                        expectedGather,
+                        inclNegative,
+                        targetsAreEnemy=targetsAreEnemy,
+                        testTiming=False,
+                        debugMode=debugMode)
 
             with self.subTest(depth=depth, expectedGather=expectedGather, timing=True):
                 self.run_adversarial_gather_test_all_algorithms(
@@ -595,7 +619,122 @@ bot_player_index=0
                     testTiming=True,
                     debugMode=False)
 
+    def test_gather__basic_gather_all_combinations_of_true_val_neg_val(self):
+        """
+        Produces a scenario where gathers max value paths produce results away from the main cluster, and
+         where leaves on suboptimal parts of the cluster are intentionally larger than leaves on optimal parts of the
+         cluster to try to induce suboptimal prunes that prune the lower value leaves from the higher value cluster
+         over the higher value leaves from the poorer-value-per-turn offshoots, leaving a suboptimal gather plan.
+        @return:
+        """
+        debugMode = False
+        testData = """
+|    |    |    |    |    |    |    |
+aG1  a1   a2   a3   a2   a3   a1   a11
+a1   a1   a1   a1   a1   a1   a1   a1  
+a1   N10  N10  N10  N10  N10  a1   a3  
+a2   a2                                
+a2   a2   a2   a3   a2   a6   a2   a11
+a2   a2   a2   a3   a1   a1   a1   b1  
+a2   a2   a2   a23  a15  b1   b1   b1  
+a2   a3   a2   a3   b1   b1   b1   b1  
+a2   a2   a1   b1   b1   b1   b1   b1  
+a2   a2   b1   b1   b1   b2   b2   b2  
+a1   b1   b1   b1   b1   b2   bG3  b2
+|    |    |    |    | 
+bot_player_index=0
+"""
+        cases = [
+            (1, 1),
+            (2, 2),
+            (3, 4),
+            (4, 4),
+            (5, 5),
+            (6, 6),
+            (7, 7),
+            (8, 8),
+            (9, 9),
+            (10, 10),
+            (11, 11),
+            (12, 12),
+            (13, 13),
+            (14, 14),
+            (15, 15),
+            (16, 16),
+            (17, 17),
+            (18, 18),
+            (19, 19),
+            (20, 20),
+            (21, 21),
+            (22, 22),
+            (23, 23),
+            (24, 24),
+            (25, 25),
+            (26, 26),
+            (27, 27),
+            (28, 28),
+            (29, 29),
+        ]
+
+        targetsAreEnemyCases = [
+            False,
+            True,
+            None,
+        ]
+
+        incNegCases = [
+            False,
+            True
+        ]
+
+        trueValCases = [
+            False,
+            True
+        ]
+
+        targetXYs = [
+            (1, 2),
+            (2, 2),
+            (3, 2),
+            (4, 2),
+            (5, 2)
+        ]
+
+        debugMode = True
+
+        for depth, expectedGather in cases:
+            if depth > 6:
+                debugMode = True
+            for targetsAreEnemy in targetsAreEnemyCases:
+                for useTrueGatherVal in trueValCases:
+                    for incNegative in incNegCases:
+                        with self.subTest(
+                                depth=depth,
+                                # expectedGather=expectedGather,
+                                incNegative=incNegative,
+                                useTrueGatherVal=useTrueGatherVal,
+                                targetsAreEnemy=targetsAreEnemy
+                        ):
+                            self.run_adversarial_gather_test_all_algorithms(
+                                testData,
+                                targetXYs,
+                                depth,
+                                None,
+                                inclNegative=incNegative,
+                                useTrueVal=useTrueGatherVal,
+                                targetsAreEnemy=targetsAreEnemy,
+                                testTiming=False,
+                                debugMode=debugMode,
+                                incGreedy=False,
+                                incRecurse=False,
+                            )
+
     def test_gather__adversarial_far_tiles_to_gather(self):
+        """
+        Test which represents a scenario where all of the players army is far from the main gather path, but is all clustered.
+        Ideally the algo should find an optimal path to the cluster and then produce the main tree within the cluster, rather than producing suboptimal paths to the cluster.
+        @return:
+        """
         debugMode = False
         testData = """
 |    |    |    |    |    |    |    |
@@ -617,6 +756,7 @@ a20  b1   b1   b1   b1   b1   bG1  b1
 bot_player_index=0
 """
         cases = [
+            (24, 147),
             (1, 1),
             (2, 2),
             (3, 3),
@@ -649,6 +789,11 @@ bot_player_index=0
             (28, 173),
         ]
 
+        targetsAreEnemyCases = [
+            False,
+            True,
+        ]
+
         targetXYs = [
             (1, 2),
             (2, 2),
@@ -661,18 +806,20 @@ bot_player_index=0
         for depth, expectedGather in cases:
             if depth > 24:
                 debugMode = True
-            with self.subTest(depth=depth, expectedGather=expectedGather):
-                self.run_adversarial_gather_test_all_algorithms(
-                    testData,
-                    targetXYs,
-                    depth,
-                    expectedGather,
-                    inclNegative,
-                    testTiming=False,
-                    debugMode=debugMode,
-                    # incGreedy=False,
-                    # incRecurse=False
-                )
+            for targetsAreEnemy in targetsAreEnemyCases:
+                with self.subTest(depth=depth, expectedGather=expectedGather, targetsAreEnemy=targetsAreEnemy):
+                    self.run_adversarial_gather_test_all_algorithms(
+                        testData,
+                        targetXYs,
+                        depth,
+                        expectedGather,
+                        inclNegative,
+                        targetsAreEnemy=targetsAreEnemy,
+                        testTiming=False,
+                        debugMode=debugMode,
+                        # incGreedy=False,
+                        # incRecurse=False
+                    )
 
             with self.subTest(depth=depth, expectedGather=expectedGather, timing=True):
                 self.run_adversarial_gather_test_all_algorithms(
@@ -685,6 +832,11 @@ bot_player_index=0
                     debugMode=False)
 
     def test_gather__adversarial_far_tiles_to_gather__through_enemy_lines(self):
+        """
+        Same as test_gather__adversarial_far_tiles_to_gather, except must also break through a line of enemy tiles
+        that divides the high value gather cluster from the low value cluster.
+        @return:
+        """
         debugMode = False
         testData = """
 |    |    |    |    |    |    |    |
@@ -706,6 +858,7 @@ a20  b1   b1   b1   b1   b1   bG1  b1
 bot_player_index=0
 """
         cases = [
+            (8, 9),
             (1, 1),
             (2, 2),
             (3, 3),
@@ -713,7 +866,6 @@ bot_player_index=0
             (5, 5),
             (6, 6),
             (7, 7),
-            (8, 8),
             (9, 17 - 4),  # our 5 and 10
             (10, 26 - 4),  # grab the 23 on 3,6 in place of the 11s
             (11, 40 - 4),
@@ -756,9 +908,9 @@ bot_player_index=0
 
         for depth, expectedGather in cases:
             for targetsAreEnemy in targetsAreEnemyCases:
-                if depth > 24:
-                    debugMode = True
-                with self.subTest(depth=depth, targetsAreEnemy=targetsAreEnemy, expectedGather=expectedGather):
+                if depth > 7:
+                    debugMode = False
+                with self.subTest(depth=depth, expectedGather=expectedGather, targetsAreEnemy=targetsAreEnemy):
                     self.run_adversarial_gather_test_all_algorithms(
                         testData,
                         targetXYs,
@@ -771,15 +923,15 @@ bot_player_index=0
                         debugMode=debugMode,
                     )
 
-                with self.subTest(depth=depth, targetsAreEnemy=targetsAreEnemy, expectedGather=expectedGather, timing=True):
-                    self.run_adversarial_gather_test_all_algorithms(
-                        testData,
-                        targetXYs,
-                        depth,
-                        expectedGather,
-                        inclNegative,
-                        useTrueVal=useTrueVal,
-                        targetsAreEnemy=targetsAreEnemy,
-                        testTiming=True,
-                        debugMode=False,
-                    )
+            with self.subTest(depth=depth, expectedGather=expectedGather, timing=True):
+                self.run_adversarial_gather_test_all_algorithms(
+                    testData,
+                    targetXYs,
+                    depth,
+                    expectedGather,
+                    inclNegative,
+                    useTrueVal=useTrueVal,
+                    targetsAreEnemy=True,
+                    testTiming=True,
+                    debugMode=False,
+                )

@@ -179,7 +179,7 @@ class DefenseTests(TestBase):
 
 
     def test_finds_perfect_gather_defense__small_moves_into_path__knapsack_gather_breaks_simpler(self):
-        debugMode = True
+        debugMode = False
         mapFile = 'Defense/GatherScenarios/ManySingleMovesToPath__KnapsackGatherBreaks_Simpler.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 527)
 
@@ -347,8 +347,8 @@ class DefenseTests(TestBase):
         mapFile = 'Defense/GatherScenarios/ManySingleMovesToPath_WithLongerStart_MultiKnapsackFailed.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 527)
 
-        self.enable_search_time_limits_and_disable_debug_asserts()
-        # self.disable_search_time_limits_and_enable_debug_asserts()
+        # self.enable_search_time_limits_and_disable_debug_asserts()
+        self.disable_search_time_limits_and_enable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, 527)
@@ -477,12 +477,8 @@ class DefenseTests(TestBase):
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, 792)
 
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, afkPlayers=[enemyGeneral.player])
-
-        # simHost.make_player_afk(enemyGeneral.player)
-
-        # alert enemy of the player general
-        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '15,6->16,6->16,5->16,4->16,3->16,2->16,1->15,1')
 
         ekBot = simHost.bot_hosts[general.player].eklipz_bot
 
@@ -519,7 +515,7 @@ class DefenseTests(TestBase):
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
         self.assertIsNone(winner)
 
     def test_should_detect_chase_kill_defense_with_scrim(self):
@@ -590,7 +586,7 @@ class DefenseTests(TestBase):
         # TODO add asserts for should_detect_enemy_kill_threat__2_5__at__4_5
     
     def test_should_not_loop_forever_defense_gathering(self):
-        debugMode = True
+        debugMode = False
         mapFile = 'GameContinuationEntries/should_not_loop_forever_defense_gathering___EklipZ_ai-rx8fCvt63---b--216.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 216, fill_out_tiles=True)
 
@@ -660,7 +656,7 @@ class DefenseTests(TestBase):
         self.assertIsNone(winner)
     
     def test_should_barely_save_against_no_known_king_loc(self):
-        debugMode = True
+        debugMode = False
         mapFile = 'GameContinuationEntries/should_barely_save_against_no_known_king_loc___SepnLTq6h---b--537.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 537, fill_out_tiles=True)
 
@@ -682,7 +678,7 @@ class DefenseTests(TestBase):
         self.assertIsNone(winner)
     
     def test_should_not_make_nonsense_scrim_move(self):
-        debugMode = True
+        debugMode = False
         mapFile = 'GameContinuationEntries/should_not_make_nonsense_scrim_move___Hxp3ym3Th---b--383.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 383, fill_out_tiles=True)
 

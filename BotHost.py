@@ -95,7 +95,17 @@ class BotHostBase(object):
 
             if self.has_viewer:
                 with moveTimer.begin_event(f'Sending turn {currentMap.turn} update to Viewer'):
-                    self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, currentMap, currentMap.complete, timer)
+                    if timer:
+                        max = 15
+                        cur = 0
+                        for entry in sorted(timer.current_move.event_list, key=lambda e: e.get_duration(),
+                                            reverse=True):
+                            self.eklipz_bot.viewInfo.perfEvents.append(
+                                f'{entry.get_duration():.3f} {entry.event_name}'.lstrip('0'))
+                            cur += 1
+                            if cur > max:
+                                break
+                    self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, currentMap, currentMap.complete)
 
             with moveTimer.begin_event(f'Dump {currentMap.turn}.txtmap to disk'):
                 self.save_txtmap(currentMap)
@@ -144,8 +154,7 @@ class BotHostBase(object):
             self._viewer.send_update_to_viewer(
                 self.eklipz_bot.viewInfo,
                 self.eklipz_bot._map,
-                isComplete=True,
-                timer=self.eklipz_bot.perf_timer)
+                isComplete=True)
             self._viewer.kill()
 
 

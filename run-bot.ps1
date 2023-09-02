@@ -139,6 +139,12 @@ function Run-BotOnce {
     Write-Verbose $ps1File -Verbose
     start Powershell "-File $ps1File" -Wait -NoNewWindow
     Write-Verbose 'Powershell finished, sleeping' -Verbose
+    try {
+        remove-item $ps1File
+    }
+    catch {
+        # no op I guess
+    }
 }
 
 
@@ -424,6 +430,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w LiveBots new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
+        . .\game-result-analysis-utils.ps1;
     }
 
     <#

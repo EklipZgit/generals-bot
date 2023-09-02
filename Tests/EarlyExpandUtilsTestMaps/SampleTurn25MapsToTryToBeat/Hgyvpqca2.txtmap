@@ -1,0 +1,67 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                    M                                                 M
+                    M    M    M                                                      M    M                   M
+               M                                  M              M
+                                   M    M         M    M                   M                   M
+     M         M         M    M         M                                  M         M
+                                                                 M              M
+M         M         M              M         M              M    M                   M                   M
+M                   M                                  M         M         M
+M         M    M                   M                             M         M
+               M                   M         M              M
+               M         M                        M                                  M                        M
+M                        M                             M
+     M                        M         M    M                   M    M    M              M    M
+                                             M                   M         M    M              M         M
+M    M         M              M    M         M                        M    M                             M
+M              M    M    M    M    M                   M    M              M                   M    M
+          M    M              M         M    M                   M    M                        M
+               M    M    M         d2   d2   d2
+M         M                   M    d2             M                             M              M    M
+     M    M         d2   d2   d2   d2                  M    M                   M                   M
+d2   d2   M         d2   M    M    M    M    M    M                   M                                  M
+M    d2   d2        d2   d2   d2                                                     M
+          d2   d2   d2   d2   dG3  d2   d2   d2   d2             M                   M                   M
+                              M    M                   M                                            M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=14,9
+turn=50
+bot_player_index=3
+aTiles=22
+aScore=48
+aStandingArmy=26
+aStars=65
+aCityCount=1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=25
+bScore=51
+bStandingArmy=26
+bStars=65
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+cTiles=21
+cScore=47
+cStandingArmy=26
+cStars=67
+cCityCount=1
+cKnowsKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+dTiles=25
+dScore=51
+dStandingArmy=26
+dStars=66
+dCityCount=1
+dGeneral=6,22
+dKnowsKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+bot_target_player=-1

@@ -6,19 +6,22 @@
 '''
 
 import logging
+import typing
 from copy import deepcopy
 import time
 import json
 from pprint import pprint,pformat
 
+from DataModels import Move
+
+
 class History(object):
 	def	__init__(self):
 		self.contested_cities = {}
 		self.aggressive_enemy_moves = []
-		self.move_history = {}
 		self.player_captures = []
 		self.attempted_threat_kills = set()
-		self.moveHistory = {}
+		self.move_history: typing.Dict[int, typing.List[Move]] = {}
 		self.droppedHistory = {}
 
 	def add_city_contestation(self, city, turn, player, army):

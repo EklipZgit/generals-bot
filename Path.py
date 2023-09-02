@@ -153,7 +153,12 @@ class Path(object):
             dist += 1
         return dict
 
-    def calculate_value(self, forPlayer: int, negativeTiles: None | typing.Set[Tile] | typing.Dict[Tile, typing.Any] = None) -> int:
+    def calculate_value(
+            self,
+            forPlayer: int,
+            negativeTiles: None | typing.Set[Tile] | typing.Dict[Tile, typing.Any] = None,
+            ignoreNonPlayerArmy: bool = False
+    ) -> int:
         # have to offset the first [val - 1] I guess since the first tile didn't get moved to
         val = 1
         node = self.start
@@ -164,11 +169,11 @@ class Path(object):
                 if tile.player == forPlayer:
                     val += tile.army
                     if tile.isCity or tile.isGeneral:
-                        val += math.floor(max(0, i - 1) * 0.5)
-                else:
+                        val += (i - 1) // 2
+                elif not ignoreNonPlayerArmy:
                     val -= tile.army
                     if tile.isCity or tile.isGeneral and tile.player != -1:
-                        val -= math.floor(max(0, i - 1) * 0.5)
+                        val -= (i - 1) // 2
 
             if not node.move_half:
                 val = val - 1
@@ -177,6 +182,7 @@ class Path(object):
 
             node = node.next
             i += 1
+
         self.value = val
         return val
 

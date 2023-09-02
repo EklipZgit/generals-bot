@@ -75,7 +75,17 @@ class TreeNode(object):
         self.fromTile: Tile | None = fromTile
         self.value: int = 0
         self.trunkValue: int = 0
+        """
+        trunkValue is the value of the branch up to and including this node, 
+        so it starts at 0 at the gather targets and goes up as you move out along the tree.
+        """
+
         self.trunkDistance: int = 0
+        """
+        How far from a root this is. Does not take into account the starting distance that 
+        the actual tree search was weighted with.
+        """
+
         self.turn: int = turn
         self.gatherTurns: int = 0
         self.neutrals: int = 0
@@ -108,6 +118,11 @@ class TreeNode(object):
         newNode.children = [node.deep_clone() for node in self.children]
         newNode.pruned = [node.deep_clone() for node in self.pruned]
         return newNode
+
+    def strip_all_prunes(self):
+        for c in self.children:
+            c.strip_all_prunes()
+        self.pruned = []
 
     def __str__(self):
         return f'[{str(self.tile)}<-{str(self.fromTile)} t{str(self.gatherTurns)} v{self.value} tv{self.trunkValue}, ch{len(self.children)}]'

@@ -14,7 +14,45 @@ from DangerAnalyzer import DangerAnalyzer
 
 
 class KnapsackUtils_MCKP_Tests(TestBase):
+    def execute_multiple_choice_knapsack_with_tuples(
+            self,
+            groupItemWeightValues: typing.List[typing.Tuple[int, object, int, int]],
+            capacity: int):
+        groupItemWeightValues = [t for t in sorted(groupItemWeightValues)]
+        items = []
+        groups = []
+        weights = []
+        values = []
 
+        for (group, item, weight, value) in groupItemWeightValues:
+            items.append(item)
+            groups.append(group)
+            weights.append(weight)
+            values.append(value)
+
+        return KnapsackUtils.solve_multiple_choice_knapsack(items, capacity, weights, values, groups, noLog=False, forceLongRun=True)
+
+    def generate_item_test_set(self, simulatedItemCount, simulatedGroupCount, maxWeightPerItem, maxValuePerItem):
+        groupItemWeightValues = []
+        r = random.Random()
+
+        # at least one per group
+        for i in range(simulatedGroupCount):
+            item = i
+            group = i
+            value = r.randint(0, maxValuePerItem)
+            weight = r.randint(1, maxWeightPerItem)
+            groupItemWeightValues.append((group, item, weight, value))
+
+        # then random groups after that
+        for i in range(simulatedItemCount - simulatedGroupCount):
+            item = i + simulatedGroupCount
+            group = r.randint(0, simulatedGroupCount - 1)
+            value = r.randint(0, maxValuePerItem)
+            weight = r.randint(1, maxWeightPerItem)
+            groupItemWeightValues.append((group, item, weight, value))
+
+        return groupItemWeightValues
 
     def test_multiple_choice_knapsack_solver__more_capacity_than_items__0_1_base_case__includes_all(self):
         groupItemWeightValues = [
@@ -209,43 +247,127 @@ class KnapsackUtils_MCKP_Tests(TestBase):
 
         self.assertLess(duration, 0.15)
 
-    def execute_multiple_choice_knapsack_with_tuples(
-            self,
-            groupItemWeightValues: typing.List[typing.Tuple[int, object, int, int]],
-            capacity: int):
-        groupItemWeightValues = [t for t in sorted(groupItemWeightValues)]
-        items = []
-        groups = []
-        weights = []
-        values = []
+    # TESTS STOLEN FROM https://github.com/tmarinkovic/multiple-choice-knapsack-problem/blob/master/test/knapsack/MultipleChoiceKnapsackProblemTest.java
+    def test_shouldReturnDesiredSolution2(self):
+        capacity, values, weights, groups = self.getProblem2()
+        items = [i for i in range(len(values))]
+        maxValue, maxItems = KnapsackUtils.solve_multiple_choice_knapsack(items, capacity, weights, values, groups, noLog=False, forceLongRun=True)
 
-        for (group, item, weight, value) in groupItemWeightValues:
-            items.append(item)
-            groups.append(group)
-            weights.append(weight)
-            values.append(value)
+        expected = [False, False, True,  False, False,
+                    False, False, True,  False, False,
+                    False, True,  False, False, False,
+                    True,  False, False, False, False,
+                    True,  False, False, False, False]
 
-        return KnapsackUtils.solve_multiple_choice_knapsack(items, capacity, weights, values, groups, noLog=False, forceLongRun=True)
+        self.assertEqual(42, maxValue)
+        for i, shouldInclude in enumerate(expected):
+            if shouldInclude:
+                self.assertIn(i, maxItems)
+            else:
+                self.assertNotIn(i, maxItems)
 
-    def generate_item_test_set(self, simulatedItemCount, simulatedGroupCount, maxWeightPerItem, maxValuePerItem):
-        groupItemWeightValues = []
-        r = random.Random()
 
-        # at least one per group
-        for i in range(simulatedGroupCount):
-            item = i
-            group = i
-            value = r.randint(0, maxValuePerItem)
-            weight = r.randint(1, maxWeightPerItem)
-            groupItemWeightValues.append((group, item, weight, value))
+    def test_shouldReturnDesiredSolution3(self):
+        capacity, values, weights, groups = self.getProblem3()
+        items = [i for i in range(len(values))]
+        maxValue, maxItems = KnapsackUtils.solve_multiple_choice_knapsack(items, capacity, weights, values, groups, noLog=False, forceLongRun=True)
 
-        # then random groups after that
-        for i in range(simulatedItemCount - simulatedGroupCount):
-            item = i + simulatedGroupCount
-            group = r.randint(0, simulatedGroupCount - 1)
-            value = r.randint(0, maxValuePerItem)
-            weight = r.randint(1, maxWeightPerItem)
-            groupItemWeightValues.append((group, item, weight, value))
+        expected = [True,  False, False, False, False,
+                    False, False, True,  False, False,
+                    False, True,  False, False, False,
+                    True,  False, False, False, False,
+                    False, True,  False, False, False]
 
-        return groupItemWeightValues
+        self.assertEqual(144, maxValue)
+        for i, shouldInclude in enumerate(expected):
+            if shouldInclude:
+                self.assertIn(i, maxItems)
+            else:
+                self.assertNotIn(i, maxItems)
 
+
+    def test_shouldReturnDesiredSolution4(self):
+        capacity, values, weights, groups = self.getProblem4()
+        items = [i for i in range(len(values))]
+        maxValue, maxItems = KnapsackUtils.solve_multiple_choice_knapsack(items, capacity, weights, values, groups, noLog=False, forceLongRun=True)
+
+        expected = [False, False, False, False, False,
+                    False, False, False, False, False,
+                    True,  False, False, False, False,
+                    False, False, False, False, False,
+                    True,  False, False, False, False]
+
+        self.assertEqual(105, maxValue)
+        for i, shouldInclude in enumerate(expected):
+            if shouldInclude:
+                self.assertIn(i, maxItems)
+            else:
+                self.assertNotIn(i, maxItems)
+
+    def getProblem2(self):
+        W = 10
+        profit = [
+                0,  0,  3,  4,  5,
+                0,  4,  6,  10, 10,
+                5,  8,  12, 18, 17,
+                10, 12, 18, 30, 24,
+                15, 20, 27, 44, 30]
+
+        weight = [
+                0, 0, 1, 2,  5,
+                0, 1, 2, 5,  10,
+                1, 2, 4, 9,  17,
+                2, 3, 6, 15, 24,
+                3, 5, 9, 22, 30]
+
+        group = [
+                0, 0, 0, 0, 0,
+                1, 1, 1, 1, 1,
+                2, 2, 2, 2, 2,
+                3, 3, 3, 3, 3,
+                4, 4, 4, 4, 4]
+        return (W, profit, weight, group)
+
+    def getProblem3(self):
+        W = 12
+        profit = [
+                100, 100, 3,  4,  5,
+                0,   4,   6,  10, 10,
+                5,   8,   12, 18, 17,
+                10,  12,  18, 30, 24,
+                15,  20,  27, 44, 30]
+        weight = [
+                1, 1, 1, 2,  5,
+                0, 1, 2, 5,  10,
+                1, 2, 4, 9,  17,
+                2, 3, 6, 15, 24,
+                3, 5, 9, 22, 30]
+        group = [
+                0, 0, 0, 0, 0,
+                1, 1, 1, 1, 1,
+                2, 2, 2, 2, 2,
+                3, 3, 3, 3, 3,
+                4, 4, 4, 4, 4]
+        return (W, profit, weight, group)
+
+    def getProblem4(self):
+        W = 2
+        profit = [
+                1,   1,  3,   4,  5,
+                0,   4,  6,   10, 10,
+                5,   8,  12,  18, 17,
+                10,  12, 18,  30, 24,
+                100, 100, 27, 44, 30]
+        weight = [
+                10, 10, 1, 2,  5,
+                0,  1,  2, 5,  10,
+                1,  2,  4, 9,  17,
+                2,  3,  6, 15, 24,
+                1,  1,  9, 22, 30]
+        group = [
+                0, 0, 0, 0, 0,
+                1, 1, 1, 1, 1,
+                2, 2, 2, 2, 2,
+                3, 3, 3, 3, 3,
+                4, 4, 4, 4, 4]
+        return (W, profit, weight, group)

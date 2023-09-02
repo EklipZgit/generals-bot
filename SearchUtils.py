@@ -585,7 +585,9 @@ def breadth_first_dynamic_max(
         boundFunc=None,
         maxIterations: int = INF,
         allowDoubleBacks=False,
-        includePath=False):
+        includePath=False,
+        ignoreNonPlayerArmy: bool = False
+):
     '''
     @param map:
     @param startTiles: startTiles dict is (startPriorityObject, distance) = startTiles[tile]
@@ -611,6 +613,7 @@ def breadth_first_dynamic_max(
     @param maxIterations:
     @param allowDoubleBacks:
     @param includePath:  if True, all the functions take a path object param as third tuple entry
+    @param ignoreNonPlayerArmy: if True, the paths returned will be calculated on the basis of just the searching players army and ignore enemy (or neutral city!) army they pass through.
     @return:
 
     # make sure to initialize the initial base values and account for first priorityObject being None.
@@ -837,9 +840,9 @@ def breadth_first_dynamic_max(
     # 		dist -= 1
     # 		path = PathNode(node, path, army, dist, -1, None)
     if ignoreStartTile:
-        pathObject.calculate_value(searchingPlayer, negativeTiles=startTiles)
+        pathObject.calculate_value(searchingPlayer, negativeTiles=startTiles, ignoreNonPlayerArmy=ignoreNonPlayerArmy)
     else:
-        pathObject.calculate_value(searchingPlayer)
+        pathObject.calculate_value(searchingPlayer, ignoreNonPlayerArmy=ignoreNonPlayerArmy)
     if pathObject.length == 0:
         if not noLog:
             logging.info(
@@ -879,7 +882,9 @@ def breadth_first_dynamic_max_per_tile(
         boundFunc=None,
         maxIterations: int = INF,
         allowDoubleBacks=False,
-        includePath=False):
+        includePath=False,
+        ignoreNonPlayerArmy: bool = False
+):
     '''
     Keeps the max path from each of the start tiles as output. Since we force use a global visited set, the paths returned will never overlap each other.
 
@@ -905,6 +910,7 @@ def breadth_first_dynamic_max_per_tile(
     @param maxIterations:
     @param allowDoubleBacks:
     @param includePath:  if True, all the functions take a path object param as third tuple entry
+    @param ignoreNonPlayerArmy: if True, the paths returned will be calculated on the basis of just the searching players army and ignore enemy (or neutral city!) army they pass through.
     @return:
 
     # make sure to initialize the initial base values and account for first priorityObject being None.
@@ -1126,9 +1132,14 @@ def breadth_first_dynamic_max_per_tile(
         maxPaths[startTile] = pathObject
 
         if ignoreStartTile:
-            pathObject.calculate_value(searchingPlayer, negativeTiles=startTiles)
+            pathObject.calculate_value(
+                searchingPlayer,
+                negativeTiles=startTiles,
+                ignoreNonPlayerArmy=ignoreNonPlayerArmy)
         else:
-            pathObject.calculate_value(searchingPlayer)
+            pathObject.calculate_value(
+                searchingPlayer,
+                ignoreNonPlayerArmy=ignoreNonPlayerArmy)
 
         if pathObject.length == 0:
             if not noLog:
@@ -1140,8 +1151,6 @@ def breadth_first_dynamic_max_per_tile(
                 logging.info(f"BFS-DYNAMIC-MAX-PER-TILE FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}\n   {pathObject.toString()}")
 
     return maxPaths
-
-
 
 
 def breadth_first_dynamic_max_per_tile_per_distance(
@@ -1167,7 +1176,9 @@ def breadth_first_dynamic_max_per_tile_per_distance(
         boundFunc=None,
         maxIterations: int = INF,
         allowDoubleBacks=False,
-        includePath=False):
+        includePath=False,
+        ignoreNonPlayerArmy: bool = False
+):
     '''
     Keeps the max path from each of the start tiles as output. Since we force use a global visited set, the paths returned will never overlap each other.
     For each start tile, returns a dict from found distances to the max value found at that distance.
@@ -1194,6 +1205,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
     @param maxIterations:
     @param allowDoubleBacks:
     @param includePath:  if True, all the functions take a path object param as third tuple entry
+    @param ignoreNonPlayerArmy: if True, the paths returned will be calculated on the basis of just the searching players army and ignore enemy (or neutral city!) army they pass through.
     @return:
 
     # make sure to initialize the initial base values and account for first priorityObject being None.
@@ -1377,6 +1389,8 @@ def breadth_first_dynamic_max_per_tile_per_distance(
                     or (noNeutralCities and next.player == -1 and next.isCity)
                     or (not next.discovered and next.isNotPathable)):
                 continue
+            if next in globalVisitedSet:
+                continue
             nextPrio = priorityFunc(next, prioVals) if not includePath else priorityFunc(next, prioVals, nodeList)
             if nextPrio is not None:
                 if boundFunc is not None:
@@ -1427,7 +1441,15 @@ def breadth_first_dynamic_max_per_tile_per_distance(
                     # logging.info("curArmy {} NODE {},{}".format(curArmy, curNode.x, curNode.y))
                     pathObject.add_next(tile)
 
-            pathObject.calculate_value(searchingPlayer, negativeTiles=startTiles)
+            if ignoreStartTile:
+                pathObject.calculate_value(
+                    searchingPlayer,
+                    negativeTiles=startTiles,
+                    ignoreNonPlayerArmy=ignoreNonPlayerArmy)
+            else:
+                pathObject.calculate_value(
+                    searchingPlayer,
+                    ignoreNonPlayerArmy=ignoreNonPlayerArmy)
 
             if pathObject.length == 0:
                 if not noLog:

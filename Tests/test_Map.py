@@ -395,7 +395,7 @@ C5
         # OK so this works correctly at the map level, must be the bot itself with army tracking / emergence updating the fog to 1/0...?
 
     def test_capture_from_fog_should_not_duplicate_out_into_fog(self):
-        debugMode = True
+        debugMode = False
         mapFile = 'GameContinuationEntries/capture_from_fog_should_not_duplicate_out_into_fog___rgI9fxNa3---a--485.txtmap'
         rawMap, gen = self.load_map_and_general(mapFile, 485)
 

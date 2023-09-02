@@ -374,8 +374,6 @@ class Score(object):
         ]
 
 
-
-
 class MapBase(object):
     def __init__(self,
                  player_index: int,
@@ -736,39 +734,37 @@ class MapBase(object):
             self.scoreHistory[i] = self.scoreHistory[i - 1]
         self.scoreHistory[0] = self.scores
 
+        # Check for OBVIOUS army movement, first
+        for x in range(self.cols):
+            for y in range(self.rows):
+                curTile = self.grid[y][x]
+
+                if curTile.player >= 0:
+                    self.players[curTile.player].tiles.append(curTile)
+
+                if curTile.isCity and curTile.player != -1:
+                    self.players[curTile.player].cities.append(curTile)
+
+                maybeMovedTo = self.army_moved_grid[y][x]
+                if maybeMovedTo:
+                    # look for candidate tiles that army may have come from
+                    bestCandTile = evaluateTileDiffsVisible(curTile)
+
+                    if bestCandTile is not None:
+                        self.set_tile_moved(curTile, bestCandTile)
+
         # Make assumptions about unseen tiles
         for x in range(self.cols):
             for y in range(self.rows):
                 curTile = self.grid[y][x]
 
-                if curTile.isCity and curTile.player != -1:
-                    self.players[curTile.player].cities.append(curTile)
                 maybeMovedTo = self.army_moved_grid[y][x]
                 if maybeMovedTo:
                     # look for candidate tiles that army may have come from
-                    bestCandTile = None
-                    bestCandValue = -1
-                    for candidateTile in curTile.movable:
-                        candValue = evaluateTileDiffs(curTile, candidateTile)
-                        if candValue > bestCandValue:
-                            bestCandValue = candValue
-                            bestCandTile = candidateTile
+                    bestCandTile = evaluateTileDiffsFog(curTile)
 
                     if bestCandTile is not None:
-                        self.army_moved_grid[bestCandTile.y][bestCandTile.x] = False
-                        if bestCandValue >= 100:
-                            if not bestCandTile.visible:
-                                bestCandTile.army += curTile.delta.armyDelta
-                                bestCandTile.delta.armyDelta = 0 - curTile.delta.armyDelta
-                            # only say the army is completely covered if the confidence was high, otherwise we can have two armies move here from diff players
-                            self.army_moved_grid[y][x] = False
-                        if curTile.player == -1:
-                            curTile.player = bestCandTile.player
-                        curTile.delta.fromTile = bestCandTile
-                        bestCandTile.delta.toTile = curTile
-
-                if curTile.player >= 0:
-                    self.players[curTile.player].tiles.append(curTile)
+                        self.set_tile_moved(curTile, bestCandTile)
 
         for x in range(self.cols):
             for y in range(self.rows):
@@ -866,6 +862,19 @@ class MapBase(object):
                 tile.delta.armyDelta += 1
             if self.is_city_bonus_turn and tile.player >= 0 and (tile.isGeneral or tile.isCity):
                 tile.delta.armyDelta += 1
+
+    def set_tile_moved(self, curTile, bestCandTile):
+        self.army_moved_grid[bestCandTile.y][bestCandTile.x] = False
+        # used to be if value greater than 75 or something
+        if not bestCandTile.visible:
+            bestCandTile.army += curTile.delta.armyDelta
+            bestCandTile.delta.armyDelta = 0 - curTile.delta.armyDelta
+        # only say the army is completely covered if the confidence was high, otherwise we can have two armies move here from diff players
+        self.army_moved_grid[curTile.y][curTile.x] = False
+        if curTile.player == -1:
+            curTile.player = bestCandTile.player
+        curTile.delta.fromTile = bestCandTile
+        bestCandTile.delta.toTile = curTile
 
 
 # Actual live server map that interacts with the crazy array patch diffs.
@@ -1000,8 +1009,7 @@ def new_tile_matrix(map, initialValueTileFunc):
 def new_value_matrix(map, initValue) -> typing.List[typing.List[int]]:
     return [[initValue] * map.rows for _ in range(map.cols)]
 
-
-def evaluateTileDiffs(tile: Tile, candidateTile: Tile):
+def evaluateTileDiffsInt(tile: Tile, candidateTile: Tile) -> int:
     # both visible
     if tile.visible:
         if candidateTile.visible:
@@ -1011,6 +1019,27 @@ def evaluateTileDiffs(tile: Tile, candidateTile: Tile):
     else:
         return evaluateIslandFogMove(tile, candidateTile)
 
+def evaluateTileDiffsVisible(curTile) -> Tile | None:
+    bestCandTile = None
+    bestCandValue = 95
+    for candidateTile in filter(lambda t: t.visible, curTile.movable):
+        candValue = evaluateTileDiffsInt(curTile, candidateTile)
+        if candValue > bestCandValue:
+            bestCandValue = candValue
+            bestCandTile = candidateTile
+
+    return bestCandTile
+
+def evaluateTileDiffsFog(curTile) -> Tile | None:
+    bestCandTile = None
+    bestCandValue = 1
+    for candidateTile in curTile.movable:
+        candValue = evaluateTileDiffsInt(curTile, candidateTile)
+        if candValue > bestCandValue:
+            bestCandValue = candValue
+            bestCandTile = candidateTile
+
+    return bestCandTile
 
 def evaluateDualVisibleTileDiffs(tile, candidateTile):
     if tile.delta.oldOwner != tile.delta.newOwner:
@@ -1040,9 +1069,11 @@ def evaluateDualVisibleTileDiffs(tile, candidateTile):
     # return evaluateSameOwnerMoves(tile, candidateTile)
     return -100
 
-
 def evaluateMoveFromFog(tile, candidateTile):
-    """returns an int where negative means definitely not and positive int means probably"""
+    """
+    Evaluates whether an army moved from a fog tile into a tile that is in vision.
+    Returns an int where negative means definitely not and positive int means probably, with 100 being high probability.
+    """
     # if tile.delta.oldOwner == tile.delta.newOwner:
     #     return -100
     if candidateTile.visible:
@@ -1052,12 +1083,12 @@ def evaluateMoveFromFog(tile, candidateTile):
         # then we're in this weird situation where we KNOW the tile was captured or something but armies collided in the process
         # if ONLY one tile adjacent is fog, then MUST have come from there, or we'd have already picked a visible tile with a delta
         if candidateTile.army > 0:
-            logging.info(f'candidateTile.army > 0 '
+            logging.info(f'(evaluateMoveFromFog, weird situation) candidateTile.army > 0 '
                          f'{candidateTile.x},{candidateTile.y}({candidateTile.delta.armyDelta})'
                          f'->{tile.x},{tile.y}({tile.delta.armyDelta})')
             return 10
 
-        logging.info(f'tile.delta.armyDelta == 0 '
+        logging.info(f'(evaluateMoveFromFog) tile.delta.armyDelta == 0 '
                      f'{candidateTile.x},{candidateTile.y}({candidateTile.delta.armyDelta})'
                      f'->{tile.x},{tile.y}({tile.delta.armyDelta})')
         return -100
@@ -1073,7 +1104,7 @@ def evaluateMoveFromFog(tile, candidateTile):
     halfMoveAmount = (candidateTile.army // 2)
     halfDelta = halfMoveAmount + tile.delta.armyDelta
     if halfMoveAmount > 0 and halfDelta == 0:
-        logging.info(f'halfMoveAmount > 0 and halfDelta == 0 '
+        logging.info(f'(evaluateMoveFromFog) halfMoveAmount > 0 and halfDelta == 0 '
                      f'{candidateTile.x},{candidateTile.y}({candidateTile.delta.armyDelta})'
                      f'->{tile.x},{tile.y}({tile.delta.armyDelta})')
         return 35

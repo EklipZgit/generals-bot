@@ -251,9 +251,10 @@ class GeneralsViewer(object):
 
 
     def run_main_viewer_loop(self, alignTop=True, alignLeft=True):
+        termSec = 350
         while not self._receivedUpdate:  # Wait for first update
             try:
-                viewInfo, map, isComplete = self._update_queue.get(block=True, timeout=0.2)
+                viewInfo, map, isComplete = self._update_queue.get(block=True, timeout=5.0)
                 if viewInfo is not None:
                     self._receivedUpdate = True
                     self.updateGrid(viewInfo, map)
@@ -262,8 +263,8 @@ class GeneralsViewer(object):
             except queue.Empty:
                 elapsed = time.perf_counter() - self.last_update_received
                 # TODO add a server ping callback here so while we're waiting in a lobby for a while we can keep the viewer thread alive
-                if elapsed > 200.0:
-                    logging.info(f'GeneralsViewer zombied with no game start, self-terminating after 10 seconds')
+                if elapsed > termSec:
+                    logging.info(f'GeneralsViewer zombied with no game start, self-terminating after {termSec} seconds')
                     self._event_queue.put(False)
                     self._killed = True
                     self._receivedUpdate = True

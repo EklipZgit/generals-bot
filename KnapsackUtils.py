@@ -138,13 +138,12 @@ def solve_multiple_choice_knapsack(
         res = res - values[i - 1]
         w = w - weights[i - 1]
 
-    uniqueGroupsIncluded = set(includedGroups)
-    if len(uniqueGroupsIncluded) != len(includedGroups):
-        raise AssertionError("Yo, the multiple choice knapsacker failed to be distinct by groups")
-
     if not noLog:
-        logging.info(
-            f"multiple choice knapsack completed on {n} items for capacity {capacity} finding value {K[n][capacity]} in Duration {time.perf_counter() - timeStart:.3f}")
+        uniqueGroupsIncluded = set(includedGroups)
+        if len(uniqueGroupsIncluded) != len(includedGroups):
+            raise AssertionError("Yo, the multiple choice knapsacker failed to be distinct by groups")
+    logging.info(
+        f"multiple choice knapsack completed on {n} items for capacity {capacity} finding value {K[n][capacity]} in Duration {time.perf_counter() - timeStart:.3f}")
 
     return K[n][capacity], includedItems
 

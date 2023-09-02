@@ -10,7 +10,20 @@ function Copy-Turn25StartResultsToUnitTest {
     $items = Get-ChildItem -Path $LogFolder -Recurse -Filter '50.txtmap'
     foreach ($item in $items)
     {
+        if (-not $item.DirectoryName.Contains('---'))
+        {
+            Write-Host "skipped - $($item.DirectoryName)"
+            continue
+        }
+
         $newName = ($item.DirectoryName -split '---') | Select -Last 1
+        if ($newName.Contains('GroupedLogs'))
+        {
+            # then this is a log folder from an old bot, I think?
+            Write-Host "skipped - newName $newName, folder $($folder.BaseName)"
+            continue
+        }
+        
         $item | Copy-Item -Destination "$DestFolder\$newName.txtmap"
     }
 }
@@ -93,7 +106,20 @@ function Copy-WinMapsToWonMapsDirectory {
             continue
         }
 
+        if (-not $folder.BaseName.Contains('---'))
+        {
+            Write-Host "skipped - $($folder.BaseName)"
+            continue
+        }
+
         $newName = ($folder.BaseName -split '---') | Select -Last 1
+        if ($newName.Contains('GroupedLogs'))
+        {
+            # then this is a log folder from an old bot, I think?
+            Write-Host "skipped - newName $newName, folder $($folder.BaseName)"
+            continue
+        }
+
         $newName = "$newName---$foundPlayer--$maxFileInt"
         Copy-Item -Path $maxFilePath -Destination "$DestFolder\$newName.txtmap"
     }

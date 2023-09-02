@@ -310,9 +310,9 @@ def get_optimal_expansion(
             if targetPlayer != -1 and (nextTile.player == targetPlayer or (
                     not nextTile.visible and territoryMap[nextTile.x][
                 nextTile.y] == targetPlayer)):
-                if nextTile.player == -1:
-                    # these are usually 1 or more army since usually after army bonus
-                    armyRemaining -= 1
+                # if nextTile.player == -1:
+                #     # these are usually 1 or more army since usually after army bonus
+                #     armyRemaining -= 1
                 addedPriority += 8
                 tileCapturePoints -= 2.3
                 enemyTiles -= 1
@@ -447,11 +447,11 @@ def get_optimal_expansion(
                 # or do nothing?
             else:
                 if tile.player == targetPlayer:
-                    value += 2.4
+                    value += 2.2
                 elif not tile.discovered and territoryMap[tile.x][tile.y] == targetPlayer:
                     value += 2.0
                 elif not tile.visible and territoryMap[tile.x][tile.y] == targetPlayer:
-                    value += 2.10
+                    value += 1.9
                 elif tile.player == -1:
                     value += 1.0
             sourceDist = enemyDistMap[last.x][last.y]

@@ -1,0 +1,48 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+b3   b1   M    C43  b3   M    b2   b3                  M                   M
+b1   b1   bC1  M    b2   b1   b2   M    M    M    M         M
+b3   M    b26  b1   b1   b1   b2   b1   b1   M         M    M              M
+b3   b1   b1   b1   M    b1   b1   b1   M         M         M    M
+b2   b4   bG108b1   b1   b1   b1   b1   b1   b1        M         M
+     b2   M    M    M    b1   b1   b2   b2   b2   M    M
+M    b2   b3   b3   b2   b1   b1   C41       b2                  M    M
+     b2   b3   b3   b3   b3   b1        M    b2                            M         M
+M    b2   b3   M    b3   M    b1        M    b2                       M
+     b2   b44  b1   b1   b1   b1   M         a1   M                   M
+     b2   a1   a1   M    M    a1   a1   M    a3   N1   M    M    M    M              M
+          M    a1   a34  b1   a1   b1   a2   a1   a1   M
+     M    a4   a1   a1   M    M    a2   a2   a5   a4   M    b2   b4
+     N1   a4   a1   a1   a1   a1   a1   M    a70  b4   M    b2   M         a2
+M    a3   a1   a1   a1   a2   M    M    a1   a1   a4   a2   b2   b1   b3   a3   C44
+b2   a3   a3   a2   a1   a2        M         a1   a7   M    M    b1   M    b4   b5   M
+b2   b2   b2   M    a1   a2        M              M              M         C49  b5   b4
+b2   a3   a3   a3   a1   a2   M              M    M                             M    b4
+          M    a3   a1   a1   M         M                   M    M
+     M    M    a2   a2   aG1  a1        M              M    M                   M
+               a2   a4   a4                       M                             M    M
+     M         M         M                   M         M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=5,19
+turn=499
+bot_player_index=1
+aTiles=85
+aScore=277
+aStandingArmy=192
+aStars=38
+aCityCount=1
+aGeneral=5,19
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=88
+bScore=343
+bStandingArmy=255
+bStars=51
+bCityCount=2
+bGeneral=2,4
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=0

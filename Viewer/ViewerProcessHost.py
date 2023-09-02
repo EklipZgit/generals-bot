@@ -54,7 +54,11 @@ class ViewerHost(object):
 
     def kill(self):
         logging.info("putting Complete viewer update in queue")
-        self._update_queue.put((None, None, True))
+        try:
+            self._update_queue.put((None, None, True))
+        except BrokenPipeError:
+            pass
+
         logging.info("joining viewer")
         if self.process.is_alive():
             self.process.join(1.0)
@@ -102,6 +106,12 @@ class ViewerHost(object):
             #     pass
 
             self._update_queue.put(obj)
+        except BrokenPipeError as ex:
+            if ex.errno == 232:
+                logging.info('multi processing is shutting down, got a BrokenPipeError from the viewer')
+            else:
+                logging.info(f'outer update publish catch, error: ')
+                logging.info(traceback.format_exc())
         except:
             logging.info(f'outer update publish catch, error: ')
             logging.info(traceback.format_exc())

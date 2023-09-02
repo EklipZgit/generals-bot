@@ -1,0 +1,90 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                                                       M    M                             M              M
+M         M              M                             M              M                                                 M         M
+                                   M    M                   M                                            M         M              M
+                                                            M                   M
+M         M              M                             M                                            M                   M    M    M    M
+               M                                                                     M                                  M
+     M         M         M         M                        M
+                                   M                        M    M                        M    M         M
+                                   M         M    M                        M         M         M    M
+                                   M         M                   M         M                             M                   M
+                    M                                  M    M                        M                             M         M
+          M                        M         M              M         M
+                    M         M    M    M    M                                  M         M    M                   M         M
+     M    M              M                                  M                        M              M                                  M
+     M              M         M                   M                        M         M    M                   M         M    M
+               M                        M                   M                             M         M                   M    M
+          M    M              M                        M                             M
+                                        M         M    M    M    M         M                                       M                   M
+M                   M                   M              M                             M         M
+          M                   d2                                      M                                            M                   M
+                    M    d2   d2                  M                                       M         M
+          M              d2        M    M              M                                            M    M    M    M
+          M              d2        M              M         M                   M                                            M
+                         d2                                 M                                                 M         M    M
+                    C48  d2                  d2                  M                                  M              M
+M                   M    d2   M    M         d2                                 M                                            M
+M         M    M         d2   d2   d2   d2   d2   M              M              M         M                   M                        M
+     M    dG4  d2   d2   d2   M                             M                   M              M              M
+     M    M    d2   d2   d4   M         M         M                   M              M              M              M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=14,6
+turn=50
+bot_player_index=3
+aTiles=21
+aScore=43
+aStandingArmy=22
+aStars=65
+aCityCount=1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=21
+bScore=43
+bStandingArmy=22
+bStars=66
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+cTiles=25
+cScore=51
+cStandingArmy=26
+cStars=65
+cCityCount=1
+cKnowsKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+dTiles=22
+dScore=48
+dStandingArmy=26
+dStars=65
+dCityCount=1
+dGeneral=2,27
+dKnowsKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+eTiles=17
+eScore=43
+eStandingArmy=26
+eStars=64
+eCityCount=1
+eKnowsKingLocation=False
+eDead=False
+eLeftGame=False
+eLeftGameTurn=-1
+fTiles=20
+fScore=46
+fStandingArmy=26
+fStars=65
+fCityCount=1
+fKnowsKingLocation=False
+fDead=False
+fLeftGame=False
+fLeftGameTurn=-1
+bot_target_player=-1

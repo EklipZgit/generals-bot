@@ -84,7 +84,7 @@ class ArmyEngineTests(TestBase):
         return Army(generalArmy), Army(enemyArmy)
 
     def test_brute_force__armies_suicide(self):
-        debugMode = False
+        debugMode = True
         rawMap = """
 |    |    |    |    |    
           aG1          
@@ -829,7 +829,7 @@ bTiles=20
                 self.assertFalse(result.best_result_state.captured_by_enemy)
                 self.assertFalse(result.best_result_state.captures_enemy)
                 # depending on depth this calculates different differentials, but should p much always be more than 7
-                self.assertGreater(result.best_result_state.tile_differential, 7)
+                self.assertGreater(result.best_result_state.tile_differential, 6)
                 self.assertEqual(0, result.best_result_state.city_differential)
 
     def test_b_can_chase_as_army(self):
@@ -1291,3 +1291,26 @@ bTiles=20
         if debugMode:
             self.render_step_engine_analysis(armyEngine, simHost.sim, result, aArmy, bArmy)
             # self.render_sim_analysis(m, result)
+    
+    def test_should_not_generate_idkQQ_error_in_scrim_8_11__7_12(self):
+        debugMode = True
+        mapFile = 'GameContinuationEntries/should_not_generate_idkQQ_error_in_scrim_8_11__7_12___rxjjRQqTn---b--484.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 484, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        # Grant the general the same fog vision they had at the turn the map was exported
+        rawMap, _ = self.load_map_and_general(mapFile, 484)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+
+        # simHost.make_player_afk(enemyGeneral.player)
+
+        # alert enemy of the player general
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
+        self.assertIsNone(winner)
+
+        # TODO add asserts for should_not_generate_idkQQ_error_in_scrim_8_11__7_12

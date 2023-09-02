@@ -14,7 +14,7 @@ class ArmyEngineGameTests(TestBase):
     def test_should_scrim_against_incoming_army__long_dist(self):
         debugMode = True
         mapFile = 'GameContinuationEntries/should_scrim_against_incoming_army___BlzKXZ-pn---b--238.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 238)
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 238, fill_out_tiles=True)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
@@ -29,14 +29,13 @@ class ArmyEngineGameTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=10)
-
-        # TODO add asserts for should_scrim_against_incoming_army
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=10)
+        self.assertIsNone(winner)
 
     def test_should_scrim_against_incoming_army(self):
-        debugMode = True
+        debugMode = False
         mapFile = 'GameContinuationEntries/should_scrim_against_incoming_army___b-TEST__fcb6b723-0f6d-4f85-a465-62c0f4081d7d-----241.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 241)
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 241, fill_out_tiles=True)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
@@ -51,14 +50,13 @@ class ArmyEngineGameTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=2.0)
-
-        # TODO add asserts for should_scrim_against_incoming_army
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=50)
+        self.assertIsNone(winner)
     
     def test_army_scrim_defense_should_not_avoid_kill_threat(self):
         debugMode = True
         mapFile = 'GameContinuationEntries/army_scrim_defense_should_not_avoid_kill_threat___rgNPA7Zan---b--388.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 388)
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 388, fill_out_tiles=True)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
@@ -82,7 +80,7 @@ class ArmyEngineGameTests(TestBase):
     def test_army_scrim_defense_should_still_save_out_of_range(self):
         debugMode = True
         mapFile = 'GameContinuationEntries/army_scrim_defense_should_not_avoid_kill_threat___rgNPA7Zan__Modified_range.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 389)
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 389, fill_out_tiles=True)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
@@ -103,7 +101,7 @@ class ArmyEngineGameTests(TestBase):
     def test_should_intercept_correctly(self):
         debugMode = True
         mapFile = 'GameContinuationEntries/should_intercept_correctly___BegNpvZT3---a--246.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 246)
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 246, fill_out_tiles=True)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
@@ -125,7 +123,7 @@ class ArmyEngineGameTests(TestBase):
     def test_should_not_cycle_sideways(self):
         debugMode = True
         mapFile = 'GameContinuationEntries/should_not_cycle_sideways___rlgSxdZ62---b--423.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 423)
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 423, fill_out_tiles=True)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
@@ -147,7 +145,7 @@ class ArmyEngineGameTests(TestBase):
     def test_should_not_let_general_die_scrim_path(self):
         debugMode = True
         mapFile = 'GameContinuationEntries/should_not_let_general_die_scrim_path___HeTqrYFT3---a--740.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 740, fill_out_tiles=True)
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 740, fill_out_tiles=True, fill_out_tiles=True)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
@@ -168,7 +166,7 @@ class ArmyEngineGameTests(TestBase):
     def test_should_not_let_general_die_scrim_path__turn_before(self):
         debugMode = True
         mapFile = 'GameContinuationEntries/should_not_let_general_die_scrim_path__turn_before___HeTqrYFT3---a--739.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 739, fill_out_tiles=True)
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 739, fill_out_tiles=True, fill_out_tiles=True)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 

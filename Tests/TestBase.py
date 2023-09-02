@@ -5,6 +5,7 @@ import unittest
 
 import BotHost
 import EarlyExpandUtils
+import GatherUtils
 import SearchUtils
 from ArmyEngine import ArmySimResult
 from DataModels import Move
@@ -270,11 +271,13 @@ class TestBase(unittest.TestCase):
     def disable_search_time_limits_and_enable_debug_asserts(self):
         SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING = True
         EarlyExpandUtils.DEBUG_ASSERTS = True
+        GatherUtils.USE_DEBUG_ASSERTS = True
         BotHost.FORCE_NO_VIEWER = False
 
     def enable_search_time_limits_and_disable_debug_asserts(self):
         SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING = False
         EarlyExpandUtils.DEBUG_ASSERTS = False
+        GatherUtils.USE_DEBUG_ASSERTS = False
         BotHost.FORCE_NO_VIEWER = False
 
     def reset_map_to_just_generals(self, map: MapBase, turn: int = 16):
@@ -502,7 +505,7 @@ class TestBase(unittest.TestCase):
             capturedWithinLastTurns: int = 15,
             requireCountCapturedInWindow: int = 10):
         countCaptured = SearchUtils.Counter(0)
-        map = simHost.sim.players[player].map
+        map = simHost.sim.sim_map
         sourceTile = map.GetTile(x, y)
 
         def countFunc(tile: Tile):
@@ -621,11 +624,13 @@ class TestBase(unittest.TestCase):
         if enemyGeneralTargetScore is not None and countScoreEnemy.value > enemyGeneralTargetScore:
             raise AssertionError(f"countScoreEnemy.value {countScoreEnemy.value} > enemyGeneralTargetScore {enemyGeneralTargetScore}. Have to implement reducing the army on non-visible tiles from the snapshot here")
 
-        while enemyGeneralTargetScore is not None and countScoreEnemy.value < enemyGeneralTargetScore:
+        iter = 0
+        while enemyGeneralTargetScore is not None and countScoreEnemy.value < enemyGeneralTargetScore and iter < 100:
             for tile in newTiles:
                 if tile.player == enemyGeneral.player and countScoreEnemy.value < enemyGeneralTargetScore:
                     countScoreEnemy.add(1)
                     tile.army += 1
+            iter += 1
 
         while generalTargetScore is not None and countScoreGeneral.value < generalTargetScore:
             for tile in map.get_all_tiles():

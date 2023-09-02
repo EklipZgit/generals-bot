@@ -1,0 +1,44 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                    M                        M    M              M    M    M
+                                   M         M         M              M         M
+     M    M                        M         M    M         M         M    M
+M                                       M                   M         M                        M
+                                             M         M    M         M
+     M         M    M         M                                  M                   M         M
+                                                                 b2                       M
+               M         b2   b2   b2   b2   b2                  b2                       M
+     M    M    M              M    M         b2   b2   b2   b2   b2        M              M
+               M              M    M    M              M    b2   b2                            M
+M                        M              M         M    b2   b2   b2                            M
+                         M                        M    b2   b2   b2
+                                             M         b2   bG3  b2                            M
+                              M              M         b2   b2        M                        M
+                    M    M                                                 M    M
+                                                       M         M         M                   M
+               M                                  M
+     M         M    M    M
+M                   M                                                 M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=2,10
+turn=50
+bot_player_index=1
+aTiles=22
+aScore=48
+aStandingArmy=26
+aStars=51
+aCityCount=1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=25
+bScore=51
+bStandingArmy=26
+bStars=53
+bCityCount=1
+bGeneral=12,12
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=-1

@@ -428,11 +428,11 @@ class EarlyExpandUtilsTests(TestBase):
             turn=turn,
             prune_below=0,
             allow_wasted_moves=6,
-            no_log=False)
+            no_log=True)
 
-        value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, map.turn, paths, noLog=False)
-
-        # self.render_paths(map, paths, str(value))
+        value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, map.turn, paths, noLog=True)
+        if debugMode:
+            self.render_paths(map, paths, str(value))
         self.assertEqual(25, value)
 
     def test_finds_optimal__empty_board__corner__forced_corner_combo__10_launch_should_wait_till_11(self):
@@ -654,7 +654,8 @@ class EarlyExpandUtilsTests(TestBase):
             paths.insert(0, None)
 
         value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, map.turn, paths, noLog=False)
-        # self.render_paths(map, paths, str(value))
+        if debugMode:
+            self.render_paths(map, paths, str(value))
         self.assertEqual(25, value)
 
     def test_produces_plans_as_good_or_better_than_historical(self):

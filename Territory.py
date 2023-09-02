@@ -48,14 +48,14 @@ class TerritoryClassifier():
 		it is just used to weight the tiles around it during that cycle.
 		"""
 		self.territoryMap[tile.x][tile.y] = tile.player
-		if tile.player != -1:
+		if tile.player != -1 and tile.player != self.map.player_index:
 			for movable in tile.movable:
-				if not movable.discovered:
+				if not movable.discovered and not movable.isObstacle:
 					self.territoryMap[movable.x][movable.y] = tile.player
 
 	def scan(self):
 		logging.info("Scanning map for territories, aww geez")
-		counts = new_map_matrix(self.map, lambda x,y: [0 for n in range(len(self.map.players)+1)])
+		counts = new_map_matrix(self.map, lambda x, y: [0 for n in range(len(self.map.players) + 1)])
 		startTime = time.time()
 		undiscoveredCounterDepth = 5
 		# count the number of tiles for each player within range 3 to determine whose territory this is
@@ -63,8 +63,15 @@ class TerritoryClassifier():
 		
 		# do a BFS foreach within a BFS foreach. Normal everyday stuff nbd
 		def foreach_near_updated_tiles(evaluatingTile):
+			if evaluatingTile.player != -1 and evaluatingTile.player != self.map.player_index:
+				for movable in evaluatingTile.movable:
+					if not movable.discovered and not movable.isObstacle:
+						self.territoryMap[movable.x][movable.y] = evaluatingTile.player
+						counts[evaluatingTile.x][evaluatingTile.y][evaluatingTile.player] += 3
+						counts[movable.x][movable.y][evaluatingTile.player] += 5
+
 			def countFunc(tile):
-				if tile.isMountain:
+				if tile.isObstacle:
 					return
 				
 				currentTerritory = self.territoryMap[tile.x][tile.y]
@@ -79,11 +86,11 @@ class TerritoryClassifier():
 							counts[evaluatingTile.x][evaluatingTile.y][neutralNewIndex] += 0.06
 					else:
 						# only discovered neutral tiles count, and only if we're trying to classify a neutral tile.
-						counts[evaluatingTile.x][evaluatingTile.y][neutralNewIndex] += 0.02
+						counts[evaluatingTile.x][evaluatingTile.y][neutralNewIndex] += 0.014
 				else:
 					# undiscovereds count for the evaluating tile player
 					if not tile.discovered:
-						counts[evaluatingTile.x][evaluatingTile.y][evaluatingTile.player] += 0.2
+						counts[evaluatingTile.x][evaluatingTile.y][evaluatingTile.player] += 0.25
 					else:
 						pIndex = tile.player
 						if pIndex != -1 and pIndex != self.map.player_index:
@@ -110,7 +117,6 @@ class TerritoryClassifier():
 
 			if evaluatingTile.player != maxPlayer and evaluatingTile.player != -1:
 				logging.info("Tile {} is in player {} {} territory".format(evaluatingTile.toString(), maxPlayer, userName))
-			
 
 			self.territoryMap[evaluatingTile.x][evaluatingTile.y] = maxPlayer
 		startTiles = list(self.needToUpdateAroundTiles)

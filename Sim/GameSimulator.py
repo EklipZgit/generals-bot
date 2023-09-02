@@ -9,6 +9,7 @@ from Path import Path
 from SearchUtils import count, where
 from base.bot_base import create_thread
 from base.client.map import MapBase, Tile, TILE_EMPTY, TILE_OBSTACLE, Score, TILE_FOG, TILE_MOUNTAIN, TileDelta
+from bot_ek0x45 import EklipZBot
 
 
 def generate_player_map(player_index: int, map_raw: MapBase) -> MapBase:
@@ -243,6 +244,7 @@ class GameSimulator(object):
             captured_player.tiles_lost_this_turn.add(captured_tile)
             if captured_tile in captured_player.tiles_gained_this_turn:
                 captured_player.tiles_gained_this_turn.remove(captured_tile)
+        captured_tile.turn_captured = self.turn
         capturing_player.tiles_gained_this_turn.add(captured_tile)
 
     def _execute_player_capture(self, capturer: GamePlayer, captured: GamePlayer):
@@ -436,6 +438,7 @@ class GameSimulatorHost(object):
             botHost.eklipz_bot.initialize_map_for_first_time(player.map)
             botHost.eklipz_bot.targetPlayer = (botHost.eklipz_bot.general.player + 1) % 2
             botHost.eklipz_bot.targetPlayerObj = botHost.eklipz_bot._map.players[botHost.eklipz_bot.targetPlayer]
+            # botHost.eklipz_bot.init_turn()
             botHost.make_move(player.map)
 
         # throw the initialized moves away
@@ -574,7 +577,16 @@ class GameSimulatorHost(object):
             # if we have a move queued explicitly, overwrite their move with the test-forced move.
             if len(self.move_queue[playerIndex]) > 0:
                 move = self.move_queue[playerIndex].pop(0)
-                self.sim.make_move(playerIndex, move, force=True)
+                if self.sim.sim_map.GetTile(move.source.x, move.source.y).player == playerIndex:
+                    self.sim.make_move(playerIndex, move, force=True)
+                if self.bot_hosts[playerIndex] is not None:
+                    fullArmy = self.sim.sim_map.GetTile(move.source.x, move.source.y).army
+                    move.army_moved = fullArmy - 1
+                    if move.move_half:
+                        move.army_moved = fullArmy // 2
+
+                    self.bot_hosts[playerIndex].eklipz_bot.armyTracker.lastMove = move
+                    self.bot_hosts[playerIndex].eklipz_bot.history.move_history[self.sim.turn] = [move]
 
         if run_real_time:
             elapsed = time.perf_counter() - start
@@ -606,3 +618,15 @@ class GameSimulatorHost(object):
         if winner == -1:
             winner = None
         return winner
+
+    def get_player_map(self, player: int = -1) -> MapBase:
+        if player == -1:
+            player = self.sim.sim_map.player_index
+
+        return self.sim.players[player].map
+
+    def get_bot(self, player: int = -1) -> EklipZBot:
+        if player == -1:
+            player = self.sim.sim_map.player_index
+
+        return self.bot_hosts[player].eklipz_bot

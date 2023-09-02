@@ -6,12 +6,12 @@ b2   b6   M    d1   M    d3   d3   d1   d3   M    d5   d1   d1   b1   b1   b1   
 b2   b5   M         M    d4   d3   dC1  d3   M    d3   d3   M    d2   d7   d10  d3   M    d2
 b5   b5   b5   M    d1   d1   d1   d8   d4   b5   d6   d2   M    d3   b2   b2   d2   d2   dG300M
 b4   b4   b4   b4   d8   M    b4   d5   b4   b4   M    M    d2   d1   M    d8   d2   M
-b5   M    bC36 b2   b4   M         M    b4   b4   C45  d1   d1   d1   d1                  M
-b5   M    M    bC35 M    b2   b5   M    C49  b4   d2   d2   d2   d1   d8                  M
+b5   M    bC36 b2   b4   M         M    b4   b4   C45  d1   d1   d1   d1   d-1  d-1  d-1  M
+b5   M    M    bC35 M    b2   b5   M    C49  b4   d2   d2   d2   d1   d8   d-1  d-1  d-1  M
 M    M    b3   b2   b2   b2   b2   b2   b2   b2   b2   b2   M    d3   d4   M    M    M    M    M
      b3   b3   b3   M    b2   b3   b5   b3   b4   b4   b4   b4   d4   d5   b4   d4   M    M
 M    b3   b3   b3   b3   b3   b3   M    b3   b5   b4   b4   M    M    d4   d3   M
-          M         b3   b4   b3   b5   b3   b5   b4   b4   b6        M         M
+          M         b3   b4   b3   b5   b3   b5   b4   b4   b6        M    d1   M
                               b3   b4        C45  b5   b4   M    M         M                   M
      M                   C47            M         M    b4   M         M    b4   M
 M    M                   M         M    M    M    b4   b4   b4   M    bG76 b4   b5   b5

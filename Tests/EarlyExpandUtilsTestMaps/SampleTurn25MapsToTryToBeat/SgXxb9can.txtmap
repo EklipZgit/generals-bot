@@ -1,0 +1,69 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                    M                                                                M    M    M
+               M                   M                             M
+     M                        M                   M                   M                   M    M    M
+M    M                   M                             M                   M         M
+                         M                   M    M    M                                       M
+     M         M                   M                                       M                   M
+                    M              M    M              M         M    M                             M
+          M         M                   M                             M              M
+               M    M                        M    M                                  M
+     M                        M         M              M              M    M         M    M
+M                                       M                   M         M              M
+     M                   M                   M              M              M                   M
+M                                                           M         M    M
+                    M                                       M    M              M                   M
+                                                            M    M              C46  M              M
+M         M                             M         M    M                   a2   a2             M
+M    M                                                 M    M         M    a2   aG3  a2   a2   a2   a2
+     M              M    M    M                                  M    a2   a2   a2                  a2
+                                             M    a2             M    a2   a2   a2        M         a2
+     M    M    M                                  a2   M    M         a2   M         M              a2
+M    M         M              M                   a2   a2   a2   a2   a2   M         M
+M                                                           M    M         M    M                   M
+M    M                                            M                             M
+     M         M                                                 M              M    M         M
+               M                                  M                                                 M
+                    M    M         M                   M              M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=7,16
+turn=50
+bot_player_index=0
+aTiles=25
+aScore=51
+aStandingArmy=26
+aStars=66
+aCityCount=1
+aGeneral=16,16
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=15
+bScore=41
+bStandingArmy=26
+bStars=65
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+cTiles=18
+cScore=44
+cStandingArmy=26
+cStars=67
+cCityCount=1
+cKnowsKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+dTiles=14
+dScore=40
+dStandingArmy=26
+dStars=64
+dCityCount=1
+dKnowsKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+bot_target_player=-1

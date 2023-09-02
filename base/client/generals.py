@@ -447,7 +447,8 @@ class GeneralsClient(object):
             self._map.complete = True
             self._map.result = False
         self._terminate()
-        # exit(2)  # End Program
+        time.sleep(10)
+        exit(2)  # End Program
 
     def _terminate(self):
         self._running = False

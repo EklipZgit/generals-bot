@@ -147,24 +147,20 @@ class CityAnalyzerTests(TestBase):
     def test_should_take_city_as_quick_as_possible(self):
         debugMode = True
         mapFile = 'GameContinuationEntries/should_take_city_as_quick_as_possible___HltY61xph---b--100.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 100)
+        map, general, enemyGen = self.load_map_and_generals(mapFile, 100, fill_out_tiles=True)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, 100)
         
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
-
-        # simHost.make_player_afk(enemyGeneral.player)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
         # alert enemy of the player general
-        simHost.sim.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+        simHost.sim.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGen.player)
 
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=2.0)
-
-        # TODO add asserts for should_take_city_as_quick_as_possible
+        simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=20)
     
     def test_should_not_take_city_in_middle_of_map_right_in_front_of_enemy_army_lol(self):
         debugMode = True
@@ -206,7 +202,7 @@ class CityAnalyzerTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=450)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=45)
         self.assertIsNone(winner)
         badCity = self.get_player_tile(13,5, simHost.sim, general.player)
         self.assertEqual(-1, badCity.player)

@@ -1,0 +1,45 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                                                  M              M    M
+     M                        M                                       M
+     M                             M                   M
+                    M
+                                   M                                                 M
+               M                                                                     M
+M                                                           M              M
+M    M         M    M                                  M         M                   M
+M              M         M              M                   M    M         M    M
+                    M              M    M    M                        M    M
+M    M                        M                   M         a2
+     M              M         M                        M    a2        M
+                                                  a2   a2   a2        M    M    M
+     M              M    C49  M    M    M         a2                  M         M
+M                        C48  aG5  a2        M    a2   M    M    M
+M    M              M         M    a2   a2   a2   a2   M              M
+               M    M         a2   a2             M                   M
+     M    M              a3   a2   a2   a2   a2                  M         M
+                              M         M    a2   a2             M    M         M
+     M    M         M         M                                            M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=7,5
+turn=50
+bot_player_index=0
+aTiles=22
+aScore=48
+aStandingArmy=26
+aStars=52
+aCityCount=1
+aGeneral=6,14
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=24
+bScore=50
+bStandingArmy=26
+bStars=51
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=-1

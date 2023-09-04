@@ -185,14 +185,10 @@ function Create-TestContinuingGameFrom {
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, $turn)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
-        # simHost.make_player_afk(enemyGeneral.player)
-
-        # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()

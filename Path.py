@@ -157,7 +157,9 @@ class Path(object):
             self,
             forPlayer: int,
             negativeTiles: None | typing.Set[Tile] | typing.Dict[Tile, typing.Any] = None,
-            ignoreNonPlayerArmy: bool = False
+            ignoreNonPlayerArmy: bool = False,
+            ignoreIncrement: bool = False,
+            incrementBackwards: bool = False
     ) -> int:
         # have to offset the first [val - 1] I guess since the first tile didn't get moved to
         val = 1
@@ -168,12 +170,18 @@ class Path(object):
             if negativeTiles is None or tile not in negativeTiles:
                 if tile.player == forPlayer:
                     val += tile.army
-                    if tile.isCity or tile.isGeneral:
-                        val += (i - 1) // 2
+                    if (tile.isCity or tile.isGeneral) and not ignoreIncrement:
+                        incVal = (i - 1)
+                        if incrementBackwards:
+                            incVal = self.length - incVal
+                        val += incVal // 2
                 elif not ignoreNonPlayerArmy:
                     val -= tile.army
-                    if tile.isCity or tile.isGeneral and tile.player != -1:
-                        val -= (i - 1) // 2
+                    if (tile.isCity or tile.isGeneral) and tile.player != -1 and not ignoreIncrement:
+                        incVal = (i - 1)
+                        if incrementBackwards:
+                            incVal = self.length - incVal
+                        val -= incVal // 2
 
             if not node.move_half:
                 val = val - 1

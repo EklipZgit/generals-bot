@@ -155,7 +155,7 @@ class GatherTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
         # Grant the general the same fog vision they had at the turn the map was exported
         # simHost.make_player_afk(enemyGeneral.player)
@@ -192,7 +192,7 @@ class GatherTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
         # Grant the general the same fog vision they had at the turn the map was exported
         # simHost.make_player_afk(enemyGeneral.player)
@@ -250,7 +250,7 @@ class GatherTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
         # Grant the general the same fog vision they had at the turn the map was exported
         # simHost.make_player_afk(enemyGeneral.player)
@@ -313,7 +313,7 @@ class GatherTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
         # Grant the general the same fog vision they had at the turn the map was exported
         # simHost.make_player_afk(enemyGeneral.player)
@@ -378,10 +378,12 @@ class GatherTests(TestBase):
                 simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
                 simHost.reveal_player_general(enemyGeneral.player, general.player, hidden=True)
 
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.31, turns=80)
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.010, turns=80)
                 self.assertEqual(map.player_index, winner)
+                cappedTile = map.GetTile(18, 5)
+                self.assertGreater(cappedTile.army, 440, "should not have dropped the cities at the leaves during the gather phase.")
                 self.assertNoRepetition(simHost, minForRepetition=1, msg="should not re-gather cities or explore inefficiently. There should be zero excuse for ANY tile to be move source more than once in this sim.")
-    
+
     def test_random_large_gather_test(self):
         debugMode = True
         mapFile = 'GameContinuationEntries/random_large_gather_test___reOqoXEp2---g--864.txtmap'
@@ -392,7 +394,7 @@ class GatherTests(TestBase):
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, 864)
         
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
         # simHost.make_player_afk(enemyGeneral.player)
 
@@ -477,7 +479,7 @@ b1   b1   b1   b1   b1   b1   bG1
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, 321)
 
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
         # simHost.make_player_afk(enemyGeneral.player)
 
@@ -640,14 +642,14 @@ a2   a2   a2   a23  a15  b1   b1   b1
 a2   a3   a2   a3   b1   b1   b1   b1  
 a2   a2   a1   b1   b1   b1   b1   b1  
 a2   a2   b1   b1   b1   b2   b2   b2  
-a1   b1   b1   b1   b1   b2   bG3  b2
+a1   b1   b1   b1   b1   b2   bG70 b2
 |    |    |    |    | 
 bot_player_index=0
 """
         cases = [
+            (3, 4),
             (1, 1),
             (2, 2),
-            (3, 4),
             (4, 4),
             (5, 5),
             (6, 6),
@@ -700,11 +702,11 @@ bot_player_index=0
             (5, 2)
         ]
 
-        debugMode = True
+        debugMode = False
 
         for depth, expectedGather in cases:
             if depth > 6:
-                debugMode = True
+                debugMode = False
             for targetsAreEnemy in targetsAreEnemyCases:
                 for useTrueGatherVal in trueValCases:
                     for incNegative in incNegCases:
@@ -725,8 +727,8 @@ bot_player_index=0
                                 targetsAreEnemy=targetsAreEnemy,
                                 testTiming=False,
                                 debugMode=debugMode,
-                                incGreedy=False,
-                                incRecurse=False,
+                                # incGreedy=False,
+                                # incRecurse=False,
                             )
 
     def test_gather__adversarial_far_tiles_to_gather(self):
@@ -805,7 +807,7 @@ bot_player_index=0
 
         for depth, expectedGather in cases:
             if depth > 24:
-                debugMode = True
+                debugMode = False
             for targetsAreEnemy in targetsAreEnemyCases:
                 with self.subTest(depth=depth, expectedGather=expectedGather, targetsAreEnemy=targetsAreEnemy):
                     self.run_adversarial_gather_test_all_algorithms(
@@ -866,18 +868,18 @@ bot_player_index=0
             (5, 5),
             (6, 6),
             (7, 7),
-            (9, 17 - 4),  # our 5 and 10
-            (10, 26 - 4),  # grab the 23 on 3,6 in place of the 11s
-            (11, 40 - 4),
-            (12, 59 - 4),  # 61 poss
-            (13, 63 - 4),  # 65 poss
-            (14, 67 - 4),  # 69 poss
-            (15, 83 - 4),  # 83 if you switch to right side gather
-            (16, 83 - 4),  #
-            (17, 87 - 4),  #
-            (18, 92 - 4),
-            (19, 106 - 4),
-            (20, 126 - 4),
+            (9, 17 - 2),  # our 5 and 10
+            (10, 26 - 2),  # grab the 23 on 3,6 in place of the 11s
+            (11, 40 - 2),
+            (12, 59 - 2),  # 61 poss
+            (13, 63 - 2),  # 65 poss
+            (14, 67 - 2),  # 69 poss
+            (15, 83 - 2),  # 83 if you switch to right side gather
+            (16, 83 - 2),  #
+            (17, 87 - 2),  #
+            (18, 92 - 2),
+            (19, 106 - 2),
+            (20, 126 - 2),
             # for these higher ones, iterative produces two branches.
             # Need to implement a mid-tree disconnect-prune-reconnect approach to have it iteratively build a maximum connection in the tree
             (21, 135 - 4),

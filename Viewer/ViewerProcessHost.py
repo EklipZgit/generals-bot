@@ -8,8 +8,6 @@ import multiprocessing as mp
 from multiprocessing.managers import SyncManager
 from multiprocessing.process import BaseProcess
 
-import TestPickle
-from PerformanceTimer import PerformanceTimer
 from ViewInfo import ViewInfo
 from base.client.map import MapBase
 
@@ -98,8 +96,8 @@ class ViewerHost(object):
 
             self._update_queue.put(obj)
         except BrokenPipeError as ex:
-            if ex.errno == 232:
-                logging.info('multi processing is shutting down, got a BrokenPipeError from the viewer')
+            if ex.winerror == 232:
+                logging.info('multi processing is shutting down, got a BrokenPipeError from the viewer, unable to send (final?) update to viewer.')
             else:
                 logging.info(f'outer update publish catch, error: ')
                 logging.info(traceback.format_exc())

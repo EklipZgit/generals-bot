@@ -7,6 +7,7 @@
 import os
 import queue
 import sys
+import time
 import traceback
 import typing
 from multiprocessing import Queue
@@ -283,7 +284,7 @@ class GeneralsViewer(object):
         termSec = 350
         while not self._receivedUpdate:  # Wait for first update
             try:
-                viewInfo, map, isComplete = self._update_queue.get(block=True, timeout=5.0)
+                viewInfo, map, isComplete = self._update_queue.get(block=True, timeout=15.0)
                 if viewInfo is not None:
                     self._receivedUpdate = True
                     self.updateGrid(viewInfo, map)
@@ -291,12 +292,15 @@ class GeneralsViewer(object):
                     self.last_update_received = time.perf_counter()
             except queue.Empty:
                 elapsed = time.perf_counter() - self.last_update_received
+                logging.info(f'waiting for update...... {elapsed:.3f} / {termSec} sec')
                 # TODO add a server ping callback here so while we're waiting in a lobby for a while we can keep the viewer thread alive
                 if elapsed > termSec:
                     logging.info(f'GeneralsViewer zombied with no game start, self-terminating after {termSec} seconds')
-                    self._event_queue.put(False)
+                    time.sleep(1.0)
+                    self.send_killed_event()
                     self._killed = True
                     self._receivedUpdate = True
+                    time.sleep(1.0)
                     return
                 pass
 
@@ -343,7 +347,7 @@ class GeneralsViewer(object):
                 if elapsed > 60.0:
                     logging.info(f'GeneralsViewer zombied, self-terminating after 10 seconds')
                     done = True
-                    self._event_queue.put(False)
+                    self.send_killed_event()
                 pass
             except BrokenPipeError:
                 logging.info('pipe died')
@@ -367,7 +371,7 @@ class GeneralsViewer(object):
                     print("Click ", pos, "Grid coordinates: ", row, column)
 
         logging.info(f'Pygame closed in GeneralsViewer, sending closedByUser {closedByUser} back to main threads')
-        self._event_queue.put(closedByUser)
+        self.send_closed_event(closedByUser)
         logging.info('Pygame closed in GeneralsViewer, exiting')
         time.sleep(1.0)
         pygame.quit()  # Done.  Quit pygame.
@@ -1122,6 +1126,12 @@ class GeneralsViewer(object):
 
     def save_image(self):
         pygame.image.save(self._screen, "{}\\{}.png".format(self.logDirectory, self._map.turn))
+
+    def send_killed_event(self):
+        self.send_closed_event(killedByUserClose=False)
+
+    def send_closed_event(self, killedByUserClose: bool):
+        self._event_queue.put(killedByUserClose)
 
 
 def rescale_color(

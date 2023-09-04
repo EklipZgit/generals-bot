@@ -707,7 +707,7 @@ class ArmyEngine(object):
         nextBoardState.friendly_move = frMove
         nextBoardState.enemy_move = enMove
 
-        if self.player_had_priority(self.friendly_player, nextBoardState.remaining_cycle_turns):
+        if MapBase.player_had_priority(self.friendly_player, nextBoardState.remaining_cycle_turns):
             self.execute(nextBoardState, frMove, self.friendly_player, self.enemy_player)
             if not nextBoardState.captures_enemy:
                 self.execute(nextBoardState, enMove, self.enemy_player, self.friendly_player)
@@ -884,7 +884,7 @@ class ArmyEngine(object):
 
         if boardState.captured_by_enemy and boardState.captures_enemy:
             # see who wins the race
-            if ArmyEngine.player_had_priority(self.friendly_player, boardState.remaining_cycle_turns + closestFrThreat):
+            if MapBase.player_had_priority(self.friendly_player, boardState.remaining_cycle_turns + closestFrThreat):
                 boardState.captured_by_enemy = False
             else:
                 boardState.captures_enemy = False
@@ -995,16 +995,6 @@ class ArmyEngine(object):
                 payoffRow.append(str(payoffs[frIdx][enIdx].best_result_state).ljust(colWidth))
 
             logging.info(f'{str(frMove).rjust(colWidth - 2)}  {"".join(payoffRow)}')
-
-    @staticmethod
-    def player_had_priority(player: int, turn: int):
-        """Whether the player HAD priority on the current turns move that they sent last turn"""
-        return player & 1 != turn & 1
-
-    @staticmethod
-    def player_has_priority(player: int, turn: int):
-        """Whether the player WILL HAVE priority on the move they are about to make on current turn"""
-        return player & 1 == turn & 1
 
     def are_tiles_adjacent(self, saveTile: Tile | None, threatTile: Tile | None):
         if threatTile is not None and saveTile is not None and threatTile in saveTile.movable:

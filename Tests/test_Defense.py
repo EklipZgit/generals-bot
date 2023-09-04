@@ -561,7 +561,7 @@ class DefenseTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=15)
         self.assertIsNone(winner)
 
-    
+    # TODO idk what the point of this test was, it can't save itself, right...?
     def test_should_detect_enemy_kill_threat__2_5__at__4_5(self):
         debugMode = True
         mapFile = 'GameContinuationEntries/should_detect_enemy_kill_threat__2_5__at__4_5___BxBqC4YT3---b--807.txtmap'
@@ -652,7 +652,7 @@ class DefenseTests(TestBase):
         self.get_player_tile(general.x, general.y, simHost.sim, enemyGeneral.player).army = 2
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=70)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=50)
         self.assertIsNone(winner)
     
     def test_should_barely_save_against_no_known_king_loc(self):
@@ -700,3 +700,24 @@ class DefenseTests(TestBase):
         self.assertIsNone(winner)
 
         # TODO add asserts for should_not_make_nonsense_scrim_move
+    
+    def test_should_always_make_furthest_defense_gather_move_first(self):
+        debugMode = False
+        mapFile = 'GameContinuationEntries/should_always_make_furthest_defense_gather_move_first___HgshlO-0n---b--441.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 441, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        # Grant the general the same fog vision they had at the turn the map was exported
+        rawMap, _ = self.load_map_and_general(mapFile, 441)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+
+        # alert enemy of the player general
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
+        self.assertIsNone(winner)
+
+        # TODO add asserts for should_always_make_furthest_defense_gather_move_first

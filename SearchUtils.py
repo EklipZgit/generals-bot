@@ -554,7 +554,9 @@ def breadth_first_dynamic(
     # 	if (node != None):
     # 		dist -= 1
     # 		path = PathNode(node, path, army, dist, -1, None)
-    pathObject.calculate_value(searchingPlayer)
+    pathObject.calculate_value(
+        searchingPlayer,
+        incrementBackwards=incrementBackward)
     logging.info(
         f"DYNAMIC BFS FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}\n   {pathObject.toString()}")
     return pathObject
@@ -586,7 +588,8 @@ def breadth_first_dynamic_max(
         maxIterations: int = INF,
         allowDoubleBacks=False,
         includePath=False,
-        ignoreNonPlayerArmy: bool = False
+        ignoreNonPlayerArmy: bool = False,
+        ignoreIncrement: bool = True
 ):
     '''
     @param map:
@@ -614,6 +617,7 @@ def breadth_first_dynamic_max(
     @param allowDoubleBacks:
     @param includePath:  if True, all the functions take a path object param as third tuple entry
     @param ignoreNonPlayerArmy: if True, the paths returned will be calculated on the basis of just the searching players army and ignore enemy (or neutral city!) army they pass through.
+    @param ignoreIncrement: if True, do not have paths returned include the city increment in their path calculation for any cities or generals in the path.
     @return:
 
     # make sure to initialize the initial base values and account for first priorityObject being None.
@@ -840,9 +844,19 @@ def breadth_first_dynamic_max(
     # 		dist -= 1
     # 		path = PathNode(node, path, army, dist, -1, None)
     if ignoreStartTile:
-        pathObject.calculate_value(searchingPlayer, negativeTiles=startTiles, ignoreNonPlayerArmy=ignoreNonPlayerArmy)
+        pathObject.calculate_value(
+            searchingPlayer,
+            negativeTiles=negativeTiles.union(startTiles),
+            ignoreNonPlayerArmy=ignoreNonPlayerArmy,
+            incrementBackwards=incrementBackward,
+            ignoreIncrement=ignoreIncrement)
     else:
-        pathObject.calculate_value(searchingPlayer, ignoreNonPlayerArmy=ignoreNonPlayerArmy)
+        pathObject.calculate_value(
+            searchingPlayer,
+            negativeTiles=negativeTiles,
+            ignoreNonPlayerArmy=ignoreNonPlayerArmy,
+            incrementBackwards=incrementBackward,
+            ignoreIncrement=ignoreIncrement)
     if pathObject.length == 0:
         if not noLog:
             logging.info(
@@ -883,7 +897,8 @@ def breadth_first_dynamic_max_per_tile(
         maxIterations: int = INF,
         allowDoubleBacks=False,
         includePath=False,
-        ignoreNonPlayerArmy: bool = False
+        ignoreNonPlayerArmy: bool = False,
+        ignoreIncrement: bool = True
 ):
     '''
     Keeps the max path from each of the start tiles as output. Since we force use a global visited set, the paths returned will never overlap each other.
@@ -911,6 +926,7 @@ def breadth_first_dynamic_max_per_tile(
     @param allowDoubleBacks:
     @param includePath:  if True, all the functions take a path object param as third tuple entry
     @param ignoreNonPlayerArmy: if True, the paths returned will be calculated on the basis of just the searching players army and ignore enemy (or neutral city!) army they pass through.
+    @param ignoreIncrement: if True, do not have paths returned include the city increment in their path calculation for any cities or generals in the path.
     @return:
 
     # make sure to initialize the initial base values and account for first priorityObject being None.
@@ -1113,6 +1129,7 @@ def breadth_first_dynamic_max_per_tile(
     if foundDist >= 1000:
         return {}
 
+    negWithStart = negativeTiles.union(startTiles)
     maxPaths: typing.Dict[Tile, Path] = {}
     for startTile in maxValues.keys():
         tile = endNodes[startTile]
@@ -1134,12 +1151,17 @@ def breadth_first_dynamic_max_per_tile(
         if ignoreStartTile:
             pathObject.calculate_value(
                 searchingPlayer,
-                negativeTiles=startTiles,
-                ignoreNonPlayerArmy=ignoreNonPlayerArmy)
+                negativeTiles=negWithStart,
+                ignoreNonPlayerArmy=ignoreNonPlayerArmy,
+                incrementBackwards=incrementBackward,
+                ignoreIncrement=ignoreIncrement)
         else:
             pathObject.calculate_value(
                 searchingPlayer,
-                ignoreNonPlayerArmy=ignoreNonPlayerArmy)
+                negativeTiles=negativeTiles,
+                ignoreNonPlayerArmy=ignoreNonPlayerArmy,
+                incrementBackwards=incrementBackward,
+                ignoreIncrement=ignoreIncrement)
 
         if pathObject.length == 0:
             if not noLog:
@@ -1177,7 +1199,8 @@ def breadth_first_dynamic_max_per_tile_per_distance(
         maxIterations: int = INF,
         allowDoubleBacks=False,
         includePath=False,
-        ignoreNonPlayerArmy: bool = False
+        ignoreNonPlayerArmy: bool = False,
+        ignoreIncrement: bool = True
 ):
     '''
     Keeps the max path from each of the start tiles as output. Since we force use a global visited set, the paths returned will never overlap each other.
@@ -1206,6 +1229,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
     @param allowDoubleBacks:
     @param includePath:  if True, all the functions take a path object param as third tuple entry
     @param ignoreNonPlayerArmy: if True, the paths returned will be calculated on the basis of just the searching players army and ignore enemy (or neutral city!) army they pass through.
+    @param ignoreIncrement: if True, do not have paths returned include the city increment in their path calculation for any cities or generals in the path.
     @return:
 
     # make sure to initialize the initial base values and account for first priorityObject being None.
@@ -1416,6 +1440,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
         return {}
 
     maxPaths: typing.Dict[Tile, typing.List[Path]] = {}
+    negWithStart = negativeTiles.union(startTiles)
     for startTile in maxValuesTMP.keys():
         pathListForTile = []
         for dist in maxValuesTMP[startTile].keys():
@@ -1444,12 +1469,17 @@ def breadth_first_dynamic_max_per_tile_per_distance(
             if ignoreStartTile:
                 pathObject.calculate_value(
                     searchingPlayer,
-                    negativeTiles=startTiles,
-                    ignoreNonPlayerArmy=ignoreNonPlayerArmy)
+                    negativeTiles=negWithStart,
+                    ignoreNonPlayerArmy=ignoreNonPlayerArmy,
+                    incrementBackwards=incrementBackward,
+                    ignoreIncrement=ignoreIncrement)
             else:
                 pathObject.calculate_value(
                     searchingPlayer,
-                    ignoreNonPlayerArmy=ignoreNonPlayerArmy)
+                    negativeTiles=negativeTiles,
+                    ignoreNonPlayerArmy=ignoreNonPlayerArmy,
+                    incrementBackwards=incrementBackward,
+                    ignoreIncrement=ignoreIncrement)
 
             if pathObject.length == 0:
                 if not noLog:
@@ -1620,7 +1650,7 @@ def bidirectional_breadth_first_dynamic(
                 frontier.put((nextVal, newDist, next, current))
 
     logging.info(
-        f"BFS-FIND ITERATIONS {iter}, DURATION: {time.time() - start:.3f}, DEPTH: {depthEvaluated}")
+        f"BI-DIR BFS-FIND ITERATIONS {iter}, DURATION: {time.time() - start:.3f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         return None
 
@@ -1649,9 +1679,9 @@ def bidirectional_breadth_first_dynamic(
     # 	if (node != None):
     # 		dist -= 1
     # 		path = PathNode(node, path, army, dist, -1, None)
-    pathObject.calculate_value(searchingPlayer)
+    pathObject.calculate_value(searchingPlayer, incrementBackwards=incrementBackward)
     logging.info(
-        f"DYNAMIC BFS FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}\n   {pathObject.toString()}")
+        f"BI-DIR DYNAMIC BFS FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}\n   {pathObject.toString()}")
     return pathObject
 
 

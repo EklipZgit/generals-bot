@@ -388,6 +388,8 @@ class GameSimulatorHost(object):
 
         self.bot_hosts: typing.List[BotHostBase | None] = [None for player in self.sim.players]
 
+        self._between_turns_funcs: typing.List[typing.Callable] = []
+
         self.forced_afk_players: typing.List[int] = []
         if afkPlayers is not None:
             self.forced_afk_players = afkPlayers
@@ -588,6 +590,16 @@ class GameSimulatorHost(object):
                     self.bot_hosts[playerIndex].eklipz_bot.armyTracker.lastMove = move
                     self.bot_hosts[playerIndex].eklipz_bot.history.move_history[self.sim.turn] = [move]
 
+        for func in self._between_turns_funcs:
+            try:
+                func()
+            except:
+                if run_real_time:
+                    logging.error(f'assertion failure while running live, turn {self.sim.turn}')
+                    logging.error(traceback.format_exc())
+                    time.sleep(20)
+                raise
+
         if run_real_time:
             elapsed = time.perf_counter() - start
             if elapsed < turn_time:
@@ -603,6 +615,16 @@ class GameSimulatorHost(object):
                 gameEndedByUser = True
 
         if self.sim.is_game_over() or gameEndedByUser:
+            # run these one last time
+            for func in self._between_turns_funcs:
+                try:
+                    func()
+                except:
+                    if run_real_time:
+                        logging.error(f'assertion failure while running live, turn {self.sim.turn}')
+                        logging.error(traceback.format_exc())
+                        time.sleep(20)
+                    raise
             self.sim.end_game()
             for player in self.sim.players:
                 if not player.dead:
@@ -630,3 +652,6 @@ class GameSimulatorHost(object):
             player = self.sim.sim_map.player_index
 
         return self.bot_hosts[player].eklipz_bot
+
+    def run_between_turns(self, func: typing.Callable):
+        self._between_turns_funcs.append(func)

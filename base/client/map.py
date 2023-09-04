@@ -56,6 +56,9 @@ class TileDelta(object):
         self.friendlyCaptured = False
         self.armyDelta = 0
         """
+        UNEXPLAINED army delta. So this will be 0 for a tile that was not interacted with whether army bonus, 
+        city bonus, general bonus, etc. If it matches what would be expected on a turn update, then it is 0.
+        
         Positive means friendly army was moved ON to this tile (or army bonuses happened), 
         negative means army moved off or was attacked for not full damage OR was captured by opp.
         This includes city/turn25 army bonuses, so should ALWAYS be 0 UNLESS a player interacted 
@@ -875,6 +878,16 @@ class MapBase(object):
             curTile.player = bestCandTile.player
         curTile.delta.fromTile = bestCandTile
         bestCandTile.delta.toTile = curTile
+
+    @staticmethod
+    def player_had_priority(player: int, turn: int):
+        """Whether the player HAD priority on the current turns move that they sent last turn"""
+        return player & 1 != turn & 1
+
+    @staticmethod
+    def player_has_priority(player: int, turn: int):
+        """Whether the player WILL HAVE priority on the move they are about to make on current turn"""
+        return player & 1 == turn & 1
 
 
 # Actual live server map that interacts with the crazy array patch diffs.

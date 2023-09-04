@@ -77,27 +77,14 @@ BLUE: general evaluation ACTUAL approximation
 
 
 
-4 - 25 seems passable, 17 pretty bad, 21 bad, 26 good, 29 very good, 34 great
-6 - 45 passable, 27 real bad, 32 bad, 35 borderline ok, 48 pretty good, 60 great
-8 - 91 great, 80 pretty good, 75 ok, 55 meh, 52 bad, 48 terrible
-10 - not super useful <80 bad, >95 good
+TODO:
+Expansion/Gather iterative plan.
+City Contestation and enemy army gather size predictor.
+Tile value priority matrix to board analysis.
+Fix fog army issues.
+army engine, MCST / Bound.
+Figure out why Gather is being weird and producing gathers that cyclicly add like, 3 army after a bunch of 1's to a 33 tile instead of gathering army near important stuff.
 
-
-
-
-
-HOW GATHER ITER WORKS:
-
-origStartDict = startDict.copy
-newStartDict = startDict.copy
-Build tree node lookup from startdict
-	Gather to max turns
-	put all those paths in the tree nodes
-	recalc tree values (maaaaaaaybe leaves gatherTurns 1 on empty root nodes in some situations?)
-	rootNodes = tree node lookup intersection with origStartDict
-	prune mst down to some point OR LOWER, cleans up things in tree nodes but not newStartDict (but, we haven't added anything to newStartDict yet)
-	recalc tree values again (leaves gatherTurns 1 on empty root nodes in some situations?)
-	add shit to 
 
 
 

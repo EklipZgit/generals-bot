@@ -426,7 +426,7 @@ class EklipZBot(object):
         with self.perf_timer.begin_move_event('Army Tracker Scan'):
             self.armies_moved_this_turn = []
             # the callback on armies moved will fill the list above back up during armyTracker.scan
-            self.armyTracker.scan(self._gen_distances, lastMove, self._map.turn)
+            self.armyTracker.scan(lastMove, self._map.turn)
 
         if self._map.turn == 3 or self.board_analysis.should_rescan:
             # I think reachable tiles isn't built till turn 2? so chokes aren't built properly turn 1
@@ -488,26 +488,27 @@ class EklipZBot(object):
                     cycleDuration = 50
                     gatherSplit = 35
             elif genPlayer.tileCount - countOnPath > 120 or realDist > 29:
-                cycleDuration = 100
-                gatherSplit = 65
+                # cycleDuration = 100
+                # gatherSplit = 65
+                gatherSplit = 27
             elif genPlayer.tileCount - countOnPath > 100:
                 # slightly longer gatherSplit
-                gatherSplit = 35
+                gatherSplit = 24
             elif genPlayer.tileCount - countOnPath > 85:
                 # slightly longer gatherSplit
-                gatherSplit = 30
+                gatherSplit = 23
             elif genPlayer.tileCount - countOnPath > 65:
                 # slightly longer gatherSplit
-                gatherSplit = 27
+                gatherSplit = 22
             elif genPlayer.tileCount - countOnPath > 45:
                 # slightly longer gatherSplit
-                gatherSplit = 22
+                gatherSplit = 20
             elif genPlayer.tileCount - countOnPath > 30:
                 # slightly longer gatherSplit
-                gatherSplit = 20
+                gatherSplit = 18
             elif genPlayer.tileCount - countOnPath > 21:
                 # slightly longer gatherSplit
-                gatherSplit = 18
+                gatherSplit = 16
             else:
                 gatherSplit = genPlayer.tileCount - countOnPath
                 randomVal = 0
@@ -3057,6 +3058,7 @@ class EklipZBot(object):
             # default priority func, gathers based on cityCount then distance from general
             def default_priority_func(nextTile, currentPriorityObject):
                 cityCount = distFromPlayArea = negArmy = negUnfriendlyTileCount = 0
+                # i don't think this does anything...?
                 if currentPriorityObject is not None:
                     (cityCount, negUnfriendlyTileCount, distFromPlayArea, negArmy) = currentPriorityObject
                     negArmy += 1
@@ -3100,7 +3102,6 @@ class EklipZBot(object):
             # else:
             priorityFunc = default_priority_func
 
-
         if valueFunc is None:
             # default value func, gathers based on cityCount then distance from general
             def default_value_func(currentTile, currentPriorityObject):
@@ -3121,7 +3122,7 @@ class EklipZBot(object):
                 node: TreeNode = nodeLookup[currentTile]
                 # gather the furthest from play area by
                 # because these are all negated in the priorityFunc we need to negate them here for making them 'positive' weights for value
-                return 0 - cityCount, node.trunkDistance // (cityCount + 1), 0 - negArmy  #493
+                return 0 - cityCount, node.value / max(1, node.trunkDistance), 0 - negArmy
                 return isGoodMove, 0 - cityCount, 0 - negUnfriendlyTileCount, (0 - negArmy) * distFromPlayArea, 0 - negArmy  #492
                 return isGoodMove, 0 - cityCount, 0 - negUnfriendlyTileCount, distFromPlayArea, 0 - negArmy  #492
                 return isGoodMove, 0 - cityCount, 0 - negUnfriendlyTileCount, node.trunkDistance, 0 - negArmy  #493
@@ -5177,13 +5178,21 @@ class EklipZBot(object):
                 del distDict[tail.tile]
                 tail = tail.prev
 
-        distMap = build_distance_map(self._map, [threat.path.start.tile])
+        distMap = build_distance_map(self._map, [threat.path.tail.tile])
 
         def move_closest_priority_func(nextTile, currentPriorityObject):
-            return nextTile in threat.armyAnalysis.shortestPathWay.tiles, distMap[nextTile.x][nextTile.y]
+            return (
+                nextTile in threat.armyAnalysis.shortestPathWay.tiles,
+                0 - distMap[nextTile.x][nextTile.y],
+                0 - nextTile.army
+            )
 
         def move_closest_value_func(curTile, currentPriorityObject):
-            return curTile not in threat.armyAnalysis.shortestPathWay.tiles, 0-distMap[curTile.x][curTile.y]
+            return (
+                curTile not in threat.armyAnalysis.shortestPathWay.tiles,
+                distMap[curTile.x][curTile.y],
+                curTile.army
+            )
 
         targetArmy = threat.threatValue
         if gatherMax:
@@ -5203,7 +5212,6 @@ class EklipZBot(object):
 
         return move, value, turnsUsed, gatherNodes
 
-
     def get_gather_to_threat_path_greedy(
             self,
             threat: ThreatObj,
@@ -5212,6 +5220,7 @@ class EklipZBot(object):
             shouldLog: bool = False
     ) -> typing.Tuple[None | Move, int, int, None | typing.List[TreeNode]]:
         """
+        Greedy is faster than the main knapsack version.
         returns move, valueGathered, turnsUsed
 
         @return:
@@ -5635,7 +5644,7 @@ class EklipZBot(object):
             defenseNegatives = set(threat.armyAnalysis.shortestPathWay.tiles)
 
             # gatherVal = int(threat.threatValue * 0.8)
-            with self.perf_timer.begin_move_event(f'Gathering to threat as final panic defense'):
+            with self.perf_timer.begin_move_event(f'Defense Threat Gather'):
                 move, valueGathered, turnsUsed, gatherNodes = self.get_gather_to_threat_path(threat)
             if move:
                 pruned = [node.deep_clone() for node in gatherNodes]
@@ -5675,15 +5684,15 @@ class EklipZBot(object):
                         threat.turns - 5)
                     goodInterceptCandidate = largestGatherTile.army > threatTile.army - threat.turns * 2 and largestGatherTile.army > 30
                     if goodInterceptCandidate and inRangeForScrim and inRangeForScrimGen:
-                        logging.info('wtf trying army scrim :D')
-
-                        scrimMove = self.get_army_scrim_move(largestGatherTile, threatTile, friendlyHasKillThreat=False, forceKeepMove=threat.turns < 7)
+                        with self.perf_timer.begin_move_event(f'defense army scrim @ {str(threatTile)}'):
+                            scrimMove = self.get_army_scrim_move(largestGatherTile, threatTile, friendlyHasKillThreat=False, forceKeepMove=threat.turns < 7)
                         if scrimMove is not None:
                             self.targetingArmy = self.get_army_at(threatTile)
                             # already logged
                             return scrimMove, savePath
 
-                    path = self.kill_threat(threat, allowGeneral=True)
+                    with self.perf_timer.begin_move_event(f'defense kill_threat @ {str(threatTile)}'):
+                        path = self.kill_threat(threat, allowGeneral=True)
                     if path is not None:
                         self.threat_kill_path = path
                         return None, None
@@ -5890,12 +5899,7 @@ class EklipZBot(object):
             return None
 
     def get_army_at(self, tile: Tile):
-        if tile in self.armyTracker.armies:
-            return self.armyTracker.armies[tile]
-        else:
-            newArmy = Army(tile)
-            self.armyTracker.armies[tile] = newArmy
-            return newArmy
+        return self.armyTracker.get_or_create_army_at(tile)
 
     def get_army_at_x_y(self, x: int, y: int):
         tile = self._map.GetTile(x, y)

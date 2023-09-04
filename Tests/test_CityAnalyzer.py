@@ -7,7 +7,6 @@ from bot_ek0x45 import EklipZBot
 
 
 class CityAnalyzerTests(TestBase):
-
     def test_analyzes_cities__produces_expandability(self):
         map, general = self.load_map_and_general(f'WonFullMapVisionSampleMaps/Be72k28nn---b--552.txtmap', turn=5)
 
@@ -33,7 +32,6 @@ class CityAnalyzerTests(TestBase):
         self.assertEqual(map.GetTile(11,13), cityList[7][0])
         self.assertEqual(map.GetTile(7,7), cityList[8][0])
 
-
     def test_analyzes_cities__takes_city_behind_general_in_pocket(self):
         map, general = self.load_map_and_general(f'WonFullMapVisionSampleMaps/BeeYqbhU23---c--350.txtmap', turn=5)
 
@@ -55,7 +53,6 @@ class CityAnalyzerTests(TestBase):
         self.assertEqual(map.GetTile(0,9), cityList[3][0])
         self.assertEqual(map.GetTile(5,9), cityList[4][0])
 
-
     def test_analyzes_cities__takes_cities_in_line_with_agressive_pathing(self):
         map, general = self.load_map_and_general(f'WonFullMapVisionSampleMaps/BemI6cUn2---a--80.txtmap', turn=5)
 
@@ -76,7 +73,6 @@ class CityAnalyzerTests(TestBase):
         self.assertEqual(map.GetTile(7,15), cityList[2][0])
         self.assertEqual(map.GetTile(2,18), cityList[3][0])
         self.assertEqual(map.GetTile(9,13), cityList[4][0])
-
 
     def test_analyzes_cities__enemy_city_analysis_makes_sense(self):
         map, general = self.load_map_and_general(f'WonFullMapVisionSampleMaps/Be72k28nn---b--552.txtmap', turn=5)
@@ -157,7 +153,7 @@ class CityAnalyzerTests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
         # alert enemy of the player general
-        simHost.sim.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGen.player)
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGen.player)
 
         self.begin_capturing_logging()
         simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=20)
@@ -174,16 +170,14 @@ class CityAnalyzerTests(TestBase):
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
-        # simHost.make_player_afk(enemyGeneral.player)
-
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=10)
         self.assertIsNone(winner)
+        city = self.get_player_tile(11, 12, simHost.sim, general.player)
+        self.assertTrue(city.isNeutral)
 
-        # TODO add asserts for should_not_take_city_in_middle_of_map_right_in_front_of_enemy_army_lol
-    
     def test_should_never_take_city_so_far_from_play_area__should_contest_red_city_instead(self):
         debugMode = True
         mapFile = 'GameContinuationEntries/should_never_take_city_so_far_from_play_area__should_contest_red_city_instead___BlFGDfup2---b--510.txtmap'

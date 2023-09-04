@@ -130,7 +130,7 @@ bTiles=20
                     self.render_step_engine_analysis(armyEngine, sim, result, aArmy, bArmy)
 
                 # this should be +2 / -2 if we're considering no-op moves to be worth 1 economy, otherwise this is +1 -1
-                if ArmyEngine.player_has_priority(general.player, turn):
+                if MapBase.player_has_priority(general.player, turn):
                     self.assertEqual(-2, result.best_result_state.tile_differential)
                 else:
                     self.assertEqual(2, result.best_result_state.tile_differential)
@@ -181,10 +181,10 @@ bTiles=20
                 if debugMode:
                     self.render_sim_analysis(map, result)
                 # whoever has priority this turn should also have priority in 4 moves, which is when the king kill would happen
-                if ArmyEngine.player_has_priority(general.player, map.turn):
+                if MapBase.player_has_priority(general.player, map.turn):
                     self.assertTrue(result.best_result_state.captures_enemy)
                     self.assertFalse(result.best_result_state.captured_by_enemy)
-                if not ArmyEngine.player_has_priority(general.player, map.turn):
+                if not MapBase.player_has_priority(general.player, map.turn):
                     self.assertFalse(result.best_result_state.captures_enemy)
                     self.assertTrue(result.best_result_state.captured_by_enemy)
 
@@ -233,10 +233,10 @@ bTiles=20
                 if debugMode:
                     self.render_sim_analysis(map, result)
                 # whoever has priority this turn should NOT have priority in 5 moves, which is when the king kill would happen
-                if not ArmyEngine.player_has_priority(general.player, map.turn):
+                if not MapBase.player_has_priority(general.player, map.turn):
                     self.assertTrue(result.best_result_state.captures_enemy)
                     self.assertFalse(result.best_result_state.captured_by_enemy)
-                if ArmyEngine.player_has_priority(general.player, map.turn):
+                if MapBase.player_has_priority(general.player, map.turn):
                     self.assertFalse(result.best_result_state.captures_enemy)
                     self.assertTrue(result.best_result_state.captured_by_enemy)
 
@@ -509,7 +509,7 @@ bTiles=20
                 result = armyEngine.scan(4, logEvals=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
-                if not ArmyEngine.player_has_priority(enemyGen.player, turn):
+                if not MapBase.player_has_priority(enemyGen.player, turn):
                     # B should just wait to see what A does this turn, as he'll have priority next turn.
                     self.assertIsNone(result.expected_best_moves[0][1])
                 else:
@@ -670,7 +670,7 @@ bTiles=20
                 if debugMode:
                     self.render_sim_analysis(map, result)
 
-                if ArmyEngine.player_has_priority(general.player, turn):
+                if MapBase.player_has_priority(general.player, turn):
                     # then has priority next turn
                     self.assertFalse(result.best_result_state.captured_by_enemy)
                     self.assertTrue(result.best_result_state.captures_enemy)
@@ -816,7 +816,7 @@ bTiles=20
                 result = armyEngine.scan(5)
                 if debugMode:
                     self.render_sim_analysis(map, result)
-                if ArmyEngine.player_has_priority(enemyGen.player, turn):
+                if MapBase.player_has_priority(enemyGen.player, turn):
                     # B must assume A will attack and block, because A will have priority next turn.
                     self.assertIsNotNone(result.expected_best_moves[0][1])
                     self.assertEqual(map.GetTile(1, 9), result.expected_best_moves[0][1].dest)
@@ -884,7 +884,7 @@ bTiles=15
                     enMove=Move(enemyGen, t1_9)
                 )
                 simState2 = simState1
-                if not ArmyEngine.player_had_priority(enemyGen.player, map.turn + 1):
+                if not MapBase.player_had_priority(enemyGen.player, map.turn + 1):
                     simState2 = armyEngine.get_next_board_state(
                         map.turn + 2,
                         simState1,

@@ -152,10 +152,15 @@ function Create-TestContinuingGameFrom {
     $map = Get-Item $TestMapFile
     $turn = $map.BaseName
 
-    $earlyFile = Get-Item "$($map.Directory.FullName)/20.txtmap"
-    $earlyContent = $earlyFile | get-content -raw
-    $match = $earlyContent -cmatch '[a-h]G'
-    $player = $MATCHES[0].Trim('G')
+    $player = 'unk'
+    $content = $map | Get-Content
+    foreach ($line in $content)
+    {
+        if ($line -like '*bot_player_index*')
+        {
+            $player = $line.Split('=')[1].Trim()
+        }
+    }
 
     $newName = ($map.Directory.BaseName -split '---') | Select -Last 1
     $newName = "$newName---$player--$turn"
@@ -187,7 +192,7 @@ function Create-TestContinuingGameFrom {
 
         rawMap, _ = self.load_map_and_general(mapFile, $turn)
         
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 

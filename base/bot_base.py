@@ -77,7 +77,7 @@ class GeneralsClientHost(object):
                 # Perform Make Move
                 self._move_event.set()
 
-        except ValueError: # Already in match, restart    
+        except ValueError:  # Already in match, restart
             exc_type, exc_value, exc_traceback = sys.exc_info()
             lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
             logging.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
@@ -95,6 +95,7 @@ class GeneralsClientHost(object):
             logging.info("err")  # Log it or whatever here
             logging.error(''.join('!! ' + line for line in lines))  # Log it or whatever here
             self._running = False
+            self._game._terminate()
 
         logging.info("crashed out of update loop, quitting")
         # time.sleep(3)

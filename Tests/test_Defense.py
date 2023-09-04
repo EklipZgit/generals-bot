@@ -4,7 +4,7 @@ from DataModels import Move
 from Sim.GameSimulator import GameSimulator, GameSimulatorHost
 from Sim.TextMapLoader import TextMapLoader
 from TestBase import TestBase
-from base.client.map import MapBase, Tile
+from base.client.map import MapBase, Tile, TILE_MOUNTAIN
 from bot_ek0x45 import EklipZBot
 
 
@@ -53,8 +53,6 @@ class DefenseTests(TestBase):
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
-        # simHost.make_player_afk(enemyGeneral.player)
-
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
@@ -99,8 +97,6 @@ class DefenseTests(TestBase):
         rawMap, _ = self.load_map_and_general(mapFile, 527)
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
-        # simHost.make_player_afk(enemyGeneral.player)
-
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
@@ -144,8 +140,6 @@ class DefenseTests(TestBase):
         rawMap, _ = self.load_map_and_general(mapFile, 527)
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
-        # simHost.make_player_afk(enemyGeneral.player)
-
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
@@ -188,8 +182,6 @@ class DefenseTests(TestBase):
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, 527)
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-
-        # simHost.make_player_afk(enemyGeneral.player)
 
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -239,8 +231,6 @@ class DefenseTests(TestBase):
         rawMap, _ = self.load_map_and_general(mapFile, 527)
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
-        # simHost.make_player_afk(enemyGeneral.player)
-
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
@@ -288,8 +278,6 @@ class DefenseTests(TestBase):
         rawMap, _ = self.load_map_and_general(mapFile, 527)
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
-        # simHost.make_player_afk(enemyGeneral.player)
-
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
@@ -309,8 +297,6 @@ class DefenseTests(TestBase):
 
         self.begin_capturing_logging()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
-
-        # simHost.make_player_afk(enemyGeneral.player)
 
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -400,8 +386,6 @@ class DefenseTests(TestBase):
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
-        # simHost.make_player_afk(enemyGeneral.player)
-
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
@@ -443,8 +427,6 @@ class DefenseTests(TestBase):
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
-        # simHost.make_player_afk(enemyGeneral.player)
-
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
@@ -467,7 +449,7 @@ class DefenseTests(TestBase):
         self.assertNotEqual(0, len(gatherNodes))
         self.assertGreater(valueGathered, 75)
     
-    def test__should_realize_it_can_save_one_move_behind(self):
+    def test__should_realize_it_can_save__exact_move(self):
         debugMode = True
         mapFile = 'GameContinuationEntries/does_not_fail_defense___BgVc48Chn---b--792.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 792)
@@ -490,12 +472,71 @@ class DefenseTests(TestBase):
 
         viewInfo = ekBot.viewInfo
         viewInfo.gatherNodes = gatherNodes
-        if debugMode:
-            self.render_view_info(map, viewInfo, f"valueGath {valueGathered}")
 
         self.assertGreater(valueGathered, threat.threatValue)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=30)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=30)
+        self.assertIsNone(winner)
+
+    def test__should_realize_it_can_save_one_move_behind(self):
+        debugMode = True
+        mapFile = 'GameContinuationEntries/does_not_fail_defense___BgVc48Chn---b--792.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 793)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        # Grant the general the same fog vision they had at the turn the map was exported
+        rawMap, _ = self.load_map_and_general(mapFile, 793)
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '15,6->16,6->16,5->16,4->16,3->16,2->16,1->15,1')
+        simHost.queue_player_moves_str(general.player, '16,1->15,1')
+
+        ekBot = simHost.bot_hosts[general.player].eklipz_bot
+
+        threat = ekBot.dangerAnalyzer.fastestThreat
+        self.assertIsNotNone(threat)
+
+        self.begin_capturing_logging()
+        move, valueGathered, turnsUsed, gatherNodes = ekBot.get_gather_to_threat_path(threat, shouldLog=True)
+
+        viewInfo = ekBot.viewInfo
+        viewInfo.gatherNodes = gatherNodes
+
+        self.assertGreater(valueGathered, threat.threatValue)
+
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=30)
+        self.assertIsNone(winner)
+
+    def test__should_realize_it_can_save_one_move_behind__blocked_main_defense(self):
+        debugMode = True
+        mapFile = 'GameContinuationEntries/does_not_fail_defense___BgVc48Chn---b--792.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 793)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        # Grant the general the same fog vision they had at the turn the map was exported
+        rawMap, _ = self.load_map_and_general(mapFile, 793)
+        rawMap.GetTile(14, 1).army = 0
+        rawMap.GetTile(14, 1).isMountain = True
+        rawMap.GetTile(14, 1).tile = TILE_MOUNTAIN
+        rawMap.GetTile(14, 1).player = -1
+        map.GetTile(14, 1).army = 0
+        map.GetTile(14, 1).isMountain = True
+        map.GetTile(14, 1).tile = TILE_MOUNTAIN
+        map.GetTile(14, 1).player = -1
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '15,6->16,6->16,5->16,4->16,3->16,2->16,1->15,1')
+
+        ekBot = simHost.bot_hosts[general.player].eklipz_bot
+
+        threat = ekBot.dangerAnalyzer.fastestThreat
+        self.assertIsNotNone(threat)
+
+        self.begin_capturing_logging()
+
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=30)
         self.assertIsNone(winner)
 
     def test_should_detect_chase_kill_defense_with_scrim__passes_actual_threat_value_through_scrim(self):
@@ -508,14 +549,14 @@ class DefenseTests(TestBase):
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, 641)
 
+        self.begin_capturing_logging()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
-
-        # simHost.make_player_afk(enemyGeneral.player)
+        simHost.queue_player_moves_str(enemyGeneral.player, '6,2->6,1->6,0->5,0')
 
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=15)
         self.assertIsNone(winner)
 
     def test_should_detect_chase_kill_defense_with_scrim(self):
@@ -530,9 +571,8 @@ class DefenseTests(TestBase):
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, 641)
 
+        self.begin_capturing_logging()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
-
-        # simHost.make_player_afk(enemyGeneral.player)
 
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -549,11 +589,11 @@ class DefenseTests(TestBase):
 
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, 298)
-        
+
+        self.begin_capturing_logging()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         #19,15, 19,16, 20,16
         simHost.queue_player_moves_str(enemyGeneral.player, "19,15 -> 19,16 -> 20,16")
-        # simHost.make_player_afk(enemyGeneral.player)
 
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -571,10 +611,9 @@ class DefenseTests(TestBase):
 
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, 807)
-        
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
-        # simHost.make_player_afk(enemyGeneral.player)
+        self.begin_capturing_logging()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -597,8 +636,6 @@ class DefenseTests(TestBase):
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
-        # simHost.make_player_afk(enemyGeneral.player)
-
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
@@ -619,8 +656,6 @@ class DefenseTests(TestBase):
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
         simHost.queue_player_moves_str(enemyGeneral.player, '9,14->8,14->8,15->7,15->7,16->6,16->5,16->4,16')
-
-        # simHost.make_player_afk(enemyGeneral.player)
 
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -645,8 +680,6 @@ class DefenseTests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
         simHost.queue_player_moves_str(enemyGeneral.player, "9,7->9,8->9,9->9,10->9,11->9,12->9,13->8,13->7,13->7,14->7,15->7,16->7,17->7,18")
 
-        # simHost.make_player_afk(enemyGeneral.player)
-
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
         self.get_player_tile(general.x, general.y, simHost.sim, enemyGeneral.player).army = 2
@@ -668,8 +701,6 @@ class DefenseTests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
         simHost.queue_player_moves_str(enemyGeneral.player, '6,8->5,8->4,8->4,7->3,7->3,8->2,8')
 
-        # simHost.make_player_afk(enemyGeneral.player)
-
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
@@ -689,8 +720,6 @@ class DefenseTests(TestBase):
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
         simHost.queue_player_moves_str(enemyGeneral.player, '6,5->6,6->6,7->6,8->6,9->6,10->6,11->6,12->6,13')
-
-        # simHost.make_player_afk(enemyGeneral.player)
 
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)

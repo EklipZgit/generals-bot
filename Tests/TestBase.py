@@ -401,7 +401,7 @@ class TestBase(unittest.TestCase):
             viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
             time.sleep(0.1)
 
-    def assertNoRepetition(self, simHost: GameSimulatorHost, minForRepetition=3, msg="Expected no move repetition."):
+    def assertNoRepetition(self, simHost: GameSimulatorHost, minForRepetition=2, msg="Expected no move repetition."):
         moved: typing.List[typing.Dict[Tile, int]] = [{} for player in simHost.bot_hosts]
 
         for histEntry in simHost.sim.moves_history:
@@ -644,7 +644,7 @@ class TestBase(unittest.TestCase):
         scores[enemyGeneral.player] = Score(enemyGeneral.player, countScoreEnemy.value, countTilesEnemy.value, dead=False)
 
         map.update()
-        map.clear_deltas()
+        map.clear_deltas_and_score_history()
 
     def generate_enemy_general_opposite_general(self, map: MapBase, general: Tile) -> Tile:
         map.generals[general.player] = general

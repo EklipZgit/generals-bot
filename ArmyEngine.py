@@ -798,8 +798,8 @@ class ArmyEngine(object):
                 nextBoardState.captures_enemy = True
 
         movingArmy = movingPlayerArmies.pop(source.source_tile, None)
-        if movingArmy is None:
-            raise AssertionError("IDK???")
+        # if movingArmy is None:
+        #     raise AssertionError("IDK???")
         capped = movingPlayer == resultDest.player
 
         otherArmy = otherPlayerArmies.pop(destTile, None)

@@ -128,6 +128,7 @@ class Tile(object):
 
         self.army: int = army
         """Integer Army Count"""
+        # self._army: int = army
 
         self.isCity: bool = isCity
         """Boolean isCity"""
@@ -208,6 +209,15 @@ class Tile(object):
         elif value == -1 and self.army == 0 and not self.isNotPathable and not self.isCity:
             self.tile = TILE_EMPTY # this whole thing seems wrong, needs to be updated carefully with tests as the delta logic seems to rely on it...
         self._player = value
+
+    # @property
+    # def army(self) -> int:
+    #     """int army val for debugging"""
+    #     return self._army
+    #
+    # @army.setter
+    # def army(self, value):
+    #     self._army = value
 
     def __repr__(self):
         return f"({self.x:d},{self.y:d}) t{self.tile:d} a({self.army:d})"
@@ -451,6 +461,12 @@ class MapBase(object):
         self.scoreHistory: typing.List[typing.Union[None, typing.List[Score]]] = [None for i in range(50)]
         self.remainingPlayers = 0
 
+    def __repr__(self):
+        return str(self)
+
+    def __str__(self):
+        return f'p{self.player_index} t{self.turn}'
+
     @property
     def turn(self) -> int:
         return self._turn
@@ -663,7 +679,7 @@ class MapBase(object):
 
     def update_turn(self, turn: int):
         self.turn = turn
-        self.army_moved_grid = [[False for x in range(self.cols)] for y in range(self.rows)]
+        self.clear_deltas()
 
     def update_scores(self, scores: typing.List[Score]):
         """ONLY call this when simulating the game"""
@@ -696,7 +712,8 @@ class MapBase(object):
         wasVisible = curTile.visible
         wasDiscovered = curTile.discovered
         wasGeneral = curTile.isGeneral
-        self.army_moved_grid[y][x] = curTile.update(self, tile_type, tile_army, is_city, is_general)
+        maybeMoved = curTile.update(self, tile_type, tile_army, is_city, is_general)
+        self.army_moved_grid[y][x] = maybeMoved
         if curTile.delta.oldOwner != curTile.delta.newOwner:
             for eventHandler in self.notify_tile_captures:
                 eventHandler(curTile)
@@ -856,15 +873,19 @@ class MapBase(object):
         self.pathableTiles = pathableTiles
         self.reachableTiles = reachableTiles
 
-    def clear_deltas(self):
+    def clear_deltas_and_score_history(self):
         self.scoreHistory = [None for i in range(50)]
+        self.clear_deltas()
+
+    def clear_deltas(self):
         for tile in self.get_all_tiles():
             tile.delta = TileDelta()
             # Make the deltas look normal, otherwise loading a map mid-game looks to the bot like these tiles all got attacked by something on army bonus turns etc.
-            if self.is_army_bonus_turn and tile.player >= 0:
-                tile.delta.armyDelta += 1
-            if self.is_city_bonus_turn and tile.player >= 0 and (tile.isGeneral or tile.isCity):
-                tile.delta.armyDelta += 1
+            # if self.is_army_bonus_turn and tile.player >= 0:
+            #     tile.delta.armyDelta += 1
+            # if self.is_city_bonus_turn and tile.player >= 0 and (tile.isGeneral or tile.isCity):
+            #     tile.delta.armyDelta += 1
+        self.army_moved_grid = [[False for x in range(self.cols)] for y in range(self.rows)]
 
     def set_tile_moved(self, curTile, bestCandTile):
         self.army_moved_grid[bestCandTile.y][bestCandTile.x] = False
@@ -1026,6 +1047,8 @@ def evaluateTileDiffsInt(tile: Tile, candidateTile: Tile) -> int:
     # both visible
     if tile.visible:
         if candidateTile.visible:
+            if candidateTile.isMountain:
+                return -100
             return evaluateDualVisibleTileDiffs(tile, candidateTile)
         else:
             return evaluateMoveFromFog(tile, candidateTile)
@@ -1036,6 +1059,8 @@ def evaluateTileDiffsVisible(curTile) -> Tile | None:
     bestCandTile = None
     bestCandValue = 95
     for candidateTile in filter(lambda t: t.visible, curTile.movable):
+        if candidateTile.isMountain:
+            continue
         candValue = evaluateTileDiffsInt(curTile, candidateTile)
         if candValue > bestCandValue:
             bestCandValue = candValue

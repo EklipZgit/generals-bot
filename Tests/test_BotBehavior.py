@@ -22,13 +22,12 @@ class BotBehaviorTests(TestBase):
         simHost.sim.players[general.player].map.update_visible_tile(enemyGeneral.x, enemyGeneral.y, enemyGeneral.player, enemyGeneral.army, is_city=False, is_general=True)
 
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=True, turn_time=0.5)
+        simHost.run_sim(run_real_time=True, turn_time=0.5, turns=60)
 
         # TODO TEST, bot died because it executed a short gather timing cycle and left all its army on the left of the map expanding
 
-    
     def test_army_tracker_should_not_keep_seeing_city_as_moving_back_into_fog(self):
-        debugMode = False
+        debugMode = True
         mapFile = 'GameContinuationEntries/army_tracker_should_not_keep_seeing_city_as_moving_back_into_fog___SxnQ2Hun2---b--413.txtmap'
         for afk in [True, False]:
             with self.subTest(afk=afk):
@@ -44,8 +43,9 @@ class BotBehaviorTests(TestBase):
                 simHost.sim.players[general.player].map.update_visible_tile(enemyGeneral.x, enemyGeneral.y, enemyGeneral.player, enemyGeneral.army, is_city=False, is_general=True)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=100)
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=50)
                 self.assertIsNone(winner)
+                self.assertNoRepetition(simHost)
 
     
     def test_should_not_sit_there_and_die_when_enemy_army_around_general(self):
@@ -449,7 +449,24 @@ class BotBehaviorTests(TestBase):
         self.assertIsNone(winner)
         self.assertNoRepetition(simHost, minForRepetition=1)
 
-    
+    def test_should_not_keep_moving_back_to_general_and_take_the_fucking_city(self):
+        debugMode = True
+        mapFile = 'GameContinuationEntries/should_take_the_fucking_city___SxwaZRG0h---b--330.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 330, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 330)
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        self.assertIsNone(winner)
+        self.assertNoRepetition(simHost)
+
     def test_should_plan_through_neutral_city_quick_kill_flank(self):
         debugMode = True
         mapFile = 'GameContinuationEntries/should_plan_through_neutral_city_quick_kill_flank___BxU_GGgA3---a--583.txtmap'

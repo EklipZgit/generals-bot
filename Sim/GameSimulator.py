@@ -322,7 +322,7 @@ class GameSimulator(object):
 
         for player in self.players:
             if noDeltas:
-                player.map.clear_deltas()
+                player.map.clear_deltas_and_score_history()
             player.map.update()
             player.tiles_lost_this_turn = set()
             player.tiles_gained_this_turn = set()
@@ -379,6 +379,10 @@ class GameSimulator(object):
     def send_update_to_player_maps(self, noDeltas=False):
         self._update_scores()
         self._send_updates_to_player_maps(noDeltas)
+
+    def reset_player_map_deltas(self):
+        for player in self.players:
+            player.map.clear_deltas_and_score_history()
 
 
 class GameSimulatorHost(object):
@@ -445,6 +449,7 @@ class GameSimulatorHost(object):
 
         # throw the initialized moves away
         self.sim.moves = [None for move in self.sim.moves]
+        self.sim.reset_player_map_deltas()
 
     def run_sim(self, run_real_time: bool = True, turn_time: float = 0.5, turns: int = 10000) -> int | None:
         """

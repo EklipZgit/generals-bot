@@ -1,15 +1,10 @@
-import EarlyExpandUtils
-from BotHost import BotHostBase
 from DataModels import Move
 from Sim.GameSimulator import GameSimulator, GameSimulatorHost
 from TestBase import TestBase
-from ViewInfo import ViewInfo
-from base.client.map import MapBase, Tile, TILE_FOG
-from bot_ek0x45 import EklipZBot
+from base.client.map import Tile, TILE_FOG
 
 
 class GameSimulatorTests(TestBase):
-
     def test_loads_map_data_correctly_per_player(self):
         map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/242.txtmap', 242, player_index=1)
         fakeEnemyGen = map.GetTile(2, 16)
@@ -171,7 +166,7 @@ class GameSimulatorTests(TestBase):
         # simHost = GameSimulatorHost(map)
 
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=True, turn_time=2.5)
+        simHost.run_sim(run_real_time=True, turn_time=0.5)
 
 
     def test_game_simulator__correctly_updates_client_fog_of_war__robust_against_manually_tweaked_maps(self):

@@ -1,0 +1,48 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          M         M         a3   b2   b2   M    a1   a1   a1   aG4  a3
+M                             a2   a2   a2   a2   a2   a2   M    a1   M    a1
+               M         a2   M    a2   M    a2   a1   a1   a1   a1   a2   a1   a1        M    M
+     M              M    M    b2   a2   a2   a1   a1   a1   a1   a1   a1   a1   M    M
+                    M    b2   b2   M    b11  a34  M         C45  a1   a2   a1   a1   a3   M
+                         b1   b1   b1   b1   b1        M    M                   a1   a3   M    M
+               b1   b1   b1   b1   b1   b1             M              M         a1             M
+M              b2   b1   bG1  b35  M    b1                  M    a3   a3   M    a1   M         M
+     M              C48  b1   b1   b2   b2   M                   M    b1   b1   b4
+                    M    b1   b1   b1   b2   b2   M              C42  b1   M    a1   M
+          M    M         M    b1   M    b2   b2   b2   M    M    b1   b1   C45  a1   M    b2
+               M              b1   b2   C40  b2   b2   b2   b1   b1   C45  C45  a1   a1   a2
+                         C42  M    b2   b3   b2   b2   b2   b1   b1   b1   b2   M    M    a2   b3
+                    M    M         b2   b2   b2   b2   b4   b1   M    b4   b1   b2   b2   a2   b3
+M                   M                             M              b1   b1   b3   b4   a2
+                                                            M    b2                            M
+     M                                                      M    M    M    M
+     M    M         M    M         M         M                   M
+          M                             M                                       M
+     M                   M         M    M              M         M              M
+     M         M    M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=13,0
+turn=245
+bot_player_index=1
+aTiles=70
+aScore=162
+aStandingArmy=92
+aStars=0
+aCityCount=1
+aGeneral=13,0
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=75
+bScore=169
+bStandingArmy=94
+bStars=0
+bCityCount=1
+bGeneral=5,7
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=0
+bot_targeting_army=9,4

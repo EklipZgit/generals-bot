@@ -279,9 +279,8 @@ class GeneralsViewer(object):
 
         self.logDirectory = BotLogging.get_file_logging_directory(self._map.usernames[self._map.player_index], self.repId)
 
-
     def run_main_viewer_loop(self, alignTop=True, alignLeft=True):
-        termSec = 350
+        termSec = 600
         while not self._receivedUpdate:  # Wait for first update
             try:
                 viewInfo, map, isComplete = self._update_queue.get(block=True, timeout=15.0)

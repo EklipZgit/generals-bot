@@ -196,6 +196,9 @@ class ArmyTracker(object):
                 logging.info(
                     f"Moving fogged army {army.toString()} along expected path {army.expectedPath.toString()}")
                 del self.armies[army.tile]
+
+                existingArmy = self.armies.get(nextTile, None)
+
                 oldTile = army.tile
                 oldTile.army = 1
                 if self.map.is_city_bonus_turn and oldTile.isCity or oldTile.isGeneral:
@@ -208,6 +211,18 @@ class ArmyTracker(object):
                     nextTile.army = nextTile.army - army.value
                     if nextTile.army < 0:
                         nextTile.army = 0 - nextTile.army
+
+                if existingArmy is not None:
+                    if existingArmy in army.entangledArmies:
+                        logging.info(f'entangled army collided with itself, scrapping the collision-mover {str(army)} in favor of {str(existingArmy)}')
+                        self.scrap_army(existingArmy)
+                        continue
+                    elif existingArmy.player == army.player:
+                        if existingArmy.value > army.value:
+                            self.merge_armies(existingArmy, army, nextTile)
+                        else:
+                            self.merge_armies(army, existingArmy, nextTile)
+                        continue
 
                 army.update_tile(nextTile)
                 army.value = nextTile.army - 1
@@ -828,8 +843,8 @@ class ArmyTracker(object):
 
         if destDeltaMismatch:
             unexplainedDelta = expectedDestDelta - actualDestDelta
-            # if playerMoveDest.delta.oldOwner == playerMoveDest.delta.newOwner:
-            #     unexplainedDelta = 0 - unexplainedDelta
+            if playerMoveDest.delta.oldOwner == playerMoveDest.delta.newOwner:
+                unexplainedDelta = 0 - unexplainedDelta
 
             self.unaccounted_tile_diffs[self.lastMove.dest] = unexplainedDelta
             logging.info(
@@ -1048,12 +1063,12 @@ class ArmyTracker(object):
             skip: typing.Set[Tile],
             trackingArmies: typing.Dict[Tile, Army]
     ) -> bool:
-        unexplainedSourceDelta = self.unaccounted_tile_diffs.get(army.tile, 0 - army.tile.delta.armyDelta)
-        armyRealTileDelta = unexplainedSourceDelta
+        unexplainedSourceDelta = self.unaccounted_tile_diffs.get(army.tile, army.tile.delta.armyDelta)
+        armyRealTileDelta = 0 - unexplainedSourceDelta
         unexplainedAdjDelta = self.unaccounted_tile_diffs.get(adjacent, 0)
         positiveUnexplainedAdjDelta = 0 - unexplainedAdjDelta
 
-        if armyRealTileDelta > 0 and unexplainedAdjDelta - armyRealTileDelta == 0:
+        if armyRealTileDelta > 0 and abs(unexplainedAdjDelta) - abs(armyRealTileDelta) == 0:
             logging.info(
                 f"    Army probably moved from {army.toString()} to {adjacent.toString()} based on unexplainedAdjDelta {unexplainedAdjDelta} vs armyRealTileDelta {armyRealTileDelta}")
             self.unaccounted_tile_diffs.pop(army.tile, None)

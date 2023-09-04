@@ -536,6 +536,15 @@ class GameSimulatorHost(object):
         playerToGiveVision.set_map_vision(rawMap)
 
     def queue_player_moves_str(self, player: int, moves_str: str):
+        """
+        x,y->x',y'->... to represent paths.
+        double space to separate individual paths.
+        double space 'none' double space to represent no-op moves.
+        
+        @param player:
+        @param moves_str:
+        @return:
+        """
         playerObj = self.sim.players[player]
         paths = moves_str.split('  ')
         for path_str in paths:

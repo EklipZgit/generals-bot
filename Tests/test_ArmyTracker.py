@@ -117,14 +117,14 @@ class ArmyTrackerTests(TestBase):
                 simHost.queue_player_moves_str(general.player,      "5,15->6,15->7,15->8,15->9,15")
                 simHost.queue_player_moves_str(enemyGeneral.player, "12,16->11,16->10,16->10,15->9,15")
 
-                debugMode = True
-                if debugMode:
-                    self.begin_capturing_logging()
-
-                    simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player))
-                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=5)
-                    self.assertIsNone(winner)
-                    continue
+                # debugMode = True
+                # if debugMode:
+                #     self.begin_capturing_logging()
+                #
+                #     simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player))
+                #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=5)
+                #     self.assertIsNone(winner)
+                #     continue
 
                 bot = simHost.get_bot()
                 m = simHost.get_player_map()

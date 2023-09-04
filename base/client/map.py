@@ -290,7 +290,7 @@ class Tile(object):
                     # armyMovedHere = True
             elif tile == TILE_MOUNTAIN:
                 self.isMountain = True
-            elif tile >= 0:
+            elif tile >= TILE_EMPTY:
                 self._player = tile
 
             self.tile = tile

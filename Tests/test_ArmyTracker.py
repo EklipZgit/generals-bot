@@ -122,7 +122,7 @@ class ArmyTrackerTests(TestBase):
                 #     self.begin_capturing_logging()
                 #
                 #     simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player))
-                #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=5)
+                #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=6)
                 #     self.assertIsNone(winner)
                 #     continue
 
@@ -209,31 +209,39 @@ class ArmyTrackerTests(TestBase):
                 collisionTile = m.GetTile(9, 15)
                 # ok now that army comes out of the fog, COLLIDING with our generals army that is moving 8,15->9,15
                 collision = bot.armyTracker.armies[collisionTile]
-                if frArmy >= enArmy:  # >= because player wins the tiebreak in this specific cycle
+                #fr army collects 5 more than enemy army, adjust by 5
+                frCollisionArmy = frArmy + 5
+                if frCollisionArmy >= enArmy:  # >= because player wins the tiebreak in this specific cycle
                     self.assertEqual(playerArmyName, collision.name)
                     self.assertTrue(entangledCorrect.scrapped)
+                    self.assertEqual(playerArmy, collision)
                 else:
                     self.assertEqual(origName, collision.name)
+                    self.assertFalse(entangledCorrect.scrapped)
+                    self.assertEqual(entangledCorrect, collision)
 
                 self.assertEqual(origName, entangledIncorrect.name)
                 self.assertEqual(origName, entangledCorrect.name)
                 self.assertNotIn(entangledIncorrect, entangledCorrect.entangledArmies)
-                self.assertEqual(entangledCorrect, collision)
-                if collision.value > 8:
-                    self.assertFalse(collision.scrapped)
-                else:
-                    self.assertTrue(collision.scrapped)
+                self.assertFalse(collision.scrapped, "collision army should always stick around for a turn")
                 # reuses the entangled army that was resolved as the fog emergence source.
                 self.assertTrue(entangledIncorrect.scrapped)
                 self.assertNotIn(entangledIncorrect.tile, bot.armyTracker.armies)
 
                 # Also assert that when ONLY one fog resolution happened, we 100% update the fog source tile to be the enemy player and army amount.
                 self.assertNotIn(t11_16, bot.armyTracker.armies, "should have scrapped the entangled army that collided on 9,15")
-                # self.assertEqual(enemyGeneral.player, t11_16.player)
-                # army = bot.as
-                self.assertNoFogMismatches(simHost, general.player)
                 self.assertEqual(collisionTile.player, collision.player, "the player who owns the tile should be the one whose army gets left.")
+
+                simHost.execute_turn()
+                bot.init_turn()
+
+                if collision.value > 8:
+                    self.assertFalse(collision.scrapped)
+                else:
+                    self.assertTrue(collision.scrapped)
+
                 # eh, dunno how much I care about this
+                self.assertEqual(enemyGeneral.player, t11_16.player, "eh, dunno how much I care but technically we know for sure that this tile was crossed despite undiscovered, should be en player.")
                 self.assertEqual(1, t11_16.army, "eh, dunno how much I care but technically we know for sure that this tile was crossed despite undiscovered, should have army 1")
     
     def test_should_track_army_fog_island_capture(self):
@@ -527,7 +535,7 @@ class ArmyTrackerTests(TestBase):
         self.assertIsNone(winner)
     
     def test_should_not_resolve_fog_path_for_normal_move(self):
-        debugMode = True
+        debugMode = False
         mapFile = 'GameContinuationEntries/should_not_resolve_fog_path_for_normal_move___b-TEST__259fdd8d-1e8d-469c-8dbb-d1cfca2a67eb---1--245.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 245, fill_out_tiles=True)
 

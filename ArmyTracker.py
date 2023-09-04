@@ -78,7 +78,7 @@ class Army(object):
         return newDude
 
     def toString(self):
-        return f"({self.name}) {self.tile.toString()}"
+        return f"[{self.name} {self.tile.toString()} p{self.player} v{self.value}]"
 
     def __str__(self):
         return self.toString()
@@ -324,10 +324,12 @@ class ArmyTracker(object):
 
             self.try_track_army(army, skip, trackingArmies)
 
-        self.clean_up_armies()
+        self.scrap_unmoved_low_armies()
 
         for army in trackingArmies.values():
             self.armies[army.tile] = army
+
+        self.clean_up_armies()
 
     def find_visible_source(self, tile: Tile):
         if tile.delta.armyDelta == 0:
@@ -374,8 +376,7 @@ class ArmyTracker(object):
         @return:
         """
         oldTile = army.tile
-        if army.tile in self.armies:
-            del self.armies[army.tile]
+        existingArmy = self.armies.pop(army.tile, None)
         if army.visible and tile.visible or tile.delta.lostSight:
             if army.player in self.player_moves_this_turn:
                 logging.error(f'Yo, we think a player moved twice this turn...?')
@@ -383,9 +384,17 @@ class ArmyTracker(object):
             self.player_moves_this_turn.add(army.player)
 
         army.update_tile(tile)
-        trackingArmies[tile] = army
-        if army.value < 0 or (army.player != army.tile.player and army.tile.visible):
-            logging.info(f"    Army {army.toString()} scrapped for being low value or run into larger tile")
+        existingTracking = trackingArmies.get(tile, None)
+        h = ""
+        if (
+            existingTracking is None
+            or existingTracking.value < army.value
+            or existingTracking.player != tile.player
+        ):
+            trackingArmies[tile] = army
+
+        if army.value < -1 or (army.player != army.tile.player and army.tile.visible):
+            logging.info(f"    Army {army.toString()} scrapped for being negative or run into larger tile")
             self.scrap_army(army)
         if army.tile.visible and len(army.entangledArmies) > 0:
             self.resolve_entangled_armies(army)
@@ -399,15 +408,18 @@ class ArmyTracker(object):
                 oldTile.army += 1
 
         if army.player != self.map.player_index:
-            # TODO detect if enemy army is likely trying to defend
-            army.expectedPath = SearchUtils.breadth_first_find_queue(
-                self.map,
-                [army.tile],
-                goalFunc=lambda tile, army, dist: army > 0 and tile in self.player_targets,
-                maxTime=0.1,
-                maxDepth=10,
-                noNeutralCities=tile.army < 150,
-                searchingPlayer=army.player)
+            if army.scrapped:
+                army.expectedPath = None
+            else:
+                # TODO detect if enemy army is likely trying to defend
+                army.expectedPath = SearchUtils.breadth_first_find_queue(
+                    self.map,
+                    [army.tile],
+                    goalFunc=lambda tile, army, dist: army > 0 and tile in self.player_targets,
+                    maxTime=0.1,
+                    maxDepth=10,
+                    noNeutralCities=tile.army < 150,
+                    searchingPlayer=army.player)
 
         army.last_moved_turn = self.map.turn - 1
 
@@ -910,12 +922,7 @@ class ArmyTracker(object):
         ):
             # army hasn't moved
             army.update()
-            if (
-                    (army.tile.visible and army.value < self.track_threshold - 1)
-                    or (not army.tile.visible and army.value < 3)
-            ):
-                logging.info(f"  Army {army.toString()} Stopped moving. Scrapped for being low value")
-                self.scrap_army(army)
+            self.check_for_should_scrap_unmoved_army(army)
             return
 
         # army probably moved. Check adjacents for the army
@@ -1137,3 +1144,16 @@ class ArmyTracker(object):
             self.new_army_emerged(armyTile, armyEmergenceValue)
 
         return isGoodResolution
+
+    def check_for_should_scrap_unmoved_army(self, army: Army):
+        if (
+                (army.tile.visible and army.value < self.track_threshold - 1)
+                or (not army.tile.visible and army.value < self.track_threshold - 1)
+        ):
+            logging.info(f"  Army {army.toString()} Stopped moving. Scrapped for being low value")
+            self.scrap_army(army)
+
+    def scrap_unmoved_low_armies(self):
+        for army in list(self.armies.values()):
+            if army.last_moved_turn < self.map.turn - 1:
+                self.check_for_should_scrap_unmoved_army(army)

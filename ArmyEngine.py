@@ -11,265 +11,9 @@ from ArmyAnalyzer import ArmyAnalyzer
 from ArmyTracker import Army
 from BoardAnalyzer import BoardAnalyzer
 from DataModels import Move
+from Engine.Models import ArmySimState, ArmySimResult, SimTile
+from MctsLudii import MctsDUCT, Game, Context
 from base.client.map import MapBase, Tile, MapMatrix
-
-
-class SimTile(object):
-    def __init__(self, sourceTile: Tile, army: int | None = None, player: int | None = None):
-        self.source_tile = sourceTile
-        self.army = sourceTile.army if army is None else army
-        self.player = sourceTile.player if player is None else player
-
-    def __str__(self):
-        return f"[{self.source_tile.x},{self.source_tile.y} p{self.player} a{self.army}]"
-
-    def __repr__(self):
-        return str(self)
-
-
-class ArmySimState(object):
-    def __init__(
-            self,
-            remainingCycleTurns: int,
-            simTiles: typing.Dict[Tile, SimTile] | None = None,
-            friendlyLivingArmies: typing.Dict[Tile, SimTile] | None = None,
-            enemyLivingArmies: typing.Dict[Tile, SimTile] | None = None
-    ):
-        if simTiles is None:
-            simTiles = {}
-
-        if friendlyLivingArmies is None:
-            friendlyLivingArmies = {}
-
-        if enemyLivingArmies is None:
-            enemyLivingArmies = {}
-
-        self.remaining_cycle_turns: int = remainingCycleTurns
-
-        self.depth: int = 0
-
-        self.tile_differential: int = 0
-        """negative means they captured our tiles, positive means we captured theirs"""
-
-        self.city_differential: int = 0
-        """
-        negative means they have that many more cities active than us, positive means we have more. 
-        This is as of the CURRENT board state; bonuses owned is covered under the *city_control_turns fields.
-        """
-
-        self.captures_enemy: bool = False
-        """if kill on enemy general appears guaranteed"""
-
-        self.captured_by_enemy: bool = False
-        """if kill against our general appears guaranteed"""
-
-        self.can_force_repetition: bool = False
-        """if we can force a repetition in our favor"""
-
-        self.can_enemy_force_repetition: bool = False
-        """if the enemy can force a repetition in their favor"""
-
-        self.kills_all_friendly_armies: bool = False
-        """If their armies kill friendly armies with 3+ army to spare (ignoring remaining tile capture)"""
-
-        self.kills_all_enemy_armies: bool = False
-        """If our armies kill all enemy armies with 3+ army to spare (ignoring remaining tile capture)"""
-
-        self.sim_tiles: typing.Dict[Tile, SimTile] = simTiles
-        """
-        the set of tiles that have been involved in the scrim so far, tracking the current owner and army amount on them
-        """
-
-        self.controlled_city_turn_differential: int = 0
-        """
-        for cities in the scrim area, this is how many turns were controlled by a different player than the 
-        current owner at sim start. 
-        Positive means we gained city bonus overall, negative means enemy gained city bonus overall.
-        """
-
-        self.friendly_living_armies: typing.Dict[Tile, SimTile] = friendlyLivingArmies
-        """
-        Actively alive friendly armies at this point in the board state
-        """
-
-        self.enemy_living_armies: typing.Dict[Tile, SimTile] = enemyLivingArmies
-        """
-        Actively alive enemy armies at this point in the board state
-        """
-
-        self.friendly_skipped_move_count: int = 0
-        """How many times friendly has no-opped already"""
-
-        self.enemy_skipped_move_count: int = 0
-        """How many times enemy has no-opped already"""
-
-        self.friendly_move: Move | None = None
-        """Friendly move made to reach this board state"""
-
-        self.enemy_move: Move | None = None
-        """Enemy move made to reach this board state"""
-
-        self.prev_friendly_move: Move | None = None
-        """Friendly move made before the last move to reach this board state, for detecting repetitions"""
-
-        self.prev_enemy_move: Move | None = None
-        """Enemy move made before the last move to reach this board state, for detecting repetitions"""
-
-        self.repetition_count: int = 0
-
-        self.parent_board: ArmySimState | None = None
-
-    def get_child_board(self) -> ArmySimState:
-        copy = ArmySimState(self.remaining_cycle_turns - 1, self.sim_tiles.copy(), self.friendly_living_armies.copy(), self.enemy_living_armies.copy())
-        copy.tile_differential = self.tile_differential
-        copy.city_differential = self.city_differential
-        copy.captures_enemy = self.captures_enemy
-        copy.captured_by_enemy = self.captured_by_enemy
-        copy.can_force_repetition = self.can_force_repetition
-        copy.can_enemy_force_repetition = self.can_enemy_force_repetition
-        copy.kills_all_friendly_armies = self.kills_all_friendly_armies
-        copy.kills_all_enemy_armies = self.kills_all_enemy_armies
-        copy.controlled_city_turn_differential = self.controlled_city_turn_differential
-        copy.friendly_skipped_move_count = self.friendly_skipped_move_count
-        copy.enemy_skipped_move_count = self.enemy_skipped_move_count
-        copy.repetition_count = self.repetition_count
-        copy.depth = self.depth + 1
-
-        copy.prev_friendly_move = self.friendly_move
-        copy.prev_enemy_move = self.enemy_move
-        copy.parent_board = self
-
-        return copy
-
-    def get_moves_string(self):
-        frMoves = []
-        enMoves = []
-        curState = self
-        # intentionally while .parent_board isn't none to skip the top board, since it will show both moves as None
-        while curState.parent_board is not None:
-            frMoves.insert(0, curState.friendly_move)
-            enMoves.insert(0, curState.enemy_move)
-            curState = curState.parent_board
-
-        fr = f'fr: {" -> ".join([str(move.dest).ljust(5) if move is not None else "None " for move in frMoves])}'
-        en = f'en: {" -> ".join([str(move.dest).ljust(5) if move is not None else "None " for move in enMoves])}'
-
-        return f"{fr}\r\n{en}"
-
-    def __repr__(self):
-        return f'{str(self)} [{self.get_moves_string()}]'
-
-    def __str__(self):
-        pieces = [f'(d{self.depth}) {self.get_econ_value():+d}']
-
-        if self.kills_all_friendly_armies and self.kills_all_enemy_armies:
-            pieces.append(f'x ')
-        elif self.kills_all_friendly_armies:
-            pieces.append(f'x-')
-        elif self.kills_all_enemy_armies:
-            pieces.append(f'x+')
-
-        if self.can_enemy_force_repetition and self.can_force_repetition:
-            pieces.append('REP')
-        elif self.can_force_repetition:
-            pieces.append('REP+')
-        elif self.can_enemy_force_repetition:
-            pieces.append('REP-')
-
-        if self.captures_enemy:
-            pieces.append('WIN')
-
-        if self.captured_by_enemy:
-            pieces.append('LOSS')
-
-        return ' '.join(pieces)
-
-    def calculate_value(self) -> typing.Tuple:
-        econDiff = self.get_econ_value()
-        return (
-            # self.calculate_value_int(),  # todo hack...?
-            self.captures_enemy,
-            not self.captured_by_enemy,
-            # self.can_force_repetition,
-            # not self.can_enemy_force_repetition,
-            econDiff,
-            self.friendly_skipped_move_count,
-            0 - self.enemy_skipped_move_count,
-            self.kills_all_enemy_armies,
-            not self.kills_all_friendly_armies,
-        )
-
-    def calculate_value_int(self) -> int:
-        """Gets a (10x econ diff based) integer representation of the value of the board state. Used for Nashpy"""
-        econDiff = self.get_econ_value() * 10
-        if self.captures_enemy:
-            econDiff += 10000
-        if self.captured_by_enemy:
-            econDiff -= 10000
-        # skipped moves are worth 0.7 econ each
-        econDiff += self.friendly_skipped_move_count * 5
-        #enemy skipped moves are worth slightly less..? than ours?
-        econDiff -= self.enemy_skipped_move_count * 5
-
-        # if self.kills_all_enemy_armies:
-        #     econDiff += 5
-        # if self.kills_all_friendly_armies:
-        #     econDiff -= 5
-
-        return econDiff
-
-    def get_econ_value(self) -> int:
-        return (self.tile_differential
-                + 25 * self.city_differential
-                + self.controlled_city_turn_differential)  # TODO need to approximate the city differential for the scrim duration when pruning scrim?
-
-
-class ArmySimResult(object):
-    def __init__(self, cacheDepth: int = 5):
-        self.best_result_state: ArmySimState = None
-
-        self.best_result_state_depth: int = 0
-
-        self.net_economy_differential: int = 0
-
-        self.expected_best_moves: typing.List[typing.Tuple[Move, Move]] = []
-        """A list of (friendly, enemy) move tuples that the min-max best move board state is expected to take"""
-
-        self.cache_depth: int = cacheDepth
-
-        self.expected_moves_cache: ArmySimCache = None
-        """
-        A cache of the current and alternate move branches (for the enemy, since we know what 
-        move we will make we dont care about our alternates), out to cacheDepth depth, 
-        to be used on future turns to save time recalculating the full board tree from 
-        scratch every turn. If the move wasn't in cache, then we didn't think it was remotely valuable.
-        IF the opp makes a move outside this dict and our board evaluation goes down, then the analysis
-        here was poor and should be logged and tests written to predict the better opponent move next time.
-        """
-
-    def calculate_value(self) -> typing.Tuple:
-        return (self.best_result_state.calculate_value_int(), False)
-
-    def __str__(self):
-        return f'({self.net_economy_differential:+d}) {str(self.best_result_state)}'
-
-    def __repr__(self):
-        return f'{str(self)} [{self.calculate_value()}]'
-
-
-class ArmySimCache(object):
-    def __init__(
-            self,
-            friendlyMove: Move,
-            enemyMove: Move,
-            simState: ArmySimState,
-            subTreeCache: typing.Dict[Tile, ArmySimCache] | None = None
-    ):
-        self.friendly_move: Move = friendlyMove
-        self.enemy_move: Move = enemyMove
-        self.sim_state: ArmySimState = simState
-        self.move_tree_cache: typing.Dict[Tile, ArmySimCache] | None = subTreeCache
-
 
 class ArmyEngine(object):
     def __init__(
@@ -368,7 +112,8 @@ class ArmyEngine(object):
             turns: int,
             logEvals: bool = False,
             # perf_timer: PerformanceTimer | None = None,
-            noThrow: bool = False
+            noThrow: bool = False,
+            mcts: bool = False
     ) -> ArmySimResult:
         """
         Sims a number of turns and outputs what it believes to be the best move combination for players. Brute force approach, largely just for validating that any branch and bound approaches produce the correct result.
@@ -392,63 +137,22 @@ class ArmyEngine(object):
         if self.force_enemy_towards_or_parallel_to is not None:
             self._enemy_move_filter = lambda source, dest, board: self.force_enemy_towards_or_parallel_to[source] < self.force_enemy_towards_or_parallel_to[dest]
 
-        multiFriendly = len(self.friendly_armies) > 1
-        multiEnemy = len(self.enemy_armies) > 1
-
         baseBoardState = self.get_base_board_state()
         self.base_city_differential = baseBoardState.city_differential
+        baseBoardState.friendly_move_generator = self.generate_friendly_moves
+        baseBoardState.enemy_move_generator = self.generate_enemy_moves
 
         start = time.perf_counter()
-        result: ArmySimResult = self.simulate_recursive_brute_force(
-            baseBoardState,
-            self.map.turn,
-            self.map.turn + turns)
+        if not mcts:
+            result = self.execute_scan_brute_force(baseBoardState, turns, noThrow=noThrow)
 
-        ogDiff = baseBoardState.tile_differential + baseBoardState.city_differential * 25
-        afterScrimDiff = result.best_result_state.tile_differential + result.best_result_state.city_differential * 25
-        result.net_economy_differential = afterScrimDiff - ogDiff
+            duration = time.perf_counter() - start
+            logging.info(f'brute force army scrim depth {turns} complete in {duration:.3f} after iter {self.iterations} (nash {self.time_in_nash:.3f} - {self.nash_eq_iterations} eq itr, {self.time_in_nash_eq:.3f} in eq)')
+        else:
+            result = self.execute_scan_MCTS(baseBoardState, turns, noThrow=noThrow)
 
-        # build the expected move list up the tree
-        equilibriumBoard = result.best_result_state
-        # intentionally while .parent_board isn't none to skip the top board, since it will show both moves as None
-        parentFr = None
-        parentEn = None
-        curBoard = equilibriumBoard
-        boards = []
-        while curBoard is not None:
-            boards.append(curBoard)
-            curBoard = curBoard.parent_board
-
-        for curBoard in boards:
-            if curBoard.parent_board is None:
-                continue
-            curFr = curBoard.friendly_move
-            curEn = curBoard.enemy_move
-            result.expected_best_moves.insert(0, (curFr, curEn))
-            if curFr is not None:
-                if parentFr is not None:
-                    if curFr.source not in parentFr.source.movable and not multiFriendly:
-                        msg = f"yo, wtf, invalid friendly move sequence returned {str(curFr)}+{str(parentFr)}"
-                        if not noThrow:
-                            raise AssertionError(msg)
-                        else:
-                            logging.error(msg)
-                parentFr = curFr
-            if curEn is not None:
-                if parentEn is not None:
-                    if curEn.source not in parentEn.source.movable and not multiEnemy:
-                        msg = f"yo, wtf, invalid enemy move sequence returned {str(curEn)}+{str(parentEn)}"
-                        if not noThrow:
-                            raise AssertionError(msg)
-                        else:
-                            logging.error(msg)
-                parentEn = curEn
-
-        duration = time.perf_counter() - start
-        logging.info(f'brute force army scrim depth {turns} complete in {duration:.3f} after iter {self.iterations} (nash {self.time_in_nash:.3f} - {self.nash_eq_iterations} eq itr, {self.time_in_nash_eq:.3f} in eq)')
-
-        # moves are appended in reverse order, so reverse them
-        # result.expected_best_moves = [m for m in reversed(result.expected_best_moves)]
+            duration = time.perf_counter() - start
+            logging.info(f'MONTE CARLO army scrim depth {turns} complete in {duration:.3f} after iter {self.iterations}')
 
         return result
 
@@ -485,9 +189,9 @@ class ArmyEngine(object):
 
         nextTurn = currentTurn + 1
 
-        frMoves: typing.List[Move | None] = self.generate_friendly_moves(boardState)
+        frMoves: typing.List[Move | None] = boardState.generate_friendly_moves()
 
-        enMoves: typing.List[Move | None] = self.generate_enemy_moves(boardState)
+        enMoves: typing.List[Move | None] = boardState.generate_enemy_moves()
 
         payoffs: typing.List[typing.List[None | ArmySimResult]] = [[None for e in enMoves] for f in frMoves]
 
@@ -1001,179 +705,6 @@ class ArmyEngine(object):
             return True
         return False
 
-    #
-    # def scan_mcts(self):
-    #     """thiefed from https://pastebin.com/bUcRrKwF / https://www.youtube.com/watch?v=gvlO_-Fdk9w"""
-    #     ### The Monte Carlo Search Tree AI
-    #
-    #     ### 1 - It takes the current game state
-    #
-    #     ### 2 - It runs multiple random game simulations starting from this game state
-    #
-    #     ### 3 - For each simulation, the final state is evaluated by a score (higher score = better outcome)
-    #
-    #     ### 4 - It only remembers the next move of each simulation and accumulates the scores for that move
-    #
-    #     ### 5 - Finally, it returns the next move with the highest score
-    #
-    #     import random
-    #     import ast
-    #
-    #     userPlayer = 'O'
-    #     # boardSize = 3
-    #     numberOfSimulations = 200
-    #
-    #     startingPlayer = 'X'
-    #     currentPlayer = startingPlayer
-    #
-    #     def getBoardCopy(board):
-    #         boardCopy = []
-    #
-    #         for row in board:
-    #             boardCopy.append(row.copy())
-    #
-    #         return boardCopy
-    #
-    #     def hasMovesLeft(board):
-    #         for y in range(boardSize):
-    #             for x in range(boardSize):
-    #                 if board[y][x] == '.':
-    #                     return True
-    #
-    #         return False
-    #
-    #     def getNextMoves(currentBoard, player):
-    #         nextMoves = []
-    #
-    #         for y in range(boardSize):
-    #             for x in range(boardSize):
-    #                 if currentBoard[y][x] == '.':
-    #                     boardCopy = getBoardCopy(currentBoard)
-    #                     boardCopy[y][x] = player
-    #                     nextMoves.append(boardCopy)
-    #
-    #         return nextMoves
-    #
-    #     def hasWon(currentBoard, player):
-    #         winningSet = [player for _ in range(boardSize)]
-    #
-    #         for row in currentBoard:
-    #             if row == winningSet:
-    #                 return True
-    #
-    #         for y in range(len(currentBoard)):
-    #             column = [currentBoard[index][y] for index in range(boardSize)]
-    #
-    #             if column == winningSet:
-    #                 return True
-    #
-    #         diagonal1 = []
-    #         diagonal2 = []
-    #         for index in range(len(currentBoard)):
-    #             diagonal1.append(currentBoard[index][index])
-    #             diagonal2.append(currentBoard[index][boardSize - index - 1])
-    #
-    #         if diagonal1 == winningSet or diagonal2 == winningSet:
-    #             return True
-    #
-    #         return False
-    #
-    #     def getNextPlayer(currentPlayer):
-    #         if currentPlayer == 'X':
-    #             return 'O'
-    #
-    #         return 'X'
-    #
-    #     def getBestNextMove(currentBoard, currentPlayer):
-    #         evaluations = {}
-    #
-    #         for generation in range(numberOfSimulations):
-    #             player = currentPlayer
-    #             boardCopy = getBoardCopy(currentBoard)
-    #
-    #             simulationMoves = []
-    #             nextMoves = getNextMoves(boardCopy, player)
-    #
-    #             score = boardSize * boardSize
-    #
-    #             while nextMoves != []:
-    #                 roll = random.randint(1, len(nextMoves)) - 1
-    #                 boardCopy = nextMoves[roll]
-    #
-    #                 simulationMoves.append(boardCopy)
-    #
-    #                 if hasWon(boardCopy, player):
-    #                     break
-    #
-    #                 score -= 1
-    #
-    #                 player = getNextPlayer(player)
-    #                 nextMoves = getNextMoves(boardCopy, player)
-    #
-    #             firstMove = simulationMoves[0]
-    #             lastMove = simulationMoves[-1]
-    #
-    #             firstMoveKey = repr(firstMove)
-    #
-    #             if player == userPlayer and hasWon(boardCopy, player):
-    #                 score *= -1
-    #
-    #             if firstMoveKey in evaluations:
-    #                 evaluations[firstMoveKey] += score
-    #             else:
-    #                 evaluations[firstMoveKey] = score
-    #
-    #         bestMove = []
-    #         highestScore = 0
-    #         firstRound = True
-    #
-    #         for move, score in evaluations.items():
-    #             if firstRound or score > highestScore:
-    #                 highestScore = score
-    #                 bestMove = ast.literal_eval(move)
-    #                 firstRound = False
-    #
-    #         return bestMove
-    #
-    #     def printBoard(board):
-    #         firstRow = True
-    #
-    #         for index in range(boardSize):
-    #             if firstRow:
-    #                 print('  012')
-    #                 firstRow = False
-    #
-    #             print(str(index) + ' ' + ''.join(board[index]))
-    #
-    #     def getPlayerMove(board, currentPlayer):
-    #         isMoveValid = False
-    #         while isMoveValid == False:
-    #             print('')
-    #             userMove = input('X,Y? ')
-    #             userX, userY = map(int, userMove.split(','))
-    #
-    #             if board[userY][userX] == '.':
-    #                 isMoveValid = True
-    #
-    #         board[userY][userX] = currentPlayer
-    #         return board
-    #
-    #     printBoard(board)
-    #
-    #     while hasMovesLeft(board):
-    #         if currentPlayer == userPlayer:
-    #             board = getPlayerMove(board, currentPlayer)
-    #         else:
-    #             board = getBestNextMove(board, currentPlayer)
-    #
-    #         print('')
-    #         printBoard(board)
-    #
-    #         if hasWon(board, currentPlayer):
-    #             print('Player ' + currentPlayer + ' has won!')
-    #             break
-    #
-    #         currentPlayer = getNextPlayer(currentPlayer)
     def get_comparison_based_expected_result_state(
             self,
             boardState: ArmySimState,
@@ -1362,4 +893,85 @@ class ArmyEngine(object):
                 f'{len(enEqMoves)} en moves returned...? {", ".join([str(move) for move in enEqMoves])}')
         self.time_in_nash_eq += time.perf_counter() - nashEqStart
         return frEqMoves, enEqMoves
+
+    def execute_scan_brute_force(
+            self,
+            baseBoardState: ArmySimState,
+            turns: int,
+            noThrow: bool = False
+    ) -> ArmySimResult:
+        multiFriendly = len(self.friendly_armies) > 1
+        multiEnemy = len(self.enemy_armies) > 1
+
+        result: ArmySimResult = self.simulate_recursive_brute_force(
+            baseBoardState,
+            self.map.turn,
+            self.map.turn + turns)
+
+        ogDiff = baseBoardState.tile_differential + baseBoardState.city_differential * 25
+        afterScrimDiff = result.best_result_state.tile_differential + result.best_result_state.city_differential * 25
+        result.net_economy_differential = afterScrimDiff - ogDiff
+
+        # build the expected move list up the tree
+        equilibriumBoard = result.best_result_state
+        # intentionally while .parent_board isn't none to skip the top board, since it will show both moves as None
+        parentFr = None
+        parentEn = None
+        curBoard = equilibriumBoard
+        boards = []
+        while curBoard is not None:
+            boards.append(curBoard)
+            curBoard = curBoard.parent_board
+
+        for curBoard in boards:
+            if curBoard.parent_board is None:
+                continue
+            curFr = curBoard.friendly_move
+            curEn = curBoard.enemy_move
+            result.expected_best_moves.insert(0, (curFr, curEn))
+            if curFr is not None:
+                if parentFr is not None:
+                    if curFr.source not in parentFr.source.movable and not multiFriendly:
+                        msg = f"yo, wtf, invalid friendly move sequence returned {str(curFr)}+{str(parentFr)}"
+                        if not noThrow:
+                            raise AssertionError(msg)
+                        else:
+                            logging.error(msg)
+                parentFr = curFr
+            if curEn is not None:
+                if parentEn is not None:
+                    if curEn.source not in parentEn.source.movable and not multiEnemy:
+                        msg = f"yo, wtf, invalid enemy move sequence returned {str(curEn)}+{str(parentEn)}"
+                        if not noThrow:
+                            raise AssertionError(msg)
+                        else:
+                            logging.error(msg)
+                parentEn = curEn
+
+        return result
+
+    def execute_scan_MCTS(
+            self,
+            baseBoardState: ArmySimState,
+            turns: int,
+            noThrow: bool = False
+    ):
+        # multiFriendly = len(self.friendly_armies) > 1
+        # multiEnemy = len(self.enemy_armies) > 1
+
+        mctsRunner: MctsDUCT = MctsDUCT()
+        game: Game = Game()
+        ctx: Context = Context()
+        baseBoardState.initial_differential = baseBoardState.tile_differential + baseBoardState.city_differential * 25
+        ctx.set_initial_board_state(self, baseBoardState, game, self.map.turn)
+
+        eval, moves, simState = mctsRunner.select_action(game, ctx, 5.050, 100000000)
+        frMove = moves.playerMoves[0]
+        enMove = moves.playerMoves[1]
+        result = ArmySimResult(self.get_next_board_state(self.map.turn + 1, simState, frMove, enMove))
+        result.expected_best_moves = [(frMove, enMove)]
+
+        logging.info(f'MCTS iter {mctsRunner.iterations}, nodesExplored {mctsRunner.nodes_explored}, rollouts {mctsRunner.trials_performed}, backprops {mctsRunner.backprop_iter}, rolloutExpansions {game.rollout_expansions}, biasedRolloutExpansions {game.biased_rollout_expansions}')
+
+        return result
 

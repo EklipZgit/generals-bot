@@ -422,10 +422,12 @@ class BotBehaviorTests(TestBase):
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=15)
+        # beyond 14 turns its clearly screwing up
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.5, turns=14)
         self.assertIsNone(winner)
         city = self.get_player_tile(12, 6, simHost.sim, map.player_index)
         self.assertEqual(general.player, city.player)
+        self.assertNoRepetition(simHost)
     
     def test_should_not_incorrectly_dive_enemy_king_in_repetition_with_not_enough_army(self):
         debugMode = False

@@ -4,6 +4,7 @@ import typing
 from collections import deque
 from queue import PriorityQueue
 
+import GatherUtils
 import KnapsackUtils
 import SearchUtils
 from DataModels import Move, TreeNode
@@ -1632,56 +1633,6 @@ def get_tree_move(
     logging.info(f"highestValueMove in get_tree_move was {highestValueMove.toString()}!")
     return highestValueMove
 
-
-def calculate_mst_trunk_values_and_build_leaf_queue_and_node_map(
-        treeNodes: typing.List[TreeNode],
-        searchingPlayer: int,
-        invalidMoveFunc: typing.Callable[[TreeNode], bool],
-        viewInfo: ViewInfo | None = None,
-        noLog: bool = True
-) -> typing.Tuple[int, typing.Dict[Tile, TreeNode]]:
-    """
-    Returns (numNodesInTree, priorityQueue of leaves, lowest value first, lookup from Tile to TreeNode).
-    Does not queue root nodes (nodes where fromTile is None) into the leaf queue.
-    @param treeNodes:
-    @param searchingPlayer:
-    @param invalidMoveFunc: Should return True for invalid moves that should ALWAYS be pruned as leaves. (Generally moves that would try to move negative army, or whatever).
-    @param viewInfo:
-    @param noLog:
-    @return:
-    """
-
-    nodeMap = {}
-
-    count = 0
-    # find the leaves
-    queue = deque()
-    for treeNode in treeNodes:
-        treeNode.trunkValue = 0
-        queue.appendleft(treeNode)
-
-    while not len(queue) == 0:
-        current = queue.pop()
-        nodeMap[current.tile] = current
-        if current.fromTile is not None:
-            count += 1
-        if not noLog:
-            logging.info(" current {}, count {}".format(current.tile.toString(), count))
-        for child in current.children:
-            child.trunkValue = current.trunkValue
-            child.trunkDistance = current.trunkDistance + 1
-            if child.tile.player == searchingPlayer:
-                child.trunkValue += child.tile.army
-            #else:
-            #    child.trunkValue -= child.tile.army
-            child.trunkValue -= 1
-            # if viewInfo is not None:
-            #     viewInfo.bottomLeftGridText[child.tile.x][child.tile.y] = child.trunkValue
-            queue.appendleft(child)
-
-    return count, nodeMap
-
-
 def prune_mst_to_turns(
         rootNodes: typing.List[TreeNode],
         turns: int,
@@ -1797,6 +1748,78 @@ def prune_mst_to_turns_with_values(
     )
 
 
+def prune_mst_to_army_with_values(
+        rootNodes: typing.List[TreeNode],
+        army: int,
+        searchingPlayer: int,
+        viewInfo: ViewInfo | None = None,
+        noLog: bool = True,
+        treeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
+        invalidMoveFunc: typing.Callable[[TreeNode], bool] | None = None
+) -> typing.Tuple[int, int, typing.List[TreeNode]]:
+    """
+    Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
+    O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
+    TODO optimize to reuse existing treenode lookup map instead of rebuilding...?
+    TODO make sure no recalculate tree nodes is necessary.
+
+    @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
+    @param army: The army amount to prune the MST down to
+    @param searchingPlayer:
+    @param viewInfo:
+    @param noLog:
+    @param treeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
+    @param invalidMoveFunc: func(TreeNode) -> bool, return true if you want a leaf TreeNode to always be prune. For example, pruning gather nodes that begin at an enemy tile or that are 1's.
+
+    @return: The list same list of rootnodes passed in, modified.
+    """
+    start = time.perf_counter()
+
+    cityCounter = SearchUtils.Counter(0)
+    citySkipTiles = set()
+    for n in rootNodes:
+        if n.tile.isCity or n.tile.isGeneral and not n.tile.isNeutral:
+            if n.tile.player == searchingPlayer:
+                citySkipTiles.add(n.tile)
+
+    def cityCounterFunc(node: TreeNode):
+        if (node.tile.isGeneral or node.tile.isCity) and not node.tile.isNeutral and node.tile not in citySkipTiles:
+            if node.tile.player == searchingPlayer:
+                cityCounter.add(1)
+            else:
+                cityCounter.add(-1)
+    iterate_tree_nodes(rootNodes, cityCounterFunc)
+
+    if invalidMoveFunc is None:
+        def invalid_move_func(node: TreeNode):
+            if node.value <= 0:
+                return True
+            if node.tile.player != searchingPlayer:
+                return True
+        invalidMoveFunc = invalid_move_func
+
+    # TODO pruning a city doesn't decrement the city counter,
+    #  so we might overestimate in situations where the large gather includes 3 cities but pruned only 1 etc.
+    def untilFunc(node: TreeNode, _, turnsLeft: int, curValue: int):
+        cityIncrementAmount = cityCounter.value * (turnsLeft - 1) // 2
+        armyLeftIfPruned = curValue - node.value + cityIncrementAmount
+        # logging.info(f'eval {str(node)}: armyLeftIfPruned {armyLeftIfPruned} < {army} {armyLeftIfPruned < army} -- turnsLeft {turnsLeft}, curValue {curValue}, cit {cityCounter.value}, ')
+        # armyLeftIfPruned = curValue + cityIncrementAmount
+        if armyLeftIfPruned < army:
+            return True
+        return False
+
+    return prune_mst_until(
+        rootNodes,
+        untilFunc=untilFunc,
+        pruneValueFunc=lambda node, curObj: (node.value, node.trunkDistance),
+        invalidMoveFunc=invalidMoveFunc,
+        viewInfo=viewInfo,
+        noLog=noLog,
+        treeNodeLookupToPrune=treeNodeLookupToPrune
+    )
+
+
 def prune_mst_to_army(
         rootNodes: typing.List[TreeNode],
         army: int,
@@ -1822,44 +1845,15 @@ def prune_mst_to_army(
 
     @return: The list same list of rootnodes passed in, modified.
     """
-    start = time.perf_counter()
 
-    cityCounter = SearchUtils.Counter(0)
-
-    def cityCounterFunc(node: TreeNode):
-        if (node.tile.isGeneral or node.tile.isCity) and not node.tile.isNeutral and node not in rootNodes:
-            if node.tile.player == searchingPlayer:
-                cityCounter.add(1)
-            else:
-                cityCounter.add(-1)
-    iterate_tree_nodes(rootNodes, cityCounterFunc)
-
-    if invalidMoveFunc is None:
-        def invalid_move_func(node: TreeNode):
-            if node.value <= 0:
-                return True
-            if node.tile.player != searchingPlayer:
-                return True
-        invalidMoveFunc = invalid_move_func
-
-    # count, nodeMap = calculate_mst_trunk_values_and_build_leaf_queue_and_node_map(rootNodes, searchingPlayer, invalidMoveFunc, viewInfo=viewInfo, noLog=noLog)
-
-    def untilFunc(node: TreeNode, _, turnsLeft: int, curValue: int):
-        cityIncrementAmount = cityCounter.value * (turnsLeft - 1) // 2
-        armyLeftIfPruned = curValue - node.value + cityIncrementAmount
-        # armyLeftIfPruned = curValue + cityIncrementAmount
-        if armyLeftIfPruned < army:
-            return True
-        return False
-
-    count, totalValue, rootNodes = prune_mst_until(
-        rootNodes,
-        untilFunc=untilFunc,
-        pruneValueFunc=lambda node, curObj: (node.value, node.trunkDistance),
-        invalidMoveFunc=invalidMoveFunc,
+    count, totalValue, rootNodes = GatherUtils.prune_mst_to_army_with_values(
+        rootNodes=rootNodes,
+        army=army,
+        searchingPlayer=searchingPlayer,
         viewInfo=viewInfo,
         noLog=noLog,
-        treeNodeLookupToPrune=treeNodeLookupToPrune
+        treeNodeLookupToPrune=treeNodeLookupToPrune,
+        invalidMoveFunc=invalidMoveFunc,
     )
 
     return rootNodes

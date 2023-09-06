@@ -401,7 +401,7 @@ class TestBase(unittest.TestCase):
             viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
             time.sleep(0.1)
 
-    def assertNoRepetition(self, simHost: GameSimulatorHost, minForRepetition=2, msg="Expected no move repetition."):
+    def assertNoRepetition(self, simHost: GameSimulatorHost, minForRepetition=1, msg="Expected no move repetition."):
         moved: typing.List[typing.Dict[Tile, int]] = [{} for player in simHost.bot_hosts]
 
         for histEntry in simHost.sim.moves_history:

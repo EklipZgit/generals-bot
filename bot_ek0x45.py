@@ -111,6 +111,7 @@ class EklipZBot(object):
         self.lastTimingTurn = 0
         self._evaluatedUndiscoveredCache = []
         self.lastTurnTime = 0
+        self.use_mcts = False
 
         self.allIn = False
         self.all_in_army_advantage_counter: int = 0
@@ -446,11 +447,12 @@ class EklipZBot(object):
         for path in self.armyTracker.fogPaths:
             self.viewInfo.color_path(PathColorer(path, 255, 84, 0, 255, 30, 150))
 
-
-
     def get_timings(self):
         with self.perf_timer.begin_move_event('GatherAnalyzer scan'):
             self.gatherAnalyzer.scan()
+            for tile in self._map.pathableTiles:
+                if tile.player == self.general.player:
+                    self.viewInfo.bottomMidRightGridText[tile.x][tile.y] = f'g{self.gatherAnalyzer.gather_locality_map[tile]}'
 
         countOnPath = 0
         if self.target_player_gather_targets is not None:
@@ -3451,7 +3453,6 @@ class EklipZBot(object):
         logging.info("No proactive cities :(     dist {}, safe {}, player.standingArmy {}, cityLeadWeight {}".format(dist, safeOnStandingArmy, player.standingArmy, cityLeadWeight))
         return False
 
-
     def capture_cities(self, negativeTiles) -> typing.Tuple[Path | None, Move | None]:
         if self.is_all_in():
             return None, None
@@ -3538,9 +3539,17 @@ class EklipZBot(object):
         if player.standingArmy + 8 <= target.army:
             return None, None
 
-        targetArmyGather = target.army + self.sum_enemy_army_near_tile(target, 2)
+        targetArmyGather = target.army + self.sum_enemy_army_near_tile(target, 2) + 2
+
         targetArmy = 0 + self.sum_enemy_army_near_tile(target, 2) * 1.5
         searchDist = maxDist
+        if not isNeutCity:
+            # TODO with proper city contestation, this should die and just be an as-fast-as-possible
+            #  cap followed by gathers to hold the city.
+            targetArmyGather = target.army + max(2, target.army / 3 + self.sum_enemy_army_near_tile(target, 4) * 1.2)
+            searchDist = 2 * maxDist // 3 + 1
+            targetArmy = max(2, self.sum_enemy_army_near_tile(target, 2) * 1.1)
+
         self.viewInfo.lastEvaluatedGrid[target.x][target.y] = 140
         # gather to the 2 tiles in front of the city
         logging.info("xxxxxxxxx\n    SEARCHED AND FOUND NEAREST NEUTRAL / ENEMY CITY {},{} dist {}. Searching {} army searchDist {}\nxxxxxxxx".format(target.x, target.y, path.length, targetArmy, searchDist))
@@ -3550,16 +3559,17 @@ class EklipZBot(object):
         if path.length > 2:
             # strip all but 2 end tiles off
             path = path.get_subsegment(2, end=True)
-        if not isNeutCity:
-            # TODO with proper city contestation, this should die and just be an as-fast-as-possible
-            #  cap followed by gathers to hold the city.
-            targetArmyGather = target.army + max(2, target.army / 3 + self.sum_enemy_army_near_tile(target, 4) * 1.2)
-            targetArmy = max(2, self.sum_enemy_army_near_tile(target, 2) * 1.1)
-            searchDist = 2 * maxDist // 3 + 1
+
+        # reduce the necessary gather army by the amount on the start nodes.
+        armyAlreadyPrepped = 0
+        for tile in path.tileList:
+            if tile.player == self.general.player:
+                armyAlreadyPrepped += tile.army - 1
+        targetArmyGather -= armyAlreadyPrepped
 
         def goalFunc(currentTile, prioObject):
             (dist, negCityCount, negEnemyTileCount, negArmySum, x, y, goalIncrement) = prioObject
-            if 0-negArmySum >= targetArmy:
+            if 0-negArmySum > targetArmy:
                 return True
             return False
 
@@ -3567,8 +3577,9 @@ class EklipZBot(object):
         #killPath = dest_breadth_first_target(self._map, [target], targetArmy, 0.1, searchDist, negativeTiles, dontEvacCities=True)
         if killPath is not None:
             killPath = killPath.get_reversed()
-            logging.info("found depth {} dest bfs kill on Neutral or Enemy city {},{} \n{}".format(killPath.length, target.x, target.y, killPath.toString()))
-            self.info("City killpath {},{}  setting TreeNodes to None".format(target.x, target.y))
+            logging.info(
+                f"found depth {killPath.length} dest bfs kill on Neutral or Enemy city {target.x},{target.y} \n{killPath.toString()}")
+            self.info(f"City killpath {target.x},{target.y}  setting TreeNodes to None")
             self.viewInfo.lastEvaluatedGrid[target.x][target.y] = 300
             self.gatherNodes = None
             addlArmy = 0
@@ -3578,9 +3589,9 @@ class EklipZBot(object):
                 addlArmy += killPath.length
             killPath.start.move_half = self.should_kill_path_move_half(killPath, targetArmy + addlArmy)
             return killPath, None
-        gatherDuration = 25
+        gatherDuration = 15
         if player.tileCount > 125:
-            gatherDuration = 15
+            gatherDuration = 10
 
         if (self.winning_on_army()
                 or self.timings.in_gather_split(self._map.turn)
@@ -3588,12 +3599,15 @@ class EklipZBot(object):
                 or genDist > 22
                 or target.player >= 0):
             # TODO implement gather quick-kill
+            # TODO if neutral city, prioritize NOT pulling any army off of the main attack paths,
+            #  abandon neut gathers if it would weaken us substantially
             with self.perf_timer.begin_move_event(f'Capture City gath to {str(path.tileList)}'):
                 gatherDist = (gatherDuration - self._map.turn % gatherDuration)
-                gatherDist = 24
+                gatherDist = 15
                 negativeTiles = negativeTiles.copy()
                 #negativeTiles.add(self.general)
-                logging.info("self.gather_to_target_tile gatherDist {} - targetArmyGather {}".format(gatherDist, targetArmyGather))
+                self.viewInfo.addAdditionalInfoLine(
+                    f"city gath self.gather_to_target_tile gatherDist {gatherDist} - targetArmyGather {targetArmyGather} (already prepped {armyAlreadyPrepped})")
                 for t in path.tileList:
                     self.viewInfo.add_targeted_tile(t, TargetStyle.PURPLE)
 
@@ -3602,7 +3616,7 @@ class EklipZBot(object):
                     0.03,
                     gatherDist,
                     gatherNegatives=negativeTiles,
-                    targetArmy=targetArmyGather - gatherDist // 4)
+                    targetArmy=targetArmyGather)
                     # targetArmy=targetArmyGather - gatherDist // 2)
 
                 if move is not None:
@@ -3611,11 +3625,12 @@ class EklipZBot(object):
 
                     # TODO only prune to target army if we're attacking a neutral city,
                     #  for now. Until city contestation
-                    gatherNodes = GatherUtils.prune_mst_to_army(gatherNodes, targetArmyGather + 1, self.general.player, self.viewInfo)
-                    move = self.get_tree_move_default(gatherNodes)
+                    prunedTurns, prunedValue, prunedGatherNodes = GatherUtils.prune_mst_to_army_with_values(gatherNodes, targetArmyGather, self.general.player, self.viewInfo)
+                    move = self.get_tree_move_default(prunedGatherNodes)
 
-                    self.gatherNodes = gatherNodes
-                    self.info("Gathering to target city {},{}, proactivelyTakeCity {}, move {}".format(target.x, target.y, proactivelyTakeCity, move.toString()))
+                    self.gatherNodes = prunedGatherNodes
+                    self.info(
+                        f"Gath city {str(target)}, proact {proactivelyTakeCity}, move {str(move)}, v{prunedValue + armyAlreadyPrepped}/{gatherValue + armyAlreadyPrepped}/{targetArmyGather + armyAlreadyPrepped}, t{prunedTurns}/{gatherTurns}/{gatherDist}")
                     self.viewInfo.lastEvaluatedGrid[target.x][target.y] = 300
                     return None, move
 
@@ -5994,9 +6009,6 @@ class EklipZBot(object):
         self.viewInfo.targetPlayer = self.targetPlayer
         self.viewInfo.generalApproximations = self.generalApproximations
         self.viewInfo.playerTargetScores = self.playerTargetScores
-        for tile in self._map.pathableTiles:
-            if tile.player == self.general.player:
-                self.viewInfo.bottomMidRightGridText[tile.x][tile.y] = f'g{self.gatherAnalyzer.gather_locality_map[tile]}'
 
         if self.target_player_gather_path is not None:
             alpha = 140
@@ -6267,7 +6279,7 @@ class EklipZBot(object):
 
         engine.friendly_has_kill_threat = friendlyHasKillThreat
         engine.enemy_has_kill_threat = enemyHasKillThreat
-        result = engine.scan(depth, noThrow=True)
+        result = engine.scan(depth, noThrow=True, mcts=self.use_mcts)
         return result
 
     def is_tile_in_range_from(self, source: Tile, target: Tile, maxDist: int, minDist: int = 0) -> bool:

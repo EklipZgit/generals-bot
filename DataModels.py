@@ -21,12 +21,12 @@ class PathNode(object):
         self.pathDict = pathDict
 
     def __gt__(self, other):
-        if other == None:
+        if other is None:
             return True
         return self.turn > other.turn
 
     def __lt__(self, other):
-        if other == None:
+        if other is None:
             return True
         return self.turn < other.turn
 
@@ -39,10 +39,10 @@ class PathNode(object):
 
 def get_tile_list_from_path(pathObject):
     path = pathObject.start
-    if path == None:
+    if path is None:
         return None
     pathList = []
-    while path != None:
+    while path is not None:
         pathList.append(path.tile)
         path = path.next
     return pathList
@@ -61,7 +61,7 @@ def get_player_army_amount_on_path(path, player, startIdx=0, endIdx=1000):
     value = 0
     idx = 0
     pathNode = path.start
-    while pathNode != None:
+    while pathNode is not None:
         if pathNode.tile.player == player and idx >= startIdx and idx <= endIdx:
             value += (pathNode.tile.army - 1)
         pathNode = pathNode.next
@@ -95,12 +95,12 @@ class TreeNode(object):
         """Children that have been pruned from the actual gather"""
 
     def __gt__(self, other):
-        if other == None:
+        if other is None:
             return True
         return self.value > other.value
 
     def __lt__(self, other):
-        if other == None:
+        if other is None:
             return False
         return self.value < other.value
 
@@ -141,14 +141,13 @@ class Move(object):
             self.army_moved = (source.army - 1) // 2
         self.non_friendly = self.source.player != self.dest.player
 
-
     def __gt__(self, other):
-        if other == None:
+        if other is None:
             return True
         return self.source.army - self.dest.army > other.source.army - other.dest.army
 
     def __lt__(self, other):
-        if other == None:
+        if other is None:
             return False
         return self.source.army - self.dest.army < other.source.army - other.dest.army
 

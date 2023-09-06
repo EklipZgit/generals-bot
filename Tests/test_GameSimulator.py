@@ -421,7 +421,24 @@ aG7
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        simHost = GameSimulatorHost(map, player_with_viewer=1)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player)
+
+        simHost.run_sim(run_real_time=True, turn_time=0.1)
+
+    def test_simulates_a_game_from_turn_1__deep_mcst_should_always_win(self):
+        self.begin_capturing_logging()
+        map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/243.txtmap', 243, player_index=1)
+        fakeEnemyGen = map.GetTile(2, 16)
+        fakeEnemyGen.isGeneral = True
+        fakeEnemyGen.player = 0
+        fakeEnemyGen.army = 1
+
+        self.reset_map_to_just_generals(map)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        simHost = GameSimulatorHost(map, player_with_viewer=-2)
+        simHost.get_bot(fakeEnemyGen.player).use_mcts = True
 
         simHost.run_sim(run_real_time=True, turn_time=0.1)
 

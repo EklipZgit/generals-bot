@@ -753,8 +753,8 @@ class ArmyTracker(object):
             army.path = sourceFogArmyPath
 
     def merge_armies(self, largerArmy, smallerArmy, finalTile):
-        del self.armies[largerArmy.tile]
-        del self.armies[smallerArmy.tile]
+        self.armies.pop(largerArmy.tile, None)
+        self.armies.pop(smallerArmy.tile, None)
         self.scrap_army(smallerArmy)
 
         if largerArmy.tile != finalTile:

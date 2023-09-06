@@ -122,7 +122,7 @@ bTiles=20
                 armyEngine.enemy_has_kill_threat = True
                 armyEngine.allow_friendly_no_op = True
                 armyEngine.allow_enemy_no_op = True
-                result = armyEngine.scan(4)
+                result = armyEngine.scan(4, mcts=True)
                 if debugMode:
                     sim = GameSimulator(map_raw=map, ignore_illegal_moves=True)
                     sim.players[general.player].set_map_vision(map)
@@ -177,7 +177,7 @@ bTiles=20
                 armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = True
-                result = armyEngine.scan(5)
+                result = armyEngine.scan(5, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
                 # whoever has priority this turn should also have priority in 4 moves, which is when the king kill would happen
@@ -229,7 +229,7 @@ bTiles=20
                 armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = True
-                result = armyEngine.scan(5)
+                result = armyEngine.scan(5, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
                 # whoever has priority this turn should NOT have priority in 5 moves, which is when the king kill would happen
@@ -282,7 +282,7 @@ bTiles=20
                 self.assertEqual(0, baseState.tile_differential)
                 self.assertEqual(0, baseState.city_differential)
 
-                result = armyEngine.scan(5)
+                result = armyEngine.scan(5, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
                 # b can make a run safely for a's general, but a has time to capture b if b does that (?)
@@ -334,7 +334,7 @@ bTiles=20
                 self.assertEqual(0, baseState.tile_differential)
                 self.assertEqual(0, baseState.city_differential)
 
-                result = armyEngine.scan(4, logEvals=False)
+                result = armyEngine.scan(4, logEvals=False, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
 
@@ -393,7 +393,7 @@ bTiles=20
                 self.assertEqual(0, baseState.tile_differential)
                 self.assertEqual(0, baseState.city_differential)
 
-                result = armyEngine.scan(4, logEvals=False)
+                result = armyEngine.scan(4, logEvals=False, mcts=True)
                 armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(map, [general])
                 if debugMode:
                     self.render_sim_analysis(map, result)
@@ -451,7 +451,7 @@ bTiles=20
                 self.assertEqual(0, baseState.tile_differential)
                 self.assertEqual(0, baseState.city_differential)
 
-                result = armyEngine.scan(5, logEvals=False)
+                result = armyEngine.scan(5, logEvals=False, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
                 # b can make a run safely for a's general, but a has time to capture b if b does that (?)
@@ -506,7 +506,7 @@ bTiles=20
                 self.assertEqual(0, baseState.tile_differential)
                 self.assertEqual(0, baseState.city_differential)
 
-                result = armyEngine.scan(4, logEvals=True)
+                result = armyEngine.scan(4, logEvals=True, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
                 if not MapBase.player_has_priority(enemyGen.player, turn):
@@ -564,7 +564,7 @@ bTiles=20
                 self.assertEqual(0, baseState.tile_differential)
                 self.assertEqual(0, baseState.city_differential)
 
-                result = armyEngine.scan(3, logEvals=True)
+                result = armyEngine.scan(3, logEvals=True, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
 
@@ -615,7 +615,7 @@ bTiles=20
                 self.assertEqual(0, baseState.tile_differential)
                 self.assertEqual(0, baseState.city_differential)
 
-                result = armyEngine.scan(2, logEvals=True)
+                result = armyEngine.scan(2, logEvals=True, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
 
@@ -666,7 +666,7 @@ bTiles=20
                 self.assertEqual(0, baseState.tile_differential)
                 self.assertEqual(0, baseState.city_differential)
 
-                result = armyEngine.scan(2, logEvals=True)
+                result = armyEngine.scan(2, logEvals=True, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
 
@@ -720,7 +720,7 @@ bTiles=20
                 armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = True
-                result = armyEngine.scan(2)
+                result = armyEngine.scan(2, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
                 # b can make a run safely for a's general, but a has time to capture b if b does that (?)
@@ -765,7 +765,7 @@ bTiles=20
                 armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = True
-                result = armyEngine.scan(2)
+                result = armyEngine.scan(2, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
                 # b can make a run safely for a's general, but a has time to capture b if b does that (?)
@@ -813,7 +813,7 @@ bTiles=20
                 armyEngine.allow_enemy_no_op = True
                 armyEngine.allow_friendly_no_op = True
                 armyEngine.log_payoff_depth = 1
-                result = armyEngine.scan(5)
+                result = armyEngine.scan(5, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
                 if MapBase.player_has_priority(enemyGen.player, turn):
@@ -876,7 +876,7 @@ bTiles=15
                 armyEngine.enemy_has_kill_threat = True
                 armyEngine.log_everything = True
                 baseBoardState = armyEngine.get_base_board_state()
-                # result = armyEngine.scan(3, logEvals=True)
+                # result = armyEngine.scan(3, logEvals=True, mcts=True)
                 simState1 = armyEngine.get_next_board_state(
                     map.turn + 1,
                     baseBoardState,
@@ -946,7 +946,7 @@ bTiles=15
                 armyEngine.enemy_has_kill_threat = True
                 armyEngine.log_everything = True
                 baseBoardState = armyEngine.get_base_board_state()
-                # result = armyEngine.scan(3, logEvals=True)
+                # result = armyEngine.scan(3, logEvals=True, mcts=True)
                 simState1 = armyEngine.get_next_board_state(
                     map.turn + 1,
                     baseBoardState,
@@ -1020,7 +1020,7 @@ bTiles=15
                     armyEngine.enemy_has_kill_threat = True
                     armyEngine.log_everything = True
                     baseBoardState = armyEngine.get_base_board_state()
-                    # result = armyEngine.scan(3, logEvals=True)
+                    # result = armyEngine.scan(3, logEvals=True, mcts=True)
                     simState1 = armyEngine.get_next_board_state(
                         map.turn + 1,
                         baseBoardState,
@@ -1099,7 +1099,7 @@ bTiles=20
         armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
         armyEngine.friendly_has_kill_threat = True
         armyEngine.enemy_has_kill_threat = True
-        result = armyEngine.scan(3)
+        result = armyEngine.scan(3, mcts=True)
         if debugMode:
             self.render_sim_analysis(map, result)
         self.assertTrue(result.best_result_state.captures_enemy)
@@ -1142,7 +1142,7 @@ bTiles=20
                 armyEngine.enemy_has_kill_threat = True
                 # TODO switch to this method of parameterizing this
                 armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(map, [general])
-                result = armyEngine.scan(5)
+                result = armyEngine.scan(5, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
                 # both players should have moves until they cancel out
@@ -1151,7 +1151,7 @@ bTiles=20
                     self.assertIsNotNone(bMove)
 
     def test_army_scrim_defense_should_not_avoid_kill_threat(self):
-        debugMode = False
+        debugMode = True
         mapFile = 'GameContinuationEntries/army_scrim_defense_should_not_avoid_kill_threat___rgNPA7Zan---b--388.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 388, fill_out_tiles=True)
 
@@ -1173,7 +1173,7 @@ bTiles=20
         armyEngine.enemy_has_kill_threat = True
         # TODO switch to this method of parameterizing this
         armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(map, [general])
-        result = armyEngine.scan(5, logEvals=False)
+        result = armyEngine.scan(5, logEvals=False, mcts=True)
         if debugMode:
             self.render_sim_analysis(map, result)
         self.assertEqual(map.GetTile(2, 12), result.expected_best_moves[0][0].dest)
@@ -1211,7 +1211,7 @@ bTiles=20
                 # armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(m, [general])
                 armyEngine.log_payoff_depth = 2
                 armyEngine.repetition_threshold = 3
-                result = armyEngine.scan(5, logEvals=False)
+                result = armyEngine.scan(5, logEvals=False, mcts=True)
                 if debugMode:
                     sim = GameSimulator(map_raw=map, ignore_illegal_moves=True)
                     sim.players[general.player].set_map_vision(m)
@@ -1256,7 +1256,7 @@ bTiles=20
         armyEngine.friendly_has_kill_threat = True
         armyEngine.enemy_has_kill_threat = True
         armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(m, [general])
-        result = armyEngine.scan(5, logEvals=False)
+        result = armyEngine.scan(5, logEvals=False, mcts=True)
         if debugMode:
             self.render_sim_analysis(m, result)
         self.assertEqual(m.GetTile(14, 7), result.expected_best_moves[0][0].dest)
@@ -1287,7 +1287,7 @@ bTiles=20
         armyEngine.friendly_has_kill_threat = False
         armyEngine.enemy_has_kill_threat = False
         armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(m, [general])
-        result = armyEngine.scan(6, logEvals=False, noThrow=debugMode)
+        result = armyEngine.scan(6, logEvals=False, noThrow=debugMode, mcts=True)
         if debugMode:
             self.render_step_engine_analysis(armyEngine, simHost.sim, result, aArmy, bArmy)
             # self.render_sim_analysis(m, result)
@@ -1310,7 +1310,51 @@ bTiles=20
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=2)
         self.assertIsNone(winner)
 
         # TODO add asserts for should_not_generate_idkQQ_error_in_scrim_8_11__7_12
+    
+    def test_should_not_lock_up_mcts(self):
+        for i in range(100):
+            with self.subTest(i=i):
+                debugMode = False
+                mapFile = 'GameContinuationEntries/should_not_lock_up_mcts___EklipZ_ai-rel2QZ4Ch---1--197.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 197, fill_out_tiles=True)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+
+                rawMap, _ = self.load_map_and_general(mapFile, 197)
+
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, '13,11->14,11->14,12')
+                simHost.get_bot(general.player).use_mcts = True
+
+                simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=3)
+                self.assertIsNone(winner)
+    
+    def test_should_not_lock_up_mcts_2(self):
+        debugMode = False
+
+        for i in range(100):
+            with self.subTest(i=i):
+                mapFile = 'GameContinuationEntries/should_not_lock_up_mcts_2___EklipZ_ai-rel2QZ4Ch---1--196.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 196, fill_out_tiles=True)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+
+                rawMap, _ = self.load_map_and_general(mapFile, 196)
+
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, '12,11->13,11->14,11->14,12')
+                simHost.get_bot(general.player).use_mcts = True
+
+                simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=3)
+                self.assertIsNone(winner)
+

@@ -737,7 +737,7 @@ bot_player_index=0
         Ideally the algo should find an optimal path to the cluster and then produce the main tree within the cluster, rather than producing suboptimal paths to the cluster.
         @return:
         """
-        debugMode = False
+        debugMode = True
         testData = """
 |    |    |    |    |    |    |    |
 aG1  a2   a2   a2   a2   a2   a2   a2 

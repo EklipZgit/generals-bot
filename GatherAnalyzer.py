@@ -36,6 +36,6 @@ class GatherAnalyzer(object):
                 if nearbyTile.player == self.map.player_index:
                     self.gather_locality_map[tile] += nearbyTile.army - 1
 
-            SearchUtils.breadth_first_foreach(self.map, [tile], maxDepth=5, foreachFunc=counter, skipFunc=lambda curTile: curTile.isNeutral and curTile.isCity)
+            SearchUtils.breadth_first_foreach(self.map, [tile], maxDepth=4, foreachFunc=counter, skipFunc=lambda curTile: curTile.isNeutral and curTile.isCity)
 
 

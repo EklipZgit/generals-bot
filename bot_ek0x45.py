@@ -3668,9 +3668,9 @@ class EklipZBot(object):
         for city in self.cityAnalyzer.city_scores.keys():
             score = self.cityAnalyzer.city_scores[city]
             enemyVision = [tile for tile in filter(lambda t: t.player != -1 and t.player != self.general.player, city.adjacents)]
-            cityDistanceRatioThresh = 0.9
+            cityDistanceRatioThresh = 0.93
             if len(enemyVision) > 0:
-                cityDistanceRatioThresh = 0.5
+                cityDistanceRatioThresh = 0.75
             if (maxScore is None or maxScore.get_weighted_neutral_value() < score.get_weighted_neutral_value()) \
                     and score.general_distances_ratio < cityDistanceRatioThresh:
                 maxScore = score

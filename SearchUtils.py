@@ -1702,7 +1702,8 @@ def breadth_first_find_queue(
     if searchingPlayer == -2:
         searchingPlayer = map.player_index
     frontier = deque()
-    visited = [[None for x in range(map.rows)] for y in range(map.cols)]
+    nodeValues = [[None for x in range(map.rows)] for y in range(map.cols)]
+    visited: typing.Set[Tile] = set()
     if isinstance(startTiles, dict):
         for tile in startTiles.keys():
             (startDist, startArmy) = startTiles[tile]
@@ -1718,7 +1719,7 @@ def breadth_first_find_queue(
                 goalInc = -1 * goalInc
             if ignoreStartTile:
                 startArmy = 0
-            visited[tile.x][tile.y] = (startArmy, None)
+            nodeValues[tile.x][tile.y] = (startArmy, None)
             frontier.appendleft((tile, startDist, startArmy, goalInc))
     else:
         for tile in startTiles:
@@ -1729,7 +1730,7 @@ def breadth_first_find_queue(
             startArmy = tile.army - 1
             if tile.player != searchingPlayer:
                 startArmy = 0 - tile.army - 1
-            visited[tile.x][tile.y] = (startArmy, None)
+            nodeValues[tile.x][tile.y] = (startArmy, None)
             if tile.isCity or tile.isGeneral:
                 goalInc = 0.5
             if ignoreStartTile:
@@ -1745,8 +1746,9 @@ def breadth_first_find_queue(
     while len(frontier) > 0:
         iter += 1
         (current, dist, army, goalInc) = frontier.pop()
-        if visited[current.x][current.y] is not None or (skipTiles is not None and current in skipTiles):
+        if current in visited or (skipTiles is not None and current in skipTiles):
             continue
+        visited.add(current)
         if goalFunc(current, army, dist) and (dist < foundDist or (dist == foundDist and army > foundArmy)):
             foundGoal = True
             foundDist = dist
@@ -1758,9 +1760,14 @@ def breadth_first_find_queue(
                 break
         if dist <= maxDepth and not foundGoal:
             for next in current.movable:  # new spots to try
-                if next.isMountain or (noNeutralCities and next.isCity and next.player == -1) or (
-                        not next.discovered and next.isNotPathable):
+                if (
+                    next.isMountain
+                    or (noNeutralCities and next.isCity and next.player == -1)
+                    or (not next.discovered and next.isNotPathable)
+                    or next in visited
+                ):
                     continue
+
                 inc = 0 if not ((next.isCity and next.player != -1) or next.isGeneral) else dist / 2
                 # new_cost = cost_so_far[current] + graph.cost(current, next)
                 nextArmy = army - 1
@@ -1770,8 +1777,8 @@ def breadth_first_find_queue(
                     else:
                         nextArmy -= (next.army + inc)
                 newDist = dist + 1
-                if visited[next.x][next.y] is None or visited[next.x][next.y][0] < nextArmy:
-                    visited[next.x][next.y] = (nextArmy, current)
+                if nodeValues[next.x][next.y] is None or nodeValues[next.x][next.y][0] < nextArmy:
+                    nodeValues[next.x][next.y] = (nextArmy, current)
                 frontier.appendleft((next, newDist, nextArmy, goalInc))
 
     logging.info(
@@ -1792,7 +1799,7 @@ def breadth_first_find_queue(
         nodes.append((army, node))
 
         # logging.info(pformat(visited[node.x][node.y]))
-        (army, node) = visited[node.x][node.y]
+        (army, node) = nodeValues[node.x][node.y]
         dist -= 1
     nodes.reverse()
     (startArmy, startNode) = nodes[0]

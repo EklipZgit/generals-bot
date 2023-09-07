@@ -1358,3 +1358,75 @@ bTiles=20
                 winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=3)
                 self.assertIsNone(winner)
 
+    
+    def test_should_not_die_scrimming_general_at_threat(self):
+        debugMode = True
+        mapFile = 'GameContinuationEntries/should_not_die_scrimming_general_at_threat___BgX63UBAn---1--439.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 439, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 439)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
+        self.assertIsNone(winner)
+
+        # TODO add asserts for should_not_die_scrimming_general_at_threat
+    
+    def test_should_not_dance_around_armies_standing_still(self):
+        debugMode = True
+        mapFile = 'GameContinuationEntries/should_not_dance_around_armies_standing_still___HeEzmHU03---0--269.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 269, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 269)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        eklipz_bot = simHost.bot_hosts[general.player].eklipz_bot
+        ekThreat = eklipz_bot.threat.path.start.tile
+        aArmy = Army(map.GetTile(10, 8))
+        bArmy = Army(map.GetTile(10, 9))
+
+        self.begin_capturing_logging()
+        armyEngine = ArmyEngine(map, [aArmy], [bArmy], eklipz_bot.board_analysis)
+        armyEngine.friendly_has_kill_threat = False
+        # TODO TEST WITH BOTH KILL THREAT AND NOT KILL THREAT
+        # TODO TEST WITH BOTH FORCED TOWARDS AND NOT FORCED TOWARDS
+        armyEngine.enemy_has_kill_threat = True
+        armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(map, [general])
+        result = armyEngine.scan(4, mcts=True)
+        if debugMode:
+            self.render_sim_analysis(map, result)
+        self.assertNotEqual(map.GetTile(9, 8), result.expected_best_moves[0][0].dest, "should not do ridiculous dancing around on friendly tiles.")
+        self.assertEqual(bArmy.tile, result.expected_best_moves[0][0].dest, "should immediately capture enemy army threatening to capture tiles.")
+    
+    def test_should_complete_scrim_army_intercept_instead_of_letting_enemy_cap_tiles(self):
+        debugMode = True
+        mapFile = 'GameContinuationEntries/should_complete_scrim_army_intercept_instead_of_letting_enemy_cap_tiles___Bgk8TIUR2---0--86.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 86, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 86)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '5,14->4,14->3,14->2,14->2,13->2,12')
+        simHost.queue_player_moves_str(general.player, '2,16->3,16')
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=5)
+        self.assertIsNone(winner)
+        shouldNotBeCapped = self.get_player_tile(2, 13, simHost.sim, general.player)
+        self.assertEqual(general.player, shouldNotBeCapped.player)
+

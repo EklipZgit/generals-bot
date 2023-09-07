@@ -97,6 +97,7 @@ class ArmyTracker(object):
         self.player_moves_this_turn: typing.Set[int] = set()
         self.map: MapBase = map
         self.armies: typing.Dict[Tile, Army] = {}
+        self.genDistances: typing.List[typing.List[int]] = []
         """Actual armies. During a scan, this stores the armies that haven't been dealt with since last turn, still."""
 
         self.unaccounted_tile_diffs: typing.Dict[Tile, int] = {}
@@ -141,8 +142,9 @@ class ArmyTracker(object):
         self.notify_army_moved = []
 
     # distMap used to determine how to move armies under fog
-    def scan(self, lastMove, turn):
+    def scan(self, lastMove: Move | None, turn: int, genDistances: typing.List[typing.List[int]]):
         self.lastMove = lastMove
+        self.genDistances = genDistances
 
         advancedTurn = False
         if turn > self.lastTurn:
@@ -277,6 +279,8 @@ class ArmyTracker(object):
 
         if self.lastMove is not None:
             playerMoveArmy = self.get_or_create_army_at(self.lastMove.source)
+            playerMoveArmy.player = self.map.player_index
+            playerMoveArmy.value = self.lastMove.source.delta.oldArmy - 1
             self.try_track_own_move(playerMoveArmy, skip, trackingArmies)
 
         for tile in self.map.get_all_tiles():
@@ -363,35 +367,40 @@ class ArmyTracker(object):
     def army_moved(
             self,
             army: Army,
-            tile: Tile,
+            toTile: Tile,
             trackingArmies: typing.Dict[Tile, Army],
             dontUpdateOldFogArmyTile=False
     ):
         """
 
         @param army:
-        @param tile:
+        @param toTile:
         @param trackingArmies:
         @param dontUpdateOldFogArmyTile: If True, will not update the old fogged army tile to be 1
         @return:
         """
         oldTile = army.tile
         existingArmy = self.armies.pop(army.tile, None)
-        if army.visible and tile.visible or tile.delta.lostSight:
+        if army.visible and toTile.visible or toTile.delta.lostSight:
             if army.player in self.player_moves_this_turn:
                 logging.error(f'Yo, we think a player moved twice this turn...?')
 
             self.player_moves_this_turn.add(army.player)
 
-        army.update_tile(tile)
-        existingTracking = trackingArmies.get(tile, None)
+        army.update_tile(toTile)
+        existingTracking = trackingArmies.get(toTile, None)
         h = ""
         if (
             existingTracking is None
             or existingTracking.value < army.value
-            or existingTracking.player != tile.player
+            or existingTracking.player != toTile.player
         ):
-            trackingArmies[tile] = army
+            trackingArmies[toTile] = army
+
+        potentialMergeOrKilled = self.armies.get(toTile, None)
+        if potentialMergeOrKilled is not None:
+            if potentialMergeOrKilled.player == army.player:
+                self.merge_armies(army, potentialMergeOrKilled, toTile, trackingArmies)
 
         if army.value < -1 or (army.player != army.tile.player and army.tile.visible):
             logging.info(f"    Army {army.toString()} scrapped for being negative or run into larger tile")
@@ -412,14 +421,7 @@ class ArmyTracker(object):
                 army.expectedPath = None
             else:
                 # TODO detect if enemy army is likely trying to defend
-                army.expectedPath = SearchUtils.breadth_first_find_queue(
-                    self.map,
-                    [army.tile],
-                    goalFunc=lambda tile, army, dist: army > 0 and tile in self.player_targets,
-                    maxTime=0.1,
-                    maxDepth=10,
-                    noNeutralCities=tile.army < 150,
-                    searchingPlayer=army.player)
+                army.expectedPath = self.get_army_expected_path(army)
 
         army.last_moved_turn = self.map.turn - 1
 
@@ -752,14 +754,18 @@ class ArmyTracker(object):
             self.armies[fogTile] = army
             army.path = sourceFogArmyPath
 
-    def merge_armies(self, largerArmy, smallerArmy, finalTile):
+    def merge_armies(self, largerArmy, smallerArmy, finalTile, armyDict: typing.Dict[Tile, Army] | None = None):
         self.armies.pop(largerArmy.tile, None)
         self.armies.pop(smallerArmy.tile, None)
         self.scrap_army(smallerArmy)
 
         if largerArmy.tile != finalTile:
             largerArmy.update_tile(finalTile)
-        self.armies[finalTile] = largerArmy
+
+        if armyDict is None:
+            armyDict = self.armies
+
+        armyDict[finalTile] = largerArmy
         largerArmy.update()
 
     def has_perfect_information_of_player_cities_and_general(self, player: int):
@@ -922,6 +928,8 @@ class ArmyTracker(object):
         ):
             # army hasn't moved
             army.update()
+            if not army.scrapped and not army.visible:
+                army.value = army.tile.army - 1
             self.check_for_should_scrap_unmoved_army(army)
             return
 
@@ -969,10 +977,11 @@ class ArmyTracker(object):
                     fogBois.append(adjacent)
                     fogCount += 1
 
-                expectedAdjDelta = self.unaccounted_tile_diffs.get(adjacent, 0)
+                expectedAdjDelta = 0
+                adjDelta = self.unaccounted_tile_diffs.get(adjacent, adjacent.delta.armyDelta)
+                # expectedAdjDelta = 0
                 logging.info(
                     f"  adjacent delta raw {adjacent.delta.armyDelta} expectedAdjDelta {expectedAdjDelta}")
-                adjDelta = abs(adjacent.delta.armyDelta + expectedAdjDelta)
                 logging.info(
                     f"  armyDeltas: army {army.toString()} {armyRealTileDelta} - adj {adjacent.toString()} {adjDelta} expAdj {expectedAdjDelta}")
                 # expectedDelta is fine because if we took the expected tile we would get the same delta as army remaining on army tile.
@@ -1026,6 +1035,11 @@ class ArmyTracker(object):
         if army is None:
             army = Army(tile)
             army.last_moved_turn = self.map.turn
+            if not tile.visible:
+                army.value = tile.army - 1
+
+            army.expectedPath = self.get_army_expected_path(army)
+
             self.armies[tile] = army
 
         return army
@@ -1075,6 +1089,7 @@ class ArmyTracker(object):
         unexplainedAdjDelta = self.unaccounted_tile_diffs.get(adjacent, 0)
         positiveUnexplainedAdjDelta = 0 - unexplainedAdjDelta
 
+        # only works when the source army is still visible
         if armyRealTileDelta > 0 and abs(unexplainedAdjDelta) - abs(armyRealTileDelta) == 0:
             logging.info(
                 f"    Army probably moved from {army.toString()} to {adjacent.toString()} based on unexplainedAdjDelta {unexplainedAdjDelta} vs armyRealTileDelta {armyRealTileDelta}")
@@ -1097,7 +1112,7 @@ class ArmyTracker(object):
             self.unaccounted_tile_diffs.pop(adjacent, None)
             self.army_moved(army, adjacent, trackingArmies)
             return True
-        elif positiveUnexplainedAdjDelta != 0 and positiveUnexplainedAdjDelta - army.value == 0:
+        elif positiveUnexplainedAdjDelta != 0 and abs(positiveUnexplainedAdjDelta) - army.value == 0:
             # handle fog moves?
             logging.info(
                 f"    Army (SOURCE FOGGED?) probably moved from {army.toString()} to {adjacent.toString()}. adj (dest) visible? {adjacent.visible}")
@@ -1146,9 +1161,15 @@ class ArmyTracker(object):
         return isGoodResolution
 
     def check_for_should_scrap_unmoved_army(self, army: Army):
+        thresh = self.track_threshold - 1
+        if self.genDistances[army.tile.x][army.tile.y] < 5:
+            thresh = 4
+        if self.genDistances[army.tile.x][army.tile.y] < 2:
+            thresh = 2
+
         if (
-                (army.tile.visible and army.value < self.track_threshold - 1)
-                or (not army.tile.visible and army.value < self.track_threshold - 1)
+                (army.tile.visible and army.value < thresh)
+                or (not army.tile.visible and army.value < thresh)
         ):
             logging.info(f"  Army {army.toString()} Stopped moving. Scrapped for being low value")
             self.scrap_army(army)
@@ -1157,3 +1178,25 @@ class ArmyTracker(object):
         for army in list(self.armies.values()):
             if army.last_moved_turn < self.map.turn - 1:
                 self.check_for_should_scrap_unmoved_army(army)
+
+    def get_army_expected_path(self, army: Army) -> Path | None:
+        """
+        Returns none if asked to predict a friendly army path.
+
+        Returns the path to the nearest player target out of the targets,
+         WHETHER OR NOT the army can actually reach that target or capture it successfully.
+
+        @param army:
+        @return:
+        """
+        if army.player == self.map.player_index:
+            return None
+
+        return SearchUtils.breadth_first_find_queue(
+            self.map,
+            [army.tile],
+            goalFunc=lambda tile, army, dist: army > 0 and tile in self.player_targets,
+            maxTime=0.1,
+            maxDepth=10,
+            noNeutralCities=army.tile.army < 150,
+            searchingPlayer=army.player)

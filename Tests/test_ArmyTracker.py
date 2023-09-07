@@ -239,11 +239,11 @@ class ArmyTrackerTests(TestBase):
                     self.assertFalse(collision.scrapped)
                 else:
                     self.assertTrue(collision.scrapped)
-
+            with self.subTest(careLess=True, frArmy=frArmy, enArmy=enArmy, expectedTileArmy=expectedTileArmy):
                 # eh, dunno how much I care about this
                 self.assertEqual(enemyGeneral.player, t11_16.player, "eh, dunno how much I care but technically we know for sure that this tile was crossed despite undiscovered, should be en player.")
                 self.assertEqual(1, t11_16.army, "eh, dunno how much I care but technically we know for sure that this tile was crossed despite undiscovered, should have army 1")
-    
+
     def test_should_track_army_fog_island_capture(self):
         debugMode = False
         mapFile = 'GameContinuationEntries/should_track_army_fog_island_capture___HlPWKpCT3---b--499.txtmap'
@@ -553,3 +553,62 @@ class ArmyTrackerTests(TestBase):
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player))
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=2)
         self.assertIsNone(winner)
+
+    def test_should_not_perform_army_increment_or_city_increment_on_initial_test_map_load(self):
+        mapFile = 'GameContinuationEntries/should_not_duplicate_army_back_into_fog_on_small_player_intersection___HeEzmHU03---0--350.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 350, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 350)
+
+        simHost = GameSimulatorHost(
+            map,
+            player_with_viewer=general.player,
+            playerMapVision=rawMap,
+            allAfkExceptMapPlayer=True)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        self.assertNoFogMismatches(simHost, general.player)
+    
+    def test_should_not_duplicate_army_back_into_fog_on_small_player_army_collision(self):
+        debugMode = False
+        mapFile = 'GameContinuationEntries/should_not_duplicate_army_back_into_fog_on_small_player_intersection___HeEzmHU03---0--350.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 351, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 351)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=-2, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '5,9->5,8')
+        simHost.queue_player_moves_str(general.player, '4,8->5,8')
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=True))
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=2)
+        self.assertNoFogMismatches(simHost, general.player)
+    
+    def test_should_not_duplicate_army_collision_backwards_into_fog(self):
+        debugMode = False
+        mapFile = 'GameContinuationEntries/should_not_duplicate_army_collision_backwards_into_fog___reQb1i8Rh---0--285.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 285, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 285)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '13,9->12,9')
+        simHost.queue_player_moves_str(general.player, '11,9->12,9')
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=True))
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=2)
+        # self.assertNoFogMismatches(simHost, general.player)

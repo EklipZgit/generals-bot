@@ -132,6 +132,27 @@ class TestBase(unittest.TestCase):
 
             self.ensure_player_tiles_and_scores(map, general, playerTiles, playerScore, enemyGen, enemyTiles, enemyScore, enemyCities)
 
+        for player in map.players:
+            player.score = 0
+            player.tileCount = 0
+            player.cityCount = 0
+            player.cities = []
+            player.tiles = []
+            player.general = []
+        for tile in map.get_all_tiles():
+            tile.lastSeen = 0
+            if tile.player >= 0:
+                tilePlayer = map.players[tile.player]
+                tilePlayer.score += tile.army
+                tilePlayer.tileCount += 1
+                if tile.isGeneral:
+                    tilePlayer.cityCount += 1
+                    tilePlayer.general = tile
+                if tile.isCity:
+                    tilePlayer.cityCount += 1
+                    tilePlayer.cities.append(tile)
+                tilePlayer.tiles.append(tile)
+
         return map, general, enemyGen
 
     def get_test_map(self, tiles: typing.List[typing.List[Tile]], turn: int = 1, player_index: int = 0, dont_set_seen_visible_discovered: bool = False, num_players: int = -1) -> MapBase:

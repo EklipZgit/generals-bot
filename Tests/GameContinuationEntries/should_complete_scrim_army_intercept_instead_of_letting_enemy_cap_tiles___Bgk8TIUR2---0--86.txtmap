@@ -1,0 +1,43 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          M              M                                            M         M    M    M
+     M                        M                        M         M    M              M
+               M    M    M                        M                                       M    M
+     M         M              M         M                                  M         M                   M
+          M                                       M                                                 M    M
+M                                                 M                   M    M
+          M              M              M
+                         M              M         M    M         M              M    M
+                              M                                                      M
+                              M              M
+                    M                   a1   a1   a1   a1   a1        M         M    M         M         M
+                                        a1   C42            a1   M         M    M    M         M    M
+     M    a1        C46                 a1        M         a1   a6   b1        M
+          a1   M         b1   b1   b1   b1   M    M    b1   b1   b1   b1   M    M
+M    M    a1   a1   a1   b12  M         b1   b1   b1   b1        M                        M              M
+          a1   a1   M    a1        a1   a1   a1   a1   a2             M
+     M    aG13 a1   a1   a1   a1   a1   M         M                   M                   M    M    M
+          a1   a1
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=17,14
+turn=86
+bot_player_index=0
+aTiles=31
+aScore=49
+aStandingArmy=18
+aStars=55
+aCityCount=1
+aGeneral=2,16
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=30
+bScore=49
+bStandingArmy=19
+bStars=53
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=1

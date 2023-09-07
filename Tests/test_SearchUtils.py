@@ -10,8 +10,6 @@ from DangerAnalyzer import DangerAnalyzer
 
 
 class SearchUtilsTests(TestBase):
-
-
     def test_dest_breadth_first_target__calculates_short_path_values_correctly__normal_tile(self):
         # test both odd and even turns
         turnsToTest = [0, 1, 2]
@@ -179,3 +177,35 @@ class SearchUtilsTests(TestBase):
                 self.assertIsNotNone(path)
                 self.assertEquals(1, path.value)
 
+    def test_bfs_find_queue_returns_path(self):
+        mapFile = 'GameContinuationEntries/should_complete_danger_tile_kill___Bgk8TIUR2---0--108.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 108, fill_out_tiles=True)
+        startTile = map.GetTile(2, 12)
+        midTile = map.GetTile(2, 15)
+
+        def pathToGenFunc(current: Tile, curArmyAmt: int, distance: int) -> bool:
+            if current == general:
+                return True
+            return False
+
+        path = SearchUtils.breadth_first_find_queue(map, [startTile], pathToGenFunc, noNeutralCities = True, searchingPlayer = startTile.player)
+
+        self.assertIsNotNone(path)
+        self.assertEqual(4, path.length)
+
+    def test_bfs_find_queue_returns_path_despite_army_blocking(self):
+        mapFile = 'GameContinuationEntries/should_complete_danger_tile_kill___Bgk8TIUR2---0--108.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 108, fill_out_tiles=True)
+        startTile = map.GetTile(2, 12)
+        midTile = map.GetTile(2, 14)
+        midTile.army = 14
+
+        def pathToGenFunc(current: Tile, curArmyAmt: int, distance: int) -> bool:
+            if current == general:
+                return True
+            return False
+
+        path = SearchUtils.breadth_first_find_queue(map, [startTile], pathToGenFunc, noNeutralCities = True, searchingPlayer = startTile.player)
+
+        self.assertIsNotNone(path)
+        self.assertEqual(4, path.length)

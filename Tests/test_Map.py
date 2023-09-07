@@ -443,3 +443,15 @@ C5
 
         self.assertEqual(m.GetTile(7, 16), m.GetTile(7, 15).delta.fromTile)
         self.assertEqual(m.GetTile(7, 15), m.GetTile(7, 16).delta.toTile)
+
+    def test_load_map_should_load_with_actual_scores(self):
+        mapFile = 'GameContinuationEntries/should_not_dance_around_armies_standing_still___HeEzmHU03---0--269.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 269, fill_out_tiles=True)
+        # aTiles = 79
+        # aScore = 199
+        # bTiles = 76
+        # bScore = 191
+        self.assertEqual(79, map.players[0].tileCount)
+        self.assertEqual(199, map.players[0].score)
+        self.assertEqual(76, map.players[1].tileCount)
+        self.assertEqual(191, map.players[1].score)

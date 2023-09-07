@@ -49,6 +49,7 @@ class TileDelta(object):
     def __init__(self):
         # Public Properties
         self.oldOwner = -1
+        self.oldArmy: int = 0
         self.newOwner = -1
         self.gainedSight = False
         self.lostSight = False
@@ -260,6 +261,7 @@ class Tile(object):
         overridePlayer: int | None = None
     ) -> bool:
         self.delta: TileDelta = TileDelta()
+        self.delta.oldArmy = self.army
         if tile >= TILE_MOUNTAIN:
             self.discovered = True
             self.lastSeen = map.turn

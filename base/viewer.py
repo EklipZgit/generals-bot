@@ -517,6 +517,9 @@ class GeneralsViewer(object):
 
             self.draw_division_borders()
 
+            if self._viewInfo.targetingArmy is not None:
+                self.draw_square(self._viewInfo.targetingArmy.tile, 2, 25, 25, 25, 200, self.square_inner_3)
+
             if self._viewInfo.redGatherNodes is not None:
                 self.drawGathers(self._viewInfo.redGatherNodes, self.redLineArrow, self.redLineArrow)
             if self._viewInfo.gatherNodes is not None:
@@ -727,9 +730,6 @@ class GeneralsViewer(object):
                                               (pos_left + 2, pos_top + self.cellHeight / 3))
 
             self.draw_armies()
-
-            if self._viewInfo.targetingArmy is not None:
-                self.draw_square(self._viewInfo.targetingArmy.tile, 3, 1, 1, 1, 254, self.square_inner_3)
 
             # Go ahead and update the screen with what we've drawn.
             pygame.display.flip()

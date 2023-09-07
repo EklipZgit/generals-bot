@@ -1236,6 +1236,7 @@ def greedy_backpack_gather_values(
     """
     Legacy iterative BFS greedy backpack gather, where every iteration it adds the max army-per-turn path that it finds on to the existing gather plan.
     SHOULD be replaced by variations of the multiple-choice-knapsack gathers that pull lots of paths in a single BFS and knapsack them.
+    Returns (value, turnsUsed, gatherNodes)
 
     @param map:
     @param startTiles: startTiles is list of tiles that will be weighted with baseCaseFunc, OR dict (startPriorityObject, distance) = startTiles[tile]

@@ -406,7 +406,7 @@ class BotBehaviorTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=50)
         self.assertIsNone(winner)
 
-    def test_should_capture_neutral_city(self):
+    def test_should_capture_neutral_city_quickly(self):
         debugMode = True
         mapFile = 'GameContinuationEntries/should_capture_neutral_city___EklipZ_ai-BxOfVysTh---a--201.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 201, fill_out_tiles=True)
@@ -491,3 +491,58 @@ class BotBehaviorTests(TestBase):
         self.assertIsNone(winner)
 
         # TODO add asserts for should_plan_through_neutral_city_quick_kill_flank
+
+    def test_should_not_make_silly_threat_killer_move__when_already_safe_4_8__5_8(self):
+        debugMode = True
+        mapFile = 'GameContinuationEntries/should_not_duplicate_army_back_into_fog_on_small_player_intersection___HeEzmHU03---0--350.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 350, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 350)
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap,
+                                    allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '5,9->5,8')
+        move = simHost.get_bot(general.player).find_move()
+        self.assertNotEqual(self.get_player_tile(5, 8, simHost.sim, general.player), move.dest)
+    
+    def test_should_complete_danger_tile_kill(self):
+        debugMode = True
+        mapFile = 'GameContinuationEntries/should_complete_danger_tile_kill___Bgk8TIUR2---0--108.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 108, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 108)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=4)
+        self.assertIsNone(winner)
+
+        tile = self.get_player_tile(2, 12, simHost.sim, general.player)
+        self.assertEqual(general.player, tile.player)
+        self.assertNoRepetition(simHost)
+    
+    def test_should_not_failed_defense_king_kill_against_undisc_king_when_can_still_save(self):
+        debugMode = True
+        mapFile = 'GameContinuationEntries/should_not_failed_defense_king_kill_against_undisc_king_when_can_still_save___HxJcBYIC3---1--456.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 456, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 456)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
+        self.assertIsNone(winner)
+
+        # TODO add asserts for should_not_failed_defense_king_kill_against_undisc_king_when_can_still_save

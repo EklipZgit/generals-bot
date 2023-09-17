@@ -138,7 +138,6 @@ function Run-BotOnce {
     $exeString | Out-File $ps1File
     Write-Verbose $ps1File -Verbose
     start Powershell "-File $ps1File" -Wait -NoNewWindow
-    Write-Verbose 'Powershell finished, sleeping' -Verbose
     try {
         remove-item $ps1File
     }
@@ -366,7 +365,26 @@ function Start-WindowsTerminalHistoricalBots {
     }
 
     <#
-    MCTS based army engine
+    loads of fog / engine bugfixes but still not MCTS working. 
+    Tweaked attack timings.
+    Better defense.
+    Brute force army engine time cutoff.
+    Dropped file logging.
+    #>
+    wt -w HistBots new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'run-bot -game 1v1, ffa, ffa, 1v1, ffa, 1v1, 1v1 -name "EklipZ_ai_07" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-09-15\BotHost.py'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    <#
+    MCTS based army engine.
     #>
 }
 
@@ -559,7 +577,7 @@ function Create-Checkpoint {
 function Run-Human {
     Param(
         $game = @('1v1', 'ffa', '1v1'),
-        $sleepMax = 5
+        $sleepMax = 3
     )
     $splat = @{
         noui = $false
@@ -570,7 +588,9 @@ function Run-Human {
         foreach ($g in $game)
         {
             Run-BotOnce -game $g -name "Human.exe" -public @splat
-            Start-Sleep -Seconds (Get-Random -Min 0 -Max $sleepMax)
+            $sleepTime = (Get-Random -Min 0 -Max $sleepMax)
+            Write-Verbose "Powershell finished, sleeping $sleepTime" -Verbose
+            Start-Sleep -Seconds $sleepTime
         }
     }
 }

@@ -9,13 +9,14 @@ LOGGING_SET_UP = False
 
 
 def add_file_log_output(botName: str, gameMode: str, replayId: str, logFolder: str | None = None):
-    if logFolder is None:
-        logFolder = "D:\\GeneralsLogs"
-    fileName = f'{botName}-{gameMode}-{replayId}.txt'
-    fileHandler = logging.FileHandler("{0}/__{1}".format(logFolder, fileName))
-    fileHandler.setFormatter(FILE_FORMATTER)
-    rootLogger = logging.getLogger()
-    rootLogger.addHandler(fileHandler)
+    # if logFolder is None:
+    #     logFolder = "D:\\GeneralsLogs"
+    # fileName = f'{botName}-{gameMode}-{replayId}.txt'
+    # fileHandler = logging.FileHandler("{0}/__{1}".format(logFolder, fileName))
+    # fileHandler.setFormatter(FILE_FORMATTER)
+    # rootLogger = logging.getLogger()
+    # rootLogger.addHandler(fileHandler)
+    pass
 
 
 def set_up_logger(logLevel: int):

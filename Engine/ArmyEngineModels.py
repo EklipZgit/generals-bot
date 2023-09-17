@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import typing
 
+from numba import int64, jit, float32, boolean, types
+from numba.experimental import jitclass
+
 from DataModels import Move
 from base.client.map import Tile
 
@@ -18,7 +21,34 @@ class SimTile(object):
     def __repr__(self):
         return str(self)
 
-
+# @jitclass([
+#     ('remaining_cycle_turns', types.int64),
+#     ('depth', types.int64),
+#     ('tile_differential', types.int64),
+#     ('city_differential', types.int64),
+#     ('captures_enemy', types.boolean),
+#     ('captured_by_enemy', types.boolean),
+#     ('can_force_repetition', types.boolean),
+#     ('can_enemy_force_repetition', types.boolean),
+#     ('kills_all_friendly_armies', types.boolean),
+#     ('kills_all_enemy_armies', types.boolean),
+#     # ('sim_tiles', types.DictType(types., types.)),
+#     ('controlled_city_turn_differential', types.int64),
+#     # ('friendly_living_armies', types.DictType(types., types.)),
+#     # ('enemy_living_armies', types.DictType(types., types.)),
+#     ('friendly_skipped_move_count', types.int64),
+#     ('enemy_skipped_move_count', types.int64),
+#     # ('friendly_move', types.),
+#     # ('enemy_move', types.),
+#     # ('prev_friendly_move', types.),
+#     # ('prev_enemy_move', types.),
+#     ('repetition_count', types.int64),
+#     # ('parent_board', types.),
+#     # ('friendly_move_generator', types.),
+#     # ('enemy_move_generator', types.),
+#     ('initial_differential', types.int64),
+# ])
+# # @jitclass
 class ArmySimState(object):
     def __init__(
             self,
@@ -118,10 +148,23 @@ class ArmySimState(object):
         """ Generate the friendly moves. MUST set this before running a scan. """
 
         self.initial_differential: int = 0
+        """ The players existing econ differential so that the engine can evaluate just the positives/negatives from the starting point relative to game state rather than a massive global diff. """
 
     def get_child_board(self) -> ArmySimState:
+        copy = self.clone()
+        copy.friendly_move = None
+        copy.enemy_move = None
+        copy.depth += 1
+        copy.remaining_cycle_turns -= 1
+        copy.prev_friendly_move = self.friendly_move
+        copy.prev_enemy_move = self.enemy_move
+        copy.parent_board = self
+
+        return copy
+
+    def clone(self) -> ArmySimState:
         copy = ArmySimState(
-            self.remaining_cycle_turns - 1,
+            self.remaining_cycle_turns,
             self.sim_tiles.copy(),
             self.friendly_living_armies.copy(),
             self.enemy_living_armies.copy()
@@ -138,14 +181,15 @@ class ArmySimState(object):
         copy.friendly_skipped_move_count = self.friendly_skipped_move_count
         copy.enemy_skipped_move_count = self.enemy_skipped_move_count
         copy.repetition_count = self.repetition_count
-        copy.depth = self.depth + 1
         copy.friendly_move_generator = self.friendly_move_generator
         copy.enemy_move_generator = self.enemy_move_generator
         copy.initial_differential = self.initial_differential
-
-        copy.prev_friendly_move = self.friendly_move
-        copy.prev_enemy_move = self.enemy_move
-        copy.parent_board = self
+        copy.prev_friendly_move = self.prev_friendly_move
+        copy.prev_enemy_move = self.prev_enemy_move
+        copy.friendly_move = self.friendly_move
+        copy.enemy_move = self.enemy_move
+        copy.depth = self.depth
+        copy.parent_board = self.parent_board
 
         return copy
 
@@ -192,44 +236,65 @@ class ArmySimState(object):
 
         return ' '.join(pieces)
 
-    def calculate_value(self) -> typing.Tuple:
-        econDiff = self.get_econ_value()
-        return (
-            # self.calculate_value_int(),  # todo hack...?
-            self.captures_enemy,
-            not self.captured_by_enemy,
-            # self.can_force_repetition,
-            # not self.can_enemy_force_repetition,
-            econDiff,
-            self.friendly_skipped_move_count,
-            0 - self.enemy_skipped_move_count,
-            self.kills_all_enemy_armies,
-            not self.kills_all_friendly_armies,
-        )
+    # def calculate_value(self) -> typing.Tuple:
+    #     econDiff = self.get_econ_value()
+    #     return (
+    #         # self.calculate_value_int(),  # todo hack...?
+    #         self.captures_enemy,
+    #         not self.captured_by_enemy,
+    #         # self.can_force_repetition,
+    #         # not self.can_enemy_force_repetition,
+    #         econDiff,
+    #         self.friendly_skipped_move_count,
+    #         0 - self.enemy_skipped_move_count,
+    #         self.kills_all_enemy_armies,
+    #         not self.kills_all_friendly_armies,
+    #     )
 
     def calculate_value_int(self) -> int:
         """Gets a (10x econ diff based) integer representation of the value of the board state. Used for Nashpy"""
-        econDiff = self.get_econ_value() * 10
+        econDiff = 10 * (
+            self.tile_differential
+            + 25 * self.city_differential
+            + self.controlled_city_turn_differential
+        )
         if self.captures_enemy:
-            econDiff += 10000
+            econDiff += 10000 // self.depth
         if self.captured_by_enemy:
-            econDiff -= 10000
+            econDiff -= 10000 // self.depth
         # skipped moves are worth 0.7 econ each
         econDiff += self.friendly_skipped_move_count * 5
-        #enemy skipped moves are worth slightly less..? than ours?
+        # enemy skipped moves are worth slightly less..? than ours?
         econDiff -= self.enemy_skipped_move_count * 5
-
-        # if self.kills_all_enemy_armies:
-        #     econDiff += 5
-        # if self.kills_all_friendly_armies:
-        #     econDiff -= 5
+        if self.kills_all_enemy_armies:
+            econDiff += 2
+        if self.kills_all_friendly_armies:
+            econDiff += 1
 
         return econDiff
+        #
+        # return calc_value_int(
+        #     self.tile_differential,
+        #     self.city_differential,
+        #     self.controlled_city_turn_differential,
+        #     self.depth,
+        #     self.captures_enemy,
+        #     self.captured_by_enemy,
+        #     self.kills_all_friendly_armies,
+        #     self.kills_all_enemy_armies,
+        #     self.friendly_skipped_move_count,
+        #     self.enemy_skipped_move_count
+        # )
 
     def get_econ_value(self) -> int:
-        return (self.tile_differential
-                + 25 * self.city_differential
-                + self.controlled_city_turn_differential)  # TODO need to approximate the city differential for the scrim duration when pruning scrim?
+        return (
+            self.tile_differential
+            + 25 * self.city_differential
+            + self.controlled_city_turn_differential
+            #- self.initial_differential  # TODO ok we actually need to remove this, it ruins the engines ability to decide when it should force repetitions or not
+        )  # TODO need to approximate the city differential for the scrim duration when pruning scrim?
+
+        # return calc_econ_value(self.tile_differential, self.city_differential, self.controlled_city_turn_differential)
 
     def generate_friendly_moves(self) -> typing.List[Move | None]:
         return self.friendly_move_generator(self)
@@ -249,7 +314,7 @@ class ArmySimResult(object):
         self.expected_best_moves: typing.List[typing.Tuple[Move, Move]] = []
         """A list of (friendly, enemy) move tuples that the min-max best move board state is expected to take"""
 
-        self.expected_moves_cache: ArmySimCache = None
+        # self.expected_moves_cache: ArmySimCache = None
         """
         A cache of the current and alternate move branches (for the enemy, since we know what 
         move we will make we dont care about our alternates), out to cacheDepth depth, 
@@ -259,14 +324,11 @@ class ArmySimResult(object):
         here was poor and should be logged and tests written to predict the better opponent move next time.
         """
 
-    def calculate_value(self) -> typing.Tuple:
-        return self.best_result_state.calculate_value_int(), False
-
     def __str__(self):
         return f'({self.net_economy_differential:+d}) {str(self.best_result_state)}'
 
     def __repr__(self):
-        return f'{str(self)} [{self.calculate_value()}]'
+        return f'{str(self)} [{self.best_result_state.calculate_value_int()}]'
 
 
 class ArmySimCache(object):
@@ -282,3 +344,53 @@ class ArmySimCache(object):
         self.sim_state: ArmySimState = simState
         self.move_tree_cache: typing.Dict[Tile, ArmySimCache] | None = subTreeCache
 
+
+# https://numba.pydata.org/numba-doc/latest/reference/types.html#basic-types
+@jit(int64(int64, int64, int64, int64, boolean, boolean, boolean, boolean, int64, int64), nopython=True)
+def calc_value_int(
+        tile_differential: int,
+        city_differential: int,
+        controlled_city_turn_differential: int,
+        depth: int,
+        captures_enemy: bool,
+        captured_by_enemy: bool,
+        kills_friendly_armies: bool,
+        kills_enemy_armies: bool,
+        friendly_skipped_move_count: int,
+        enemy_skipped_move_count: int,
+) -> int:
+    """Gets a (10x econ diff based) integer representation of the value of the board state. Used for Nashpy"""
+
+    econDiff = 10 * (
+            tile_differential
+            + 25 * city_differential
+            + controlled_city_turn_differential
+    )
+    if captures_enemy:
+        econDiff += 10000 // depth
+    if captured_by_enemy:
+        econDiff -= 10000 // depth
+    # skipped moves are worth 0.7 econ each
+    econDiff += friendly_skipped_move_count * 5
+    # enemy skipped moves are worth slightly less..? than ours?
+    econDiff -= enemy_skipped_move_count * 5
+    if kills_enemy_armies:
+        econDiff += 2
+    if kills_friendly_armies:
+        econDiff += 1
+
+    return econDiff
+
+
+@jit(int64(int64, int64, int64), nopython=True)
+def calc_econ_value(
+        tile_differential: int,
+        city_differential: int,
+        controlled_city_turn_differential: int
+) -> int:
+    return (
+        tile_differential
+        + 25 * city_differential
+        + controlled_city_turn_differential
+        #- self.initial_differential  # TODO ok we actually need to remove this, it ruins the engines ability to decide when it should force repetitions or not
+    )  # TODO need to approximate the city differential for the scrim duration when pruning scrim?

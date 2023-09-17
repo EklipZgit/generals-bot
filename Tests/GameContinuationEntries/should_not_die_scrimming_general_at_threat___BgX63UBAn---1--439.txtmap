@@ -2,12 +2,12 @@
      M    M    M    M                        M         M                   M    M         M    M
                          M         M                        M                                  M
      b1   b2   b2   M                   M         M         M
-C43  b1   b2   M                        M                        a4
-b1   b1   M    M    M    M                                  a4   a4        M
+C43  b1   b2   M                        M                        a1
+b1   b1   M    M    M    M                                  a1   a1        M
 M    b1   b1   b1   b1   b1   b1   a2   a2   a2        M    a2   M                        M
-     M    bG22 bC33 a57  a1   a1   a2   a2   a2   a3   a1   a0   b1   b3        M    M         M
-     b3   b3   b1   M    a2   a1   M    C45  M    M    C43  a3   M    b3   a2        M    M
-M    b1   b1   M    b2   b2   a1   a1   a1   a1   a2        a3   b3   b3   a2             M
+     M    bG22 bC33 a57  a1   a1   a2   a2   a2   a1   a1   a0   b1   b3        M    M         M
+     b3   b3   b1   M    a2   a1   M    C45  M    M    C43  a1   M    b3   a2        M    M
+M    b1   b1   M    b2   b2   a1   a1   a1   a1   a1        a3   b3   b3   a2             M
 b3   b1   M    b1   b1   b1   b1   a2   a2   a1   a1   M    b2   b3   b3   a2   M    M         M
 b1   b1   b1   b1   a2   M    a2   a1   a3   a1   a1   a1   a1   a1   a1   a1   a1   M
 b1   b2   b2   b2   b7   M    M         a4   a3   a1   b2   b2   a1   b3   M    aG3

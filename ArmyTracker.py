@@ -182,12 +182,19 @@ class ArmyTracker(object):
         for army in list(self.armies.values()):
             if army.tile.visible:
                 continue
+            if army.player == self.map.player_index:
+                self.scrap_army(army)
+                continue
+            if army.last_moved_turn == self.map.turn - 1:
+                continue
 
             if (army.expectedPath is None
                     or army.expectedPath.start is None
                     or army.expectedPath.start.next is None
                     or army.expectedPath.start.next.tile is None
             ):
+                army.value = army.tile.army - 1
+
                 continue
 
             if army.player in self.player_moves_this_turn:
@@ -197,7 +204,7 @@ class ArmyTracker(object):
             if not nextTile.visible:
                 logging.info(
                     f"Moving fogged army {army.toString()} along expected path {army.expectedPath.toString()}")
-                del self.armies[army.tile]
+                self.armies.pop(army.tile, None)
 
                 existingArmy = self.armies.get(nextTile, None)
 
@@ -207,12 +214,16 @@ class ArmyTracker(object):
                     oldTile.army += 1
                 if self.map.is_army_bonus_turn:
                     oldTile.army += 1
+                # if not oldTile.discovered:
+                #     oldTile.player = -1
+                #     oldTile.army = 0
                 if nextTile.player == army.player:
                     nextTile.army = nextTile.army + army.value
                 else:
                     nextTile.army = nextTile.army - army.value
                     if nextTile.army < 0:
                         nextTile.army = 0 - nextTile.army
+                    nextTile.player = army.player
 
                 if existingArmy is not None:
                     if existingArmy in army.entangledArmies:
@@ -416,12 +427,18 @@ class ArmyTracker(object):
             if oldTile.isCity or oldTile.isGeneral and self.map.is_city_bonus_turn:
                 oldTile.army += 1
 
-        if army.player != self.map.player_index:
-            if army.scrapped:
-                army.expectedPath = None
+        if army.scrapped:
+            army.expectedPath = None
+        else:
+            if army.expectedPath is not None \
+                    and army.expectedPath.start.next is not None \
+                    and army.expectedPath.start.next.tile == army.tile:
+                army.expectedPath.made_move()
             else:
+                # Ok then we need to recalculate the expected path.
                 # TODO detect if enemy army is likely trying to defend
                 army.expectedPath = self.get_army_expected_path(army)
+                logging.info(f'set army {str(army)} expected path to {str(army.expectedPath)}')
 
         army.last_moved_turn = self.map.turn - 1
 
@@ -1039,6 +1056,7 @@ class ArmyTracker(object):
                 army.value = tile.army - 1
 
             army.expectedPath = self.get_army_expected_path(army)
+            logging.info(f'set army {str(army)} expected path to {str(army.expectedPath)}')
 
             self.armies[tile] = army
 
@@ -1192,11 +1210,24 @@ class ArmyTracker(object):
         if army.player == self.map.player_index:
             return None
 
-        return SearchUtils.breadth_first_find_queue(
+        armyDistFromGen = self.genDistances[army.tile.x][army.tile.y]
+
+        def goalFunc(tile: Tile, armyAmt: int, dist: int) -> bool:
+            # don't pick cities over general as targets when they're basically the same distance from gen, pick gen if its within 2 tiles of other targets.
+            if dist + 2 < armyDistFromGen and tile in self.player_targets:
+                return True
+            if tile == self.map.generals[self.map.player_index]:
+                return True
+            return False
+
+        path = SearchUtils.breadth_first_find_queue(
             self.map,
             [army.tile],
-            goalFunc=lambda tile, army, dist: army > 0 and tile in self.player_targets,
+            # goalFunc=lambda tile, armyAmt, dist: armyAmt + tile.army > 0 and tile in self.player_targets,  # + tile.army so that we find paths that reach targets regardless of killing them.
+            goalFunc=goalFunc,
             maxTime=0.1,
-            maxDepth=10,
+            maxDepth=20,
             noNeutralCities=army.tile.army < 150,
             searchingPlayer=army.player)
+
+        return path

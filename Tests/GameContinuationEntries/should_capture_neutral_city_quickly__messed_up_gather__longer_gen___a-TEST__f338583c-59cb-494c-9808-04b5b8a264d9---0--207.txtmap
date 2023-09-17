@@ -1,17 +1,17 @@
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 M    M         M    M    M              M                                                 M
                                         M                   M                             M         M
-                                   M                   M    a5   a3   a1   M    M    M
-     M         M         M    M    M    M    M    a2   a2   a3   a2   a2   a2   M         M    M
-               M    M                                       M    a2   a2   a2   a3   M    a4   a2   a2
-M                                            M         M    a2   a2   M    aG16 a2   a2   a4   M
-                                        M         M         C41  a2   a2   a2   a2   M    a5   a2
-                                             a2        M         a2   a2   M    a3   a2   a2   a2   M
-               M              b2   a2   a2   a2   M    a1   M    a2   a2   a2   a3   a2   M    a2   M
+                                   M                   M    a1   a1   a1   M    M    M
+     M         M         M    M    M    M    M    a2   a2   a3   a1   a2   a2   M         M    M
+               M    M                                       M    a1   a2   a2   a3   M    a4   a2   a2
+M                                            M         M    a2   a1   M    a2   aG19 a2   a5   M
+                                        M         M         C41  a11  a3   a2   a2   M    a1   a2
+                              b1             a2        M         a2   a2   M    a3   a2   a2   a2   M
+               M              b1   a2   a2   a2   M    a1   M    a2   a2   a2   a2   a2   M    a2   M
      M         b2   a2   a2   a2   a2   a2   a2   M    a3   a2   a2   a2   M    M    a2        a3
-               b2   M    a2   M    b2   M    a2   a2   a2   a2   a2   a2   M    a2   a2   M    a2   a3
-               b2   b1   a2   b2             M    b3   b3   b3   b3   b2   b2   a2   a2        C44  a3
-     M    M    b2   b1   M    M    M    M         C45  C50  M    a3                            a2   a3
+               b2   M    a2   M    b2   M    a2   a2   a2   a2   a0   a2   M    a2   a2   M    a2   a3
+               b2   b1   a2   b1             M    b3   b3   b3   b1   b1   b1   a2   a2        C44  a3
+     M    M    b2   b1   M    M    M    M         C45  C50  M    a3   b1   b1                  a2   a3
           b3   a2   b2   b2        M              M         M         M
      M    b2   b2   b2   b2                                 M    M         M    M    M    M
                                    M                                                 M
@@ -19,22 +19,22 @@ M                                            M         M    a2   a2   M    aG16 
           M         M              M                   M              M                        M    M
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=4,15
-turn=201
+turn=207
 bot_player_index=0
-aTiles=73
-aScore=182
-aStandingArmy=109
-aStars=53
+aTiles=76
+aScore=183
+aStandingArmy=107
+aStars=0
 aCityCount=1
 aGeneral=15,5
 aKnowsKingLocation=False
 aDead=False
 aLeftGame=False
 aLeftGameTurn=-1
-bTiles=58
-bScore=136
-bStandingArmy=78
-bStars=52
+bTiles=62
+bScore=141
+bStandingArmy=79
+bStars=0
 bCityCount=2
 bKnowsKingLocation=False
 bDead=False

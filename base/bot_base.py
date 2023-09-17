@@ -102,7 +102,7 @@ class GeneralsClientHost(object):
         # exit(0) # End Program
 
     def _set_update(self, update):
-        if update.complete:
+        if update.complete and update.turn > 2:
             logging.info("!!!! Game Complete. Result = " + str(update.result) + " !!!!")
             if '_moves_realized' in dir(self):
                 logging.info("Moves: %d, Realized: %d" % (self._update.turn, self._moves_realized))

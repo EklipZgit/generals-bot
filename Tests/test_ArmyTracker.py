@@ -1,5 +1,6 @@
 import logging
 
+from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
 
@@ -56,7 +57,7 @@ class ArmyTrackerTests(TestBase):
 
     def test_small_gather_adj_to_fog_should_not_double_gather_from_fog(self):
         # SEE TEST WITH THE SAME NAME IN test_Map.py which proves that this bug is not the map engines fault, and is instead armytracker emergence as the cause.
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/small_gather_adj_to_fog_should_not_double_gather_from_fog___rgI9fxNa3---a--451.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 451, fill_out_tiles=True)
         rawMap, gen = self.load_map_and_general(mapFile, 451)
@@ -117,7 +118,7 @@ class ArmyTrackerTests(TestBase):
                 simHost.queue_player_moves_str(general.player,      "5,15->6,15->7,15->8,15->9,15")
                 simHost.queue_player_moves_str(enemyGeneral.player, "12,16->11,16->10,16->10,15->9,15")
 
-                # debugMode = True
+                # debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
                 # if debugMode:
                 #     self.begin_capturing_logging()
                 #
@@ -245,7 +246,7 @@ class ArmyTrackerTests(TestBase):
                 self.assertEqual(1, t11_16.army, "eh, dunno how much I care but technically we know for sure that this tile was crossed despite undiscovered, should have army 1")
 
     def test_should_track_army_fog_island_capture(self):
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_track_army_fog_island_capture___HlPWKpCT3---b--499.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 499, fill_out_tiles=True)
 
@@ -255,7 +256,7 @@ class ArmyTrackerTests(TestBase):
         rawMap, _ = self.load_map_and_general(mapFile, 499)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-        simHost.queue_player_moves_str(enemyGeneral.player, '9,13->10,13->10,12->10,11')
+        simHost.queue_player_moves_str(enemyGeneral.player, '9,13->10,13->10,12->9,12')
         simHost.queue_player_moves_str(general.player, '2,9->3,9->4,9->3,9')
 
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -267,7 +268,7 @@ class ArmyTrackerTests(TestBase):
         self.assertIsNone(winner)
     
     def test_should_not_duplicate_fog_island_armies(self):
-        debugMode = True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_duplicate_fog_island_armies___rxEQ8qJR2---b--431.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 431, fill_out_tiles=True)
 
@@ -330,7 +331,7 @@ class ArmyTrackerTests(TestBase):
         simHost.queue_player_moves_str(enemyGeneral.player, '5,16->5,15')
         simHost.queue_player_moves_str(general.player, '5,15->4,15')
 
-        # debugMode = True
+        # debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         # if debugMode:
         #     simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player))
         #     simHost.run_sim(run_real_time=True, turn_time=5.0, turns = 2)
@@ -410,7 +411,7 @@ class ArmyTrackerTests(TestBase):
         simHost.queue_player_moves_str(enemyGeneral.player, '4,16->5,16')
         simHost.queue_player_moves_str(general.player, '5,16->5,15')
 
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         self.begin_capturing_logging()
         if debugMode:
             simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player))
@@ -476,7 +477,7 @@ class ArmyTrackerTests(TestBase):
         self.assertNoFogMismatches(simHost, general.player)
     
     def test_should_not_duplicate_army_into_fog_when_running_into_other_fog(self):
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_duplicate_army_into_fog_when_running_into_other_fog___SxvzBPWR2---b--427.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 427, fill_out_tiles=True)
 
@@ -498,7 +499,7 @@ class ArmyTrackerTests(TestBase):
         self.assertIsNone(winner)
 
     def template(self):
-        debugMode = True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_duplicate_gather_army_exit_from_fog___BeXQydQAn---b--243.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 243, fill_out_tiles=True)
 
@@ -516,7 +517,7 @@ class ArmyTrackerTests(TestBase):
         self.assertIsNone(winner)
     
     def test_should_not_duplicate_gather_army_exit_from_fog(self):
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_duplicate_gather_army_exit_from_fog___BeXQydQAn---b--243.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 243, fill_out_tiles=True)
 
@@ -535,7 +536,7 @@ class ArmyTrackerTests(TestBase):
         self.assertIsNone(winner)
     
     def test_should_not_resolve_fog_path_for_normal_move(self):
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_resolve_fog_path_for_normal_move___b-TEST__259fdd8d-1e8d-469c-8dbb-d1cfca2a67eb---1--245.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 245, fill_out_tiles=True)
 
@@ -574,7 +575,7 @@ class ArmyTrackerTests(TestBase):
         self.assertNoFogMismatches(simHost, general.player)
     
     def test_should_not_duplicate_army_back_into_fog_on_small_player_army_collision(self):
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_duplicate_army_back_into_fog_on_small_player_intersection___HeEzmHU03---0--350.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 351, fill_out_tiles=True)
 
@@ -594,7 +595,7 @@ class ArmyTrackerTests(TestBase):
         self.assertNoFogMismatches(simHost, general.player)
     
     def test_should_not_duplicate_army_collision_backwards_into_fog(self):
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_duplicate_army_collision_backwards_into_fog___reQb1i8Rh---0--285.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 285, fill_out_tiles=True)
 
@@ -612,3 +613,53 @@ class ArmyTrackerTests(TestBase):
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=True))
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=2)
         # self.assertNoFogMismatches(simHost, general.player)
+    
+    def test_should_not_warp_army_through_fog(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_warp_army_through_fog___NblaO2209---1--392.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 392, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 392)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '20,1->21,1->21,2->21,3->21,4->21,5->21,6->20,6')
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+        simHost.reveal_player_general(playerToReveal=enemyGeneral.player, playerToRevealTo=general.player, hidden=True)
+
+        self.begin_capturing_logging()
+        simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=False))
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        self.assertIsNone(winner)
+
+    def test_should_intercept_army_that_enters_fog__army_tracker_not_predicting_fog_moves(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_intercept_army_in_fog___BWe8LBMww---0--271.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 271, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 271)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player,
+                                       '18,9->18,8->17,8->16,8->15,8->15,7->14,7->14,6->13,6->12,6->12,5->12,4->11,4->10,4->9,4->8,4->7,4->6,4->6,3')
+        bot = simHost.get_bot(general.player)
+        bot.curPath = Path()
+        bot.curPath.add_next(self.get_player_tile(11, 4, simHost.sim, general.player))
+        bot.curPath.add_next(self.get_player_tile(12, 4, simHost.sim, general.player))
+        bot.curPath.add_next(self.get_player_tile(13, 4, simHost.sim, general.player))
+        bot.curPath.add_next(self.get_player_tile(14, 4, simHost.sim, general.player))
+        bot.curPath.add_next(self.get_player_tile(15, 4, simHost.sim, general.player))
+        bot.curPath.add_next(self.get_player_tile(15, 5, simHost.sim, general.player))
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        simHost.sim.ignore_illegal_moves = True
+        simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=False))
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=20)
+        self.assertIsNone(winner)
+

@@ -10,42 +10,26 @@ import math
 import random
 import time
 import typing
+from numba import jit, float32, int32
+
+import numpy
+from scipy.special import expit
 
 from DataModels import Move
-from Engine.Models import ArmySimState, ArmySimResult
+from Engine.ArmyEngineModels import ArmySimState, ArmySimResult
+from PerformanceTimer import PerformanceTimer
 
 
 #
-# package mcts;
+# A simple example implementation of Decoupled UCT, for simultaneous-move
+# games. Note that this example is primarily intended to show how to build
+# a search tree for simultaneous-move games in Ludii. This implementation
+# is by no means intended to be an optimal (in terms of optimisations /
+# computational efficiency) implementation of the algorithm.
 #
-# import java.util.ArrayList;
-# import java.util.HashMap;
-# import java.util.List;
-# import java.util.Map;
-# import java.util.concurrent.ThreadLocalRandom;
+# Only supports deterministic, simultaneous-move games.
 #
-# import game.Game;
-# import main.collections.FastArrayList;
-# import other.AI;
-# import other.RankUtils;
-# import other.action.Action;
-# import other.context.Context;
-# import other.move.Move;
-# import utils.AIUtils;
-#
-# /**
-#  * A simple example implementation of Decoupled UCT, for simultaneous-move
-#  * games. Note that this example is primarily intended to show how to build
-#  * a search tree for simultaneous-move games in Ludii. This implementation
-#  * is by no means intended to be an optimal (in terms of optimisations /
-#  * computational efficiency) implementation of the algorithm.
-#  *
-#  * Only supports deterministic, simultaneous-move games.
-#  *
-#  * @author Dennis Soemers
-#  */
-# public class ExampleDUCT extends AI
-# {
+# @author Dennis Soemers, translated to python by Travis Drake
 
 class BoardMoves(object):
     def __init__(self, actions: typing.List[Move | None]):
@@ -63,6 +47,9 @@ class BoardMoves(object):
     def __str__(self):
         return f'[{"  ".join([str(m) for m in self.playerMoves])}]'
 
+    def __repr__(self):
+        return str(self)
+
 
 class MctsDUCT(object):
     def __init__(
@@ -70,6 +57,7 @@ class MctsDUCT(object):
             # player: int,
             logStuff: bool = True,
     ):
+        self.logAll: bool = False
         self.player = 0
         self.should_log = logStuff
         self.iterations: int = 0
@@ -84,8 +72,7 @@ class MctsDUCT(object):
             maxTime: float,
             maxIterations: int,
             # maxDepth: int,  # he didn't use this
-    ) -> typing.Tuple[float, BoardMoves, ArmySimState]:
-
+    ) -> MctsEngineSummary:
         # Start out by creating a new root node (no tree reuse in this example)
         root: MctsNode = MctsNode(None, context)
 
@@ -132,11 +119,13 @@ class MctsDUCT(object):
                     ais=None,
                     thinkingTime=-1.0,
                     playoutMoveSelector=None,
-                    maxNumBiasedActions=5,
+                    maxNumBiasedActions=0,
                     # maxNumPlayoutActions=-1,  # -1 forces it to run until an actual game end state, infinite depth...?
-                    maxNumPlayoutActions=25,  # -1 forces it to run until an actual game end state, infinite depth...?
+                    maxNumPlayoutActions=7,  # -1 forces it to run until an actual game end state, infinite depth...?
                     randomGen=None  # ThreadLocalRandom.currentNode()
                 )
+                if self.logAll:
+                    logging.info(f'  trial for node t{currentNode.context.turn} {str(currentNode.context.board_state)} resulted in \r\n    ctxEnd t{contextEnd.turn} {str(contextEnd.board_state)} \r\n    (trial t{trial.context.turn} {str(trial.context.board_state)})')
 
                 self.trials_performed += 1
 
@@ -146,13 +135,14 @@ class MctsDUCT(object):
 
             # Backpropagate utilities through the tree
             while currentNode is not None:
-                if currentNode.totalVisitCount > 0:
-                    # This node was not newly expanded in this iteration
-                    for p in range(game.numPlayers):
-                        # logging.info(f'backpropogating {str(contextEnd.board_state)} at t{contextEnd.turn} up through the tree to {str(currentNode.context.board_state)} t{currentNode.context.turn}')
-                        currentNode.visitCounts[p][currentNode.lastSelectedMovesPerPlayer[p]] += 1
-                        currentNode.scoreSums[p][currentNode.lastSelectedMovesPerPlayer[p]] += utilities[p]
-                        self.backprop_iter += 1
+                # if currentNode.totalVisitCount > 0:
+                # This node was not newly expanded in this iteration
+                for p in range(game.numPlayers):
+                    # logging.info(f'backpropogating {str(contextEnd.board_state)} at t{contextEnd.turn} up through the tree to {str(currentNode.context.board_state)} t{currentNode.context.turn}')
+                    lastSelMove = currentNode.lastSelectedMovesPerPlayer[p]
+                    currentNode.visitCounts[p][lastSelMove] += 1
+                    currentNode.scoreSums[p][lastSelMove] += utilities[p]
+                    self.backprop_iter += 1
 
                 currentNode.totalVisitCount += 1
                 currentNode = currentNode.parent
@@ -163,7 +153,39 @@ class MctsDUCT(object):
         self.iterations = numIterations
 
         # Return the move we wish to play
-        return self.finalMoveSelection(root)
+        return self.get_best_moves(root)
+
+    def bench_random_stuff(self):
+        # for i in range(-100, 100, 10):
+        #     logging.info(f'fast_tanh {i} = {MctsDUCT.fast_tanh_jit(i)}')
+        for i in range(-1000, 1000, 10):
+            logging.info(f'fast_tanh_scaled {i} = {MctsDUCT.fast_tanh_scaled_jit(i, 0.01)}')
+        for i in range(-100, 100, 10):
+            logging.info(f'fast_sigmoid {i} = {MctsDUCT.fast_sigmoid_jit(i)}')
+        for i in range(-100, 100, 10):
+            logging.info(f'expit {i} = {expit([i])[0]}')
+
+        testRange = numpy.arange(-10000.0, 10000.0, 0.01)
+        timer = PerformanceTimer()
+        with timer.begin_move(0):
+            with timer.begin_move_event('wtf?'):
+                tanhs = [MctsDUCT.fast_tanh(i) for i in testRange]
+            with timer.begin_move_event('sigmoids'):
+                sigmoids = [MctsDUCT.fast_sigmoid(i) for i in testRange]
+            with timer.begin_move_event('expits'):
+                expits = [expit([i])[0] for i in testRange]
+
+            with timer.begin_move_event('tanhs_jit'):
+                tanhJits = [MctsDUCT.fast_tanh_jit(i) for i in testRange]
+            with timer.begin_move_event('tanhs_scaled_jit'):
+                tanhJitScaleds = [MctsDUCT.fast_tanh_scaled_jit(i, 0.01) for i in testRange]
+            with timer.begin_move_event('sigmoids_jit'):
+                sigmoidJits = [MctsDUCT.fast_sigmoid_jit(i) for i in testRange]
+            with timer.begin_move_event('tanhs'):
+                tanhs = [MctsDUCT.fast_tanh(i) for i in testRange]
+
+        for entry in sorted(timer.current_move.event_list, key=lambda e: e.get_duration(), reverse=True):
+            logging.info(f'{entry.get_duration():.3f} {entry.event_name}'.lstrip('0'))
 
     """
      * Selects child of the given "current" node according to UCB1 equation.
@@ -182,40 +204,48 @@ class MctsDUCT(object):
         game: Game = current.context.game
         numPlayers: int = game.numPlayers
 
+        twoParentLog: float = MctsDUCT.two_parent_log_jit(current.totalVisitCount)
+
         for p in range(numPlayers):
             bestMove: BoardMoves | None = None
-            bestValue: float = -10000000000000  # negative inf
-            twoParentLog: float = 2.0 * math.log(max(1, current.totalVisitCount))
+            bestValue: float = -1000000000  # negative inf
             numBestFound: int = 0
 
             for i, move in enumerate(current.legalMovesPerPlayer[p]):
                 exploit: float = 1.0
-                if current.visitCounts[p][i] != 0:
-                    exploit = current.scoreSums[p][i] / current.visitCounts[p][i]
-
-                explore: float = math.sqrt(twoParentLog / max(1, current.visitCounts[p][i]))
+                curMoveVisits = current.visitCounts[p][i]
+                curMoveSumScore = -10000
+                if curMoveVisits != 0:
+                    curMoveSumScore = current.scoreSums[p][i]
+                    exploit = curMoveSumScore / curMoveVisits
+                explore: float = MctsDUCT.two_parent_log_explore(twoParentLog, childVisitCount=curMoveVisits)
 
                 ucb1Value: float = exploit + explore
 
-                if ucb1Value > bestValue:
-                    bestValue = ucb1Value
-                    bestMove = move
-                    numBestFound = 1
-                    current.lastSelectedMovesPerPlayer[p] = i
-                elif ucb1Value == bestValue:
-                    numBestFound += 1
-                    if self.get_rand_int() % numBestFound == 0:
-                        # this case implements random tie-breaking
+                if self.logAll:
+                    logging.info(f't{current.context.turn} p{p} move {str(move)}, oit {exploit:.3f}, ore {explore:.3f}, ucb1 {ucb1Value:.3f} vs {bestValue:.3f}')
+                if ucb1Value >= bestValue:
+                    if ucb1Value == bestValue:
+                        numBestFound += 1
+                        if self.get_rand_int() % numBestFound == 0:
+                            # this case implements random tie-breaking
+                            bestMove = move
+                            current.lastSelectedMovesPerPlayer[p] = i
+                    else:
+                        bestValue = ucb1Value
                         bestMove = move
+                        numBestFound = 1
                         current.lastSelectedMovesPerPlayer[p] = i
 
             playerMoves.append(bestMove)
-
-        combinedMove: BoardMoves = BoardMoves([playerMoves[0].playerMoves[0], playerMoves[1].playerMoves[1]])
+        frMove = playerMoves[0].playerMoves[0]
+        enMove = playerMoves[1].playerMoves[1]
+        combinedMove: BoardMoves = BoardMoves([frMove, enMove])
 
         node: MctsNode | None = current.children.get(combinedMove, None)
         if node is not None:
-            logging.info(f'existing node t{node.context.turn} board move {str(combinedMove)}')
+            if self.logAll:
+                logging.info(f'existing node t{node.context.turn} board move {str(combinedMove)}')
             # We already have a node for this combination of moves
             return node
         else:
@@ -229,7 +259,9 @@ class MctsDUCT(object):
             newNode: MctsNode = MctsNode(current, context)
             current.children[combinedMove] = newNode
             self.nodes_explored += 1
-            logging.info(f'expanding new child node t{context.turn} board move {str(combinedMove)} state {str(context.board_state)}')
+
+            if self.logAll:
+                logging.info(f'expanding new child node t{context.turn} board move {str(combinedMove)} state {str(context.board_state)}')
             return newNode
 
     """
@@ -240,49 +272,124 @@ class MctsDUCT(object):
      * @param rootNode
      * @return
      """
-    def finalMoveSelection(
+    def get_best_moves(
             self,
             rootNode: MctsNode
-    ) -> typing.Tuple[float, BoardMoves, ArmySimState]:
-        bestMove: BoardMoves | None = None
-        bestAvgScore: float = -10000000000  # neg inf
-        numBestFound: int = 0
-        bestState = None
+    ) -> MctsEngineSummary:
+        def robust_child_selection_func(node: MctsNode) -> typing.Tuple[float, BoardMoves]:
+            bestMove: BoardMoves | None = None
+            bestVisitCount: float = -1
+            numBestFound: int = 0
+            bestAvgScore: float = -10000  # neg inf
 
-        for i, move in enumerate(rootNode.legalMovesPerPlayer[self.player]):
-            sumScores: float = rootNode.scoreSums[self.player][i]
-            visitCount: int = rootNode.visitCounts[self.player][i]
-            avgScore: float = -1.0
-            if visitCount != 0:
-                avgScore = sumScores / visitCount
+            for i, move in enumerate(node.legalMovesPerPlayer[self.player]):
+                sumScores: float = node.scoreSums[self.player][i]
+                visitCount: int = node.visitCounts[self.player][i]
+                avgScore: float = -10.0
+                if visitCount != 0:
+                    avgScore = sumScores / visitCount
 
-            if avgScore > bestAvgScore:
-                logging.info(f'new best move had \r\n'
-                             f'   avgScore {avgScore} > bestAvgScore {bestAvgScore}, \r\n'
+                logging.info(f't{node.context.turn} move {str(move)} visits {visitCount} score {avgScore:.3f}')
+
+            for i, move in enumerate(node.legalMovesPerPlayer[self.player]):
+                sumScores: float = node.scoreSums[self.player][i]
+                visitCount: int = node.visitCounts[self.player][i]
+                avgScore: float = -10.0
+                if visitCount != 0:
+                    avgScore = sumScores / visitCount
+
+                if visitCount > bestVisitCount:
+                    logging.info(f't{node.context.turn} new best move had \r\n'
+                             f'   visitCount {visitCount} > bestVisitCount {bestVisitCount}, \r\n'
+                             f'   avgScore {avgScore:.3f} vs bestAvgScore {bestAvgScore:.3f}, \r\n'
                              f'   new bestMove {str(move)} > old bestMove {str(bestMove)}, \r\n'
-                             f'   new bestState {str(rootNode.context.board_state)}')
-                bestAvgScore = avgScore
-                bestMove = move
-                bestState = rootNode.context.board_state
-                numBestFound = 1
-            elif avgScore == bestAvgScore:
-                numBestFound += 1
-                logging.info(f'TIEBREAK move had \r\n'
-                             f'   avgScore {avgScore} > bestAvgScore {bestAvgScore}, \r\n'
-                             f'   new bestMove {str(move)} > old bestMove {str(bestMove)}, \r\n'
-                             f'   new bestState {str(rootNode.context.board_state)}')
-                if self.get_rand_int() % numBestFound == 0:
-                    logging.info('  (won tie break)')
-                    # this case implements random tie-breaking
+                             f'   new bestState {str(node.context.board_state)}')
+                    bestVisitCount = visitCount
                     bestMove = move
-                    bestState = rootNode.context.board_state
-                else:
-                    logging.info('  (lost tie break)')
+                    bestAvgScore = avgScore
+                    numBestFound = 1
+                elif visitCount == bestVisitCount:
+                    if avgScore > bestAvgScore:
+                        logging.info(f't{node.context.turn} visit tie - new best move had \r\n'
+                                 f'   avgScore {avgScore:.3f} vs bestAvgScore {bestAvgScore:.3f}, \r\n'
+                                 f'   visitCount {visitCount} > bestVisitCount {bestVisitCount}, \r\n'
+                                 f'   new bestMove {str(move)} > old bestMove {str(bestMove)}, \r\n'
+                                 f'   new bestState {str(node.context.board_state)}')
+                        bestVisitCount = visitCount
+                        bestMove = move
+                        bestAvgScore = avgScore
+                        numBestFound = 1
+                    elif avgScore == bestAvgScore:
+                        numBestFound += 1
 
-        return bestAvgScore, bestMove, bestState
+                        logging.info(f't{node.context.turn} TIEBREAK move had \r\n'
+                                 f'   visitCount {visitCount} == bestVisitCount {bestVisitCount}, \r\n'
+                                 f'   avgScore {avgScore:.3f} vs bestAvgScore {bestAvgScore:.3f}, \r\n'
+                                 f'   move {str(move)} vs bestMove {str(bestMove)}, \r\n'
+                                 f'   state {str(node.context.board_state)}')
+                        if self.get_rand_int() % numBestFound == 0:
+                            logging.info('  (won tie break)')
+                            # this case implements random tie-breaking
+                            bestMove = move
+                            bestAvgScore = avgScore
+                        else:
+                            logging.info('  (lost tie break)')
+
+            logging.info(f't{node.context.turn} best move had \r\n'
+                     f'   visitCount {bestVisitCount}, \r\n'
+                     f'   bestAvgScore {bestAvgScore:.3f}, \r\n'
+                     f'   bestMove {str(bestMove)}')
+            return bestAvgScore, bestMove
+
+        logging.info('MCTS BUILDING BEST MOVE CHOICES')
+
+        summary = MctsEngineSummary(
+            rootNode,
+            selectionFunc=robust_child_selection_func
+        )
+        return summary
 
     def get_rand_int(self):
         return random.randrange(10000000)
+
+    @staticmethod
+    def fast_tanh(x: float) -> float:
+        """Returns between -1 and 1, where -3 as input is very close to -1 already and 3 is very close to 1 output already. Somehow this is faster than the jit'd version...?"""
+        return x / (1 + abs(x))
+
+    @staticmethod
+    def fast_sigmoid(x: float) -> float:
+        """compresses stuff to stuff."""
+        return x / (2 * ((x < 0.0) * -x + (x >= 0.0) * x) + 2) + 0.5
+
+    @staticmethod
+    @jit(float32(float32), nopython=True)
+    def fast_tanh_jit(x: float) -> float:
+        """Returns between -1 and 1, where -3 as input is very close to -1 already and 3 is very close to 1 output already."""
+        return x / (1 + abs(x))
+
+    @staticmethod
+    @jit(float32(float32, float32), nopython=True)
+    def fast_tanh_scaled_jit(x: float, scaleFactor: float) -> float:
+        """Returns between -1 and 1, where -3 as input is very close to -1 already and 3 is very close to 1 output already."""
+        x = x * scaleFactor
+        return x / (1 + abs(x))
+
+    @staticmethod
+    @jit(float32(float32), nopython=True)
+    def fast_sigmoid_jit(x: float) -> float:
+        """compresses stuff to stuff."""
+        return x / (2 * ((x < 0.0) * -x + (x >= 0.0) * x) + 2) + 0.5
+
+    @staticmethod
+    @jit(float32(int32), nopython=True)
+    def two_parent_log_jit(totalVisitCount: int) -> float:
+        return 2.0 * math.log(max(1, totalVisitCount))
+
+    @staticmethod
+    @jit(float32(float32, int32), nopython=True)
+    def two_parent_log_explore(twoParentLog: float, childVisitCount: int) -> float:
+        return math.sqrt(twoParentLog / max(1, childVisitCount))
 
     @staticmethod
     def get_player_utilities_n1_1(boardState: ArmySimState) -> typing.List[float]:
@@ -292,25 +399,65 @@ class MctsDUCT(object):
         @param boardState:
         @return:
         """
-        netDifferential = boardState.get_econ_value() - boardState.initial_differential
-        # # TODO should wins/losses be the 1.0/-1.0 extremes and just econ be much more 'middle'...?
-        # econValueNeg100To100 = min(100.0, max(-100.0, netDifferential))
-        # compressed = econValueNeg100To100 / 100.0
+        netDifferential = boardState.calculate_value_int()
+
+        # # # TODO should wins/losses be the 1.0/-1.0 extremes and just econ be much more 'middle'...?
+        # econValueNeg1000To1000 = min(1000.0, max(-1000.0, netDifferential))
+        # compressed = econValueNeg1000To1000 / 1000.0
         # return [compressed, 0 - compressed]
 
-        val = 0.0
-        if netDifferential > 0:
-            # val = 0.7
-            val = 1.0
-        if netDifferential < 0:
-            # val = -0.7
-            val = -1.0
-        if netDifferential < -200:
-            val = -1.0
-        if netDifferential > 200:
-            val = 1.0
+        # econValueNeg500To500 = min(500.0, max(-500.0, netDifferential))
+        # compressed = econValueNeg500To500 / 500.0
+        # return [compressed, 0 - compressed]
+        compressed = MctsDUCT.fast_tanh_scaled_jit(netDifferential, 0.01)
+        return [compressed, 0 - compressed]
 
-        return [val, 0 - val]
+        # val = 0.0
+        # if netDifferential > 0:
+        #     # val = 0.7
+        #     val = 1.0
+        # if netDifferential < 0:
+        #     # val = -0.7
+        #     val = -1.0
+        # if netDifferential < -200:
+        #     val = -1.0
+        # if netDifferential > 200:
+        #     val = 1.0
+        #
+        # return [val, 0 - val]
+
+
+class MctsEngineSummary(object):
+    def __init__(
+            self,
+            rootNode: MctsNode,
+            selectionFunc: typing.Callable[[MctsNode], typing.Tuple[float, BoardMoves]]
+    ):
+        """
+
+        @param rootNode:
+        @param selectionFunc:
+        """
+        self.root_node: MctsNode = rootNode
+        self.best_moves: typing.List[BoardMoves] = []
+        self.best_states: typing.List[ArmySimState] = []
+        self.best_nodes: typing.List[MctsNode] = []
+        self.best_result_state: ArmySimState = rootNode.context.board_state
+
+        score, bestMoves = selectionFunc(rootNode)
+        self.expected_score: float = score
+
+        curNode = rootNode
+        while curNode is not None:
+            self.best_nodes.append(curNode)
+            self.best_states.append(curNode.context.board_state)
+            self.best_result_state = curNode.context.board_state
+            self.best_moves.append(bestMoves)
+
+            curNode = curNode.children.get(bestMoves, None)
+            if curNode is not None:
+                score, bestMoves = selectionFunc(curNode)
+
 
 
 class MctsNode(object):
@@ -352,11 +499,17 @@ class MctsNode(object):
         self.scoreSums: typing.List[typing.List[float]] = [[0.0 for move in playerMoves] for playerMoves in self.legalMovesPerPlayer]
         """ For every player, for every child move, a sum of backpropagated scores """
 
-        self.lastSelectedMovesPerPlayer: typing.List[int] = [0 for p in range(numPlayers)]
+        self.lastSelectedMovesPerPlayer: typing.List[int] = [-1 for p in range(numPlayers)]
         """
         For every player, the index of the legal move we selected for
         that player in this node in the last (current) MCTS iteration.
         """
+
+    def __str__(self):
+        return str(self.context)
+
+    def __repr__(self):
+        return str(self)
 
 
 class Context(object):
@@ -372,7 +525,7 @@ class Context(object):
             # TODO this might need to be raw clone not child_board, dunno yet.
             # self.frMoves = toClone.frMoves
             # self.enMoves = toClone.enMoves
-            self.board_state = toClone.board_state.get_child_board()
+            self.board_state = toClone.board_state.clone()
             self.engine = toClone.engine
             self.game = toClone.game
             self.turn = toClone.turn
@@ -399,6 +552,12 @@ class Context(object):
                 moves.append(BoardMoves([frMove, enMove]))
 
         return moves
+
+    def __str__(self):
+        return f't{self.turn} {str(self.board_state)} {str(self.board_state.friendly_move)} {str(self.board_state.enemy_move)}'
+
+    def __repr__(self):
+        return str(self)
 
 
 class Trial(object):
@@ -482,11 +641,11 @@ class Game(object):
             else:
                 numAllowedBiasedActions = maxNumBiasedActions
 
-            if numAllowedBiasedActions <= 0 and random.randrange(10) <= 0:
-                trial = self.playout_random_move(trial)
-            else:
+            if numAllowedBiasedActions > 0 and random.randrange(10) <= 5:
                 trial = self.playout_biased_move(trial, playoutMoveSelector)
                 # numAllowedBiasedActions -= 1
+            else:
+                trial = self.playout_random_move(trial)
             iter += 1
             if iter > 50:
                 logging.info(f'inf looping? {str(trial.context.board_state)}')
@@ -496,9 +655,19 @@ class Game(object):
         return trial
 
     def apply(self, context: Context, combinedMove: BoardMoves):
-        nextTurn = context.turn + 1
-        context.board_state = context.engine.get_next_board_state(nextTurn, context.board_state, combinedMove.playerMoves[0], combinedMove.playerMoves[1])
-        context.turn = nextTurn
+        """
+        Applies moves to a context, updating its turn and current board state.
+        @param context:
+        @param combinedMove:
+        @return:
+        """
+        # nextTurn = context.turn + 1
+        context.board_state = context.engine.get_next_board_state(
+            context.turn + 1,
+            context.board_state,
+            frMove=combinedMove.playerMoves[0],
+            enMove=combinedMove.playerMoves[1])
+        context.turn += 1
 
     def playout_random_move(self, trial: Trial) -> Trial:
         chosen = random.choice(trial.context.get_legal_moves())
@@ -517,14 +686,14 @@ class Game(object):
         c.get_legal_moves()
         payoffs = [
             [
-                ArmySimResult(e.get_next_board_state(c.turn + 1, bs, frMove, enMove))
+                e.get_next_board_state(c.turn + 1, bs, frMove, enMove)
                 for enMove in c.enMoves
             ]
             for frMove in c.frMoves
         ]
 
         chosenRes = e.get_comparison_based_expected_result_state(
-            bs,
+            bs.depth,
             [x for x in enumerate(c.frMoves)],
             [x for x in enumerate(c.enMoves)],
             payoffs

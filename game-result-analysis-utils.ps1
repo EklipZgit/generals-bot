@@ -184,7 +184,7 @@ function Create-TestContinuingGameFrom {
     $testFileContent += @"
     
     def test_$TestName(self):
-        debugMode = True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/$newName'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, $turn, fill_out_tiles=True)
 

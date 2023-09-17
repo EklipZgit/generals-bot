@@ -40,6 +40,7 @@ class Player(object):
         self.leftGameTurn = -1
         self.capturedBy = None
         self.knowsKingLocation = False
+        """True if this player knows the map.player_index players general location. False otherwise."""
 
     def __str__(self):
         return f'p{self.index}{"(dead)" if self.dead else ""}: tiles {self.tileCount}, standingArmy {self.standingArmy}, general {str(self.general)}'

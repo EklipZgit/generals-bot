@@ -132,6 +132,7 @@ class GeneralsViewer(object):
             name=None,
             cell_width: int | None = None,
             cell_height: int | None = None,
+            no_log: bool = False,
     ):
         self._killed = False
         self._update_queue: "Queue[typing.Tuple[ViewInfo | None, MapBase | None, bool]]" = update_queue
@@ -146,7 +147,7 @@ class GeneralsViewer(object):
         self.lineArrow: DirectionalShape = None
         self.redLineArrow: DirectionalShape = None
         self.line = None
-        self.noLog: bool = False
+        self.noLog: bool = no_log
         # Table Properies
         self.cellWidth: int = cell_width
         self.cellHeight: int = cell_height
@@ -281,6 +282,7 @@ class GeneralsViewer(object):
 
     def run_main_viewer_loop(self, alignTop=True, alignLeft=True):
         termSec = 600
+        BotLogging.set_up_logger(logging.INFO)
         while not self._receivedUpdate:  # Wait for first update
             try:
                 viewInfo, map, isComplete = self._update_queue.get(block=True, timeout=15.0)
@@ -291,7 +293,8 @@ class GeneralsViewer(object):
                     self.last_update_received = time.perf_counter()
             except queue.Empty:
                 elapsed = time.perf_counter() - self.last_update_received
-                logging.info(f'waiting for update...... {elapsed:.3f} / {termSec} sec')
+                if not self.noLog:
+                    logging.info(f'waiting for update...... {elapsed:.3f} / {termSec} sec')
                 # TODO add a server ping callback here so while we're waiting in a lobby for a while we can keep the viewer thread alive
                 if elapsed > termSec:
                     logging.info(f'GeneralsViewer zombied with no game start, self-terminating after {termSec} seconds')
@@ -301,9 +304,9 @@ class GeneralsViewer(object):
                     self._receivedUpdate = True
                     time.sleep(1.0)
                     return
-                pass
 
         self._initViewier(alignTop=alignTop, alignLeft=alignLeft)
+        self.last_update_received = time.perf_counter()
 
         done = False
 
@@ -321,7 +324,8 @@ class GeneralsViewer(object):
                 break
 
             try:
-                logging.info("GeneralsViewer waiting for queue event:")
+                if not self.noLog:
+                    logging.info("GeneralsViewer waiting for queue event:")
                 viewInfo, map, isComplete = self._update_queue.get(block=True, timeout=1.0)
                 self.last_update_received = time.perf_counter()
                 # if self.verbose:
@@ -330,26 +334,30 @@ class GeneralsViewer(object):
                     logging.info("GeneralsViewer received done event!")
                     done = True
 
-                logging.info("GeneralsViewer received an event! Updating grid")
+                if not self.noLog:
+                    logging.info("GeneralsViewer received an event! Updating grid")
 
                 self.updateGrid(viewInfo, map)
 
-                logging.info("GeneralsViewer drawing grid:")
+                if not self.noLog:
+                    logging.info("GeneralsViewer drawing grid:")
                 self._drawGrid()
 
-                logging.info("GeneralsViewer saving image:")
+                if not self.noLog:
+                    logging.info("GeneralsViewer saving image:")
                 if not self.noLog:
                     self.save_image()
             except queue.Empty:
                 elapsed = time.perf_counter() - self.last_update_received
-                logging.info(f'No GeneralsViewer update received in {elapsed:.2f} seconds')
-                if elapsed > 60.0:
+                if not self.noLog:
+                    logging.info(f'No GeneralsViewer update received in {elapsed:.2f} seconds')
+                if elapsed > 180.0:
                     logging.info(f'GeneralsViewer zombied, self-terminating after 10 seconds')
                     done = True
                     self.send_killed_event()
                 pass
             except BrokenPipeError:
-                logging.info('pipe died')
+                logging.info('GeneralsViewer pipe died')
                 done = True
                 break
 
@@ -371,7 +379,7 @@ class GeneralsViewer(object):
 
         logging.info(f'Pygame closed in GeneralsViewer, sending closedByUser {closedByUser} back to main threads')
         self.send_closed_event(closedByUser)
-        logging.info('Pygame closed in GeneralsViewer, exiting')
+        logging.info('GeneralsViewer, exiting pygame w/ pygame.quit() in 1 second:')
         time.sleep(1.0)
         pygame.quit()  # Done.  Quit pygame.
 
@@ -1065,6 +1073,10 @@ class GeneralsViewer(object):
                 colorR = colorR / 2 + 40
                 colorG = colorG / 2 + 40
                 colorB = colorB / 2 + 40
+                if not tile.discovered and tile.player != -1:
+                    colorR = colorR / 2 + 20
+                    colorG = colorG / 2 + 20
+                    colorB = colorB / 2 + 20
             color = (colorR, colorG, colorB)
         elif tile.isNotPathable:  # Obstacle
             color = GRAY_DARK

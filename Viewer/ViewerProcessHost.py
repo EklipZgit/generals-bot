@@ -20,7 +20,8 @@ class ViewerHost(object):
             cell_height: int | None = None,
             alignTop: bool = True,
             alignLeft: bool = True,
-            ctx: BaseContext | None = None
+            ctx: BaseContext | None = None,
+            noLog: bool = False
     ):
         if ctx is None:
             logging.info("getting spawn context")
@@ -35,10 +36,10 @@ class ViewerHost(object):
         logging.info("importing GeneralsViewer")
         from base.viewer import GeneralsViewer
         logging.info("newing up GeneralsViewer")
-        self._viewer = GeneralsViewer(self._update_queue, self._viewer_event_queue, window_title, cell_width=cell_width, cell_height=cell_height)
+        self._viewer = GeneralsViewer(self._update_queue, self._viewer_event_queue, window_title, cell_width=cell_width, cell_height=cell_height, no_log=noLog)
         logging.info("newing up viewer process")
         self.process: BaseProcess = self.ctx.Process(target=self._viewer.run_main_viewer_loop, args=(alignTop, alignLeft))
-
+        self.no_log: bool = noLog
 
     def __getstate__(self):
         raise AssertionError('this should never get serialized')

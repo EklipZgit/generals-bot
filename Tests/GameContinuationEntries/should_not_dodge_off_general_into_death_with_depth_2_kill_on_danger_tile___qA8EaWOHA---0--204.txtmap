@@ -1,0 +1,45 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          M    M    M              M                   M         M    M
+               M         M                             M              M    M         M
+                              a2   a2   a3   a3   a2        M              M    M    C46
+                    M    a3   a3   a2   a2   a2   a2   a2   a2   a2   a3   a3   a2   a2
+M                        a3   b2   C41  M         a2   a2   a2   a2   a2        M    a1   aC3
+          M              M    b2   b2   N1   M    a2   a2   a2   a2   a2   a2   a1   a1   a2
+                         M    N1   M    M    M    a2   a3   M    a4   a2   a2   a3   aG23 a2
+     M              M                                  M    M    b2   a2   M    b19  a2
+M    M              M         b4                       M    b2   b1   M         b1   M
+M                        M    a5   M                   M    b3   b2   b1   b1   b1        M
+M                   M    a3   a2        M         a2   b2   b3   b2   M    M
+                    M    a3   a2   M    M    M    M    b3   b2   b2             M    M    M
+M    M         M    M    a3        C49  C43  M    b3   b2   b2                       M
+M         M    M    b2   b3   b3   b2   b2   b2   b3   b2             M    M    M
+     M              b2   b3   b3             b2   b2   b2   M              M
+M                             M              M         b2   b2   M                   M    M
+          M                        M              M                             M
+               M                             M              M                        M
+M                                       M              M         M              M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=4,18
+turn=204
+bot_player_index=0
+aTiles=52
+aScore=140
+aStandingArmy=88
+aStars=65
+aCityCount=2
+aGeneral=17,6
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=71
+bScore=184
+bStandingArmy=113
+bStars=46
+bCityCount=1
+bKnowsKingLocation=True
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=1
+bot_targeting_army=16,7

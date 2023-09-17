@@ -49,7 +49,7 @@ class ExpansionTests(TestBase):
         return path
 
     def test_should_not_split_for_neutral_while_exploring_enemy_path_with_largish_army(self):
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_split_for_neutral_while_exploring_enemy_path_with_largish_army___SxyrToG62---b--95.txtmap'
         # intentionally pretend it is turn 94 so we give it time for the last neutral capture
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 94)

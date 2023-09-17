@@ -144,7 +144,7 @@ C5
         self.assertEqual(targetTile, general.delta.toTile)
 
     def test_should_not_duplicate_army_in_fog_on_army_capture(self):
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_duplicate_army_in_fog_on_army_capture___rgj-w2G62---b--166.txtmap'
 
         self.enable_search_time_limits_and_disable_debug_asserts()
@@ -256,7 +256,7 @@ C5
         self.assertEqual(enemyPlayer, botMap.GetTile(6,13).player)
 
     def test_army_should_not_duplicate_backwards_on_capture(self):
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/army_should_not_duplicate_backwards_on_capture___Bgb7Eiba2---a--399.txtmap'
 
         # Grant the general the same fog vision they had at the turn the map was exported
@@ -344,7 +344,7 @@ C5
 # TODO missing test for army collision deltas? Actually I think that test exists, somewhere
     
     def test_small_gather_adj_to_fog_should_not_double_gather_from_fog(self):
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/small_gather_adj_to_fog_should_not_double_gather_from_fog___rgI9fxNa3---a--451.txtmap'
         rawMap, gen = self.load_map_and_general(mapFile, 451)
 
@@ -395,7 +395,7 @@ C5
         # OK so this works correctly at the map level, must be the bot itself with army tracking / emergence updating the fog to 1/0...?
 
     def test_capture_from_fog_should_not_duplicate_out_into_fog(self):
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/capture_from_fog_should_not_duplicate_out_into_fog___rgI9fxNa3---a--485.txtmap'
         rawMap, gen = self.load_map_and_general(mapFile, 485)
 

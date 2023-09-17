@@ -1,0 +1,111 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                                             M         M                   M              M    M    M
+               M                        M              M                        M                                  M
+                                             M         M                        M                   M
+                                   M    M         M         M    M
+M         M                   M                        M                   M                   M                   M
+                         M                        M    M                                  M
+M              M              M    M                        M                                                                M
+                         M              M                             M         M              M                        M
+                    M    M                                            M    M                                       M
+M              M                                            M                                  M
+                              M                   M                                            M         M                   M
+          M                             M    M    M    M         M                   M    b2   b2   h3             M
+M                                                           M         M              M    M    e1   h3
+          M                   M    M                                  M                   e1   e1        M    h3   h1   hG69
+                         M    M                                            M    b2   M    e1   M    M    e3   h3   e55  M
+M                        M    M              M         M                             e1   e1   M         e3   h3   e1   h1   h1
+M                        M                        M         e2   e2   M              e1   M              e3   h3   e1   h1   M
+     M                                       e4   e4   e4   e3   M    M         e2   e1   e1   e1   e1   e1   e1   e1   h1   M
+                    M              M         e4   M    e4   e4   e2   M    e2   e2   M    e3   M    M    e3   h3   e3   h1
+     M    M                        M         e4   e4   e4   e4   e1   e1   e1   e1   e1   e1   e1   e1   e32  h2   h2   h230 M
+                                   M         C49  M    M    e2   eC8  M    e4   e3   e3   M         C44       C42  e10  e1
+     M                   M              M         M         M    e2   M    e4   e3   e4   M    M    e4   M         e2   e2   M
+          M              M                   M    M         e2   e2   M    M    e3   e4        eC33 e2   e2   M    e2   e2   e2
+M         M    M                             M              e2   e4   e4        e3   e4        M    M    eG33 e2   e2   M    e2
+     M                   M                                  M    e4   e4   M    e4   e4        M    e1   e1   e2   e2   e2   e2
+                         M                                       e4   e4   e4   e4        C46       M    M    e2   e4   e5   M
+M                                       M                        e4   e4   e4   e4   e4   e4   M    e2   e2   e2        M
+               M    M    M                   M                   e4   e4   e2   e8   e2   e2   e2   e2   e2   e3   M
+M         M         M                        M    M    M         e4   e4        M    e4   M    M    M         e4             M
+               M                                  M                                            M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=24,13
+turn=278
+bot_player_index=4
+aTiles=0
+aScore=0
+aStandingArmy=0
+aStars=34
+aCityCount=1
+aKnowsKingLocation=False
+aDead=True
+aLeftGame=True
+aLeftGameTurn=121
+bTiles=85
+bScore=356
+bStandingArmy=271
+bStars=52
+bCityCount=4
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+cTiles=57
+cScore=329
+cStandingArmy=272
+cStars=62
+cCityCount=4
+cKnowsKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+dTiles=84
+dScore=422
+dStandingArmy=338
+dStars=34
+dCityCount=3
+dKnowsKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+eTiles=122
+eScore=476
+eStandingArmy=354
+eStars=62
+eCityCount=3
+eGeneral=21,23
+eKnowsKingLocation=False
+eDead=False
+eLeftGame=False
+eLeftGameTurn=-1
+fTiles=0
+fScore=0
+fStandingArmy=0
+fStars=58
+fCityCount=1
+fKnowsKingLocation=False
+fDead=True
+fLeftGame=True
+fLeftGameTurn=83
+gTiles=0
+gScore=0
+gStandingArmy=0
+gStars=63
+gCityCount=1
+gGeneral=13,20
+gKnowsKingLocation=False
+gDead=True
+gLeftGame=True
+gLeftGameTurn=137
+hTiles=106
+hScore=568
+hStandingArmy=462
+hStars=67
+hCityCount=3
+hGeneral=24,13
+hKnowsKingLocation=False
+hDead=False
+hLeftGame=False
+hLeftGameTurn=-1
+bot_target_player=7

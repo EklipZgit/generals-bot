@@ -348,14 +348,7 @@ class GameSimulator(object):
             player.map.update_visible_tile(revealGeneral.x, revealGeneral.y, TILE_FOG, 0, is_city=False, is_general=False)
         else:
             # we're hiding the general
-            playerTile = player.map.GetTile(revealGeneral.x, revealGeneral.y)
-            playerTile.visible = False
-            playerTile.discovered = False
-            playerTile.tile = TILE_FOG
-            playerTile.isCity = False
-            playerTile.isGeneral = False
-            playerTile.army = 0
-            playerTile.player = -1
+            self.set_tile_vision(playerToRevealTo, revealGeneral.x, revealGeneral.y, undiscovered=True, hidden=True)
             player.map.generals[playerToReveal] = None
 
     def set_tile_vision(self, playerToRevealTo, x, y, hidden=False, undiscovered=False):
@@ -512,11 +505,15 @@ class GameSimulatorHost(object):
         revealPlayer = self.sim.players[playerToRevealTo]
         revealGeneral = self.sim.sim_map.generals[playerToReveal]
 
+        revealPlayer.map.players[playerToRevealTo].knowsKingLocation = True
+
         if hidden:
             botHost = self.bot_hosts[playerToRevealTo]
             playerTile = revealPlayer.map.GetTile(revealGeneral.x, revealGeneral.y)
             if botHost is not None and playerTile in botHost.eklipz_bot.armyTracker.armies:
                 del botHost.eklipz_bot.armyTracker.armies[playerTile]
+
+                revealPlayer.map.players[playerToRevealTo].knowsKingLocation = False
 
     # def reveal_player_tile(self, playerToTileTo, x, y):
     #     self.sim.set_general_vision(playerToReveal, playerToRevealTo, hidden=hidden)

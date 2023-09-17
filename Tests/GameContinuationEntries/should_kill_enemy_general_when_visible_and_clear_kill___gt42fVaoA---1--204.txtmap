@@ -1,0 +1,47 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M                             M                   M         M         M         M
+               M                                  M
+     M         M         M    M              M         M         M    M    M         M
+               M                        M         M    b2   b2   b3   b3             M
+               b3   b3   b3   b2   b2   b2   b2   b2   b2        M              M
+               M    b3   b3   M         b2   b2   bG18 b2   b2   b2        M    M
+M    M              b3   b3        b2   b2   b2   b2        b2   b2   b2
+M         M         M              b2             C48       b2        b3
+                                                       M    b2   b2   b2
+M    M                                       M              b2   M    b2
+                                   M                        a3                       M
+     M              M         M    M    M                   a1   C48
+     M                   M    M         M    C43       M    a1        M    M         M
+                    M              b2   b2   M    M    a1   a1   M
+     M                   b2   b2   a2   a2   a2   a2   a2   b2                       M
+     M         C41  M    b2        a2   b3   a2   M                        M
+               M    b2   b2   M    a2   a2   a2             M         M
+     a2   a3   a3   b2   a4   M    a2   a2   a2   M
+     a2   b1   b1   b1   b1   a2   a2   a2   a2
+     a3   a2   a2   a2   b24  a2   M                                       M
+     M              M    a1   aG13 M              M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=6,20
+turn=204
+bot_player_index=1
+aTiles=40
+aScore=96
+aStandingArmy=56
+aStars=31
+aCityCount=1
+aGeneral=6,20
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=53
+bScore=151
+bStandingArmy=98
+bStars=65
+bCityCount=1
+bGeneral=10,5
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=0

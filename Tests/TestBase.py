@@ -18,6 +18,9 @@ from base.client.map import MapBase, Tile, Score, Player, TILE_FOG, TILE_OBSTACL
 
 
 class TestBase(unittest.TestCase):
+    GLOBAL_BYPASS_REAL_TIME_TEST = False
+    """Change to True to have NO TEST bring up a viewer at all"""
+
     # __test__ = False
     def __init__(self, methodName: str = ...):
         super().__init__(methodName)
@@ -226,11 +229,23 @@ class TestBase(unittest.TestCase):
 
     def render_moves(self, map: MapBase, infoStr: str, moves1: typing.List[Move | None], moves2: typing.List[Move | None] = None, addlViewInfoLogLines: typing.List[str] | None = None):
         viewInfo = self.get_view_info(map)
-
-        if len(moves1) > 0 and moves1[0] is not None and moves1[0].source.player == 1:
-            temp = moves1
-            moves1 = moves2
-            moves2 = temp
+        verifiedColors = False
+        for move in moves1:
+            if move is not None:
+                if move.source.player == 1:
+                    temp = moves1
+                    moves1 = moves2
+                    moves2 = temp
+                verifiedColors = True
+                break
+        if not verifiedColors:
+            for move in moves2:
+                if move is not None:
+                    if move.source.player == 0:
+                        temp = moves1
+                        moves1 = moves2
+                        moves2 = temp
+                    break
 
         r = 255
         g = 0
@@ -412,7 +427,7 @@ class TestBase(unittest.TestCase):
         return viewInfo
 
     def render_view_info(self, map: MapBase, viewInfo: ViewInfo, infoString: str):
-        viewer = ViewerHost(infoString, cell_width=None, cell_height=None, alignTop=False, alignLeft=False)
+        viewer = ViewerHost(infoString, cell_width=None, cell_height=None, alignTop=False, alignLeft=False, noLog=True)
         viewer.noLog = True
         viewInfo.infoText = infoString
         viewer.start()
@@ -541,6 +556,13 @@ class TestBase(unittest.TestCase):
         player = sim.players[player_index]
         tile = player.map.GetTile(x, y)
         return tile
+
+    def get_player_largest_tile(self, sim: GameSimulator, player_index: int) -> Tile:
+        largest = None
+        for tile in sim.sim_map.get_all_tiles():
+            if tile.player == player_index and (largest is None or largest.army < tile.army):
+                largest = tile
+        return largest
 
     def render_sim_map_from_all_perspectives(self, sim):
         simMapViewInfo = ViewInfo(3, sim.sim_map.cols, sim.sim_map.rows)

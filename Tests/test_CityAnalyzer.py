@@ -141,7 +141,7 @@ class CityAnalyzerTests(TestBase):
         self.render_view_info(map, viewInfo, 'whatever')
     
     def test_should_take_city_as_quick_as_possible(self):
-        debugMode = True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_take_city_as_quick_as_possible___HltY61xph---b--100.txtmap'
         map, general, enemyGen = self.load_map_and_generals(mapFile, 100, fill_out_tiles=True)
 
@@ -159,7 +159,7 @@ class CityAnalyzerTests(TestBase):
         simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=20)
     
     def test_should_not_take_city_in_middle_of_map_right_in_front_of_enemy_army_lol(self):
-        debugMode = True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_take_city_in_middle_of_map_right_in_front_of_enemy_army_lol___Se6KaySp2---a--186.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 186)
 
@@ -179,7 +179,7 @@ class CityAnalyzerTests(TestBase):
         self.assertTrue(city.isNeutral)
 
     def test_should_never_take_city_so_far_from_play_area__should_contest_red_city_instead(self):
-        debugMode = True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_never_take_city_so_far_from_play_area__should_contest_red_city_instead___BlFGDfup2---b--510.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 510, fill_out_tiles=True)
 

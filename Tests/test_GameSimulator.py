@@ -152,6 +152,7 @@ class GameSimulatorTests(TestBase):
 
 
     def test_simulates_a_game(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/243.txtmap', 243, player_index=1)
         fakeEnemyGen = map.GetTile(2, 16)
         fakeEnemyGen.isGeneral = True
@@ -166,7 +167,7 @@ class GameSimulatorTests(TestBase):
         # simHost = GameSimulatorHost(map)
 
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=True, turn_time=0.5)
+        simHost.run_sim(run_real_time=debugMode, turn_time=0.5)
 
 
     def test_game_simulator__correctly_updates_client_fog_of_war__robust_against_manually_tweaked_maps(self):
@@ -268,9 +269,7 @@ M                             M                                  M              
         # enemy gen can see our tile two tiles away now
         self.assertPlayerTileVisibleAndCorrect(p1TileNextToEnemyCorrectTile.x, p1TileNextToEnemyCorrectTile.y, sim, fakeEnemyGen.player)
 
-
     def test_game_simulator__collided_armies_have_correct_deltas__both_move_to_same_tile(self):
-
         # (a army amount, b army amount, target tile player, target tile army)
         testCases = [
             # neutral target
@@ -410,6 +409,7 @@ aG7
         self.assertEqual(abs(aMovedAmount - bMovedAmount), abs(p1targetTile.delta.armyDelta))
 
     def test_simulates_a_game_from_turn_1(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         self.begin_capturing_logging()
         map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/243.txtmap', 243, player_index=1)
         fakeEnemyGen = map.GetTile(2, 16)
@@ -423,24 +423,29 @@ aG7
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player)
 
-        simHost.run_sim(run_real_time=True, turn_time=0.1)
+        simHost.run_sim(run_real_time=debugMode, turn_time=0.1)
 
-    def test_simulates_a_game_from_turn_1__deep_mcst_should_always_win(self):
-        self.begin_capturing_logging()
-        map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/243.txtmap', 243, player_index=1)
-        fakeEnemyGen = map.GetTile(2, 16)
-        fakeEnemyGen.isGeneral = True
-        fakeEnemyGen.player = 0
-        fakeEnemyGen.army = 1
+    def test_simulates_a_game_from_turn_1__deep_mcts_should_always_win(self):
+        for playerWithMcts in [1, 0]:
+            with self.subTest(playerWithMcts=playerWithMcts):
+                debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+                mapFile = 'GameContinuationEntries/should_not_make_nonsense_scrim_move___Hxp3ym3Th---b--383.txtmap'
+                map, general, enemyGen = self.load_map_and_generals(mapFile, 399, fill_out_tiles=True)
+                map.usernames[playerWithMcts] = 'mcts'
+                map.usernames[(playerWithMcts + 1) % 2] = 'brute'
+                self.reset_map_to_just_generals(map)
+                self.begin_capturing_logging()
 
-        self.reset_map_to_just_generals(map)
+                self.enable_search_time_limits_and_disable_debug_asserts()
 
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        simHost = GameSimulatorHost(map, player_with_viewer=-2)
-        simHost.get_bot(fakeEnemyGen.player).use_mcts = True
-
-        simHost.run_sim(run_real_time=True, turn_time=0.1)
-
+                simHost = GameSimulatorHost(map, player_with_viewer=-2)
+                if general.player == playerWithMcts:
+                    simHost.get_bot(general.player).use_mcts = True
+                    simHost.get_bot(enemyGen.player).use_mcts = False
+                else:
+                    simHost.get_bot(general.player).use_mcts = False
+                    simHost.get_bot(enemyGen.player).use_mcts = True
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1)
+                self.assertEqual(playerWithMcts, winner)
 
 

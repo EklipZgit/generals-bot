@@ -19,14 +19,14 @@ FORCE_PRIVATE = False
 
 class BotHostBase(object):
     def __init__(
-            self,
-            name: str,
-            placeMoveFunc: typing.Callable[[Tile, Tile, bool], bool],
-            gameType: str,
-            noUi: bool = True,
-            alignBottom: bool = False,
-            alignRight: bool = False,
-            throw: bool = False
+        self,
+        name: str,
+        placeMoveFunc: typing.Callable[[Tile, Tile, bool], bool],
+        gameType: str,
+        noUi: bool = True,
+        alignBottom: bool = False,
+        alignRight: bool = False,
+        throw: bool = False
     ):
         """
 
@@ -222,7 +222,6 @@ class BotHostLiveServer(BotHostBase):
 if __name__ == '__main__':
     import BotLogging
 
-    BotLogging.set_up_logger(logging.INFO)
     BotLogging.set_up_logger(logging.INFO)
 
     # raise AssertionError("stop")

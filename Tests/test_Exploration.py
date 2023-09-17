@@ -13,7 +13,7 @@ from bot_ek0x45 import EklipZBot
 class ExplorationTests(TestBase):
     
     def test_shouldnt_make_nonsense_exploration_path_15_6__15_5__15_4(self):
-        debugMode = True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/shouldnt_make_nonsense_exploration_path_15_6__15_5__15_4___HlRRkn923---b--543.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 543)
 
@@ -47,7 +47,7 @@ class ExplorationTests(TestBase):
         simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=30)
 
     def test_should_not_loop_back_and_forth_exploring_stupid_fog(self):
-        debugMode = True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_loop_back_and_forth_exploring_stupid_fog___Hx2Nw8WTh---e--490.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 490, player_index=4)
 

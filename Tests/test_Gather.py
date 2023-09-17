@@ -130,7 +130,7 @@ class GatherTests(TestBase):
                 self.fail(f'gather depth {depth} took {dur:.3f}')
 
     def test_should_gather_from_less_useful_parts_of_the_map(self):
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_gather_from_less_useful_parts_of_the_map___Bgw4Yc5n2---a--650.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 650, fill_out_tiles=True)
 
@@ -147,7 +147,7 @@ class GatherTests(TestBase):
         self.assertIsNone(winner)
 
     def test_gather_value_estimates_should_be_correct(self):
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/gather_value_estimates_should_be_correct___rghT7Cq23---b--240.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240)
 
@@ -182,7 +182,7 @@ class GatherTests(TestBase):
 
 
     def test_gather_prune_produces_correct_values(self):
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/gather_value_estimates_should_be_correct___rghT7Cq23---b--240.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240)
 
@@ -240,7 +240,7 @@ class GatherTests(TestBase):
             f'{str(move)} Final panic gather value {valueGathered}/{threat.threatValue} turns {turnsUsed}/{threat.turns}')
 
     def test_gather_prune_less_produces_correct_length_plan(self):
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/gather_value_estimates_should_be_correct___rghT7Cq23---b--240.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240)
 
@@ -303,7 +303,7 @@ class GatherTests(TestBase):
             self.render_view_info(map, viewInfo, f"valueGath {valueGathered}")
 
     def test_gather_prune_to_zero_produces_correct_values(self):
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/gather_value_estimates_should_be_correct___rghT7Cq23---b--240.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240)
 
@@ -356,7 +356,7 @@ class GatherTests(TestBase):
                     self.render_view_info(map, viewInfo, f"valueGath {valueGathered}")
     
     def test_going_all_in_on_army_advantage_should_gather_at_the_opp_general__LARGE_gather(self):
-        debugMode = True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         cases = [
             True,
             False,
@@ -385,7 +385,7 @@ class GatherTests(TestBase):
                 self.assertNoRepetition(simHost, minForRepetition=1, msg="should not re-gather cities or explore inefficiently. There should be zero excuse for ANY tile to be move source more than once in this sim.")
 
     def test_random_large_gather_test(self):
-        debugMode = True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/random_large_gather_test___reOqoXEp2---g--864.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 864, fill_out_tiles=True)
 
@@ -407,7 +407,7 @@ class GatherTests(TestBase):
         # TODO add asserts for random_large_gather_test
 
     def test_should_not_produce_invalid_path_during_gather(self):
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_produce_invalid_path_during_gather___b-TEST__10ec1926-ef6a-4efb-a6e6-d7a3a9017f00---b--553.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 560, fill_out_tiles=True)
 
@@ -430,7 +430,7 @@ class GatherTests(TestBase):
         self.assertNoRepetition(simHost, minForRepetition=1)
 
     def test_gather_and_prune_should_not_produce_stupid_prune(self):
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         testData = """
 |    |    |    |    |    |    |
 aG1  a1   a1   a1   a1   a1   a1   
@@ -529,7 +529,7 @@ b1   b1   b1   b1   b1   b1   bG1
          over the higher value leaves from the poorer-value-per-turn offshoots, leaving a suboptimal gather plan.
         @return:
         """
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         testData = """
 |    |    |    |    |    |    |    |
 aG1  a11  a2   a3   a2   a3   a1   a21
@@ -598,7 +598,7 @@ bot_player_index=0
 
         for depth, expectedGather in cases:
             if depth > 10:
-                debugMode = False
+                debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
             for targetsAreEnemy in targetsAreEnemyCases:
                 with self.subTest(depth=depth, expectedGather=expectedGather, targetsAreEnemy=targetsAreEnemy):
                     self.run_adversarial_gather_test_all_algorithms(
@@ -629,7 +629,7 @@ bot_player_index=0
          over the higher value leaves from the poorer-value-per-turn offshoots, leaving a suboptimal gather plan.
         @return:
         """
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         testData = """
 |    |    |    |    |    |    |    |
 aG1  a1   a2   a3   a2   a3   a1   a11
@@ -702,11 +702,11 @@ bot_player_index=0
             (5, 2)
         ]
 
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         for depth, expectedGather in cases:
             if depth > 6:
-                debugMode = False
+                debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
             for targetsAreEnemy in targetsAreEnemyCases:
                 for useTrueGatherVal in trueValCases:
                     for incNegative in incNegCases:
@@ -737,7 +737,7 @@ bot_player_index=0
         Ideally the algo should find an optimal path to the cluster and then produce the main tree within the cluster, rather than producing suboptimal paths to the cluster.
         @return:
         """
-        debugMode = True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         testData = """
 |    |    |    |    |    |    |    |
 aG1  a2   a2   a2   a2   a2   a2   a2 
@@ -807,7 +807,7 @@ bot_player_index=0
 
         for depth, expectedGather in cases:
             if depth > 24:
-                debugMode = False
+                debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
             for targetsAreEnemy in targetsAreEnemyCases:
                 with self.subTest(depth=depth, expectedGather=expectedGather, targetsAreEnemy=targetsAreEnemy):
                     self.run_adversarial_gather_test_all_algorithms(
@@ -839,7 +839,7 @@ bot_player_index=0
         that divides the high value gather cluster from the low value cluster.
         @return:
         """
-        debugMode = False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         testData = """
 |    |    |    |    |    |    |    |
 aG1  a2   a2   a2   a2   a2   a2   a2 
@@ -911,7 +911,7 @@ bot_player_index=0
         for depth, expectedGather in cases:
             for targetsAreEnemy in targetsAreEnemyCases:
                 if depth > 7:
-                    debugMode = False
+                    debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
                 with self.subTest(depth=depth, expectedGather=expectedGather, targetsAreEnemy=targetsAreEnemy):
                     self.run_adversarial_gather_test_all_algorithms(
                         testData,

@@ -65,9 +65,10 @@ def dest_breadth_first_target(
         skipTiles=None,
         ignoreGoalArmy=False,
         noLog=True) -> typing.Union[None, Path]:
-    '''
+    """
+    Gets a path that results in {targetArmy} army on one of the goalList tiles.
     GoalList can be a dict that maps from start tile to (startDist, goalTargetArmy)
-    '''
+    """
     if searchingPlayer == -2:
         searchingPlayer = map.player_index
     frontier = PriorityQueue()
@@ -1805,15 +1806,12 @@ def breadth_first_find_queue(
     (startArmy, startNode) = nodes[0]
     pathObject = Path(foundArmy)
     pathObject.add_next(startNode)
-    pathStart = PathNode(startNode, None, foundArmy, foundDist, -1, None)
-    path = pathStart
     dist = foundDist
     for i, armyNode in enumerate(nodes[1:]):
         (curArmy, curNode) = armyNode
         if curNode is not None:
             # logging.info("curArmy {} NODE {},{}".format(curArmy, curNode.x, curNode.y))
-            path = PathNode(curNode, path, curArmy, dist, -1, None)
-            pathObject.add_start(curNode)
+            pathObject.add_next(curNode)
             dist -= 1
 
     # while (node != None):

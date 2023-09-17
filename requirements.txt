@@ -3,5 +3,7 @@ pygame
 certifi
 requests
 nashpy
-numpy
+numpy==1.24.0 # after numba update let this upgrade? Numba being stupid.
+numba
+scipy
 # dill

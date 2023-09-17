@@ -1634,6 +1634,7 @@ def get_tree_move(
     logging.info(f"highestValueMove in get_tree_move was {highestValueMove.toString()}!")
     return highestValueMove
 
+
 def prune_mst_to_turns(
         rootNodes: typing.List[TreeNode],
         turns: int,
@@ -1738,7 +1739,7 @@ def prune_mst_to_turns_with_values(
     return prune_mst_until(
         rootNodes,
         untilFunc=lambda node, _, turnsLeft, curValue: turnsLeft <= turns,
-        pruneValueFunc=pruneFunc,
+        pruneOrderFunc=pruneFunc,
         invalidMoveFunc=invalidMoveFunc,
         pruneOverrideFunc=lambda node, _, turnsLeft, curValue: turnsLeft - node.gatherTurns < turns,
         viewInfo=viewInfo,
@@ -1761,8 +1762,6 @@ def prune_mst_to_army_with_values(
     """
     Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
     O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
-    TODO optimize to reuse existing treenode lookup map instead of rebuilding...?
-    TODO make sure no recalculate tree nodes is necessary.
 
     @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
     @param army: The army amount to prune the MST down to
@@ -1777,9 +1776,10 @@ def prune_mst_to_army_with_values(
     start = time.perf_counter()
 
     cityCounter = SearchUtils.Counter(0)
+    cityGatherDepthCounter = SearchUtils.Counter(0)
     citySkipTiles = set()
     for n in rootNodes:
-        if n.tile.isCity or n.tile.isGeneral and not n.tile.isNeutral:
+        if (n.tile.isCity or n.tile.isGeneral) and not n.tile.isNeutral:
             if n.tile.player == searchingPlayer:
                 citySkipTiles.add(n.tile)
 
@@ -1787,6 +1787,8 @@ def prune_mst_to_army_with_values(
         if (node.tile.isGeneral or node.tile.isCity) and not node.tile.isNeutral and node.tile not in citySkipTiles:
             if node.tile.player == searchingPlayer:
                 cityCounter.add(1)
+                # each time we add one of these we must gather all the other cities in the tree first too so we lose that many increment turns + that
+                cityGatherDepthCounter.add(node.trunkDistance)
             else:
                 cityCounter.add(-1)
     iterate_tree_nodes(rootNodes, cityCounterFunc)
@@ -1799,25 +1801,32 @@ def prune_mst_to_army_with_values(
                 return True
         invalidMoveFunc = invalid_move_func
 
-    # TODO pruning a city doesn't decrement the city counter,
-    #  so we might overestimate in situations where the large gather includes 3 cities but pruned only 1 etc.
     def untilFunc(node: TreeNode, _, turnsLeft: int, curValue: int):
-        cityIncrementAmount = cityCounter.value * (turnsLeft - 1) // 2
+        turnsLeftIfPruned = turnsLeft - node.gatherTurns
+        cityIncrementAmount = cityCounter.value * ((turnsLeftIfPruned - 1) // 2)
+        cityIncrementAmount -= cityGatherDepthCounter.value // 2
         armyLeftIfPruned = curValue - node.value + cityIncrementAmount
-        # logging.info(f'eval {str(node)}: armyLeftIfPruned {armyLeftIfPruned} < {army} {armyLeftIfPruned < army} -- turnsLeft {turnsLeft}, curValue {curValue}, cit {cityCounter.value}, ')
-        # armyLeftIfPruned = curValue + cityIncrementAmount
+
         if armyLeftIfPruned < army:
             return True
+
+        if node.tile.player == searchingPlayer and (node.tile.isCity or node.tile.isGeneral):
+            cityGatherDepthCounter.add(0 - node.trunkDistance)
+            cityCounter.add(-1)
         return False
 
     return prune_mst_until(
         rootNodes,
         untilFunc=untilFunc,
-        pruneValueFunc=lambda node, curObj: (node.value, node.trunkDistance),
+        # if we dont include trunkVal/node.trunkDistance we end up keeping shitty branches just because they have a far, large tile on the end.
+        pruneOrderFunc=lambda node, curObj: (node.value / node.gatherTurns, node.trunkValue/node.trunkDistance, node.trunkDistance),
+        # pruneOrderFunc=lambda node, curObj: (node.value, node.trunkValue / node.trunkDistance, node.trunkDistance),
+        # pruneOrderFunc=lambda node, curObj: (node.value / node.gatherTurns, node.trunkValue / node.trunkDistance, node.trunkDistance),
         invalidMoveFunc=invalidMoveFunc,
         viewInfo=viewInfo,
         noLog=noLog,
-        treeNodeLookupToPrune=treeNodeLookupToPrune
+        treeNodeLookupToPrune=treeNodeLookupToPrune,
+        pruneBranches=True
     )
 
 
@@ -1833,8 +1842,6 @@ def prune_mst_to_army(
     """
     Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
     O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
-    TODO optimize to reuse existing treenode lookup map instead of rebuilding...?
-    TODO make sure no recalculate tree nodes is necessary.
 
     @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
     @param army: The army amount to prune the MST down to
@@ -1860,11 +1867,147 @@ def prune_mst_to_army(
     return rootNodes
 
 
+def prune_mst_to_max_army_per_turn_with_values(
+        rootNodes: typing.List[TreeNode],
+        minArmy: int,
+        searchingPlayer: int,
+        viewInfo: ViewInfo | None = None,
+        noLog: bool = True,
+        treeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
+        invalidMoveFunc: typing.Callable[[TreeNode], bool] | None = None,
+        allowBranchPrune: bool = True,
+) -> typing.Tuple[int, int, typing.List[TreeNode]]:
+    """
+    Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
+    O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
+
+    @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
+    @param minArmy: The minimum army amount to prune the MST down to
+    @param searchingPlayer:
+    @param viewInfo:
+    @param noLog:
+    @param treeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
+    @param invalidMoveFunc: func(TreeNode) -> bool, return true if you want a leaf TreeNode to always be prune. For example, pruning gather nodes that begin at an enemy tile or that are 1's.
+    @param allowBranchPrune: Optionally, pass false to disable pruning whole branches. Allowing branch prunes produces lower value per turn trees but also smaller trees.
+
+    @return: The list same list of rootnodes passed in, modified.
+    """
+
+    cityCounter = SearchUtils.Counter(0)
+    cityGatherDepthCounter = SearchUtils.Counter(0)
+    citySkipTiles = set()
+    totalValue = 0
+    totalTurns = 0
+    for n in rootNodes:
+        if (n.tile.isCity or n.tile.isGeneral) and not n.tile.isNeutral:
+            if n.tile.player == searchingPlayer:
+                citySkipTiles.add(n.tile)
+
+        totalTurns += n.gatherTurns
+        totalValue += n.value
+
+    if totalTurns == 0:
+        return 0, 0, rootNodes
+
+    def cityCounterFunc(node: TreeNode):
+        if (node.tile.isGeneral or node.tile.isCity) and not node.tile.isNeutral and node.tile not in citySkipTiles:
+            if node.tile.player == searchingPlayer:
+                cityCounter.add(1)
+                # each time we add one of these we must gather all the other cities in the tree first too so we lose that many increment turns + that
+                cityGatherDepthCounter.add(node.trunkDistance)
+            else:
+                cityCounter.add(-1)
+    iterate_tree_nodes(rootNodes, cityCounterFunc)
+
+    if invalidMoveFunc is None:
+        def invalid_move_func(node: TreeNode):
+            if node.value <= 0:
+                return True
+            if node.tile.player != searchingPlayer:
+                return True
+        invalidMoveFunc = invalid_move_func
+
+    curValuePerTurn = SearchUtils.Counter(totalValue / totalTurns)
+
+    def untilFunc(node: TreeNode, _, turnsLeft: int, curValue: int):
+        turnsLeftIfPruned = turnsLeft - node.gatherTurns
+        if turnsLeftIfPruned == 0:
+            return True
+        cityIncrementAmount = cityCounter.value * ((turnsLeftIfPruned - 1) // 2)
+        cityIncrementAmount -= cityGatherDepthCounter.value // 2
+        armyLeftIfPruned = curValue - node.value + cityIncrementAmount
+        pruneValPerTurn = armyLeftIfPruned / turnsLeftIfPruned
+        if pruneValPerTurn < curValuePerTurn.value or armyLeftIfPruned < minArmy:
+            return True
+
+        if node.tile.player == searchingPlayer and (node.tile.isCity or node.tile.isGeneral):
+            cityGatherDepthCounter.add(0 - node.trunkDistance)
+            cityCounter.add(-1)
+
+        curValuePerTurn.value = pruneValPerTurn
+        return False
+
+    return prune_mst_until(
+        rootNodes,
+        untilFunc=untilFunc,
+        # if we dont include trunkVal/node.trunkDistance we end up keeping shitty branches just because they have a far, large tile on the end.
+        pruneOrderFunc=lambda node, curObj: (node.value / node.gatherTurns, node.trunkValue/node.trunkDistance, node.trunkDistance),
+        # pruneOrderFunc=lambda node, curObj: (node.value, node.trunkValue / node.trunkDistance, node.trunkDistance),
+        # pruneOrderFunc=lambda node, curObj: (node.value / node.gatherTurns, node.trunkValue / node.trunkDistance, node.trunkDistance),
+        invalidMoveFunc=invalidMoveFunc,
+        viewInfo=viewInfo,
+        noLog=noLog,
+        treeNodeLookupToPrune=treeNodeLookupToPrune,
+        pruneBranches=allowBranchPrune
+    )
+
+
+def prune_mst_to_max_army_per_turn(
+        rootNodes: typing.List[TreeNode],
+        minArmy: int,
+        searchingPlayer: int,
+        viewInfo: ViewInfo | None = None,
+        noLog: bool = True,
+        treeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
+        invalidMoveFunc: typing.Callable[[TreeNode], bool] | None = None,
+        allowBranchPrune: bool = True
+) -> typing.List[TreeNode]:
+    """
+    Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
+    O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
+
+    @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
+    @param minArmy: The minimum army amount to prune the MST down to
+    @param searchingPlayer:
+    @param viewInfo:
+    @param noLog:
+    @param treeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
+    @param invalidMoveFunc: func(TreeNode) -> bool, return true if you want a leaf TreeNode to always be prune. For example, pruning gather nodes that begin at an enemy tile or that are 1's.
+    @param allowBranchPrune: Optionally, pass false to disable pruning whole branches.
+    Allowing branch prunes produces lower value per turn trees but also smaller trees.
+
+    @return: The list same list of rootnodes passed in, modified.
+    """
+
+    count, totalValue, rootNodes = GatherUtils.prune_mst_to_max_army_per_turn_with_values(
+        rootNodes=rootNodes,
+        minArmy=minArmy,
+        searchingPlayer=searchingPlayer,
+        viewInfo=viewInfo,
+        noLog=noLog,
+        treeNodeLookupToPrune=treeNodeLookupToPrune,
+        invalidMoveFunc=invalidMoveFunc,
+        allowBranchPrune=allowBranchPrune
+    )
+
+    return rootNodes
+
+
 # TODO can implement prune as multiple choice knapsack, optimizing lowest weight combinations of tree prunes instead of highest weight, maybe?
 def prune_mst_until(
         rootNodes: typing.List[TreeNode],
         untilFunc: typing.Callable[[TreeNode, typing.Tuple, int, int], bool],
-        pruneValueFunc: typing.Callable[[TreeNode, typing.Tuple | None], typing.Tuple],
+        pruneOrderFunc: typing.Callable[[TreeNode, typing.Tuple | None], typing.Tuple],
         invalidMoveFunc: typing.Callable[[TreeNode], bool],
         pruneBranches: bool = False,
         pruneOverrideFunc: typing.Callable[[TreeNode, typing.Tuple, int, int], bool] | None = None,
@@ -1876,12 +2019,10 @@ def prune_mst_until(
     """
     Prunes excess / bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
     O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
-    TODO optimize to reuse existing treenode lookup map instead of rebuilding...?
-    TODO make sure no recalculate tree nodes is necessary.
 
     @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
     @param untilFunc: Func[curNode, curPriorityObject, treeNodeCountRemaining, curValue] -> bool (should return False to continue pruning, True to return the tree).
-    @param pruneValueFunc: Func[curNode, curPriorityObject] - min are pruned first
+    @param pruneOrderFunc: Func[curNode, curPriorityObject] - min are pruned first
     @param pruneBranches: If true, runs the prune func to prioritize nodes in the middle of the tree, not just leaves.
     @param pruneOverrideFunc: Func[curNode, curPriorityObject, treeNodeCountRemaining, curValue] -> bool
     If passed, a node popped from the queue will run through this function and if the function returns true, will NOT be pruned.
@@ -1912,7 +2053,7 @@ def prune_mst_until(
                 validMove = False
             if not noLog:
                 logging.info("  tile {} had value {:.1f}, trunkDistance {}".format(current.tile.toString(), value, current.trunkDistance))
-            pruneHeap.put((validMove, pruneValueFunc(current, None), current))
+            pruneHeap.put((validMove, pruneOrderFunc(current, None), current))
 
     iterate_tree_nodes(rootNodes, nodeInitializer)
 
@@ -1941,7 +2082,7 @@ def prune_mst_until(
             if untilFunc(current, prioObj, count, curValue):
                 # Then this was a valid move, and we've pruned enough leaves out.
                 # Thus we should break. Otherwise if validMove == 0, we want to keep popping invalid moves off until they're valid again.
-                break
+                continue
         else:
             logging.info(f'pruning extra invalid tree node despite untilFunc == True: {str(current)}')
 
@@ -1955,7 +2096,7 @@ def prune_mst_until(
 
         # make sure the value of this prune didn't go down, if it did, shuffle it back into the heap with new priority.
         if validMove:
-            doubleCheckPrioObj = pruneValueFunc(current, prioObj)
+            doubleCheckPrioObj = pruneOrderFunc(current, prioObj)
             if doubleCheckPrioObj > prioObj:
                 pruneHeap.put((validMove, doubleCheckPrioObj, current))
                 if not noLog:
@@ -1988,7 +2129,7 @@ def prune_mst_until(
                 treeNodeLookupToPrune.pop(toDropFromLookup.tile, None)
             if tileDictToPrune is not None:
                 tileDictToPrune.pop(toDropFromLookup.tile, None)
-            del nodeMap[toDropFromLookup.tile]
+            nodeMap.pop(toDropFromLookup.tile, None)
             count -= 1
             if not noLog:
                 logging.info(
@@ -2013,7 +2154,7 @@ def prune_mst_until(
                 logging.info(
                     f"  Appending parent {realParent.tile.toString()} (valid {parentValidMove}) had value {value:.1f}, trunkDistance {realParent.trunkDistance}")
 
-            nextPrioObj = pruneValueFunc(realParent, prioObj)
+            nextPrioObj = pruneOrderFunc(realParent, prioObj)
             pruneHeap.put((parentValidMove, nextPrioObj, realParent))
 
     #while not leaves.empty():

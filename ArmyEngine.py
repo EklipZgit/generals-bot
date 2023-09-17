@@ -7,13 +7,15 @@ import typing
 import nashpy
 import numpy
 
+import SearchUtils
 from ArmyAnalyzer import ArmyAnalyzer
 from ArmyTracker import Army
 from BoardAnalyzer import BoardAnalyzer
 from DataModels import Move
-from Engine.Models import ArmySimState, ArmySimResult, SimTile
+from Engine.ArmyEngineModels import ArmySimState, ArmySimResult, SimTile
 from MctsLudii import MctsDUCT, Game, Context
 from base.client.map import MapBase, Tile, MapMatrix
+
 
 class ArmyEngine(object):
     def __init__(
@@ -24,6 +26,7 @@ class ArmyEngine(object):
             boardAnalysis: BoardAnalyzer,
             friendlyCaptureValues: MapMatrix | None = None,
             enemyCaptureValues: MapMatrix | None = None,
+            timeCap: float = 5.0
     ):
         """
 
@@ -91,7 +94,7 @@ class ArmyEngine(object):
         self.enemy_end_board_recap_weight: float = 2.0
         """How much tile-differential per turn a surviving enemy army is worth if near recapturable territory."""
 
-        self.repetition_threshold: int = 2
+        self.repetition_threshold: int = 5
         """How many repeated tiles in a row constitute a repetition."""
 
         if len(friendlyArmies) == 1 and len(enemyArmies) == 1:
@@ -107,13 +110,25 @@ class ArmyEngine(object):
         self.log_payoff_depth: int = 1
         """Even without log_everything set, log payoffs at or below this depth. Depth 1 will log the payoffs for all moves from starting position."""
 
+        self.iteration_limit: int = -1
+        self.time_limit: float = timeCap
+        self._time_limit_dec: float = 0.01
+        """The amount of time to give long running brute force scans per pruned level"""
+        self.start_time: float = 0.0
+        self.to_turn: int = 0
+        """The turn to simulate up to."""
+
+        if SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING:
+            self.iteration_limit = 200
+            self.time_limit = 10000000000.0
+
     def scan(
-            self,
-            turns: int,
-            logEvals: bool = False,
-            # perf_timer: PerformanceTimer | None = None,
-            noThrow: bool = False,
-            mcts: bool = False
+        self,
+        turns: int,
+        logEvals: bool = False,
+        # perf_timer: PerformanceTimer | None = None,
+        noThrow: bool = False,
+        mcts: bool = False
     ) -> ArmySimResult:
         """
         Sims a number of turns and outputs what it believes to be the best move combination for players. Brute force approach, largely just for validating that any branch and bound approaches produce the correct result.
@@ -141,6 +156,7 @@ class ArmyEngine(object):
         self.base_city_differential = baseBoardState.city_differential
         baseBoardState.friendly_move_generator = self.generate_friendly_moves
         baseBoardState.enemy_move_generator = self.generate_enemy_moves
+        baseBoardState.initial_differential = baseBoardState.tile_differential + baseBoardState.city_differential * 25
 
         start = time.perf_counter()
         if not mcts:
@@ -152,40 +168,52 @@ class ArmyEngine(object):
             result = self.execute_scan_MCTS(baseBoardState, turns, noThrow=noThrow)
 
             duration = time.perf_counter() - start
-            logging.info(f'MONTE CARLO army scrim depth {turns} complete in {duration:.3f} after iter {self.iterations}')
+            logging.info(f'MONTE CARLO army scrim complete in {duration:.3f}')
 
         return result
 
     def simulate_recursive_brute_force(
             self,
             boardState: ArmySimState,
-            currentTurn: int,
-            stopTurn: int
-    ) -> ArmySimResult:
+            currentTurn: int
+    ) -> ArmySimState:
         """
 
         @param currentTurn: the current turn (in the sim, or starting turn that the current map is at)
-        @param stopTurn: how far to execute the sim until
         @param boardState: the state of the board at this position
         @return: a tuple of (the min-maxed best sim state down the tree,
         with the list of moves (and their actual board states) up the tree,
         the depth evaluated)
         """
         self.iterations += 1
-        if currentTurn == stopTurn or (boardState.kills_all_enemy_armies and boardState.kills_all_friendly_armies):
+        if currentTurn >= self.to_turn or (boardState.kills_all_enemy_armies and boardState.kills_all_friendly_armies):
             self.set_final_board_state_depth_estimation(boardState)
 
-        if (currentTurn == stopTurn
+        if self.iterations & 511 == 0:
+            duration = time.perf_counter() - self.start_time
+
+            if duration > self.time_limit:
+                oldTurn = self.to_turn
+                self.to_turn -= 1
+                if boardState.depth > 7:
+                    self.to_turn -= 2
+                elif boardState.depth > 5:
+                    self.to_turn -= 1
+                else:
+                    # don't over-penalize to short depths, give them extra scan time
+                    self.time_limit += self._time_limit_dec
+
+                logging.error(f'AE BRUTE ITER {self.iterations} EXCEEDED TIME {self.time_limit:.3f} ({duration:.3f}) reducing end turn from {oldTurn} to {self.to_turn}')
+                self.time_limit += self._time_limit_dec
+
+        if (currentTurn >= self.to_turn
                 or (boardState.kills_all_friendly_armies and boardState.kills_all_enemy_armies)
                 or boardState.captures_enemy
                 or boardState.captured_by_enemy
                 or boardState.can_enemy_force_repetition
                 or boardState.can_force_repetition):
-            res = ArmySimResult()
-            res.best_result_state = boardState
-            # res.expected_best_moves = [(boardState.friendly_move, boardState.enemy_move)]
-            res.best_result_state_depth = stopTurn - currentTurn
-            return res
+
+            return boardState
 
         nextTurn = currentTurn + 1
 
@@ -193,42 +221,41 @@ class ArmyEngine(object):
 
         enMoves: typing.List[Move | None] = boardState.generate_enemy_moves()
 
-        payoffs: typing.List[typing.List[None | ArmySimResult]] = [[None for e in enMoves] for f in frMoves]
+        payoffs: typing.List[typing.List[None | ArmySimState]] = [[None for e in enMoves] for f in frMoves]
 
         nashPayoffs: typing.List[typing.List[int]] = [[0 for e in enMoves] for f in frMoves]
 
         for frIdx, frMove in enumerate(frMoves):
             for enIdx, enMove in enumerate(enMoves):
-                if (1 == 1
-                        and frMove is not None
-                        and frMove.dest.x == 3
-                        and frMove.dest.y == 4
-                        # and frMove.source.x == 0
-                        # and frMove.source.y == 9
-                        and enMove is not None
-                        and enMove.dest.x == 3
-                        and enMove.dest.y == 3
-                        and enMove.source.x == 3
-                        and enMove.source.y == 4
-                        and boardState.depth < 2
-                ):
-                    logging.info('gotcha')
+                # if (1 == 1
+                #         and frMove is not None
+                #         and frMove.dest.x == 3
+                #         and frMove.dest.y == 4
+                #         # and frMove.source.x == 0
+                #         # and frMove.source.y == 9
+                #         and enMove is not None
+                #         and enMove.dest.x == 3
+                #         and enMove.dest.y == 3
+                #         and enMove.source.x == 3
+                #         and enMove.source.y == 4
+                #         and boardState.depth < 2
+                # ):
+                #     logging.info('gotcha')
                 nextBoardState = self.get_next_board_state(nextTurn, boardState, frMove, enMove)
                 nextResult = self.simulate_recursive_brute_force(
                     nextBoardState,
-                    nextTurn,
-                    stopTurn
+                    nextTurn
                 )
 
                 payoffs[frIdx][enIdx] = nextResult
-                nashPayoffs[frIdx][enIdx] = nextResult.best_result_state.calculate_value_int()
+                nashPayoffs[frIdx][enIdx] = nextResult.calculate_value_int()
 
                 # frMoves[frMove].append(nextResult)
                 # enMoves[enMove].append(nextResult)
 
         frEqMoves = [e for e in enumerate(frMoves)]
         enEqMoves = [e for e in enumerate(enMoves)]
-        if boardState.depth < 2:
+        if boardState.depth < 1:
             nashStart = time.perf_counter()
             nashA = numpy.array(nashPayoffs)
             nashB = -nashA
@@ -252,7 +279,7 @@ class ArmyEngine(object):
         if self.log_everything or boardState.depth < self.log_payoff_depth:
             self.render_payoffs(boardState, frMoves, enMoves, payoffs)
 
-        return self.get_comparison_based_expected_result_state(boardState, frEqMoves, enEqMoves, payoffs)
+        return self.get_comparison_based_expected_result_state(boardState.depth, frEqMoves, enEqMoves, payoffs)
 
     def simulate_recursive_alpha_beta(
             self,
@@ -398,7 +425,7 @@ class ArmyEngine(object):
         # if self.log_everything or boardState.depth < self.log_payoff_depth:
         #     self.render_payoffs(boardState, frMoves, enMoves, payoffs)
         #
-        # return self.get_comparison_based_expected_result_state(boardState, frEqMoves, enEqMoves, payoffs)
+        # return self.get_comparison_based_expected_result_state(boardState.depth, frEqMoves, enEqMoves, payoffs)
 
     def get_next_board_state(
             self,
@@ -696,7 +723,7 @@ class ArmyEngine(object):
         for frIdx, frMove in enumerate(frMoves):
             payoffRow = []
             for enIdx, enMove in enumerate(enMoves):
-                payoffRow.append(str(payoffs[frIdx][enIdx].best_result_state).ljust(colWidth))
+                payoffRow.append(str(payoffs[frIdx][enIdx]).ljust(colWidth))
 
             logging.info(f'{str(frMove).rjust(colWidth - 2)}  {"".join(payoffRow)}')
 
@@ -707,27 +734,27 @@ class ArmyEngine(object):
 
     def get_comparison_based_expected_result_state(
             self,
-            boardState: ArmySimState,
+            curDepth: int,
             frEqMoves: typing.List[typing.Tuple[int, Move | None]],
             enEqMoves: typing.List[typing.Tuple[int, Move | None]],
-            payoffs: typing.List[typing.List[ArmySimResult]]
-    ) -> ArmySimResult:
+            payoffs: typing.List[typing.List[ArmySimState]]
+    ) -> ArmySimState:
         # enemy is going to choose the move that results in the lowest maximum board state
 
         # build response matrix
 
         bestEnemyMove: Move | None = None
         bestEnemyMoveExpectedFriendlyMove: Move | None = None
-        bestEnemyMoveWorstCaseFriendlyResponse: ArmySimResult | None = None
+        bestEnemyMoveWorstCaseFriendlyResponse: ArmySimState | None = None
         for enIdx, enMove in enEqMoves:
-            curEnemyMoveWorstCaseFriendlyResponse: ArmySimResult | None = None
+            curEnemyMoveWorstCaseFriendlyResponse: ArmySimState | None = None
             curEnemyExpectedFriendly = None
             for frIdx, frMove in frEqMoves:
                 state = payoffs[frIdx][enIdx]
-                if curEnemyMoveWorstCaseFriendlyResponse is None or state.calculate_value() > curEnemyMoveWorstCaseFriendlyResponse.calculate_value():
+                if curEnemyMoveWorstCaseFriendlyResponse is None or state.calculate_value_int() > curEnemyMoveWorstCaseFriendlyResponse.calculate_value_int():
                     curEnemyMoveWorstCaseFriendlyResponse = state
                     curEnemyExpectedFriendly = frMove
-            if bestEnemyMoveWorstCaseFriendlyResponse is None or curEnemyMoveWorstCaseFriendlyResponse.calculate_value() < bestEnemyMoveWorstCaseFriendlyResponse.calculate_value():
+            if bestEnemyMoveWorstCaseFriendlyResponse is None or curEnemyMoveWorstCaseFriendlyResponse.calculate_value_int() < bestEnemyMoveWorstCaseFriendlyResponse.calculate_value_int():
                 bestEnemyMoveWorstCaseFriendlyResponse = curEnemyMoveWorstCaseFriendlyResponse
                 bestEnemyMove = enMove
                 bestEnemyMoveExpectedFriendlyMove = curEnemyExpectedFriendly
@@ -737,28 +764,28 @@ class ArmyEngine(object):
         # friendly is going to choose the move that results in the highest minimum board state
         bestFriendlyMove: Move | None = None
         bestFriendlyMoveExpectedEnemyMove: Move | None = None
-        bestFriendlyMoveWorstCaseOpponentResponse: ArmySimResult = None
+        bestFriendlyMoveWorstCaseOpponentResponse: ArmySimState = None
         for frIdx, frMove in frEqMoves:
-            curFriendlyMoveWorstCaseOpponentResponse: ArmySimResult = None
+            curFriendlyMoveWorstCaseOpponentResponse: ArmySimState = None
             curFriendlyExpectedEnemy = None
             for enIdx, enMove in enEqMoves:
                 state = payoffs[frIdx][enIdx]
                 # if logEvals:
                 #     logging.info(
                 #         f'opponent cant make this move :D   {str(state)} <= {str(bestEnemyMoveWorstCaseFriendlyResponse)}')
-                if curFriendlyMoveWorstCaseOpponentResponse is None or state.calculate_value() < curFriendlyMoveWorstCaseOpponentResponse.calculate_value():
+                if curFriendlyMoveWorstCaseOpponentResponse is None or state.calculate_value_int() < curFriendlyMoveWorstCaseOpponentResponse.calculate_value_int():
                     curFriendlyMoveWorstCaseOpponentResponse = state
                     curFriendlyExpectedEnemy = enMove
-            if bestFriendlyMoveWorstCaseOpponentResponse is None or curFriendlyMoveWorstCaseOpponentResponse.calculate_value() > bestFriendlyMoveWorstCaseOpponentResponse.calculate_value():
+            if bestFriendlyMoveWorstCaseOpponentResponse is None or curFriendlyMoveWorstCaseOpponentResponse.calculate_value_int() > bestFriendlyMoveWorstCaseOpponentResponse.calculate_value_int():
                 bestFriendlyMoveWorstCaseOpponentResponse = curFriendlyMoveWorstCaseOpponentResponse
                 bestFriendlyMove = frMove
                 bestFriendlyMoveExpectedEnemyMove = curFriendlyExpectedEnemy
 
-        if self.log_everything or boardState.depth < self.log_payoff_depth:
+        if self.log_everything or curDepth < self.log_payoff_depth:
             if bestFriendlyMoveExpectedEnemyMove != bestEnemyMove or bestFriendlyMove != bestEnemyMoveExpectedFriendlyMove or bestFriendlyMoveWorstCaseOpponentResponse != bestEnemyMoveWorstCaseFriendlyResponse:
-                logging.info(f'~~~  diverged, why?\r\n    FR fr: ({str(bestFriendlyMove)}) en: ({str(bestFriendlyMoveExpectedEnemyMove)})  eval {str(bestFriendlyMoveWorstCaseOpponentResponse.best_result_state)}\r\n    EN fr: ({str(bestEnemyMoveExpectedFriendlyMove)}) en: ({str(bestEnemyMove)})  eval {str(bestEnemyMoveWorstCaseFriendlyResponse.best_result_state)}\r\n')
+                logging.info(f'~~~  diverged, why?\r\n    FR fr: ({str(bestFriendlyMove)}) en: ({str(bestFriendlyMoveExpectedEnemyMove)})  eval {str(bestFriendlyMoveWorstCaseOpponentResponse)}\r\n    EN fr: ({str(bestEnemyMoveExpectedFriendlyMove)}) en: ({str(bestEnemyMove)})  eval {str(bestEnemyMoveWorstCaseFriendlyResponse)}\r\n')
             else:
-                logging.info(f'~~~  both players agreed  fr: ({str(bestFriendlyMove)}) en: ({str(bestEnemyMove)}) eval {str(bestEnemyMoveWorstCaseFriendlyResponse.best_result_state)}\r\n')
+                logging.info(f'~~~  both players agreed  fr: ({str(bestFriendlyMove)}) en: ({str(bestEnemyMove)}) eval {str(bestEnemyMoveWorstCaseFriendlyResponse)}\r\n')
 
         worstCaseForUs = bestFriendlyMoveWorstCaseOpponentResponse
         # worstCaseForUs = bestEnemyMoveWorstCaseFriendlyResponse
@@ -777,15 +804,14 @@ class ArmyEngine(object):
             boardState: ArmySimState,
             frEnumMoves: typing.List[typing.Tuple[int, Move | None]],
             enEnumMoves: typing.List[typing.Tuple[int, Move | None]],
-            payoffs: typing.List[typing.List[ArmySimResult]]
+            payoffs: typing.List[typing.List[ArmySimState]]
     ) -> typing.Tuple[typing.List[typing.Tuple[int, Move | None]], typing.List[typing.Tuple[int, Move | None]]]:
         # hack do this for now
-        # return self.get_comparison_based_expected_result_state(boardState, frEnumMoves, enEnumMoves, payoffs)
+        # return self.get_comparison_based_expected_result_state(boardState.depth, frEnumMoves, enEnumMoves, payoffs)
 
         return self.get_nash_moves_based_on_lemke_howson(boardState, game, frEnumMoves, enEnumMoves, payoffs)
         # for frMoveIdx, frMove in frEnumMoves:
         #     for enMoveIdx, enMove in enEnumMoves:
-
 
     def get_nash_moves_based_on_support_enumeration(
             self,
@@ -793,7 +819,7 @@ class ArmyEngine(object):
             game: nashpy.Game,
             frEnumMoves: typing.List[typing.Tuple[int, Move | None]],
             enEnumMoves: typing.List[typing.Tuple[int, Move | None]],
-            payoffs: typing.List[typing.List[ArmySimResult]]
+            payoffs: typing.List[typing.List[ArmySimState]]
     ) -> typing.Tuple[typing.List[typing.Tuple[int, Move | None]], typing.List[typing.Tuple[int, Move | None]]]:
         """
         Returns just the enumeration of the moves that are part of the equilibrium.
@@ -824,17 +850,22 @@ class ArmyEngine(object):
                     if val >= 0.5:
                         enEqMoves.append(enEnumMoves[moveIdx])
 
-            if len(frEqMoves) == 0 and len(frEnumMoves) > 0:
-                raise AssertionError(f'No fr moves returned...?')
-            if len(enEqMoves) == 0 and len(enEnumMoves) > 0:
-                raise AssertionError(f'No en moves returned...?')
-
             if len(frEqMoves) > 1:
                 logging.warning(
-                    f'{len(frEqMoves)} fr moves returned...? {", ".join([str(move) for move in frEqMoves])}')
+                    f'{len(frEqMoves)} fr support moves returned...? {", ".join([str(move) for move in frEqMoves])}')
             if len(enEqMoves) > 1:
                 logging.warning(
-                    f'{len(enEqMoves)} en moves returned...? {", ".join([str(move) for move in enEqMoves])}')
+                    f'{len(enEqMoves)} en support moves returned...? {", ".join([str(move) for move in enEqMoves])}')
+
+            if len(frEqMoves) == 0 and len(frEnumMoves) > 0:
+                logging.warning(
+                    f'{len(frEqMoves)} fr support moves returned...? {", ".join([str(move) for move in frEqMoves])}')
+                frEqMoves = frEnumMoves
+            if len(enEqMoves) == 0 and len(enEnumMoves) > 0:
+                logging.warning(
+                    f'{len(enEqMoves)} en support moves returned...? {", ".join([str(move) for move in enEqMoves])}')
+                enEqMoves = enEnumMoves
+
         self.time_in_nash_eq += time.perf_counter() - nashEqStart
         return frEqMoves, enEqMoves
 
@@ -844,7 +875,7 @@ class ArmyEngine(object):
             game: nashpy.Game,
             frEnumMoves: typing.List[typing.Tuple[int, Move | None]],
             enEnumMoves: typing.List[typing.Tuple[int, Move | None]],
-            payoffs: typing.List[typing.List[ArmySimResult]]
+            payoffs: typing.List[typing.List[ArmySimState]]
     ) -> typing.Tuple[typing.List[typing.Tuple[int, Move | None]], typing.List[typing.Tuple[int, Move | None]]]:
         """
         Returns just the enumeration of the moves that are part of the equilibrium.
@@ -880,17 +911,22 @@ class ArmyEngine(object):
                 if val >= 0.5:
                     enEqMoves.append(enEnumMoves[moveIdx])
 
-        if len(frEqMoves) == 0 and len(frEnumMoves) > 0:
-            frEqMoves = frEnumMoves
-        if len(enEqMoves) == 0 and len(enEnumMoves) > 0:
-            enEqMoves = enEnumMoves
-
         if len(frEqMoves) > 1:
             logging.warning(
-                f'{len(frEqMoves)} fr moves returned...? {", ".join([str(move) for move in frEqMoves])}')
+                f'{len(frEqMoves)} fr lemke moves returned...? {", ".join([str(move) for move in frEqMoves])}')
         if len(enEqMoves) > 1:
             logging.warning(
-                f'{len(enEqMoves)} en moves returned...? {", ".join([str(move) for move in enEqMoves])}')
+                f'{len(enEqMoves)} en lemke moves returned...? {", ".join([str(move) for move in enEqMoves])}')
+
+        if len(frEqMoves) == 0 and len(frEnumMoves) > 0:
+            logging.warning(
+                f'{len(frEqMoves)} fr lemke moves returned...? {", ".join([str(move) for move in frEqMoves])}')
+            frEqMoves = frEnumMoves
+        if len(enEqMoves) == 0 and len(enEnumMoves) > 0:
+            logging.warning(
+                f'{len(enEqMoves)} en lemke moves returned...? {", ".join([str(move) for move in enEqMoves])}')
+            enEqMoves = enEnumMoves
+
         self.time_in_nash_eq += time.perf_counter() - nashEqStart
         return frEqMoves, enEqMoves
 
@@ -900,15 +936,22 @@ class ArmyEngine(object):
             turns: int,
             noThrow: bool = False
     ) -> ArmySimResult:
+        # we gradually cut off the recursive search depth so the time limit is more a time suggestion, unlike mcts. Back the initial cutoff off slightly.
+        self._time_limit_dec = max(self.time_limit * 0.09, 0.004)
+        self.time_limit = min(self.time_limit, self.time_limit * 0.6 + 0.007)
+
         multiFriendly = len(self.friendly_armies) > 1
         multiEnemy = len(self.enemy_armies) > 1
-
-        result: ArmySimResult = self.simulate_recursive_brute_force(
-            baseBoardState,
-            self.map.turn,
-            self.map.turn + turns)
-
+        self.to_turn = self.map.turn + turns
+        self.start_time = time.perf_counter()
         ogDiff = baseBoardState.tile_differential + baseBoardState.city_differential * 25
+
+        final_state: ArmySimState = self.simulate_recursive_brute_force(
+            baseBoardState,
+            self.map.turn)
+        result = ArmySimResult(final_state)
+        result.best_result_state_depth = final_state.depth
+
         afterScrimDiff = result.best_result_state.tile_differential + result.best_result_state.city_differential * 25
         result.net_economy_differential = afterScrimDiff - ogDiff
 
@@ -962,14 +1005,11 @@ class ArmyEngine(object):
         mctsRunner: MctsDUCT = MctsDUCT()
         game: Game = Game()
         ctx: Context = Context()
-        baseBoardState.initial_differential = baseBoardState.tile_differential + baseBoardState.city_differential * 25
         ctx.set_initial_board_state(self, baseBoardState, game, self.map.turn)
 
-        eval, moves, simState = mctsRunner.select_action(game, ctx, 5.050, 100000000)
-        frMove = moves.playerMoves[0]
-        enMove = moves.playerMoves[1]
-        result = ArmySimResult(self.get_next_board_state(self.map.turn + 1, simState, frMove, enMove))
-        result.expected_best_moves = [(frMove, enMove)]
+        mctsSummary = mctsRunner.select_action(game, ctx, self.time_limit, self.iteration_limit)
+        result = ArmySimResult(mctsSummary.best_result_state)
+        result.expected_best_moves = [(bm.playerMoves[0], bm.playerMoves[1]) for bm in mctsSummary.best_moves]
 
         logging.info(f'MCTS iter {mctsRunner.iterations}, nodesExplored {mctsRunner.nodes_explored}, rollouts {mctsRunner.trials_performed}, backprops {mctsRunner.backprop_iter}, rolloutExpansions {game.rollout_expansions}, biasedRolloutExpansions {game.biased_rollout_expansions}')
 

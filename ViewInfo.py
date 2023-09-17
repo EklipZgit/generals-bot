@@ -1,9 +1,9 @@
-'''
+"""
 	@ Travis Drake (EklipZ) eklipz.io - tdrake0x45 at gmail)
 	April 2017
 	Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
 	EklipZ bot - Tries to play generals lol
-'''
+"""
 
 import logging
 import typing
@@ -22,7 +22,8 @@ from DataModels import TreeNode
 from Directives import Timings
 from Path import Path
 from Territory import TerritoryClassifier
-from base.client.map import Tile, MapMatrix
+from base.client.map import Tile
+from MapMatrix import MapMatrix
 
 
 class TargetStyle(Enum):
@@ -45,7 +46,7 @@ class PathColorer(object):
 class ViewInfo(object):
     def __init__(self, countHist, cols, rows):
         # list of true/false matrixes and the color to color the border
-        self._divisions: typing.List[typing.Tuple[MapMatrix, typing.Tuple[int, int, int], int]] = []
+        self._divisions: typing.List[typing.Tuple[MapMatrix[bool], typing.Tuple[int, int, int], int]] = []
         # Draws the red target circles
 
         # self.ekBot.dump_turn_data_to_string()
@@ -139,7 +140,7 @@ class ViewInfo(object):
         logging.info(additionalInfo)
         self.addlInfoLines.append(additionalInfo)
 
-    def add_map_division(self, withinGenPathMatrix: MapMatrix, color: typing.Tuple[int, int, int], alpha: int = 128):
+    def add_map_division(self, withinGenPathMatrix: MapMatrix[bool], color: typing.Tuple[int, int, int], alpha: int = 128):
         self._divisions.append((withinGenPathMatrix, color, alpha))
 
     def color_path(self, pathColorer: PathColorer):

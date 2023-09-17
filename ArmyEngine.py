@@ -14,7 +14,8 @@ from BoardAnalyzer import BoardAnalyzer
 from DataModels import Move
 from Engine.ArmyEngineModels import ArmySimState, ArmySimResult, SimTile
 from MctsLudii import MctsDUCT, Game, Context
-from base.client.map import MapBase, Tile, MapMatrix
+from base.client.map import MapBase, Tile
+from MapMatrix import MapMatrix
 
 
 class ArmyEngine(object):
@@ -24,9 +25,9 @@ class ArmyEngine(object):
             friendlyArmies: typing.List[Army],
             enemyArmies: typing.List[Army],
             boardAnalysis: BoardAnalyzer,
-            friendlyCaptureValues: MapMatrix | None = None,
-            enemyCaptureValues: MapMatrix | None = None,
-            timeCap: float = 5.0
+            friendlyCaptureValues: MapMatrix[int] | None = None,
+            enemyCaptureValues: MapMatrix[int] | None = None,
+            timeCap: float = 0.05
     ):
         """
 
@@ -58,9 +59,9 @@ class ArmyEngine(object):
         self.friendly_has_kill_threat: bool = False
         """Whether or not the friendly army escaping towards the enemy general is a kill threat or not. Affects the value of board tree states."""
 
-        self.friendly_capture_values: MapMatrix = friendlyCaptureValues
+        self.friendly_capture_values: MapMatrix[int] = friendlyCaptureValues
         """Tile weights indicating how many enemy tiles to 'capture' there are nearby a given tile. Affects how valuable a game end state with an unrestricted opposing army near these tiles are."""
-        self.enemy_capture_values: MapMatrix = enemyCaptureValues
+        self.enemy_capture_values: MapMatrix[int] = enemyCaptureValues
         """Tile weights indicating how many friendly tiles to 'capture' there are nearby a given tile. Affects how valuable a game end state with an unrestricted opposing army near these tiles are."""
 
         self.force_enemy_path: bool = False
@@ -74,14 +75,14 @@ class ArmyEngine(object):
         #
         # self.force_friendly_pathway: bool = False
         # """Whether to forcibly use the Army.expected_path for this player when choosing moves"""
-        self.force_enemy_towards_or_parallel_to: MapMatrix | None = None
+        self.force_enemy_towards_or_parallel_to: MapMatrix[int] | None = None
         """A distance gradiant that an enemy army must make moves smaller or equal to to the current value. Pass this a SearchUtils.build_distance_map_matrix from the tile(s) you want to keep the army moving towards. Does not NEED to be ints, and can be any gradient descent (like forcing towards the closest clusters of opponent territory)"""
-        self.force_enemy_towards: MapMatrix | None = None
+        self.force_enemy_towards: MapMatrix[int] | None = None
         """A distance gradiant that an enemy army must make moves smaller than the current value. Pass this a SearchUtils.build_distance_map_matrix from the tile(s) you want to keep the army moving towards. Does not NEED to be ints, and can be any gradient descent (like forcing towards the closest clusters of opponent territory)"""
 
-        self.force_friendly_towards_or_parallel_to: MapMatrix | None = None
+        self.force_friendly_towards_or_parallel_to: MapMatrix[int] | None = None
         """A distance gradiant that an friendly army must make moves smaller or equal to to the current value. Pass this a SearchUtils.build_distance_map_matrix from the tile(s) you want to keep the army moving towards. Does not NEED to be ints, and can be any gradient descent (like forcing towards the closest clusters of opponent territory)"""
-        self.force_friendly_towards: MapMatrix | None = None
+        self.force_friendly_towards: MapMatrix[int] | None = None
         """A distance gradiant that an friendly army must make moves smaller than the current value. Pass this a SearchUtils.build_distance_map_matrix from the tile(s) you want to keep the army moving towards. Does not NEED to be ints, and can be any gradient descent (like forcing towards the closest clusters of opponent territory)"""
 
         self.allow_enemy_no_op: bool = False
@@ -118,9 +119,9 @@ class ArmyEngine(object):
         self.to_turn: int = 0
         """The turn to simulate up to."""
 
-        if SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING:
-            self.iteration_limit = 200
-            self.time_limit = 10000000000.0
+        # if SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING:
+        #     self.iteration_limit = 200
+        #     self.time_limit = 10000000000.0
 
     def scan(
         self,

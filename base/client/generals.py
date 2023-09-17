@@ -1,7 +1,7 @@
-'''
+"""
     Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
     Client Adopted from @toshima Generals Python Client - https://github.com/toshima/generalsio
-'''
+"""
 import os
 import random
 import sys

@@ -74,7 +74,7 @@ class BotHostBase(object):
             except:
                 errMsg = traceback.format_exc()
                 self.eklipz_bot.viewInfo.addAdditionalInfoLine(f'ERROR: {errMsg}')
-                logging.error('ERROR IN EKBOT.find_move():')
+                logging.error('ERROR: IN EKBOT.find_move():')
                 logging.error(errMsg)
                 if self.rethrow:
                     raise

@@ -1,0 +1,43 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                                        C45
+
+                                                            C41
+                                        M              bG1
+                                        M         M
+          M                             M
+     M                                                                C43
+M                                  C47
+
+                                   C47                                M
+C43                                                              M
+                              M                             M
+                    M         M
+               aG1            M
+          C41
+
+                              C45
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=13,1
+turn=383
+bot_player_index=1
+aTiles=55
+aScore=148
+aStandingArmy=93
+aStars=55
+aCityCount=1
+aGeneral=13,1
+aKnowsKingLocation=True
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+bTiles=71
+bScore=159
+bStandingArmy=88
+bStars=57
+bCityCount=1
+bGeneral=6,13
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bot_target_player=0

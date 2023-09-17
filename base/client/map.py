@@ -1,9 +1,9 @@
-'''
+"""
     @ Harris Christiansen (Harris@HarrisChristiansen.com)
     January 2016
     Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
     Map: Objects for representing Generals IO Map and Tiles
-'''
+"""
 import logging
 import typing
 import uuid
@@ -224,8 +224,8 @@ class Tile(object):
     def __repr__(self):
         return f"({self.x:d},{self.y:d}) t{self.tile:d} a({self.army:d})"
 
-    '''def __eq__(self, other):
-            return (other != None and self.x==other.x and self.y==other.y)'''
+    """def __eq__(self, other):
+            return (other != None and self.x==other.x and self.y==other.y)"""
 
     def __lt__(self, other):
         if other is None:
@@ -1002,49 +1002,17 @@ class Map(MapBase):
                                   data['generals']]  # returns [(y,x)]
 
 
-class MapMatrix:
-    def __init__(self, map: MapBase, initVal=False):
-        self.init_val = initVal
-        self.grid = new_value_matrix(map, initVal)
-
-    def add(self, item: Tile, value=True):
-        self.grid[item.x][item.y] = value
-
-    def __setitem__(self, key: Tile, item):
-        self.grid[key.x][key.y] = item
-
-    def __getitem__(self, key: Tile):
-        val = self.grid[key.x][key.y]
-        return val
-
-    def __repr__(self):
-        return repr(self.grid)
-
-    def values(self):
-        all = []
-        for row in self.grid:
-            for item in row:
-                if item != self.init_val:
-                    all.append(item)
-        return all
-
-    def __delitem__(self, key: Tile):
-        self.grid[key.x][key.y] = self.init_val
-
-    def __contains__(self, item):
-        return self.grid[item.x][item.y] != self.init_val
-
-
-def new_map_matrix(map, initialValueXYFunc):
+def new_map_grid(map, initialValueXYFunc):
     return [[initialValueXYFunc(x, y) for y in range(map.rows)] for x in range(map.cols)]
 
 
-def new_tile_matrix(map, initialValueTileFunc):
+def new_tile_grid(map, initialValueTileFunc):
     return [[initialValueTileFunc(map.grid[y][x]) for y in range(map.rows)] for x in range(map.cols)]
 
 
-def new_value_matrix(map, initValue) -> typing.List[typing.List[int]]:
+def new_value_grid(map, initValue) -> typing.List[typing.List[int]]:
     return [[initValue] * map.rows for _ in range(map.cols)]
+
 
 def evaluateTileDiffsInt(tile: Tile, candidateTile: Tile) -> int:
     # both visible
@@ -1057,6 +1025,7 @@ def evaluateTileDiffsInt(tile: Tile, candidateTile: Tile) -> int:
             return evaluateMoveFromFog(tile, candidateTile)
     else:
         return evaluateIslandFogMove(tile, candidateTile)
+
 
 def evaluateTileDiffsVisible(curTile) -> Tile | None:
     bestCandTile = None
@@ -1071,6 +1040,7 @@ def evaluateTileDiffsVisible(curTile) -> Tile | None:
 
     return bestCandTile
 
+
 def evaluateTileDiffsFog(curTile) -> Tile | None:
     bestCandTile = None
     bestCandValue = 1
@@ -1081,6 +1051,7 @@ def evaluateTileDiffsFog(curTile) -> Tile | None:
             bestCandTile = candidateTile
 
     return bestCandTile
+
 
 def evaluateDualVisibleTileDiffs(tile, candidateTile):
     if tile.delta.oldOwner != tile.delta.newOwner:
@@ -1109,6 +1080,7 @@ def evaluateDualVisibleTileDiffs(tile, candidateTile):
     #     return evaluateSameOwnerMoves(tile, candidateTile)
     # return evaluateSameOwnerMoves(tile, candidateTile)
     return -100
+
 
 def evaluateMoveFromFog(tile, candidateTile):
     """

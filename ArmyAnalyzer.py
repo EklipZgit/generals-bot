@@ -1,9 +1,9 @@
-'''
+"""
 	@ Travis Drake (EklipZ) eklipz.io - tdrake0x45 at gmail)
 	July 2019
 	Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
 	EklipZ bot - Tries to play generals lol
-'''
+"""
 
 import logging
 import time
@@ -13,7 +13,8 @@ from SearchUtils import *
 from collections import deque 
 from queue import PriorityQueue 
 from Path import Path
-from base.client.map import Tile, MapMatrix
+from base.client.map import Tile
+from MapMatrix import MapMatrix
 
 
 class PathWay:
@@ -51,7 +52,7 @@ class ArmyAnalyzer:
 
 		# path chokes are relative to the paths between A and B
 		self.pathChokes: typing.Set[Tile] = set()
-		self.pathWayLookupMatrix = MapMatrix(map, initVal=None)
+		self.pathWayLookupMatrix: MapMatrix[PathWay | None] = MapMatrix(map, initVal=None)
 		self.pathWays: typing.List[PathWay] = []
 		self.shortestPathWay: PathWay = PathWay(distance=INF)
 

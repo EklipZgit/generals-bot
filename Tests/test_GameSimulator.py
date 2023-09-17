@@ -425,27 +425,3 @@ aG7
 
         simHost.run_sim(run_real_time=debugMode, turn_time=0.1)
 
-    def test_simulates_a_game_from_turn_1__deep_mcts_should_always_win(self):
-        for playerWithMcts in [1, 0]:
-            with self.subTest(playerWithMcts=playerWithMcts):
-                debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-                mapFile = 'GameContinuationEntries/should_not_make_nonsense_scrim_move___Hxp3ym3Th---b--383.txtmap'
-                map, general, enemyGen = self.load_map_and_generals(mapFile, 399, fill_out_tiles=True)
-                map.usernames[playerWithMcts] = 'mcts'
-                map.usernames[(playerWithMcts + 1) % 2] = 'brute'
-                self.reset_map_to_just_generals(map)
-                self.begin_capturing_logging()
-
-                self.enable_search_time_limits_and_disable_debug_asserts()
-
-                simHost = GameSimulatorHost(map, player_with_viewer=-2)
-                if general.player == playerWithMcts:
-                    simHost.get_bot(general.player).use_mcts = True
-                    simHost.get_bot(enemyGen.player).use_mcts = False
-                else:
-                    simHost.get_bot(general.player).use_mcts = False
-                    simHost.get_bot(enemyGen.player).use_mcts = True
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1)
-                self.assertEqual(playerWithMcts, winner)
-
-

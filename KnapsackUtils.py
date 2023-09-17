@@ -75,8 +75,8 @@ def solve_multiple_choice_knapsack(
         # this is a special case that behaves like 0-1 knapsack and doesn't multiply by max group size at all, due to the -1 check in the loop below.
         estTime = n * capacity * 0.00000022
 
-    if estTime > 0.010 and not forceLongRun:
-        raise AssertionError(f"The inputs (n {n} * capacity {capacity} * math.sqrt(maxGroupSize {maxGroupSize}) {maxGrSq}) are going to result in a substantial runtime, maybe try a different algorithm")
+    if estTime > 0.025 and not forceLongRun:
+        raise AssertionError(f"Knapsack potential long run est {estTime:.3f}: the inputs (n {n} * capacity {capacity} * math.sqrt(maxGroupSize {maxGroupSize}) {maxGrSq}) are going to result in a substantial runtime, maybe try a different algorithm")
     if not noLog:
         logging.info(f'estimated knapsack time: {estTime:.3f} (n {n} * capacity {capacity} * math.sqrt(maxGroupSize {maxGroupSize}) {maxGrSq})')
 

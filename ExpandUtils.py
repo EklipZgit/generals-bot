@@ -9,7 +9,8 @@ from PerformanceTimer import PerformanceTimer
 from SearchUtils import breadth_first_foreach, count, solve_knapsack, build_distance_map, where, \
     breadth_first_dynamic_max
 from ViewInfo import PathColorer, ViewInfo
-from base.client.map import Tile, MapBase, MapMatrix
+from base.client.map import Tile, MapBase
+from MapMatrix import MapMatrix
 
 
 # attempt to get this to a* able?
@@ -36,7 +37,7 @@ def get_optimal_expansion(
         perfTimer: PerformanceTimer | None = None
 ) -> typing.Union[None, Path]:
 
-    '''
+    """
     f(n) = node priority in queue
     g(n) = cost so far
     h(n) = estimated cost after choosing next node
@@ -50,7 +51,7 @@ def get_optimal_expansion(
 
 
     what about estimated cost is distance to
-    '''
+    """
 
     # allow exploration again
     fullLog = map.turn < 150
@@ -61,8 +62,8 @@ def get_optimal_expansion(
     withinGenPathThreshold = int((distanceBetweenGenerals + 1) * 1.3)
     tilesOnMainPathDist = int((distanceBetweenGenerals + 1) * 1.15)
 
-    withinGenPathMatrix = MapMatrix(map, initVal=False)
-    withinTakeEverythingMatrix = MapMatrix(map, initVal=False)
+    withinGenPathMatrix: MapMatrix[bool] = MapMatrix(map, initVal=False)
+    withinTakeEverythingMatrix: MapMatrix[bool] = MapMatrix(map, initVal=False)
 
     for tile in map.pathableTiles:
         tileDistSum = enemyDistMap[tile.x][tile.y] + generalDistMap[tile.x][tile.y]

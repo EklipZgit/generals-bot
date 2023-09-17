@@ -1,9 +1,9 @@
-'''
+"""
 	@ Travis Drake (EklipZ) eklipz.io - tdrake0x45 at gmail)
 	July 2019
 	Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
 	EklipZ bot - Tries to play generals lol
-'''
+"""
 
 import logging
 import time

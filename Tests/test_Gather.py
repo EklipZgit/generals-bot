@@ -381,7 +381,8 @@ class GatherTests(TestBase):
                 winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.010, turns=80)
                 self.assertEqual(map.player_index, winner)
                 cappedTile = map.GetTile(18, 5)
-                self.assertGreater(cappedTile.army, 440, "should not have dropped the cities at the leaves during the gather phase.")
+                # this assert no longer relevant now that all in gathers are max-value-per-turn
+                # self.assertGreater(cappedTile.army, 440, "should not have dropped the cities at the leaves during the gather phase.")
                 self.assertNoRepetition(simHost, minForRepetition=1, msg="should not re-gather cities or explore inefficiently. There should be zero excuse for ANY tile to be move source more than once in this sim.")
 
     def test_random_large_gather_test(self):
@@ -937,3 +938,21 @@ bot_player_index=0
                     testTiming=True,
                     debugMode=False,
                 )
+    
+    def test_should_not_generate_too_large_an_input_to_knapsack(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_generate_too_large_an_input_to_knapsack___PFKmbadYE---0--477.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 477, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 477)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=15)
+        self.assertIsNone(winner)
+

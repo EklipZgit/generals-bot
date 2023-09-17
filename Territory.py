@@ -1,9 +1,9 @@
-'''
+"""
 	@ Travis Drake (EklipZ) eklipz.io - tdrake0x45 at gmail)
 	April 2017
 	Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
 	EklipZ bot - Tries to play generals lol
-'''
+"""
 
 import logging
 import time
@@ -11,7 +11,7 @@ import json
 from SearchUtils import *
 from test.test_float import INF
 
-from base.client.map import new_map_matrix
+from base.client.map import new_map_grid
 
 
 # attempts to classify tiles into territories.
@@ -20,7 +20,7 @@ class TerritoryClassifier():
 		self.territories = [None for player in map.players]
 		self.map = map
 		self.lastCalculatedTurn = -1
-		self.territoryMap = new_value_matrix(self.map, -1)
+		self.territoryMap = new_value_grid(self.map, -1)
 		self.needToUpdateAroundTiles = set()
 		for tile in self.map.pathableTiles:
 			self.needToUpdateAroundTiles.add(tile)
@@ -55,7 +55,7 @@ class TerritoryClassifier():
 
 	def scan(self):
 		logging.info("Scanning map for territories, aww geez")
-		counts = new_map_matrix(self.map, lambda x, y: [0 for n in range(len(self.map.players) + 1)])
+		counts = new_map_grid(self.map, lambda x, y: [0 for n in range(len(self.map.players) + 1)])
 		startTime = time.time()
 		undiscoveredCounterDepth = 5
 		# count the number of tiles for each player within range 3 to determine whose territory this is

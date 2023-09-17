@@ -17,7 +17,7 @@ from GatherAnalyzer import GatherAnalyzer
 from PerformanceTimer import PerformanceTimer
 from BoardAnalyzer import *
 from ViewInfo import ViewInfo, PathColorer, TargetStyle
-from base.client.map import Player, new_tile_matrix
+from base.client.map import Player, new_tile_grid
 from DangerAnalyzer import DangerAnalyzer, ThreatType, ThreatObj
 from DataModels import get_tile_set_from_path, get_player_army_amount_on_path, get_tile_list_from_path
 from Directives import *
@@ -110,7 +110,7 @@ class EklipZBot(object):
         self.lastTimingTurn = 0
         self._evaluatedUndiscoveredCache = []
         self.lastTurnTime = 0
-        self.use_mcts = False
+        self.use_mcts = True
 
         self.allIn = False
         self.all_in_army_advantage_counter: int = 0
@@ -2411,7 +2411,7 @@ class EklipZBot(object):
                 return True
             return False
 
-        validExplorationTiles = new_tile_matrix(self._map, validExplorationTileEvaluater)
+        validExplorationTiles = new_tile_grid(self._map, validExplorationTileEvaluater)
 
         #skipFunc(next, nextVal). Not sure why this is 0 instead of 1, but 1 breaks it. I guess the 1 is already subtracted
         if not skipFunc:
@@ -3531,10 +3531,10 @@ class EklipZBot(object):
             enemyVision = [tile for tile in filter(lambda t: t.player != -1 and t.player != self.general.player, city.adjacents)]
             cityDistanceRatioThresh = 0.93
             if len(enemyVision) > 0:
-                if self.player.cityCount < 3:
-                    cityDistanceRatioThresh = 0.4  # 0.75 is too high to allow taking while enemy has vision.
+                if self.player.cityCount < 4:
+                    cityDistanceRatioThresh = 0.25  # 0.75 is too high to allow taking while enemy has vision.
                 else:
-                    cityDistanceRatioThresh = 0.75
+                    cityDistanceRatioThresh = 0.55
             if (maxScore is None or maxScore.get_weighted_neutral_value() < score.get_weighted_neutral_value()) \
                     and score.general_distances_ratio < cityDistanceRatioThresh:
                 maxScore = score
@@ -6197,7 +6197,9 @@ class EklipZBot(object):
         enemyArmy = self.get_army_at(enemyArmyTile)
         engine: ArmyEngine = ArmyEngine(self._map, [self.get_army_at(friendlyArmyTile)], [enemyArmy], self.board_analysis, timeCap=0.05)
         depth = 4
-        if enemyCannotMoveAway:
+        engine.allow_enemy_no_op = self.use_mcts
+        # if enemyCannotMoveAway:
+        if enemyCannotMoveAway and not self.use_mcts:
             # we can scan much deeper when the enemies moves are heavily restricted.
             depth = 6
             if enemyArmy.expectedPath is not None:

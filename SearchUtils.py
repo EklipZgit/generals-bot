@@ -1,9 +1,9 @@
-'''
-	@ Travis Drake (EklipZ) eklipz.io - tdrake0x45 at gmail)
-	April 2017
-	Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
-	EklipZ bot - Tries to play generals lol
-'''
+"""
+    @ Travis Drake (EklipZ) eklipz.io - tdrake0x45 at gmail)
+    April 2017
+    Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
+    EklipZ bot - Tries to play generals lol
+"""
 
 import logging
 import math
@@ -11,11 +11,11 @@ import typing
 import time
 from collections import deque
 from queue import PriorityQueue
-from DataModels import PathNode, TreeNode, Move
-from KnapsackUtils import solve_knapsack
+from DataModels import PathNode
 from Path import Path
 from test.test_float import INF
-from base.client.map import Tile, MapBase, new_value_matrix, MapMatrix
+from base.client.map import Tile, MapBase, new_value_grid
+from MapMatrix import MapMatrix
 
 BYPASS_TIMEOUTS_FOR_DEBUGGING = False
 
@@ -242,10 +242,10 @@ def dest_breadth_first_target(
         logging.info("abandoned path")
         return None
     # while (node != None):
-    # 	army, node = visited[node.x][node.y][dist]
-    # 	if (node != None):
-    # 		dist -= 1
-    # 		path = PathNode(node, path, army, dist, -1, None)
+    #     army, node = visited[node.x][node.y][dist]
+    #     if (node != None):
+    #         dist -= 1
+    #         path = PathNode(node, path, army, dist, -1, None)
 
     logging.info(
         f"DEST BFS FOUND KILLPATH OF LENGTH {pathObject.length} VALUE {pathObject.value}\n{pathObject.toString()}")
@@ -278,7 +278,7 @@ def a_star_kill(
                 startArmy = 0
             startArmy -= requireExtraArmy
             # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
-            #	startArmy = start.army / 2
+            #    startArmy = start.army / 2
             cost_so_far[start] = (startDist, 0 - startArmy)
             frontier.put((cost_so_far[start], start))
             came_from[start] = None
@@ -290,7 +290,7 @@ def a_star_kill(
                 startArmy = 0
             startArmy -= requireExtraArmy
             # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
-            #	startArmy = start.army / 2
+            #    startArmy = start.army / 2
             cost_so_far[start] = (0, 0 - startArmy)
             frontier.put((cost_so_far[start], start))
             came_from[start] = None
@@ -398,7 +398,7 @@ def breadth_first_dynamic(
         incrementBackward=False,
         preferNeutral=False,
         allowDoubleBacks=False):
-    '''
+    """
     startTiles dict is (startPriorityObject, distance) = startTiles[tile]
     goalFunc is (currentTile, priorityObject) -> True or False
     priorityFunc is (nextTile, currentPriorityObject) -> nextPriorityObject
@@ -419,7 +419,7 @@ def breadth_first_dynamic(
         else:
             negArmySum += nextTile.army + 1
         return (dist, negCityCount, negEnemyTileCount, negArmySum, nextTile.x, nextTile.y)
-    '''
+    """
 
     # make sure to initialize the initial base values and account for first priorityObject being None. Or initialize all your start values in the dict.
     def default_priority_func(nextTile, currentPriorityObject):
@@ -551,10 +551,10 @@ def breadth_first_dynamic(
             pathObject.add_next(tile)
 
     # while (node != None):
-    # 	army, node = visited[node.x][node.y][dist]
-    # 	if (node != None):
-    # 		dist -= 1
-    # 		path = PathNode(node, path, army, dist, -1, None)
+    #     army, node = visited[node.x][node.y][dist]
+    #     if (node != None):
+    #         dist -= 1
+    #         path = PathNode(node, path, army, dist, -1, None)
     pathObject.calculate_value(
         searchingPlayer,
         incrementBackwards=incrementBackward)
@@ -592,7 +592,7 @@ def breadth_first_dynamic_max(
         ignoreNonPlayerArmy: bool = False,
         ignoreIncrement: bool = True
 ):
-    '''
+    """
     @param map:
     @param startTiles: startTiles dict is (startPriorityObject, distance) = startTiles[tile]
     @param valueFunc:
@@ -637,7 +637,7 @@ def breadth_first_dynamic_max(
         else:
             negArmySum += nextTile.army + 1
         return (dist, negCityCount, negEnemyTileCount, negArmySum, nextTile.x, nextTile.y)
-    '''
+    """
 
     # make sure to initialize the initial base values and account for first priorityObject being None. Or initialize all your start values in the dict.
     def default_priority_func(nextTile, currentPriorityObject):
@@ -668,7 +668,7 @@ def breadth_first_dynamic_max(
 
             validMoveCount = 0
             # if not noLog:
-            #	logging.info("{}  EVAL".format(current.toString()))
+            #    logging.info("{}  EVAL".format(current.toString()))
 
             for adj in current.movable:
                 skipMt = adj.isMountain or (adj.isCity and adj.player == -1)
@@ -678,17 +678,17 @@ def breadth_first_dynamic_max(
                 skipVisited = adj in tileSet or adj in negativeTiles
                 skipIt = skipMt or skipSearching or skipArmy or skipVisited
                 # if not noLog:
-                #	logging.info("    {}   {}  mt {}, player {}, army {} ({} - {} < 1), visitedNeg {}".format(adj.toString(), skipIt, skipMt, skipSearching, skipArmy, army, adj.army, skipVisited))
+                #    logging.info("    {}   {}  mt {}, player {}, army {} ({} - {} < 1), visitedNeg {}".format(adj.toString(), skipIt, skipMt, skipSearching, skipArmy, army, adj.army, skipVisited))
                 if not skipIt:
                     validMoveCount += 1
 
             # validMoveCount = count(current.movable, lambda adj: not  and not adj.player == searchingPlayer and (not army - adj.army < 1) and not )
             if validMoveCount > 0 and dist < maxDepth:
                 # if not noLog:
-                #	logging.info("{} SKIPPED VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
+                #    logging.info("{} SKIPPED VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
                 return None
             # if not noLog:
-            #	logging.info("{} VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
+            #    logging.info("{} VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
             return oldValFunc(current, prioVals)
 
         valueFunc = newValFunc
@@ -751,7 +751,7 @@ def breadth_first_dynamic_max(
         iter += 1
         if (iter & 128 == 0
             and time.perf_counter() - start > maxTime
-            # and not BYPASS_TIMEOUTS_FOR_DEBUGGING
+                # and not BYPASS_TIMEOUTS_FOR_DEBUGGING
         ) or iter > maxIterations:
             logging.info("BFS-DYNAMIC-MAX BREAKING EARLY")
             break
@@ -768,11 +768,11 @@ def breadth_first_dynamic_max(
 
         newValue = valueFunc(current, prioVals) if not includePath else valueFunc(current, prioVals, nodeList)
         # if logResultValues:
-        #	logging.info("Tile {} value?: [{}]".format(current.toString(), '], ['.join(str(x) for x in newValue)))
-        #	if parent != None:
-        #		parentString = parent.toString()
-        #	else:
-        #		parentString = "None"
+        #    logging.info("Tile {} value?: [{}]".format(current.toString(), '], ['.join(str(x) for x in newValue)))
+        #    if parent != None:
+        #        parentString = parent.toString()
+        #    else:
+        #        parentString = "None"
         if newValue is not None and (maxValue is None or newValue > maxValue):
             foundDist = dist
             if logResultValues:
@@ -787,7 +787,7 @@ def breadth_first_dynamic_max(
             endNode = current
             maxList = nodeList
         # elif logResultValues:
-        #		logging.info("   Tile {} from {} was not max value: [{}]".format(current.toString(), parentString, '], ['.join(str(x) for x in newValue)))
+        #        logging.info("   Tile {} from {} was not max value: [{}]".format(current.toString(), parentString, '], ['.join(str(x) for x in newValue)))
         if dist > depthEvaluated:
             depthEvaluated = dist
             # stop when we either reach the max depth (this is dynamic from start tiles) or use up the remaining turns (as indicated by len(nodeList))
@@ -840,10 +840,10 @@ def breadth_first_dynamic_max(
             pathObject.add_next(tile)
 
     # while (node != None):
-    # 	army, node = visited[node.x][node.y][dist]
-    # 	if (node != None):
-    # 		dist -= 1
-    # 		path = PathNode(node, path, army, dist, -1, None)
+    #     army, node = visited[node.x][node.y][dist]
+    #     if (node != None):
+    #         dist -= 1
+    #         path = PathNode(node, path, army, dist, -1, None)
     if ignoreStartTile:
         pathObject.calculate_value(
             searchingPlayer,
@@ -901,7 +901,7 @@ def breadth_first_dynamic_max_per_tile(
         ignoreNonPlayerArmy: bool = False,
         ignoreIncrement: bool = True
 ):
-    '''
+    """
     Keeps the max path from each of the start tiles as output. Since we force use a global visited set, the paths returned will never overlap each other.
 
     @param map:
@@ -946,7 +946,7 @@ def breadth_first_dynamic_max_per_tile(
         else:
             negArmySum += nextTile.army + 1
         return (dist, negCityCount, negEnemyTileCount, negArmySum, nextTile.x, nextTile.y)
-    '''
+    """
 
     # make sure to initialize the initial base values and account for first priorityObject being None. Or initialize all your start values in the dict.
     def default_priority_func(nextTile, currentPriorityObject):
@@ -977,7 +977,7 @@ def breadth_first_dynamic_max_per_tile(
 
             validMoveCount = 0
             # if not noLog:
-            #	logging.info("{}  EVAL".format(current.toString()))
+            #    logging.info("{}  EVAL".format(current.toString()))
 
             for adj in current.movable:
                 skipMt = adj.isMountain or (adj.isCity and adj.player == -1)
@@ -987,17 +987,17 @@ def breadth_first_dynamic_max_per_tile(
                 skipVisited = adj in tileSet or adj in negativeTiles
                 skipIt = skipMt or skipSearching or skipArmy or skipVisited
                 # if not noLog:
-                #	logging.info("    {}   {}  mt {}, player {}, army {} ({} - {} < 1), visitedNeg {}".format(adj.toString(), skipIt, skipMt, skipSearching, skipArmy, army, adj.army, skipVisited))
+                #    logging.info("    {}   {}  mt {}, player {}, army {} ({} - {} < 1), visitedNeg {}".format(adj.toString(), skipIt, skipMt, skipSearching, skipArmy, army, adj.army, skipVisited))
                 if not skipIt:
                     validMoveCount += 1
 
             # validMoveCount = count(current.movable, lambda adj: not  and not adj.player == searchingPlayer and (not army - adj.army < 1) and not )
             if validMoveCount > 0 and dist < maxDepth:
                 # if not noLog:
-                #	logging.info("{} SKIPPED VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
+                #    logging.info("{} SKIPPED VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
                 return None
             # if not noLog:
-            #	logging.info("{} VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
+            #    logging.info("{} VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
             return oldValFunc(current, prioVals)
 
         valueFunc = newValFunc
@@ -1073,11 +1073,11 @@ def breadth_first_dynamic_max_per_tile(
 
         newValue = valueFunc(current, prioVals) if not includePath else valueFunc(current, prioVals, nodeList)
         # if logResultValues:
-        #	logging.info("Tile {} value?: [{}]".format(current.toString(), '], ['.join(str(x) for x in newValue)))
-        #	if parent != None:
-        #		parentString = parent.toString()
-        #	else:
-        #		parentString = "None"
+        #    logging.info("Tile {} value?: [{}]".format(current.toString(), '], ['.join(str(x) for x in newValue)))
+        #    if parent != None:
+        #        parentString = parent.toString()
+        #    else:
+        #        parentString = "None"
 
         if newValue is not None and (startTile not in maxValues or newValue > maxValues[startTile]):
             foundDist = dist
@@ -1094,7 +1094,7 @@ def breadth_first_dynamic_max_per_tile(
             endNodes[startTile] = current
             maxLists[startTile] = nodeList
         # elif logResultValues:
-        #		logging.info("   Tile {} from {} was not max value: [{}]".format(current.toString(), parentString, '], ['.join(str(x) for x in newValue)))
+        #        logging.info("   Tile {} from {} was not max value: [{}]".format(current.toString(), parentString, '], ['.join(str(x) for x in newValue)))
         if dist > depthEvaluated:
             depthEvaluated = dist
         if dist >= maxDepth or len(nodeList) > maxTurns:
@@ -1171,7 +1171,8 @@ def breadth_first_dynamic_max_per_tile(
             continue
         else:
             if not noLog:
-                logging.info(f"BFS-DYNAMIC-MAX-PER-TILE FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}\n   {pathObject.toString()}")
+                logging.info(
+                    f"BFS-DYNAMIC-MAX-PER-TILE FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}\n   {pathObject.toString()}")
 
     return maxPaths
 
@@ -1203,7 +1204,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
         ignoreNonPlayerArmy: bool = False,
         ignoreIncrement: bool = True
 ):
-    '''
+    """
     Keeps the max path from each of the start tiles as output. Since we force use a global visited set, the paths returned will never overlap each other.
     For each start tile, returns a dict from found distances to the max value found at that distance.
 
@@ -1249,7 +1250,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
         else:
             negArmySum += nextTile.army + 1
         return (dist, negCityCount, negEnemyTileCount, negArmySum, nextTile.x, nextTile.y)
-    '''
+    """
 
     # make sure to initialize the initial base values and account for first priorityObject being None. Or initialize all your start values in the dict.
     def default_priority_func(nextTile, currentPriorityObject):
@@ -1280,7 +1281,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
 
             validMoveCount = 0
             # if not noLog:
-            #	logging.info("{}  EVAL".format(current.toString()))
+            #    logging.info("{}  EVAL".format(current.toString()))
 
             for adj in current.movable:
                 skipMt = adj.isMountain or (adj.isCity and adj.player == -1)
@@ -1290,17 +1291,17 @@ def breadth_first_dynamic_max_per_tile_per_distance(
                 skipVisited = adj in tileSet or adj in negativeTiles
                 skipIt = skipMt or skipSearching or skipArmy or skipVisited
                 # if not noLog:
-                #	logging.info("    {}   {}  mt {}, player {}, army {} ({} - {} < 1), visitedNeg {}".format(adj.toString(), skipIt, skipMt, skipSearching, skipArmy, army, adj.army, skipVisited))
+                #    logging.info("    {}   {}  mt {}, player {}, army {} ({} - {} < 1), visitedNeg {}".format(adj.toString(), skipIt, skipMt, skipSearching, skipArmy, army, adj.army, skipVisited))
                 if not skipIt:
                     validMoveCount += 1
 
             # validMoveCount = count(current.movable, lambda adj: not  and not adj.player == searchingPlayer and (not army - adj.army < 1) and not )
             if validMoveCount > 0 and dist < maxDepth:
                 # if not noLog:
-                #	logging.info("{} SKIPPED VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
+                #    logging.info("{} SKIPPED VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
                 return None
             # if not noLog:
-            #	logging.info("{} VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
+            #    logging.info("{} VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
             return oldValFunc(current, prioVals)
 
         valueFunc = newValFunc
@@ -1376,11 +1377,11 @@ def breadth_first_dynamic_max_per_tile_per_distance(
 
         newValue = valueFunc(current, prioVals) if not includePath else valueFunc(current, prioVals, nodeList)
         # if logResultValues:
-        #	logging.info("Tile {} value?: [{}]".format(current.toString(), '], ['.join(str(x) for x in newValue)))
-        #	if parent != None:
-        #		parentString = parent.toString()
-        #	else:
-        #		parentString = "None"
+        #    logging.info("Tile {} value?: [{}]".format(current.toString(), '], ['.join(str(x) for x in newValue)))
+        #    if parent != None:
+        #        parentString = parent.toString()
+        #    else:
+        #        parentString = "None"
 
         if newValue is not None:
             if startTile not in maxValuesTMP:
@@ -1498,15 +1499,15 @@ def breadth_first_dynamic_max_per_tile_per_distance(
 
 # goalInc = 0
 # if (tile.isCity or tile.isGeneral) and tile.player != -1:
-#	goalInc = -0.5
+#    goalInc = -0.5
 # startArmy = tile.army - 1
 # if tile.player != searchingPlayer:
-#	startArmy = 0 - tile.army - 1
-#	goalInc *= -1
+#    startArmy = 0 - tile.army - 1
+#    goalInc *= -1
 # if incrementBackward:
-#	goalInc *= -1
+#    goalInc *= -1
 # if ignoreStartTile:
-#	startArmy = 0
+#    startArmy = 0
 def bidirectional_breadth_first_dynamic(
         map,
         startTiles,
@@ -1523,7 +1524,7 @@ def bidirectional_breadth_first_dynamic(
         incrementBackward=False,
         preferNeutral=False,
         allowDoubleBacks=False):
-    '''
+    """
     startTiles dict is (startPriorityObject, distance) = startTiles[tile]
     goalFunc is (currentTile, priorityObject) -> True or False
     priorityFunc is (nextTile, currentPriorityObject) -> nextPriorityObject
@@ -1544,7 +1545,7 @@ def bidirectional_breadth_first_dynamic(
         else:
             negArmySum += nextTile.army + 1
         return (dist, negCityCount, negEnemyTileCount, negArmySum, nextTile.x, nextTile.y)
-    '''
+    """
 
     # make sure to initialize the initial base values and account for first priorityObject being None. Or initialize all your start values in the dict.
     def default_priority_func(nextTile, currentPriorityObject):
@@ -1676,10 +1677,10 @@ def bidirectional_breadth_first_dynamic(
             pathObject.add_next(tile)
 
     # while (node != None):
-    # 	army, node = visited[node.x][node.y][dist]
-    # 	if (node != None):
-    # 		dist -= 1
-    # 		path = PathNode(node, path, army, dist, -1, None)
+    #     army, node = visited[node.x][node.y][dist]
+    #     if (node != None):
+    #         dist -= 1
+    #         path = PathNode(node, path, army, dist, -1, None)
     pathObject.calculate_value(searchingPlayer, incrementBackwards=incrementBackward)
     logging.info(
         f"BI-DIR DYNAMIC BFS FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}\n   {pathObject.toString()}")
@@ -1697,9 +1698,9 @@ def breadth_first_find_queue(
         skipTiles=None,
         searchingPlayer=-2,
         ignoreStartTile=False):
-    '''
+    """
     goalFunc is goalFunc(current, army, dist)
-    '''
+    """
     if searchingPlayer == -2:
         searchingPlayer = map.player_index
     frontier = deque()
@@ -1762,10 +1763,10 @@ def breadth_first_find_queue(
         if dist <= maxDepth and not foundGoal:
             for next in current.movable:  # new spots to try
                 if (
-                    next.isMountain
-                    or (noNeutralCities and next.isCity and next.player == -1)
-                    or (not next.discovered and next.isNotPathable)
-                    or next in visited
+                        next.isMountain
+                        or (noNeutralCities and next.isCity and next.player == -1)
+                        or (not next.discovered and next.isNotPathable)
+                        or next in visited
                 ):
                     continue
 
@@ -1815,10 +1816,10 @@ def breadth_first_find_queue(
             dist -= 1
 
     # while (node != None):
-    # 	army, node = visited[node.x][node.y]
-    # 	if (node != None):
-    # 		dist -= 1
-    # 		path = PathNode(node, path, army, dist, -1, None)
+    #     army, node = visited[node.x][node.y]
+    #     if (node != None):
+    #         dist -= 1
+    #         path = PathNode(node, path, army, dist, -1, None)
 
     logging.info(
         f"BFS-FIND-QUEUE found path OF LENGTH {pathObject.length} VALUE {pathObject.value}\n{pathObject.toString()}")
@@ -1846,7 +1847,7 @@ def breadth_first_foreach(map: MapBase, startTiles, maxDepth, foreachFunc, negat
     @return:
     """
     frontier = deque()
-    globalVisited = new_value_matrix(map, False)
+    globalVisited = new_value_grid(map, False)
     if skipTiles is not None:
         for tile in skipTiles:
             if not noLog:
@@ -1917,7 +1918,7 @@ def breadth_first_foreach_dist(map, startTiles, maxDepth, foreachFunc, negativeF
     @return:
     """
     frontier = deque()
-    globalVisited = new_value_matrix(map, False)
+    globalVisited = new_value_grid(map, False)
     if skipTiles is not None:
         for tile in skipTiles:
             globalVisited[tile.x][tile.y] = True
@@ -1964,7 +1965,7 @@ def breadth_first_foreach_dist(map, startTiles, maxDepth, foreachFunc, negativeF
 
 
 def build_distance_map_incl_mountains(map, startTiles, skipTiles=None) -> typing.List[typing.List[int]]:
-    distanceMap = new_value_matrix(map, 1000)
+    distanceMap = new_value_grid(map, 1000)
 
     if skipTiles is None:
         skipTiles = None
@@ -1984,7 +1985,7 @@ def build_distance_map_incl_mountains(map, startTiles, skipTiles=None) -> typing
 
 
 def build_distance_map(map, startTiles, skipTiles=None) -> typing.List[typing.List[int]]:
-    distanceMap = new_value_matrix(map, 1000)
+    distanceMap = new_value_grid(map, 1000)
 
     if skipTiles is None:
         skipTiles = None
@@ -2008,7 +2009,7 @@ def build_distance_map(map, startTiles, skipTiles=None) -> typing.List[typing.Li
     return distanceMap
 
 
-def build_distance_map_matrix(map, startTiles, skipTiles=None) -> MapMatrix:
+def build_distance_map_matrix(map, startTiles, skipTiles=None) -> MapMatrix[int]:
     distanceMap = MapMatrix(map, 1000)
 
     if skipTiles is None:

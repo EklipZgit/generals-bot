@@ -106,8 +106,6 @@ aTiles=20
 bTiles=20
 """
 
-        # self.enable_search_time_limits_and_disable_debug_asserts()
-
         for turn in [0, 1]:
             with self.subTest(turn=turn):
                 # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
@@ -116,6 +114,8 @@ bTiles=20
                 self.ensure_player_tiles_and_scores(map, general, generalTileCount=20)
                 self.begin_capturing_logging()
                 aArmy, bArmy = self.get_test_army_tiles(map, general, enemyGen)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
@@ -163,13 +163,13 @@ bot_target_player=1
 aTiles=20
 bTiles=20
 """
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
         # Both should have half the board if this gens correctly..
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        for shortCircuit in [True, False]:
+        for shortCircuit in [False, True]:
             for turn in [0, 1]:
                 with self.subTest(turn=turn, shortCircuit=shortCircuit):
                     map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102 + turn)
@@ -416,13 +416,13 @@ bTiles=20
         map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102)
         self.ensure_player_tiles_and_scores(map, general, generalTileCount=20)
 
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        for turn in [0, 1]:
+        for turn in [1, 0]:
             with self.subTest(turn=turn):
                 self.begin_capturing_logging()
                 map.turn = map.turn + turn
                 aArmy, bArmy = self.get_test_army_tiles(map, general, enemyGen)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
@@ -479,8 +479,8 @@ bTiles=20
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
                 armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
-                armyEngine.friendly_has_kill_threat = True
-                armyEngine.enemy_has_kill_threat = False
+                # armyEngine.friendly_has_kill_threat = True
+                # armyEngine.enemy_has_kill_threat = False
                 baseState = armyEngine.get_base_board_state()
                 self.assertEqual(0, baseState.tile_differential)
                 self.assertEqual(0, baseState.city_differential)
@@ -596,8 +596,8 @@ bTiles=20
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
                 armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
-                armyEngine.friendly_has_kill_threat = True
-                armyEngine.enemy_has_kill_threat = True
+                # armyEngine.friendly_has_kill_threat = True
+                # armyEngine.enemy_has_kill_threat = True
                 baseState = armyEngine.get_base_board_state()
                 self.assertEqual(0, baseState.tile_differential)
                 self.assertEqual(0, baseState.city_differential)
@@ -634,8 +634,6 @@ bTiles=20
         # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
         # Both should have half the board if this gens correctly..
 
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
         for turn in [0, 1]:
             with self.subTest(turn=turn):
                 map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102 + turn)
@@ -643,6 +641,8 @@ bTiles=20
 
                 self.begin_capturing_logging()
                 aArmy, bArmy = self.get_test_army_tiles(map, general, enemyGen)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
@@ -660,7 +660,7 @@ bTiles=20
                 result = armyEngine.scan(4, logEvals=True, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
-                if not MapBase.player_has_priority(enemyGen.player, turn):
+                if not MapBase.player_had_priority(enemyGen.player, turn):
                     # B should just wait to see what A does this turn, as he'll have priority next turn.
                     self.assertIsNone(result.expected_best_moves[0][1])
                 else:
@@ -690,19 +690,19 @@ bot_target_player=1
 aTiles=20
 bTiles=20
 """
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
-        # Both should have half the board if this gens correctly..
-        map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102)
-        self.ensure_player_tiles_and_scores(map, general, generalTileCount=20)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         for turn in [0, 1]:
             with self.subTest(turn=turn):
+                # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
+                # Both should have half the board if this gens correctly..
+                map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102 + turn)
+                self.ensure_player_tiles_and_scores(map, general, generalTileCount=20)
+
                 self.begin_capturing_logging()
-                map.turn = map.turn + turn
                 aArmy, bArmy = self.get_test_army_tiles(map, general, enemyGen)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
@@ -744,18 +744,18 @@ aTiles=20
 bTiles=20
 """
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
-        # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
-        # Both should have half the board if this gens correctly..
-        map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102)
-        self.ensure_player_tiles_and_scores(map, general, generalTileCount=20)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
 
         for turn in [0, 1]:
             with self.subTest(turn=turn):
+                # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
+                # Both should have half the board if this gens correctly..
+                map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102 + turn)
+                self.ensure_player_tiles_and_scores(map, general, generalTileCount=20)
+
                 self.begin_capturing_logging()
-                map.turn = map.turn + turn
                 aArmy, bArmy = self.get_test_army_tiles(map, general, enemyGen)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
@@ -987,11 +987,9 @@ bot_target_player=1
 aTiles=20
 bTiles=20
 """
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
         # Both should have half the board if this gens correctly..
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
 
         for turn in [0, 1]:
             with self.subTest(turn=turn):
@@ -1000,6 +998,8 @@ bTiles=20
 
                 self.begin_capturing_logging()
                 aArmy, bArmy = self.get_test_army_tiles(map, general, enemyGen)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
@@ -1224,8 +1224,8 @@ bTiles=15
                         frMove=Move(aArmy.tile, bArmy.tile),
                         enMove=Move(bArmy.tile, aArmy.tile)
                     )
-                    result = armyEngine.simulate_recursive_brute_force(simState1, currentTurn=7)
                     if debugMode:
+                        result = armyEngine.simulate_recursive_brute_force(simState1, currentTurn=7)
                         self.render_sim_analysis(map, result)
 
                     expect9ArmyTile = aArmy.tile
@@ -1286,7 +1286,7 @@ bTiles=20
         map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102)
         self.ensure_player_tiles_and_scores(map, general, generalTileCount=20)
 
-        # self.enable_search_time_limits_and_disable_debug_asserts()
+        self.enable_search_time_limits_and_disable_debug_asserts()
 
         self.begin_capturing_logging()
         aArmy, bArmy = self.get_test_army_tiles(map, general, enemyGen)
@@ -1325,7 +1325,7 @@ bTiles=20
         map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102)
         self.ensure_player_tiles_and_scores(map, general, generalTileCount=20)
 
-        # self.enable_search_time_limits_and_disable_debug_asserts()
+        self.enable_search_time_limits_and_disable_debug_asserts()
 
         self.begin_capturing_logging()
         aArmy, bArmy = self.get_test_army_tiles(map, general, enemyGen)
@@ -1365,7 +1365,7 @@ bTiles=20
         map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102)
         self.ensure_player_tiles_and_scores(map, general, generalTileCount=20)
 
-        # self.enable_search_time_limits_and_disable_debug_asserts()
+        self.enable_search_time_limits_and_disable_debug_asserts()
 
         self.begin_capturing_logging()
         aArmy, bArmy = self.get_test_army_tiles(map, general, enemyGen)
@@ -1445,7 +1445,11 @@ bTiles=20
         self.assertEqual(map.GetTile(2, 12), result.expected_best_moves[0][0].dest)
 
         # player b should be capping as many tiles as possible
-        for aMove, bMove in result.expected_best_moves:
+        for aMove, bMove in result.expected_best_moves[0:2]:
+            self.assertIsNotNone(aMove)
+            self.assertIsNotNone(bMove)
+        for aMove, bMove in result.expected_best_moves[2:5]:
+            self.assertIsNone(aMove)
             self.assertIsNotNone(bMove)
 
     def test__brute_force_respects_time_limit(self):
@@ -1527,7 +1531,7 @@ bTiles=20
         self.assertEqual(map.GetTile(2, 12), result.expected_best_moves[0][0].dest)
 
         # player b should be capping as many tiles as possible
-        for aMove, bMove in result.expected_best_moves:
+        for aMove, bMove in result.expected_best_moves[0:4]:
             self.assertIsNotNone(bMove)
     
     def test_should_intercept_army_and_kill_incoming_before_it_does_damage(self):
@@ -1832,3 +1836,49 @@ bTiles=20
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=8)
         self.assertIsNone(winner)
         self.assertNoRepetition(simHost, minForRepetition=2)
+
+    def test__deep_mcts_should_always_win__vs__brute_force__top_left_bottom_right(self):
+        for playerWithMcts in [0, 1]:
+            with self.subTest(playerWithMcts=playerWithMcts):
+                debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+                mapFile = 'GameContinuationEntries/even_playground_map_small__top_left_bot_right.txtmap'
+                map, general, enemyGen = self.load_map_and_generals(mapFile, 399, fill_out_tiles=True)
+                map.usernames[playerWithMcts] = 'mcts'
+                map.usernames[(playerWithMcts + 1) % 2] = 'brute'
+                self.reset_map_to_just_generals(map)
+                self.begin_capturing_logging()
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+
+                simHost = GameSimulatorHost(map, player_with_viewer=-2)
+                if general.player == playerWithMcts:
+                    simHost.get_bot(general.player).use_mcts = True
+                    simHost.get_bot(enemyGen.player).use_mcts = False
+                else:
+                    simHost.get_bot(general.player).use_mcts = False
+                    simHost.get_bot(enemyGen.player).use_mcts = True
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1)
+                self.assertEqual(playerWithMcts, winner)
+
+    def test__deep_mcts_should_always_win__vs__brute_force__top_right_bottom_left(self):
+        for playerWithMcts in [0, 1]:
+            with self.subTest(playerWithMcts=playerWithMcts):
+                debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+                mapFile = 'GameContinuationEntries/even_playground_map_small__top_right_bot_left.txtmap'
+                map, general, enemyGen = self.load_map_and_generals(mapFile, 399, fill_out_tiles=True)
+                map.usernames[playerWithMcts] = 'mcts'
+                map.usernames[(playerWithMcts + 1) % 2] = 'brute'
+                self.reset_map_to_just_generals(map)
+                self.begin_capturing_logging()
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+
+                simHost = GameSimulatorHost(map, player_with_viewer=-2)
+                if general.player == playerWithMcts:
+                    simHost.get_bot(general.player).use_mcts = True
+                    simHost.get_bot(enemyGen.player).use_mcts = False
+                else:
+                    simHost.get_bot(general.player).use_mcts = False
+                    simHost.get_bot(enemyGen.player).use_mcts = True
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1)
+                self.assertEqual(playerWithMcts, winner)

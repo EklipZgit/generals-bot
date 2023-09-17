@@ -200,14 +200,14 @@ class MctsDUCT(object):
             current: MctsNode,
     ) -> MctsNode:
         # Every player selects its move based on its own, decoupled statistics
-        playerMoves: typing.List[BoardMoves] = []
+        playerMoves: typing.List[Move | None] = []
         game: Game = current.context.game
         numPlayers: int = game.numPlayers
 
         twoParentLog: float = MctsDUCT.two_parent_log_jit(current.totalVisitCount)
 
         for p in range(numPlayers):
-            bestMove: BoardMoves | None = None
+            bestMove: Move | None = None
             bestValue: float = -1000000000  # negative inf
             numBestFound: int = 0
 
@@ -238,8 +238,8 @@ class MctsDUCT(object):
                         current.lastSelectedMovesPerPlayer[p] = i
 
             playerMoves.append(bestMove)
-        frMove = playerMoves[0].playerMoves[0]
-        enMove = playerMoves[1].playerMoves[1]
+        frMove = playerMoves[0]
+        enMove = playerMoves[1]
         combinedMove: BoardMoves = BoardMoves([frMove, enMove])
 
         node: MctsNode | None = current.children.get(combinedMove, None)
@@ -277,69 +277,83 @@ class MctsDUCT(object):
             rootNode: MctsNode
     ) -> MctsEngineSummary:
         def robust_child_selection_func(node: MctsNode) -> typing.Tuple[float, BoardMoves]:
-            bestMove: BoardMoves | None = None
-            bestVisitCount: float = -1
-            numBestFound: int = 0
-            bestAvgScore: float = -10000  # neg inf
+            playerMoves: typing.List[Move | None] = []
+            playerScores: typing.List[float] = []
+            playerVisitCounts: typing.List[int] = []
 
-            for i, move in enumerate(node.legalMovesPerPlayer[self.player]):
-                sumScores: float = node.scoreSums[self.player][i]
-                visitCount: int = node.visitCounts[self.player][i]
-                avgScore: float = -10.0
-                if visitCount != 0:
-                    avgScore = sumScores / visitCount
+            for p, pMoves in enumerate(node.legalMovesPerPlayer):
+                bestMove: BoardMoves | None = None
+                bestVisitCount: int = -1
+                numBestFound: int = 0
+                bestAvgScore: float = -10000  # neg inf
 
-                logging.info(f't{node.context.turn} move {str(move)} visits {visitCount} score {avgScore:.3f}')
+                for i, move in enumerate(pMoves):
+                    sumScores: float = node.scoreSums[p][i]
+                    visitCount: int = node.visitCounts[p][i]
+                    avgScore: float = -10.0
+                    if visitCount != 0:
+                        avgScore = sumScores / visitCount
 
-            for i, move in enumerate(node.legalMovesPerPlayer[self.player]):
-                sumScores: float = node.scoreSums[self.player][i]
-                visitCount: int = node.visitCounts[self.player][i]
-                avgScore: float = -10.0
-                if visitCount != 0:
-                    avgScore = sumScores / visitCount
+                    logging.info(f'p{p} t{node.context.turn} move {str(move)} visits {visitCount} score {avgScore:.3f}')
 
-                if visitCount > bestVisitCount:
-                    logging.info(f't{node.context.turn} new best move had \r\n'
-                             f'   visitCount {visitCount} > bestVisitCount {bestVisitCount}, \r\n'
-                             f'   avgScore {avgScore:.3f} vs bestAvgScore {bestAvgScore:.3f}, \r\n'
-                             f'   new bestMove {str(move)} > old bestMove {str(bestMove)}, \r\n'
-                             f'   new bestState {str(node.context.board_state)}')
-                    bestVisitCount = visitCount
-                    bestMove = move
-                    bestAvgScore = avgScore
-                    numBestFound = 1
-                elif visitCount == bestVisitCount:
-                    if avgScore > bestAvgScore:
-                        logging.info(f't{node.context.turn} visit tie - new best move had \r\n'
-                                 f'   avgScore {avgScore:.3f} vs bestAvgScore {bestAvgScore:.3f}, \r\n'
+                for i, move in enumerate(pMoves):
+                    sumScores: float = node.scoreSums[p][i]
+                    visitCount: int = node.visitCounts[p][i]
+                    avgScore: float = -10.0
+                    if visitCount != 0:
+                        avgScore = sumScores / visitCount
+
+                    if visitCount > bestVisitCount:
+                        logging.info(f'p{p} t{node.context.turn} new best move had \r\n'
                                  f'   visitCount {visitCount} > bestVisitCount {bestVisitCount}, \r\n'
+                                 f'   avgScore {avgScore:.3f} vs bestAvgScore {bestAvgScore:.3f}, \r\n'
                                  f'   new bestMove {str(move)} > old bestMove {str(bestMove)}, \r\n'
                                  f'   new bestState {str(node.context.board_state)}')
                         bestVisitCount = visitCount
                         bestMove = move
                         bestAvgScore = avgScore
                         numBestFound = 1
-                    elif avgScore == bestAvgScore:
-                        numBestFound += 1
-
-                        logging.info(f't{node.context.turn} TIEBREAK move had \r\n'
-                                 f'   visitCount {visitCount} == bestVisitCount {bestVisitCount}, \r\n'
-                                 f'   avgScore {avgScore:.3f} vs bestAvgScore {bestAvgScore:.3f}, \r\n'
-                                 f'   move {str(move)} vs bestMove {str(bestMove)}, \r\n'
-                                 f'   state {str(node.context.board_state)}')
-                        if self.get_rand_int() % numBestFound == 0:
-                            logging.info('  (won tie break)')
-                            # this case implements random tie-breaking
+                    elif visitCount == bestVisitCount:
+                        if avgScore > bestAvgScore:
+                            logging.info(f'p{p} t{node.context.turn} visit tie - new best move had \r\n'
+                                     f'   avgScore {avgScore:.3f} vs bestAvgScore {bestAvgScore:.3f}, \r\n'
+                                     f'   visitCount {visitCount} > bestVisitCount {bestVisitCount}, \r\n'
+                                     f'   new bestMove {str(move)} > old bestMove {str(bestMove)}, \r\n'
+                                     f'   new bestState {str(node.context.board_state)}')
+                            bestVisitCount = visitCount
                             bestMove = move
                             bestAvgScore = avgScore
-                        else:
-                            logging.info('  (lost tie break)')
+                            numBestFound = 1
+                        elif avgScore == bestAvgScore:
+                            numBestFound += 1
 
-            logging.info(f't{node.context.turn} best move had \r\n'
-                     f'   visitCount {bestVisitCount}, \r\n'
-                     f'   bestAvgScore {bestAvgScore:.3f}, \r\n'
-                     f'   bestMove {str(bestMove)}')
-            return bestAvgScore, bestMove
+                            logging.info(f'p{p} t{node.context.turn} TIEBREAK move had \r\n'
+                                     f'   visitCount {visitCount} == bestVisitCount {bestVisitCount}, \r\n'
+                                     f'   avgScore {avgScore:.3f} vs bestAvgScore {bestAvgScore:.3f}, \r\n'
+                                     f'   move {str(move)} vs bestMove {str(bestMove)}, \r\n'
+                                     f'   state {str(node.context.board_state)}')
+                            if self.get_rand_int() % numBestFound == 0:
+                                logging.info('  (won tie break)')
+                                # this case implements random tie-breaking
+                                bestMove = move
+                                bestAvgScore = avgScore
+                            else:
+                                logging.info('  (lost tie break)')
+                logging.info(f'p{p} t{node.context.turn} best move had \r\n'
+                         f'   visitCount {bestVisitCount}, \r\n'
+                         f'   bestAvgScore {bestAvgScore:.3f}, \r\n'
+                         f'   bestMove {str(bestMove)}')
+                playerMoves.append(bestMove)
+                playerScores.append(bestAvgScore)
+                playerVisitCounts.append(bestVisitCount)
+
+            boardMove = BoardMoves(playerMoves)
+
+            logging.info(f't{node.context.turn} COMBINED move had \r\n'
+                         f'   visitCounts {str(playerVisitCounts)}, \r\n'
+                         f'   bestAvgScores {str([f"{s:.3f}" for s in playerScores])}, \r\n'
+                         f'   bestMove {str(boardMove)}')
+            return playerScores[0], boardMove
 
         logging.info('MCTS BUILDING BEST MOVE CHOICES')
 
@@ -459,7 +473,6 @@ class MctsEngineSummary(object):
                 score, bestMoves = selectionFunc(curNode)
 
 
-
 class MctsNode(object):
     def __init__(
             self,
@@ -481,17 +494,21 @@ class MctsNode(object):
         game: Game = context.game
         numPlayers: int = game.numPlayers
 
-        self.legalMovesPerPlayer: typing.List[typing.List[BoardMoves] | None] = [None for p in range(numPlayers)]
+        self.legalMovesPerPlayer: typing.List[typing.List[Move | None]] = [[] for p in range(numPlayers)]
         """ For every player index, a list of legal moves in this node """
 
-        allLegalMoves: typing.List[BoardMoves] = context.get_legal_moves()
+        # allLegalMoves: typing.List[BoardMoves] = context.get_legal_moves()
 
-        # For every active player in this state, compute their legal moves
-        for p in range(numPlayers):
-            # TODO IF WE NEED TO INCLUDE MORE THAN TWO PLAYERS AT ONCE...?
-            # moves = AIUtils.extractMovesForMover(allLegalMoves, p)
-            # TODO this might actually be intended to be JUST the players move options, not the pair of every move/response...?
-            self.legalMovesPerPlayer[p] = allLegalMoves
+        # # For every active player in this state, compute their legal moves
+        # for p in range(numPlayers):
+        #     # TODO IF WE NEED TO INCLUDE MORE THAN TWO PLAYERS AT ONCE...?
+        #     # moves = AIUtils.extractMovesForMover(allLegalMoves, p)
+        #     # TODO this might actually be intended to be JUST the players move options, not the pair of every move/response...?
+        #     self.legalMovesPerPlayer[p] = allLegalMoves
+
+        self.legalMovesPerPlayer[0] = self.context.board_state.generate_friendly_moves()
+
+        self.legalMovesPerPlayer[1] = self.context.board_state.generate_enemy_moves()
 
         self.visitCounts: typing.List[typing.List[int]] = [[0 for move in playerMoves] for playerMoves in self.legalMovesPerPlayer]
         """ For every player, for every child move, a visit count """
@@ -519,7 +536,9 @@ class Context(object):
         self.engine = None  # untyped to avoid circular refs for now
         self.board_state: ArmySimState | None = None
         self.frMoves: typing.List[Move | None] = None
+        """available friendly moves"""
         self.enMoves: typing.List[Move | None] = None
+        """available enemy moves"""
         self._trial: Trial | None = None
         if toClone is not None:
             # TODO this might need to be raw clone not child_board, dunno yet.
@@ -628,13 +647,13 @@ class Game(object):
             ):
                 break
 
-            numAllowedActions: int = 0
-            numAllowedBiasedActions: int = 0
-
-            if maxNumPlayoutActions >= 0:
-                numAllowedActions = max(0, maxNumPlayoutActions - (trial.numMoves() - numStartMoves))
-            else:
-                numAllowedActions = maxNumPlayoutActions
+            # numAllowedActions: int = 0
+            # numAllowedBiasedActions: int = 0
+            #
+            # if maxNumPlayoutActions >= 0:
+            #     numAllowedActions = max(0, maxNumPlayoutActions - (trial.numMoves() - numStartMoves))
+            # else:
+            #     numAllowedActions = maxNumPlayoutActions
 
             if maxNumBiasedActions >= 0:
                 numAllowedBiasedActions = max(0, maxNumBiasedActions - (trial.numMoves() - numStartMoves))

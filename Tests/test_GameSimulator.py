@@ -2,6 +2,7 @@ from DataModels import Move
 from Sim.GameSimulator import GameSimulator, GameSimulatorHost
 from TestBase import TestBase
 from base.client.map import Tile, TILE_FOG
+from bot_ek0x45 import EklipZBot
 
 
 class GameSimulatorTests(TestBase):
@@ -411,17 +412,61 @@ aG7
     def test_simulates_a_game_from_turn_1(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         self.begin_capturing_logging()
-        map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/243.txtmap', 243, player_index=1)
-        fakeEnemyGen = map.GetTile(2, 16)
-        fakeEnemyGen.isGeneral = True
-        fakeEnemyGen.player = 0
-        fakeEnemyGen.army = 1
 
-        self.reset_map_to_just_generals(map)
+        def configure_a(aBot: EklipZBot):
+            # codified
+            # aBot.expansion_force_no_global_visited = True
+            # aBot.expansion_single_iteration_time_cap = 0.02
 
-        self.enable_search_time_limits_and_disable_debug_asserts()
+            # 3 went 19-11 against gather_include_distance_from_enemy_general_as_negatives 0.85
+            # 3 went 18-11 against gather_include_distance_from_enemy_general_as_negatives 0.5, codified
+            # aBot.gather_include_distance_from_enemy_TERRITORY_as_negatives = 3
 
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player)
+            aBot.expansion_use_multi_per_dist_per_tile = True
+            aBot.expansion_force_no_global_visited = False
+            pass
 
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.1)
+        def configure_b(bBot: EklipZBot):
+            # bBot.gather_include_distance_from_enemy_TERRITORY_as_negatives = 0
+            # bBot.gather_include_distance_from_enemy_general_as_negatives = 0.5
+            pass
+
+        self.a_b_test(
+            numRuns=30,
+            configureA=configure_a,
+            configureB=configure_b,
+            debugMode=debugMode,
+            debugModeTurnTime=0.75,
+            debugModeRenderAllPlayers=True,
+            mapFile='SymmetricTestMaps/even_playground_map_small_short_spawns__top_left_bot_right.txtmap',
+            noCities=True,
+        )
+
+    def test_simulates_a_game_from_turn_1__2(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        self.begin_capturing_logging()
+
+        def configure_a(aBot: EklipZBot):
+            # RUNNING WITH NOT PER DIST PER TILE
+            # aBot.expansion_use_multi_per_dist_per_tile = True
+            # aBot.expansion_force_no_global_visited = False
+            aBot.gather_include_distance_from_enemy_TILES_as_negatives = 2
+            aBot.engine_always_include_last_move_tile_in_scrims = True
+            pass
+
+        def configure_b(bBot: EklipZBot):
+            # bBot.expansion_use_multi_per_dist_per_tile = False
+            # bBot.expansion_use_multi_per_tile = False
+            # bBot.expansion_force_no_global_visited = True
+            pass
+
+        self.a_b_test(
+            numRuns=30,
+            configureA=configure_a,
+            configureB=configure_b,
+            debugMode=debugMode,
+            debugModeTurnTime=0.001,
+            debugModeRenderAllPlayers=False,
+            noCities=None,
+        )
 

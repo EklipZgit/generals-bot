@@ -56,7 +56,7 @@ class GatherTests(TestBase):
             depth,
             shouldLog=False,
             useTrueValueGathered=useTrueVal,
-            includeTreeNodesThatGatherNegative=inclNegative)
+            includeGatherTreeNodesThatGatherNegative=inclNegative)
         dur = time.perf_counter() - start
 
         for n in nodes:
@@ -75,7 +75,7 @@ class GatherTests(TestBase):
                 turns=depth,
                 searchingPlayer=general.player,
                 useTrueValueGathered=useTrueVal,
-                includeTreeNodesThatGatherNegative=inclNegative,
+                includeGatherTreeNodesThatGatherNegative=inclNegative,
                 shouldLog=False)
             greedyDur = time.perf_counter() - greedyStart
             for n in greedyNodes:
@@ -93,7 +93,7 @@ class GatherTests(TestBase):
                 turns=depth,
                 searchingPlayer=general.player,
                 useTrueValueGathered=useTrueVal,
-                includeTreeNodesThatGatherNegative=inclNegative,
+                includeGatherTreeNodesThatGatherNegative=inclNegative,
                 ignoreStartTile=True,
                 shouldLog=False,
                 useRecurse=True
@@ -383,7 +383,8 @@ class GatherTests(TestBase):
                 cappedTile = map.GetTile(18, 5)
                 # this assert no longer relevant now that all in gathers are max-value-per-turn
                 # self.assertGreater(cappedTile.army, 440, "should not have dropped the cities at the leaves during the gather phase.")
-                self.assertNoRepetition(simHost, minForRepetition=1, msg="should not re-gather cities or explore inefficiently. There should be zero excuse for ANY tile to be move source more than once in this sim.")
+                self.assertNoRepetition(simHost, minForRepetition=1,
+                                        msg="should not re-gather cities or explore inefficiently. There should be zero excuse for ANY tile to be move source more than once in this sim.")
 
     def test_random_large_gather_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -515,7 +516,7 @@ b1   b1   b1   b1   b1   b1   bG1
             skipTiles=None,
             distPriorityMap=enemyDistanceMap,
             priorityTiles=None,
-            includeTreeNodesThatGatherNegative=True,
+            includeGatherTreeNodesThatGatherNegative=True,
             incrementBackward=False)
         bot.viewInfo.gatherNodes = nodes
         # self.render_view_info(m, bot.viewInfo, f"ur mum {value}")

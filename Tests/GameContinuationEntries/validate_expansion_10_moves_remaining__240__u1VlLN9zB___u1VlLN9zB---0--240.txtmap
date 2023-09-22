@@ -1,0 +1,49 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+M                                                                     M
+     M              M         M    M    M    M                        M    M         M
+     M                                                      M
+                         M              C41                      M         M
+M                        M              a3   M                   M              M
+               M              a4   a1   a1   a3   a3                  M    M                   M
+                    a2   a4   a3   a3   a1   M    M         M         M
+b1   M    a2        a1        M    a2   a7   b2   b1                       M
+b1        a2   M    a1   a2   a2   a2   M    M    b1   b1   M
+b1   b1   b1   b0   a5   b1   M              b4   M    b1   M         M         M
+     a1   M    a1   a1   b0   b0   a0             M    b0   b1   b3
+     a1   a1   a1   a2   M    b1   b1   b1   b1   a1   b1        b3        M    M         b3
+M         a1   a1   a1   M    a1   M    M    a3   a1   b3   b3   b3                  a4   b3   M
+               a1   aG4  a1   a1   M    a2   a3   a3   b3   a3   a3   M    a3   a3   a2   M
+M              M    a1   a1   a2   a2   a2   M         b3        a4   a3   a3   a3   a2   M
+     M              a1             M              b2   b2   M    M    a3   M    M    a2   a4
+                    a2                       C42       b3   M    a1   a6   a1   M    a2   a4   M
+               b1   a1   a2   a1   a15  a1   a1   M    a1   a1   a1   a1   a1   a1   a1
+                         C44  M         b2   a1   a1   a1   M              M
+          M                                                 C45
+                    M                        M              M    M    M         M         M
+          M    M         M              M         M         M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=13,5
+turn=240
+bot_player_index=0
+aTiles=85
+aScore=184
+aStandingArmy=99
+aStars=69
+aCityCount=1
+aGeneral=4,13
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+bTiles=73
+bScore=143
+bStandingArmy=70
+bStars=45
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=375
+bot_target_player=1

@@ -1,0 +1,45 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+b1   b1   b1   b2   b2   M    b1   M         M    b2   M         M                   M
+b1   b1   b14  bG29 b2   b4   b3   b2   b2   b14  b1   b1   b1                       M
+b1   M    b2   M    M    M         M    M    b1   b1   b2   b1
+M    C50  b2   b5   M    b3   C46  M    b1   b1   M    b2   b2   b2   M    M         M
+     M    b9   b2   M    b3   a2   a2   a2   b2   b2   b2   C45
+M    M    b1   b2   b2   b2   a2   b19  b1   b1   b1   b2   b3        M              M
+b1   a1   b7   b1   M    M    a2   a3   M    M    C40  b2   M    M    M
+M    a1   a3   a3   a3   a36  a2   a2   a2        a2   a2   b4   b2   b2        M
+     a1   M    a70  a2   a1   a2   a2   a2   a2   a2   a2   b4   b2        M    M
+     a2   a2   a1   M    a1   a1   a2   a3   M         a2   a3   b2   M    M         M
+M    M    C42  a1   a1   C45  a1   M                   a2   a2   M    M
+     M         a2   a1   M    a1   M              C40
+M              a2   a1   M    a2   M         M                        M    M         M
+                    a2   a2   a2   M         M
+                    a2   a2   a2   a2             M         M                        M
+                         N1   M    M    M    M         M                   M
+          M         M              M              M                                  M
+                         M                        M                        M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=2,13
+turn=375
+bot_player_index=1
+aTiles=74
+aScore=232
+aStandingArmy=158
+aStars=67
+aCityCount=1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=303
+bTiles=60
+bScore=192
+bStandingArmy=132
+bStars=69
+bCityCount=1
+bGeneral=3,1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=10
+bot_target_player=0

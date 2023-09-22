@@ -103,10 +103,6 @@ def get_start_expand_value(
 
     return len(tilesCapped)
 
-#
-# def print_expansion_optimization(expansionOptimization: ExpansionPlan):
-#
-
 def __evaluate_plan_value(
         map: MapBase,
         general: Tile,
@@ -206,6 +202,7 @@ def optimize_first_25(
         (10, 20, 8),
         (12, 22, 4),
     ]
+    # 12-6-5-4-1
 
     maxResult = None
     maxVal = None

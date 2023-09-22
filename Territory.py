@@ -62,8 +62,8 @@ class TerritoryClassifier():
 		neutralNewIndex = len(self.map.players)
 		
 		# do a BFS foreach within a BFS foreach. Normal everyday stuff nbd
-		def foreach_near_updated_tiles(evaluatingTile):
-			if evaluatingTile.player != -1 and evaluatingTile.player != self.map.player_index:
+		def foreach_near_updated_tiles(evaluatingTile: Tile):
+			if evaluatingTile.player != -1 and evaluatingTile.player != self.map.player_index:  # and not evaluatingTile.discoveredAsNeutral (territories track live territory, not general prediction)
 				for movable in evaluatingTile.movable:
 					if not movable.discovered and not movable.isObstacle:
 						self.territoryMap[movable.x][movable.y] = evaluatingTile.player

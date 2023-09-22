@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import typing
 import math
-from DataModels import TreeNode, Move
+from DataModels import GatherTreeNode, Move
 from collections import deque
 
 from base.client.map import Tile
@@ -246,19 +246,19 @@ class Path(object):
     def __repr__(self) -> str:
         return str(self)
 
-    def convert_to_tree_nodes(self) -> TreeNode:
-        curTreeNode = None
+    def convert_to_tree_nodes(self) -> GatherTreeNode:
+        curGatherTreeNode = None
         curPathNode = self.start
         prevPathTile = None
         turn = 0
         while curPathNode is not None:
-            prevTreeNode = curTreeNode
-            curTreeNode = TreeNode(curPathNode.tile, prevPathTile, turn)
-            curTreeNode.children.append(prevTreeNode)
+            prevGatherTreeNode = curGatherTreeNode
+            curGatherTreeNode = GatherTreeNode(curPathNode.tile, prevPathTile, turn)
+            curGatherTreeNode.children.append(prevGatherTreeNode)
             turn += 1
             prevPathTile = curPathNode.tile
             curPathNode = curPathNode.next
-        return curTreeNode
+        return curGatherTreeNode
 
     def break_overflow_into_one_move_path_subsegments(self, lengthToKeepInOnePath: int = 1) -> typing.List[typing.Union[Path, None]]:
         copy = self.clone()

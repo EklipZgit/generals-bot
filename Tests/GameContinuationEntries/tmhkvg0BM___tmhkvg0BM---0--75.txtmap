@@ -1,0 +1,47 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+               M    a1   a1   a1   a1   M              M    M                   M    M    M
+               M    aG5  a1   a1   M    M              M              M         M
+     M    M         M    a1   a1   a1   a1   a1                  M         M              M
+M              M    a1   a1        M              M         M    M                   M         M
+     M              a1   a1   a1   a1   a1   a1
+          M         a1   M         M         a1        M                   M
+     M    M         a1   M         M    M    a1             M    M                   M
+          b2   b1   a1        M                                                 M              M
+               M    a31  M                   M    M                   M                        M
+          M              C49                      M         M
+                                        M                                  M    M    M    M    M
+                                                                                     M
+     M         M                                                 M         M    M              M
+M    M                                  M                             M    M    M    M
+M         M    M                        M                                  M              M
+                                        M         M                                            M
+          M                   M              M    M         M    M                             M
+                    M              M                        M                             M
+                              M                   M              M    M         M    M
+                              M                   M                        M         M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=1,5
+turn=75
+bot_player_index=0
+aTiles=26
+aScore=60
+aStandingArmy=34
+aStars=70
+aCityCount=1
+aGeneral=4,1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+bTiles=24
+bScore=58
+bStandingArmy=34
+bStars=76
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bot_target_player=1

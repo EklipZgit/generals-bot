@@ -17,7 +17,7 @@ class MapMatrix(Generic[T]):
     def __setitem__(self, key: Tile, item: T):
         self.grid[key.x][key.y] = item
 
-    def __getitem__(self, key: Tile):
+    def __getitem__(self, key: Tile) -> T:
         val = self.grid[key.x][key.y]
         return val
 
@@ -40,3 +40,4 @@ class MapMatrix(Generic[T]):
 
     def __repr__(self):
         return str(self)
+

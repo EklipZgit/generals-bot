@@ -1,0 +1,111 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          f1   f1   M                                       M    M              M         M    M              M
+     M    M    f2   f1   f1   M                                            M         M                        M
+     g9   g1   g2   g2   g2   g2                  M    M    M         M                                  M         M
+M              g2   f1   M         M                        M                                  M
+               g2   f1                                 M              M         M
+          g2   g2   f4                                                M              M    M
+          M    M    f2   M                             M         M    M    M    M         M         M         M
+M         M         f27                                                                        M
+          M         f1        M    M                             M                                       M
+f1   f1   f1   M    f1   f1                  M         M    M                                                      M
+M    M    f1   f1   fG3  f1   f1   f1        M         M                                            M         M
+M              f1   f1                                 M
+     b1   b11  M    f1        M         M    M    M                   M                   M
+               M    C45       M    M    M    M                             M         M                   M
+     M              M    M                   M                        M                             M         M
+               M                        M              M              M    M         M         M
+               M                                  M
+               M    M                        M         M                        M
+                    M    M              M                             M
+                                             M         M    M              M         M         M    M         M    M
+M                                  M              M                                            M    M    M
+M    M                        M                                       M                                  M
+               M         M                        M                        M    M    M    M              M
+     M    M         M                        M    M                   M    M    M    M    M                   M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=0,5
+turn=70
+bot_player_index=5
+aTiles=22
+aScore=58
+aStandingArmy=36
+aStars=68
+aCityCount=1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+bTiles=34
+bScore=86
+bStandingArmy=52
+bStars=68
+bCityCount=2
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+cTiles=1
+cScore=37
+cStandingArmy=36
+cStars=66
+cCityCount=1
+cKnowsKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+dTiles=36
+dScore=58
+dStandingArmy=22
+dStars=65
+dCityCount=1
+dKnowsKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+eTiles=0
+eScore=0
+eStandingArmy=0
+eStars=0
+eCityCount=1
+eKnowsKingLocation=False
+eDead=True
+eLeftGame=True
+eLeftGameTurn=45
+eAggressionFactor=0
+fTiles=25
+fScore=58
+fStandingArmy=33
+fStars=68
+fCityCount=1
+fGeneral=4,10
+fKnowsKingLocation=False
+fDead=False
+fLeftGame=False
+fLeftGameTurn=-1
+fAggressionFactor=0
+gTiles=14
+gScore=49
+gStandingArmy=35
+gStars=65
+gCityCount=1
+gKnowsKingLocation=False
+gDead=False
+gLeftGame=False
+gLeftGameTurn=-1
+gAggressionFactor=20
+hTiles=26
+hScore=60
+hStandingArmy=34
+hStars=0
+hCityCount=1
+hKnowsKingLocation=False
+hDead=False
+hLeftGame=False
+hLeftGameTurn=-1
+hAggressionFactor=0
+bot_target_player=6

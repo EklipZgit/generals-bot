@@ -242,18 +242,21 @@ class TextMapLoader(object):
         for player in map.players:
             char, index = playerCharMap[player.index]
 
-            tileKey = f'{char}Tiles'
-            if tileKey in data:
-                player.tileCount = int(data[tileKey])
-
-            scoreKey = f'{char}Score'
-            if scoreKey in data:
-                player.score = int(data[scoreKey])
-
-            cityKey = f'{char}CityCount'
-            if cityKey in data:
-                player.cityCount = int(data[cityKey])
-
-            deadKey = f'{char}Dead'
-            if deadKey in data:
-                player.dead = data[deadKey].lower() == 'true'
+            if f'{char}Score' in data:
+                player.score = int(data[f'{char}Score'])
+            if f'{char}Tiles' in data:
+                player.tileCount = int(data[f'{char}Tiles'])
+            if f'{char}CityCount' in data:
+                player.cityCount = int(data[f'{char}CityCount'])
+            if f'{char}Stars' in data:
+                player.stars = float(data[f'{char}Stars'])
+            if f'{char}KnowsKingLocation' in data:
+                player.knowsKingLocation = data[f'{char}KnowsKingLocation'].lower() == 'true'
+            if f'{char}Dead' in data:
+                player.dead = data[f'{char}Dead'].lower() == 'true'
+            if f'{char}LeftGame' in data:
+                player.leftGame = data[f'{char}LeftGame'].lower() == 'true'
+            if f'{char}LeftGameTurn' in data:
+                player.leftGameTurn = int(data[f'{char}LeftGameTurn'])
+            if f'{char}AggressionFactor' in data:
+                player.aggression_factor = int(data[f'{char}AggressionFactor'])

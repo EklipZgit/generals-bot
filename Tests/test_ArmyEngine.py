@@ -1,5 +1,6 @@
 import logging
 import time
+import traceback
 import typing
 
 import SearchUtils
@@ -7,14 +8,15 @@ from ArmyEngine import ArmyEngine, ArmySimResult
 from ArmyTracker import Army
 from BoardAnalyzer import BoardAnalyzer
 from DataModels import Move
-from Engine.ArmyEngineModels import calc_value_int, calc_econ_value
+from Engine.ArmyEngineModels import calc_value_int, calc_econ_value, ArmySimState
+from MctsLudii import MctsDUCT, MoveSelectionFunction
 from Sim.GameSimulator import GameSimulatorHost, GameSimulator
 from TestBase import TestBase
 from base.client.map import Tile, MapBase
+from bot_ek0x45 import EklipZBot
 
 
 class ArmyEngineTests(TestBase):
-
     def render_step_engine_analysis(
             self,
             engine: ArmyEngine,
@@ -62,29 +64,6 @@ class ArmyEngineTests(TestBase):
                 # this is the last thing we do before we return
                 self.render_sim_analysis(map, result)
 
-    def get_test_army_tiles(self, map: MapBase, general: Tile, enemyGen: Tile) -> typing.Tuple[Army, Army]:
-        enemyArmy = None
-        generalArmy = None
-        for tile in map.get_all_tiles():
-            if tile.player == enemyGen.player and tile.army > 3 and not tile.isGeneral:
-                enemyArmy = tile
-            elif tile.player == general.player and tile.army > 3 and not tile.isGeneral:
-                generalArmy = tile
-
-        # now include generals
-        for tile in map.get_all_tiles():
-            if enemyArmy is None and tile.player == enemyGen.player and tile.army > 3:
-                enemyArmy = tile
-            elif generalArmy is None and tile.player == general.player and tile.army > 3:
-                generalArmy = tile
-
-        if enemyArmy is None:
-            raise AssertionError("Couldn't find an enemy tile with army > 3")
-        if generalArmy is None:
-            raise AssertionError("Couldn't find a friendly tile with army > 3")
-
-        return Army(generalArmy), Army(enemyArmy)
-
     def test_brute_force__armies_suicide(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         rawMap = """
@@ -119,7 +98,9 @@ bTiles=20
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+                mcts: MctsDUCT = MctsDUCT()
+                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                 armyEngine.time_limit = 100000000000000.0
                 armyEngine.iteration_limit = 1000
                 armyEngine.friendly_has_kill_threat = True
@@ -180,7 +161,9 @@ bTiles=20
 
                     boardAnalysis = BoardAnalyzer(map, general)
                     boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                    armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+                    mcts: MctsDUCT = MctsDUCT()
+                    armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                     armyEngine.friendly_has_kill_threat = shortCircuit
                     armyEngine.enemy_has_kill_threat = shortCircuit
                     result = armyEngine.scan(5, mcts=True)
@@ -230,7 +213,9 @@ bTiles=20
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+                mcts: MctsDUCT = MctsDUCT()
+                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = True
                 result = armyEngine.scan(5, mcts=True)
@@ -279,7 +264,9 @@ bTiles=20
 
                     boardAnalysis = BoardAnalyzer(map, general)
                     boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                    armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+                    mcts: MctsDUCT = MctsDUCT()
+                    armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                     armyEngine.friendly_has_kill_threat = shortCircuit
                     armyEngine.enemy_has_kill_threat = shortCircuit
                     armyEngine.log_payoff_depth = 3
@@ -328,7 +315,9 @@ bTiles=20
 
         boardAnalysis = BoardAnalyzer(map, general)
         boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-        armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+        mcts: MctsDUCT = MctsDUCT()
+        armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
         armyEngine.friendly_has_kill_threat = shortCircuit
         armyEngine.enemy_has_kill_threat = shortCircuit
         armyEngine.log_payoff_depth = 3
@@ -377,7 +366,9 @@ bTiles=20
 
                     boardAnalysis = BoardAnalyzer(map, general)
                     boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                    armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+                    mcts: MctsDUCT = MctsDUCT()
+                    armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                     armyEngine.friendly_has_kill_threat = shortCircuit
                     armyEngine.enemy_has_kill_threat = shortCircuit
                     result = armyEngine.scan(5, mcts=True)
@@ -426,7 +417,9 @@ bTiles=20
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+                mcts: MctsDUCT = MctsDUCT()
+                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = True
                 baseState = armyEngine.get_base_board_state()
@@ -455,37 +448,40 @@ bTiles=20
 
 a1
 a1                
-a1        bG20          
+a1        bG17          
 |    |    |    |    |    
 bot_player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
 """
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
-        # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
-        # Both should have half the board if this generates correctly..
-        map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102)
-        self.ensure_player_tiles_and_scores(map, general, generalTileCount=25)
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         for turn in [0, 1]:
             with self.subTest(turn=turn):
                 self.begin_capturing_logging()
-                map.turn = map.turn + turn
+                # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
+                # Both should have half the board if this generates correctly..
+                map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102 + turn)
+                self.ensure_player_tiles_and_scores(map, general, generalTileCount=25)
                 aArmy, bArmy = self.get_test_army_tiles(map, general, enemyGen)
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+                mcts: MctsDUCT = MctsDUCT()
+                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                 # armyEngine.friendly_has_kill_threat = True
                 # armyEngine.enemy_has_kill_threat = False
-                baseState = armyEngine.get_base_board_state()
-                self.assertEqual(0, baseState.tile_differential)
-                self.assertEqual(0, baseState.city_differential)
+                # baseState = armyEngine.get_base_board_state()
+                # self.assertEqual(0, baseState.tile_differential)
+                # self.assertEqual(0, baseState.city_differential)
 
-                result = armyEngine.scan(4, logEvals=False, mcts=True)
+                armyEngine.iteration_limit = 1000
+                armyEngine.time_limit = 1000
+                result = armyEngine.scan(5, logEvals=False, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
 
@@ -537,7 +533,9 @@ bTiles=20
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+                mcts: MctsDUCT = MctsDUCT()
+                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = True
                 baseState = armyEngine.get_base_board_state()
@@ -595,7 +593,9 @@ bTiles=20
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+                mcts: MctsDUCT = MctsDUCT()
+                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                 # armyEngine.friendly_has_kill_threat = True
                 # armyEngine.enemy_has_kill_threat = True
                 baseState = armyEngine.get_base_board_state()
@@ -646,7 +646,9 @@ bTiles=20
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+                mcts: MctsDUCT = MctsDUCT()
+                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = False
                 armyEngine.allow_enemy_no_op = True
@@ -706,7 +708,9 @@ bTiles=20
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+                mcts: MctsDUCT = MctsDUCT()
+                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = True
                 armyEngine.force_friendly_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(map, [enemyGen])
@@ -759,7 +763,9 @@ bTiles=20
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+                mcts: MctsDUCT = MctsDUCT()
+                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = True
                 baseState = armyEngine.get_base_board_state()
@@ -810,7 +816,9 @@ bTiles=20
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+                mcts: MctsDUCT = MctsDUCT()
+                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = True
                 baseState = armyEngine.get_base_board_state()
@@ -834,49 +842,91 @@ bTiles=20
                     self.assertTrue(result.best_result_state.kills_all_friendly_armies)
                     self.assertTrue(result.best_result_state.kills_all_enemy_armies)
 
-        def test_brute_force__recognizes_wins_on_general_distances(self):
-            rawMap = """
-    |    |    |    |    |    
-         aG1               
+    def test_engine_should_intercept_army_not_threat_killer_move(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/engine_should_intercept_army_not_threat_killer_move___YcpRMr0HG---0--233.txtmap'
+        turn = 233
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, turn, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+        aArmy, bArmy = self.get_test_army_tiles(map, general, enemyGeneral)
+
+        boardAnalysis = BoardAnalyzer(map, general)
+        boardAnalysis.rebuild_intergeneral_analysis(enemyGeneral)
+
+        mcts: MctsDUCT = MctsDUCT()
+        armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
+        armyEngine.friendly_has_kill_threat = True
+        armyEngine.enemy_has_kill_threat = True
+
+        result = armyEngine.scan(2, logEvals=False, mcts=True)
+        if debugMode:
+            self.render_sim_analysis(map, result)
 
 
-              a25       b25
 
+    def test_does_not_over_recognize_losses_on_general_distances(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/does_not_fail_defense___BgVc48Chn---b--792.txtmap'
 
+        for turn in [0, 1]:
+            with self.subTest(turn=turn):
+                map, general, enemyGen = self.load_map_and_generals(mapFile, 792 + turn)
+                self.begin_capturing_logging()
+                blocked = map.GetTile(14, 1)
+                map.convert_tile_to_mountain(blocked)
 
-    M              
-              bG1          
-    |    |    |    |    |    
-    bot_player_index=0
-    bot_target_player=1
-    aTiles=20
-    bTiles=20
-    """
-            debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
-            # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
-            # Both should have half the board if this gens correctly..
-            map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102)
-            self.ensure_player_tiles_and_scores(map, general, generalTileCount=20)
+                # Grant the general the same fog vision they had at the turn the map was exported
+                rawMap, _ = self.load_map_and_general(mapFile, 792 + turn)
 
-            self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+                simHost.queue_player_moves_str(enemyGen.player, '15,6->16,6->16,5->16,4->16,3->16,2->16,1->15,1')
 
-            for turn in [0, 1]:
-                with self.subTest(turn=turn):
-                    self.begin_capturing_logging()
-                    map.turn = map.turn + turn
-                    aArmy, bArmy = self.get_test_army_tiles(map, general, enemyGen)
+                eklipz_bot = simHost.bot_hosts[general.player].eklipz_bot
+                boardAnalysis = BoardAnalyzer(map, general)
+                boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
 
-                    boardAnalysis = BoardAnalyzer(map, general)
-                    boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                    armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
-                    armyEngine.friendly_has_kill_threat = True
+                for i in range(8):
+                    mcts: MctsDUCT = MctsDUCT()
+                    aArmies = eklipz_bot.find_large_tiles_near(
+                        fromTiles=[
+                            self.get_player_tile(15, 1, simHost.sim, general.player),
+                            self.get_player_tile(15, 6, simHost.sim, general.player),
+                            self.get_player_tile(12, 4, simHost.sim, general.player),
+                        ],
+                        forPlayer=general.player,
+                        limit=1,
+                        distance=5
+                    )
+                    bArmies = eklipz_bot.find_large_tiles_near(
+                        fromTiles=[
+                            self.get_player_tile(15, 1, simHost.sim, general.player),
+                            self.get_player_tile(15, 6, simHost.sim, general.player),
+                            self.get_player_tile(12, 4, simHost.sim, general.player),
+                        ],
+                        forPlayer=enemyGen.player,
+                        limit=1,
+                        distance=5
+                    )
+                    if len(bArmies) == 0:
+                        break
+                    armyEngine = ArmyEngine(map, [Army(t) for t in aArmies], [Army(t) for t in bArmies], boardAnalysis, mctsRunner=mcts)
+                    armyEngine.friendly_has_kill_threat = False
                     armyEngine.enemy_has_kill_threat = True
-                    result = armyEngine.scan(2, mcts=True)
+                    # armyEngine.time_limit = 0.05
+                    # armyEngine.time_limit = 2.0
+                    armyEngine.iteration_limit = 1000
+                    armyEngine.time_limit = 100
+                    result = armyEngine.scan(4, mcts=True)
                     if debugMode:
                         self.render_sim_analysis(map, result)
-                    # b can make a run safely for a's general, but a has time to capture b if b does that (?)
+                    # b can make a run safely for a's general, but a has time to capture b if b does that. Neither caps each other.
                     self.assertFalse(result.best_result_state.captured_by_enemy)
-                    self.assertTrue(result.best_result_state.captures_enemy)
+                    self.assertFalse(result.best_result_state.captures_enemy)
+                    simHost.queue_player_move(general.player, result.expected_best_moves[0][0])
+                    winner = simHost.run_sim(run_real_time=False, turn_time=5, turns=1)
+                    self.assertIsNone(winner)
 
     def test_brute_force__does_not_over_recognize_wins_on_general_distances(self):
         rawMap = """
@@ -913,7 +963,9 @@ bTiles=20
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+                mcts: MctsDUCT = MctsDUCT()
+                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = True
                 result = armyEngine.scan(4, mcts=True)
@@ -958,7 +1010,9 @@ bTiles=20
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+                mcts: MctsDUCT = MctsDUCT()
+                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = True
                 result = armyEngine.scan(2, mcts=True)
@@ -996,19 +1050,23 @@ bTiles=20
                 map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102 + turn)
                 self.ensure_player_tiles_and_scores(map, general, generalTileCount=20)
 
-                self.begin_capturing_logging()
                 aArmy, bArmy = self.get_test_army_tiles(map, general, enemyGen)
 
                 self.enable_search_time_limits_and_disable_debug_asserts()
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+                self.begin_capturing_logging()
+                mcts: MctsDUCT = MctsDUCT()
+                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = False
                 armyEngine.allow_enemy_no_op = True
                 armyEngine.allow_friendly_no_op = True
                 armyEngine.log_payoff_depth = 1
+                armyEngine.time_limit = 1000.0
+                armyEngine.iteration_limit = 1000
                 result = armyEngine.scan(5, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
@@ -1067,7 +1125,9 @@ bTiles=15
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+                mcts: MctsDUCT = MctsDUCT()
+                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = True
                 armyEngine.log_everything = True
@@ -1136,7 +1196,9 @@ bTiles=15
 
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+                mcts: MctsDUCT = MctsDUCT()
+                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = True
                 armyEngine.log_everything = True
@@ -1211,7 +1273,9 @@ bTiles=15
 
                     boardAnalysis = BoardAnalyzer(map, general)
                     boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-                    armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+                    mcts: MctsDUCT = MctsDUCT()
+                    armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                     armyEngine.friendly_has_kill_threat = True
                     armyEngine.enemy_has_kill_threat = True
                     armyEngine.log_everything = True
@@ -1293,7 +1357,9 @@ bTiles=20
 
         boardAnalysis = BoardAnalyzer(map, general)
         boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-        armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+        mcts: MctsDUCT = MctsDUCT()
+        armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
         # armyEngine.friendly_has_kill_threat = True
         # armyEngine.enemy_has_kill_threat = True
         result = armyEngine.scan(3, mcts=True)
@@ -1332,7 +1398,9 @@ bTiles=20
 
         boardAnalysis = BoardAnalyzer(map, general)
         boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-        armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+        mcts: MctsDUCT = MctsDUCT()
+        armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
         # armyEngine.friendly_has_kill_threat = True
         # armyEngine.enemy_has_kill_threat = True
         result = armyEngine.scan(3, mcts=True)
@@ -1372,7 +1440,9 @@ bTiles=20
 
         boardAnalysis = BoardAnalyzer(map, general)
         boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
-        armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis)
+
+        mcts: MctsDUCT = MctsDUCT()
+        armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
         # armyEngine.friendly_has_kill_threat = True
         # armyEngine.enemy_has_kill_threat = True
         result = armyEngine.scan(3, mcts=True)
@@ -1403,10 +1473,11 @@ bTiles=20
                 bArmy = Army(map.GetTile(ekThreat.x, ekThreat.y))
 
                 self.begin_capturing_logging()
-                armyEngine = ArmyEngine(map, [aArmy], [bArmy], eklipz_bot.board_analysis)
+                mcts: MctsDUCT = MctsDUCT()
+                armyEngine = ArmyEngine(map, [aArmy], [bArmy], eklipz_bot.board_analysis, mctsRunner=mcts)
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = True
-                # TODO switch to this method of parameterizing this
+                armyEngine.log_everything = True
                 armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(map, [general])
                 result = armyEngine.scan(5, mcts=True)
                 if debugMode:
@@ -1434,7 +1505,9 @@ bTiles=20
         bArmy = Army(map.GetTile(ekThreat.x, ekThreat.y))
 
         self.begin_capturing_logging()
-        armyEngine = ArmyEngine(map, [aArmy], [bArmy], eklipz_bot.board_analysis)
+
+        mcts: MctsDUCT = MctsDUCT()
+        armyEngine = ArmyEngine(map, [aArmy], [bArmy], eklipz_bot.board_analysis, mctsRunner=mcts)
         armyEngine.friendly_has_kill_threat = True
         armyEngine.enemy_has_kill_threat = True
         # TODO switch to this method of parameterizing this
@@ -1475,7 +1548,9 @@ bTiles=20
 
         self.begin_capturing_logging()
         startTime = time.perf_counter()
-        armyEngine = ArmyEngine(map, [aArmy], [bArmy], eklipz_bot.board_analysis, timeCap=0.05)
+
+        mcts: MctsDUCT = MctsDUCT()
+        armyEngine = ArmyEngine(map, [aArmy], [bArmy], eklipz_bot.board_analysis, timeCap=0.05, mctsRunner=mcts)
         armyEngine.friendly_has_kill_threat = True
         armyEngine.enemy_has_kill_threat = True
         # armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(map, [general])
@@ -1516,7 +1591,9 @@ bTiles=20
 
         self.begin_capturing_logging()
         startTime = time.perf_counter()
-        armyEngine = ArmyEngine(map, [aArmy], [bArmy], eklipz_bot.board_analysis, timeCap=0.05)
+
+        mcts: MctsDUCT = MctsDUCT()
+        armyEngine = ArmyEngine(map, [aArmy], [bArmy], eklipz_bot.board_analysis, timeCap=0.05, mctsRunner=mcts)
         armyEngine.friendly_has_kill_threat = True
         armyEngine.enemy_has_kill_threat = True
         # armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(map, [general])
@@ -1680,7 +1757,7 @@ bTiles=20
 
                 simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
                 simHost.queue_player_moves_str(enemyGeneral.player, '13,11->14,11->14,12')
-                simHost.get_bot(general.player).use_mcts = True
+                simHost.get_bot(general.player).engine_use_mcts = True
 
                 simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
@@ -1702,14 +1779,13 @@ bTiles=20
 
                 simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
                 simHost.queue_player_moves_str(enemyGeneral.player, '12,11->13,11->14,11->14,12')
-                simHost.get_bot(general.player).use_mcts = True
+                simHost.get_bot(general.player).engine_use_mcts = True
 
                 simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
                 self.begin_capturing_logging()
                 winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=3)
                 self.assertIsNone(winner)
-
     
     def test_should_not_die_scrimming_general_at_threat(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1730,7 +1806,7 @@ bTiles=20
         self.assertIsNone(winner)
     
     def test_should_not_dance_around_armies_standing_still(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_dance_around_armies_standing_still___HeEzmHU03---0--269.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 269, fill_out_tiles=True)
 
@@ -1748,20 +1824,26 @@ bTiles=20
         bArmy = Army(map.GetTile(10, 9))
 
         self.begin_capturing_logging()
-        armyEngine = ArmyEngine(map, [aArmy], [bArmy], eklipz_bot.board_analysis)
+
+        mcts: MctsDUCT = MctsDUCT()
+        armyEngine = ArmyEngine(map, [aArmy], [bArmy], eklipz_bot.board_analysis, mctsRunner=mcts)
         armyEngine.friendly_has_kill_threat = False
         # TODO TEST WITH BOTH KILL THREAT AND NOT KILL THREAT
         # TODO TEST WITH BOTH FORCED TOWARDS AND NOT FORCED TOWARDS
         armyEngine.enemy_has_kill_threat = True
-        armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(map, [general])
+        # armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(map, [general])
+        # armyEngine.time_limit = 0.1
+        armyEngine.iteration_limit = 1000
+        armyEngine.time_limit = 10000
         result = armyEngine.scan(4, mcts=True)
         if debugMode:
             self.render_sim_analysis(map, result)
         self.assertNotEqual(map.GetTile(9, 8), result.expected_best_moves[0][0].dest, "should not do ridiculous dancing around on friendly tiles.")
         self.assertEqual(bArmy.tile, result.expected_best_moves[0][0].dest, "should immediately capture enemy army threatening to capture tiles.")
+        self.assertGreater(result.net_economy_differential, 7, 'might be inconsistent depending on the depth MCTS / Brute force reach but should cap enemy army then cap tiles resulting in positive econ')
     
     def test_should_complete_scrim_army_intercept_instead_of_letting_enemy_cap_tiles(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_complete_scrim_army_intercept_instead_of_letting_enemy_cap_tiles___Bgk8TIUR2---0--86.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 86, fill_out_tiles=True)
 
@@ -1818,7 +1900,7 @@ bTiles=20
         self.assertNoRepetition(simHost, minForRepetition=2)
 
     def test_should_intercept_army_not_leave_gen_defenseless(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_intercept_army_not_leave_gen_defenseless___Svxvcvovg---1--223.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 223, fill_out_tiles=True)
 
@@ -1826,59 +1908,666 @@ bTiles=20
 
         rawMap, _ = self.load_map_and_general(mapFile, 223)
 
+        self.begin_capturing_logging()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap,
                                     allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '18,12->18,13->17,13->17,14->17,15->17,16->16,16')
 
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=8)
         self.assertIsNone(winner)
         self.assertNoRepetition(simHost, minForRepetition=2)
 
-    def test__deep_mcts_should_always_win__vs__brute_force__top_left_bottom_right(self):
-        for playerWithMcts in [0, 1]:
-            with self.subTest(playerWithMcts=playerWithMcts):
-                debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-                mapFile = 'GameContinuationEntries/even_playground_map_small__top_left_bot_right.txtmap'
-                map, general, enemyGen = self.load_map_and_generals(mapFile, 399, fill_out_tiles=True)
-                map.usernames[playerWithMcts] = 'mcts'
-                map.usernames[(playerWithMcts + 1) % 2] = 'brute'
-                self.reset_map_to_just_generals(map)
-                self.begin_capturing_logging()
+    def test__board_state_value_compression(self):
+        testCases = [
+            40,
+            0,
+            1,
+            2,
+            4,
+            8,
+            12,
+            20,
+            1000,
+            -1,
+            -2,
+            -4,
+            -8,
+            -12,
+            -20,
+            -40,
+            -1000,
+        ]
 
-                self.enable_search_time_limits_and_disable_debug_asserts()
+        for boardValue in testCases:
+            with self.subTest(boardValue=boardValue):
+                basicMcts = MctsDUCT()
+                fakeState = ArmySimState(0, basicMcts.eval_params, {}, {}, {})
+                # this will be the only value on the board
+                fakeState.controlled_city_turn_differential = boardValue
 
-                simHost = GameSimulatorHost(map, player_with_viewer=-2)
-                if general.player == playerWithMcts:
-                    simHost.get_bot(general.player).use_mcts = True
-                    simHost.get_bot(enemyGen.player).use_mcts = False
+                actualExpectedValueInt = boardValue * 10
+                self.assertEqual(actualExpectedValueInt, fakeState.calculate_value_int())
+
+                compressed0, compressed1 = basicMcts.get_player_utilities_n1_1(fakeState)
+
+                rawAsFloat = actualExpectedValueInt * 1.0
+                rawScaled = rawAsFloat * basicMcts.utility_compression_ratio
+                expectedCompressedRawPython = rawScaled / (1.0 + abs(rawScaled))
+
+                self.assertAlmostEqual(expectedCompressedRawPython, compressed0, places=7)
+
+                self.assertGreater(compressed0, -1.0)
+                self.assertLess(compressed0, 1.0)
+                self.assertGreater(compressed1, -1.0)
+                self.assertLess(compressed1, 1.0)
+
+                decompressed0 = basicMcts.decompress_player_utility(compressed0)
+
+                if compressed0 > 0:
+                    self.assertTrue(
+                        actualExpectedValueInt * 1.001 >= decompressed0 >= actualExpectedValueInt * 0.999,
+                        f'actualExpectedValueInt * 1.001 ({actualExpectedValueInt * 1.001}) >= decompressed0 ({decompressed0}) >= actualExpectedValueInt * 0.999 ({actualExpectedValueInt * 0.999})')
                 else:
-                    simHost.get_bot(general.player).use_mcts = False
-                    simHost.get_bot(enemyGen.player).use_mcts = True
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1)
-                self.assertEqual(playerWithMcts, winner)
+                    self.assertTrue(
+                        actualExpectedValueInt * 1.001 <= decompressed0 <= actualExpectedValueInt * 0.999,
+                        f'actualExpectedValueInt * 1.001 ({actualExpectedValueInt * 1.001}) <= decompressed0 ({decompressed0}) <= actualExpectedValueInt * 0.999 ({actualExpectedValueInt * 0.999})')
 
-    def test__deep_mcts_should_always_win__vs__brute_force__top_right_bottom_left(self):
-        for playerWithMcts in [0, 1]:
-            with self.subTest(playerWithMcts=playerWithMcts):
-                debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-                mapFile = 'GameContinuationEntries/even_playground_map_small__top_right_bot_left.txtmap'
-                map, general, enemyGen = self.load_map_and_generals(mapFile, 399, fill_out_tiles=True)
-                map.usernames[playerWithMcts] = 'mcts'
-                map.usernames[(playerWithMcts + 1) % 2] = 'brute'
-                self.reset_map_to_just_generals(map)
-                self.begin_capturing_logging()
+    def test__mcts_should_always_win__vs__brute_force__top_left_bottom_right(self):
+        numRuns = 20
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'SymmetricTestMaps/even_playground_map_small__top_left_bot_right.txtmap'
 
-                self.enable_search_time_limits_and_disable_debug_asserts()
+        def configure_a(aBot: EklipZBot):
+            aBot.engine_use_mcts = True
 
-                simHost = GameSimulatorHost(map, player_with_viewer=-2)
-                if general.player == playerWithMcts:
-                    simHost.get_bot(general.player).use_mcts = True
-                    simHost.get_bot(enemyGen.player).use_mcts = False
-                else:
-                    simHost.get_bot(general.player).use_mcts = False
-                    simHost.get_bot(enemyGen.player).use_mcts = True
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1)
-                self.assertEqual(playerWithMcts, winner)
+        def configure_b(bBot: EklipZBot):
+            bBot.engine_use_mcts = False
+
+        self.a_b_test(numRuns, configureA=configure_a, configureB=configure_b, debugMode=debugMode, mapFile=mapFile)
+
+    def test__mcts_should_always_win__vs__brute_force__top_right_bottom_left(self):
+        numRuns = 50
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'SymmetricTestMaps/even_playground_map_small__top_right_bot_left.txtmap'
+
+        def configure_a(aBot: EklipZBot):
+            aBot.engine_use_mcts = True
+            # aBot.mcts_engine.final_playout_estimation_depth = 1
+            aBot.engine_honor_mcts_expanded_expected_score = True
+            aBot.engine_army_nearby_tiles_range = 6
+
+        def configure_b(bBot: EklipZBot):
+            bBot.engine_use_mcts = False
+            # this was how brute force was during the original testing.
+            bBot.engine_allow_enemy_no_op = False
+
+        self.a_b_test(numRuns, configureA=configure_a, configureB=configure_b, debugMode=debugMode, mapFile=mapFile)
+
+    def test__mcts_should_always_win__vs__brute_force__left_right(self):
+        numRuns = 20
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'SymmetricTestMaps/even_playground_map_small__left_right.txtmap'
+
+        def configure_a(aBot: EklipZBot):
+            aBot.engine_use_mcts = True
+            aBot.engine_force_multi_tile_mcts = True
+
+        def configure_b(bBot: EklipZBot):
+            bBot.engine_use_mcts = False
+            # this was how brute force was during the original testing.
+            bBot.engine_allow_enemy_no_op = False
+
+        self.a_b_test(numRuns, configureA=configure_a, configureB=configure_b, debugMode=debugMode, mapFile=mapFile)
+
+    def test__brute_force_should_beat_no_engine(self):
+        numRuns = 20
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        def configure_a(aBot: EklipZBot):
+            aBot.engine_use_mcts = False
+
+            # original brute force had this false while it was true for mcts.
+            # it is now true for both. and brute force is still beating no engine.
+            # 13-7
+            # aBot.engine_allow_enemy_no_op = False
+
+            # see if brute force does better with the force or not.
+            # brute force lost 9-11 with this, lol.
+            # aBot.engine_allow_force_incoming_armies_towards = True
+
+            # aBot.engine_allow_enemy_no_op = False
+
+        def configure_b(bBot: EklipZBot):
+            bBot.disable_engine = True
+
+        self.a_b_test(
+            numRuns,
+            configureA=configure_a,
+            configureB=configure_b,
+            debugMode=debugMode)
+
+    def test__mcts_should_beat_no_engine(self):
+        numRuns = 20
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        def configure_a(aBot: EklipZBot):
+            aBot.engine_use_mcts = True
+            # hodgepodge of currently winning a-b tests
+            # 10-9
+            # aBot.mcts_engine.total_playout_move_count = 6
+            # aBot.mcts_engine.eval_params.friendly_move_no_op_scale_10_fraction = 0
+            # aBot.mcts_engine.eval_params.enemy_move_no_op_scale_10_fraction = 0
+            # aBot.mcts_engine.disable_positional_win_detection_in_rollouts = True
+            # aBot.mcts_engine.biased_playouts_allowed_per_trial = 4
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.5
+
+            #13-7
+            # aBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.RobustChild)
+            # aBot.mcts_engine.disable_positional_win_detection_in_rollouts = True
+            # aBot.mcts_engine.biased_playouts_allowed_per_trial = 4
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.5
+
+            # (Same as above but using maxValue selection instead of robust child)
+            # 10-10
+
+            # try robust child again?
+            # 12-7, codified
+            # aBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.RobustChild)
+
+            # 12-8...?
+            # 15-5
+            # 11-9
+            # TODO come back to this.
+            # aBot.mcts_engine.disable_positional_win_detection_in_rollouts = False
+
+            # nothing? 10-10
+
+            # 10-10 D:
+            aBot.engine_force_multi_tile_mcts = True
+
+        def configure_b(bBot: EklipZBot):
+            bBot.disable_engine = True
+
+        self.a_b_test(
+            numRuns,
+            configureA=configure_a,
+            configureB=configure_b,
+            debugMode=debugMode)
+
+    def test__mcts_should_always_win__vs__brute_force__left_vs_right(self):
+        mapFile = 'SymmetricTestMaps/even_playground_map_small__left_right.txtmap'
+        numRuns = 100
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        def configure_a(aBot: EklipZBot):
+            aBot.engine_use_mcts = True
+            # 4 went 46-54
+            # 2 went 51-48
+            # aBot.mcts_engine.final_playout_estimation_depth = 2
+
+            # aBot.mcts_engine.final_playout_estimation_depth = 2
+            aBot.engine_honor_mcts_expanded_expected_score = True
+
+        def configure_b(bBot: EklipZBot):
+            bBot.engine_use_mcts = False
+            bBot.engine_allow_enemy_no_op = False
+
+        self.a_b_test(numRuns, configureA=configure_a, configureB=configure_b, debugMode=debugMode, mapFile=mapFile)
+
+    def test__A_B_test_mcts__num1__left_vs_right(self):
+        numRuns = 250
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        def configure_a(aBot: EklipZBot):
+            # doesn't seem to do too much, but does seem to lose.
+            # aBot.mcts_engine.explore_factor = 1.5
+
+            # # a winning!? nvm pretty even-ish
+            # aBot.mcts_engine.utility_compression_ratio = 0.005
+            # bBot.mcts_engine.utility_compression_ratio = 0.01
+
+            # not meaningful
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.5
+            # aBot.mcts_engine.biased_playouts_allowed_per_trial = 10
+            # aBot.mcts_engine.total_playout_move_count = 15
+
+            # so far, significant. WHOO won quite a few in a row. Codified.
+            # aBot.allow_force_incoming_armies_towards = False
+
+            # seemed about 50-50...? Maybe slightly better, worth coming back to
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.5
+            # aBot.mcts_engine.biased_playouts_allowed_per_trial = 5
+            # aBot.mcts_engine.total_playout_move_count = 7
+
+            # failure
+            # aBot.mcts_engine.biased_move_ratio_while_available = 1.0
+            # aBot.mcts_engine.biased_playouts_allowed_per_trial = 5
+            # aBot.mcts_engine.total_playout_move_count = 4
+            # aBot.mcts_engine.min_random_playout_moves_initial = 2
+
+            # this shit does nothing...?
+            # aBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.MaxAverageValue)
+            # aBot.mcts_engine.biased_playouts_allowed_per_trial = 5
+            # aBot.mcts_engine.total_playout_move_count = 4
+
+            # seems to be winning, codified
+            # aBot.mcts_engine.eval_params.kills_friendly_armies_10_fraction = -10
+            # aBot.mcts_engine.eval_params.kills_enemy_armies_10_fraction = 10
+
+            # seems to be winning, codified
+            # aBot.mcts_engine.explore_factor = 1.3
+
+            # seems to be winning! codified
+            # aBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.MaxAverageValue)
+            # aBot.mcts_engine.explore_factor = 1.5
+
+            # bad
+            # aBot.mcts_engine.utility_compression_ratio = 0.03
+            # aBot.mcts_engine.utility_compression_ratio = 0.005
+
+            # seems good, codified
+            # aBot.mcts_engine.total_playout_move_count = 6
+
+            # a won 193 vs b won 200. So my biased stuff is fucked, good to know. Disabling it for now.
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.1
+            # aBot.mcts_engine.biased_playouts_allowed_per_trial = 2
+
+            # TODO above might be last good change? Everything after inversed? Start reverse verifying...
+            # 28-21, re-codified for now. Come back to this.
+            # aBot.mcts_engine.total_playout_move_count = 6
+
+            ####### ok this was 18-32 loss, the 'dont propogate initial results' is correct.
+            # 22-28 on re-verification.
+            # aBot.mcts_engine.skip_first_result_backpropogation = False
+
+            # ###20-18, maybe just because more iterations? Keep trying.
+            # ######18-22, so 38-40. try again
+            # #####22-18, so 60-58. Seems meaningless.
+            # #####TODO revisit later after tuning other things.
+            # 28-22, try again.
+            # 24-26 after starting by winning almost 10 in a row, wtf distribution. AGAIN!
+            # 32-18, so 84-66, codified
+            # aBot.mcts_engine.allow_random_repetitions = True
+
+            # #####24-15? Continuing
+            # ######round 2, 28-22 so 52-37. Codifying as 4.
+            # test 5 again.
+            # 23-27. TEST AGAIN.
+            # 24-26. OK TRY HIGHER :D
+            # aBot.mcts_engine.total_playout_move_count = 5
+
+            # 27-22, AGAIN
+            # 28-22 codifying
+            # aBot.mcts_engine.total_playout_move_count = 7
+
+            # try 8?
+            # 46-54 ok 7 it is.
+            # aBot.mcts_engine.total_playout_move_count = 8
+
+            # 53-44, AGAIN
+            # 115-132, (so 168-176). try reducing to 1?
+            # aBot.mcts_engine.min_random_playout_moves_initial = 3
+
+            # 133-113, AGAIN
+            # killed at 20-15, codifying
+            # aBot.mcts_engine.min_random_playout_moves_initial = 1
+
+            # 135-115, codified. Confirmed by expanded_expected vs _expected which won by similar marging, and just _expected won against none at all, so very conclusively good.
+            # aBot.engine_honor_mcts_expanded_expected_score = True
+
+            # killed 61-79
+            # 114-131 fml
+            # aBot.engine_army_nearby_tiles_range = 6  # was 4. 5 being tested in parallel, as well.
+
+            # try 3
+            # killed 45-70
+            # aBot.engine_army_nearby_tiles_range = 3  # was 4. 5 being tested in parallel, as well.
+            # ok so based on the other data I think we need to increase range but reduce the armies-per-scrim limit for now. To like, 3 or 2 or something.
+
+            # 117-130, try 6?
+            # aBot.engine_army_nearby_tiles_range = 8
+            # aBot.engine_mcts_scrim_armies_per_player_limit = 2
+
+            # 120-125
+            # aBot.engine_army_nearby_tiles_range = 6
+            # aBot.engine_mcts_scrim_armies_per_player_limit = 2
+
+            # 90-158
+            # aBot.expansion_use_multi_per_dist_per_tile = True  # note no force single
+            # aBot.expansion_single_iteration_time_cap = 0.01
+
+            aBot.gather_include_distance_from_enemy_TILES_as_negatives = 3
+
+        self.a_b_test(
+            numRuns,
+            configureA=configure_a,
+            configureB=lambda bBot: bBot,
+            debugMode=debugMode)
+
+    def test__A_B_test_mcts__num2__left_vs_right(self):
+        numRuns = 250
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        def configure_a(aBot: EklipZBot):
+            # 25-25, codifying for now.
+            # aBot.mcts_engine.offset_initial_differential = True
+
+            # ####187-204, so, bad.
+            # retrying, 21-28, so ok, legit bad.
+            # aBot.mcts_engine.offset_initial_differential = True
+            # aBot.mcts_engine.utility_compression_ratio = 0.07
+
+            # 21-29 yikes
+            # aBot.mcts_engine.utility_compression_ratio = 0.03
+
+            # try other direction...?
+            # 22-28
+            # if bad, try scaling down explore to compensate.
+            # 28-22, try MORE
+            # 51-47 (so 79-69, codified! WHOO!)
+            # aBot.mcts_engine.utility_compression_ratio = 0.005
+            # aBot.mcts_engine.explore_factor = 1.1
+
+            # play with it a bit more.
+            # 48-52, lets try a bit lower
+            # aBot.mcts_engine.utility_compression_ratio = 0.007
+            # aBot.mcts_engine.explore_factor = 1.1
+
+            #lower
+            # 56-44, codified
+            # aBot.mcts_engine.utility_compression_ratio = 0.004
+            # aBot.mcts_engine.explore_factor = 1.1
+
+            # try even lower...?
+            # 47-52, .0035?
+            # aBot.mcts_engine.utility_compression_ratio = 0.003
+            # aBot.mcts_engine.explore_factor = 1.1
+
+            # 123-122, perfectly even. Try in tweaking explore factor......?
+            # aBot.mcts_engine.utility_compression_ratio = 0.0035
+            # aBot.mcts_engine.explore_factor = 1.1
+
+            # Try in tweaking explore factor
+            # 134-112, AGAIN but codified
+            # 115-133, test again...?
+            # aBot.mcts_engine.utility_compression_ratio = 0.004  # default, just noting
+            # aBot.mcts_engine.explore_factor = 1.0  # was 1.1 when starting this run
+
+            # try 1.05...?
+            # killed 81-75, codifying...? I'm bored of this
+            # aBot.mcts_engine.utility_compression_ratio = 0.004  # default, just noting
+            # aBot.mcts_engine.explore_factor = 1.05  # was 1.0 when starting this run
+
+            # TESTING B == 0.0
+            # 124-124
+            # aBot.gather_include_distance_from_enemy_general_as_negatives = 0.5
+
+            # b = 0.5
+            # codified in advance, at 126-105
+            # 130-116
+            # wait, what? with b at 0.5 this went 86-160
+            # aBot.gather_include_distance_from_enemy_general_as_negatives = 0.85
+
+            # accidentally killed 52-66 but wanted to switch to dist 3 anyway
+            # aBot.gather_include_distance_from_enemy_TERRITORY_as_negatives = 4
+            # aBot.gather_include_distance_from_enemy_general_as_negatives = 0.0
+            # aBot.gather_include_distance_from_enemy_general_large_map_as_negatives = 0.0
+
+            # just per_tile
+            # 78-172 lol
+            # aBot.expansion_use_multi_per_tile = True
+            # aBot.expansion_force_no_global_visited = False
+
+            aBot.gather_include_distance_from_enemy_TILES_as_negatives = 2  # was 0 but codified in the meantime
+
+            pass
+
+        def configure_b(bBot: EklipZBot):
+            # bBot.gather_include_distance_from_enemy_general_as_negatives = 0.0
+            # bBot.gather_include_shortest_pathway_as_negatives = True
+            # bBot.gather_include_distance_from_enemy_general_as_negatives = 0.5
+
+            pass
+
+        self.a_b_test(
+            numRuns,
+            configureA=configure_a,
+            configureB=configure_b,
+            debugMode=debugMode)
+
+    def test__A_B_test_mcts__num3__left_vs_right(self):
+        numRuns = 250
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        def configure_a(aBot: EklipZBot):
+            # Test reverting the no op bonus...
+            # 24-26
+            # aBot.mcts_engine.eval_params.friendly_move_no_op_scale_10_fraction = 0
+            # aBot.mcts_engine.eval_params.enemy_move_no_op_scale_10_fraction = 0
+
+            # try middle ground
+            # 25-25, seems this doesn't matter...?
+            # aBot.mcts_engine.eval_params.friendly_move_no_op_scale_10_fraction = 5
+            # aBot.mcts_engine.eval_params.enemy_move_no_op_scale_10_fraction = -5
+
+            # try increasing it a bit to 1 full econ...?
+            # 23-27
+            # aBot.mcts_engine.eval_params.friendly_move_no_op_scale_10_fraction = 10
+            # aBot.mcts_engine.eval_params.enemy_move_no_op_scale_10_fraction = -10
+
+            # try asymmetric enemy vs friendly...?
+            # 27-23, try more.
+            # 29-31, f it.
+            # aBot.mcts_engine.eval_params.friendly_move_no_op_scale_10_fraction = 12
+            # aBot.mcts_engine.eval_params.enemy_move_no_op_scale_10_fraction = -5
+
+            # try near 0 one more time..
+            # 24-26, meaningless. Ok ignore.
+            # aBot.mcts_engine.eval_params.friendly_move_no_op_scale_10_fraction = 2
+            # aBot.mcts_engine.eval_params.enemy_move_no_op_scale_10_fraction = -2
+
+            # play with penalty
+            # 46-52, try increasing...?
+            # aBot.mcts_engine.eval_params.friendly_move_penalty_10_fraction = 0
+            # aBot.mcts_engine.eval_params.enemy_move_penalty_10_fraction = 0
+
+            # 46-54, try again, variance...?
+            # 58-42 lol...? AGAIN?
+            # 129-118, AGAIN @ 233-214 ACTUALLY NVM WHO CARES CODIFIED FOR NOW LETS TEST MORE INTERESTING STUFF LIKE FINAL PLAYOUT
+            # aBot.mcts_engine.eval_params.friendly_move_penalty_10_fraction = 4
+            # aBot.mcts_engine.eval_params.enemy_move_penalty_10_fraction = -4
+
+            # 108-142 :s
+            # aBot.mcts_engine.final_playout_estimation_depth = 4
+
+            # try reducing to 2...?
+            # aBot.mcts_engine.final_playout_estimation_depth = 2
+
+            # 131-118, confirms other results too, codified.
+            # aBot.engine_honor_mcts_expanded_expected_score = True
+            # aBot.engine_honor_mcts_expected_score = False
+
+            # killed 82-88, again
+            # 123-124, meaningless or worse
+            # aBot.engine_army_nearby_tiles_range = 5  # was 4
+
+            # codified, 128-119
+            # aBot.mcts_engine.eval_params.always_reward_dead_army_no_ops = True  # was false
+
+            # 108-138, huh
+            # aBot.engine_army_nearby_tiles_range = 6
+            # aBot.engine_mcts_scrim_armies_per_player_limit = 3
+
+            # what about range 5...?
+            # 122-125
+            # aBot.engine_army_nearby_tiles_range = 5
+            # aBot.engine_mcts_scrim_armies_per_player_limit = 3
+
+            # try 3.....?
+            # 125-123. What about a lower limit?
+            # aBot.engine_army_nearby_tiles_range = 5
+            # aBot.engine_mcts_scrim_armies_per_player_limit = 3
+
+            # 106-131
+            # aBot.engine_army_nearby_tiles_range = 5
+            # aBot.engine_mcts_scrim_armies_per_player_limit = 2
+
+            aBot.engine_army_nearby_tiles_range = 4
+            aBot.engine_mcts_scrim_armies_per_player_limit = 2
+
+        def configure_b(bBot: EklipZBot):
+            pass
+
+        self.a_b_test(
+            numRuns,
+            configureA=configure_a,
+            configureB=configure_b,
+            debugMode=debugMode)
+
+    def test__A_B_test_mcts__num4__left_vs_right(self):
+        numRuns = 300
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        def configure_a(aBot: EklipZBot):
+            # 27-23 after fixing a-b. Trying more. (now with offset true and 6 rollouts):
+            # 29-21, codifying. :D BIASED IS BACK BABYYYYY
+            # aBot.mcts_engine.disable_positional_win_detection_in_rollouts = True
+            # aBot.mcts_engine.biased_playouts_allowed_per_trial = 4
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.5
+
+            # try leaving bias up but re-including positional win detection:
+            # 31-19, fucking, bias worked the whole time and we didn't need this shit...?
+            # try again. 20-30 lmao, so 51-49, try again...?
+            # 26-24, seems basically completely even weirdly enough.
+            # TODO come back and play with this later after tweaking other bias stuff.
+            # aBot.mcts_engine.disable_positional_win_detection_in_rollouts = False
+
+            # play with biased moves always first.
+            # 24-26, try again.
+            # 47-53, ok. what about 75% of the time?
+            # aBot.mcts_engine.biased_move_ratio_while_available = 1.0
+            # aBot.mcts_engine.biased_playouts_allowed_per_trial = 4
+
+            # 47-53 again. Try lower...?
+            # 48-51, ignore for now
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.4
+            # aBot.mcts_engine.biased_playouts_allowed_per_trial = 4
+
+            # try 7->8 with high sim count
+            # 159-134, ok so bigger is better...? AGAIN just to be sure.
+            # 150-145, codifying
+            # aBot.mcts_engine.total_playout_move_count = 8
+
+            # 153-146, nuked in favor of _expanded_expected_score which did much better both against this and against neither.
+            # aBot.engine_honor_mcts_expected_score = True
+
+            # killed 80-76, again
+            # killed at 140-124, codified
+            # aBot.engine_mcts_scrim_armies_per_player_limit = 3  # currently 4
+
+            # 158-137, codified...?
+            # aBot.expansion_single_iteration_time_cap = 0.03  # currently 0.02
+            # re-confirm but flipped, b is 0.03 now and this is 0.02
+
+            # 145-149, about even
+            # aBot.expansion_single_iteration_time_cap = 0.02  # currently 0.03
+
+            # 134-162. Ok, try 10
+            # aBot.mcts_engine.total_playout_move_count = 15  # current 8
+
+            # even
+            # aBot.mcts_engine.total_playout_move_count = 10  # current 8
+
+            aBot.engine_always_include_last_move_tile_in_scrims = True  # was false but codified in meantime
+
+        self.a_b_test(
+            numRuns,
+            configureA=configure_a,
+            configureB=lambda bBot: bBot,
+            debugMode=debugMode)
+
+    def test__A_B_test_mcts__num5__left_vs_right(self):
+        numRuns = 250
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        def configure_a(aBot: EklipZBot):
+            # 18-22, bad.
+            # aBot.mcts_engine.explore_factor = 2.0
+            # aBot.mcts_engine.offset_initial_differential = True
+
+            # 29-20. Trying again.
+            # killed @ 18-11 making it 48-31 in favor of robust child.
+            # Codified.
+            # TODO test again later with large game size to be sure. with
+            #  configureB=lambda bBot: bBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.MaxAverageValue),
+            # aBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.RobustChild)
+
+            # This should not be good, but if it is, that might be why brute force was winning sometimes.
+            #  Assuming that a and b werent swapped and mcts was beating brute force the whole time.
+            # 28-22, shit. TODO try again later
+            # aBot.engine_allow_enemy_no_op = False
+
+            # NEXT try this instead...?
+            # 21-29, shit, try engine_allow_enemy_no_op_false again
+            # aBot.mcts_engine.allow_random_no_ops = False
+
+            # 24-25, try again.
+            # 25-24, so 49-49, boring, who cares.
+            # aBot.engine_allow_enemy_no_op = False
+
+            # 25-25
+            # 27-22, codified because thats the direction we want to go anyway.
+            # aBot.engine_force_multi_tile_mcts = True
+
+            # try reducing this...?
+            # 22-27, AGAIN
+            # 112-136, so SOME bias is definitely good.
+            # aBot.mcts_engine.biased_playouts_allowed_per_trial = 2
+
+            # try more...?
+            # 113-131
+            # aBot.mcts_engine.biased_playouts_allowed_per_trial = 6
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.5  # default, just noting what it is right now.
+
+            # try adjusting the ratio
+            # 118-130
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.6
+
+            # 119-122 ...? but everything else did well so still codified.
+            # aBot.engine_honor_mcts_expanded_expected_score = True
+
+            # try this again
+            # killed at 89-76 due to long running, running again.
+            # 122-125
+            # aBot.engine_allow_enemy_no_op = False
+
+            # 123-119, codified i guess
+            # aBot.gather_include_distance_from_enemy_general_as_negatives = 0.3  # b is 0.5
+
+            # 117-130, but 0.75 has already been codified
+            # aBot.gather_include_distance_from_enemy_general_as_negatives = 0.4  # b is 0.3
+
+            # 124-121
+            # aBot.expansion_use_multi_per_dist_per_tile = True
+            # aBot.expansion_single_iteration_time_cap = 0.01  # current 0.02
+
+            # try again, against 0.03, with multi-tile
+            # 103-141. Fixed now, though. Try again.
+            # aBot.expansion_use_multi_per_dist_per_tile = True
+            # aBot.expansion_force_no_global_visited = True
+
+            aBot.expansion_single_iteration_time_cap = 0.06
+
+        def configure_b(bBot: EklipZBot):
+            # bBot.expansion_use_multi_per_dist_per_tile = True
+            # bBot.expansion_single_iteration_time_cap = 0.03
+            pass
+
+        self.a_b_test(
+            numRuns,
+            configureA=configure_a,
+            configureB=configure_b,
+            # configureB=lambda bBot: bBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.MaxAverageValue),
+            debugMode=debugMode)

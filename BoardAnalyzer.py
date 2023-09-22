@@ -22,15 +22,27 @@ class BoardAnalyzer:
 		self.general: Tile = general
 		self.should_rescan = False
 
+		# TODO probably calc these chokes for the enemy, too?
 		self.innerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
 		"""Tiles that only have one outward path away from our general."""
 
 		self.outerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
 		"""Tiles that only have a single inward path towards our general."""
 
-		# TODO probably calc these chokes for the enemy, too?
-
 		self.intergeneral_analysis: ArmyAnalyzer = None
+
+		self.core_play_area_matrix: MapMatrix[bool] = None
+
+		self.extended_play_area_matrix: MapMatrix[bool] = None
+
+		self.inter_general_distance: int = 0
+		"""The (possibly estimated) distance between our gen and target player gen."""
+
+		self.within_core_play_area_threshold: int = 1
+		"""The cutoff point where we draw pink borders as the 'core' play area between generals."""
+
+		self.within_extended_play_area_threshold: int = 2
+		"""The cutoff point where we draw yellow borders as the 'extended' play area between generals."""
 
 		self.rescan_chokes()
 
@@ -77,6 +89,24 @@ class BoardAnalyzer:
 
 	def rebuild_intergeneral_analysis(self, opponentGeneral):
 		self.intergeneral_analysis = ArmyAnalyzer(self.map, self.general, opponentGeneral)
+
+		enemyDistMap = self.intergeneral_analysis.bMap
+		generalDistMap = self.intergeneral_analysis.aMap
+		general = self.general
+
+		self.inter_general_distance = enemyDistMap[general.x][general.y]
+		self.within_extended_play_area_threshold = int((self.inter_general_distance + 2) * 1.2)
+		self.within_core_play_area_threshold = int((self.inter_general_distance + 1) * 1.1)
+
+		self.extended_play_area_matrix: MapMatrix[bool] = MapMatrix(self.map, initVal=False)
+		self.core_play_area_matrix: MapMatrix[bool] = MapMatrix(self.map, initVal=False)
+
+		for tile in self.map.pathableTiles:
+			tileDistSum = enemyDistMap[tile.x][tile.y] + generalDistMap[tile.x][tile.y]
+			if tileDistSum < self.within_extended_play_area_threshold:
+				self.extended_play_area_matrix[tile] = True
+			if tileDistSum < self.within_core_play_area_threshold:
+				self.core_play_area_matrix[tile] = True
 
 	def get_tile_usefulness_score(self, x: int, y: int):
 		# score a tile based on how far out of the play area it is and whether it is on a good flank path

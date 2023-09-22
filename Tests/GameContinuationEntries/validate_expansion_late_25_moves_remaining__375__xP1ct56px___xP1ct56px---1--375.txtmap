@@ -1,0 +1,46 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                              M                                                      M    b1   bC6
+          M    M         M              M    b3   M              M    b2   M    M    bG5  b1   bC6  b1   b1
+     M                        b2   b2   b4   b2   M                   b1   b2   b2   b1   M         M    M
+M                   M         a3   b2   M    b2   b4   M         b2   b2   b2   b2   b1   b2   b2   b2   b2
+                              a3   M    M    b2   b4   M    b3   b3   M    M    b2   b1   b2        C50  M
+                    a3   a4   a4        C44  b2   b2   b3   M    b3   b6   M    b2   b25  b2   M
+               M    a3   M              M    b2   b2   b2   b2   M    b3   b3   b1   b1   b1   M    M
+M              M    a3        M    a4   a1   M    M    b2   b2   b3   b3   M    b18  b1   b1   b1
+               a3   a3   M    a4   a4   a1   a1   a1   b2   M    b3   b3   b2   b3   M    M    b1
+               aG46 M         a4   MN1  a1   a2   b2   b2   a2   M    a2   b2   b3   a2             C45  M
+     M    M    a3   a3   a3   a2   a3   a1   M    a2   a2   a2   b2   b2   b2   a2   a2
+               a4   a5   M    a2   a2   a2   a4   a2   M         a2   a2                       M         M
+          a5   a4   a4   a4   a4   a3   a2   a2   a2        M              M                        M
+     M    a5   a4   a5   a5   M    M    a2   a2   a2   M                                       M    M
+          a5   a2   a2   C47  M    a2   a2   M                   M    M
+     M         a2   a2   a3   a2   a2   a2   a2   a2                  M    M                   M
+          a2   a2   M    b3   M    M    M    b1   a2   M                             M
+               a2   a3   M    M    M         b2                                                M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=3,9
+turn=375
+bot_player_index=1
+aTiles=88
+aScore=253
+aStandingArmy=165
+aStars=78
+aCityCount=2
+aGeneral=3,9
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=284
+bTiles=77
+bScore=212
+bStandingArmy=135
+bStars=70
+bCityCount=3
+bGeneral=17,1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=5
+bot_target_player=0

@@ -10,7 +10,7 @@ def solve_multiple_choice_knapsack(
         values: typing.List[int],
         groups: typing.List[int],
         noLog: bool = True,
-        forceLongRun: bool = False
+        longRuntimeThreshold = 0.025
 ) -> typing.Tuple[int, typing.List[typing.Any]]:
     """
     Solves knapsack where you need to knapsack a bunch of things, but must pick at most one thing from each group of things
@@ -60,8 +60,8 @@ def solve_multiple_choice_knapsack(
         maxGroupSize = curGroupSize
 
     # if BYPASS_TIMEOUTS_FOR_DEBUGGING:
-    for value in values:
-        if not isinstance(value, int):
+    if len(values) > 0:
+        if not isinstance(values[0], int):
             raise AssertionError('values are all required to be ints or this algo will not function')
 
     n = len(values)
@@ -75,10 +75,10 @@ def solve_multiple_choice_knapsack(
         # this is a special case that behaves like 0-1 knapsack and doesn't multiply by max group size at all, due to the -1 check in the loop below.
         estTime = n * capacity * 0.00000022
 
-    if estTime > 0.025 and not forceLongRun:
+    if estTime > longRuntimeThreshold:
         raise AssertionError(f"Knapsack potential long run est {estTime:.3f}: the inputs (n {n} * capacity {capacity} * math.sqrt(maxGroupSize {maxGroupSize}) {maxGrSq}) are going to result in a substantial runtime, maybe try a different algorithm")
     if not noLog:
-        logging.info(f'estimated knapsack time: {estTime:.3f} (n {n} * capacity {capacity} * math.sqrt(maxGroupSize {maxGroupSize}) {maxGrSq})')
+        logging.info(f'estimated knapsack time: {estTime:.3f} (n {n} * capacity {capacity} * math.sqrt(maxGroupSize {maxGroupSize}) {maxGrSq:.1f})')
 
     for curCapacity in range(capacity + 1):
         for i in range(n + 1):

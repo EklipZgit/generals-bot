@@ -16,10 +16,30 @@ class SimTile(object):
         self.player = sourceTile.player if player is None else player
 
     def __str__(self):
-        return f"[{self.source_tile.x},{self.source_tile.y} p{self.player} a{self.army}]"
+        return f"[{self.source_tile.x},{self.source_tile.y} p{self.player} a{self.army} ({repr(self.source_tile)})]"
 
     def __repr__(self):
         return str(self)
+
+
+class ArmySimEvaluationParams(object):
+    def __init__(self):
+        self.friendly_move_penalty_10_fraction = 4
+        self.enemy_move_penalty_10_fraction = -4
+
+        self.kills_friendly_armies_10_fraction = -10
+        """This is added to the score if all friendly armies are killed."""
+
+        self.kills_enemy_armies_10_fraction = 10
+        """This is added to the score if all enemy armies are killed."""
+
+        self.friendly_move_no_op_scale_10_fraction = 8
+        """zero or positive. The econ value scale 10 that friendly gets from a no-op, in addition to no move penalty they already get from no-op."""
+
+        self.enemy_move_no_op_scale_10_fraction = -8
+        """zero or negative. The econ value scale 10 that enemy gets from a no-op, in addition to no move penalty they already get from no-op."""
+
+        self.always_reward_dead_army_no_ops: bool = True
 
 # @jitclass([
 #     ('remaining_cycle_turns', types.int64),
@@ -52,10 +72,11 @@ class SimTile(object):
 class ArmySimState(object):
     def __init__(
             self,
-            remainingCycleTurns: int,
+            turn: int,
+            evaluationParams: ArmySimEvaluationParams,
             simTiles: typing.Dict[Tile, SimTile] | None = None,
             friendlyLivingArmies: typing.Dict[Tile, SimTile] | None = None,
-            enemyLivingArmies: typing.Dict[Tile, SimTile] | None = None
+            enemyLivingArmies: typing.Dict[Tile, SimTile] | None = None,
     ):
         if simTiles is None:
             simTiles = {}
@@ -66,7 +87,9 @@ class ArmySimState(object):
         if enemyLivingArmies is None:
             enemyLivingArmies = {}
 
-        self.remaining_cycle_turns: int = remainingCycleTurns
+        self.eval_params: ArmySimEvaluationParams = evaluationParams
+
+        self.turn: int = turn
 
         self.depth: int = 0
 
@@ -77,6 +100,7 @@ class ArmySimState(object):
         """
         negative means they have that many more cities active than us, positive means we have more. 
         This is as of the CURRENT board state; bonuses owned is covered under the *city_control_turns fields.
+        If players start even, and enemy city is captured, the value in this will be 2 because that player is -1 city and our player is +1 city.
         """
 
         self.captures_enemy: bool = False
@@ -100,6 +124,11 @@ class ArmySimState(object):
         self.sim_tiles: typing.Dict[Tile, SimTile] = simTiles
         """
         the set of tiles that have been involved in the scrim so far, tracking the current owner and army amount on them
+        """
+
+        self.incrementing: typing.Set[Tile] = set()
+        """
+        The set of tiles in the scrim that are currently incrementing (city or general)
         """
 
         self.controlled_city_turn_differential: int = 0
@@ -155,7 +184,7 @@ class ArmySimState(object):
         copy.friendly_move = None
         copy.enemy_move = None
         copy.depth += 1
-        copy.remaining_cycle_turns -= 1
+        copy.turn += 1
         copy.prev_friendly_move = self.friendly_move
         copy.prev_enemy_move = self.enemy_move
         copy.parent_board = self
@@ -164,7 +193,8 @@ class ArmySimState(object):
 
     def clone(self) -> ArmySimState:
         copy = ArmySimState(
-            self.remaining_cycle_turns,
+            self.turn,
+            self.eval_params,
             self.sim_tiles.copy(),
             self.friendly_living_armies.copy(),
             self.enemy_living_armies.copy()
@@ -189,6 +219,7 @@ class ArmySimState(object):
         copy.friendly_move = self.friendly_move
         copy.enemy_move = self.enemy_move
         copy.depth = self.depth
+        copy.incrementing = self.incrementing.copy()
         copy.parent_board = self.parent_board
 
         return copy
@@ -256,20 +287,36 @@ class ArmySimState(object):
         econDiff = 10 * (
             self.tile_differential
             + 25 * self.city_differential
-            + self.controlled_city_turn_differential
+            + self.controlled_city_turn_differential  # TODO consider bonus points for this, because we get these econ rewards NOW not 'maybe at end of round'. Right now, every 2 turns controlling opponent city counts as 2 neutral captures.
         )
         if self.captures_enemy:
-            econDiff += 10000 // self.depth
+            econDiff += 100000 // (self.depth + 4)
         if self.captured_by_enemy:
-            econDiff -= 10000 // self.depth
+            econDiff -= 100000 // (self.depth + 4)
         # skipped moves are worth 0.7 econ each
-        econDiff += self.friendly_skipped_move_count * 5
+        econDiff -= (self.depth - self.friendly_skipped_move_count) * self.eval_params.friendly_move_penalty_10_fraction
         # enemy skipped moves are worth slightly less..? than ours?
-        econDiff -= self.enemy_skipped_move_count * 5
+        econDiff -= (self.depth - self.enemy_skipped_move_count) * self.eval_params.enemy_move_penalty_10_fraction
+
+        # These move penalty fractions and no-op values need to be stored in a variable so that the whole reward from previous no-ops doesn't vanish once the army dies etc.
+        # We should just stop granting more rewards once the player has no available moves.
+
         if self.kills_all_enemy_armies:
-            econDiff += 2
+            econDiff += self.eval_params.kills_enemy_armies_10_fraction
+        # else:
+        #     # only reward enemy for enemy skipped moves when enemy army is still alive. Scrim is just over if neither player has an army left.
+        #     econDiff += self.enemy_skipped_move_count * self.eval_params.enemy_move_no_op_scale_10_fraction
+
+        if not self.kills_all_enemy_armies or self.eval_params.always_reward_dead_army_no_ops:
+            econDiff += self.enemy_skipped_move_count * self.eval_params.enemy_move_no_op_scale_10_fraction
+
         if self.kills_all_friendly_armies:
-            econDiff += 1
+            econDiff += self.eval_params.kills_friendly_armies_10_fraction
+        # else:
+        #     # only reward skipped moves when our army is still alive. Scrim is just over if neither player has an army left.
+        #     econDiff += self.friendly_skipped_move_count * self.eval_params.friendly_move_no_op_scale_10_fraction
+        if not self.kills_all_friendly_armies or self.eval_params.always_reward_dead_army_no_ops:
+            econDiff += self.friendly_skipped_move_count * self.eval_params.friendly_move_no_op_scale_10_fraction
 
         return econDiff
         #

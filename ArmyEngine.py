@@ -12,11 +12,10 @@ from ArmyAnalyzer import ArmyAnalyzer
 from ArmyTracker import Army
 from BoardAnalyzer import BoardAnalyzer
 from DataModels import Move
-from Engine.ArmyEngineModels import ArmySimState, ArmySimResult, SimTile
-from MctsLudii import MctsDUCT, Game, Context
+from Engine.ArmyEngineModels import ArmySimState, ArmySimResult, SimTile, ArmySimEvaluationParams
+from MctsLudii import MctsDUCT, Game, Context, MctsEngineSummary
 from base.client.map import MapBase, Tile
 from MapMatrix import MapMatrix
-
 
 class ArmyEngine(object):
     def __init__(
@@ -27,7 +26,8 @@ class ArmyEngine(object):
             boardAnalysis: BoardAnalyzer,
             friendlyCaptureValues: MapMatrix[int] | None = None,
             enemyCaptureValues: MapMatrix[int] | None = None,
-            timeCap: float = 0.05
+            timeCap: float = 0.05,
+            mctsRunner: MctsDUCT | None = None,
     ):
         """
 
@@ -46,11 +46,17 @@ class ArmyEngine(object):
         self.friendly_player = friendlyArmies[0].player
         self.enemy_player = enemyArmies[0].player
         self.base_city_differential: int = 0
+        self.next_cycle_turn = None
         """The city differential at sim start, used for determining whether we are city-bonus-positive or city-bonus-negative during the duration of a scrim."""
         self.iterations: int = 0
         self.nash_eq_iterations: int = 0
         self.time_in_nash_eq: float = 0.0
         self.time_in_nash: float = 0.0
+
+        self.mcts_runner: MctsDUCT | None = mctsRunner
+        self.eval_params: ArmySimEvaluationParams = ArmySimEvaluationParams()
+        self.honor_mcts_expected_score: bool = False
+        self.honor_mcts_expanded_expected_score: bool = False
 
         ## CONFIGURATION PARAMETERS
 
@@ -136,6 +142,7 @@ class ArmyEngine(object):
         @param turns:
         @return:
         """
+
         self.iterations: int = 0
         self.nash_eq_iterations: int = 0
         self.time_in_nash_eq: float = 0.0
@@ -155,9 +162,12 @@ class ArmyEngine(object):
 
         baseBoardState = self.get_base_board_state()
         self.base_city_differential = baseBoardState.city_differential
-        baseBoardState.friendly_move_generator = self.generate_friendly_moves
-        baseBoardState.enemy_move_generator = self.generate_enemy_moves
-        baseBoardState.initial_differential = baseBoardState.tile_differential + baseBoardState.city_differential * 25
+        remainingCycleTurns = 50 - (self.map.turn % 50)
+        self.next_cycle_turn = self.map.turn + remainingCycleTurns
+
+        if turns == 0:
+            res = ArmySimResult(baseBoardState)
+            return res
 
         start = time.perf_counter()
         if not mcts:
@@ -166,11 +176,13 @@ class ArmyEngine(object):
             duration = time.perf_counter() - start
             logging.info(f'brute force army scrim depth {turns} complete in {duration:.3f} after iter {self.iterations} (nash {self.time_in_nash:.3f} - {self.nash_eq_iterations} eq itr, {self.time_in_nash_eq:.3f} in eq)')
         else:
-            result = self.execute_scan_MCTS(baseBoardState, turns, noThrow=noThrow)
+            if self.mcts_runner is None:
+                self.mcts_runner = MctsDUCT()
 
-            duration = time.perf_counter() - start
-            logging.info(f'MONTE CARLO army scrim complete in {duration:.3f}')
+            result, summary = self.execute_scan_MCTS(baseBoardState, turns, noThrow=noThrow)
 
+            logging.info(f'MONTE CARLO army scrim complete in scan {summary.duration:.4f} full {time.perf_counter() - start:.4f}')
+            logging.info(f'Monte Carlo summary: {str(summary)}')
         return result
 
     def simulate_recursive_brute_force(
@@ -439,7 +451,7 @@ class ArmyEngine(object):
         nextBoardState.friendly_move = frMove
         nextBoardState.enemy_move = enMove
 
-        if MapBase.player_had_priority(self.friendly_player, nextBoardState.remaining_cycle_turns):
+        if MapBase.player_had_priority(self.friendly_player, nextBoardState.turn):
             self.execute(nextBoardState, frMove, self.friendly_player, self.enemy_player)
             if not nextBoardState.captures_enemy:
                 self.execute(nextBoardState, enMove, self.enemy_player, self.friendly_player)
@@ -461,10 +473,47 @@ class ArmyEngine(object):
             nextBoardState.kills_all_enemy_armies = True
 
         if turn & 1 == 0:
-            controlDiff = nextBoardState.city_differential - self.base_city_differential
-            nextBoardState.controlled_city_turn_differential += controlDiff
+            nextBoardState.controlled_city_turn_differential += nextBoardState.city_differential - self.base_city_differential
 
         self.detect_repetition(boardState, nextBoardState)
+
+        if nextBoardState.turn == self.next_cycle_turn:
+            updated = []
+            for tile, simTile in nextBoardState.sim_tiles.items():
+                newSimTile = SimTile(simTile.source_tile, simTile.army + 1, simTile.player)
+
+                if tile.isCity or tile.isGeneral:
+                    newSimTile.army += 1
+
+                updated.append(newSimTile)
+
+            for simTile in updated:
+                nextBoardState.sim_tiles[simTile.source_tile] = simTile
+                if simTile.player == self.friendly_player:
+                    st = nextBoardState.friendly_living_armies.pop(simTile.source_tile, None)
+                    if st:
+                        nextBoardState.friendly_living_armies[simTile.source_tile] = simTile
+                else:
+                    st = nextBoardState.enemy_living_armies.pop(simTile.source_tile, None)
+                    if st:
+                        nextBoardState.enemy_living_armies[simTile.source_tile] = simTile
+
+        elif nextBoardState.turn & 1 == 0:
+            updated = []
+            for tile in nextBoardState.incrementing:
+                simTile = nextBoardState.sim_tiles[tile]
+                newSimTile = SimTile(simTile.source_tile, simTile.army + 1, simTile.player)
+                updated.append(newSimTile)
+            for simTile in updated:
+                nextBoardState.sim_tiles[simTile.source_tile] = simTile
+                if simTile.player == self.friendly_player:
+                    st = nextBoardState.friendly_living_armies.pop(simTile.source_tile, None)
+                    if st:
+                        nextBoardState.friendly_living_armies[simTile.source_tile] = simTile
+                else:
+                    st = nextBoardState.enemy_living_armies.pop(simTile.source_tile, None)
+                    if st:
+                        nextBoardState.enemy_living_armies[simTile.source_tile] = simTile
 
         return nextBoardState
 
@@ -482,12 +531,19 @@ class ArmyEngine(object):
         sourceTile = move.source
 
         source = nextBoardState.sim_tiles[sourceTile]
-        dest = nextBoardState.sim_tiles.get(destTile) or SimTile(destTile)
 
         if source.player != movingPlayer or source.army < 2:
             # tile was captured by the other player before the move was executed
             # TODO, do we need to clear any armies here or anything weird?
             return
+
+        dest = nextBoardState.sim_tiles.get(destTile)
+        if not dest:
+            dest = SimTile(destTile)
+            if destTile.isCity and destTile.player >= 0 or destTile.isGeneral:
+                dest.army += (nextBoardState.depth + ((nextBoardState.turn - 1) & 1)) // 2
+                nextBoardState.incrementing.add(destTile)
+                # nextBoardState.sim_tiles[destTile] = dest
 
         if dest.player != source.player:
             resultArmy = dest.army - source.army + 1
@@ -548,22 +604,30 @@ class ArmyEngine(object):
         nextBoardState.city_differential += cityDif
 
     def get_base_board_state(self) -> ArmySimState:
-        baseBoardState = ArmySimState(remainingCycleTurns=50 - self.map.turn % 50)
+        baseBoardState = ArmySimState(turn=self.map.turn, evaluationParams=self.eval_params)
 
         for friendlyArmy in self.friendly_armies:
             if friendlyArmy.value > 0:
                 st = SimTile(friendlyArmy.tile, friendlyArmy.value + 1, friendlyArmy.player)
                 baseBoardState.friendly_living_armies[friendlyArmy.tile] = st
                 baseBoardState.sim_tiles[friendlyArmy.tile] = st
+                if friendlyArmy.tile.isCity or friendlyArmy.tile.isGeneral:
+                    baseBoardState.incrementing.add(friendlyArmy.tile)
 
         for enemyArmy in self.enemy_armies:
             if enemyArmy.value > 0:
                 st = SimTile(enemyArmy.tile, enemyArmy.value + 1, self.enemy_player)
                 baseBoardState.enemy_living_armies[enemyArmy.tile] = st
                 baseBoardState.sim_tiles[enemyArmy.tile] = st
+                if enemyArmy.tile.isCity or enemyArmy.tile.isGeneral:
+                    baseBoardState.incrementing.add(enemyArmy.tile)
 
         baseBoardState.tile_differential = self.map.players[self.friendly_player].tileCount - self.map.players[self.enemy_player].tileCount
         baseBoardState.city_differential = self.map.players[self.friendly_player].cityCount - self.map.players[self.enemy_player].cityCount
+        baseBoardState.friendly_move_generator = self.generate_friendly_moves
+        baseBoardState.enemy_move_generator = self.generate_enemy_moves
+        baseBoardState.initial_differential = baseBoardState.tile_differential + baseBoardState.city_differential * 25
+
         return baseBoardState
 
     def check_army_positions(self, boardState: ArmySimState):
@@ -604,19 +668,25 @@ class ArmyEngine(object):
                     closestEnThreat = distToGen
                     closestEnThreatTile = tile
 
-        if self.enemy_has_kill_threat and closestFrSave > closestEnThreat and (not self.friendly_has_kill_threat or closestFrThreat >= closestEnThreat):
+        if (self.enemy_has_kill_threat
+                and closestFrSave > closestEnThreat # + 1
+                and (not self.friendly_has_kill_threat or closestFrThreat >= closestEnThreat)
+        ):
             boardState.captured_by_enemy = True
-            if self.are_tiles_adjacent(closestFrSaveTile, closestEnThreatTile) or closestFrSave < closestEnThreat:
+            if self.are_tiles_adjacent(closestFrSaveTile, closestEnThreatTile):
                 boardState.captured_by_enemy = False
 
-        if self.friendly_has_kill_threat and closestEnSave > closestFrThreat and (not self.enemy_has_kill_threat or closestEnThreat >= closestFrThreat):
+        if (self.friendly_has_kill_threat
+                and closestEnSave > closestFrThreat # + 1
+                and (not self.enemy_has_kill_threat or closestEnThreat >= closestFrThreat)
+        ):
             boardState.captures_enemy = True
-            if self.are_tiles_adjacent(closestEnSaveTile, closestFrThreatTile) or closestEnSave < closestFrThreat:
+            if self.are_tiles_adjacent(closestEnSaveTile, closestFrThreatTile):
                 boardState.captures_enemy = False
 
         if boardState.captured_by_enemy and boardState.captures_enemy:
             # see who wins the race
-            if MapBase.player_had_priority(self.friendly_player, boardState.remaining_cycle_turns + closestFrThreat):
+            if MapBase.player_had_priority(self.friendly_player, boardState.turn + closestFrThreat):
                 boardState.captured_by_enemy = False
             else:
                 boardState.captures_enemy = False
@@ -945,7 +1015,7 @@ class ArmyEngine(object):
         multiEnemy = len(self.enemy_armies) > 1
         self.to_turn = self.map.turn + turns
         self.start_time = time.perf_counter()
-        ogDiff = baseBoardState.tile_differential + baseBoardState.city_differential * 25
+        ogDiff = baseBoardState.initial_differential
 
         final_state: ArmySimState = self.simulate_recursive_brute_force(
             baseBoardState,
@@ -953,7 +1023,7 @@ class ArmyEngine(object):
         result = ArmySimResult(final_state)
         result.best_result_state_depth = final_state.depth
 
-        afterScrimDiff = result.best_result_state.tile_differential + result.best_result_state.city_differential * 25
+        afterScrimDiff = result.best_result_state.get_econ_value()
         result.net_economy_differential = afterScrimDiff - ogDiff
 
         # build the expected move list up the tree
@@ -999,20 +1069,35 @@ class ArmyEngine(object):
             baseBoardState: ArmySimState,
             turns: int,
             noThrow: bool = False
-    ):
+    ) -> typing.Tuple[ArmySimResult, MctsEngineSummary]:
         # multiFriendly = len(self.friendly_armies) > 1
         # multiEnemy = len(self.enemy_armies) > 1
-
-        mctsRunner: MctsDUCT = MctsDUCT()
-        game: Game = Game()
+        self.mcts_runner.reset()
+        game: Game = Game(
+            player=self.friendly_player,
+            otherPlayers=[self.enemy_player],
+            allowRandomRepetitions=self.mcts_runner.allow_random_repetitions,
+            allowRandomNoOps=self.mcts_runner.allow_random_no_ops,
+            disablePositionalWinDetectionInRollouts=self.mcts_runner.disable_positional_win_detection_in_rollouts)
         ctx: Context = Context()
         ctx.set_initial_board_state(self, baseBoardState, game, self.map.turn)
 
-        mctsSummary = mctsRunner.select_action(game, ctx, self.time_limit, self.iteration_limit)
+        mctsSummary = self.mcts_runner.select_action(game, ctx, self.time_limit, self.iteration_limit)
         result = ArmySimResult(mctsSummary.best_result_state)
         result.expected_best_moves = [(bm.playerMoves[0], bm.playerMoves[1]) for bm in mctsSummary.best_moves]
 
-        logging.info(f'MCTS iter {mctsRunner.iterations}, nodesExplored {mctsRunner.nodes_explored}, rollouts {mctsRunner.trials_performed}, backprops {mctsRunner.backprop_iter}, rolloutExpansions {game.rollout_expansions}, biasedRolloutExpansions {game.biased_rollout_expansions}')
+        afterScrimDiff = result.best_result_state.get_econ_value()
+        result.net_economy_differential = afterScrimDiff - baseBoardState.initial_differential
 
-        return result
+        decompressedExpectedScore = self.mcts_runner.decompress_player_utility(mctsSummary.expected_score)
+        decompressedExpandedExpectedScore = self.mcts_runner.decompress_player_utility(mctsSummary.expanded_expected_score)
+
+        logging.info(f'MCTS {decompressedExpectedScore:.0f} : {decompressedExpandedExpectedScore:.0f} iter {mctsSummary.iterations}, nodesExplored {mctsSummary.nodes_explored}, rollouts {mctsSummary.trials_performed}, backprops {mctsSummary.backprop_iter}, rolloutExpansions {mctsSummary.rollout_expansions}, biasedRolloutExpansions {mctsSummary.biased_rollout_expansions}')
+
+        if self.honor_mcts_expected_score:
+            result.net_economy_differential = int(round(mctsSummary.expected_score))
+        elif self.honor_mcts_expanded_expected_score:
+            result.net_economy_differential = int(round(mctsSummary.expanded_expected_score))
+
+        return result, mctsSummary
 

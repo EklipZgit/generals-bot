@@ -1,0 +1,48 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+a1   aG11 a1   M    a1   a1   a1   a1             M    M                   M              M    M              M
+a1   M    a1   a1   a1   a1   a1   b1   M    M                        M                   M
+a1   M    a1   a1   M    b2   b1   b1   a2   a2                  M                                  M         M
+C45       a1   a1        M    a3   b2   M    a1   a1                                      M    M    M         M
+     a1   a1   a1   M    b3   b3   b2   a3   a1             M         M    M
+M         M    a1   a2   a2   a2   a3   M    a1        M         M                   M    M              M
+     M         a1   a1   M    a2   b2   M    a1   M                   M    M         M                        M
+               a1   M    a1   a3   b1   a2   M                   M    M                        M    M    M
+M              a1   a1   a1   a1   b1   b1        M              M    M                        M
+          a1   a1   b1   b1   b20  b1   b1                       M         M                        M
+     M    M    a2   b1   b1   b1   b1   b1                                 M         M    M    M              M
+M    M         M    b1   b1   b2                                 M                        M                   M
+     M                        M                   M                                       M
+     M         M                                            M                   M    M                   M
+     M         M                   M                             M                             M
+     M                        M    M                        M                   M
+                    M                                            M              M                   M    M
+M    M         M                             M                             M
+M                        M    M                                                 M         M              M
+     M              M                        M    M                                            M
+     M              M                                                                          M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=6,11
+turn=240
+bot_player_index=0
+aTiles=49
+aScore=75
+aStandingArmy=26
+aStars=69
+aCityCount=1
+aGeneral=1,0
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+bTiles=55
+bScore=100
+bStandingArmy=45
+bStars=68
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=578
+bot_target_player=1

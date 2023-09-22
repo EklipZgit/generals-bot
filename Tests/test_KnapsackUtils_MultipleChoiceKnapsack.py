@@ -30,7 +30,7 @@ class KnapsackUtils_MCKP_Tests(TestBase):
             weights.append(weight)
             values.append(value)
 
-        return KnapsackUtils.solve_multiple_choice_knapsack(items, capacity, weights, values, groups, noLog=False, forceLongRun=True)
+        return KnapsackUtils.solve_multiple_choice_knapsack(items, capacity, weights, values, groups, noLog=False, longRuntimeThreshold=10.0)
 
     def generate_item_test_set(self, simulatedItemCount, simulatedGroupCount, maxWeightPerItem, maxValuePerItem):
         groupItemWeightValues = []
@@ -251,7 +251,7 @@ class KnapsackUtils_MCKP_Tests(TestBase):
     def test_shouldReturnDesiredSolution2(self):
         capacity, values, weights, groups = self.getProblem2()
         items = [i for i in range(len(values))]
-        maxValue, maxItems = KnapsackUtils.solve_multiple_choice_knapsack(items, capacity, weights, values, groups, noLog=False, forceLongRun=True)
+        maxValue, maxItems = KnapsackUtils.solve_multiple_choice_knapsack(items, capacity, weights, values, groups, noLog=False, longRuntimeThreshold=10.0)
 
         expected = [False, False, True,  False, False,
                     False, False, True,  False, False,
@@ -270,7 +270,7 @@ class KnapsackUtils_MCKP_Tests(TestBase):
     def test_shouldReturnDesiredSolution3(self):
         capacity, values, weights, groups = self.getProblem3()
         items = [i for i in range(len(values))]
-        maxValue, maxItems = KnapsackUtils.solve_multiple_choice_knapsack(items, capacity, weights, values, groups, noLog=False, forceLongRun=True)
+        maxValue, maxItems = KnapsackUtils.solve_multiple_choice_knapsack(items, capacity, weights, values, groups, noLog=False, longRuntimeThreshold=10.0)
 
         expected = [True,  False, False, False, False,
                     False, False, True,  False, False,
@@ -289,7 +289,7 @@ class KnapsackUtils_MCKP_Tests(TestBase):
     def test_shouldReturnDesiredSolution4(self):
         capacity, values, weights, groups = self.getProblem4()
         items = [i for i in range(len(values))]
-        maxValue, maxItems = KnapsackUtils.solve_multiple_choice_knapsack(items, capacity, weights, values, groups, noLog=False, forceLongRun=True)
+        maxValue, maxItems = KnapsackUtils.solve_multiple_choice_knapsack(items, capacity, weights, values, groups, noLog=False, longRuntimeThreshold=10.0)
 
         expected = [False, False, False, False, False,
                     False, False, False, False, False,

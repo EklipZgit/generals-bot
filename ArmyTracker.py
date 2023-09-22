@@ -6,6 +6,7 @@
 """
 
 import SearchUtils
+from DataModels import Move
 from SearchUtils import *
 from Path import Path
 from base.client.map import Tile, TILE_FOG
@@ -115,6 +116,7 @@ class ArmyTracker(object):
         self.fogPaths = []
         self.emergenceLocationMap: typing.List[typing.List[typing.List[int]]] = [
             [[0 for x in range(self.map.rows)] for y in range(self.map.cols)] for z in range(len(self.map.players))]
+        """List by player of emergence values."""
 
         self.player_targets: typing.List[Tile] = []
         """The list of tiles we expect an enemy player might be trying to attack."""

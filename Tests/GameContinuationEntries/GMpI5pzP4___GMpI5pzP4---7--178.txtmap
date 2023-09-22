@@ -1,0 +1,116 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                                                                 M         M                        M
+                                             M              M                                       M              M
+                         M    M         M    M              M                             M    M         M    M              M
+     M              M                                            M              M    M              M    M                        M
+                                   M    M                   M              M                        M                        M
+                    M    M    M         M         M    M                                  M              M         M    M
+M         M                             M                             M    M                                                           M
+          M    M    M    M              M                   M                   M         M         M         M
+     M              M         M    M                   M              M                                                 M              M
+                              M    M                             M                   M    M                                       M
+M                             M                                  M                                  M
+                                                  M         M                                       M    M    M
+     M         M         M                   M                   M              M                                            M
+                                                            M              M    M                   M    M    M         M
+                         M         M                        M    M                                       M              M         M
+M         M              M                   M         M         M                        M                   M         M         M
+M    M    c3   M                                  M    M                        M         M              M    M    M         M    M    M
+c1   c1   c1        M              M                        M                        M    M    M              M                        M
+M    c1   c2   c1   c1   c3   M    M    M         M              M              M    M    M                   M              M
+c1   c20  c2   h2   h2   c2   c3   c3   c3   M                                  M                                  M                   M
+cG4  M    M    M    h2   h2   c3   M    h2   h6   c4   MN1                                                              M         M    M
+M              M    M    h2   M    h2   h2   h1   M    d1   N1                       M         M                   M
+     M    M    M         h1   h1   h1   h1   h1   h1   d1   d1   M                                            M         M
+          C48  hC6  h1   h1   M    h2   h2   h1   h1   h2   h2   M                                  M
+M         M         M    h1   h1   M    h2   h1   h1   h2   h2   d1                            M                   M    M
+               M    h2   h2   h1   h2   M    h2   M    M    h3   M                        M    M    M    M              M         M    M
+M                   M    h2   h1   h1   h1   h1   h1   M    h3   d1                       M                                            M
+     M         M    h2   h1   hG7  h1   M    h2   h1   h1   h1   d1        M    M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=0,20
+turn=178
+bot_player_index=7
+aTiles=63
+aScore=198
+aStandingArmy=135
+aStars=68
+aCityCount=2
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+bTiles=0
+bScore=0
+bStandingArmy=0
+bStars=65
+bCityCount=1
+bKnowsKingLocation=False
+bDead=True
+bLeftGame=True
+bLeftGameTurn=178
+bAggressionFactor=0
+cTiles=25
+cScore=74
+cStandingArmy=49
+cStars=53
+cCityCount=1
+cGeneral=0,20
+cKnowsKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=115
+dTiles=121
+dScore=252
+dStandingArmy=131
+dStars=67
+dCityCount=1
+dKnowsKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+eTiles=0
+eScore=0
+eStandingArmy=0
+eStars=66
+eCityCount=1
+eKnowsKingLocation=False
+eDead=True
+eLeftGame=True
+eLeftGameTurn=121
+eAggressionFactor=0
+fTiles=39
+fScore=109
+fStandingArmy=70
+fStars=66
+fCityCount=1
+fKnowsKingLocation=False
+fDead=False
+fLeftGame=False
+fLeftGameTurn=-1
+fAggressionFactor=0
+gTiles=17
+gScore=84
+gStandingArmy=67
+gStars=0
+gCityCount=2
+gKnowsKingLocation=False
+gDead=False
+gLeftGame=False
+gLeftGameTurn=-1
+gAggressionFactor=0
+hTiles=53
+hScore=95
+hStandingArmy=42
+hStars=68
+hCityCount=2
+hGeneral=6,27
+hKnowsKingLocation=False
+hDead=False
+hLeftGame=False
+hLeftGameTurn=-1
+hAggressionFactor=10
+bot_target_player=2

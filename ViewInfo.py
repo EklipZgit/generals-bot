@@ -18,7 +18,7 @@ from pprint import pprint,pformat
 from ArmyTracker import Army, ArmyTracker
 from BoardAnalyzer import BoardAnalyzer
 from DangerAnalyzer import DangerAnalyzer
-from DataModels import TreeNode
+from DataModels import GatherTreeNode
 from Directives import Timings
 from Path import Path
 from Territory import TerritoryClassifier
@@ -47,6 +47,7 @@ class ViewInfo(object):
     def __init__(self, countHist, cols, rows):
         # list of true/false matrixes and the color to color the border
         self._divisions: typing.List[typing.Tuple[MapMatrix[bool], typing.Tuple[int, int, int], int]] = []
+        self._zones: typing.List[typing.Tuple[MapMatrix[bool], typing.Tuple[int, int, int], int]] = []
         # Draws the red target circles
 
         # self.ekBot.dump_turn_data_to_string()
@@ -55,8 +56,8 @@ class ViewInfo(object):
         self.armyTracker: ArmyTracker | None = None
         self.dangerAnalyzer: DangerAnalyzer | None = None
         self.currentPath: Path | None = None
-        self.gatherNodes: typing.List[TreeNode] | None = None
-        self.redGatherNodes: typing.List[TreeNode] | None = None
+        self.gatherNodes: typing.List[GatherTreeNode] | None = None
+        self.redGatherNodes: typing.List[GatherTreeNode] | None = None
         self.territories: TerritoryClassifier | None = None
         self.perfEvents: typing.List[str] = []
         self.allIn: bool = False
@@ -99,15 +100,16 @@ class ViewInfo(object):
         self.addlTimingsLineText = ""
         self.addlInfoLines = []
         self._divisions = []
+        self._zones = []
         self.board_analysis: BoardAnalyzer | None = None
         self.targetingArmy: Army | None = None
         self.armyTracker: ArmyTracker | None = None
         self.dangerAnalyzer: DangerAnalyzer | None = None
         self.currentPath: Path | None = None
-        self.gatherNodes: typing.List[TreeNode] | None = None
+        self.gatherNodes: typing.List[GatherTreeNode] | None = None
         self.perfEvents = []
         self.paths = deque()
-        self.redGatherNodes: typing.List[TreeNode] | None = None
+        self.redGatherNodes: typing.List[GatherTreeNode] | None = None
         self.territories: TerritoryClassifier | None = None
         self.allIn: bool = False
         self.timings: Timings | None = None
@@ -140,8 +142,12 @@ class ViewInfo(object):
         logging.info(additionalInfo)
         self.addlInfoLines.append(additionalInfo)
 
-    def add_map_division(self, withinGenPathMatrix: MapMatrix[bool], color: typing.Tuple[int, int, int], alpha: int = 128):
-        self._divisions.append((withinGenPathMatrix, color, alpha))
+    def add_map_division(self, divisionMatrix: MapMatrix[bool], color: typing.Tuple[int, int, int], alpha: int = 128):
+        self._divisions.append((divisionMatrix, color, alpha))
+
+    def add_map_zone(self, zoneMatrix: MapMatrix[bool], color: typing.Tuple[int, int, int], alpha: int = 15):
+        """Note this doesn't do pure alpha...?"""
+        self._zones.append((zoneMatrix, color, alpha))
 
     def color_path(self, pathColorer: PathColorer):
         self.paths.append(pathColorer)

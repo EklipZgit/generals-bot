@@ -502,7 +502,7 @@ def breadth_first_dynamic(
         if current in globalVisitedSet or (skipTiles is not None and current in skipTiles):
             continue
         globalVisitedSet.add(current)
-        if goalFunc(current, prioVals):
+        if goalFunc(current, prioVals) and (foundVal is None or prioVals < foundVal):
             foundGoal = True
             foundDist = dist
             foundVal = prioVals
@@ -607,7 +607,7 @@ def breadth_first_dynamic_max(
     @param ignoreStartTile:
     @param incrementBackward:
     @param preferNeutral:
-    @param useGlobalVisitedSet:
+    @param useGlobalVisitedSet: prevent a tile from ever being popped more than once in a search. Use this when your priority function guarantees that the best path that uses a tile is also guaranteed to be reached first in the search.
     @param logResultValues:
     @param noLog:
     @param includePathValue: if True, the paths value (from the value func output) will be returned in a tuple with the actual path.
@@ -899,8 +899,9 @@ def breadth_first_dynamic_max_per_tile(
         allowDoubleBacks=False,
         includePath=False,
         ignoreNonPlayerArmy: bool = False,
-        ignoreIncrement: bool = True
-):
+        ignoreIncrement: bool = True,
+        useGlobalVisitedSet: bool = True
+) -> typing.Dict[Tile, Path]:
     """
     Keeps the max path from each of the start tiles as output. Since we force use a global visited set, the paths returned will never overlap each other.
 
@@ -928,6 +929,7 @@ def breadth_first_dynamic_max_per_tile(
     @param includePath:  if True, all the functions take a path object param as third tuple entry
     @param ignoreNonPlayerArmy: if True, the paths returned will be calculated on the basis of just the searching players army and ignore enemy (or neutral city!) army they pass through.
     @param ignoreIncrement: if True, do not have paths returned include the city increment in their path calculation for any cities or generals in the path.
+    @param useGlobalVisitedSet: prevent a tile from ever being popped more than once in a search. Use this when your priority function guarantees that the best path that uses a tile is also guaranteed to be reached first in the search.
     @return:
 
     # make sure to initialize the initial base values and account for first priorityObject being None.
@@ -1059,15 +1061,16 @@ def breadth_first_dynamic_max_per_tile(
     while not frontier.empty():
         iter += 1
         if iter & 256 == 0 and time.time() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING or iter > maxIterations:
-            logging.info("BFS-DYNAMIC-MAX BREAKING EARLY")
+            logging.info("BFS-DYNAMIC-MAX-PER-TILE BREAKING EARLY")
             break
 
         (prioVals, dist, current, parent, nodeList, startTile) = frontier.get()
         # if dist not in visited[current.x][current.y] or visited[current.x][current.y][dist][0] > prioVals:
         # if current in globalVisitedSet or (skipTiles != None and current in skipTiles):
-        if current in globalVisitedSet:
-            continue
-        globalVisitedSet.add(current)
+        if useGlobalVisitedSet:
+            if current in globalVisitedSet:
+                continue
+            globalVisitedSet.add(current)
         if skipTiles is not None and current in skipTiles:
             continue
 
@@ -1109,15 +1112,19 @@ def breadth_first_dynamic_max_per_tile(
                 continue
             nextPrio = priorityFunc(next, prioVals) if not includePath else priorityFunc(next, prioVals, nodeList)
             if nextPrio is not None:
+                # TODO we're bounding per tile, not globally, seems questionable.
+
                 if boundFunc is not None:
-                    if not includePath:
-                        bounded = boundFunc(next, nextPrio, maxPrios[startTile])
-                    else:
-                        bounded = boundFunc(next, nextPrio, maxPrios[startTile], nodeList)
-                    if bounded:
-                        if not noLog:
-                            logging.info(f"Bounded off {next.toString()}")
-                        continue
+                    boundPrio = maxPrios.get(startTile, None)
+                    if boundPrio is not None:
+                        if not includePath:
+                            bounded = boundFunc(next, nextPrio, boundPrio)
+                        else:
+                            bounded = boundFunc(next, nextPrio, boundPrio, nodeList)
+                        if bounded:
+                            if not noLog:
+                                logging.info(f"Bounded off {next.toString()}")
+                            continue
                 if skipFunc is not None:
                     skip = skipFunc(next, nextPrio) if not includePath else skipFunc(next, nextPrio, nodeList)
                     if skip:
@@ -1126,7 +1133,7 @@ def breadth_first_dynamic_max_per_tile(
                 newNodeList.append((next, nextPrio))
                 frontier.put((nextPrio, dist, next, current, newNodeList, startTile))
     if not noLog:
-        logging.info(f"BFS-DYNAMIC-MAX ITERATIONS {iter}, DURATION: {time.time() - start:.3f}, DEPTH: {depthEvaluated}")
+        logging.info(f"BFS-DYNAMIC-MAX-PER-TILE ITERATIONS {iter}, DURATION: {time.time() - start:.3f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         return {}
 
@@ -1202,11 +1209,13 @@ def breadth_first_dynamic_max_per_tile_per_distance(
         allowDoubleBacks=False,
         includePath=False,
         ignoreNonPlayerArmy: bool = False,
-        ignoreIncrement: bool = True
-):
+        ignoreIncrement: bool = True,
+        useGlobalVisitedSet: bool = True
+) -> typing.Dict[Tile, typing.List[Path]]:
     """
     Keeps the max path from each of the start tiles as output. Since we force use a global visited set, the paths returned will never overlap each other.
     For each start tile, returns a dict from found distances to the max value found at that distance.
+    Does not return paths for a tile that are a longer distance but the same value as a shorter one, so no need to prune them yourself.
 
     @param map:
     @param startTiles: startTiles dict is (startPriorityObject, distance) = startTiles[tile]
@@ -1232,6 +1241,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
     @param includePath:  if True, all the functions take a path object param as third tuple entry
     @param ignoreNonPlayerArmy: if True, the paths returned will be calculated on the basis of just the searching players army and ignore enemy (or neutral city!) army they pass through.
     @param ignoreIncrement: if True, do not have paths returned include the city increment in their path calculation for any cities or generals in the path.
+    @param useGlobalVisitedSet: prevent a tile from ever being popped more than once in a search. Use this when your priority function guarantees that the best path that uses a tile is also guaranteed to be reached first in the search.
     @return:
 
     # make sure to initialize the initial base values and account for first priorityObject being None.
@@ -1369,11 +1379,12 @@ def breadth_first_dynamic_max_per_tile_per_distance(
         (prioVals, dist, current, parent, nodeList, startTile) = frontier.get()
         # if dist not in visited[current.x][current.y] or visited[current.x][current.y][dist][0] > prioVals:
         # if current in globalVisitedSet or (skipTiles != None and current in skipTiles):
-        if current in globalVisitedSet:
-            continue
-        globalVisitedSet.add(current)
-        if skipTiles is not None and current in skipTiles:
-            continue
+        if useGlobalVisitedSet:
+            if current in globalVisitedSet:
+                continue
+            globalVisitedSet.add(current)
+            if skipTiles is not None and current in skipTiles:
+                continue
 
         newValue = valueFunc(current, prioVals) if not includePath else valueFunc(current, prioVals, nodeList)
         # if logResultValues:
@@ -1420,15 +1431,19 @@ def breadth_first_dynamic_max_per_tile_per_distance(
             nextPrio = priorityFunc(next, prioVals) if not includePath else priorityFunc(next, prioVals, nodeList)
             if nextPrio is not None:
                 if boundFunc is not None:
-                    if not includePath:
-                        bounded = boundFunc(next, nextPrio, maxPriosTMP[startTile][dist - 1])
-                    else:
-                        bounded = boundFunc(next, nextPrio, maxPriosTMP[startTile], nodeList)
+                    maxPrioDict = maxPriosTMP.get(startTile, None)
+                    if maxPrioDict is not None:
+                        maxPrioDist = maxPrioDict.get(dist - 1, None)
+                        if maxPrioDist is not None:
+                            if not includePath:
+                                bounded = boundFunc(next, nextPrio, maxPrioDist)
+                            else:
+                                bounded = boundFunc(next, nextPrio, maxPrioDist, nodeList)
 
-                    if bounded:
-                        if not noLog:
-                            logging.info(f"Bounded off {next.toString()}")
-                        continue
+                            if bounded:
+                                if not noLog:
+                                    logging.info(f"Bounded off {next.toString()}")
+                                continue
                 if skipFunc is not None:
                     skip = skipFunc(next, nextPrio) if not includePath else skipFunc(next, nextPrio, nodeList)
                     if skip:
@@ -1496,18 +1511,6 @@ def breadth_first_dynamic_max_per_tile_per_distance(
         maxPaths[startTile] = pathListForTile
     return maxPaths
 
-
-# goalInc = 0
-# if (tile.isCity or tile.isGeneral) and tile.player != -1:
-#    goalInc = -0.5
-# startArmy = tile.army - 1
-# if tile.player != searchingPlayer:
-#    startArmy = 0 - tile.army - 1
-#    goalInc *= -1
-# if incrementBackward:
-#    goalInc *= -1
-# if ignoreStartTile:
-#    startArmy = 0
 def bidirectional_breadth_first_dynamic(
         map,
         startTiles,
@@ -1525,6 +1528,8 @@ def bidirectional_breadth_first_dynamic(
         preferNeutral=False,
         allowDoubleBacks=False):
     """
+    THIS isn't implemented yet...?
+
     startTiles dict is (startPriorityObject, distance) = startTiles[tile]
     goalFunc is (currentTile, priorityObject) -> True or False
     priorityFunc is (nextTile, currentPriorityObject) -> nextPriorityObject
@@ -1618,7 +1623,7 @@ def bidirectional_breadth_first_dynamic(
     while not frontier.empty():
         iter += 1
         if iter % 1000 == 0 and time.time() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
-            logging.info("BFS-FIND BREAKING")
+            logging.info("BI-DIR BREAKING")
             break
 
         (prioVals, dist, current, parent) = frontier.get()
@@ -1628,7 +1633,7 @@ def bidirectional_breadth_first_dynamic(
         if current in globalVisitedSet or (skipTiles is not None and current in skipTiles):
             continue
         globalVisitedSet.add(current)
-        if goalFunc(current, prioVals):
+        if goalFunc(current, prioVals) and (foundVal is None or prioVals < foundVal):
             foundGoal = True
             foundDist = dist
             foundVal = prioVals

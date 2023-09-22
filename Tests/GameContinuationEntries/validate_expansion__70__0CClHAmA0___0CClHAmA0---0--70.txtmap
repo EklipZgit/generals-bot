@@ -1,0 +1,112 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+M              M    M         M    C42  a1   a1   a1   M    M    M    M                        M         M              M
+                    M         M         a3   a3   a31  a1   a1   aG3  a1   M    C48       M
+                                   f2   M         a1        a1   a1   a1   a1                            M         M
+                         M              f2   a1   a1   M    a1   M    a1   a1   M                                            M
+                                        M    M    a1   a1   a1        M    M                                       M         M
+     M                   M         M                                            M              M              M
+     M                             M    M              M              M         M         M
+M              M         M              M         M                             M    M                   M              M
+                    M    M              M                                       M                                  M         M
+M    M                                                                                         M                   M
+                                                            M                             M              M    M              M
+M         M    M    M                                                      M    M
+     M    M         M              M                        M                        M    M              M
+               M              M                   M    M    M    M                   M         M              M
+               M                        M              M                                       M    M                   M
+M    M         M                   M         M    M                                                           M    M         M
+                              M                   M    M         M                   M         M                   M
+                    M                             M                                  M              M    M
+                                        M                   M                   M              M
+M                   M                                                 M                   M    M              M    M    M    M
+M    M         M              M                        M                             M                                  M    M
+M                        M         M         M                                            M
+                         M         M                                                 M    M    M    M              M    M
+                                                                                M                   M              M
+M                                       M    M                   M              M    M              M         M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=4,2
+turn=70
+bot_player_index=0
+aTiles=23
+aScore=59
+aStandingArmy=36
+aStars=69
+aCityCount=1
+aGeneral=13,1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+bTiles=20
+bScore=50
+bStandingArmy=30
+bStars=65
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+cTiles=18
+cScore=25
+cStandingArmy=7
+cStars=67
+cCityCount=1
+cKnowsKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+dTiles=5
+dScore=14
+dStandingArmy=9
+dStars=0
+dCityCount=1
+dKnowsKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+eTiles=18
+eScore=42
+eStandingArmy=24
+eStars=64
+eCityCount=1
+eKnowsKingLocation=False
+eDead=False
+eLeftGame=False
+eLeftGameTurn=-1
+eAggressionFactor=0
+fTiles=27
+fScore=58
+fStandingArmy=31
+fStars=68
+fCityCount=1
+fKnowsKingLocation=False
+fDead=False
+fLeftGame=False
+fLeftGameTurn=-1
+fAggressionFactor=0
+gTiles=23
+gScore=58
+gStandingArmy=35
+gStars=66
+gCityCount=1
+gKnowsKingLocation=False
+gDead=False
+gLeftGame=False
+gLeftGameTurn=-1
+gAggressionFactor=0
+hTiles=22
+hScore=52
+hStandingArmy=30
+hStars=35
+hCityCount=1
+hKnowsKingLocation=False
+hDead=False
+hLeftGame=False
+hLeftGameTurn=-1
+hAggressionFactor=0
+bot_target_player=5

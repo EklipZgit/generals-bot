@@ -1,0 +1,46 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                         M    M                   M                   M
+                                                            M                   M         M
+M              M                                  M              M         M
+          C47                                     M                                       M
+a2   M    a2   a2   a2   M    M    M                        M    M                   M
+a2   a2   a11  M    a2             M         M                                       M    M
+M    M    a1   M         M                                       M         M
+a1   a1   aG2  M                             M              M    M    M              M    M
+a1   a1   a1   C45  M                   M              M    M
+a1   M    C46  M                                            M
+a1   a2   a2   a2   a2   a2   a2   a2                       M              M    M    M
+a1   a1                                           M                   M                   M
+M    a1   a1   a1   a1   a1                  M                             M         M
+                         a1   a1   M    M              M                   M    M
+               M    M         a2   M         M                             M
+M              M         M                   M              M                   M
+                    M                        M    M                             M    M    M
+          M
+     M         M         M    M              M         M                        M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=12,5
+turn=70
+bot_player_index=0
+aTiles=34
+aScore=60
+aStandingArmy=26
+aStars=69
+aCityCount=1
+aGeneral=2,7
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+bTiles=1
+bScore=37
+bStandingArmy=36
+bStars=0
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bot_target_player=-1

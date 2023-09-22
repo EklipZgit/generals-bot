@@ -1,0 +1,45 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+M                                                           M                        M
+M         M                   M    M         M                   M         M
+          M                        M                                  M                   M
+          M                   M
+M              M                                                 M         M              M
+     a2   a2   a2   a2                                                     M    M    M    M
+     a2   a2   M    a2                                      M         M         M    M
+     a2   M    b2   a2   a2   M              M         M                   M
+     M    b1   b1   a2   a2                  M         M              M
+M                   a2   a2   M    C46  M         b1
+                    M    b1   b2   b2   a2   M    b1   b1        b1   b1   M         M    M
+M                   b1   b1   M    b2   b2   b2   b2   b1   b1   M    b1   b1
+M                   M         M    b2   b5   b1   b1   b2   b1   b2   b1   b1
+     M                        M    b1   b4   b2   b2   C44  b1   b1   b1   b1   M
+                         M    b2   b2   b2   b3   b6   b1   b1   M    M         M
+M                   b1   b1   b2   M    M    a2   b2   b2   M    bG4  M                   M
+     M              M    b2   b2   b1   b1   b4   M    C45  b1   b1   M         M    M    M
+                    b1   b1   b2   b3   b1   a1   a2   a2   b13  b2   M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=3,5
+turn=175
+bot_player_index=1
+aTiles=61
+aScore=140
+aStandingArmy=79
+aStars=76
+aCityCount=1
+aKnowsKingLocation=True
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=335
+bTiles=65
+bScore=121
+bStandingArmy=56
+bStars=70
+bCityCount=1
+bGeneral=13,15
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bot_target_player=0

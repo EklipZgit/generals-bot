@@ -1,0 +1,47 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M         M    M              M         M
+a2   a2   a1                                 M
+a2   b1   b1   b1   b1   M    M                             M         M         M
+a2   a2   b1   bG66      b2   M    M         M    M                             M
+     M    b1   b4   C44  b2   M         M    a2   a2   C43  M
+     a1   a2   M    b2   b2   M    b2   a3   a2   a2                       M         M
+     a1   a2   b2   b17  b2   b2   b2   M    a3   a2   M
+     a1   a1   M    M    b2        b2   C43  a2   a2   M                        M
+     a1   a1   a2        b2   b2             a2   a2   M         M    M    M    M
+     a1   a4   a2             a7             M    a2   a2   M    M         M
+     a1   a3   a1   M    C40  a1   a1             M    a2   M    M         M
+M    a1   M         M    M    a3   M                   a1   M         M    M
+a1   a1   M         M         a2   M              M    a1        M
+a1   aC9       M         a2   a2             M    M    M                   M         M
+a1   M              a2   a2                                      M              M
+a1   a1   M    M    a2             M    M    M                   M
+M    a1        M    a2                  M         M                             M
+a1   aG7  a2   a3   a2             M                   M                   M    M
+a1   a1   a1   a1        M                   M         M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=13,6
+turn=178
+bot_player_index=0
+aTiles=66
+aScore=129
+aStandingArmy=63
+aStars=70
+aCityCount=2
+aGeneral=1,17
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+bTiles=22
+bScore=74
+bStandingArmy=52
+bStars=38
+bCityCount=1
+bGeneral=3,3
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=255
+bot_target_player=-1

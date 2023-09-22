@@ -1,0 +1,46 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M              M              M         M
+M                                       M    M                        M              M
+          M                        M                        M    M
+               M                        M                   M
+          M    M                   M         M         M              a1
+                                   a1   a1   a1   a1   a1   a1   a1   a1
+     M                             a1   M    M         M    M    a1   a1   a1   a1
+               M    M    M    a1   a1   M    b2   M    a1   a1   a1   M         a1   a1
+     M    M         M    b1   b1   a1   M    b2   a1   a1   C43  M              M    a1
+                    M    b2   a1   a1   a1   a1   a1   a2   M         M    C45  M    a1
+          b3   b3   b2   b2   M    M    a1   a1   a3   M    M                   a1   a1
+M         b1   b1   b1   b1        M    a1   M    M    b2   b3   M    a1   b1   a1   a1
+     b2   b1   M    b1   aC1  a1   a1   a1   M    b2   b2   M         M    b1   C49
+     b2   b1   M    b1   a66  M    M    a2   M    M    b2   b3   b3   b3   b3        M
+          b3   b1   M    b1   b16  b1   b1   a2   b2   b2   b2   b2   b3   b3
+               b1   b1   b1   M    b1   b39  M    b2   b2   M    b2   b3   b3   M    M
+     M    b1   b1   b1   b1   b1   bG7  b2   b1   b2   b3   b3   b2   b2   b3   b3
+M    M    M         M    M    b1   b1   b1   b2   b2   M    b2   b2   M    M    C46
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=15,6
+turn=341
+bot_player_index=1
+aTiles=71
+aScore=199
+aStandingArmy=128
+aStars=73
+aCityCount=3
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=1225
+bTiles=74
+bScore=191
+bStandingArmy=117
+bStars=69
+bCityCount=1
+bGeneral=7,16
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=25
+bot_target_player=0
+bot_targeting_army=8,9

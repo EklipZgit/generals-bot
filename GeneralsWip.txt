@@ -37,8 +37,18 @@ TODO:
 Tile value priority matrix to board analysis.
 Fix fog army issues.
 
-FIX-MCTS:
-	Bruh, just fix it.
+MCTS:
+	Engine should not calculate the general distance win until the end of the scrim. 
+		Must give tiles a chance to catch the enemy if a few spaces apart.
+		So we should be able to expand nodes that would fail the distance check instead of considering them 'trial.over()' however we should still VALUE it as a loss until we find a save below and backpropogate that up or something?
+	Stop individually MCTSing things and do one big MCTS at the end of every turn, allowing us to use consistent amounts of time per move.
+		Provide move hints to MCTS.
+			Switch move selection to return a model of considered paths, must-do constraints (like, make this defense move unless MCTS determines a better move that prevents a loss).
+			Have MCTS pre-expand (both in trial bias move selection and in node selection itself) the well known paths so that it starts with something exploitable to explore from.
+		As we have a larger branching factor in MCTS, implement 'killer move' logic to globally track good moves during the search and possibly include them in trial bias or just as a slight bias during exploration node expansion. 
+			Can just maintain a List(player to dictionary(Move to visits/score)) and slightly factor that into exploit if army on one of those move sources?
+		Can also use this longer end-of-turn calculation time post-move to pre-calculate other stuff with MCTS if we want.
+		MCTS does not need to be zero sum during FFA, even if we only include two players. Tile differential concept would need to change, though.
 
 
 EXPANSION v2
@@ -47,6 +57,7 @@ EXPANSION v2
 	Have the main attack path(s) (@gen, @enemy cities) be an 'infinite' army sink to allow infinite army amounts towards it.
 	THEN tweak existing gather to gather towards those target points.
 	Have both expansion-plan and gather-plan be pruned simultaneously until we find the 'best' balance of time spent gathering vs expected tiles captured. Somehow factor in time for defending enemy pushes (may need to recalculate this every turn...? Yikes)
+	Expansion phase needs to maximize for amount of army per turn that reaches the border of our territory vs enemy territory, probably? Might be a good heuristic to use.
 
 
 GENERAL-PREDICTION:

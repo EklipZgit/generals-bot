@@ -5,6 +5,7 @@
     Map: Objects for representing Generals IO Map and Tiles
 """
 import logging
+import random
 import typing
 import uuid
 from collections import deque
@@ -24,22 +25,23 @@ class Player(object):
     def __init__(self, player_index):
         self.cities: typing.List[Tile] = []
         self.general: Tile | None = None
-        self.index = player_index
+        self.index: int = player_index
         self.stars = 0
-        self.score = 0
+        self.score: int = 0
         self.tiles: typing.List[Tile] = []
-        self.tileCount = 0
-        self.standingArmy = 0
-        self.cityCount = 1
-        self.cityLostTurn = 0
-        self.cityGainedTurn = 0
-        self.delta25tiles = 0
-        self.delta25score = 0
+        self.tileCount: int = 0
+        self.standingArmy: int = 0
+        self.cityCount: int = 1
+        self.cityLostTurn: int = 0
+        self.cityGainedTurn: int = 0
+        self.delta25tiles: int = 0
+        self.delta25score: int = 0
         self.dead = False
         self.leftGame = False
-        self.leftGameTurn = -1
+        self.leftGameTurn: int = -1
         self.capturedBy = None
         self.knowsKingLocation = False
+        self.aggression_factor: int = 0
         """True if this player knows the map.player_index players general location. False otherwise."""
 
     def __str__(self):
@@ -293,6 +295,16 @@ class Tile(object):
                     # armyMovedHere = True
             elif tile == TILE_MOUNTAIN:
                 self.isMountain = True
+
+                if self.player != -1 or self.isCity or self.army != 0:
+                    # mis-predicted city.
+                    self.isCity = False
+                    self.player = -1
+                    self.army = 0
+                    for movableTile in self.movable:
+                        if self in movableTile.movable:
+                            movableTile.movable.remove(self)
+
             elif tile >= TILE_EMPTY:
                 self._player = tile
 
@@ -410,7 +422,7 @@ class MapBase(object):
                     self.teammates.add(player)
 
         self.usernames: typing.List[str] = user_names  # List of String Usernames
-        self.players = [Player(x) for x in range(len(self.usernames))]
+        self.players: typing.List[Player] = [Player(x) for x in range(len(self.usernames))]
         self.pathableTiles: typing.Set[Tile] = set()
         """Tiles PATHABLE from the general spawn on the map, including neutral cities but not including mountains/undiscovered obstacles"""
 
@@ -646,33 +658,41 @@ class MapBase(object):
         captureeIdx = self.get_id_from_username(capturee)
         for handler in self.notify_player_captures:
             handler(captureeIdx, capturerIdx)
-        print("\n\n    ~~~~~~~~~\nPlayer captured: {} ({}) by {} ({})\n    ~~~~~~~~~\n".format(capturee, captureeIdx,
+        logging.info("\n\n    ~~~~~~~~~\nPlayer captured: {} ({}) by {} ({})\n    ~~~~~~~~~\n".format(capturee, captureeIdx,
                                                                                                capturer, capturerIdx))
 
         if capturerIdx == self.player_index:
             # ignore, player was us, our tiles will update
             return
-        if captureeIdx >= 0:
-            capturedGen = self.generals[captureeIdx]
-            if capturedGen is not None:
-                capturedGen.isGeneral = False
-                capturedGen.isCity = True
+
+        if captureeIdx < 0:
+            raise AssertionError('what?')
+
+        capturedGen = self.generals[captureeIdx]
+        if capturedGen is not None:
+            capturedGen.isGeneral = False
+            capturedGen.isCity = True
+            for eventHandler in self.notify_city_found:
+                eventHandler(capturedGen)
+        self.generals[captureeIdx] = None
+        capturingPlayer = self.players[capturerIdx]
+        for tile in self.get_all_tiles():
+            if tile.player != captureeIdx:
+                continue
+
+            tile.discoveredAsNeutral = True
+            tile.update(self, tile.tile, tile.army // 2, overridePlayer=capturerIdx)
+            if tile.isGeneral:
+                tile.isGeneral = False
+                tile.isCity = True
                 for eventHandler in self.notify_city_found:
-                    eventHandler(capturedGen)
-            self.generals[captureeIdx] = None
-            capturingPlayer = self.players[capturerIdx]
-            for x in range(self.cols):
-                for y in range(self.rows):
-                    tile = self.grid[y][x]
-                    if tile.player == captureeIdx:
-                        tile.discoveredAsNeutral = True
-                        tile.update(self, tile.tile, tile.army // 2, overridePlayer=capturerIdx)
-                        for eventHandler in self.notify_tile_deltas:
-                            eventHandler(tile)
-                        if tile.isCity and not tile in capturingPlayer.cities:
-                            capturingPlayer.cities.append(tile)
-                        for eventHandler in self.notify_tile_captures:
-                            eventHandler(tile)
+                    eventHandler(tile)
+            for eventHandler in self.notify_tile_deltas:
+                eventHandler(tile)
+            if tile.isCity and not tile in capturingPlayer.cities:
+                capturingPlayer.cities.append(tile)
+            for eventHandler in self.notify_tile_captures:
+                eventHandler(tile)
 
     def get_id_from_username(self, username):
         for i, curName in enumerate(self.usernames):
@@ -850,6 +870,9 @@ class MapBase(object):
                 if tile.isGeneral:
                     self.generals[tile.player] = tile
 
+                random.shuffle(tile.adjacents)
+                random.shuffle(tile.movable)
+
         self.update_reachable()
 
     def update_reachable(self):
@@ -912,6 +935,15 @@ class MapBase(object):
     def player_has_priority(player: int, turn: int):
         """Whether the player WILL HAVE priority on the move they are about to make on current turn"""
         return player & 1 == turn & 1
+
+    def convert_tile_to_mountain(self, tile: Tile):
+        self.pathableTiles.discard(tile)
+        tile.tile = TILE_MOUNTAIN
+        tile.isCity = False
+        tile.army = 0
+        tile.player = -1
+        tile.isMountain = True
+        tile.isGeneral = False
 
 
 # Actual live server map that interacts with the crazy array patch diffs.
@@ -980,7 +1012,7 @@ class Map(MapBase):
         if not '_map_private' in dir(self):
             self._map_private = []
             self._cities_private = []
-        # TODO update map prediction
+
         _apply_diff(self._map_private, data['map_diff'])
         _apply_diff(self._cities_private, data['cities_diff'])
 

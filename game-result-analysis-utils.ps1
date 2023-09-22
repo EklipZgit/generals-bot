@@ -125,6 +125,27 @@ function Copy-WinMapsToWonMapsDirectory {
     }
 }
 
+function Create-ManyTestsByTurnFromFolders {
+    Param(
+        $TestNamePrefix = "",
+        $TestCategory = "",
+        $Turn = 1,
+        $LogFolderRoot = "D:\GeneralsLogs\GroupedLogs\",
+        $DestFolderRoot = "D:\2019_reformat_Backup\generals-bot\Tests\"
+    )
+
+    $folders = foreach ($f in Get-ChildItem $LogFolderRoot -Directory)
+    {
+        $f.FullName
+    }
+
+    foreach ($folder in $folders) {
+        $safeNameEnd = $folder.split('---')[1].replace('-', '_')
+        $testName = "$($TestNamePrefix)__$($Turn)__$($safeNameEnd)"
+
+        "$folder/$turn.txtmap" | Create-TestContinuingGameFrom -TestName $testName -TestCategory $TestCategory
+    }
+}
 
 function Create-TestContinuingGameFrom {
     Param(
@@ -149,7 +170,13 @@ function Create-TestContinuingGameFrom {
         $TestMapFile = $TestMapFile.Replace(".png", ".txtmap")
     }
     
-    $map = Get-Item $TestMapFile
+    $map = Get-Item $TestMapFile -ErrorAction Ignore
+    if ($null -eq $map)
+    {
+        Write-Warning "Unable to load $TestMapFile"
+        return        
+    }
+
     $turn = $map.BaseName
 
     $player = 'unk'
@@ -160,6 +187,11 @@ function Create-TestContinuingGameFrom {
         {
             $player = $line.Split('=')[1].Trim()
         }
+    }
+
+    if ($player -eq 'unk')
+    {
+        Write-Warning "Unable to load $testFile player"
     }
 
     $newName = ($map.Directory.BaseName -split '---') | Select -Last 1

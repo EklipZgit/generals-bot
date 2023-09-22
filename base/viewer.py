@@ -72,7 +72,7 @@ Player information card readout:
 Information area:
 Top line
     -> The THING the bot is currently doing, basically the evaluation that led to a move selection.
-Timings: C {CycleInterval} Q {QuickExpandTurns} G {Gather/AttackSplitTurn} L {LaunchTiming} Off {Offset} ({CurrentCycleTurn})
+C{CycleInterval} Q{QuickExpandTurns} G{Gather/AttackSplitTurn} L{LaunchTiming} Off{Offset} ({CurrentCycleTurn})
 
 black arrows 
     -> intended gather lines
@@ -402,11 +402,10 @@ class GeneralsViewer(object):
             if self._viewInfo.timings:
                 timings = self._viewInfo.timings
                 timingTurn = (self._map.turn + timings.offsetTurns) % timings.cycleTurns
+                timingsText = f"{str(timings)} ({timingTurn}) - {allInText}{self._viewInfo.allInCounter}  {self._viewInfo.addlTimingsLineText}"
                 self._screen.blit(
                     self._infoFont.render(
-                        "Timings: {} ({})   - {}{}       {}".format(
-                            timings.toString(), timingTurn, allInText, self._viewInfo.allInCounter,
-                            self._viewInfo.addlTimingsLineText),
+                        timingsText,
                         True,
                         WHITE),
                     (self.infoSpaceFromLeft, self._window_size[1] - self.infoRowHeight + curInfoTextHeight))
@@ -455,18 +454,18 @@ class GeneralsViewer(object):
                             pygame.draw.rect(self._screen, GRAY,
                                              [score_width * i, pos_top, score_width, self.scoreRowHeight], 1)
                         userName = self._map.usernames[player.index]
-                        userString = "{} ({})".format(userName, player.stars)
+                        userString = f"({player.stars}) {userName}"
                         try:
                             self._screen.blit(self._medFont.render(userString, True, WHITE),
                                               (score_width * i + 3, pos_top + 1))
                         except:
-                            userString = "{} ({})".format("INVALID_NAME", player.stars)
+                            userString = f"({player.stars}) INVALID_NAME"
                             self._screen.blit(self._medFont.render(userString, True, WHITE),
                                               (score_width * i + 3, pos_top + 1))
 
-                        playerSubtext = "{} on {} ({})".format(player.score, player.tileCount, player.cityCount)
-                        if player.index != self._map.player_index:
-                            playerSubtext += " [{}]".format(str(int(self._viewInfo.playerTargetScores[player.index])))
+                        playerSubtext = f"{player.score} {player.tileCount}t {player.cityCount}c"
+                        if self._map.remainingPlayers > 2 and player.index != self._map.player_index and len(self._viewInfo.playerTargetScores) > 0:
+                            playerSubtext += f" {player.aggression_factor}a {int(self._viewInfo.playerTargetScores[player.index])}ts"
                         self._screen.blit(self._medFont.render(playerSubtext, True, WHITE),
                                           (score_width * i + 3, pos_top + 1 + self._medFont.get_height()))
             # for i, score in enumerate(self._scores):
@@ -933,7 +932,7 @@ class GeneralsViewer(object):
                         self.draw_between_tiles(divisionLine, tile, move, alpha=alpha)
             if len(self._viewInfo.board_analysis.intergeneral_analysis.shortestPathWay.tiles) > 0:
                 startTiles = [t for t in self._viewInfo.board_analysis.intergeneral_analysis.shortestPathWay.tiles]
-                SearchUtils.breadth_first_foreach(self._map, startTiles, 1000, draw_border_func)
+                SearchUtils.breadth_first_foreach(self._map, startTiles, 1000, draw_border_func, noLog=True)
 
     def draw_path(self, pathObject, R, G, B, alphaStart, alphaDec, alphaMin):
         if pathObject is None:
@@ -1092,6 +1091,21 @@ class GeneralsViewer(object):
 
         elif not tile.visible:
             color = GRAY
+
+        # adjust color by map divisions:
+        # for (divisionMatrix, (r, g, b), alpha) in self._viewInfo._divisions:
+        #     divisionLine = DirectionalShape(self.get_line(r, g, b, width=2), rotateInitial=90)
+        #
+        #     def draw_border_func(tile):
+        #         for move in tile.movable:
+        #             if move.isMountain or move.isNotPathable:
+        #                 continue
+        #
+        #             if divisionMatrix[tile] != divisionMatrix[move]:
+        #                 self.draw_between_tiles(divisionLine, tile, move, alpha=alpha)
+        #     if len(self._viewInfo.board_analysis.intergeneral_analysis.shortestPathWay.tiles) > 0:
+        #         startTiles = [t for t in self._viewInfo.board_analysis.intergeneral_analysis.shortestPathWay.tiles]
+        #         SearchUtils.breadth_first_foreach(self._map, startTiles, 1000, draw_border_func)
 
         return color
 

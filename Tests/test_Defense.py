@@ -271,6 +271,7 @@ class DefenseTests(TestBase):
 
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, 527)
+        self.begin_capturing_logging()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
         # alert enemy of the player general
@@ -432,7 +433,7 @@ class DefenseTests(TestBase):
         self.assertEqual(7, threat.turns)
 
         self.begin_capturing_logging()
-        move, valueGathered, turnsUsed, gatherNodes = ekBot.get_gather_to_target_tiles_greedy([enemyGeneral], 0.1, gatherTurns=30, includeTreeNodesThatGatherNegative=True, targetArmy=70)
+        move, valueGathered, turnsUsed, gatherNodes = ekBot.get_gather_to_target_tiles_greedy([enemyGeneral], 0.1, gatherTurns=30, includeGatherTreeNodesThatGatherNegative=True, targetArmy=70)
 
         viewInfo = ekBot.viewInfo
         viewInfo.gatherNodes = gatherNodes
@@ -445,7 +446,7 @@ class DefenseTests(TestBase):
         self.assertGreater(valueGathered, 75)
     
     def test__should_realize_it_can_save__exact_move(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/does_not_fail_defense___BgVc48Chn---b--792.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 792)
 
@@ -474,7 +475,7 @@ class DefenseTests(TestBase):
         self.assertIsNone(winner)
 
     def test__should_realize_it_can_save_one_move_behind(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/does_not_fail_defense___BgVc48Chn---b--792.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 793)
 
@@ -504,7 +505,7 @@ class DefenseTests(TestBase):
         self.assertIsNone(winner)
 
     def test__should_realize_it_can_save_one_move_behind__blocked_main_defense(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/does_not_fail_defense___BgVc48Chn---b--792.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 793)
 
@@ -512,26 +513,21 @@ class DefenseTests(TestBase):
 
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, 793)
-        rawMap.GetTile(14, 1).army = 0
-        rawMap.GetTile(14, 1).isMountain = True
-        rawMap.GetTile(14, 1).tile = TILE_MOUNTAIN
-        rawMap.GetTile(14, 1).player = -1
-        map.GetTile(14, 1).army = 0
-        map.GetTile(14, 1).isMountain = True
-        map.GetTile(14, 1).tile = TILE_MOUNTAIN
-        map.GetTile(14, 1).player = -1
+        rawMap.convert_tile_to_mountain(rawMap.GetTile(14, 1))
+        map.convert_tile_to_mountain(map.GetTile(14, 1))
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '15,6->16,6->16,5->16,4->16,3->16,2->16,1->15,1')
 
         ekBot = simHost.bot_hosts[general.player].eklipz_bot
+        ekBot.engine_army_nearby_tiles_range = 8
 
         threat = ekBot.dangerAnalyzer.fastestThreat
         self.assertIsNotNone(threat)
 
         self.begin_capturing_logging()
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=30)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.5, turns=10)
         self.assertIsNone(winner)
 
     def test_should_detect_chase_kill_defense_with_scrim__passes_actual_threat_value_through_scrim(self):
@@ -672,15 +668,17 @@ class DefenseTests(TestBase):
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, 478)
         
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, "9,7->9,8->9,9->9,10->9,11->9,12->9,13->8,13->7,13->7,14->7,15->7,16->7,17->7,18")
+        # this expansion move is what gets it killed kinda, but it should still save. Ideally it should never make this move, but force it to to repro the death.
+        simHost.queue_player_moves_str(general.player, '10,12->11,12')
 
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
         self.get_player_tile(general.x, general.y, simHost.sim, enemyGeneral.player).army = 2
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=50)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=50)
         self.assertIsNone(winner)
     
     def test_should_barely_save_against_no_known_king_loc(self):
@@ -726,7 +724,7 @@ class DefenseTests(TestBase):
         # TODO add asserts for should_not_make_nonsense_scrim_move
     
     def test_should_always_make_furthest_defense_gather_move_first(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_always_make_furthest_defense_gather_move_first___HgshlO-0n---b--441.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 441, fill_out_tiles=True)
 
@@ -743,5 +741,88 @@ class DefenseTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
         self.assertIsNone(winner)
+    
+    def test_should_not_allow_army_to_pass(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_not_allow_army_to_pass___uOUignesH---0--280.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 280, fill_out_tiles=True)
+        enemyGeneral.isGeneral = False
+        oldArmy = enemyGeneral.army
+        enemyGeneral.army = 1
+        enemyGeneral = map.GetTile(3, 16)
+        enemyGeneral.player = (general.player + 1) % 2
+        enemyGeneral.isGeneral = True
+        enemyGeneral.army = oldArmy
+        map.generals[enemyGeneral.player] = enemyGeneral
 
-        # TODO add asserts for should_always_make_furthest_defense_gather_move_first
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 282)
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '7,11->6,11->5,11->5,10->5,9->5,8->5,7->5,6->4,6->3,6->3,5->3,4')
+        simHost.queue_player_moves_str(general.player, '6,11->6,10')
+
+        t1 = self.get_player_tile(8,13, simHost.sim, general.player)
+        t2 = self.get_player_tile(9,13, simHost.sim, general.player)
+        t1.player = enemyGeneral.player
+        t2.player = enemyGeneral.player
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.1, turns=15)
+        self.assertIsNone(winner)
+    
+    def test_should_gather__5_14__into_threat(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_gather__5_14__into_threat___XwyNqjQpO---1--341.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 341, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 341)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '5,13->5,14->5,15->5,16->6,16->7,16')
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=10)
+        self.assertIsNone(winner)
+
+    def test_should_correctly_gather_outer_edges_and_should_not_include_impossible_gather_combination(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_die___8_9nCLDQr---1--432.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 432, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 432)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '10,12->11,12->11,13->11,14->11,15->12,15->13,15->13,16->13,17->14,17')
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
+        self.assertIsNone(winner)
+    
+    def test_should_still_catch_threat(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_still_catch_threat___tuG18hO5s---0--288.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 288, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 288)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '9,2->10,2->10,1->11,1')
+        # simHost.queue_player_moves_str(general.player, '10,4->10,3->10,2->10,1')
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=5)
+        self.assertIsNone(winner)

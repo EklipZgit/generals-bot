@@ -1,0 +1,49 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+               M    M                             M         M    M                   M
+M         M    M         M                        M              M    M    M    M    M    M
+M    M              M    M         M         M                        M
+     M                        M                                  M         M
+          M         M         M                             M
+               M         M         M    M    M                        M    M    M         M
+     M    M                             M                                       M
+     C47       a1   C46       M                        M         M    M              M
+     M    a1   a1   a1   a1                       M                   M
+a1   a1   a4   a2   a4   a1                            M              M                        M
+a1   a1   a3   a1   a1        M              M         M    M    M                        M
+a1   a6        a1   C41  M              M    M    M              M
+a1   a19  M    a1             M    M              M                                       M    M
+a1   a1   a1   a1   M         M         M    M    M    M                                  M
+M    aG2  M                             M         M    M                                       M
+     M                                       M         M
+     M    M                        M    M              M
+M    M                                  M
+M                   M                                                 M         M              M
+     M                        M         M                   M                                  M
+M                   M    M    M                             M         M    M         M    M
+                                        M         M         M                        M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=15,6
+turn=70
+bot_player_index=0
+aTiles=27
+aScore=60
+aStandingArmy=33
+aStars=69
+aCityCount=1
+aGeneral=1,14
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+bTiles=22
+bScore=57
+bStandingArmy=35
+bStars=37
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bot_target_player=-1

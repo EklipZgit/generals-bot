@@ -43,6 +43,9 @@ class MoveTimer(object):
         logging.info(f'vvv--------------vvv\nBeginning: {event_description} ({event.event_start_time - self.move_beginning_time:.3f} in)\n--------------------')
         return event
 
+    def get_time_elapsed(self):
+        return time.perf_counter() - self.move_beginning_time
+
 
 class PerformanceTimer(object):
     def __init__(self):

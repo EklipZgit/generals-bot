@@ -69,7 +69,7 @@ def get_player_army_amount_on_path(path, player, startIdx=0, endIdx=1000):
     return value
 
 
-class TreeNode(object):
+class GatherTreeNode(object):
     def __init__(self, tile: Tile, fromTile: Tile | None, turn: int):
         self.tile: Tile = tile
         self.fromTile: Tile | None = fromTile
@@ -89,9 +89,9 @@ class TreeNode(object):
         self.turn: int = turn
         self.gatherTurns: int = 0
         self.neutrals: int = 0
-        self.children: typing.List[TreeNode] = []
+        self.children: typing.List[GatherTreeNode] = []
         """Child gather tree nodes"""
-        self.pruned: typing.List[TreeNode] = []
+        self.pruned: typing.List[GatherTreeNode] = []
         """Children that have been pruned from the actual gather"""
 
     def __gt__(self, other):
@@ -110,7 +110,7 @@ class TreeNode(object):
         return self.tile == other.tile
 
     def deep_clone(self):
-        newNode = TreeNode(self.tile, self.fromTile, self.turn)
+        newNode = GatherTreeNode(self.tile, self.fromTile, self.turn)
         newNode.value = self.value
         newNode.trunkValue = self.trunkValue
         newNode.gatherTurns = self.gatherTurns

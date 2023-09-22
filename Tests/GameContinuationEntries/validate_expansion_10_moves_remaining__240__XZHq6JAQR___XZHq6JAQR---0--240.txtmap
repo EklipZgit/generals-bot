@@ -1,0 +1,47 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M    b1   M    M              M         M
+b1   b1   b1   b2                            M
+a1   b2   b1   b1   b2   M    M                             M         M         M
+a3   a3   b1   bG6  b1   b1   M    M         M    M                             M
+     M    b22  b1   C44  b1   M         M    a1   a1   C43  M
+     a2   a3   M    b3   b1   M    a2   a1   a1   a1                       M         M
+     a2   a3   b3   b18  b1   b2   b1   M    a1   a1   M
+     a2   a37  M    M    b1   b1   b1   C43  a1   a1   M                        M
+     a2   a1   a1   a1   a1   a1   a1   a1   a1   a1   M         M    M    M    M
+     a2   a5   a3             a2   a1   a2   M    a1   a1   M    M         M
+     a92  a4   a2   M    C40  a2   a2             M    a1   M    M         M
+M    a1   M         M    M    a2   M                   a2   M         M    M
+a1   a1   M         M         a2   M              M    a2        M
+a1   aC4       M         a2   a2             M    M    M                   M         M
+a1   M              a3   a2                                      M              M
+a1   a1   M    M    a2             M    M    M                   M
+M    a1        M    a2                  M         M                             M
+a1   aG7  a1   a1   a2             M                   M                   M    M
+a1   a1   a1   a1        M                   M         M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=3,3
+turn=240
+bot_player_index=0
+aTiles=71
+aScore=247
+aStandingArmy=176
+aStars=70
+aCityCount=2
+aGeneral=1,17
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+bTiles=26
+bScore=119
+bStandingArmy=93
+bStars=38
+bCityCount=1
+bGeneral=3,3
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=167
+bot_target_player=1

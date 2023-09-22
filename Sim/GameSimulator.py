@@ -479,12 +479,12 @@ class GameSimulatorHost(object):
                         continue
                     botHost.notify_game_over()
             except:
-                logging.info("(error v notifying bots of game over, less important than real error below)")
-                logging.info(traceback.format_exc())
-                logging.info("(error ^ notifying bots of game over, less important than real error below)")
+                logging.error(f"(error v notifying bots of game over turn {self.sim.turn})")
+                logging.error(traceback.format_exc())
+                logging.error("(error ^ notifying bots of game over above, less important than real error logged below)")
 
-            logging.info("(error v running bot sim)")
-            logging.info(traceback.format_exc())
+            logging.error(f"(error v running bot sim turn {self.sim.turn})")
+            logging.error(traceback.format_exc())
             raise
 
         self.sim.end_game()

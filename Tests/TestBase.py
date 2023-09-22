@@ -1,5 +1,7 @@
 import logging
+import random
 import time
+import traceback
 import typing
 import unittest
 
@@ -8,6 +10,7 @@ import EarlyExpandUtils
 import GatherUtils
 import SearchUtils
 from ArmyEngine import ArmySimResult
+from ArmyTracker import Army
 from DataModels import Move
 from Path import Path
 from Sim.GameSimulator import GameSimulator, GameSimulatorHost
@@ -15,6 +18,7 @@ from Sim.TextMapLoader import TextMapLoader
 from ViewInfo import ViewInfo, PathColorer
 from Viewer.ViewerProcessHost import ViewerHost
 from base.client.map import MapBase, Tile, Score, Player, TILE_FOG, TILE_OBSTACLE
+from bot_ek0x45 import EklipZBot
 
 
 class TestBase(unittest.TestCase):
@@ -30,8 +34,9 @@ class TestBase(unittest.TestCase):
         # without force=True, the first time a logging.log* is called earlier in the code, the config gets set to
         # default: WARN and basicConfig after that point has no effect without force=True
         logging.basicConfig(format='%(message)s', level=logLevel, force=True)
-        time.sleep(0.1)
-        logging.info("TESTING TESTING 123")
+
+    def stop_capturing_logging(self):
+        logging.basicConfig(format='%(message)s', level=logging.FATAL, force=True)
 
     def _initialize(self):
         if not self._initialized:
@@ -75,11 +80,25 @@ class TestBase(unittest.TestCase):
             logging.info(f'failed to load file {mapFilePath}')
             raise
 
-    def load_map_and_generals(self, mapFilePath: str, turn: int, player_index: int = -1, fill_out_tiles=False) -> typing.Tuple[MapBase, Tile, Tile]:
+    def load_map_and_generals(
+            self,
+            mapFilePath: str,
+            turn: int,
+            player_index: int = -1,
+            fill_out_tiles: bool = False,
+            respect_player_vision: bool = False
+    ) -> typing.Tuple[MapBase, Tile, Tile]:
         rawData = TextMapLoader.get_map_raw_string_from_file(mapFilePath)
-        return self.load_map_and_generals_from_string(rawData, turn, player_index, fill_out_tiles)
+        return self.load_map_and_generals_from_string(rawData, turn, player_index, fill_out_tiles, respect_player_vision)
 
-    def load_map_and_generals_from_string(self, rawMapStr: str, turn: int, player_index: int = -1, fill_out_tiles=False) -> typing.Tuple[MapBase, Tile, Tile]:
+    def load_map_and_generals_from_string(
+            self,
+            rawMapStr: str,
+            turn: int,
+            player_index: int = -1,
+            fill_out_tiles=False,
+            respect_player_vision: bool = False
+    ) -> typing.Tuple[MapBase, Tile, Tile]:
         gameData = TextMapLoader.load_data_from_string(rawMapStr)
         if player_index == -1 and 'bot_player_index' in gameData:
             player_index = int(gameData['bot_player_index'])
@@ -103,12 +122,35 @@ class TestBase(unittest.TestCase):
             map.players[enemyGen.player].general = enemyGen
         elif any(filter(lambda gen: gen is not None and gen != general, map.generals)):
             enemyGen = next(filter(lambda gen: gen is not None and gen != general, map.generals))
+            map.generals[enemyGen.player] = enemyGen
+            map.players[enemyGen.player].general = enemyGen
         else:
             raise AssertionError("Unable to produce an enemy general from given map data file...")
 
         for i, player in enumerate(map.players):
             if i != general.player and i != enemyGen.player:
-                player.dead = True
+                chars = TextMapLoader.get_player_char_index_map()
+                enemyChar, _ = chars[i]
+                # player.dead = True
+
+                if f'{enemyChar}Score' in gameData:
+                    player.score = int(gameData[f'{enemyChar}Score'])
+                if f'{enemyChar}Tiles' in gameData:
+                    player.tileCount = int(gameData[f'{enemyChar}Tiles'])
+                if f'{enemyChar}CityCount' in gameData:
+                    player.cityCount = int(gameData[f'{enemyChar}CityCount'])
+                if f'{enemyChar}Stars' in gameData:
+                    player.stars = float(gameData[f'{enemyChar}Stars'])
+                if f'{enemyChar}KnowsKingLocation' in gameData:
+                    player.knowsKingLocation = gameData[f'{enemyChar}KnowsKingLocation'].lower() == 'true'
+                if f'{enemyChar}Dead' in gameData:
+                    player.dead = gameData[f'{enemyChar}Dead'].lower() == 'true'
+                if f'{enemyChar}LeftGame' in gameData:
+                    player.leftGame = gameData[f'{enemyChar}LeftGame'].lower() == 'true'
+                if f'{enemyChar}LeftGameTurn' in gameData:
+                    player.leftGameTurn = int(gameData[f'{enemyChar}LeftGameTurn'])
+                if f'{enemyChar}AggressionFactor' in gameData:
+                    player.aggression_factor = int(gameData[f'{enemyChar}AggressionFactor'])
 
         if fill_out_tiles:
             chars = TextMapLoader.get_player_char_index_map()
@@ -133,7 +175,7 @@ class TestBase(unittest.TestCase):
             if f'{playerChar}Tiles' in gameData:
                 playerTiles = int(gameData[f'{playerChar}Tiles'])
 
-            self.ensure_player_tiles_and_scores(map, general, playerTiles, playerScore, enemyGen, enemyTiles, enemyScore, enemyCities)
+            self.ensure_player_tiles_and_scores(map, general, playerTiles, playerScore, enemyGen, enemyTiles, enemyScore, enemyCities, respect_player_vision)
 
         for player in map.players:
             player.score = 0
@@ -202,6 +244,29 @@ class TestBase(unittest.TestCase):
                     furthestMap[x][y] = 0 - furthestMap[x][y]
 
         return furthestMap
+
+    def get_test_army_tiles(self, map: MapBase, general: Tile, enemyGen: Tile) -> typing.Tuple[Army, Army]:
+        enemyArmy = None
+        generalArmy = None
+        for tile in map.get_all_tiles():
+            if tile.player == enemyGen.player and (enemyArmy is None or enemyArmy.army < tile.army):
+                enemyArmy = tile
+            elif tile.player == general.player and (generalArmy is None or generalArmy.army < tile.army):
+                generalArmy = tile
+
+        # # now include generals
+        # for tile in map.get_all_tiles():
+        #     if enemyArmy is None and tile.player == enemyGen.player and tile.army > 3:
+        #         enemyArmy = tile
+        #     elif generalArmy is None and tile.player == general.player and tile.army > 3:
+        #         generalArmy = tile
+
+        if enemyArmy is None:
+            raise AssertionError("Couldn't find an enemy tile with army > 3")
+        if generalArmy is None:
+            raise AssertionError("Couldn't find a friendly tile with army > 3")
+
+        return Army(generalArmy), Army(enemyArmy)
 
     def render_paths(self, map: MapBase, paths: typing.List[Path | None], infoStr: str):
         viewInfo = self.get_view_info(map)
@@ -426,10 +491,14 @@ class TestBase(unittest.TestCase):
         viewInfo.playerTargetScores = [0 for p in map.players]
         return viewInfo
 
-    def render_view_info(self, map: MapBase, viewInfo: ViewInfo, infoString: str):
-        viewer = ViewerHost(infoString, cell_width=None, cell_height=None, alignTop=False, alignLeft=False, noLog=True)
+    def render_view_info(self, map: MapBase, viewInfo: ViewInfo, infoString: str | None = None):
+        titleString = infoString
+        if titleString is None:
+            titleString = self._testMethodName
+        viewer = ViewerHost(titleString, cell_width=None, cell_height=None, alignTop=False, alignLeft=False, noLog=True)
         viewer.noLog = True
-        viewInfo.infoText = infoString
+        if infoString is not None:
+            viewInfo.infoText = infoString
         viewer.start()
         viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
 
@@ -437,7 +506,12 @@ class TestBase(unittest.TestCase):
             viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
             time.sleep(0.1)
 
-    def assertNoRepetition(self, simHost: GameSimulatorHost, minForRepetition=1, msg="Expected no move repetition."):
+    def assertNoRepetition(
+            self,
+            simHost: GameSimulatorHost,
+            minForRepetition=1,
+            msg="Expected no move repetition.",
+            repetitionPlayer: int | None = None):
         moved: typing.List[typing.Dict[Tile, int]] = [{} for player in simHost.bot_hosts]
 
         for histEntry in simHost.sim.moves_history:
@@ -451,6 +525,9 @@ class TestBase(unittest.TestCase):
 
         failures = []
         for player in range(len(simHost.bot_hosts)):
+            if repetitionPlayer is not None and player != repetitionPlayer:
+                continue
+
             playerMoves = moved[player]
             for tile, repetitions in sorted(playerMoves.items(), key=lambda kvp: kvp[1], reverse=True):
                 if repetitions > minForRepetition:
@@ -580,11 +657,23 @@ class TestBase(unittest.TestCase):
             enemyGeneral: Tile = None,
             enemyGeneralTileCount: int = None,
             enemyGeneralTargetScore: int = None,
-            enemyCityCount: int = 1):
+            enemyCityCount: int = 1,
+            respectPlayerVision: bool = False,
+    ):
         """
         Leave enemy params empty to match the general values evenly (and create an enemy general opposite general)
         -1 means leave the map alone, keep whatever tiles and army amounts are already on the map
         """
+
+        bannedEnemyTiles: typing.Set[Tile] = set()
+        if respectPlayerVision:
+            for tile in map.get_all_tiles():
+                if tile.player == general.player:
+                    for adj in tile.adjacents:
+                        if adj.isObstacle:
+                            continue
+                        if adj.player == -1:
+                            bannedEnemyTiles.add(adj)
 
         if enemyGeneral is None:
             enemyGeneral = map.generals[(general.player + 1) % 2]
@@ -626,7 +715,7 @@ class TestBase(unittest.TestCase):
             tileToGen = genDistMap[tile.x][tile.y]
             tileToOp = enemyMap[tile.x][tile.y]
 
-            if tile.isObstacle:
+            if tile.isObstacle and tile not in bannedEnemyTiles:
                 countPlayerAdj = SearchUtils.count(tile.adjacents, lambda t: t.player == general.player)
                 if countPlayerAdj == 0 and countCitiesEnemy.value < enemyCityCount and tileToOp < tileToGen:
                     tile.player = enemyGeneral.player
@@ -647,7 +736,7 @@ class TestBase(unittest.TestCase):
                         countTilesGeneral.add(1)
                         newTiles.add(tile)
                 else:
-                    if countTilesEnemy.value < enemyGeneralTileCount:
+                    if countTilesEnemy.value < enemyGeneralTileCount and tile not in bannedEnemyTiles:
                         tile.player = enemyGeneral.player
                         tile.army = 1
                         countTilesEnemy.add(1)
@@ -681,7 +770,6 @@ class TestBase(unittest.TestCase):
                     countScoreGeneral.add(1)
                     tile.army += 1
 
-
         scores: typing.List[None | Score] = [None for _ in map.players]
         scores[general.player] = Score(general.player, countScoreGeneral.value, countTilesGeneral.value, dead=False)
         scores[enemyGeneral.player] = Score(enemyGeneral.player, countScoreEnemy.value, countTilesEnemy.value, dead=False)
@@ -697,3 +785,116 @@ class TestBase(unittest.TestCase):
         map.generals[furthestTile.player] = furthestTile
         enemyGen = furthestTile
         return enemyGen
+
+    def a_b_test(
+            self,
+            numRuns: int,
+            configureA: typing.Callable[[EklipZBot], None],
+            configureB: typing.Callable[[EklipZBot], None] | None = None,
+            debugMode: bool = False,
+            mapFile: str | typing.List[str] | None = None,
+            debugModeTurnTime: float = 0.1,
+            debugModeRenderAllPlayers: bool = False,
+            noCities: bool | None = None
+    ):
+        """
+        run numRuns games on a map flipping general spawns each time, and asserts that A beat B most of the time.
+        Always outputs the final results at the end.
+        Takes a config function for A and optional config function for B.
+        If debugMode = True will attach a viewer to A.
+
+        @param numRuns:
+        @param configureA:
+        @param configureB:
+        @param debugMode:
+        @param mapFile: If none, will cycle fairly between a set of symmetric maps.
+        @param noCities: If True, all cities will be converted to mountains. By default it will be 50-50 whether the map has cities or not.
+        @return:
+        """
+        mapFiles = [
+            'SymmetricTestMaps/even_playground_map_small__left_right.txtmap',
+            'SymmetricTestMaps/even_playground_map_small__top_left_bot_right.txtmap',
+            'SymmetricTestMaps/even_playground_map_small__top_right_bot_left.txtmap',
+        ]
+        if isinstance(mapFile, str):
+            mapFiles = [mapFile]
+        elif isinstance(mapFile, list):
+            mapFiles = mapFile
+
+        curMapFile = mapFiles[0]
+
+        minGameDurationToCount = 125
+
+        aWins = 0
+        bWins = 0
+        for i in range(numRuns):
+            a = i % 2
+            b = (a + 1) % 2
+
+            banCitiesThisIter = noCities
+
+            # randomize maps every time we do a mirrored set of matches
+            if a == 0:
+                curMapFile = random.choice(mapFiles)
+                if banCitiesThisIter is None:
+                    banCitiesThisIter = random.choice([True, False])
+
+            try:
+                lastWinTurns = 0
+                winner = -1
+                while lastWinTurns < minGameDurationToCount:
+                    self.stop_capturing_logging()
+                    map, general, enemyGen = self.load_map_and_generals(curMapFile, 1, fill_out_tiles=False)
+                    map.usernames[a] = 'a'
+                    map.usernames[b] = 'b'
+                    self.reset_map_to_just_generals(map)
+
+                    if banCitiesThisIter:
+                        for tile in map.get_all_tiles():
+                            if tile.isCity:
+                                map.convert_tile_to_mountain(tile)
+
+                    self.enable_search_time_limits_and_disable_debug_asserts()
+
+                    playerToRender = a
+                    if debugMode and debugModeRenderAllPlayers:
+                        playerToRender = -2
+                    simHost = GameSimulatorHost(map, player_with_viewer=playerToRender)
+                    aBot = simHost.get_bot(a)
+                    bBot = simHost.get_bot(b)
+
+                    configureA(aBot)
+                    if configureB is not None:
+                        configureB(bBot)
+
+                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=debugModeTurnTime)
+                    lastWinTurns = simHost.sim.turn
+                    if lastWinTurns < minGameDurationToCount:
+                        self.begin_capturing_logging()
+                        logging.info(f'replaying short game turns {simHost.sim.turn} (won by {"a" if winner == a else "b"}={winner})')
+                        self.stop_capturing_logging()
+
+                if a == winner:
+                    aWins += 1
+                elif b == winner:
+                    bWins += 1
+                else:
+                    raise AssertionError(f"wtf, winner was {str(winner)}")
+                self.begin_capturing_logging()
+                logging.info(f'aWins: {aWins}, bWins: {bWins} (games {aWins + bWins})')
+                self.stop_capturing_logging()
+            except:
+                self.begin_capturing_logging()
+                logging.info(f'error: {traceback.format_exc()}')
+                self.stop_capturing_logging()
+                pass
+
+        aIndicator = 'A--'
+        if aWins > bWins:
+            aIndicator = 'A++'
+
+        self.begin_capturing_logging()
+        msg = f'{aIndicator} | A won {aWins} times, B won {bWins} times out of {numRuns} games ({numRuns - aWins - bWins} errors?)'
+        logging.info(msg)
+
+        self.assertGreater(aWins, bWins, msg)

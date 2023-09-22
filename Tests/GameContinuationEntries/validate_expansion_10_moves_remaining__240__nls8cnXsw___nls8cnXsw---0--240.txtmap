@@ -1,0 +1,45 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+               M              b2   b2   M                   M    M    M         M
+                    M         b2   M    M    M                   M    M
+b3   b3   b3   b3   b3   b3   b2        M                                       M    M    M
+b3   M    M    M    M    b3   b2   b3   M              M         M         M    M    a2   M
+b3   b3   b3   b3   b3   b3   b2   b2   MN1                      M    M    aG10 a2   a2   a2
+     M         C47  b3   b3   M    b2   b2   M    a3        M    a2   a1   a1   a1   a2   a2
+     M              M    a2   M    a69  b2   M    a1   a1   a1   a3   M    a1   a1   M    a2
+M              M         a2   C47  a1   a1   a1   a1   a1   a2   a1   a1   aC10 a1   a1   a1
+                                   b1   b1   b1   b1   M    b1   b38  a1   a1   a1   a1   a1
+               M    M    M         M    b1   b1   b1   b1   b1   a2   a2   a2   a2   a1   M
+                                             M    b2   b1   b2   M    C49  M    a2   a1
+                                                  M    b1   b1             C48  a2   a1
+     M              M                        M                        M         M    a1
+                                        M                   M    M         a1   a1   a1   C45
+M                                  M                             M         M
+M                                                      M
+     M                                       M              M    M         M
+          M         M                   M    M                        M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=2,2
+turn=240
+bot_player_index=0
+aTiles=52
+aScore=159
+aStandingArmy=107
+aStars=69
+aCityCount=2
+aGeneral=15,4
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+bTiles=50
+bScore=155
+bStandingArmy=105
+bStars=52
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=328
+bot_target_player=1

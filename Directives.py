@@ -41,11 +41,8 @@ class Timings():
 		adjustedTurn = (turn + self.offsetTurns) % self.cycleTurns
 		return adjustedTurn
 
-	
-	def toString(self):
-		return "C {}   Q {}   G {}   L {}   Off {}".format(self.cycleTurns, self.quickExpandTurns, self.splitTurns, self.launchTiming, self.offsetTurns)
 	def __str__(self):
-		return self.toString()
+		return f"C{self.cycleTurns}  Q{self.quickExpandTurns}  G{self.splitTurns}  L{self.launchTiming}  Off{self.offsetTurns}"
 
 class Directive():
 	def __init__(self, type = None):

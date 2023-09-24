@@ -648,8 +648,13 @@ class GeneralsViewer(object):
                                           (pos_left + 2, pos_top + self.cellHeight / 4))
 
                     # Draw Text Value
-                    if tile.army != 0 and (
-                            tile.discovered or tile in self._viewInfo.armyTracker.armies):  # Don't draw on empty tiles
+                    if (
+                        tile.army != 0
+                        # and (
+                        #     tile.discovered
+                        #     or tile in self._viewInfo.armyTracker.armies
+                        # )
+                    ):  # Don't draw on empty tiles
                         textVal = str(tile.army)
                         textWidth = self._medFontWidth * len(textVal)
                         self._screen.blit(self._medFont.render(textVal, True, color_font),

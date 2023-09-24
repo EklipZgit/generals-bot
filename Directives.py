@@ -44,6 +44,7 @@ class Timings():
 	def __str__(self):
 		return f"C{self.cycleTurns}  Q{self.quickExpandTurns}  G{self.splitTurns}  L{self.launchTiming}  Off{self.offsetTurns}"
 
+
 class Directive():
 	def __init__(self, type = None):
 		self.type = type

@@ -81,7 +81,7 @@ class CityGatherTests(TestBase):
         self.assertNoRepetition(simHost)
 
     def test_should_gather_at_enemy_city_in_sane_way(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_gather_at_enemy_city_in_sane_way___SAsqVqIT3---1--537.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 537, fill_out_tiles=True)
 
@@ -105,7 +105,7 @@ class CityGatherTests(TestBase):
         self.assertEqual(general.player, city2.player)
 
     def test_should_gather_at_enemy_city__should_use_large_tiles__all_armies_off_cities(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_gather_at_enemy_city_in_sane_way__all_armies_off_cities___SAsqVqIT3---1--537.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 537, fill_out_tiles=True)
 
@@ -131,7 +131,7 @@ class CityGatherTests(TestBase):
         self.assertGreater(largest.army, 150, "should have gathered big boy army to hold the cities")
 
     def test_should_gather_at_enemy_city__should_use_large_tiles(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_gather_at_enemy_city_in_sane_way___SAsqVqIT3---1--537.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 537, fill_out_tiles=True)
 
@@ -155,3 +155,45 @@ class CityGatherTests(TestBase):
         self.assertEqual(general.player, city2.player)
         largest = self.get_player_largest_tile(simHost.sim, general.player)
         self.assertGreater(largest.army, 150, "should have gathered big boy army to hold the cities")
+    
+    def test_should_not_capture_enemy_cities_through_neutral_cities(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_not_capture_enemy_cities_through_neutral_cities___1sjqfLDV7---0--426.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 426, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 426)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+        simHost.reveal_player_general(playerToRevealTo=general.player, playerToReveal=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=16)
+        self.assertIsNone(winner)
+        self.assertNoRepetition(simHost, minForRepetition=2)
+        targCity = self.get_player_tile(8, 6, simHost.sim, general.player)
+        neutCity = self.get_player_tile(9, 6, simHost.sim, general.player)
+
+        self.assertEqual(general.player, targCity.player)
+        self.assertEqual(-1, neutCity.player, 'should not have attacked target city through neutral city wtf')
+    
+    def test_should_not_take_city_literally_2_inches_from_enemy_army(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_take_city_literally_2_inches_from_enemy_army___XZvpx_iVk---1--196.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 196, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 196)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=4)
+        self.assertIsNone(winner)
+        city = self.get_player_tile(6, 7, simHost.sim, general.player)
+        self.assertTrue(city.isNeutral)

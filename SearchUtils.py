@@ -28,27 +28,24 @@ class Counter(object):
         self.value = self.value + value
 
 
-def where(list, filter):
-    results = []
-    for item in list:
-        if filter(item):
-            results.append(item)
+def where(enumerable, filter_func):
+    results = [item for item in enumerable if filter_func(item)]
     return results
 
 
-def any(list, filter):
-    for item in list:
-        if filter(item):
+def any_where(enumerable, filter_func) -> bool:
+    for item in enumerable:
+        if filter_func(item):
             return True
     return False
 
 
-def count(list, filter):
-    count = 0
-    for item in list:
-        if filter(item):
-            count += 1
-    return count
+def count(enumerable, filter_func) -> int:
+    countMatch = 0
+    for item in enumerable:
+        if filter_func(item):
+            countMatch += 1
+    return countMatch
 
 
 def dest_breadth_first_target(
@@ -64,7 +61,8 @@ def dest_breadth_first_target(
         noNeutralCities=True,
         skipTiles=None,
         ignoreGoalArmy=False,
-        noLog=True) -> typing.Union[None, Path]:
+        noLog=True
+) -> typing.Union[None, Path]:
     """
     Gets a path that results in {targetArmy} army on one of the goalList tiles.
     GoalList can be a dict that maps from start tile to (startDist, goalTargetArmy)
@@ -388,7 +386,7 @@ def breadth_first_dynamic(
         goalFunc,
         maxTime=0.2,
         maxDepth=100,
-        noNeutralCities=False,
+        noNeutralCities=True,
         negativeTiles=None,
         skipTiles=None,
         searchingPlayer=-2,
@@ -571,6 +569,7 @@ def breadth_first_dynamic_max(
         maxTurns=100,
         maxDepth=100,
         noNeutralCities=False,
+        noNeutralUndiscoveredObstacles=True,
         negativeTiles=None,
         skipTiles=None,
         searchingPlayer=-2,
@@ -747,6 +746,9 @@ def breadth_first_dynamic_max(
     maxPrio = None
     maxList = None
 
+    current: Tile = None
+    next: Tile = None
+
     while not frontier.empty():
         iter += 1
         if (iter & 128 == 0
@@ -799,7 +801,7 @@ def breadth_first_dynamic_max(
                 continue
             if (next.isMountain
                     or (noNeutralCities and next.player == -1 and next.isCity)
-                    or (not next.discovered and next.isNotPathable)):
+                    or (next.isUndiscoveredObstacle and noNeutralUndiscoveredObstacles)):
                 continue
             nextVal = priorityFunc(next, prioVals) if not includePath else priorityFunc(next, prioVals, nodeList)
             if nextVal is not None:

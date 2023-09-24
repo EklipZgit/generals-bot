@@ -177,7 +177,7 @@ def optimize_first_25(
     genArmyAtStart = general.army
 
     if mapTurnAtStart > 25:
-        result = _sub_optimize_first_25(
+        result = _sub_optimize_remaining_cycle_expand_from_cities(
             map,
             general,
             genArmyAtStart,
@@ -212,7 +212,7 @@ def optimize_first_25(
         if mapTurnAtStart > launchTurn:
             continue
 
-        launchResult = _sub_optimize_first_25(map, general, genArmy, distToGenMap, tile_weight_map, turn=launchTurn, allow_wasted_moves=optimalWastedMoves + 3, debug_view_info=debug_view_info, prune_below=maxTiles, no_log=no_log)
+        launchResult = _sub_optimize_remaining_cycle_expand_from_cities(map, general, genArmy, distToGenMap, tile_weight_map, turn=launchTurn, allow_wasted_moves=optimalWastedMoves + 3, debug_view_info=debug_view_info, prune_below=maxTiles, no_log=no_log)
         for _ in range(mapTurnAtStart, launchTurn):
             launchResult.insert(0, None)
         launchVal = __evaluate_plan_value(map, general, genArmyAtStart, map.turn, launchResult, dist_to_gen_map=distToGenMap, tile_weight_map=tile_weight_map, already_visited=visited, no_log=no_log)
@@ -332,7 +332,7 @@ def _sub_optimize_first_25_specific_wasted(
         # try immediate launch
         if not no_log:
             logging.info(f'normal, curTurn {curTurn}, genArmy {curAttemptGenArmy}')
-        maxOptimized = _sub_optimize_first_25(
+        maxOptimized = _sub_optimize_remaining_cycle_expand_from_cities(
             map,
             general,
             curAttemptGenArmy,
@@ -358,7 +358,7 @@ def _sub_optimize_first_25_specific_wasted(
             if not no_log:
                 logging.info(
                     f'withWait (double: {not isSuboptimalLaunchTurn}), curTurn {curTurn}, genArmy {curAttemptGenArmy}')
-            withOneWait = _sub_optimize_first_25(
+            withOneWait = _sub_optimize_remaining_cycle_expand_from_cities(
                 map,
                 general,
                 curAttemptGenArmy,
@@ -391,7 +391,7 @@ def _sub_optimize_first_25_specific_wasted(
 
         return maxValue, pathList
 
-def _sub_optimize_first_25(
+def _sub_optimize_remaining_cycle_expand_from_cities(
         map: MapBase,
         general: Tile,
         gen_army: int,
@@ -429,6 +429,8 @@ def _sub_optimize_first_25(
         visited_set = set()
         visited_set.add(general)
 
+    turn = turn % 50
+
     skipMoveCount = 0
     if not dont_force_first:
         if gen_army == 1:
@@ -440,7 +442,6 @@ def _sub_optimize_first_25(
                 turn += 1
                 allow_wasted_moves -= 1
                 skipMoveCount += 1
-
     turnsLeft = 50 - turn
 
     if turnsLeft <= 0:

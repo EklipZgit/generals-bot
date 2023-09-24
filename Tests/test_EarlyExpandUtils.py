@@ -419,7 +419,7 @@ class EarlyExpandUtilsTests(TestBase):
 
         distToGenMap = SearchUtils.build_distance_map(map, [general])
 
-        paths = EarlyExpandUtils._sub_optimize_first_25(
+        paths = EarlyExpandUtils._sub_optimize_remaining_cycle_expand_from_cities(
             map,
             general,
             11,
@@ -449,7 +449,7 @@ class EarlyExpandUtilsTests(TestBase):
 
         distToGenMap = SearchUtils.build_distance_map(map, [general])
 
-        paths = EarlyExpandUtils._sub_optimize_first_25(
+        paths = EarlyExpandUtils._sub_optimize_remaining_cycle_expand_from_cities(
             map,
             general,
             10,
@@ -486,7 +486,7 @@ class EarlyExpandUtilsTests(TestBase):
 
                     launchTurn = 20
 
-                    paths = EarlyExpandUtils._sub_optimize_first_25(
+                    paths = EarlyExpandUtils._sub_optimize_remaining_cycle_expand_from_cities(
                         map,
                         general,
                         11,
@@ -639,7 +639,7 @@ class EarlyExpandUtilsTests(TestBase):
 
         launchTurn = 20
 
-        paths = EarlyExpandUtils._sub_optimize_first_25(
+        paths = EarlyExpandUtils._sub_optimize_remaining_cycle_expand_from_cities(
             map,
             general,
             11,

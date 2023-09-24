@@ -184,7 +184,7 @@ class Tile(object):
     @property
     def isUndiscoveredObstacle(self) -> bool:
         """True if not discovered and is a map obstacle/mountain"""
-        return not self.discovered and self.tile == TILE_OBSTACLE
+        return self.tile == TILE_OBSTACLE and not self.discovered and not self.isCity
 
     @property
     def isNotPathable(self) -> bool:
@@ -210,7 +210,7 @@ class Tile(object):
     def player(self, value):
         if value >= 0:
             self.tile = value
-        elif value == -1 and self.army == 0 and not self.isNotPathable and not self.isCity:
+        elif value == -1 and self.army == 0 and not self.isNotPathable and not self.isCity and not self.isMountain:
             self.tile = TILE_EMPTY # this whole thing seems wrong, needs to be updated carefully with tests as the delta logic seems to rely on it...
         self._player = value
 
@@ -253,6 +253,12 @@ class Tile(object):
             return self.x == other.x and self.y == other.y
         return False
 
+    def was_not_visible_last_turn(self):
+        return self.delta.gainedSight or (not self.visible and not self.delta.lostSight)
+
+    def was_visible_last_turn(self):
+        return self.delta.lostSight or (self.visible and not self.delta.gainedSight)
+
     # returns true if an army was likely moved to this tile, false if not.
     def update(
         self,
@@ -294,6 +300,11 @@ class Tile(object):
                     logging.info(f'enemy tile adjacent to vision lost was lost, army moved here true for {str(self)}')
                     # armyMovedHere = True
             elif tile == TILE_MOUNTAIN:
+                if not self.isMountain:
+                    for movableTile in self.movable:
+                        if self in movableTile.movable:
+                            movableTile.movable.remove(self)
+
                 self.isMountain = True
 
                 if self.player != -1 or self.isCity or self.army != 0:
@@ -301,9 +312,6 @@ class Tile(object):
                     self.isCity = False
                     self.player = -1
                     self.army = 0
-                    for movableTile in self.movable:
-                        if self in movableTile.movable:
-                            movableTile.movable.remove(self)
 
             elif tile >= TILE_EMPTY:
                 self._player = tile

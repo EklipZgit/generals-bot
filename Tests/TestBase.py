@@ -115,9 +115,11 @@ class TestBase(unittest.TestCase):
         elif 'targetPlayerExpectedGeneralLocation' in gameData:
             x, y = gameData['targetPlayerExpectedGeneralLocation'].split(',')
             enemyGen = map.GetTile(int(x), int(y))
-            enemyGen.isGeneral = True
-            enemyGen.player = botTargetPlayer
-            enemyGen.army = 10
+            if not enemyGen.isGeneral:
+                enemyGen.isGeneral = True
+                enemyGen.player = botTargetPlayer
+                if enemyGen.army == 0:
+                    enemyGen.army = 10
             map.generals[enemyGen.player] = enemyGen
             map.players[enemyGen.player].general = enemyGen
         elif any(filter(lambda gen: gen is not None and gen != general, map.generals)):

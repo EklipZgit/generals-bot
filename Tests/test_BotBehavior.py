@@ -815,4 +815,3 @@ class BotBehaviorTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
         self.assertIsNone(winner)
-

@@ -409,11 +409,16 @@ aG7
         p1targetTile = self.get_player_tile(collisionTarget.x, collisionTarget.y, sim, 1)
         self.assertEqual(abs(aMovedAmount - bMovedAmount), abs(p1targetTile.delta.armyDelta))
 
-    def test_simulates_a_game_from_turn_1(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+    def test_simulates_a_game_from_turn_1__1(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         self.begin_capturing_logging()
 
+        def configure_b(bBot: EklipZBot):
+            pass
+
         def configure_a(aBot: EklipZBot):
+            aBot.mcts_engine.biased_move_ratio_while_available = 0.35  # was 0.5, and biased allowed is 7 now.
+
             # codified
             # aBot.expansion_force_no_global_visited = True
             # aBot.expansion_single_iteration_time_cap = 0.02
@@ -422,46 +427,90 @@ aG7
             # 3 went 18-11 against gather_include_distance_from_enemy_general_as_negatives 0.5, codified
             # aBot.gather_include_distance_from_enemy_TERRITORY_as_negatives = 3
 
-            aBot.expansion_use_multi_per_dist_per_tile = True
-            aBot.expansion_force_no_global_visited = False
-            pass
+            # 121-128
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.7 # current 0.5
 
-        def configure_b(bBot: EklipZBot):
-            # bBot.gather_include_distance_from_enemy_TERRITORY_as_negatives = 0
-            # bBot.gather_include_distance_from_enemy_general_as_negatives = 0.5
+            # 251-246, but did worse than the other test of 7, 0.5. Testing 0.33 with 7 above
+            # aBot.mcts_engine.biased_playouts_allowed_per_trial = 6  # was 4
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.33  # was 0.5, so this should be the same number of biased moves on average per move but it will go later in the trial
+
             pass
 
         self.a_b_test(
-            numRuns=30,
+            numRuns=250,
             configureA=configure_a,
             configureB=configure_b,
             debugMode=debugMode,
-            debugModeTurnTime=0.75,
-            debugModeRenderAllPlayers=True,
-            mapFile='SymmetricTestMaps/even_playground_map_small_short_spawns__top_left_bot_right.txtmap',
-            noCities=True,
+            debugModeTurnTime=0.25,
+            debugModeRenderAllPlayers=False,
+            # mapFile='SymmetricTestMaps/even_playground_map_small_short_spawns__top_left_bot_right.txtmap',
+            noCities=None,
         )
 
     def test_simulates_a_game_from_turn_1__2(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         self.begin_capturing_logging()
 
         def configure_a(aBot: EklipZBot):
             # RUNNING WITH NOT PER DIST PER TILE
             # aBot.expansion_use_multi_per_dist_per_tile = True
             # aBot.expansion_force_no_global_visited = False
-            aBot.gather_include_distance_from_enemy_TILES_as_negatives = 2
-            aBot.engine_always_include_last_move_tile_in_scrims = True
+
+            # 108-123
+            # aBot.gather_include_distance_from_enemy_TILES_as_negatives = 2
+            # aBot.engine_always_include_last_move_tile_in_scrims = True
+            # aBot.engine_mcts_scrim_armies_per_player_limit = 1
+
+            # 103-125 unclear B, rerunning with B False, 3
+            # 129-121...?
+            # aBot.engine_always_include_last_move_tile_in_scrims = True
+            # aBot.engine_mcts_scrim_armies_per_player_limit = 2
+
+            # 114-134, ok so this is bad
+            # aBot.mcts_engine.biased_playouts_allowed_per_trial = 6 # current 4
+
+            # 245-251. 7 already won elsewhere so nuking
+            # aBot.mcts_engine.biased_playouts_allowed_per_trial = 3  # current 4
+
+            aBot.engine_mcts_move_estimation_net_differential_cutoff = -1  # current 0
+
             pass
 
         def configure_b(bBot: EklipZBot):
             # bBot.expansion_use_multi_per_dist_per_tile = False
             # bBot.expansion_use_multi_per_tile = False
             # bBot.expansion_force_no_global_visited = True
+            # bBot.engine_always_include_last_move_tile_in_scrims = False
+            # bBot.engine_mcts_scrim_armies_per_player_limit = 3
+
             pass
 
         self.a_b_test(
-            numRuns=30,
+            numRuns=250,
+            configureA=configure_a,
+            configureB=configure_b,
+            debugMode=debugMode,
+            debugModeTurnTime=0.001,
+            debugModeRenderAllPlayers=False,
+            noCities=None,
+        )
+
+    def test_simulates_a_game_from_turn_1__3(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        self.begin_capturing_logging()
+
+        def configure_b(bBot: EklipZBot):
+            pass
+
+        def configure_a(aBot: EklipZBot):
+            aBot.engine_mcts_move_estimation_net_differential_cutoff = 2  # was 0
+
+            # 226-272
+            # aBot.engine_mcts_move_estimation_net_differential_cutoff = -8  # was 0
+            pass
+
+        self.a_b_test(
+            numRuns=250,
             configureA=configure_a,
             configureB=configure_b,
             debugMode=debugMode,

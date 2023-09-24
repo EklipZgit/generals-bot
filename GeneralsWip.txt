@@ -50,6 +50,9 @@ MCTS:
 		Can also use this longer end-of-turn calculation time post-move to pre-calculate other stuff with MCTS if we want.
 		MCTS does not need to be zero sum during FFA, even if we only include two players. Tile differential concept would need to change, though.
 
+STRATEGY:
+	When losing on tiles, try to plan runbys. Fuck defense when losing, it just gets you more behind. Go all out, enemy_has_kill_threat=False MCTS dance your way in, fully disable army intercept, etc.
+
 
 EXPANSION v2
 	Build 'gather' tree INTO enemy territory (and/or cleaning up enemy tiles), so we have a plan on what to DO with gathered army.

@@ -3,6 +3,7 @@ import time
 import traceback
 import typing
 
+import DebugHelper
 from BotHost import BotHostBase
 from DataModels import Move
 from Path import Path
@@ -144,7 +145,7 @@ class GameSimulator(object):
         self.tiles_updated_this_cycle: typing.Set[Tile] = set()
         self.ignore_illegal_moves = ignore_illegal_moves
 
-    def make_move(self, player_index: int, move: Move, force: bool = False) -> bool:
+    def make_move(self, player_index: int, move: Move | None, force: bool = False) -> bool:
         if self.moves[player_index] is not None:
             if not force:
                 raise AssertionError(f'player {player_index} already has a move queued this turn, {str(self.moves[player_index])}')
@@ -385,6 +386,9 @@ class GameSimulatorHost(object):
 
         self.bot_hosts: typing.List[BotHostBase | None] = [None for player in self.sim.players]
 
+        self.player_move_cutoff_time: float = 0.450
+        """If a player takes longer to move than this, and a debugger is not attached, then the players move will be discarded and an error logged. Does not include the first 12 turns."""
+
         self._between_turns_funcs: typing.List[typing.Callable] = []
 
         self.forced_afk_players: typing.List[int] = []
@@ -526,8 +530,6 @@ class GameSimulatorHost(object):
     #         if botHost is not None and playerTile in botHost.eklipz_bot.armyTracker.armies:
     #             del botHost.eklipz_bot.armyTracker.armies[playerTile]
 
-
-
     def apply_map_vision(self, player: int, rawMap: MapBase):
         playerToGiveVision = self.sim.players[player]
         playerToGiveVision.set_map_vision(rawMap)
@@ -542,7 +544,6 @@ class GameSimulatorHost(object):
         @param moves_str:
         @return:
         """
-        playerObj = self.sim.players[player]
         paths = moves_str.split('  ')
         for path_str in paths:
             if path_str.strip().lower() == 'none':
@@ -552,13 +553,7 @@ class GameSimulatorHost(object):
             moves = path_str.split('->')
             prevTile: Tile | None = None
             for move_str in moves:
-                xStr, yStr = move_str.strip().split(',')
-                moveHalf=False
-                if yStr.endswith('z'):
-                    moveHalf = True
-                    yStr.strip('z')
-
-                currentTile = playerObj.map.GetTile(int(xStr), int(yStr))
+                (currentTile, moveHalf) = self.get_player_tile_from_move_str(player, move_str)
                 if prevTile is not None:
                     self.move_queue[player].append(Move(prevTile, currentTile, moveHalf))
                 prevTile = currentTile
@@ -585,7 +580,12 @@ class GameSimulatorHost(object):
             player = self.sim.players[playerIndex]
 
             if not player.dead and not player.index in self.forced_afk_players:
+                moveStart = time.perf_counter()
                 botHost.make_move(player.map)
+                moveTime = time.perf_counter() - moveStart
+                if self.sim.sim_map.turn > 20 and moveTime > self.player_move_cutoff_time and not DebugHelper.IS_DEBUGGING:
+                    logging.error(f'turn {self.sim.sim_map.turn}: player {playerIndex} {self.sim.sim_map.usernames[playerIndex]} took {moveTime:.3f} to move, discarding its move!')
+                    self.sim.make_move(playerIndex, None, force=True)
 
             # if we have a move queued explicitly, overwrite their move with the test-forced move.
             if len(self.move_queue[playerIndex]) > 0:
@@ -666,3 +666,35 @@ class GameSimulatorHost(object):
 
     def run_between_turns(self, func: typing.Callable):
         self._between_turns_funcs.append(func)
+
+    def assert_last_move(self, player: int, move: str | None):
+        pObj = self.sim.players[player]
+        actualMove = pObj.move_history[-1]
+        if move is None:
+            assert actualMove is None
+        else:
+            srcStr, destStr = move.split('->')
+            srcTile, moveHalf = self.get_player_tile_from_move_str(player, srcStr)
+            destTile, _ = self.get_player_tile_from_move_str(player, destStr)
+            assert srcTile.x == actualMove.source.x
+            assert srcTile.y == actualMove.source.y
+            assert destTile.x == actualMove.dest.x
+            assert destTile.y == actualMove.dest.y
+
+    def get_player_tile_from_move_str(self, player: int, move_str: str) -> typing.Tuple[Tile, bool]:
+        """
+        returns the move tile, and whether it ended with 'z' indicating move-half.
+
+        @param move_str:
+        @return:
+        """
+        xStr, yStr = move_str.strip().split(',')
+        moveHalf = False
+        if yStr.endswith('z'):
+            moveHalf = True
+            yStr.strip('z')
+
+        currentTile = self.sim.players[player].map.GetTile(int(xStr), int(yStr))
+        return currentTile, moveHalf
+
+

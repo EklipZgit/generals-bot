@@ -1364,3 +1364,68 @@ bot_target_player=1
 
         # should not move the general first
         self.assertNotEqual(general, path.start.tile)
+
+    def test_should_not_launch_attack_at_suboptimal_time(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_launch_attack_at_suboptimal_time___uClPcbQ7W---1--89.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 89, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 89)
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap,
+                                    allAfkExceptMapPlayer=True)
+        bot = simHost.get_bot(general.player)
+        bot.timings.quickExpandTurns = 0
+        bot.timings.launchTiming = 25
+        bot.timings.splitTurns = 13
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        if debugMode:
+            winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=11)
+            self.assertIsNone(winner)
+
+            self.assertEqual(36, simHost.get_player_map(general.player).players[general.player].tileCount)
+            self.fail('cant actually run this test in debug mode, this is just to observe')
+
+        simHost.run_sim(run_real_time=False, turns=1)
+        simHost.assert_last_move(general.player, None)
+
+        simHost.run_sim(run_real_time=False, turns=1)
+        simHost.assert_last_move(general.player, None)
+
+    def test_should_expand_away_from_general(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_launch_attack_at_suboptimal_time___uClPcbQ7W---1--89.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 89, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 89)
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap,
+                                    allAfkExceptMapPlayer=True)
+        bot = simHost.get_bot(general.player)
+        bot.timings.quickExpandTurns = 0
+        bot.timings.launchTiming = 25
+        bot.timings.splitTurns = 13
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        if debugMode:
+            winner = simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=15)
+            self.assertIsNone(winner)
+            self.fail('cant actually run this test in debug mode, this is just to observe')
+
+        simHost.run_sim(run_real_time=False, turns=1)
+        simHost.assert_last_move(general.player, None)
+
+        simHost.run_sim(run_real_time=False, turns=1)
+        simHost.assert_last_move(general.player, None)
+
+        simHost.run_sim(run_real_time=False, turns=9)
+        self.assertEqual(36, simHost.sim.sim_map.players[general.player].tileCount)

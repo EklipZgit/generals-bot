@@ -378,7 +378,8 @@ class GeneralsClient(object):
                             and not " surrendered" in chat_msg["text"]
                             and not " left" in chat_msg["text"]
                             and not " quit" in chat_msg["text"]
-                            and not " wins!" in chat_msg["text"]):
+                            and not " wins!" in chat_msg["text"]
+                            and not "Chat is being recorded." in chat_msg["text"]):
                         self.writingFile = True
                         try:
                             with open(self.chatLogFile, "a+") as myfile:

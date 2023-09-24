@@ -2117,10 +2117,15 @@ bTiles=20
         self.a_b_test(numRuns, configureA=configure_a, configureB=configure_b, debugMode=debugMode, mapFile=mapFile)
 
     def test__A_B_test_mcts__num1__left_vs_right(self):
-        numRuns = 250
+        numRuns = 100
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         def configure_a(aBot: EklipZBot):
+            aBot.engine_mcts_move_estimation_net_differential_cutoff = 4  # was 0
+
+            # 244-256
+            # aBot.expansion_allow_leaf_moves = False
+
             # doesn't seem to do too much, but does seem to lose.
             # aBot.mcts_engine.explore_factor = 1.5
 
@@ -2238,7 +2243,14 @@ bTiles=20
             # aBot.expansion_use_multi_per_dist_per_tile = True  # note no force single
             # aBot.expansion_single_iteration_time_cap = 0.01
 
-            aBot.gather_include_distance_from_enemy_TILES_as_negatives = 3
+            # 121-94. Unclear based on other runs, and dont know what B was. Rerunning against b=2
+            # 116-132, so 2 seems to be winner. Try 1...?
+            # aBot.gather_include_distance_from_enemy_TILES_as_negatives = 3
+
+            # 84-79 killed due to lots of errors, restarting
+            # 120-130
+            # aBot.gather_include_distance_from_enemy_TILES_as_negatives = 1
+            pass
 
         self.a_b_test(
             numRuns,
@@ -2247,10 +2259,15 @@ bTiles=20
             debugMode=debugMode)
 
     def test__A_B_test_mcts__num2__left_vs_right(self):
-        numRuns = 250
+        numRuns = 100
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
+        def configure_b(bBot: EklipZBot):
+            pass
+
         def configure_a(aBot: EklipZBot):
+            aBot.engine_mcts_move_estimation_net_differential_cutoff = -6
+
             # 25-25, codifying for now.
             # aBot.mcts_engine.offset_initial_differential = True
 
@@ -2320,14 +2337,16 @@ bTiles=20
             # aBot.expansion_use_multi_per_tile = True
             # aBot.expansion_force_no_global_visited = False
 
-            aBot.gather_include_distance_from_enemy_TILES_as_negatives = 2  # was 0 but codified in the meantime
+            # 104-118, try again inversed...?
+            # aBot.gather_include_distance_from_enemy_TILES_as_negatives = 2  # was 0 but codified in the meantime
 
-            pass
+            # 112-138
+            # aBot.gather_include_distance_from_enemy_TILES_as_negatives = 1  # b is 2
+            # aBot.gather_include_distance_from_enemy_TERRITORY_as_negatives = 4  # b is 3
 
-        def configure_b(bBot: EklipZBot):
-            # bBot.gather_include_distance_from_enemy_general_as_negatives = 0.0
-            # bBot.gather_include_shortest_pathway_as_negatives = True
-            # bBot.gather_include_distance_from_enemy_general_as_negatives = 0.5
+            # 129-119 buth other one went 120-130 so even, try again.
+            # 218-279, ok definitely bad
+            # aBot.gather_include_distance_from_enemy_TERRITORY_as_negatives = 4  # b is 3
 
             pass
 
@@ -2338,10 +2357,15 @@ bTiles=20
             debugMode=debugMode)
 
     def test__A_B_test_mcts__num3__left_vs_right(self):
-        numRuns = 250
+        numRuns = 100
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
+        def configure_b(bBot: EklipZBot):
+            pass
+
         def configure_a(aBot: EklipZBot):
+            aBot.engine_mcts_move_estimation_net_differential_cutoff = -20
+
             # Test reverting the no op bonus...
             # 24-26
             # aBot.mcts_engine.eval_params.friendly_move_no_op_scale_10_fraction = 0
@@ -2414,10 +2438,20 @@ bTiles=20
             # aBot.engine_army_nearby_tiles_range = 5
             # aBot.engine_mcts_scrim_armies_per_player_limit = 2
 
-            aBot.engine_army_nearby_tiles_range = 4
-            aBot.engine_mcts_scrim_armies_per_player_limit = 2
+            # 125-104, codified
+            # aBot.engine_army_nearby_tiles_range = 4
+            # aBot.engine_mcts_scrim_armies_per_player_limit = 2
 
-        def configure_b(bBot: EklipZBot):
+            # 115-135, ok per tile is worse as expected.
+            # aBot.expansion_use_multi_per_tile = True
+            # aBot.expansion_use_multi_per_dist_per_tile = False
+
+            # 117-132
+            # aBot.gather_include_distance_from_enemy_general_as_negatives = 0.5  # was 0
+
+            # 262-236, interesting. Codified.
+            # aBot.mcts_engine.biased_playouts_allowed_per_trial = 7  # current 4
+
             pass
 
         self.a_b_test(
@@ -2427,7 +2461,7 @@ bTiles=20
             debugMode=debugMode)
 
     def test__A_B_test_mcts__num4__left_vs_right(self):
-        numRuns = 300
+        numRuns = 500
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         def configure_a(aBot: EklipZBot):
@@ -2480,7 +2514,20 @@ bTiles=20
             # even
             # aBot.mcts_engine.total_playout_move_count = 10  # current 8
 
-            aBot.engine_always_include_last_move_tile_in_scrims = True  # was false but codified in meantime
+            # 146-128, codified
+            # aBot.engine_always_include_last_move_tile_in_scrims = True  # was false but codified in meantime
+
+            # 136-162
+            # aBot.gather_include_distance_from_enemy_TILES_as_negatives = 3  # was 2
+
+            # 120-130
+            # aBot.gather_include_distance_from_enemy_TERRITORY_as_negatives = 4 # was 3
+
+            # 123-127
+            # aBot.expansion_single_iteration_time_cap = 0.12
+
+            # 254-243. Confirming with another run since previous runs indicated otherwise. This may have changed due to the 'tiles gathered to this turn' de-restriction?
+            aBot.gather_include_distance_from_enemy_TILES_as_negatives = 3  # currently 2
 
         self.a_b_test(
             numRuns,
@@ -2489,7 +2536,7 @@ bTiles=20
             debugMode=debugMode)
 
     def test__A_B_test_mcts__num5__left_vs_right(self):
-        numRuns = 250
+        numRuns = 100
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         def configure_a(aBot: EklipZBot):
@@ -2558,7 +2605,21 @@ bTiles=20
             # aBot.expansion_use_multi_per_dist_per_tile = True
             # aBot.expansion_force_no_global_visited = True
 
-            aBot.expansion_single_iteration_time_cap = 0.06
+            # 119-109, codified
+            # aBot.expansion_single_iteration_time_cap = 0.06
+
+            # 122-127
+            # aBot.expansion_small_tile_time_ratio = 0.5  # was 1.0
+
+            # 127-122, try full small time...?
+            # aBot.expansion_single_iteration_time_cap = 0.1  # was 0.06
+            # aBot.expansion_small_tile_time_ratio = 0.5  # was 1.0
+
+            # 126-121
+            # aBot.expansion_small_tile_time_ratio = 1.0
+
+            # 245-255. Implemented long-move-cutoff and trying again
+            aBot.expansion_single_iteration_time_cap = 0.055  # from 0.1, small tile time at 0.055
 
         def configure_b(bBot: EklipZBot):
             # bBot.expansion_use_multi_per_dist_per_tile = True

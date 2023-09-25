@@ -815,3 +815,61 @@ class BotBehaviorTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
         self.assertIsNone(winner)
+    
+    def test_should_gather_from_out_of_play_tiles(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_gather_from_out_of_play_tiles___sN_jR1oaU---0--200.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 200, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 200)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
+        self.assertIsNone(winner)
+
+        # TODO add asserts for should_gather_from_out_of_play_tiles
+    
+    def test_should_not_expand_past_threat(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_expand_past_threat___D4vFUocUu---1--130.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 130, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 130)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '8,11->9,11->10,11->11,11->12,11')
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=5)
+        self.assertIsNone(winner)
+        shouldNotBeEnemy = self.get_player_tile(12, 11, simHost.sim, general.player)
+        self.assertEqual(general.player, shouldNotBeEnemy.player)
+    
+    def test_should_enter_rapid_city_expansion_massive_map_mode(self):
+        # Bot should see that it has lots of army advantage and lots of available cities and enemy general has not
+        # explored its space, and it should convert the army into all neutral cities available to it immediately.
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_enter_rapid_city_expansion_massive_map_mode___-zS5mB7xt---3--444.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 444, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, 444)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=-2, playerMapVision=rawMap, allAfkExceptMapPlayer=False)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=100)
+        self.assertIsNone(winner)
+        player_map = simHost.get_player_map(general.player)
+        self.assertGreater(player_map.players[general.player].cityCount, 12)

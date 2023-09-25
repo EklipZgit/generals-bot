@@ -42,6 +42,7 @@ class Player(object):
         self.capturedBy = None
         self.knowsKingLocation = False
         self.aggression_factor: int = 0
+        self.last_seen_move_turn: int = 0
         """True if this player knows the map.player_index players general location. False otherwise."""
 
     def __str__(self):
@@ -208,7 +209,8 @@ class Tile(object):
 
     @player.setter
     def player(self, value):
-        if value >= 0:
+        # TODO why is any of this tile setter shit here at all?
+        if value >= 0 and self.visible:
             self.tile = value
         elif value == -1 and self.army == 0 and not self.isNotPathable and not self.isCity and not self.isMountain:
             self.tile = TILE_EMPTY # this whole thing seems wrong, needs to be updated carefully with tests as the delta logic seems to rely on it...
@@ -284,7 +286,8 @@ class Tile(object):
 
         if self.tile != tile:  # tile changed
             if tile < TILE_MOUNTAIN and self.discovered:  # lost sight of tile.
-                self.delta.lostSight = True
+                if self.visible:
+                    self.delta.lostSight = True
                 self.visible = False
                 self.lastSeen = map.turn - 1
 
@@ -796,6 +799,9 @@ class MapBase(object):
                 if curTile.isCity and curTile.player != -1:
                     self.players[curTile.player].cities.append(curTile)
 
+                # if not curTile.visible:  # breaks other stuff...?
+                #     continue
+
                 maybeMovedTo = self.army_moved_grid[y][x]
                 if maybeMovedTo:
                     # look for candidate tiles that army may have come from
@@ -1093,7 +1099,7 @@ def evaluateTileDiffsFog(curTile) -> Tile | None:
     return bestCandTile
 
 
-def evaluateDualVisibleTileDiffs(tile, candidateTile):
+def evaluateDualVisibleTileDiffs(tile: Tile, candidateTile: Tile):
     if tile.delta.oldOwner != tile.delta.newOwner:
         if tile.delta != 0:
             deltasMatch = tile.delta.armyDelta == candidateTile.delta.armyDelta
@@ -1122,7 +1128,7 @@ def evaluateDualVisibleTileDiffs(tile, candidateTile):
     return -100
 
 
-def evaluateMoveFromFog(tile, candidateTile):
+def evaluateMoveFromFog(tile: Tile, candidateTile: Tile):
     """
     Evaluates whether an army moved from a fog tile into a tile that is in vision.
     Returns an int where negative means definitely not and positive int means probably, with 100 being high probability.
@@ -1165,7 +1171,7 @@ def evaluateMoveFromFog(tile, candidateTile):
     return -100
 
 
-def evaluateIslandFogMove(tile, candidateTile):
+def evaluateIslandFogMove(tile: Tile, candidateTile: Tile):
     if tile.visible:
         raise AssertionError("wtf, can't call this for visible tiles my guy")
 
@@ -1181,8 +1187,8 @@ def evaluateIslandFogMove(tile, candidateTile):
             #     tile.army += 1
             # if isArmyBonusTurn:
             #     tile.army += 1
-            logging.info(f" (islandFog 1) tile {tile.toString()} army from {oldArmy} to {tile.army}")
-            return 40
+            logging.info(f" (islandFog 1) tile {str(tile)} army from {oldArmy} to {tile.army}")
+            return 100
     elif tile.army - candidateTile.army < -1 and candidateTile.player != -1:
         tile.player = candidateTile.player
         tile.delta.newOwner = candidateTile.player
@@ -1195,14 +1201,14 @@ def evaluateIslandFogMove(tile, candidateTile):
         #     candidateTile.army += 1
         # if isArmyBonusTurn:
         #     candidateTile.army += 1
-        logging.info(f" (islandFog 2) tile {tile.toString()} army from {oldArmy} to {tile.army}")
+        logging.info(f" (islandFog 2) tile {str(tile)} army from {oldArmy} to {tile.army}")
         logging.info(
             f" (islandFog 2) candTile {candidateTile.toString()} army from {oldCandArmy} to {candidateTile.army}")
-        return 30
+        return 100
     return -100
 
 
-def evaluateSameOwnerMoves(tile, candidateTile):
+def evaluateSameOwnerMoves(tile: Tile, candidateTile: Tile):
     if tile.delta.armyDelta > 0:
         delta = tile.delta.armyDelta + candidateTile.delta.armyDelta
         if delta == 0:

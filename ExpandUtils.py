@@ -321,6 +321,7 @@ def get_optimal_expansion(
         forceNoGlobalVisited: bool = False,
         allowMultiPathMultiDistReturn: bool = False,
         smallTileExpansionTimeRatio: float = 1.0,
+        time_limit = 0.2,
         perfTimer: PerformanceTimer | None = None
 ) -> typing.Tuple[Path | None, typing.List[Path]]:
     """
@@ -678,6 +679,10 @@ def get_optimal_expansion(
     multiPathDict: typing.Dict[Tile, typing.Dict[int, typing.Tuple[int, Path]]] = {}
     """Contains the current max value path per distance per start tile"""
 
+    stage1 = time_limit / 4
+    stage2 = time_limit / 2
+    breakStage = 3 * time_limit / 4
+
     while True:
         if remainingTurns <= 0:
             logging.info("breaking due to remainingTurns <= 0")
@@ -694,9 +699,6 @@ def get_optimal_expansion(
         # first 0.1s, use large tiles and shift smaller. (do nothing)
         # second 0.1s, use all tiles (to make sure our small tiles are included)
         # third 0.1s - knapsack optimal stuff outside this loop i guess?
-        stage1 = 0.05
-        stage2 = 0.1
-        breakStage = 0.14
         inStage2 = False
         if timeUsed > stage1 and timeUsed < stage2:
             logging.info(f"timeUsed > {stage1} ({timeUsed})... Breaking loop and knapsacking...")

@@ -417,7 +417,13 @@ aG7
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.mcts_engine.biased_move_ratio_while_available = 0.35  # was 0.5, and biased allowed is 7 now.
+            aBot.mcts_engine.biased_move_ratio_while_available = 0.45  # b was 0.5, and biased allowed is 7 now.
+
+            # 84-91
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.6  # b was 0.5, and biased allowed is 7 now.
+
+            # 112-138. Try higher...?
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.35  # was 0.5, and biased allowed is 7 now.
 
             # codified
             # aBot.expansion_force_no_global_visited = True
@@ -451,7 +457,16 @@ aG7
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         self.begin_capturing_logging()
 
+        def configure_b(bBot: EklipZBot):
+            pass
+
         def configure_a(aBot: EklipZBot):
+            # 85-87, again
+            aBot.engine_mcts_move_estimation_net_differential_cutoff = 2
+
+            # 108-137, so, we're making engine moves when we shouldn't be. Try higher..?
+            # aBot.engine_mcts_move_estimation_net_differential_cutoff = -1  # current 0
+
             # RUNNING WITH NOT PER DIST PER TILE
             # aBot.expansion_use_multi_per_dist_per_tile = True
             # aBot.expansion_force_no_global_visited = False
@@ -471,17 +486,6 @@ aG7
 
             # 245-251. 7 already won elsewhere so nuking
             # aBot.mcts_engine.biased_playouts_allowed_per_trial = 3  # current 4
-
-            aBot.engine_mcts_move_estimation_net_differential_cutoff = -1  # current 0
-
-            pass
-
-        def configure_b(bBot: EklipZBot):
-            # bBot.expansion_use_multi_per_dist_per_tile = False
-            # bBot.expansion_use_multi_per_tile = False
-            # bBot.expansion_force_no_global_visited = True
-            # bBot.engine_always_include_last_move_tile_in_scrims = False
-            # bBot.engine_mcts_scrim_armies_per_player_limit = 3
 
             pass
 
@@ -503,10 +507,37 @@ aG7
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.engine_mcts_move_estimation_net_differential_cutoff = 2  # was 0
+            # 82-96, ok thats enough of these to convince me this is bad.
+            # aBot.engine_mcts_move_estimation_net_differential_cutoff = 3
+
+            # 118-131
+            # aBot.engine_mcts_move_estimation_net_differential_cutoff = 2  # was 0
 
             # 226-272
             # aBot.engine_mcts_move_estimation_net_differential_cutoff = -8  # was 0
+            pass
+
+        self.a_b_test(
+            numRuns=250,
+            configureA=configure_a,
+            configureB=configure_b,
+            debugMode=debugMode,
+            debugModeTurnTime=0.001,
+            debugModeRenderAllPlayers=False,
+            noCities=None,
+        )
+
+    def test_simulates_a_game_from_turn_1__4(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        self.begin_capturing_logging()
+
+        def configure_b(bBot: EklipZBot):
+            bBot.behavior_early_retake_bonus_gather_turns = 3
+            pass
+
+        def configure_a(aBot: EklipZBot):
+            # 78-47, retesting with larger game size but god damn
+            aBot.behavior_early_retake_bonus_gather_turns = 0  # b is 3
             pass
 
         self.a_b_test(

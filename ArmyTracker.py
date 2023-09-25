@@ -864,7 +864,7 @@ class ArmyTracker(object):
             expectedDestDelta = 0 - expectedDestDelta
 
         likelyDroppedMove = False
-        if playerMoveSrc.delta.armyDelta == 0:
+        if playerMoveSrc.delta.armyDelta == 0 and playerMoveSrc.visible:
             likelyDroppedMove = True
             if playerMoveDest.delta.armyDelta == 0:
                 logging.error(
@@ -897,6 +897,7 @@ class ArmyTracker(object):
                         logging.error(
                             f'  ^ {str(self.lastMove)} IS QUESTIONABLE THOUGH BECAUSE DEST DID HAVE AN UNEXPLAINED DIFF. NUKING ANYWAY.')
                     self.scrap_army(army)
+                    # self.unaccounted_tile_diffs[self.lastMove.source] = amountAttacked  # negative number
                     self.lastMove = None
                     return
                 else:
@@ -939,6 +940,8 @@ class ArmyTracker(object):
             if playerMoveDest.delta.oldOwner == playerMoveDest.delta.newOwner:
                 unexplainedDelta = 0 - unexplainedDelta
 
+            if not MapBase.player_had_priority(self.map.player_index, self.map.turn):  # the source tile could have been attacked for non-lethal damage BEFORE the move was made to target.
+                self.unaccounted_tile_diffs[self.lastMove.source] = unexplainedDelta
             self.unaccounted_tile_diffs[self.lastMove.dest] = unexplainedDelta
             logging.info(
                 f'MOVE {str(self.lastMove)} with expectedDestDelta {expectedDestDelta} likely collided with unexplainedDelta {unexplainedDelta} at dest based on actualDestDelta {actualDestDelta}.')
@@ -975,7 +978,7 @@ class ArmyTracker(object):
         armyRealTileDelta = 0 - army.tile.delta.armyDelta
         # armyUnexplainedDelta = self.unaccounted_tile_diffs.get(adjacent, adjacent.delta.armyDelta)
         # if army.tile.visible and self.unaccounted_tile_diffs
-        if armyRealTileDelta == 0 and army.tile.was_visible_last_turn():
+        if armyRealTileDelta == 0 and army.tile.visible and not army.tile.delta.gainedSight:
             logging.info(f'army didnt move...? {str(army)}')
             army.update()
             return

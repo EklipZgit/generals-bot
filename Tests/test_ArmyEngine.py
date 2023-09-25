@@ -2117,11 +2117,15 @@ bTiles=20
         self.a_b_test(numRuns, configureA=configure_a, configureB=configure_b, debugMode=debugMode, mapFile=mapFile)
 
     def test__A_B_test_mcts__num1__left_vs_right(self):
-        numRuns = 100
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        numRuns = 250
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
 
         def configure_a(aBot: EklipZBot):
-            aBot.engine_mcts_move_estimation_net_differential_cutoff = 4  # was 0
+            aBot.expansion_full_time_limit = 0.15  # b is 0.2
+
+            #47-53, again
+            #70-97, meh
+            # aBot.engine_mcts_move_estimation_net_differential_cutoff = 4  # was 0
 
             # 244-256
             # aBot.expansion_allow_leaf_moves = False
@@ -2259,14 +2263,20 @@ bTiles=20
             debugMode=debugMode)
 
     def test__A_B_test_mcts__num2__left_vs_right(self):
-        numRuns = 100
+        numRuns = 250
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         def configure_b(bBot: EklipZBot):
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.engine_mcts_move_estimation_net_differential_cutoff = -6
+            aBot.engine_mcts_move_estimation_net_differential_cutoff = 2
+
+            # 70-108, definitely bad
+            # aBot.engine_mcts_move_estimation_net_differential_cutoff = -1
+
+            # 40-60, trying -1
+            # aBot.engine_mcts_move_estimation_net_differential_cutoff = -6
 
             # 25-25, codifying for now.
             # aBot.mcts_engine.offset_initial_differential = True
@@ -2357,14 +2367,18 @@ bTiles=20
             debugMode=debugMode)
 
     def test__A_B_test_mcts__num3__left_vs_right(self):
-        numRuns = 100
+        numRuns = 250
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         def configure_b(bBot: EklipZBot):
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.engine_mcts_move_estimation_net_differential_cutoff = -20
+            # 88-92, meaningless, again
+            aBot.engine_mcts_move_estimation_net_differential_cutoff = +1
+
+            # 39-58, try +1
+            # aBot.engine_mcts_move_estimation_net_differential_cutoff = -20
 
             # Test reverting the no op bonus...
             # 24-26
@@ -2465,6 +2479,8 @@ bTiles=20
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         def configure_a(aBot: EklipZBot):
+            aBot.mcts_engine.disable_positional_win_detection_in_rollouts = False  # currently true
+
             # 27-23 after fixing a-b. Trying more. (now with offset true and 6 rollouts):
             # 29-21, codifying. :D BIASED IS BACK BABYYYYY
             # aBot.mcts_engine.disable_positional_win_detection_in_rollouts = True
@@ -2527,7 +2543,7 @@ bTiles=20
             # aBot.expansion_single_iteration_time_cap = 0.12
 
             # 254-243. Confirming with another run since previous runs indicated otherwise. This may have changed due to the 'tiles gathered to this turn' de-restriction?
-            aBot.gather_include_distance_from_enemy_TILES_as_negatives = 3  # currently 2
+            # aBot.gather_include_distance_from_enemy_TILES_as_negatives = 3  # currently 2
 
         self.a_b_test(
             numRuns,
@@ -2536,10 +2552,13 @@ bTiles=20
             debugMode=debugMode)
 
     def test__A_B_test_mcts__num5__left_vs_right(self):
-        numRuns = 100
+        numRuns = 250
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         def configure_a(aBot: EklipZBot):
+            # 245-255. Implemented long-move-cutoff and trying again
+            aBot.expansion_single_iteration_time_cap = 0.055  # from 0.1, small tile time at 0.055
+
             # 18-22, bad.
             # aBot.mcts_engine.explore_factor = 2.0
             # aBot.mcts_engine.offset_initial_differential = True
@@ -2617,9 +2636,6 @@ bTiles=20
 
             # 126-121
             # aBot.expansion_small_tile_time_ratio = 1.0
-
-            # 245-255. Implemented long-move-cutoff and trying again
-            aBot.expansion_single_iteration_time_cap = 0.055  # from 0.1, small tile time at 0.055
 
         def configure_b(bBot: EklipZBot):
             # bBot.expansion_use_multi_per_dist_per_tile = True

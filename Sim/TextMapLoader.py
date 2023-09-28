@@ -9,6 +9,7 @@ a# = tile for player 0 with # army
 bC# = city for player 1 with # army
 empty space = empty tile
 N# = a neutral tile with army on it
+..#D = a tile that isn't visible, but has been discovered. Note that undiscovered inferred tiles are recorded as being a player, out of vision, with no D.
 
 Bot state data is below the second |  |  |  |  |  | and is ignored when loading MAPs but not when loading BOTs.
 """
@@ -45,7 +46,8 @@ class TextMapLoader(object):
             textTiles = [row[i:i+split_every] for i in range(0, len(row), split_every)]
             x = 0
             for textTile in textTiles:
-                TextMapLoader.__apply_text_tile_to_tile(cols[x], textTile)
+                curTile = cols[x]
+                TextMapLoader.__apply_text_tile_to_tile(curTile, textTile)
                 x += 1
 
             y += 1
@@ -89,27 +91,9 @@ class TextMapLoader(object):
 
         for row in map.grid:
             for tile in row:
-                charsLeft = split_every
-                if tile.player >= 0:
-                    playerChar = TextMapLoader.__convert_player_to_char(tile.player)
-                    outputToJoin.append(playerChar)
-                    charsLeft -= 1
-                if tile.isCity:
-                    outputToJoin.append('C')
-                    charsLeft -= 1
-                if tile.isMountain or (not tile.visible and tile.isNotPathable):
-                    outputToJoin.append('M')
-                    charsLeft -= 1
-                if tile.isGeneral:
-                    outputToJoin.append('G')
-                    charsLeft -= 1
-                if tile.army != 0 or tile.player >= 0:
-                    if tile.player == -1 and not tile.isCity:
-                        outputToJoin.append('N')
-                        charsLeft -= 1
-                    armyStr = str(tile.army)
-                    charsLeft -= len(armyStr)
-                    outputToJoin.append(armyStr)
+                valRep = tile.get_value_representation()
+                outputToJoin.append(valRep)
+                charsLeft = split_every - len(valRep)
 
                 for i in range(charsLeft):
                     outputToJoin.append(' ')
@@ -124,26 +108,6 @@ class TextMapLoader(object):
         raw = ''.join(outputToJoin)
         lines = raw.splitlines()
         return '\n'.join([line.rstrip() for line in lines])
-
-    @staticmethod
-    def __convert_player_to_char(player: int):
-        match player:
-            case 0:
-                return 'a'
-            case 1:
-                return 'b'
-            case 2:
-                return 'c'
-            case 3:
-                return 'd'
-            case 4:
-                return 'e'
-            case 5:
-                return 'f'
-            case 6:
-                return 'g'
-            case 7:
-                return 'h'
 
     @staticmethod
     def __apply_text_tile_to_tile(tile: Tile, text_tile: str):
@@ -185,6 +149,8 @@ class TextMapLoader(object):
                 tile.tile = -1
             case 'N':
                 tile.tile = -1
+            case 'D':
+                tile.tile = -1
             case _:
                 raise AssertionError(f'text_tile [{text_tile}] did not match a known pattern.')
 
@@ -194,13 +160,17 @@ class TextMapLoader(object):
         if 'G' in text_tile:
             tile.isGeneral = True
 
-        armyStr = text_tile.lstrip(' abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
-        army = int(armyStr)
+        if 'D' in text_tile:
+            tile.discovered = True
+
         tile.player = player
         if player >= 0:
             tile.tile = player
 
-        tile.army = army
+        armyStr = text_tile.lstrip(' abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ').rstrip('D ')
+        if len(armyStr) > 0:
+            army = int(armyStr)
+            tile.army = army
 
     @staticmethod
     def get_map_raw_string_from_file(file_path_from_tests_folder):
@@ -242,6 +212,8 @@ class TextMapLoader(object):
         for player in map.players:
             char, index = playerCharMap[player.index]
 
+            if f'{char}Username' in data:
+                map.usernames[index] = data[f'{char}Username']
             if f'{char}Score' in data:
                 player.score = int(data[f'{char}Score'])
             if f'{char}Tiles' in data:
@@ -260,3 +232,13 @@ class TextMapLoader(object):
                 player.leftGameTurn = int(data[f'{char}LeftGameTurn'])
             if f'{char}AggressionFactor' in data:
                 player.aggression_factor = int(data[f'{char}AggressionFactor'])
+            if f'{char}Delta25Tiles' in data:
+                player.delta25tiles = int(data[f'{char}Delta25Tiles'])
+            if f'{char}Delta25Score' in data:
+                player.delta25score = int(data[f'{char}Delta25Score'])
+            if f'{char}CityGainedTurn' in data:
+                player.cityGainedTurn = int(data[f'{char}CityGainedTurn'])
+            if f'{char}CityLostTurn' in data:
+                player.cityLostTurn = int(data[f'{char}CityLostTurn'])
+            if f'{char}LastSeenMoveTurn' in data:
+                player.last_seen_move_turn = int(data[f'{char}LastSeenMoveTurn'])

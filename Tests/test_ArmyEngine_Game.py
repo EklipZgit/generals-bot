@@ -11,7 +11,7 @@ class ArmyEngineGameTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 238)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=238)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -32,7 +32,7 @@ class ArmyEngineGameTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 241)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=241)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -53,7 +53,7 @@ class ArmyEngineGameTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 388)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=388)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -77,7 +77,7 @@ class ArmyEngineGameTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 389)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=389)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -98,7 +98,7 @@ class ArmyEngineGameTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 246)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=246)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -120,7 +120,7 @@ class ArmyEngineGameTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 423)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=423)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -142,7 +142,7 @@ class ArmyEngineGameTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 740)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=740)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -163,7 +163,7 @@ class ArmyEngineGameTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 739)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=739)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 

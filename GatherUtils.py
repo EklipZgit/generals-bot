@@ -4,7 +4,6 @@ import typing
 from collections import deque
 from queue import PriorityQueue
 
-import GatherUtils
 import KnapsackUtils
 import SearchUtils
 from DataModels import Move, GatherTreeNode
@@ -153,8 +152,8 @@ def extend_tree_node_lookup(
         gatherTreeNodeLookup: typing.Dict[Tile, GatherTreeNode],
         startTilesDict: typing.Dict[Tile, typing.Tuple[typing.Any, int]],
         searchingPlayer: int,
+        negativeTiles: typing.Set[Tile],
         useTrueValueGathered: bool = False,
-        # negativeTiles: typing.Set[Tile],
         shouldLog: bool = False,
         force: bool = False
 ) -> typing.Dict[Tile, GatherTreeNode]:
@@ -162,10 +161,14 @@ def extend_tree_node_lookup(
     Returns the remaining turns after adding the paths, and the new tree nodes list, and the new startingTileDict.
     If a path in the list does not produce any army, returns None for remaining turns.
 
+    @param force:
+    @param shouldLog:
+    @param startTilesDict:
     @param newPaths:
-    # @param gatherTreeNodeLookup:
+    @param negativeTiles:
+    @param gatherTreeNodeLookup:
     @param searchingPlayer:
-    # @param negativeTiles:
+    @param useTrueValueGathered:
     @return:
     """
     distanceLookup: typing.Dict[Tile, int] = {}
@@ -224,10 +227,12 @@ def extend_tree_node_lookup(
             nextGatherTreeNode = GatherTreeNode(pathNode.tile, currentGatherTreeNode.tile, newDist)
 
             tileEffect = 1
-            if pathNode.tile.player == searchingPlayer:
-                tileEffect -= pathNode.tile.army
-            elif useTrueValueGathered:
-                tileEffect += pathNode.tile.army
+
+            if negativeTiles is None or pathNode.tile not in negativeTiles:
+                if pathNode.tile.player == searchingPlayer:
+                    tileEffect -= pathNode.tile.army
+                elif useTrueValueGathered:
+                    tileEffect += pathNode.tile.army
             runningTrunkValue -= tileEffect
             nextGatherTreeNode.value = runningValue
             nextGatherTreeNode.trunkValue = runningTrunkValue
@@ -651,7 +656,7 @@ def _knapsack_levels_gather_iterative_prune(
             newStartTilesDict,
             searchingPlayer,
             useTrueValueGathered=useTrueValueGathered,
-            # negativeTiles
+            negativeTiles=negativeTiles,
             shouldLog=shouldLog
         )
 
@@ -918,6 +923,7 @@ def knapsack_levels_backpack_gather_with_value(
         negativeTiles = negativeTiles.copy()
     else:
         negativeTiles = set()
+        # negativeTilesOrig = set()
     # q = PriorityQueue()
 
     # if isinstance(startTiles, dict):
@@ -1520,10 +1526,11 @@ def recalculate_tree_values(
         for child in current.children:
             trunkValue = current.trunkValue
             trunkDistance = current.trunkDistance + 1
-            if child.tile.player == searchingPlayer:
-                trunkValue += child.tile.army
-            elif not onlyCalculateFriendlyArmy:
-                trunkValue -= child.tile.army
+            if negativeTiles is None or child.tile not in negativeTiles:
+                if child.tile.player == searchingPlayer:
+                    trunkValue += child.tile.army
+                elif not onlyCalculateFriendlyArmy:
+                    trunkValue -= child.tile.army
             trunkValue -= 1
             if shouldAssert:
                 if trunkValue != child.trunkValue:
@@ -1809,8 +1816,8 @@ def prune_mst_to_army_with_values(
 
     def untilFunc(node: GatherTreeNode, _, turnsLeft: int, curValue: int):
         turnsLeftIfPruned = turnsLeft - node.gatherTurns
-        cityIncrementAmount = cityCounter.value * ((turnsLeftIfPruned - 1) // 2)
-        cityIncrementAmount -= cityGatherDepthCounter.value // 2
+        cityIncrementAmount = cityCounter.value * ((turnsLeftIfPruned + 1) // 2)
+        cityIncrementAmount -= (cityGatherDepthCounter.value - 1) // 2
         armyLeftIfPruned = curValue - node.value + cityIncrementAmount
 
         if armyLeftIfPruned < army:
@@ -1860,7 +1867,7 @@ def prune_mst_to_army(
     @return: The list same list of rootnodes passed in, modified.
     """
 
-    count, totalValue, rootNodes = GatherUtils.prune_mst_to_army_with_values(
+    count, totalValue, rootNodes = prune_mst_to_army_with_values(
         rootNodes=rootNodes,
         army=army,
         searchingPlayer=searchingPlayer,
@@ -1995,7 +2002,7 @@ def prune_mst_to_max_army_per_turn(
     @return: The list same list of rootnodes passed in, modified.
     """
 
-    count, totalValue, rootNodes = GatherUtils.prune_mst_to_max_army_per_turn_with_values(
+    count, totalValue, rootNodes = prune_mst_to_max_army_per_turn_with_values(
         rootNodes=rootNodes,
         minArmy=minArmy,
         searchingPlayer=searchingPlayer,

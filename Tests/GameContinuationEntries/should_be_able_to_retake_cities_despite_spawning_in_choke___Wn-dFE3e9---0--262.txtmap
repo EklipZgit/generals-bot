@@ -1,0 +1,70 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+               a3   a3   a4   a4   a3   a3   M              C46  M    b2   b2        M
+     M              a3   C41  a4   a4   a3   M    a3   a3   a3   bC33 a6   b2
+                    a3   a3   a3   a3   a1   aG67 a2   a2   a2   b2   a2   a2   M
+                    a3   M    a3   a4   a1   M    M    M    a3   b2   b2   a2   a2   a2
+               M    a3   a3   a3   a1   a1   a4   M              M    b2   b2   a2   a2
+                    a1   a9   a4   a1   M    a4   a3   M              D    b2        M
+               M    a1   a5   M    a1   a2   M    a3                       b2
+                    a1   a1   a3   a1   a2   a2   M         M         M    b2        M
+                         a2   a2   a1   a2   a3   M    C46                 b2   M    M
+     M    M         M         a4   a2   a2   a3   a2   M                   b2
+               M         C49  a5   a2   a4   a4   a5   a3   M    b2        b2   M
+M         M              M    b4   a2   b4   M    a3   a3   a3   b2   C50  b2        M
+                                   M    M    a2   a2   a2   a2   a7   b3   b2
+               M    M              M    a4   a2   a3   a4   M    b3   M    b2        M
+     M    M              M         a3   a3   a4   a3   a3   b3   C49       b2
+               M                        M    a3   a3   a3   a3   b4        b2
+                                        M    b2   b3   b4   b4   b4        b2   M    M
+M              M    M                   D    D    MD                       b2
+     M                                       M    M                   M    b2   b2
+                         M                                                      M
+               M    M                             M                   M    M
+                              M                   M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=15,11
+turn=262
+bot_player_index=0
+bot_all_in_counter=18
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=40
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_target_player=1
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=96
+aScore=335
+aStandingArmy=239
+aStars=68
+aCityCount=1
+aGeneral=9,2
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=6
+aDelta25Score=73
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=262
+bUsername=simplesoon
+bTiles=90
+bScore=307
+bStandingArmy=217
+bStars=67
+bCityCount=3
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=259
+bDelta25Tiles=12
+bDelta25Score=85
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=245

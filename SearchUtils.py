@@ -118,7 +118,7 @@ def dest_breadth_first_target(
 
             startVal = (0, 0 - startArmy)
             frontier.put((startVal, goal, 0, startArmy, goalInc, None))
-    start = time.time()
+    start = time.perf_counter()
     iter = 0
     foundGoal = False
     foundArmy = -1000
@@ -186,7 +186,7 @@ def dest_breadth_first_target(
                 frontier.put(((newDist, 0 - nextArmy), next, newDist, nextArmy, goalInc, current))
     if not noLog:
         logging.info(
-            f"BFS DEST SEARCH ITERATIONS {iter}, DURATION: {time.time() - start:.3f}, DEPTH: {depthEvaluated}, FOUNDDIST: {foundDist}")
+            f"BFS DEST SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}, FOUNDDIST: {foundDist}")
     if foundDist < 0:
         return None
 
@@ -292,7 +292,7 @@ def a_star_kill(
             cost_so_far[start] = (0, 0 - startArmy)
             frontier.put((cost_so_far[start], start))
             came_from[start] = None
-    start = time.time()
+    start = time.perf_counter()
     iter = 0
     foundDist = -1
     foundArmy = -1
@@ -301,7 +301,7 @@ def a_star_kill(
 
     while not frontier.empty():
         iter += 1
-        if iter & 256 == 0 and time.time() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
+        if iter & 256 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
             logging.info("breaking A* early")
             break
         prio, current = frontier.get()
@@ -359,7 +359,7 @@ def a_star_kill(
                     # logging.info("a* enqueued next")
                     came_from[next] = current
     logging.info(
-        f"A* KILL SEARCH ITERATIONS {iter}, DURATION: {time.time() - start:.3f}, DEPTH: {depthEvaluated}")
+        f"A* KILL SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
     if not goal in came_from:
         return None
 
@@ -480,7 +480,7 @@ def breadth_first_dynamic(
 
             startVal = (dist, negCityCount, negEnemyTileCount, negArmySum, tile.x, tile.y, goalIncrement)
             frontier.put((startVal, dist, tile, None))
-    start = time.time()
+    start = time.perf_counter()
     iter = 0
     foundGoal = False
     foundDist = 1000
@@ -489,7 +489,7 @@ def breadth_first_dynamic(
     foundVal = None
     while not frontier.empty():
         iter += 1
-        if iter % 1000 == 0 and time.time() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
+        if iter % 1000 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
             logging.info("BFS-DYNAMIC BREAKING")
             break
 
@@ -524,7 +524,7 @@ def breadth_first_dynamic(
                 frontier.put((nextVal, newDist, next, current))
 
     logging.info(
-        f"BFS-DYNAMIC ITERATIONS {iter}, DURATION: {time.time() - start:.3f}, DEPTH: {depthEvaluated}")
+        f"BFS-DYNAMIC ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         return None
 
@@ -755,7 +755,7 @@ def breadth_first_dynamic_max(
             and time.perf_counter() - start > maxTime
                 # and not BYPASS_TIMEOUTS_FOR_DEBUGGING
         ) or iter > maxIterations:
-            logging.info("BFS-DYNAMIC-MAX BREAKING EARLY")
+            logging.info(f"BFS-DYNAMIC-MAX BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
             break
 
         (prioVals, dist, current, parent, nodeList) = frontier.get()
@@ -820,7 +820,7 @@ def breadth_first_dynamic_max(
                 newNodeList.append((next, nextVal))
                 frontier.put((nextVal, dist, next, current, newNodeList))
     if not noLog:
-        logging.info(f"BFS-DYNAMIC-MAX ITERATIONS {iter}, DURATION: {time.time() - start:.3f}, DEPTH: {depthEvaluated}")
+        logging.info(f"BFS-DYNAMIC-MAX ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         if includePathValue:
             return None, None
@@ -1051,7 +1051,7 @@ def breadth_first_dynamic_max_per_tile(
             startList.append((tile, startVal))
             frontier.put((startVal, dist, tile, None, startList, tile))
 
-    start = time.time()
+    start = time.perf_counter()
     iter = 0
     foundDist = 1000
     depthEvaluated = 0
@@ -1062,8 +1062,8 @@ def breadth_first_dynamic_max_per_tile(
 
     while not frontier.empty():
         iter += 1
-        if iter & 256 == 0 and time.time() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING or iter > maxIterations:
-            logging.info("BFS-DYNAMIC-MAX-PER-TILE BREAKING EARLY")
+        if iter & 256 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING or iter > maxIterations:
+            logging.info(f"BFS-DYNAMIC-MAX-PER-TILE BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
             break
 
         (prioVals, dist, current, parent, nodeList, startTile) = frontier.get()
@@ -1135,7 +1135,7 @@ def breadth_first_dynamic_max_per_tile(
                 newNodeList.append((next, nextPrio))
                 frontier.put((nextPrio, dist, next, current, newNodeList, startTile))
     if not noLog:
-        logging.info(f"BFS-DYNAMIC-MAX-PER-TILE ITERATIONS {iter}, DURATION: {time.time() - start:.3f}, DEPTH: {depthEvaluated}")
+        logging.info(f"BFS-DYNAMIC-MAX-PER-TILE ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         return {}
 
@@ -1363,7 +1363,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
             startList.append((tile, startVal))
             frontier.put((startVal, dist, tile, None, startList, tile))
 
-    start = time.time()
+    start = time.perf_counter()
     iter = 0
     foundDist = 1000
     depthEvaluated = 0
@@ -1374,8 +1374,8 @@ def breadth_first_dynamic_max_per_tile_per_distance(
 
     while not frontier.empty():
         iter += 1
-        if iter & 256 == 0 and time.time() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING or iter > maxIterations:
-            logging.info("BFS-DYNAMIC-MAX BREAKING EARLY")
+        if iter & 256 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING or iter > maxIterations:
+            logging.info(f"BFS-DYNAMIC-MAX BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
             break
 
         (prioVals, dist, current, parent, nodeList, startTile) = frontier.get()
@@ -1402,7 +1402,8 @@ def breadth_first_dynamic_max_per_tile_per_distance(
                 maxPriosTMP[startTile] = {}
                 endNodesTMP[startTile] = {}
                 maxListsTMP[startTile] = {}
-            if dist not in maxValuesTMP[startTile] or newValue > maxValuesTMP[startTile][dist]:
+            maxMinusOne = maxValuesTMP[startTile].get(dist-1, None)
+            if (dist not in maxValuesTMP[startTile] or newValue > maxValuesTMP[startTile][dist]) and (maxMinusOne is None or maxMinusOne < newValue):
                 foundDist = min(foundDist, dist)
                 if logResultValues:
                     if parent is not None:
@@ -1454,7 +1455,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
                 newNodeList.append((next, nextPrio))
                 frontier.put((nextPrio, dist, next, current, newNodeList, startTile))
     if not noLog:
-        logging.info(f"BFS-DYNAMIC-MAX ITERATIONS {iter}, DURATION: {time.time() - start:.3f}, DEPTH: {depthEvaluated}")
+        logging.info(f"BFS-DYNAMIC-MAX ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         return {}
 
@@ -1615,7 +1616,7 @@ def bidirectional_breadth_first_dynamic(
 
             startVal = (dist, negCityCount, negEnemyTileCount, negArmySum, tile.x, tile.y, goalIncrement)
             frontier.put((startVal, dist, tile, None))
-    start = time.time()
+    start = time.perf_counter()
     iter = 0
     foundGoal = False
     foundDist = 1000
@@ -1624,7 +1625,7 @@ def bidirectional_breadth_first_dynamic(
     foundVal = None
     while not frontier.empty():
         iter += 1
-        if iter % 1000 == 0 and time.time() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
+        if iter % 1000 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
             logging.info("BI-DIR BREAKING")
             break
 
@@ -1659,7 +1660,7 @@ def bidirectional_breadth_first_dynamic(
                 frontier.put((nextVal, newDist, next, current))
 
     logging.info(
-        f"BI-DIR BFS-FIND ITERATIONS {iter}, DURATION: {time.time() - start:.3f}, DEPTH: {depthEvaluated}")
+        f"BI-DIR BFS-FIND ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         return None
 
@@ -1704,12 +1705,17 @@ def breadth_first_find_queue(
         negativeTiles=None,
         skipTiles=None,
         searchingPlayer=-2,
-        ignoreStartTile=False):
+        ignoreStartTile=False,
+        prioFunc: typing.Callable[[Tile], typing.Any] | None = None
+) -> Path | None:
     """
     goalFunc is goalFunc(current, army, dist)
+    prioFunc is prioFunc(tile) - bigger is better, tuples supported, True comes before False etc.
     """
+
     if searchingPlayer == -2:
         searchingPlayer = map.player_index
+
     frontier = deque()
     nodeValues = [[None for x in range(map.rows)] for y in range(map.cols)]
     visited: typing.Set[Tile] = set()
@@ -1746,7 +1752,7 @@ def breadth_first_find_queue(
                 startArmy = 0
             frontier.appendleft((tile, 0, startArmy, goalInc))
     iter = 0
-    start = time.time()
+    start = time.perf_counter()
     foundGoal = False
     foundArmy = -100000
     foundDist = 1000
@@ -1768,7 +1774,10 @@ def breadth_first_find_queue(
             if foundGoal:
                 break
         if dist <= maxDepth and not foundGoal:
-            for next in current.movable:  # new spots to try
+            nextSearch = current.movable
+            if prioFunc is not None:
+                nextSearch = sorted(current.movable, key=prioFunc, reverse=True)
+            for next in nextSearch:  # new spots to try
                 if (
                         next.isMountain
                         or (noNeutralCities and next.isCity and next.player == -1)
@@ -1791,7 +1800,7 @@ def breadth_first_find_queue(
                 frontier.appendleft((next, newDist, nextArmy, goalInc))
 
     logging.info(
-        f"BFS-FIND-QUEUE ITERATIONS {iter}, DURATION: {time.time() - start:.3f}, DEPTH: {depthEvaluated}")
+        f"BFS-FIND-QUEUE ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         return None
 
@@ -1876,7 +1885,7 @@ def breadth_first_foreach(map: MapBase, startTiles, maxDepth, foreachFunc, negat
 
         foreachFunc = newFunc
 
-    start = time.time()
+    start = time.perf_counter()
     iter = 0
     depthEvaluated = 0
     dist = 0
@@ -1887,7 +1896,7 @@ def breadth_first_foreach(map: MapBase, startTiles, maxDepth, foreachFunc, negat
         if globalVisited[current.x][current.y]:
             continue
         globalVisited[current.x][current.y] = True
-        if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)):
+        if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)) and dist > 0:
             continue
         foreachFunc(current)
         # intentionally placed after the foreach func, skipped tiles are still foreached, they just aren't traversed
@@ -1901,7 +1910,7 @@ def breadth_first_foreach(map: MapBase, startTiles, maxDepth, foreachFunc, negat
             frontier.appendleft((next, newDist))
     if not noLog:
         logging.info(
-            f"Completed breadth_first_foreach. startTiles[0] {startTiles[0].x},{startTiles[0].y}: ITERATIONS {iter}, DURATION {time.time() - start:.3f}, DEPTH {dist}")
+            f"Completed breadth_first_foreach. startTiles[0] {startTiles[0].x},{startTiles[0].y}: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
 
 
 def breadth_first_foreach_dist(map, startTiles, maxDepth, foreachFunc, negativeFunc=None, skipFunc=None, skipTiles=None,
@@ -1945,7 +1954,7 @@ def breadth_first_foreach_dist(map, startTiles, maxDepth, foreachFunc, negativeF
 
         foreachFunc = newFunc
 
-    start = time.time()
+    start = time.perf_counter()
     iter = 0
     dist = 0
     while len(frontier) > 0:
@@ -1968,7 +1977,7 @@ def breadth_first_foreach_dist(map, startTiles, maxDepth, foreachFunc, negativeF
             frontier.appendleft((next, newDist))
     if not noLog:
         logging.info(
-            f"Completed breadth_first_foreach_dist. startTiles[0] {startTiles[0].x},{startTiles[0].y}: ITERATIONS {iter}, DURATION {time.time() - start:.3f}, DEPTH {dist}")
+            f"Completed breadth_first_foreach_dist. startTiles[0] {startTiles[0].x},{startTiles[0].y}: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
 
 
 def build_distance_map_incl_mountains(map, startTiles, skipTiles=None) -> typing.List[typing.List[int]]:

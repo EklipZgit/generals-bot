@@ -56,11 +56,17 @@ class TestBase(unittest.TestCase):
 
         return map, general
 
-    def load_map_and_general_from_string(self, rawMapDataString: str, turn: int, player_index: int = -1) -> typing.Tuple[MapBase, Tile]:
+    def load_map_and_general_from_string(
+            self,
+            rawMapDataString: str,
+            turn: int,
+            player_index: int = -1,
+            respect_undiscovered: bool = False
+    ) -> typing.Tuple[MapBase, Tile]:
         board = TextMapLoader.load_map_from_string(rawMapDataString)
         data = TextMapLoader.load_data_from_string(rawMapDataString)
 
-        map = self.get_test_map(board, turn=turn)
+        map = self.get_test_map(board, turn=turn, dont_set_seen_visible_discovered=respect_undiscovered)
         TextMapLoader.load_map_data_into_map(map, data)
         general = next(t for t in map.pathableTiles if t.isGeneral and (t.player == player_index or player_index == -1))
         map.player_index = general.player
@@ -68,14 +74,14 @@ class TestBase(unittest.TestCase):
 
         return map, general
 
-    def load_map_and_general(self, mapFilePath: str, turn: int, player_index: int = -1) -> typing.Tuple[MapBase, Tile]:
+    def load_map_and_general(self, mapFilePath: str, turn: int, player_index: int = -1, respect_undiscovered: bool = False) -> typing.Tuple[MapBase, Tile]:
         try:
             if player_index == -1:
                 gameData = TextMapLoader.load_data_from_file(mapFilePath)
                 if 'bot_player_index' in gameData:
                     player_index = int(gameData['bot_player_index'])
             rawMapStr = TextMapLoader.get_map_raw_string_from_file(mapFilePath)
-            return self.load_map_and_general_from_string(rawMapStr, turn, player_index)
+            return self.load_map_and_general_from_string(rawMapStr, turn, player_index, respect_undiscovered)
         except:
             logging.info(f'failed to load file {mapFilePath}')
             raise
@@ -212,6 +218,10 @@ class TestBase(unittest.TestCase):
                     tile.lastSeen = turn
                     tile.visible = True
                     tile.discovered = True
+                    # if tile.isMountain:
+                    #     tile.tile = TILE_OBSTACLE
+                    #     tile.isMountain = False
+
                 if figureOutPlayerCount:
                     num_players = max(num_players, tile.player + 1)
 
@@ -271,7 +281,7 @@ class TestBase(unittest.TestCase):
         return Army(generalArmy), Army(enemyArmy)
 
     def render_paths(self, map: MapBase, paths: typing.List[Path | None], infoStr: str):
-        viewInfo = self.get_view_info(map)
+        viewInfo = self.get_renderable_view_info(map)
 
         r = 255
         g = 0
@@ -295,7 +305,7 @@ class TestBase(unittest.TestCase):
         self.render_view_info(map, viewInfo, infoStr)
 
     def render_moves(self, map: MapBase, infoStr: str, moves1: typing.List[Move | None], moves2: typing.List[Move | None] = None, addlViewInfoLogLines: typing.List[str] | None = None):
-        viewInfo = self.get_view_info(map)
+        viewInfo = self.get_renderable_view_info(map)
         verifiedColors = False
         for move in moves1:
             if move is not None:
@@ -488,7 +498,7 @@ class TestBase(unittest.TestCase):
 
         return enemyGeneral
 
-    def get_view_info(self, map: MapBase) -> ViewInfo:
+    def get_renderable_view_info(self, map: MapBase) -> ViewInfo:
         viewInfo = ViewInfo(1, map.cols, map.rows)
         viewInfo.playerTargetScores = [0 for p in map.players]
         return viewInfo
@@ -499,6 +509,22 @@ class TestBase(unittest.TestCase):
             titleString = self._testMethodName
         viewer = ViewerHost(titleString, cell_width=None, cell_height=None, alignTop=False, alignLeft=False, noLog=True)
         viewer.noLog = True
+        if infoString is not None:
+            viewInfo.infoText = infoString
+        viewer.start()
+        viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
+
+        while not viewer.check_viewer_closed():
+            viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
+            time.sleep(0.1)
+
+    def render_map(self, map: MapBase, infoString: str | None = None):
+        titleString = infoString
+        if titleString is None:
+            titleString = self._testMethodName
+        viewer = ViewerHost(titleString, cell_width=None, cell_height=None, alignTop=False, alignLeft=False, noLog=True)
+        viewer.noLog = True
+        viewInfo = self.get_renderable_view_info(map)
         if infoString is not None:
             viewInfo.infoText = infoString
         viewer.start()
@@ -788,6 +814,24 @@ class TestBase(unittest.TestCase):
         enemyGen = furthestTile
         return enemyGen
 
+    def move_enemy_general(
+            self,
+            map: MapBase,
+            oldGeneral: Tile,
+            newX: int,
+            newY: int
+    ) -> Tile:
+        oldArm = oldGeneral.army
+        enemyGeneral = map.GetTile(newX, newY)
+        enemyGeneral.army = oldArm
+        enemyGeneral.isGeneral = True
+        enemyGeneral.player = oldGeneral.player
+        map.players[enemyGeneral.player].general = enemyGeneral
+        map.generals[enemyGeneral.player] = enemyGeneral
+        oldGeneral.isGeneral = False
+        oldGeneral.army = 1
+        return enemyGeneral
+
     def a_b_test(
             self,
             numRuns: int,
@@ -797,7 +841,8 @@ class TestBase(unittest.TestCase):
             mapFile: str | typing.List[str] | None = None,
             debugModeTurnTime: float = 0.1,
             debugModeRenderAllPlayers: bool = False,
-            noCities: bool | None = None
+            noCities: bool | None = None,
+            noFileWrites: bool = True
     ):
         """
         run numRuns games on a map flipping general spawns each time, and asserts that A beat B most of the time.
@@ -864,6 +909,9 @@ class TestBase(unittest.TestCase):
                     simHost = GameSimulatorHost(map, player_with_viewer=playerToRender)
                     aBot = simHost.get_bot(a)
                     bBot = simHost.get_bot(b)
+
+                    aBot.no_file_logging = noFileWrites
+                    bBot.no_file_logging = noFileWrites
 
                     configureA(aBot)
                     if configureB is not None:

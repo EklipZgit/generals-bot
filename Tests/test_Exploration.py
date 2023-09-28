@@ -21,7 +21,7 @@ class ExplorationTests(TestBase):
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player)
 
-        rawMap, _ = self.load_map_and_general(mapFile, 543)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=543)
         simHost.apply_map_vision(general.player, rawMap)
 
         # alert enemy of the player general
@@ -29,7 +29,7 @@ class ExplorationTests(TestBase):
         simHost.bot_hosts[general.player].eklipz_bot.allIn = True
         simHost.bot_hosts[general.player].eklipz_bot.all_in_counter = 500
 
-        simHost.bot_hosts[general.player].eklipz_bot.finishingExploration = True
+        simHost.bot_hosts[general.player].eklipz_bot.finishing_exploration = True
 
         negTiles = set()
         for city in map.players[general.player].cities:
@@ -54,7 +54,7 @@ class ExplorationTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 490, player_index=4)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=490, player_index=4)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 

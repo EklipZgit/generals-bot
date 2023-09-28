@@ -235,6 +235,7 @@ class GeneralsViewer(object):
         self.square_inner_3 = Rect(3, 3, self.cellWidth - 6, self.cellHeight - 6)
         self.square_inner_4 = Rect(4, 4, self.cellWidth - 8, self.cellHeight - 8)
         self.square_inner_5 = Rect(5, 5, self.cellWidth - 10, self.cellHeight - 10)
+        self.plusDepth = self.cellWidth // 3 - 1  # bigger number = bigger squares in the corners. Idk why, the math on this doesnt make sense lol but it draws a plus i guess. // 4 (no -1) was pretty good sized.
 
         # Set Window Size
         window_height = self._map.rows * (
@@ -345,7 +346,6 @@ class GeneralsViewer(object):
 
                 if not self.noLog:
                     logging.info("GeneralsViewer saving image:")
-                if not self.noLog:
                     self.save_image()
             except queue.Empty:
                 elapsed = time.perf_counter() - self.last_update_received
@@ -464,8 +464,10 @@ class GeneralsViewer(object):
                                               (score_width * i + 3, pos_top + 1))
 
                         playerSubtext = f"{player.score} {player.tileCount}t {player.cityCount}c"
+                        if player.index != self._map.player_index and len(self._viewInfo.playerTargetScores) > 0:
+                            playerSubtext += f" {player.aggression_factor}a"
                         if self._map.remainingPlayers > 2 and player.index != self._map.player_index and len(self._viewInfo.playerTargetScores) > 0:
-                            playerSubtext += f" {player.aggression_factor}a {int(self._viewInfo.playerTargetScores[player.index])}ts"
+                            playerSubtext += f"  {int(self._viewInfo.playerTargetScores[player.index])}ts"
                         self._screen.blit(self._medFont.render(playerSubtext, True, WHITE),
                                           (score_width * i + 3, pos_top + 1 + self._medFont.get_height()))
             # for i, score in enumerate(self._scores):
@@ -1179,7 +1181,6 @@ def rescale_color(
     b = int(rescale_value(valToScale, valueMin, valueMax, bMin, bMax))
 
     return r, g, b
-
 
 
 def rescale_value(valToScale, valueMin, valueMax, newScaleMin, newScaleMax):

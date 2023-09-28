@@ -151,7 +151,7 @@ class GatherTests(TestBase):
         mapFile = 'GameContinuationEntries/gather_value_estimates_should_be_correct___rghT7Cq23---b--240.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240)
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
@@ -188,7 +188,7 @@ class GatherTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
@@ -246,7 +246,7 @@ class GatherTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
@@ -309,7 +309,7 @@ class GatherTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
@@ -372,7 +372,7 @@ class GatherTests(TestBase):
                     self.enable_search_time_limits_and_disable_debug_asserts()
 
                 # Grant the general the same fog vision they had at the turn the map was exported
-                rawMap, _ = self.load_map_and_general(mapFile, 527)
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=527)
 
                 self.begin_capturing_logging()
                 simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
@@ -394,7 +394,7 @@ class GatherTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 864)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=864)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -416,7 +416,7 @@ class GatherTests(TestBase):
         # self.disable_search_time_limits_and_enable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 560)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=560)
 
         self.begin_capturing_logging()
         self.enable_search_time_limits_and_disable_debug_asserts()
@@ -479,7 +479,7 @@ b1   b1   b1   b1   b1   b1   bG1
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 321)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=321)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -947,7 +947,7 @@ bot_player_index=0
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 477)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=477)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 

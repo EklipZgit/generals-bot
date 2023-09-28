@@ -588,7 +588,15 @@ function Run-Human {
         foreach ($g in $game)
         {
             Run-BotOnce -game $g -name "Human.exe" -public @splat
-            $sleepTime = (Get-Random -Min 0 -Max $sleepMax)
+            $sleepTimeA = (Get-Random -Min 0 -Max $sleepMax)
+            $sleepTime = $sleepTimeA
+
+            # use min-of-2 strategy to more often pick lower sleep times but still have high sleep times available.
+            $sleepTimeB = (Get-Random -Min 0 -Max $sleepMax)
+            if ($sleepTimeB -lt $sleepTime) {
+                $sleepTime = $sleepTimeB
+            }
+
             Write-Verbose "Powershell finished, sleeping $sleepTime" -Verbose
             Start-Sleep -Seconds $sleepTime
         }

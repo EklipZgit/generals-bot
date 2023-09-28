@@ -35,7 +35,6 @@ Attacking too deep in enemy territory early?
 
 TODO:
 Tile value priority matrix to board analysis.
-Fix fog army issues.
 
 MCTS:
 	Engine should not calculate the general distance win until the end of the scrim. 
@@ -51,7 +50,12 @@ MCTS:
 		MCTS does not need to be zero sum during FFA, even if we only include two players. Tile differential concept would need to change, though.
 
 STRATEGY:
-	When losing on tiles, try to plan runbys. Fuck defense when losing, it just gets you more behind. Go all out, enemy_has_kill_threat=False MCTS dance your way in, fully disable army intercept, etc.
+	When losing on tiles, try to plan runbys. 
+	
+	When losing on tiles, never back up for defense, always continue the attack. Defense pullbacks should calculate a 'chance of dying' based on the information the opp knows.
+		Fuck defense when losing, it just gets you more behind. Go all out, enemy_has_kill_threat=False MCTS dance your way in, fully disable army intercept, etc.
+			* Blindly doing this when losing on tiles reduces winrate, need to be more nuanced with the 'no go backwards' rules.
+			* Consider applying no-go-backwards even when winning...?
 
 
 EXPANSION v2
@@ -66,6 +70,7 @@ EXPANSION v2
 GENERAL-PREDICTION:
 	In FFA, after a player capture, we end up hunting all the wrong places for the capturer even though we saw them ahead of them capping more stuff.
 	We need to maintain an early game prediction state that stops getting updated after a capture or a few cycles, and heavily weight that for exploration.
+		Kind of done, ish? We heavily weight early discoveries over late discoveries.
 	Likewise when a capture happens and we see tiles from capturer before and after, we should dual-BFS out from the captured player and mark all tiles encountered on the way to the capturer as 'not capturer general possible'
 		only applies when we see a significant portion of the capturers tiles early on. If we see a few random tiles and then they capture another player, we shouldn't nuke the whole area around the captured player.
 	Eliminate general spawn locations based on if they got 25-start. We should be able to nuke the ends of all caves.
@@ -99,14 +104,18 @@ Use this in:
 
 
 ENEMY-STATE-PREDICTION:
-Maintain a running balance of predicted enemy gathered army.
-	Maintain a phantom 'general' tile counter for the player that we remove army from when army emerges during the game, and increment based on how far into the fog we think it is before the emergence.
-		Integrate this predicted general army into kill-hunting-offense so we can go super hunty when we think the enemy general is nearby and undefended.
-	Calculate predicted largest tile based on amount of cities and amount of army that isn't visible on number of tiles that aren't visible.
-	Reduce this by army emergences, increment it while the player is making moves that do not cap tiles and are not visible to us. Tweak until reasonably accurately predicting the armies that emerge from the fog at various game states.
-	In FFA, this should probably take into account whether we think the player is aggressive towards us.
-	We can use the mutual drops in army from two fog players anihilating to determine which players are attacking each other, and use that to target vulnerable players who we predict their general is weak. 
-		When they are anihilating large armies, they are clearly using army off their gen etc.
+	Maintain a running balance of predicted enemy gathered army.
+		Maintain a phantom 'general' tile counter for the player that we remove army from when army emerges during the game, and increment based on how far into the fog we think it is before the emergence.
+			Integrate this predicted general army into kill-hunting-offense so we can go super hunty when we think the enemy general is nearby and undefended.
+		Calculate predicted largest tile based on amount of cities and amount of army that isn't visible on number of tiles that aren't visible.
+		Reduce this by army emergences, increment it while the player is making moves that do not cap tiles and are not visible to us. Tweak until reasonably accurately predicting the armies that emerge from the fog at various game states.
+		In FFA, this should probably take into account whether we think the player is aggressive towards us.
+		We can use the mutual drops in army from two fog players anihilating to determine which players are attacking each other, and use that to target vulnerable players who we predict their general is weak. 
+			When they are anihilating large armies, they are clearly using army off their gen etc.
+
+	Extend the fog-city-prediction to outright predict fog cities as soon as they cap a city.
+		Prefer forward cities.
+		Unexplained army emergencies should shift city prediction accordingly, this should not fail the existing fog-city-wall-break tests.
 
 
 CITY-CONTESTATION:
@@ -117,7 +126,7 @@ CITY-CONTESTATION:
 		Never gather army AWAY from the enemy towards the city unless it is backwards behind our general.
 
 
-STRATEGY
+PERSISTENT STRATEGY
 	Make a strategy interface,
 		Prioritize army conservation vs capture 
 			(eg when all in exploring a losing game for short term kill, 

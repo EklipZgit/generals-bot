@@ -280,6 +280,8 @@ class ArmyTracker(object):
                     del self.armies[army.tile]
 
     def track_army_movement(self):
+        # TODO tile.delta.imperfectArmyDelta
+
         # for army in list(self.armies.values()):
         #    self.determine_army_movement(army, adjArmies)
         trackingArmies = {}
@@ -316,21 +318,22 @@ class ArmyTracker(object):
                     logging.error(msg)
                     continue
 
-            army = self.get_or_create_army_at(tile)
-
+            # armyDetectedAsMove = self.armies.get(tile, None)
+            # if armyDetectedAsMove is not None:
+            armyDetectedAsMove = self.get_or_create_army_at(tile)
             logging.info(f'Map detected army move, honoring that: {str(tile)}->{str(tile.delta.toTile)}')
-            self.army_moved(army, tile.delta.toTile, trackingArmies)
+            self.army_moved(armyDetectedAsMove, tile.delta.toTile, trackingArmies)
             if tile.delta.toTile.isUndiscoveredObstacle:
                 tile.delta.toTile.isCity = True
-                tile.delta.toTile.player = army.player
-                tile.delta.toTile.army = army.value
+                tile.delta.toTile.player = armyDetectedAsMove.player
+                tile.delta.toTile.army = armyDetectedAsMove.value
                 logging.warning(f'CONVERTING {str(tile.delta.toTile)} UNDISCOVERED MOUNTAIN TO CITY DUE TO MAP SAYING DEFINITELY TILE MOVED THERE. {str(tile)}->{str(tile.delta.toTile)}')
-            army.update()
+            armyDetectedAsMove.update()
             if not tile.delta.toTile.visible:
                 # map knows what it is doing, force tile army update.
-                army.value = tile.delta.toTile.army - 1
+                armyDetectedAsMove.value = tile.delta.toTile.army - 1
 
-        for army in list(self.armies.values()):
+        for army in sorted(self.armies.values(), key=lambda a: self.genDistances[a.tile.x][a.tile.y]):
             # any of our armies CANT have moved (other than the one handled explicitly above), ignore them, let other armies collide with / capture them.
             if army.player == self.map.player_index:
                 if army.last_moved_turn < self.map.turn - 1 and army.tile.army < self.track_threshold:
@@ -343,8 +346,8 @@ class ArmyTracker(object):
 
         self.scrap_unmoved_low_armies()
 
-        for army in trackingArmies.values():
-            self.armies[army.tile] = army
+        for armyDetectedAsMove in trackingArmies.values():
+            self.armies[armyDetectedAsMove.tile] = armyDetectedAsMove
 
         self.clean_up_armies()
 
@@ -548,7 +551,7 @@ class ArmyTracker(object):
                     (tileArmy is None or tileArmy.scrapped)
                     and tile.player != -1
                     and (playerLargest[tile.player] == tile
-                         or tile.army >= self.track_threshold
+                         or tile.army > self.track_threshold
                          or tileNewlyMovedByEnemy)
             ):
                 logging.info(
@@ -579,7 +582,12 @@ class ArmyTracker(object):
         @return:
         """
 
-        if not self.has_perfect_information_of_player_cities_and_general(emergedTile.player):
+        if emergedTile.player == self.map.player_index:
+            return
+
+        emergingPlayer = emergedTile.player
+
+        if not self.has_perfect_information_of_player_cities_and_general(emergingPlayer):
             logging.info(f"running new_army_emerged for tile {emergedTile.toString()}")
             distance = 11
             # armyEmergenceValue =
@@ -622,7 +630,7 @@ class ArmyTracker(object):
         skipFunc = lambda tile: (tile.visible) and tile != neutralTile
         breadth_first_foreach_dist(self.map, [neutralTile], distance, foreachFunc, negativeLambda, skipFunc)
 
-    def find_fog_source(self, armyPlayer: int, tile: Tile, delta: int | None = None):
+    def find_fog_source(self, armyPlayer: int, tile: Tile, delta: int | None = None) -> Path | None:
         """
         Looks for a fog source to this tile that produces the provided (positive) delta, or if none provided, the
         (positive) delta from the tile this turn.
@@ -640,8 +648,9 @@ class ArmyTracker(object):
         candidates = where(tile.movable,
                      lambda adj: not adj.isNotPathable and adj.was_not_visible_last_turn())
 
-        if (len(candidates) == 0
-                or missingCities > 0  # TODO questionable
+        if (
+            len(candidates) == 0
+            or missingCities > 0  # TODO questionable
         ):
             if missingCities > 0:
                 logging.info(f"        For new army at tile {str(tile)} there were no adjacent fogBois, checking for undiscovered city emergence")
@@ -650,8 +659,11 @@ class ArmyTracker(object):
                 logging.info(f"        For new army at tile {str(tile)} there were no adjacent fogBois and no missing cities, give up...?")
                 return None
 
-        def valFunc(thisTile: Tile, prioObject):
-            (dist, negArmy, turnsNegative, citiesConverted, consecUndisc) = prioObject
+        def valFunc(
+                thisTile: Tile,
+                prioObject
+        ):
+            (distWeighted, dist, negArmy, turnsNegative, citiesConverted, consecUndisc) = prioObject
             if dist == 0:
                 return None
 
@@ -676,19 +688,23 @@ class ArmyTracker(object):
                         f"using moveHalfVal {moveHalfVal:.1f} over val {val:.1f} for tile {thisTile.toString()} turn {self.map.turn}")
                     val = moveHalfVal
             elif not thisTile.discovered:
-                negArmy -= self.emergenceLocationMap[armyPlayer][thisTile.x][thisTile.y] ** 0.5
+                negArmy -= self.emergenceLocationMap[armyPlayer][thisTile.x][thisTile.y] ** 0.25
+                val += self.emergenceLocationMap[armyPlayer][thisTile.x][thisTile.y] / 1
 
             # closest path value to the actual army value. Fake tuple for logging.
             # 2*abs for making it 3x improvement on the way to the right path, and 1x unemprovement for larger armies than the found tile
             # negative weighting on dist to try to optimize for shorter paths instead of exact
-            return val - citiesConverted * 20, 0 - citiesConverted
+            return val - citiesConverted * 10 - dist, 0 - citiesConverted
 
         # if (0-negArmy) - dist*2 < tile.army:
         #    return (0-negArmy)
         # return -1
 
-        def pathSortFunc(nextTile: Tile, prioObject):
-            (dist, negArmy, turnsNeg, citiesConverted, consecutiveUndiscovered) = prioObject
+        def pathSortFunc(
+                nextTile: Tile,
+                prioObject
+        ):
+            (distWeighted, dist, negArmy, turnsNeg, citiesConverted, consecutiveUndiscovered) = prioObject
             theArmy = self.armies.get(nextTile, None)
             if theArmy is not None:
                 consecutiveUndiscovered = 0
@@ -702,9 +718,9 @@ class ArmyTracker(object):
                     return None
 
                 if nextTile.isUndiscoveredObstacle:
-                    negArmy += 25
+                    negArmy -= 3 + delta // missingCities
                 else:
-                    negArmy += 10
+                    negArmy -= 3 + delta // missingCities
                 dist += 10  # try to deprioritize these with high distance...?
 
                 consecutiveUndiscovered += 1
@@ -713,7 +729,7 @@ class ArmyTracker(object):
                     consecutiveUndiscovered += 1
                     undiscVal = self.emergenceLocationMap[armyPlayer][nextTile.x][nextTile.y]
                     if undiscVal > 0:
-                        emergenceLocalityBonusArmy = 1 + int(undiscVal ** 0.5)
+                        emergenceLocalityBonusArmy = 1 + int(undiscVal ** 0.25)
                         negArmy -= emergenceLocalityBonusArmy
                 else:
                     consecutiveUndiscovered = 0
@@ -725,30 +741,31 @@ class ArmyTracker(object):
             if negArmy <= 0:
                 turnsNeg += 1
             dist += 1
-            return dist, negArmy, turnsNeg, citiesConverted, consecutiveUndiscovered
+            return dist * citiesConverted, dist, negArmy, turnsNeg, citiesConverted, consecutiveUndiscovered
 
         def fogSkipFunc(
                 nextTile: Tile,
-                prioObject):
+                prioObject
+        ):
             if prioObject is None:
                 return True
 
-            (dist, negArmy, turnsNegative, citiesConverted, consecutiveUndiscovered) = prioObject
+            (distWeighted, dist, negArmy, turnsNegative, citiesConverted, consecutiveUndiscovered) = prioObject
             if citiesConverted > missingCities:
                 return True
 
             # logging.info("nextTile {}: negArmy {}".format(nextTile.toString(), negArmy))
             return (
                     (nextTile.visible and not nextTile.delta.gainedSight)
-                    or turnsNegative > 3
-                    or consecutiveUndiscovered > 15
-                    or dist > 20
+                    or turnsNegative > 6
+                    or consecutiveUndiscovered > 20
+                    or dist > 30
             )
 
         inputTiles = {}
         logging.info(f"Looking for fog army path of value {delta} to tile {str(tile)}")
         # we want the path to get army up to 0, so start it at the negative delta (positive)
-        inputTiles[tile] = ((0, delta, 0, 0, 0), 0)
+        inputTiles[tile] = ((0, 0, delta, 0, 0, 0), 0)
 
         fogSourcePath = breadth_first_dynamic_max(
             self.map,
@@ -764,10 +781,89 @@ class ArmyTracker(object):
             noLog=False)
         if fogSourcePath is not None:
             logging.info(
-                f"        For new army at tile {str(tile)} we found fog source path???? {fogSourcePath.toString()}")
+                f"        For new army at tile {str(tile)} we found fog source path???? {str(fogSourcePath)}")
         else:
             logging.info(f"        NO fog source path for new army at {str(tile)}")
         return fogSourcePath
+
+    def find_next_fog_city(self, cityPlayer: int, tile: Tile) -> Tile | None:
+        """
+        Looks for a fog source to this tile that produces the provided (positive) delta, or if none provided, the
+        (positive) delta from the tile this turn.
+        @param cityPlayer:
+        @param tile:
+        @return:
+        """
+
+        armyPlayerObj = self.map.players[cityPlayer]
+        missingCities = armyPlayerObj.cityCount - 1 - len(armyPlayerObj.cities)
+        if missingCities == 0:
+            return
+
+        def valFunc(
+                thisTile: Tile,
+                prioObject
+        ):
+            dist, _ = prioObject
+            if thisTile.visible:
+                return None
+
+            isPotentialFogCity = thisTile.isCity and thisTile.isNeutral
+            isPotentialFogCity = isPotentialFogCity or thisTile.isUndiscoveredObstacle
+            return isPotentialFogCity, 0 - dist
+
+        def pathSortFunc(
+                nextTile: Tile,
+                prioObject
+        ):
+            (dist, _) = prioObject
+
+            dist += 1
+            return dist, 0
+
+        def fogSkipFunc(
+                nextTile: Tile,
+                prioObject
+        ):
+            if prioObject is None:
+                return True
+
+            (dist, _) = prioObject
+
+            # logging.info("nextTile {}: negArmy {}".format(nextTile.toString(), negArmy))
+            return (
+                    (nextTile.visible and not nextTile.delta.gainedSight)
+                    or dist > 10
+            )
+
+        inputTiles = {}
+        logging.info(f"Looking for alt fog city for not-fog-city tile {str(tile)}")
+        # we want the path to get army up to 0, so start it at the negative delta (positive)
+        inputTiles[tile] = ((0, 0), 0)
+
+        fogSourcePath = breadth_first_dynamic_max(
+            self.map,
+            inputTiles,
+            valFunc,
+            maxTime=100000.0,
+            noNeutralCities=False,
+            noNeutralUndiscoveredObstacles=False,
+            priorityFunc=pathSortFunc,
+            skipFunc=fogSkipFunc,
+            searchingPlayer=cityPlayer,
+            logResultValues=True,
+            noLog=False)
+        if fogSourcePath is not None:
+            newFogCity = fogSourcePath.tail.tile
+            self.convert_fog_city_to_player_owned(newFogCity, cityPlayer)
+            logging.info(
+                f"        Found new fog city!???? {str(newFogCity)}")
+            return newFogCity
+
+        else:
+            logging.info(f"        NO alternate fog city found for {str(tile)}")
+
+        return None
 
     def resolve_fog_emergence(self, sourceFogArmyPath, fogTile):
         existingArmy = None
@@ -883,13 +979,16 @@ class ArmyTracker(object):
         sourceDeltaMismatch = expectedSourceDelta != actualSrcDelta
         destDeltaMismatch = expectedDestDelta != actualDestDelta
 
+        # works in 1v1, but 50/50 wrong in FFA, TODO do we care...?
+        fakeOtherPlayer = (self.map.player_index + 1) & 1
+
         sourceWasAttackedWithPriority = False
         sourceWasCaptured = False
         if sourceDeltaMismatch or self.lastMove.source.player != self.map.player_index:
             amountAttacked = actualSrcDelta - expectedSourceDelta
             if self.lastMove.source.player != self.map.player_index:
                 sourceWasCaptured = True
-                if MapBase.player_had_priority(self.lastMove.source.player, self.map.turn):
+                if MapBase.player_had_priority_over_other(self.lastMove.source.player, self.map.player_index, self.map.turn):
                     sourceWasAttackedWithPriority = True
                     logging.info(
                         f'MOVE {str(self.lastMove)} seems to have been captured with priority. Nuking our army and having no unexplained diffs (to let the main army tracker just calculate this capture).')
@@ -911,7 +1010,7 @@ class ArmyTracker(object):
                     # then we almost certainly didn't have source attacked with priority.
                     logging.warning(
                         f'MOVE {str(self.lastMove)} ? src attacked for amountAttacked {amountAttacked} WITHOUT priority based on actualSrcDelta {actualSrcDelta} vs expectedSourceDelta {expectedSourceDelta}')
-                elif not MapBase.player_had_priority(self.map.player_index, self.map.turn):
+                elif not MapBase.player_had_priority_over_other(self.map.player_index, fakeOtherPlayer, self.map.turn):
                     # if we DIDNT have priority (this is hit or miss in FFA, tho).
                     armyMadeItToDest = playerMoveDest.delta.armyDelta
                     amountAttacked = expectedDestDelta - armyMadeItToDest
@@ -940,7 +1039,7 @@ class ArmyTracker(object):
             if playerMoveDest.delta.oldOwner == playerMoveDest.delta.newOwner:
                 unexplainedDelta = 0 - unexplainedDelta
 
-            if not MapBase.player_had_priority(self.map.player_index, self.map.turn):  # the source tile could have been attacked for non-lethal damage BEFORE the move was made to target.
+            if not MapBase.player_had_priority_over_other(self.map.player_index, fakeOtherPlayer, self.map.turn):  # the source tile could have been attacked for non-lethal damage BEFORE the move was made to target.
                 self.unaccounted_tile_diffs[self.lastMove.source] = unexplainedDelta
             self.unaccounted_tile_diffs[self.lastMove.dest] = unexplainedDelta
             logging.info(
@@ -949,7 +1048,8 @@ class ArmyTracker(object):
             logging.info(
                 f'!MOVE {str(self.lastMove)} made it to dest with no issues, moving army.\r\n    expectedDestDelta {expectedDestDelta}, expectedSourceDelta {expectedSourceDelta}, actualSrcDelta {actualSrcDelta}, actualDestDelta {actualDestDelta}, sourceWasAttackedWithPriority {sourceWasAttackedWithPriority}, sourceWasCaptured {sourceWasCaptured}')
             self.unaccounted_tile_diffs.pop(playerMoveDest, 0)
-            skip.add(playerMoveDest)
+            # if playerMoveDest.player != self.map.player_index:
+            skip.add(playerMoveDest)  # might not need this at alll.....?
         self.army_moved(army, playerMoveDest, trackingArmies)
 
     def try_track_army(
@@ -1229,14 +1329,7 @@ class ArmyTracker(object):
         for tile in sourceFogArmyPath.tileList:
             isVisionLessNeutCity = tile.isCity and tile.isNeutral and not tile.visible
             if tile.isUndiscoveredObstacle or isVisionLessNeutCity:
-                wasUndiscObst = tile.isUndiscoveredObstacle
-                tile.update(self.map, sourceFogArmyPath.tail.tile.player, army=1, isCity=True, isGeneral=False)
-                tile.update(self.map, TILE_OBSTACLE, army=0, isCity=False, isGeneral=False)
-                tile.delta = TileDelta()
-                if wasUndiscObst:
-                    tile.discovered = False
-                    tile.discoveredAsNeutral = False
-                self.map.update_reachable()
+                self.convert_fog_city_to_player_owned(tile, sourceFogArmyPath.tail.tile.player)
 
         fogPath = sourceFogArmyPath.get_reversed()
         emergenceValueCovered = sourceFogArmyPath.value - armyTile.army
@@ -1296,14 +1389,37 @@ class ArmyTracker(object):
                 return True
             return False
 
+        skip = None
+        if len(army.entangledArmies) > 0:
+            skip = set()
+            for entangled in army.entangledArmies:
+                if entangled.expectedPath is not None:
+                    skip.update(entangled.expectedPath.tileList)
+                else:
+                    skip.add(entangled.tile)
+
         path = SearchUtils.breadth_first_find_queue(
             self.map,
             [army.tile],
             # goalFunc=lambda tile, armyAmt, dist: armyAmt + tile.army > 0 and tile in self.player_targets,  # + tile.army so that we find paths that reach targets regardless of killing them.
             goalFunc=goalFunc,
+            prioFunc=lambda t: (not t.visible, t.player == army.player, t.army if t.player == army.player else 0 - t.army),
+            skipTiles=skip,
             maxTime=0.1,
-            maxDepth=20,
+            maxDepth=23,
             noNeutralCities=army.tile.army < 150,
             searchingPlayer=army.player)
 
         return path
+
+    def convert_fog_city_to_player_owned(self, tile: Tile, player: int):
+        wasUndiscObst = tile.isUndiscoveredObstacle
+        tile.update(self.map, player, army=1, isCity=True, isGeneral=False)
+        tile.update(self.map, TILE_OBSTACLE, army=0, isCity=False, isGeneral=False)
+        tile.delta = TileDelta()
+        if wasUndiscObst:
+            tile.discovered = False
+            tile.discoveredAsNeutral = False
+
+        self.map.players[player].cities.append(tile)
+        self.map.update_reachable()

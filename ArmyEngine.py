@@ -451,7 +451,7 @@ class ArmyEngine(object):
         nextBoardState.friendly_move = frMove
         nextBoardState.enemy_move = enMove
 
-        if MapBase.player_had_priority(self.friendly_player, nextBoardState.turn):
+        if MapBase.player_had_priority_over_other(self.friendly_player, self.enemy_player, nextBoardState.turn):
             self.execute(nextBoardState, frMove, self.friendly_player, self.enemy_player)
             if not nextBoardState.captures_enemy:
                 self.execute(nextBoardState, enMove, self.enemy_player, self.friendly_player)
@@ -686,7 +686,7 @@ class ArmyEngine(object):
 
         if boardState.captured_by_enemy and boardState.captures_enemy:
             # see who wins the race
-            if MapBase.player_had_priority(self.friendly_player, boardState.turn + closestFrThreat):
+            if MapBase.player_had_priority_over_other(self.friendly_player, self.enemy_player, boardState.turn + closestFrThreat):
                 boardState.captured_by_enemy = False
             else:
                 boardState.captures_enemy = False

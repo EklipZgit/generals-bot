@@ -82,7 +82,7 @@ class MctsDUCT(object):
         self.offset_initial_differential: bool = True
 
         self.biased_playouts_allowed_per_trial: int = 7  # 7 beat 4 on 0.5 ratio 262-236
-        self.biased_move_ratio_while_available: float = 0.5
+        self.biased_move_ratio_while_available: float = 0.4
 
         # 4 outperformed 6 in 52-37 games, but might've been the flipped a-b
         # after fixing a-b and other tuning, 6 beat 4 28-21

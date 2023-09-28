@@ -89,14 +89,15 @@ class ExpansionTests(TestBase):
             self.fail("Path captures didn't match expected:\r\n  " + "\r\n  ".join(failures))
 
     def test__first_25_reroute__2_moves__should_find_2_tile_move(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = f'ExpandUtilsTestMaps/did_not_find_2_move_cap__turn34'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, turn=34, fill_out_tiles=True)
 
-        rawMap, _ = self.load_map_and_general(mapFile, 245)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=245)
         negTiles = set()
         negTiles.add(general)
 
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=2, negativeTiles=negTiles, mapVision=rawMap, debugMode=True)
+        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=2, negativeTiles=negTiles, mapVision=rawMap, debugMode=debugMode)
         # should go 5,9 -> 5,10 -> 4,10
         self.assertIsNotNone(path)
         self.assertEquals(path.length, 2)
@@ -105,7 +106,7 @@ class ExpansionTests(TestBase):
         self.assertEquals(path.start.next.next.tile, map.GetTile(4, 10))
 
     def test_should_not_split_for_neutral_while_exploring_enemy_path_with_largish_army(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_split_for_neutral_while_exploring_enemy_path_with_largish_army___SxyrToG62---b--95.txtmap'
         # intentionally pretend it is turn 94 so we give it time for the last neutral capture
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 94)
@@ -113,7 +114,7 @@ class ExpansionTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 94)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=94)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -136,7 +137,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -148,7 +149,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -160,7 +161,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -172,7 +173,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -184,7 +185,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -196,7 +197,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -208,7 +209,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -220,7 +221,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -232,7 +233,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -244,7 +245,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -256,7 +257,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -268,7 +269,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -280,7 +281,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -292,7 +293,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -304,7 +305,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -316,7 +317,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -328,7 +329,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -340,7 +341,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -352,7 +353,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -364,7 +365,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -376,7 +377,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -388,7 +389,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -400,7 +401,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -412,7 +413,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -424,7 +425,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -436,7 +437,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -448,7 +449,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -460,7 +461,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -472,7 +473,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -484,7 +485,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -496,7 +497,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -508,7 +509,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -520,7 +521,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -532,7 +533,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -544,7 +545,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -556,7 +557,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -568,7 +569,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -580,7 +581,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -592,7 +593,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 70)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -604,7 +605,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -616,7 +617,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -628,7 +629,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -640,7 +641,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -652,7 +653,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -664,7 +665,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -676,7 +677,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -688,7 +689,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -700,7 +701,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -712,7 +713,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -724,7 +725,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -736,7 +737,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -748,7 +749,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -760,7 +761,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -772,7 +773,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -784,7 +785,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -796,7 +797,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -808,7 +809,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -820,7 +821,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -832,7 +833,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -844,7 +845,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -856,7 +857,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -868,7 +869,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -880,7 +881,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -892,7 +893,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 175)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -904,7 +905,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -916,7 +917,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -928,7 +929,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -940,7 +941,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -952,7 +953,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -964,7 +965,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -976,7 +977,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -988,7 +989,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1000,7 +1001,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1012,7 +1013,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1024,7 +1025,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1036,19 +1037,19 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
     
     def test_validate_expansion_10_moves_remaining__240__0w0pGm4qa(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__0w0pGm4qa___0w0pGm4qa---0--240.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1060,7 +1061,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1072,7 +1073,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1084,7 +1085,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1096,7 +1097,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1108,7 +1109,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1120,7 +1121,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1132,7 +1133,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1144,7 +1145,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 240)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1156,7 +1157,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 375)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1168,7 +1169,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 375)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1180,7 +1181,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 375)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1192,7 +1193,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 375)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1204,7 +1205,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 375)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1216,7 +1217,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 375)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1228,7 +1229,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 375)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1240,7 +1241,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 375)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1252,7 +1253,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 375)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1264,7 +1265,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 375)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1276,7 +1277,7 @@ class ExpansionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 375)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
 
         path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
         self.assertIsNotNone(path)
@@ -1372,7 +1373,7 @@ bot_target_player=1
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 89)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=89)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap,
                                     allAfkExceptMapPlayer=True)
@@ -1404,7 +1405,7 @@ bot_target_player=1
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 89)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=89)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap,
                                     allAfkExceptMapPlayer=True)
@@ -1429,3 +1430,49 @@ bot_target_player=1
 
         simHost.run_sim(run_real_time=False, turns=9)
         self.assertEqual(36, simHost.sim.sim_map.players[general.player].tileCount)
+    
+    def test_should_not_find_no_expansion_moves(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_find_no_expansion_moves___09Pxy0uTG---1--136.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=136)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        bot = simHost.get_bot(general.player)
+        bot.expansion_use_cutoff = False
+        # bot.expansion_use_leaf_moves_first = True
+        simHost.queue_player_moves_str(enemyGeneral.player, '7,6->7,5->7,4  9,6->10,6->11,6->11,5')
+
+        # achieves 51 (12 diff)
+        # simHost.queue_player_moves_str(general.player, '12,12->12,11->12,10->12,9->11,9->10,9->10,8->9,8->9,7->9,6->8,6->7,6->6,6  17,12->17,11  18,12->18,11  5,12->5,13->5,14')
+
+        # achieves 13 diff
+        # simHost.queue_player_moves_str(general.player, '6,12->5,12->5,13->5,14  17,12->17,11  18,12->18,11  12,12->12,11->13,11->14,11')
+
+        # achieves 14 diff
+        # simHost.queue_player_moves_str(general.player, '5,12->5,13->5,14  17,12->17,11  18,12->18,11  12,12->12,11->13,11->14,11')
+
+        bot.timings.launchTiming = 30
+        bot.timings.splitTurns = 30
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        # beginning at 67 tiles, 14 moves, 8 on general
+
+        # instantly rallying general at 9,7->9,6 yields 51 tiles after neutral expands
+
+        # alternatively
+        # 3 in 4 by pushing out the 6,12 2+3, thats 70@10t
+
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=14)
+        self.assertIsNone(winner)
+        pMap = simHost.get_player_map(general.player)
+        genPlayer = pMap.players[general.player]
+        enPlayer = pMap.players[enemyGeneral.player]
+        tileCountDiff = genPlayer.tileCount - enPlayer.tileCount
+        # self.assertGreater(tileCountDiff, 11, 'instantly rallying general at 9,7->9,6 yields 51 tiles vs 39, a diff of 12')
+        self.assertGreater(tileCountDiff, 13, 'expanding all neutral leaf moves and then rallying general to nearest neutral achieves 14')

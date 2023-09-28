@@ -44,7 +44,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 527)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=527)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -89,7 +89,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 527)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=527)
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
         # alert enemy of the player general
@@ -132,7 +132,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 527)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=527)
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
         # alert enemy of the player general
@@ -175,7 +175,7 @@ class DefenseTests(TestBase):
         # self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 527)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=527)
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
         # alert enemy of the player general
@@ -223,7 +223,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 527)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=527)
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
         # alert enemy of the player general
@@ -270,7 +270,7 @@ class DefenseTests(TestBase):
         # self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 527)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=527)
         self.begin_capturing_logging()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -289,7 +289,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 527)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=527)
 
         self.begin_capturing_logging()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
@@ -333,7 +333,7 @@ class DefenseTests(TestBase):
         self.disable_search_time_limits_and_enable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 527)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=527)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -378,7 +378,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 527)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=527)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -419,7 +419,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 527)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=527)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -453,7 +453,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 792)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=792)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '15,6->16,6->16,5->16,4->16,3->16,2->16,1->15,1')
@@ -482,7 +482,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 793)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=793)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '15,6->16,6->16,5->16,4->16,3->16,2->16,1->15,1')
@@ -512,7 +512,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 793)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=793)
         rawMap.convert_tile_to_mountain(rawMap.GetTile(14, 1))
         map.convert_tile_to_mountain(map.GetTile(14, 1))
 
@@ -538,7 +538,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 641)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=641)
 
         self.begin_capturing_logging()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
@@ -560,7 +560,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 641)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=641)
 
         self.begin_capturing_logging()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
@@ -579,7 +579,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 298)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=298)
 
         self.begin_capturing_logging()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
@@ -600,7 +600,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 807)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=807)
 
         self.begin_capturing_logging()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
@@ -623,7 +623,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 216)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=216)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -643,7 +643,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 343)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=343)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
         simHost.queue_player_moves_str(enemyGeneral.player, '9,14->8,14->8,15->7,15->7,16->6,16->5,16->4,16')
@@ -666,7 +666,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 478)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=478)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, "9,7->9,8->9,9->9,10->9,11->9,12->9,13->8,13->7,13->7,14->7,15->7,16->7,17->7,18")
@@ -689,7 +689,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 537)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=537)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
         simHost.queue_player_moves_str(enemyGeneral.player, '6,8->5,8->4,8->4,7->3,7->3,8->2,8')
@@ -709,7 +709,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 383)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=383)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
         simHost.queue_player_moves_str(enemyGeneral.player, '6,5->6,6->6,7->6,8->6,9->6,10->6,11->6,12->6,13')
@@ -731,7 +731,7 @@ class DefenseTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 441)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=441)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -757,7 +757,7 @@ class DefenseTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 282)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=282)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '7,11->6,11->5,11->5,10->5,9->5,8->5,7->5,6->4,6->3,6->3,5->3,4')
@@ -779,7 +779,7 @@ class DefenseTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 341)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=341)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '5,13->5,14->5,15->5,16->6,16->7,16')
@@ -787,17 +787,40 @@ class DefenseTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=6)
         self.assertIsNone(winner)
 
+    def test_should_quickly_recapture_city_after_defense(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_gather__5_14__into_threat___XwyNqjQpO---1--341.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 341, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=341)
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '5,13->5,14->5,15->5,16->6,16->7,16')
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=12)
+        self.assertIsNone(winner)
+
+        city = self.get_player_tile(5, 12, simHost.sim, general.player)
+        self.assertEqual(general.player, city.player)
+
+
     def test_should_correctly_gather_outer_edges_and_should_not_include_impossible_gather_combination(self):
+        # shouldn't move that 3 tile first, needs to detect that the opp can kill from left side of general instead of just top and see it has less moves than it thinks...?
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_die___8_9nCLDQr---1--432.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 432, fill_out_tiles=True)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 432)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=432)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '10,12->11,12->11,13->11,14->11,15->12,15->13,15->13,16->13,17->14,17')
@@ -815,7 +838,7 @@ class DefenseTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 288)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=288)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '9,2->10,2->10,1->11,1')
@@ -826,3 +849,23 @@ class DefenseTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=5)
         self.assertIsNone(winner)
+    
+    def test_should_be_able_to_retake_cities_despite_spawning_in_choke(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_be_able_to_retake_cities_despite_spawning_in_choke___Wn-dFE3e9---0--262.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 262, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=262)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=10)
+        self.assertIsNone(winner)
+
+        otherSideOfChokeCity = self.get_player_tile(13, 1, simHost.sim, general.player)
+        self.assertEqual(general.player, otherSideOfChokeCity.player)

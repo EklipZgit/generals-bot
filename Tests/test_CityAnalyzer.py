@@ -124,7 +124,7 @@ class CityAnalyzerTests(TestBase):
     #             self.render_city_analysis_main_scores(map, boardAnalysis, analyzer)
 
     def render_city_analysis_main_scores(self, map: MapBase, boardAnalysis: BoardAnalyzer, cityAnalysis: CityAnalyzer):
-        viewInfo = self.get_view_info(map)
+        viewInfo = self.get_renderable_view_info(map)
         tileScores = cityAnalysis.get_sorted_neutral_scores()
         enemyTileScores = cityAnalysis.get_sorted_enemy_scores()
 
@@ -148,7 +148,7 @@ class CityAnalyzerTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 100)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=100)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -166,7 +166,7 @@ class CityAnalyzerTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 186)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=186)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -186,7 +186,7 @@ class CityAnalyzerTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 510)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=510)
         
         simHost = GameSimulatorHost(map, player_with_viewer=-2, playerMapVision=rawMap)
 

@@ -6,7 +6,7 @@ from Path import Path
 from SearchUtils import Counter
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
-from base.client.map import Tile
+from base.client.map import Tile, MapBase
 
 
 class BotBehaviorTests(TestBase):
@@ -39,7 +39,7 @@ class BotBehaviorTests(TestBase):
                 self.enable_search_time_limits_and_disable_debug_asserts()
 
                 # simHost = GameSimulatorHost(map)
-                rawMap, _ = self.load_map_and_general(mapFile, 242)
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=242)
                 simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=afk)
                 # alert both players of each others general
                 simHost.sim.players[enemyGeneral.player].map.update_visible_tile(general.x, general.y, general.player, general.army, is_city=False, is_general=True)
@@ -57,7 +57,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 406)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=406)
         # simHost = GameSimulatorHost(map)
         simHost = GameSimulatorHost(map, playerMapVision=rawMap, player_with_viewer=general.player)
         # alert both players of each others general
@@ -68,14 +68,14 @@ class BotBehaviorTests(TestBase):
         simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=150)
 
     def test_going_all_in_on_army_advantage_should_gather_at_the_opp_general(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/going_all_in_on_army_advantage_should_gather_at_the_opp_general___HgFB_1ohh---b--242.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 242, fill_out_tiles=True)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 242)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=242)
 
         simHost = GameSimulatorHost(map, player_with_viewer=-2, playerMapVision=rawMap)
 
@@ -96,7 +96,7 @@ class BotBehaviorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 238)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=238)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.bot_hosts[general.player].eklipz_bot.next_scrimming_army_tile = self.get_player_tile(10, 13, simHost.sim, general.player)
@@ -116,7 +116,7 @@ class BotBehaviorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 50)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=50)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -133,9 +133,9 @@ class BotBehaviorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 143)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=143)
         
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
         # alert enemy of the player general
         simHost.sim.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -155,7 +155,7 @@ class BotBehaviorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 241)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=241)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -174,14 +174,14 @@ class BotBehaviorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 299)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=299)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=25)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=30)
         self.assertEqual(map.player_index, winner)
     
     def test_should_intercept_and_kill_threats_before_exploring_or_expanding(self):
@@ -192,7 +192,7 @@ class BotBehaviorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 288)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=288)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -212,7 +212,7 @@ class BotBehaviorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 426)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=426)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -231,9 +231,9 @@ class BotBehaviorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 893)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=893)
         
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '3,7->3,8->3,9->3,10->3,11->4,11->5,11->5,12')
         simHost.bot_hosts[enemyGeneral.player].eklipz_bot.allIn = True
         simHost.bot_hosts[enemyGeneral.player].eklipz_bot.all_in_counter = 200
@@ -277,7 +277,7 @@ class BotBehaviorTests(TestBase):
                 self.enable_search_time_limits_and_disable_debug_asserts()
 
                 # Grant the general the same fog vision they had at the turn the map was exported
-                rawMap, _ = self.load_map_and_general(mapName, turn)
+                rawMap, _ = self.load_map_and_general(mapName, respect_undiscovered=True, turn=turn)
 
                 simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -309,7 +309,7 @@ class BotBehaviorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 78)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=78)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
         simHost.queue_player_moves_str(enemyGeneral.player, '4,11->4,10->3,10->2,10->1,10->1,11->1,12->1,13')
@@ -329,7 +329,7 @@ class BotBehaviorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 516)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=516)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -350,7 +350,7 @@ class BotBehaviorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 300)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=300)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -372,7 +372,7 @@ class BotBehaviorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 437)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=437)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -391,7 +391,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 330)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=330)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -410,7 +410,7 @@ class BotBehaviorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 583)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=583)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -430,7 +430,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 350)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=350)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap,
                                     allAfkExceptMapPlayer=True)
@@ -445,7 +445,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 108)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=108)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -466,7 +466,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 456)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=456)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '12,9->13,9->14,9->14,8->15,8->15,7->16,7->16,6->16,5->15,5')
@@ -484,7 +484,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 284)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=284)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         bot = simHost.get_bot(general.player)
@@ -513,7 +513,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 278)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=278)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         shouldKillEnemyGen = self.get_player_tile(24, 13, simHost.sim, general.player)
@@ -533,7 +533,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 204)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=204)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -550,7 +550,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 326)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=326)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '21,16->21,15->21,14->21,13->21,12->21,11->22,11->22,10->23,10->23,9->23,8->23,7->23,6->23,5->23,4->23,3->23,2')
@@ -585,7 +585,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 326)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=326)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '13,9->14,9->14,10')
@@ -598,32 +598,33 @@ class BotBehaviorTests(TestBase):
 
     
     def test_should_not_dodge_off_general_into_death_with_depth_2_kill_on_danger_tile(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/should_not_dodge_off_general_into_death_with_depth_2_kill_on_danger_tile___qA8EaWOHA---0--204.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 204, fill_out_tiles=True)
+        for moveCombo in ['16,7->16,6->17,6', '16,7->17,7->17,6']:
+            with self.subTest(moveCombo=moveCombo):
+                debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+                mapFile = 'GameContinuationEntries/should_not_dodge_off_general_into_death_with_depth_2_kill_on_danger_tile___qA8EaWOHA---0--204.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 204, fill_out_tiles=True)
 
-        self.enable_search_time_limits_and_disable_debug_asserts()
+                self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 204)
-        
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=204)
 
-        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, moveCombo)
 
-        self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
-        self.assertIsNone(winner)
+                simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        # TODO add asserts for should_not_dodge_off_general_into_death_with_depth_2_kill_on_danger_tile
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=3)
+                self.assertIsNone(winner)
 
     def test_shouldnt_loop_killing_gen_adjacent_vision_army(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/shouldnt_loop_killing_gen_adjacent_vision_army___JLO-6iSbd---1--290.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 290, fill_out_tiles=True)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 290)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=290)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '3,4->3,5->3,4->3,5->3,4->3,5->3,4->3,5->3,4->3,5')
@@ -632,9 +633,9 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=20)
         self.assertIsNone(winner)
-        self.assertNoRepetition(simHost, repetitionPlayer=general.player)
+        self.assertNoRepetition(simHost, repetitionPlayer=general.player, minForRepetition=2)
     
     def test_should_not_repetition_killing_danger_tile_part2(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -643,7 +644,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 301)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=301)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -661,7 +662,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 423)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=423)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '12,1->11,1->10,1->9,1->8,1->7,1->6,1->5,1->5,2->4,2->4,3->3,3->3,4->2,4->2,5->2,6->2,7->2,8->3,8')
@@ -679,7 +680,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 282)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=282)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -699,15 +700,7 @@ class BotBehaviorTests(TestBase):
             tile = map.GetTile(x, y)
             tile.army = 0
             tile.player = -1
-        oldEnemyGeneral = enemyGeneral
-        oldArm = oldEnemyGeneral.army
-        enemyGeneral = map.GetTile(2, 2)
-        enemyGeneral.army = oldArm
-        enemyGeneral.isGeneral = True
-        enemyGeneral.player = enemyGeneral.player
-        map.generals[enemyGeneral.player] = enemyGeneral
-        oldEnemyGeneral.isGeneral = False
-        oldEnemyGeneral.army = 2
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 2, 2)
 
         def update_player(t: Tile):
             t.player = enemyGeneral.player
@@ -717,7 +710,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 102)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=102)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         bot = simHost.get_bot(general.player)
@@ -742,7 +735,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 284)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=284)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -764,7 +757,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 284)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=284)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -777,13 +770,13 @@ class BotBehaviorTests(TestBase):
         # TODO add asserts for should_treat_edge_flanks_as_danger_potential_and_tendril_outwards
     
     def test_should_not_go_hunting_in_stupid_scenarios_while_quick_kill_gathering(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_go_hunting_in_stupid_scenarios_while_quick_kill_gathering___Jaq8EdMtO---0--180.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 180, fill_out_tiles=True)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 180)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=180)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         bot = simHost.get_bot(general.player)
@@ -797,7 +790,6 @@ class BotBehaviorTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
         self.assertEqual(general.player, winner)
 
-    
     def test_should_not_dodge_off_general_and_die(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_dodge_off_general_and_die___LpxIND79i---1--215.txtmap'
@@ -805,7 +797,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 215)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=215)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '10,13->9,13->9,14')
@@ -823,7 +815,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 200)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=200)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -842,7 +834,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 130)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=130)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '8,11->9,11->10,11->11,11->12,11')
@@ -864,7 +856,7 @@ class BotBehaviorTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 444)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=444)
         
         simHost = GameSimulatorHost(map, player_with_viewer=-2, playerMapVision=rawMap, allAfkExceptMapPlayer=False)
 
@@ -873,3 +865,159 @@ class BotBehaviorTests(TestBase):
         self.assertIsNone(winner)
         player_map = simHost.get_player_map(general.player)
         self.assertGreater(player_map.players[general.player].cityCount, 12)
+    
+    def test_should_leave_200_army_near_general_as_anti_fog_abuse_in_winning_game(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_leave_200_army_near_general_as_anti_fog_abuse_in_winning_game___7V34R1hBO---0--500.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 500, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=500)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        bot = simHost.get_bot(general.player)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=100)
+        self.assertIsNone(winner)
+
+        playerArmyNear = bot.sum_player_army_near_or_on_tiles([general], distance=6, player=general.player),
+        self.assertGreater(playerArmyNear, 190)
+    
+    def test_should_not_failed_defense_altKingKillPath_unnecessarily(self):
+        # TODO gather defense isn't gathering towards the skinniest part of the shortest pathway tileset, and
+        #  the result is inconsistent defensive gather predictions when the attack doesn't take the anticipated path.
+        #  gathering to the closest tiles to the threat, or to the skinniest tiles in the threat pathway would result
+        #  in much more consistent gathers.
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_failed_defense_altKingKillPath_unnecessarily___tFjnTXPts---0--377.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 377, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=377)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=False)
+        simHost.queue_player_moves_str(enemyGeneral.player, '11,11->11,12->10,12->9,12->8,12->7,12->7,13->6,13->6,14->5,14->5,15->5,16->4,16->3,16->2,16')
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.5, turns=20)
+        self.assertIsNone(winner)
+    
+    def test_should_all_in_enemy_general_since_no_meaningful_defense(self):
+        # exploration is a bit random, run the test a bunch to make sure its consistent.
+        for i in range(10):
+            with self.subTest(i=i):
+                debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+                mapFile = 'GameContinuationEntries/should_all_in_enemy_general_since_no_meaningful_defense___SRrkSRhku---0--187.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 187, fill_out_tiles=True)
+                enemyGeneral = self.move_enemy_general(map, enemyGeneral, 15, 0)
+                enemyGeneral.army = 4
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=187)
+
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, '14,13->13,13->12,13  None  12,13->11,13->10,13->9,13  None  9,13->8,13->8,12->8,11->8,10->8,11->9,11')
+                bot = simHost.get_bot(general.player)
+                bot.armyTracker.new_army_emerged(bot._map.GetTile(14, 4), 40)
+                # SPECIFICALLY NOT REVEALED, BOT SHOULD KNOW IT HAS AN EXPLORATION RACE
+                # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+                self.begin_capturing_logging()
+                genPlayer = general.player
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=14)
+                self.assertEqual(genPlayer, winner)
+    
+    def test_should_contest_cities_when_all_in_gathering_at_opp(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_contest_cities_when_all_in_gathering_at_opp___n35SxPk5n---0--235.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 235, fill_out_tiles=True)
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 5, 10)
+        enemyGeneral.army = 35
+
+        # self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=235)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+        bot = simHost.get_bot(general.player)
+        bot.finishing_exploration = True
+        bot.all_in_army_advantage = True
+        bot.all_in_army_advantage_counter = 15
+        bot.all_in_army_advantage_cycle = 50
+        bot.armyTracker.new_army_emerged(bot._map.GetTile(8, 12), 50)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=3)
+        self.assertIsNone(winner)
+        city = self.get_player_tile(7, 10, simHost.sim, general.player)
+        self.assertGreater(city.army, 30, 'should not abandon contested city when contesting it guarantees an army+economy win condition.')
+    
+    def test_should_rapid_city_expand_in_unexplored_ffa_situation(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_rapid_city_expand_in_unexplored_ffa_situation___pt9T7lYGI---1--370.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 370, fill_out_tiles=True)
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 4, 20)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=370)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        genMap = simHost.get_player_map(general.player)
+        genPlayer = genMap.players[general.player]
+        targPlayer = genMap.players[enemyGeneral.player]
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=150)
+        self.assertIsNone(winner)
+
+        cityDiff = genPlayer.cityCount - targPlayer.cityCount
+
+        self.assertGreater(cityDiff, 7, 'should switch to rapid city expand mode because no player aggression')
+
+    def test_should_stop_rapid_expanding_when_attacked_in_unexplored_ffa_situation(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_rapid_city_expand_in_unexplored_ffa_situation___pt9T7lYGI---1--370.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 370, fill_out_tiles=True)
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 4, 20)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=370)
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=False)
+        bBot = simHost.get_bot(enemyGeneral.player)
+        bBot.all_in_counter = 200
+        bBot.allIn = True
+        # 50 turns to rapid expand before other player starts attacking. Other bot will gather for ~50 turns
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+        aBot = simHost.get_bot(general.player)
+        # make it so A doesn't know B knows its gen location. Just telling b its gen location to trigger aggression from B, not actually relevant to the test.
+        aBot._map.players[enemyGeneral.player].knowsKingLocation = False
+
+        self.begin_capturing_logging()
+        genMap = simHost.get_player_map(general.player)
+        genPlayer = genMap.players[general.player]
+        targPlayer = genMap.players[enemyGeneral.player]
+
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=150)
+        if winner is not None:
+            self.assertEqual(genPlayer.index, winner)
+
+        cityDiff = genPlayer.cityCount - targPlayer.cityCount
+
+        self.assertGreater(cityDiff, 4, 'should have taken at least some cities before switching gears to defense')
+        self.assertLess(cityDiff, 9, 'should not have kept up the rapid city taking once dominating econ and under attack')

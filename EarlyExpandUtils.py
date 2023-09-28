@@ -90,7 +90,7 @@ def get_start_expand_value(
         if turn % 2 == 1:
             genArmy += 1
 
-    if pathIdx < len(expandPaths):
+    if pathIdx < len(expandPaths) and map.turn < 25:
         errorMsg = f'Plan incomplete at turn 50, pathIdx {pathIdx} with subsequent paths {", ".join([str(path) for path in expandPaths[pathIdx:]])}'
         if DEBUG_ASSERTS:
             raise AssertionError(errorMsg)

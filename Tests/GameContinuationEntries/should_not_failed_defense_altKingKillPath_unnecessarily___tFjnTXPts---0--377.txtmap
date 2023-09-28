@@ -1,0 +1,46 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+M                        M    M                   M
+               M    M                                       M                   M
+                                                  M         M    M
+                                                  M    b6             M         M
+a2   a5                            M                   b6   M    M         M         M
+a2   M         M    a4   M              N1   M    b1   b1        M    M    M
+a2   M    M    a5   a4   M    M    b3   b3   b4   b4   b1   b1   b1   b5
+a2   M    a4   M    a5   a3   a2   b2   b2   MN1  M         M    b1   M              M
+a2   M    a2   a6   a4   a3   a2   b2   b2             M         b1   b7   b7   b7
+aC5  a2   a2   a2   a5   a3   a3   a2   b2   b2   b3   b2   M    b1        M    M    M
+a1   a3   a2   M    M    a3   a3   a2   a2   a2   b2   b6   b4   b1
+a1   a1   a1   a1   a1   a3   a3   a3   a3   b3   a2   b95  b1   b1
+M    a3   a2   M    a1   a1   a32  b2   b2   b2   b2   b2
+a2   a3   a3   a2   a2   M    a1   b4   M    b2   a2   M
+M    M    a2   a2   a10  a1   a1   a3        C41  a2   a2                       M
+M    a2   a4   a2   M    a1   a3   a1   M    M    M    a2   M    M              M
+a3   a2   aG20 a1   a1   a1   a1   a1   M    M         a2                            M
+a2   a2   a1   a1   a3   a3   a3   aC11 a1   a1   aC20 a2        M    M    M    M
+     M    a1   a3   a3   a3   M    a2   a2   a2   a2   a2
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=13,8
+turn=377
+bot_player_index=0
+aTiles=101
+aScore=314
+aStandingArmy=213
+aStars=68
+aCityCount=4
+aGeneral=2,16
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+bTiles=73
+bScore=279
+bStandingArmy=206
+bStars=72
+bCityCount=4
+bKnowsKingLocation=True
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=328
+bot_target_player=1

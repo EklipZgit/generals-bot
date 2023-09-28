@@ -116,7 +116,7 @@ bTiles=20
 
                 # this should be +2 / -2 if we're considering no-op moves to be worth 1 economy, otherwise this is +1 -1
                 #  as priority player goes towards other end of board capping tile towards king and other player must chase sideways
-                if MapBase.player_has_priority(general.player, turn):
+                if MapBase.player_has_priority_over_other(general.player, enemyGen.player, turn):
                     self.assertEqual(-2, result.best_result_state.tile_differential)
                 else:
                     self.assertEqual(2, result.best_result_state.tile_differential)
@@ -170,7 +170,7 @@ bTiles=20
                     if debugMode:
                         self.render_sim_analysis(map, result)
                     # whoever has priority this turn should also have priority in 4 moves, which is when the king kill would happen
-                    if not MapBase.player_has_priority(general.player, map.turn):
+                    if not MapBase.player_has_priority_over_other(general.player, enemyGen.player, map.turn):
                         self.assertTrue(result.best_result_state.captures_enemy)
                         self.assertFalse(result.best_result_state.captured_by_enemy)
                     else:
@@ -222,7 +222,7 @@ bTiles=20
                 if debugMode:
                     self.render_sim_analysis(map, result)
                 # whoever has priority this turn should also have priority in 4 moves, which is when the king kill would happen
-                if not MapBase.player_has_priority(general.player, map.turn):
+                if not MapBase.player_has_priority_over_other(general.player, enemyGen.player, map.turn):
                     self.assertTrue(result.best_result_state.captures_enemy)
                     self.assertFalse(result.best_result_state.captured_by_enemy)
                 else:
@@ -274,7 +274,7 @@ bTiles=20
                     if debugMode:
                         self.render_sim_analysis(map, result)
                     # whoever has priority this turn should NOT have priority in 5 moves, which is when the king kill would happen
-                    if MapBase.player_has_priority(general.player, map.turn):
+                    if MapBase.player_has_priority_over_other(general.player, enemyGen.player, map.turn):
                         self.assertTrue(result.best_result_state.captures_enemy)
                         self.assertFalse(result.best_result_state.captured_by_enemy)
                     else:
@@ -325,7 +325,7 @@ bTiles=20
         if debugMode:
             self.render_sim_analysis(map, result)
         # whoever has priority this turn should NOT have priority in 5 moves, which is when the king kill would happen
-        if MapBase.player_has_priority(general.player, map.turn):
+        if MapBase.player_has_priority_over_other(general.player, enemyGen.player, map.turn):
             self.assertTrue(result.best_result_state.captures_enemy)
             self.assertFalse(result.best_result_state.captured_by_enemy)
         else:
@@ -375,7 +375,7 @@ bTiles=20
                     if debugMode:
                         self.render_sim_analysis(map, result)
                     # whoever has priority this turn should NOT have priority in 5 moves, which is when the king kill would happen
-                    if MapBase.player_has_priority(general.player, map.turn):
+                    if MapBase.player_has_priority_over_other(general.player, enemyGen.player, map.turn):
                         self.assertTrue(result.best_result_state.captures_enemy)
                         self.assertFalse(result.best_result_state.captured_by_enemy)
                     else:
@@ -662,7 +662,7 @@ bTiles=20
                 result = armyEngine.scan(4, logEvals=True, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
-                if not MapBase.player_had_priority(enemyGen.player, turn):
+                if not MapBase.player_had_priority_over_other(enemyGen.player, general.player, turn):
                     # B should just wait to see what A does this turn, as he'll have priority next turn.
                     self.assertIsNone(result.expected_best_moves[0][1])
                 else:
@@ -829,7 +829,7 @@ bTiles=20
                 if debugMode:
                     self.render_sim_analysis(map, result)
 
-                if MapBase.player_has_priority(general.player, turn):
+                if MapBase.player_has_priority_over_other(general.player, enemyGen.player, turn):
                     # then has priority next turn
                     self.assertFalse(result.best_result_state.captured_by_enemy)
                     self.assertTrue(result.best_result_state.captures_enemy)
@@ -878,7 +878,7 @@ bTiles=20
                 map.convert_tile_to_mountain(blocked)
 
                 # Grant the general the same fog vision they had at the turn the map was exported
-                rawMap, _ = self.load_map_and_general(mapFile, 792 + turn)
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=792 + turn)
 
                 simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
                 simHost.queue_player_moves_str(enemyGen.player, '15,6->16,6->16,5->16,4->16,3->16,2->16,1->15,1')
@@ -1070,7 +1070,7 @@ bTiles=20
                 result = armyEngine.scan(5, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
-                if MapBase.player_has_priority(enemyGen.player, turn):
+                if MapBase.player_has_priority_over_other(enemyGen.player, general.player, turn):
                     # B must assume A will attack and block, because A will have priority next turn.
                     self.assertIsNotNone(result.expected_best_moves[0][1])
                     self.assertEqual(map.GetTile(1, 9), result.expected_best_moves[0][1].dest)
@@ -1140,7 +1140,7 @@ bTiles=15
                     enMove=Move(enemyGen, t1_9)
                 )
                 simState2 = simState1
-                if not MapBase.player_had_priority(enemyGen.player, map.turn + 1):
+                if not MapBase.player_had_priority_over_other(enemyGen.player, general.player, map.turn + 1):
                     simState2 = armyEngine.get_next_board_state(
                         map.turn + 2,
                         simState1,
@@ -1463,7 +1463,7 @@ bTiles=20
                 # self.enable_search_time_limits_and_disable_debug_asserts()
 
                 # Grant the general the same fog vision they had at the turn the map was exported
-                rawMap, _ = self.load_map_and_general(mapFile, 241 + turn)
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=241 + turn)
 
                 simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -1495,7 +1495,7 @@ bTiles=20
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 388)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=388)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -1537,7 +1537,7 @@ bTiles=20
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 388)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=388)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -1580,7 +1580,7 @@ bTiles=20
         # self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 388)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=388)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -1664,7 +1664,7 @@ bTiles=20
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 445)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=445)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -1702,7 +1702,7 @@ bTiles=20
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 291)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=291)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -1729,7 +1729,7 @@ bTiles=20
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, 484)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=484)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
@@ -1753,7 +1753,7 @@ bTiles=20
 
                 self.enable_search_time_limits_and_disable_debug_asserts()
 
-                rawMap, _ = self.load_map_and_general(mapFile, 197)
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=197)
 
                 simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
                 simHost.queue_player_moves_str(enemyGeneral.player, '13,11->14,11->14,12')
@@ -1775,7 +1775,7 @@ bTiles=20
 
                 self.enable_search_time_limits_and_disable_debug_asserts()
 
-                rawMap, _ = self.load_map_and_general(mapFile, 196)
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=196)
 
                 simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
                 simHost.queue_player_moves_str(enemyGeneral.player, '12,11->13,11->14,11->14,12')
@@ -1794,7 +1794,7 @@ bTiles=20
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 439)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=439)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '4,6->3,6->2,6')
@@ -1812,7 +1812,7 @@ bTiles=20
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 269)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=269)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -1849,7 +1849,7 @@ bTiles=20
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 86)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=86)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '5,14->4,14->3,14->2,14->2,13->2,12')
@@ -1870,7 +1870,7 @@ bTiles=20
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 224)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=224)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '17,13->17,14->17,15->17,16->16,16')
@@ -1888,7 +1888,7 @@ bTiles=20
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 223)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=223)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -1906,7 +1906,7 @@ bTiles=20
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 223)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=223)
 
         self.begin_capturing_logging()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap,
@@ -2117,11 +2117,29 @@ bTiles=20
         self.a_b_test(numRuns, configureA=configure_a, configureB=configure_b, debugMode=debugMode, mapFile=mapFile)
 
     def test__A_B_test_mcts__num1__left_vs_right(self):
-        numRuns = 250
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        numRuns = 500
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        def configure_b(bBot: EklipZBot):
+            pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.expansion_full_time_limit = 0.15  # b is 0.2
+            # 232-227, meaningless
+            # aBot.mcts_engine.explore_factor = 1.0
+
+            # 221-236
+            # aBot.mcts_engine.explore_factor = 1.1  # b 1.05
+
+            # 121-127
+            # aBot.mcts_engine.explore_factor = 0.95  # b 1.05
+
+            # 126-121, AGAIN
+            # 130-118, FUCK
+            # TODO circle back to this
+            # aBot.engine_allow_enemy_no_op = False
+
+            # 120-125
+            # aBot.behavior_losing_on_economy_skip_defense_threshold = 0.9
 
             #47-53, again
             #70-97, meh
@@ -2259,18 +2277,27 @@ bTiles=20
         self.a_b_test(
             numRuns,
             configureA=configure_a,
-            configureB=lambda bBot: bBot,
+            configureB=configure_b,
             debugMode=debugMode)
 
     def test__A_B_test_mcts__num2__left_vs_right(self):
-        numRuns = 250
+        numRuns = 500
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         def configure_b(bBot: EklipZBot):
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.engine_mcts_move_estimation_net_differential_cutoff = 2
+            # 137-112, AGAIN with it as fucked as it is now
+            # 119-115, meh, again.
+            # 200-266
+            # aBot.expansion_use_cutoff = False
+
+            # 117-133
+            # aBot.behavior_losing_on_economy_skip_defense_threshold = 0.8
+
+            #58-68, bad
+            # aBot.engine_mcts_move_estimation_net_differential_cutoff = 2
 
             # 70-108, definitely bad
             # aBot.engine_mcts_move_estimation_net_differential_cutoff = -1
@@ -2367,15 +2394,33 @@ bTiles=20
             debugMode=debugMode)
 
     def test__A_B_test_mcts__num3__left_vs_right(self):
-        numRuns = 250
+        numRuns = 500
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         def configure_b(bBot: EklipZBot):
+            # bBot.mcts_engine.biased_move_ratio_while_available = 0.47
             pass
 
         def configure_a(aBot: EklipZBot):
+            # 219-243
+            # aBot.expansion_use_cutoff = False
+            # aBot.expansion_use_leaf_moves_first = True
+
+            # 117-120, meaningless.
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.42
+
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.47  # 129-115 vs b 0.53
+
+            # was 48-52 or something in another test, but 0.45 is showing promise.
+            # 121-128, so 0.4 too low
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.4
+
+            # 107-140
+            # aBot.behavior_losing_on_economy_skip_defense_threshold = 0.85
+
             # 88-92, meaningless, again
-            aBot.engine_mcts_move_estimation_net_differential_cutoff = +1
+            # 50-69, bad
+            # aBot.engine_mcts_move_estimation_net_differential_cutoff = +1
 
             # 39-58, try +1
             # aBot.engine_mcts_move_estimation_net_differential_cutoff = -20
@@ -2478,8 +2523,22 @@ bTiles=20
         numRuns = 500
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
+        def configure_b(bBot: EklipZBot):
+            bBot.expansion_use_leaf_moves_first = False
+            pass
+
         def configure_a(aBot: EklipZBot):
-            aBot.mcts_engine.disable_positional_win_detection_in_rollouts = False  # currently true
+            # 244-228, already codified. Retest, though
+            # hung 96-83
+            aBot.expansion_use_leaf_moves_first = True
+
+            # promising in another test so pre-emptively starting this run to get more confirmation.
+            # 250-245. AGAIN vs 0.4
+            # 239-227, however in other test it did 229-265 so i'm confused. Again...? This is feeling like a waste of time. Not running again.
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.45
+
+            # 230-265
+            # aBot.mcts_engine.disable_positional_win_detection_in_rollouts = False  # currently true
 
             # 27-23 after fixing a-b. Trying more. (now with offset true and 6 rollouts):
             # 29-21, codifying. :D BIASED IS BACK BABYYYYY
@@ -2544,20 +2603,30 @@ bTiles=20
 
             # 254-243. Confirming with another run since previous runs indicated otherwise. This may have changed due to the 'tiles gathered to this turn' de-restriction?
             # aBot.gather_include_distance_from_enemy_TILES_as_negatives = 3  # currently 2
+            pass
 
         self.a_b_test(
             numRuns,
             configureA=configure_a,
-            configureB=lambda bBot: bBot,
+            configureB=configure_b,
             debugMode=debugMode)
 
     def test__A_B_test_mcts__num5__left_vs_right(self):
-        numRuns = 250
+        numRuns = 500
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         def configure_a(aBot: EklipZBot):
+            # 258-204, codified
+            aBot.expansion_use_leaf_moves_first = True
+
+            # 238-255, hmm
+            # aBot.behavior_losing_on_economy_skip_defense_threshold = 0.75
+
+            # 227-267
+            # aBot.behavior_losing_on_economy_skip_defense_threshold = 0.93
+
             # 245-255. Implemented long-move-cutoff and trying again
-            aBot.expansion_single_iteration_time_cap = 0.055  # from 0.1, small tile time at 0.055
+            # aBot.expansion_single_iteration_time_cap = 0.055  # from 0.1, small tile time at 0.055
 
             # 18-22, bad.
             # aBot.mcts_engine.explore_factor = 2.0

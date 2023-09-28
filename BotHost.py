@@ -93,7 +93,7 @@ class BotHostBase(object):
                                     move.source.x, move.source.y,
                                     move.dest.x, move.dest.y))
 
-            if self.has_viewer:
+            if self.has_viewer and self._viewer is not None:
                 with moveTimer.begin_event(f'Sending turn {currentMap.turn} update to Viewer'):
                     if timer:
                         max = 15
@@ -107,8 +107,10 @@ class BotHostBase(object):
                                 break
                     self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, currentMap, currentMap.complete)
 
-            with moveTimer.begin_event(f'Dump {currentMap.turn}.txtmap to disk'):
-                self.save_txtmap(currentMap)
+            if not self.eklipz_bot.no_file_logging:
+                with moveTimer.begin_event(f'Dump {currentMap.turn}.txtmap to disk'):
+                    self.save_txtmap(currentMap)
+
             with moveTimer.begin_event(f'Main thread check for pygame exit'):
                 if self.is_viewer_closed_by_user():
                     currentMap.complete = True
@@ -139,12 +141,12 @@ class BotHostBase(object):
         with open(mapFilePath, 'w') as mapFile:
             mapFile.write(mapStr)
 
-    def initialize_viewer(self):
+    def initialize_viewer(self, skip_file_logging: bool = False):
         window_title = "%s (%s)" % (self._name.split('_')[-1], self._game_type)
-        self._viewer = ViewerHost(window_title, alignTop=not self.align_bottom, alignLeft=not self.align_right)
+        self._viewer = ViewerHost(window_title, alignTop=not self.align_bottom, alignLeft=not self.align_right, noLog=skip_file_logging)
 
     def is_viewer_closed_by_user(self) -> bool:
-        if self.has_viewer and self._viewer.check_viewer_closed():
+        if self.has_viewer and self._viewer is not None and self._viewer.check_viewer_closed():
             return True
         return False
 

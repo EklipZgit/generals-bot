@@ -222,7 +222,7 @@ function Create-TestContinuingGameFrom {
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, $turn)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=$turn)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 

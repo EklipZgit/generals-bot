@@ -51,9 +51,15 @@ class GeneralsClientHost(object):
         while self._running:
             time.sleep(1.0)
 
-        logging.info(f'No longer self._running=True in bot_base.py, exiting')
-        time.sleep(1.0)
-        # exit(0) # End Program
+        logging.info(f'No longer self._running=True in bot_base.py, starting suicide thread')
+        create_thread(self._suicide_in_4_seconds)
+
+    def _suicide_in_4_seconds(self):
+        logging.info('suicide thread started, waiting 4 seconds before killing the process')
+        time.sleep(4.0)
+        logging.info('ok, killing process')
+        time.sleep(0.1)
+        exit(0)
 
     ######################### Handle Updates From Server #########################
     
@@ -83,8 +89,6 @@ class GeneralsClientHost(object):
             logging.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
             
             logging.info("Exit: Already in queue in _start_update_loop")
-            self._running = False
-            self._game._terminate()
         except:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
@@ -94,12 +98,13 @@ class GeneralsClientHost(object):
             #logging.warning(''.join('!! ' + line for line in lines))  # Log it or whatever here
             logging.info("err")  # Log it or whatever here
             logging.error(''.join('!! ' + line for line in lines))  # Log it or whatever here
-            self._running = False
-            self._game._terminate()
 
-        logging.info("crashed out of update loop, quitting")
-        # time.sleep(3)
-        # exit(0) # End Program
+        self._running = False
+        self._game._terminate()
+
+        logging.info("crashed out of update loop, creating suicide thread")
+
+        create_thread(self._suicide_in_4_seconds)
 
     def _set_update(self, update):
         if update.complete and update.turn > 2:
@@ -114,7 +119,7 @@ class GeneralsClientHost(object):
             time.sleep(2.0)
             logging.info("os.exiting...?")
             try:
-                exit(0) # End Program
+                create_thread(self._suicide_in_4_seconds)
             except:
                 logging.info(traceback.format_exc())
             return
@@ -159,8 +164,6 @@ class GeneralsClientHost(object):
 
         return
 
-    ######################### Tile Finding #########################
-
     def place_move(self, source, dest, move_half=False) -> bool:
         if self.validPosition(dest.x, dest.y):
             self._game.move(source.y, source.x, dest.y, dest.x, move_half)
@@ -173,8 +176,6 @@ class GeneralsClientHost(object):
     def send_clear_moves(self):
         self._game.send_clear_moves()
 
-
-######################### Global Helpers #########################
 
 def create_thread(f):
     t = threading.Thread(target=f)

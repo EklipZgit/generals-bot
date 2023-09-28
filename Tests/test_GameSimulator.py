@@ -417,7 +417,21 @@ aG7
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.mcts_engine.biased_move_ratio_while_available = 0.45  # b was 0.5, and biased allowed is 7 now.
+            # 238-238, AGAIN
+            # 232-237, meaningless, .4 it is
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.35  # b is now 0.4
+
+            # 229-265
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.45  # b is now 0.4
+
+            # 134-113, whoo! A-B against 0.4, now. Other tests are retesting 0.45 as well as 0.4, so now a-b them.
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.45
+
+            # 113-135
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.55
+
+            # 54-66
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.45  # b was 0.5, and biased allowed is 7 now.
 
             # 84-91
             # aBot.mcts_engine.biased_move_ratio_while_available = 0.6  # b was 0.5, and biased allowed is 7 now.
@@ -443,7 +457,7 @@ aG7
             pass
 
         self.a_b_test(
-            numRuns=250,
+            numRuns=500,
             configureA=configure_a,
             configureB=configure_b,
             debugMode=debugMode,
@@ -461,8 +475,22 @@ aG7
             pass
 
         def configure_a(aBot: EklipZBot):
+            # 250-217, codified.
+            # aBot.behavior_launch_timing_offset = +3  # b is +4
+
+            # 117-128
+            # aBot.behavior_launch_timing_offset = +5  # b is +4
+
+            # 114-132, huh...? Bigger should always be better here we'd have thought. AGAIN
+            # 109-139 ok try 5
+            # aBot.behavior_launch_timing_offset = +6  # b is +4
+
+            # 126-119
+            # aBot.behavior_launch_timing_offset = 4
+
             # 85-87, again
-            aBot.engine_mcts_move_estimation_net_differential_cutoff = 2
+            # 67-56, ok but it lost mostly in other games soooooo
+            # aBot.engine_mcts_move_estimation_net_differential_cutoff = 2
 
             # 108-137, so, we're making engine moves when we shouldn't be. Try higher..?
             # aBot.engine_mcts_move_estimation_net_differential_cutoff = -1  # current 0
@@ -490,7 +518,7 @@ aG7
             pass
 
         self.a_b_test(
-            numRuns=250,
+            numRuns=500,
             configureA=configure_a,
             configureB=configure_b,
             debugMode=debugMode,
@@ -532,16 +560,33 @@ aG7
         self.begin_capturing_logging()
 
         def configure_b(bBot: EklipZBot):
-            bBot.behavior_early_retake_bonus_gather_turns = 3
+            bBot.behavior_launch_timing_offset = +4
             pass
 
         def configure_a(aBot: EklipZBot):
+            # 127-120, codified but rerunning
+            # 230-239...? codified already under other tho because 260-200 over there.
+            # aBot.behavior_launch_timing_offset = +3  # b is +4
+
+            # 111-138, so bigger def not always better.
+            # aBot.behavior_launch_timing_offset = +7  # b is +4
+
+            # 113-134, so later launch timing always wins lol...?
+            # aBot.behavior_launch_timing_offset = +2  # b is +4
+
+            # 96-154
+            # aBot.behavior_launch_timing_offset = -2
+
+            # 45-73, killed
+            # aBot.behavior_launch_timing_offset = -4
+
             # 78-47, retesting with larger game size but god damn
-            aBot.behavior_early_retake_bonus_gather_turns = 0  # b is 3
+            # 76-52, so yeah, bad
+            # aBot.behavior_early_retake_bonus_gather_turns = 0  # b is 3
             pass
 
         self.a_b_test(
-            numRuns=250,
+            numRuns=500,
             configureA=configure_a,
             configureB=configure_b,
             debugMode=debugMode,

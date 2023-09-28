@@ -24,7 +24,7 @@ class CityGatherTests(TestBase):
                 self.enable_search_time_limits_and_disable_debug_asserts()
 
                 # Grant the general the same fog vision they had at the turn the map was exported
-                rawMap, _ = self.load_map_and_general(mapFile, 201)
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=201)
 
                 self.begin_capturing_logging()
                 simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
@@ -46,7 +46,7 @@ class CityGatherTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 207)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=207)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -60,14 +60,13 @@ class CityGatherTests(TestBase):
         self.assertNoRepetition(simHost)
 
     def test_should_capture_neutral_city_quickly__messed_up_gather__gen_1_further(self):
-        # TODO this has an off by one with general distance, explore further
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_capture_neutral_city_quickly__messed_up_gather__longer_gen___a-TEST__f338583c-59cb-494c-9808-04b5b8a264d9---0--207.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 207, fill_out_tiles=True)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 207)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=207)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -87,7 +86,7 @@ class CityGatherTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 537)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=537)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '16,15->16,14')
@@ -111,7 +110,7 @@ class CityGatherTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 537)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=537)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '16,15->16,14')
@@ -137,7 +136,7 @@ class CityGatherTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 537)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=537)
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '16,15->16,14')
@@ -163,7 +162,7 @@ class CityGatherTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 426)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=426)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -180,13 +179,13 @@ class CityGatherTests(TestBase):
         self.assertEqual(-1, neutCity.player, 'should not have attacked target city through neutral city wtf')
     
     def test_should_not_take_city_literally_2_inches_from_enemy_army(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_take_city_literally_2_inches_from_enemy_army___XZvpx_iVk---1--196.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 196, fill_out_tiles=True)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        rawMap, _ = self.load_map_and_general(mapFile, 196)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=196)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
@@ -197,3 +196,56 @@ class CityGatherTests(TestBase):
         self.assertIsNone(winner)
         city = self.get_player_tile(6, 7, simHost.sim, general.player)
         self.assertTrue(city.isNeutral)
+    
+    def test_should_capture_neut_city_quickly(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        for allow_19_6_to_be_city in [False, True]:
+            with self.subTest(allow_19_6_to_be_city=allow_19_6_to_be_city):
+                mapFile = 'GameContinuationEntries/should_capture_neut_city_quickly___PHkfTkNU7---0--249.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 249, fill_out_tiles=True)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=249)
+
+                if not allow_19_6_to_be_city:
+                    map.GetTile(19, 6).player = -1
+                    map.GetTile(19, 6).isCity = False
+                    map.GetTile(19, 6).isMountain = True
+                    map.GetTile(19, 6).army = 0
+
+                    rawMap.GetTile(19, 6).player = -1
+                    rawMap.GetTile(19, 6).isCity = False
+                    rawMap.GetTile(19, 6).isMountain = True
+                    rawMap.GetTile(19, 6).army = 0
+
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+                simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.5, turns=11)
+                self.assertIsNone(winner)
+                city = self.get_player_tile(17, 10, simHost.sim, general.player)
+                self.assertEqual(general.player, city.player)
+                self.assertLess(city.turn_captured, 259)
+    
+    def test_should_not_move_tiny_tiles_at_enemy_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_not_move_tiny_tiles_at_enemy_city___A95VaqHXU---0--410.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 410, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=410)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=9)
+        self.assertIsNone(winner)
+
+        city = self.get_player_tile(14, 19, simHost.sim, general.player)
+        self.assertEqual(general.player, city.player)

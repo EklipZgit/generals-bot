@@ -69,6 +69,11 @@ class CityAnalyzer(object):
         self.player_city_scores: typing.Dict[Tile, CityScoreData] = {}
         self.enemy_city_scores: typing.Dict[Tile, CityScoreData] = {}
         self.undiscovered_mountain_scores: typing.Dict[Tile, CityScoreData] = {}
+        self.owned_contested_cities: typing.Set[Tile] = set()
+        """Contains all player owned cities that have been recently contested."""
+
+        self.enemy_contested_cities: typing.Set[Tile] = set()
+        """Contains all player owned cities that have been recently contested."""
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -85,6 +90,8 @@ class CityAnalyzer(object):
         self.player_city_scores: typing.Dict[Tile, CityScoreData] = {}
         self.enemy_city_scores: typing.Dict[Tile, CityScoreData] = {}
         self.undiscovered_mountain_scores: typing.Dict[Tile, CityScoreData] = {}
+        self.owned_contested_cities: typing.Set[Tile] = set()
+        self.enemy_contested_cities: typing.Set[Tile] = set()
 
         for tile in self.map.reachableTiles:
             # TODO calculate predicted enemy city locations in fog and explore mountains more in places we would WANT cities to be
@@ -106,12 +113,15 @@ class CityAnalyzer(object):
                     self.city_scores[tile] = score
                 elif tile.player == board_analysis.general.player:
                     self.player_city_scores[tile] = score
+                    if self.is_contested(tile):
+                        self.owned_contested_cities.add(tile)
                 else:
                     self.enemy_city_scores[tile] = score
+                    if self.is_contested(tile):
+                        self.enemy_contested_cities.add(tile)
 
             else:
                 self.undiscovered_mountain_scores[tile] = score
-
 
     def _calculate_distance_scores(self, city: Tile, board_analysis: BoardAnalyzer, score: CityScoreData):
         """
@@ -251,6 +261,32 @@ class CityAnalyzer(object):
     def get_sorted_enemy_scores(self) -> typing.List[typing.Tuple[Tile, CityScoreData]]:
         enemyTileScores = [t for t in sorted(self.enemy_city_scores.items(), reverse=True, key=lambda ts: ts[1].get_weighted_enemy_capture_value())]
         return enemyTileScores
+
+    def is_contested(self, city: Tile) -> bool:
+        if city.turn_captured > self.map.turn - 20:
+            return True
+
+        countFriendlyNear = SearchUtils.Counter(0)
+        countEnemyNear = SearchUtils.Counter(0)
+
+        def counterFunc(tile: Tile, dist: int):
+            if tile.player == city.player:
+                countFriendlyNear.add(1)
+            elif tile.player >= 0:
+                countEnemyNear.add(1)
+
+        SearchUtils.breadth_first_foreach_dist(
+            self.map,
+            [city],
+            maxDepth=5,
+            foreachFunc=counterFunc,
+        )
+
+        if countEnemyNear.value > countFriendlyNear.value:
+            return True
+
+        return False
+
 
 
 

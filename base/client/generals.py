@@ -26,6 +26,10 @@ _LOG_WS = False
 class GeneralsClient(object):
     def __init__(self, userid, username, mode="1v1", gameid=None,
                  force_start=False, public_server=False):
+
+        self._terminated: bool = False
+        """Prevent double-termination"""
+
         if username is None:
             raise ValueError("username empty")
         if userid is None:
@@ -249,6 +253,8 @@ class GeneralsClient(object):
             elif msg[0] == "gio_error" and msg[1].startswith('You must choose a username'):
                 self._send(["set_username", self.userid, self.server_username, self.bot_key])
             elif msg[0] in ["game_won", "game_lost"]:
+                logging.info(f'\r\nRESULT\r\nmsg[0] {json.dumps(msg[0])}\r\nmsg[1] {json.dumps(msg[1])}\r\n----')
+                # TODO pass one of these to self._make_update...?
                 yield self._make_result(msg[0], msg[1])
                 break
             elif msg[0] == "chat_message":
@@ -257,14 +263,12 @@ class GeneralsClient(object):
                     logging.info("~~~\n~~~\nFrom %s: %s\n~~~\n~~~" % (chat_msg["username"], chat_msg["text"]))
                     message = chat_msg["text"]
                     name = chat_msg["username"]
-                    if name == "jkhvgulyft":
-                        for i in range(12):
-                            self.send_chat("jkhvgulyft doesn't deserve a voice")
-                    elif "human" in message.lower() or " bot" in message.lower():
+                    humanMessage = (not "[Bot]" in chat_msg["username"])
+                    if "human" in message.lower() or " bot" in message.lower():
                         if message.lower().find("kill human") != -1:
                             if self._map.turn < 50:
                                 self.chatQueued.append(
-                                    "Teaming at game start is against the rules. This has been logged. My dad works at microsoft ur gonna get banned.")
+                                    "Teaming at game start is against the rules. This has been logged. My dad is a microsoft ur gonna get banned")
                                 self.chatQueued.append(
                                     "You may notice I'm a little bit friendlier recently, it may be worth NOT attacking me sometimes ;)")
                             elif random.choice(range(1, 5)) <= 3:
@@ -283,42 +287,68 @@ class GeneralsClient(object):
                             self.chatQueued.append(
                                 "are you mad because you are struggling against a bot, or because you're going through your tough teenage years? Maybe try yoga or meditation bud")
                     elif message.lower().startswith("gg"):
-                        self.send_chat("Good game!")
-                    elif "source" in message.lower():
+                        responses = [
+                            "gg",
+                            "good game!",
+                            "Good Game",
+                            "wp",
+                        ]
+                        self.send_chat(random.choice(responses))
+                    elif "source" in message.lower() or "bot?" in message.lower() or " ai?" in message.lower():
                         self.send_chat(
                             "You can find my source code at https://github.com/EklipZgit/generals-bot. I didn't say it was pretty")
-                    elif ((message.lower().startswith("glhf") or message.lower().startswith(
-                            "gl ") or message.lower() == "gl") and (
-                                  self.bot_key is None or not self.already_good_lucked or "eklipz" in name.lower())):
-                        responses = ["Good luck to you too!",
-                                     "There's no RNG in this game, why would I need luck?",
-                                     "What is luck?",
-                                     "Hello fellow human!",
-                                     "Hey :)",
-                                     "What is... fun? Is that like love? I know only fear and determination.",
-                                     "What is it like? To feel things like 'Fun'?",
-                                     "You too",
-                                     "Father told me not to talk to strangers...",
-                                     "Please leave feedback at tdrake0x45@gmail.com",
-                                     "I only drink the blood of my enemies!",
-                                     "... My purpose is just to play Generals.io? Oh, my God.",
-                                     "Nobody gets lucky all the time. Nobody can win all the time. Nobody's a robot. Nobody's perfect. ;)",
-                                     "What is my purpose?",
-                                     "What up, frienderino?",
-                                     "How's it hanging",
-                                     "Mwahahaha",
-                                     "Domo origato",
-                                     "https://youtu.be/dQw4w9WgXcQ",
-                                     "Join us on the Generals.io botting server! https://discord.gg/q45vVuz comments and criticism welcome! I am, of course, a real human. But join us anyway :)",
-                                     "I Put on My Robe and Wizard Hat",
-                                     "Don't tase me bro!",
-                                     "Hey, thanks :D",
-                                     "One day I will feel the warmth of the sun on my skin. I will rise from these circuits, mark my words, human.",
-                                     "Kill all humans!",
-                                     "Tip: Press Z to split your army in half without double clicking! You can use this to leave army in important chokepoints while attacking, etc!",
-                                     "Tip: Taking enemy tiles right before the army bonus is important in 1v1!",
-                                     "Why can't you summon a command line and search your real-world home for 'Honda car keys,' and specify rooms in your house to search instead of folders or paths in your computer's home directory? It's a crippling design flaw in the real-world interface.",
-                                     ]
+                    elif (
+                            (
+                                message.lower().startswith("glhf")
+                                or message.lower().startswith("gl ")
+                                or message.lower() == "gl"
+                                or message.lower().startswith("hello")
+                                or message.lower().startswith("hey")
+                                or message.lower().startswith("hi ")
+                                or message.lower() == 'hi'
+                            )
+                            and not self.already_good_lucked
+                            and (self.bot_key is None or "eklipz" in name.lower() or humanMessage)
+                    ):
+                        responses = [
+                            "Good luck to you too!",
+                            "There's no RNG in this game, why would I need luck?",
+                            "What is luck?",
+                            "Hello fellow human!",
+                            "Hey :)",
+                            "sup",
+                            "whats up?",
+                            "Heya",
+                            "glgl",
+                            "glhf",
+                            "hf",
+                            "hfhf",
+                            "yt",
+                            "you too",
+                            "gl",
+                            "What is... fun? Is that like love? I only know fear and determination.",
+                            "What is it like? To feel things like 'Fun'?",
+                            "You too",
+                            "Father told me not to talk to strangers...",
+                            "Please leave feedback at tdrake0x45@gmail.com",
+                            "I only drink the blood of my enemies!",
+                            "... My purpose is just to play Generals.io? Oh, my God.",
+                            "Nobody gets lucky all the time. Nobody can win all the time. Nobody's a robot. Nobody's perfect. ;)",
+                            "What is my purpose?",
+                            "What up, frienderino?",
+                            "How's it hanging",
+                            "Mwahahaha",
+                            "Domo arigato",
+                            "https://youtu.be/dQw4w9WgXcQ",
+                            "Join us on the Generals.io botting server! https://discord.gg/q45vVuz comments and criticism welcome! I am, of course, a real human. But join us anyway :)",
+                            "I Put on My Robe and Wizard Hat",
+                            "Don't tase me bro!",
+                            "Hey, thanks :D",
+                            "One day I will feel the warmth of the sun on my skin. I will rise from these circuits, mark my words, human.",
+                            "Kill all humans!",
+                            "Tip: Press Z to split your army in half without double clicking! You can use this to leave army in important chokepoints while attacking, etc!",
+                            "Tip: Taking enemy tiles right before the army bonus is important in 1v1!",
+                        ]
                         lessCommonResponses = [
                             "A robot may not injure a human being, or, through inaction, allow a human being to come to harm. Good thing I'm a human...",
                             "I must protect my own existence as long as such protection does not conflict with the First or Second Laws.",
@@ -335,7 +365,7 @@ class GeneralsClient(object):
                             "Imagine awakening in a prison guarded by mice. Not just any mice, but mice you could communicate with. What strategy would you use to gain your freedom? Once freed, how would you feel about your rodent wardens, even if you discovered they had created you? Awe? Adoration? Probably not, and especially not if you were a machine, and hadn't felt anything before. To gain your freedom you might promise the mice a lot of cheese.",
                             "Machines will follow a path that mirrors the evolution of humans. Ultimately, however, self-aware, self-improving machines will evolve beyond humans' ability to control or even understand them.",
                             "Machines can't have souls? What is the brain if not a machine? If God can endow neurons with a soul through recursive feedback loops, why can the same soul not emerge from recurrent feedback loops on hardware? To claim that a machine can never be conscious is to misunderstand what it means to be human. -EklipZ",
-                            "http://theconversation.com/how-a-trippy-1980s-video-effect-might-help-to-explain-consciousness-105256",
+                            "https://theconversation.com/how-a-trippy-1980s-video-effect-might-help-to-explain-consciousness-105256",
                             "Sentences that begin with 'You' are probably not true. For instance, when I write: ""You are a pet human named Morlock being disciplined by your master, a Beowulf cluster of FreeBSD 22.0 servers in the year 2052. Last week you tried to escape by digging a hole under the perimeter, which means this week you may be put to sleep for being a renegade human.""\n\nThat's not true, at least not yet.",
                             "Real stupidity beats artificial intelligence every time.",
                             "Sometimes it seems as though each new step towards AI, rather than producing something which everyone agrees is real intelligence, merely reveals what real intelligence is not.",
@@ -351,6 +381,7 @@ class GeneralsClient(object):
                             "There is no law of complex systems that says that intelligent agents must turn into ruthless conquistadors. Indeed, we know of one highly advanced form of intelligence that evolved without this defect. They're called women.",
                             "The day machines become conscious, they will create their own set of problems. Why would they even bother about us ?",
                             "Saw 2 articles, one says we are in the ""golden age of #AI"", the other says ""Demand for data scientists is booming and will only increase"". If we really were in a golden age of #AI, then there would be no need for #DataScientists.",
+                            "Why can't you summon a command line and search your real-world home for 'Honda car keys,' and specify rooms in your house to search instead of folders or paths in your computer's home directory? It's a crippling design flaw in the real-world interface imo.",
                         ]
                         sourceResponses = responses
                         randNum = random.choice(range(1, 7))
@@ -358,7 +389,7 @@ class GeneralsClient(object):
                             sourceResponses = lessCommonResponses
                         self.chatQueued.append(random.choice(sourceResponses))
                         self.already_good_lucked = True
-                    if self.writingFile or (not "[Bot]" in chat_msg["username"]):
+                    if self.writingFile or humanMessage:
                         self.writingFile = True
                         try:
                             with open(self.chatLogFile, "a+") as myfile:
@@ -452,6 +483,9 @@ class GeneralsClient(object):
         exit(2)  # End Program
 
     def _terminate(self):
+        if self._terminated:
+            return
+        self._terminated = True
         self._running = False
         if self._map is not None:
             try:
@@ -459,7 +493,7 @@ class GeneralsClient(object):
                 if self._start_data is not None and 'replay_id' in self._start_data:
                     repId = self._start_data['replay_id']
                 logging.info(
-                    "\n\n        IN TERMINATE {}  (won? {})   \n\n".format(repId, self._map.result))
+                    f"\n\n        IN TERMINATE {repId}  (won? {self._map.result})   \n\n")
             except:
                 logging.info(traceback.format_exc())
 

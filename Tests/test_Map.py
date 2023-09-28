@@ -11,6 +11,148 @@ from bot_ek0x45 import EklipZBot
 
 
 class MapTests(TestBase):
+    def assertCorrectArmyDeltas(
+            self,
+            simHost: GameSimulatorHost,
+            player: int = -1,
+            excludeFogMoves: bool = False,
+            minTurn = -1
+    ):
+        realMap = simHost.sim.sim_map
+        if realMap.turn <= minTurn:
+            return
+
+        players = [i for i in range(len(simHost.sim.players))]
+        if player > -1:
+            players = [player]
+
+        failures = []
+
+        for player in players:
+            playerMap = simHost.get_player_map(player)
+            # playerBot = simHost.get_bot(player)
+            # if playerBot.armyTracker.lastTurn != realMap.turn:
+            #     playerBot.init_turn()
+
+            for tile in realMap.get_all_tiles():
+                playerTile = playerMap.GetTile(tile.x, tile.y)
+                if not playerTile.visible:
+                    # TODO FIX THIS
+                    if playerTile.lastSeen < playerMap.turn - 2 and excludeFogMoves:
+                        continue
+                    #
+                    # pTilePlayer = simHost.sim.players[playerTile.player]
+                    # if pTilePlayer.move_history[-1] is not None and
+                    if playerTile.isGeneral != tile.isGeneral:
+                        continue
+
+                if not playerTile.discovered and playerTile.army == 0 and playerTile.player == -1:
+                    continue
+
+                if playerTile.army != tile.army:
+                    failures.append(f'(pMap {player} tile {str(tile)}) expected tile.army {tile.army} on {repr(tile)}, found {playerTile.army} on {repr(playerTile)}')
+                if playerTile.player != tile.player:
+                    failures.append(f'(pMap {player} tile {str(tile)}) expected player {tile.player} on {repr(tile)}, found {playerTile.player} on {repr(playerTile)}')
+                if playerTile.isCity != tile.isCity:
+                    failures.append(f'(pMap {player} tile {str(tile)}) expected isCity {tile.isCity} on {repr(tile)}, found {playerTile.isCity} on {repr(playerTile)}')
+                if playerTile.delta.armyDelta != tile.delta.armyDelta:
+                    failures.append(f'(pMap {player} tile {str(tile)}) expected tile.delta.armyDelta {tile.delta.armyDelta} on {repr(tile)}, found {playerTile.delta.armyDelta} on {repr(playerTile)}')
+                if playerTile.delta.oldArmy != tile.delta.oldArmy:
+                    failures.append(f'(pMap {player} tile {str(tile)}) expected delta.oldArmy {tile.delta.oldArmy} on {repr(tile)}, found {playerTile.delta.oldArmy} on {repr(playerTile)}')
+                if playerTile.delta.oldOwner != tile.delta.oldOwner:
+                    failures.append(f'(pMap {player} tile {str(tile)}) expected delta.oldOwner {tile.delta.oldOwner} on {repr(tile)}, found {playerTile.delta.oldOwner} on {repr(playerTile)}')
+                if playerTile.delta.newOwner != tile.delta.newOwner:
+                    failures.append(f'(pMap {player} tile {str(tile)}) expected delta.newOwner {tile.delta.newOwner} on {repr(tile)}, found {playerTile.delta.newOwner} on {repr(playerTile)}')
+                if playerTile.delta.fromTile != tile.delta.fromTile:
+                    # a tile can be moved to from multiple tiles at once. However a tile cannot move TO multiple tiles
+                    # at once, so cross reference the mismatched froms corresponding to-tiles in the real map.
+                    # If they match, then this mismatch is fine.
+                    realPlayerFrom = realMap.GetTile(playerTile.delta.fromTile.x, playerTile.delta.fromTile.y)
+                    realFrom = tile.delta.fromTile
+                    if realPlayerFrom.delta.toTile != realFrom.delta.toTile:
+                        failures.append(f'(pMap {player} tile {str(tile)}) expected delta.fromTile {str(tile.delta.fromTile)} on {repr(tile)}, found {str(playerTile.delta.fromTile)} on {repr(playerTile)}')
+                if playerTile.delta.toTile != tile.delta.toTile:
+                    failures.append(f'(pMap {player} tile {str(tile)}) expected delta.toTile {str(tile.delta.toTile)} on {repr(tile)}, found {str(playerTile.delta.toTile)} on {repr(playerTile)}')
+
+        if len(failures) > 0:
+            self.fail(f'TURN {simHost.sim.turn}\r\n' + '\r\n'.join(failures))
+
+    def run_map_delta_test(self, map, aTile, bTile, general, enemyGeneral, debugMode, aArmy, bArmy, aMove, bMove):
+        aTile.army = aArmy
+        bTile.army = bArmy
+
+        simHost = GameSimulatorHost(map, player_with_viewer=-2, afkPlayers=[0, 1])
+        if debugMode:
+            startTurn = map.turn + 1
+
+            def mapRenderer():
+                if map.turn > startTurn:
+                    self.render_sim_map_from_all_perspectives(simHost.sim)
+
+            simHost.run_between_turns(mapRenderer)
+        simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
+        simHost.apply_map_vision(player=0, rawMap=map)
+        simHost.apply_map_vision(player=1, rawMap=map)
+        simHost.sim.sim_map.USE_OLD_MOVEMENT_DETECTION = False
+        simHost.get_player_map(0).USE_OLD_MOVEMENT_DETECTION = False
+        simHost.get_player_map(1).USE_OLD_MOVEMENT_DETECTION = False
+
+        if aMove is not None:
+            aX, aY = aMove
+            simHost.queue_player_moves_str(general.player,
+                                           f'None  {aTile.x},{aTile.y}->{aTile.x + aX},{aTile.y + aY}  None')
+        else:
+            simHost.queue_player_moves_str(general.player, f'None  None  None')
+
+        if bMove is not None:
+            bX, bY = bMove
+            simHost.queue_player_moves_str(enemyGeneral.player,
+                                           f'None  {bTile.x},{bTile.y}->{bTile.x + bX},{bTile.y + bY}  None')
+        else:
+            simHost.queue_player_moves_str(enemyGeneral.player, f'None  None  None')
+
+        if debugMode:
+            self.begin_capturing_logging()
+        simHost.run_sim(run_real_time=False, turn_time=5.5, turns=3)
+        if debugMode:
+            self.stop_capturing_logging()
+
+    def run_diag_test(self, debugMode, aArmy, bArmy, aMove, bMove, turn):
+        # 4x4 map, with all fog scenarios covered. Each player has enough information to unequivocably determine which tile moved to where.
+        data = """
+|    |    |    |
+aG1  a1   a1   b1
+a1   a1   b1   b1
+a1   a1   b1   b1
+a1   b1   b1   bG1
+|    |    |    |
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(
+            data,
+            turn,
+            fill_out_tiles=False,
+            player_index=0)
+
+        aTile = map.GetTile(1, 1)
+        bTile = map.GetTile(2, 2)
+        self.run_map_delta_test(map, aTile, bTile, general, enemyGeneral, debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove)
+
+    def run_adj_test(self, debugMode, aArmy, bArmy, aMove, bMove, turn):
+        # 4x4 map, with all fog scenarios covered.
+        data = """
+|    |    |    |
+aG1  a1   a1   b1
+a1   a1   b1   b1
+a1   a1   b1   b1
+a1   b1   b1   bG1
+|    |    |    |
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(data, turn, fill_out_tiles=False,
+                                                                            player_index=0)
+
+        aTile = map.GetTile(1, 1)
+        bTile = map.GetTile(2, 1)
+        self.run_map_delta_test(map, aTile, bTile, general, enemyGeneral, debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove)
 
     def test_tile_delta_against_neutral(self):
         mapRaw = """
@@ -455,3 +597,34 @@ C5
         self.assertEqual(199, map.players[0].score)
         self.assertEqual(76, map.players[1].tileCount)
         self.assertEqual(191, map.players[1].score)
+
+    def test_generate_all_adjacent_army_scenarios(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        moveOpts = [None, (1, 0), (-1, 0), (0, 1), (0, -1)]
+
+        for aArmy in [10, 11, 12, 15, 20, 2, 5, 8, 9]:
+            for bArmy in [10, 11, 12, 15, 20, 2, 5, 8, 9]:
+                for aMove in moveOpts:
+                    for bMove in moveOpts:
+                        for turn in [96, 97]:
+                            with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn):
+                                self.run_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
+
+    def test_generate_all_diagonal_army_scenarios(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        moveOpts = [None, (1, 0), (-1, 0), (0, 1), (0, -1)]
+
+        for aArmy in [10, 11, 12, 15, 20, 2, 5, 8, 9]:
+            for bArmy in [10, 11, 12, 15, 20, 2, 5, 8, 9]:
+                for aMove in moveOpts:
+                    for bMove in moveOpts:
+                        for turn in [96, 97]:
+                            with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn):
+                                self.run_diag_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
+
+    def test_run_one_off_diag_test(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        self.run_diag_test(debugMode=debugMode, aArmy=9, bArmy=15, aMove=(0, 1), bMove=(-1, 0), turn=97)
+        #
+        # self.run_diag_test(debugMode=debugMode, aArmy=10, bArmy=2, aMove=(-1, 0), bMove=(-1, 0), turn=97)

@@ -109,9 +109,9 @@ class MapTests(TestBase):
             renderP0 = False
             renderP1 = False
 
-            renderTurnBeforeSim = True
+            # renderTurnBeforeSim = True
             # renderTurnBeforePlayers = True
-            renderP0 = True
+            # renderP0 = True
             renderP1 = True
 
             def mapRenderer():
@@ -683,11 +683,13 @@ C5
                                     # f 3304
                                     # f 1765
                                     # f 1765
+                                    # f 357
                                     self.run_out_of_fog_collision_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn, includeFogKnowledge=includeFogKnowledge)
 
     def test_run_one_off_out_of_fog_collision_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        self.run_out_of_fog_collision_test(debugMode=debugMode, aArmy=10, bArmy=11, aMove=(1, 0), bMove=(0, 1), turn=97, includeFogKnowledge=False)
+        self.run_out_of_fog_collision_test(debugMode=debugMode, aArmy=20, bArmy=10, aMove=(1, 0), bMove=(-1, 0), turn=96, includeFogKnowledge=False)
+        self.run_out_of_fog_collision_test(debugMode=debugMode, aArmy=10, bArmy=10, aMove=(0, 1), bMove=(1, 0), turn=97, includeFogKnowledge=True)
 
     def test_generate_all_adjacent_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -699,6 +701,7 @@ C5
                     for bMove in moveOpts:
                         for turn in [96, 97]:
                             with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn):
+                                # f 474
                                 # f 474
                                 # f 474
                                 # f 474
@@ -723,6 +726,7 @@ C5
                                 # f 73
                                 # f 69
                                 # f 69
+                                # f 0 (!)
                                 # f 0 (!)
                                 self.run_diag_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 

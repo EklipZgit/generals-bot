@@ -531,28 +531,42 @@ class ArmyTracker(object):
     def find_new_armies(self):
         logging.info("Finding new armies:")
         playerLargest = [None for x in range(len(self.map.players))]
+
+        tilesRankedByArmy = where(sorted(self.map.pathableTiles, key=lambda t: t.army), filter_func=lambda t: t.player != -1)
+        percentile = 95
+        percentileIndex = 95 * len(tilesRankedByArmy) // 100
+        tileAtPercentile = tilesRankedByArmy[percentileIndex]
+        if tileAtPercentile.army - 1 > self.track_threshold:
+            newTrackThreshold = tileAtPercentile.army - 1
+            logging.info(f'RAISING TRACK THRESHOLD FROM {self.track_threshold} TO {newTrackThreshold}')
+            self.track_threshold = newTrackThreshold
+
         # don't do largest tile for now?
         # for tile in self.map.pathableTiles:
         #    if tile.player != -1 and (playerLargest[tile.player] == None or tile.army > playerLargest[tile.player].army):
         #        playerLargest[tile.player] = tile
         for tile in self.map.pathableTiles:
             notOurMove = (self.lastMove is None or (tile != self.lastMove.source and tile != self.lastMove.dest))
-            tileNewlyMovedByEnemy = (tile not in self.armies
-                                     and not tile.delta.gainedSight
-                                     and tile.player != self.map.player_index
-                                     and abs(tile.delta.armyDelta) > 2
-                                     and tile.army > 2
-                                     and notOurMove)
+            tileNewlyMovedByEnemy = (
+                tile not in self.armies
+                and not tile.delta.gainedSight
+                and tile.player != self.map.player_index
+                and abs(tile.delta.armyDelta) > 2
+                and tile.army > 2
+                and notOurMove
+            )
 
             # if we moved our army into a spot last turn that a new enemy army appeared this turn
             tileArmy = self.armies.get(tile, None)
 
             if (
-                    (tileArmy is None or tileArmy.scrapped)
-                    and tile.player != -1
-                    and (playerLargest[tile.player] == tile
-                         or tile.army > self.track_threshold
-                         or tileNewlyMovedByEnemy)
+                (tileArmy is None or tileArmy.scrapped)
+                and tile.player != -1
+                and (
+                    playerLargest[tile.player] == tile
+                    or tile.army > self.track_threshold
+                    or tileNewlyMovedByEnemy
+                )
             ):
                 logging.info(
                     f"{str(tile)} Discovered as Army! (tile.army {tile.army}, tile.delta {tile.delta.armyDelta}) Determining if came from fog")

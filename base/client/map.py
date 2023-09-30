@@ -583,6 +583,7 @@ class MapBase(object):
         self.cols: int = len(map_grid_y_x[0])  # Integer Number Grid Cols
         self.grid: typing.List[typing.List[Tile]] = map_grid_y_x
         self.army_moved_grid: typing.List[typing.List[bool]] = []
+        self.army_emergences: typing.Dict[Tile, int] = {}
 
         # List of 8 Generals (None if not found)
         self.generals: typing.List[typing.Union[Tile, None]] = [
@@ -1055,6 +1056,7 @@ class MapBase(object):
             # if self.is_city_bonus_turn and tile.player >= 0 and (tile.isGeneral or tile.isCity):
             #     tile.delta.armyDelta += 1
         self.army_moved_grid = [[False for x in range(self.cols)] for y in range(self.rows)]
+        self.army_emergences: typing.Dict[Tile, int] = {}
 
     @staticmethod
     def player_had_priority_over_other(player: int, otherPlayer: int, turn: int):
@@ -1099,8 +1101,18 @@ class MapBase(object):
         expectedDelta = self._get_expected_delta_amount_toward(fromTile, toTile)
         # used to be if value greater than 75 or something
         if not fromTile.visible:
-            fromTile.army += expectedDelta
-            fromTile.delta.armyDelta = 0 - expectedDelta
+            fromDelta = expectedDelta
+            # if fromTile.player != byPlayer:
+            #     fromDelta = 0 - expectedDelta
+
+            fromTile.army += fromDelta
+            fromTile.delta.armyDelta = fromDelta
+            if fromTile.player != byPlayer:
+                fromTile.player = byPlayer
+                if fromTile.army > 0:
+                    raise AssertionError(f'fromTile was neutral/otherPlayer {fromTile.delta.oldOwner} with positive army {fromTile.army} in the fog. From->To: {repr(fromTile)} -> {repr(toTile)}')
+
+            self.set_fog_moved_from_army_incremented(fromTile, byPlayer, expectedDelta)
 
         # only say the army is completely covered if the confidence was high, otherwise we can have two armies move here from diff players
         self.army_moved_grid[toTile.y][toTile.x] = not fullToDiffCovered
@@ -1113,6 +1125,7 @@ class MapBase(object):
             if toTile.army < 0:
                 toTile.army = 0 - toTile.army
                 toTile.player = byPlayer
+                # toTile.delta.newOwner = byPlayer
                 toTile.delta.newOwner = byPlayer
                 # toTile.delta.unexplainedDelta = 0
 
@@ -1165,6 +1178,12 @@ class MapBase(object):
 
             movingPlayer.last_move = (fromTile, toTile)
 
+            # if not self.USE_OLD_MOVEMENT_DETECTION and not fromTile.visible:
+            #     movementAmount = fromTile.delta.oldArmy - 1
+            #     if movementAmount >
+            #     fromTile.army = self.get_fog_moved_from_army_incremented(fromTile)
+            #     if not toTile.visible:
+
     def _is_partial_army_movement_delta_match(self, source: Tile, dest: Tile):
         if source.delta.imperfectArmyDelta:
             if dest.delta.unexplainedDelta != 0:
@@ -1199,9 +1218,21 @@ class MapBase(object):
         return False
 
     def _get_expected_delta_amount_toward(self, source: Tile, dest: Tile) -> int:
-        if source.delta.oldOwner == dest.delta.oldOwner:
-            return 0 - source.delta.unexplainedDelta
-        return source.delta.unexplainedDelta
+        sourceDelta = source.delta.unexplainedDelta
+        sameOwnerMove = source.delta.oldOwner == dest.delta.oldOwner
+        if not source.visible:
+            sourceDelta = dest.delta.unexplainedDelta
+            if not dest.visible:
+                sourceDelta = source.delta.oldArmy - 1
+            # TODO does this need to get fancier with potential movers vs the dest owner...?
+            sameOwnerMove = sameOwnerMove or source.player == -1
+            # TODO should check move-half too probably
+            # if source.player == -1:
+            #     # then just assume same owner move...?
+            #     sourceDelta = dest.delta.unexplainedDelta
+        if sameOwnerMove:
+            return 0 - sourceDelta
+        return sourceDelta
 
     def _apply_last_player_move(self, last_player_index_submitted_move: typing.Tuple[Tile, Tile, bool]) -> typing.Tuple[Tile, Tile] | None:
         """
@@ -1340,6 +1371,72 @@ class MapBase(object):
         self.last_player_index_submitted_move = last_player_index_submitted_move
         return source, dest
 
+    # def is_exact_fog_move(self, tile: Tile, candidateTile: Tile) -> bool:
+    #     # print(str(tile.army) + " : " + str(candidateTile.army))
+    #     if candidateTile.visible:
+    #         if tile.army + candidateTile.delta.armyDelta < -1 and candidateTile.player != -1:
+    #             tile.player = candidateTile.player
+    #             tile.delta.newOwner = candidateTile.player
+    #             oldArmy = tile.army
+    #             tile.army = 0 - candidateTile.delta.armyDelta - tile.army
+    #             # THIS HANDLED EXTERNAL IN THE UPDATE LOOP, AFTER THIS LOGIC HAPPENS
+    #             # if tile.isCity and isCityBonusTurn:
+    #             #     tile.army += 1
+    #             # if isArmyBonusTurn:
+    #             #     tile.army += 1
+    #             logging.info(f" (islandFog 1) tile {str(tile)} army from {oldArmy} to {tile.army}")
+    #             return 100
+    #     elif tile.army - candidateTile.army < -1 and candidateTile.player != -1:
+    #         tile.player = candidateTile.player
+    #         tile.delta.newOwner = candidateTile.player
+    #         oldArmy = tile.army
+    #         tile.army = candidateTile.army - tile.army - 1
+    #         oldCandArmy = candidateTile.army
+    #         candidateTile.army = 1
+    #         # THIS HANDLED EXTERNAL IN THE UPDATE LOOP, AFTER THIS LOGIC HAPPENS
+    #         # if candidateTile.isCity and isCityBonusTurn:
+    #         #     candidateTile.army += 1
+    #         # if isArmyBonusTurn:
+    #         #     candidateTile.army += 1
+    #         logging.info(f" (islandFog 2) tile {str(tile)} army from {oldArmy} to {tile.army}")
+    #         logging.info(
+    #             f" (islandFog 2) candTile {candidateTile.toString()} army from {oldCandArmy} to {candidateTile.army}")
+    #         return 100
+    #     return -100
+
+    def execute_definite_fog_island_capture(self, tileLost: Tile, killedByTile: Tile):
+        # print(str(tile.army) + " : " + str(candidateTile.army))
+        if killedByTile.visible:
+            if tileLost.army + killedByTile.delta.armyDelta < -1 and killedByTile.player != -1:
+                tileLost.player = killedByTile.player
+                tileLost.delta.newOwner = killedByTile.player
+                oldArmy = tileLost.army
+                tileLost.army = 0 - killedByTile.delta.armyDelta - tileLost.army
+                # THIS HANDLED EXTERNAL IN THE UPDATE LOOP, AFTER THIS LOGIC HAPPENS
+                # if tile.isCity and isCityBonusTurn:
+                #     tile.army += 1
+                # if isArmyBonusTurn:
+                #     tile.army += 1
+                logging.info(f" (islandFog 1) tile {str(tileLost)} army from {oldArmy} to {tileLost.army}")
+                return 100
+        elif tileLost.army - killedByTile.army < -1 and killedByTile.player != -1:
+            tileLost.player = killedByTile.player
+            tileLost.delta.newOwner = killedByTile.player
+            oldArmy = tileLost.army
+            tileLost.army = killedByTile.army - tileLost.army - 1
+            oldCandArmy = killedByTile.army
+            killedByTile.army = 1
+            # THIS HANDLED EXTERNAL IN THE UPDATE LOOP, AFTER THIS LOGIC HAPPENS
+            # if candidateTile.isCity and isCityBonusTurn:
+            #     candidateTile.army += 1
+            # if isArmyBonusTurn:
+            #     candidateTile.army += 1
+            logging.info(f" (islandFog 2) tile {str(tileLost)} army from {oldArmy} to {tileLost.army}")
+            logging.info(
+                f" (islandFog 2) candTile {killedByTile.toString()} army from {oldCandArmy} to {killedByTile.army}")
+            return 100
+        return -100
+
     def detect_movement_and_populate_unexplained_diffs(self):
         possibleMovesDict: typing.Dict[Tile, typing.List[Tile]] = {}
 
@@ -1466,7 +1563,8 @@ class MapBase(object):
                     self.set_tile_moved(
                         destTile,
                         exclusiveSrc,
-                        fullFromDiffCovered=exactMatch,
+                        # fullFromDiffCovered=exactMatch, #both this and hardcoding true currently have the same result in tests...?
+                        fullFromDiffCovered=True,
                         fullToDiffCovered=True,  # otherwise we try to find the fog move to this tile again. This being wrong should be exceedingly rare, like 3 players all moving to the same tile rare.
                         byPlayer=destTile.delta.oldOwner)
                 else:
@@ -1758,6 +1856,31 @@ class MapBase(object):
                                  f'more of a spectrum and weight these possible moves lower.')
 
         return False
+
+    def set_fog_moved_from_army_incremented(self, tile: Tile, byPlayer: int, expectedDelta: int | None = None):
+        army = 1
+
+        if expectedDelta is not None:
+            potentialArmy = tile.delta.oldArmy + expectedDelta
+            if potentialArmy <= 0:
+                self.set_fog_emergence(tile, 0 - expectedDelta)
+                potentialArmy = 1
+            army = potentialArmy
+
+        tile.delta.oldArmy = army - expectedDelta
+
+        if self.is_army_bonus_turn:
+            army += 1
+        if (tile.isCity or tile.isGeneral) and self.is_city_bonus_turn:
+            army += 1
+
+        tile.army = army
+        tile.delta.oldOwner = byPlayer
+        tile.delta.newOwner = byPlayer
+
+    def set_fog_emergence(self, fromTile: Tile, armyEmerged: int):
+        logging.info(f'+++EMERGENCE {repr(fromTile)} = {armyEmerged}')
+        self.army_emergences[fromTile] = armyEmerged
 
 
 class Map(MapBase):

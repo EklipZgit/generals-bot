@@ -151,7 +151,6 @@ class GameSimulatorTests(TestBase):
         self.assertEqual(16, p0Map.GetTile(8, 8).army)
         self.assertTrue(p0Map.GetTile(8, 8).visible)
 
-
     def test_simulates_a_game(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/243.txtmap', 243, player_index=1)
@@ -169,6 +168,23 @@ class GameSimulatorTests(TestBase):
 
         self.begin_capturing_logging()
         simHost.run_sim(run_real_time=debugMode, turn_time=0.5)
+
+    def test_simulates_a_game_from_turn_1(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/243.txtmap', 243, player_index=1)
+        fakeEnemyGen = map.GetTile(2, 16)
+        fakeEnemyGen.isGeneral = True
+        fakeEnemyGen.player = 0
+        fakeEnemyGen.army = 7
+
+        self.reset_map_to_just_generals(map, turn=16)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player)
+
+        self.begin_capturing_logging()
+        simHost.run_sim(run_real_time=debugMode, turn_time=0.001)
 
     def test_game_simulator__correctly_updates_client_fog_of_war__robust_against_manually_tweaked_maps(self):
         map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/243.txtmap', 243, player_index=1)

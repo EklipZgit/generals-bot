@@ -104,14 +104,32 @@ class MapTests(TestBase):
         if debugMode:
             startTurn = map.turn + 1
 
+            renderTurnBeforeSim = False
+            renderTurnBeforePlayers = False
+            renderP1 = False
+            renderP2 = False
+
+            renderTurnBeforeSim = True
+            renderTurnBeforePlayers = True
+            # renderP1 = True
+            renderP2 = True
+
             def mapRenderer():
                 if map.turn >= startTurn:
                     if map.turn > startTurn:
                         # self.render_sim_map_from_all_perspectives(simHost.sim)
-                        self.render_map(simHost.get_player_map(0))
-                        self.render_map(simHost.get_player_map(1))
+                        if renderP1:
+                            self.render_map(simHost.get_player_map(0))
+                        if renderP2:
+                            self.render_map(simHost.get_player_map(1))
                     else:
-                        self.render_map(simHost.sim.sim_map)
+                        if renderTurnBeforeSim:
+                            self.render_map(simHost.sim.sim_map)
+                        if renderTurnBeforePlayers:
+                            if renderP1:
+                                self.render_map(simHost.get_player_map(0))
+                            if renderP2:
+                                self.render_map(simHost.get_player_map(1))
 
             simHost.run_between_turns(mapRenderer)
 
@@ -663,6 +681,7 @@ C5
                                 with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn, includeFogKnowledge=includeFogKnowledge):
                                     # f 3312
                                     # f 3304
+                                    # f 1765
                                     self.run_out_of_fog_collision_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn, includeFogKnowledge=includeFogKnowledge)
 
     def test_run_one_off_out_of_fog_collision_test(self):
@@ -679,6 +698,7 @@ C5
                     for bMove in moveOpts:
                         for turn in [96, 97]:
                             with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn):
+                                # f 474
                                 # f 474
                                 # f 474
                                 self.run_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
@@ -699,6 +719,7 @@ C5
                         for turn in [96, 97]:
                             with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn):
                                 # f 73
+                                # f 69
                                 # f 69
                                 self.run_diag_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 

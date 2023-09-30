@@ -279,11 +279,11 @@ class EklipZBot(object):
         move: Move | None = None
         try:
             move = self.select_move(allowRetry)
-            self._map.last_player_index_move = None
+            self._map.last_player_index_submitted_move = None
             if move is not None and move.source.player != self.general.player:
                 raise AssertionError(f'select_move just returned {str(move)} moving from a tile we didnt own...')
             if move is not None:
-                self._map.last_player_index_move = (move.source, move.dest, move.move_half)
+                self._map.last_player_index_submitted_move = (move.source, move.dest, move.move_half)
 
         finally:
             # # this fucks performance, need to make it not slow

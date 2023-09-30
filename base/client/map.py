@@ -549,7 +549,7 @@ class MapBase(object):
                  ):
         # Start Data
         self.USE_OLD_MOVEMENT_DETECTION = True
-        self.last_player_index_move: typing.Tuple[Tile, Tile, bool] | None = None
+        self.last_player_index_submitted_move: typing.Tuple[Tile, Tile, bool] | None = None
         self.player_index: int = player_index  # Integer Player Index
         # TODO TEAMMATE
         self.teammates = set()
@@ -878,18 +878,21 @@ class MapBase(object):
                         maybeNotGen.isGeneral = False
                         self.generals[i] = None
 
+    def update(self, bypassDeltas: bool = False):
+        """
+        Expects _applyUpdateDiff to have been run to update the hidden grid info first.
+        Expects update_turn() to have been called with the new turn already.
+        Expects update_visible_tile to have been called already for all tiles with updates.
+        Expects scores to have been recreated from latest data.
 
-    # expects _applyUpdateDiff to have been run to update the hidden grid info first
-    # expects update_turn() to have been called with the new turn already.
-    # expects update_visible_tile to have been called already for all tiles with updates
-    # expects scores to have been recreated from latest data
-    def update(self):
+        @param bypassDeltas: If passes, fog-city-and-army-increments will not be applied this turn, and tile-movement deltas will not be tracked.
+        """
         for player in self.players:
             if player is not None:
                 player.cities = []
                 player.tiles = []
 
-        if self.complete and self.result == False:  # Game Over - Ignore Empty Board Updates
+        if self.complete and not self.result and self.remainingPlayers > 2:  # Game Over - Ignore Empty Board Updates in FFA
             return self
 
         for i in range(len(self.scoreHistory) - 1, 0, -1):
@@ -900,53 +903,64 @@ class MapBase(object):
 
         # right now all tile deltas are completely raw, as applied by the raw server update, with the exception of lost-vision-fog.
 
-        if not self.USE_OLD_MOVEMENT_DETECTION:
-            self.detect_movement_and_populate_unexplained_diffs()
-
-        else:
-            # Check for OBVIOUS army movement, first
-            for x in range(self.cols):
-                for y in range(self.rows):
-                    curTile = self.grid[y][x]
-
-                    if curTile.player >= 0:
-                        self.players[curTile.player].tiles.append(curTile)
-
-                    if curTile.isCity and curTile.player != -1:
-                        self.players[curTile.player].cities.append(curTile)
-
-                    # if not curTile.visible:  # breaks other stuff...?
-                    #     continue
-
-                    maybeMovedTo = self.army_moved_grid[y][x]
-                    if maybeMovedTo:
-                        # look for candidate tiles that army may have come from
-                        bestCandTile = evaluateTileDiffsVisible(curTile)
-
-                        if bestCandTile is not None:
-                            self.set_tile_moved(curTile, bestCandTile)
-
-            # Make assumptions about unseen tiles
-            for x in range(self.cols):
-                for y in range(self.rows):
-                    curTile = self.grid[y][x]
-
-                    maybeMovedTo = self.army_moved_grid[y][x]
-                    if maybeMovedTo:
-                        # look for candidate tiles that army may have come from
-                        bestCandTile = evaluateTileDiffsFog(curTile)
-
-                        if bestCandTile is not None:
-                            self.set_tile_moved(curTile, bestCandTile)
-
         for x in range(self.cols):
             for y in range(self.rows):
                 curTile = self.grid[y][x]
-                if (not curTile.visible and (
-                        curTile.isCity or curTile.isGeneral) and curTile.player >= 0 and self.is_city_bonus_turn):
-                    curTile.army += 1
-                if not curTile.visible and curTile.player >= 0 and self.is_army_bonus_turn:
-                    curTile.army += 1
+
+                if curTile.player >= 0:
+                    self.players[curTile.player].tiles.append(curTile)
+
+                if curTile.isCity and curTile.player != -1:
+                    self.players[curTile.player].cities.append(curTile)
+
+        if not self.USE_OLD_MOVEMENT_DETECTION:
+            if not bypassDeltas:
+                self.detect_movement_and_populate_unexplained_diffs()
+
+        else:
+
+            if not bypassDeltas:
+                # Check for OBVIOUS army movement, first
+                for x in range(self.cols):
+                    for y in range(self.rows):
+                        curTile = self.grid[y][x]
+
+                        maybeMovedTo = self.army_moved_grid[y][x]
+                        if maybeMovedTo:
+                            # look for candidate tiles that army may have come from
+                            bestCandTile = evaluateTileDiffsVisible(curTile)
+
+                            if bestCandTile is not None:
+                                byPlayer = curTile.player
+                                if byPlayer == -1:
+                                    byPlayer = bestCandTile.player
+                                self.set_tile_moved(curTile, bestCandTile, byPlayer=byPlayer)
+
+                # Make assumptions about unseen tiles
+                for x in range(self.cols):
+                    for y in range(self.rows):
+                        curTile = self.grid[y][x]
+
+                        maybeMovedTo = self.army_moved_grid[y][x]
+                        if maybeMovedTo:
+                            # look for candidate tiles that army may have come from
+                            bestCandTile = evaluateTileDiffsFog(curTile)
+
+                            if bestCandTile is not None:
+                                byPlayer = curTile.player
+                                if byPlayer == -1:
+                                    byPlayer = bestCandTile.player
+                                self.set_tile_moved(curTile, bestCandTile, byPlayer=byPlayer)
+
+        if not bypassDeltas:
+            for x in range(self.cols):
+                for y in range(self.rows):
+                    curTile = self.grid[y][x]
+                    if (not curTile.visible and (
+                            curTile.isCity or curTile.isGeneral) and curTile.player >= 0 and self.is_city_bonus_turn):
+                        curTile.army += 1
+                    if not curTile.visible and curTile.player >= 0 and self.is_army_bonus_turn:
+                        curTile.army += 1
 
         self.update_reachable()
 
@@ -1127,6 +1141,8 @@ class MapBase(object):
 
         if byPlayer == -1:
             byPlayer = fromTile.delta.oldOwner
+        if byPlayer == -1:
+            raise AssertionError(f'must supply a player for moves from fog with unknown ownership. fromTile was neutral. fromTile {repr(fromTile)} -> toTile {repr(toTile)}')
 
         self.set_tile_probably_moved(
             toTile,
@@ -1185,7 +1201,7 @@ class MapBase(object):
             return 0 - source.delta.unexplainedDelta
         return source.delta.unexplainedDelta
 
-    def _apply_last_player_move(self, last_player_index_move: typing.Tuple[Tile, Tile, bool]) -> typing.Tuple[Tile, Tile, bool] | None:
+    def _apply_last_player_move(self, last_player_index_move: typing.Tuple[Tile, Tile, bool]) -> typing.Tuple[Tile, Tile] | None:
         """
         Returns None if the player move was determined to have been dropped or completely killed with priority at the source tile before executing.
         Updates the source and dest tiles unexplained deltas, if both are zero then the move should have executed cleanly with no interferences.
@@ -1218,6 +1234,7 @@ class MapBase(object):
             if dest.delta.unexplainedDelta == 0:
                 logging.error(
                     f'    map determined player DEFINITELY dropped move {str(last_player_index_move)}. Setting last move to none...')
+                self.last_player_index_submitted_move = None
                 return None
             else:
                 logging.error(
@@ -1248,6 +1265,7 @@ class MapBase(object):
                         logging.error(
                             f'  ^ {str(last_player_index_move)} IS QUESTIONABLE THOUGH BECAUSE DEST DID HAVE AN UNEXPLAINED DIFF. NUKING ANYWAY.')
                     # self.unaccounted_tile_diffs[source] = amountAttacked  # negative number
+                    self.last_player_index_submitted_move = None
                     return None
                 else:
                     logging.info(
@@ -1285,7 +1303,8 @@ class MapBase(object):
                     # self.army_moved(army, dest, trackingArmies)
                     # TODO could be wrong
                     dest.delta.unexplainedDelta = 0
-                    return last_player_index_move
+                    self.last_player_index_submitted_move = last_player_index_move
+                    return source, dest
         else:
             # nothing happened, we moved the expected army off of source. Not unexplained.
             # self.unaccounted_tile_diffs.pop(source, 0)
@@ -1316,11 +1335,14 @@ class MapBase(object):
             # skip.add(dest)  # might not need this at alll.....? TODO ??
 
         # self.army_moved(army, dest, trackingArmies)
-        return last_player_index_move
+        self.last_player_index_submitted_move = last_player_index_move
+        return source, dest
 
     def detect_movement_and_populate_unexplained_diffs(self):
         possibleMovesDict: typing.Dict[Tile, typing.List[Tile]] = {}
-        movesByPlayer: typing.List[typing.Tuple[Tile, Tile, bool] | None] = [None for player in self.players]
+
+        for player in self.players:
+            player.last_move = None
 
         # TODO for debugging only
         tilesWithDiffsPreOwn = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
@@ -1330,11 +1352,11 @@ class MapBase(object):
         logging.info(f'Tiles with MovedHere pre-own: {str([str(t) for t in tilesWithMovedHerePreOwn])}')
 
         # TRY OWN MOVE FIRST
-        if self.last_player_index_move is not None:
-            self.last_player_index_move = self._apply_last_player_move(self.last_player_index_move)
-            movesByPlayer[self.player_index] = self.last_player_index_move
-            if self.last_player_index_move is not None:
-                src, dest, move_half = self.last_player_index_move
+        if self.last_player_index_submitted_move is not None:
+            # check for dropped moves and apply the tile diffs from the players move ahead of time to more easily recognize other players moves.
+            self.players[self.player_index].last_move = self._apply_last_player_move(self.last_player_index_submitted_move)
+            if self.last_player_index_submitted_move is not None:
+                src, dest, move_half = self.last_player_index_submitted_move
                 self.set_tile_moved(
                     dest,
                     src,
@@ -1396,7 +1418,7 @@ class MapBase(object):
 
                     # no effect on diagonal
                     # if potentialSource.delta.imperfectArmyDelta and (not sourceWasAttackedNonLethalOrVacated or (potentialSource.player >= 0 and potentialSource.player != destTile.delta.oldOwner)):
-                    if potentialSource.delta.imperfectArmyDelta:
+                    if potentialSource.delta.imperfectArmyDelta and not self._move_would_violate_known_player_deltas(potentialSource, destTile):
                         potentialSources.append(potentialSource)
                     elif self.remainingPlayers > 0 and self._is_partial_army_movement_delta_match(source=potentialSource, dest=destTile):
                         if destTile.army < 3:
@@ -1404,8 +1426,6 @@ class MapBase(object):
                         else:
                             logging.info(f'including potential FFA third party attack {str(potentialSource)}->{str(destTile)} from fog as tile damager.')
                             potentialSources.append(potentialSource)
-
-                possibleMovesDict[destTile] = potentialSources
 
                 if len(potentialSources) == 1:
                     # we have our source...?
@@ -1419,7 +1439,10 @@ class MapBase(object):
                         destTile,
                         potentialSources[0],
                         fullFromDiffCovered=exactMatch,
-                        fullToDiffCovered=exactMatch)
+                        fullToDiffCovered=True,  # otherwise we try to find the fog move to this tile again. This being wrong should be exceedingly rare, like 3 players all moving to the same tile rare.
+                        byPlayer=destTile.delta.oldOwner)
+                else:
+                    possibleMovesDict[destTile] = potentialSources
 
         # TODO for debugging only
         tilesWithDiffsPreSource = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
@@ -1454,7 +1477,7 @@ class MapBase(object):
 
                     # no effect on diagonal
                     # if potentialSource.delta.imperfectArmyDelta and (not sourceWasAttackedNonLethalOrVacated or (potentialSource.player >= 0 and potentialSource.player != destTile.delta.oldOwner)):
-                    if potentialSource.delta.imperfectArmyDelta and not destWasAttackedNonLethalOrVacated:
+                    if potentialSource.delta.imperfectArmyDelta and not destWasAttackedNonLethalOrVacated and not self._move_would_violate_known_player_deltas(potentialSource, destTile):
                         potentialSources.append(potentialSource)
                     if destWasAttackedNonLethalOrVacated and self.remainingPlayers > 0 and self._is_partial_army_movement_delta_match(source=potentialSource, dest=destTile):
                         if destTile.army < 3:
@@ -1462,8 +1485,6 @@ class MapBase(object):
                         else:
                             logging.info(f'including potential FFA third party attack {str(potentialSource)}->{str(destTile)} from fog as tile damager.')
                             potentialSources.append(potentialSource)
-
-                possibleMovesDict[destTile] = potentialSources
 
                 if len(potentialSources) == 1:
                     # we have our source...?
@@ -1473,11 +1494,32 @@ class MapBase(object):
                             and self._is_exact_army_movement_delta_match(potentialSources[0], destTile)
                     )
 
-                    self.set_tile_moved(
-                        destTile,
-                        potentialSources[0],
-                        fullFromDiffCovered=exactMatch,
-                        fullToDiffCovered=exactMatch)
+                    byPlayer = potentialSources[0].delta.oldOwner
+                    if byPlayer == -1 or self.players[byPlayer].last_move is not None:
+                        byPlayer = self.players[destTile.delta.oldOwner].fighting_with_player
+                    if byPlayer == -1:
+                        possibilities = list(filter(lambda p: (
+                                not p.dead
+                                and not p.leftGame
+                                and p.last_move is None
+                                and p.unexplainedTileDelta < 0
+                                and p.index != self.player_index
+                                and p.index != destTile.delta.oldOwner
+                        ), self.players))
+                        if len(possibilities) > 0:
+                            byPlayer = possibilities[0].index
+
+                    if byPlayer != -1:
+                        self.set_tile_moved(
+                            destTile,
+                            potentialSources[0],
+                            fullFromDiffCovered=exactMatch,
+                            fullToDiffCovered=exactMatch,
+                            byPlayer=byPlayer)
+                    else:
+                        logging.error(f'UNABLE TO EXECUTE MOVE {repr(potentialSources[0])}->{repr(destTile)} DUE TO UNABLE TO FIND byPlayer THAT ISNT NEUTRAL')
+                else:
+                    possibleMovesDict[destTile] = potentialSources
 
         # TODO for debugging only
         tilesWithDiffsPreFog = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
@@ -1505,8 +1547,6 @@ class MapBase(object):
                         ):
                             potentialDests.append(potentialDest)
 
-                possibleMovesDict[sourceTile] = potentialDests
-
                 if len(potentialDests) == 1:
                     # we have our source...?
                     exactMatch = (
@@ -1520,7 +1560,9 @@ class MapBase(object):
                         sourceTile,
                         fullFromDiffCovered=exactMatch,
                         fullToDiffCovered=exactMatch)
-                # TODO compare potential sources limited to one per player.
+                else:
+                    possibleMovesDict[sourceTile] = potentialDests
+        # TODO compare potential sources limited to one per player.
 
         # TODO for debugging only
         tilesWithDiffsEnd = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]

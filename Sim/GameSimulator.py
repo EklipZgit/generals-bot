@@ -48,7 +48,7 @@ def generate_player_map(player_index: int, map_raw: MapBase) -> MapBase:
                 else:
                     map.update_visible_tile(realTile.x, realTile.y, TILE_FOG, tile_army=0, is_city=False, is_general=False)
 
-    map.update()
+    map.update(bypassDeltas=True)
 
     return map
 
@@ -665,13 +665,13 @@ class GameSimulatorHost(object):
                         if move.move_half:
                             move.army_moved = fullArmy // 2
 
-                    self.bot_hosts[playerIndex].eklipz_bot.armyTracker.last_player_index_move = move
+                    self.bot_hosts[playerIndex].eklipz_bot.armyTracker.last_player_index_submitted_move = move
                     self.bot_hosts[playerIndex].eklipz_bot.history.move_history[self.sim.turn] = [move]
 
                 player = self.sim.players[playerIndex]
-                player.map.last_player_index_move = None
+                player.map.last_player_index_submitted_move = None
                 if move is not None:
-                    player.map.last_player_index_move = (move.source, move.dest, move.move_half)
+                    player.map.last_player_index_submitted_move = (move.source, move.dest, move.move_half)
 
         for func in self._between_turns_funcs:
             try:

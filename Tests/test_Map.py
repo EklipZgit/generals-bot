@@ -117,8 +117,9 @@ class MapTests(TestBase):
 
         simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
 
-        simHost.apply_map_vision(player=0, rawMap=map)
-        simHost.apply_map_vision(player=1, rawMap=map)
+        if includeFogKnowledge:
+            simHost.apply_map_vision(player=0, rawMap=map)
+            simHost.apply_map_vision(player=1, rawMap=map)
 
         simHost.sim.sim_map.USE_OLD_MOVEMENT_DETECTION = False
         simHost.get_player_map(0).USE_OLD_MOVEMENT_DETECTION = False
@@ -184,7 +185,7 @@ a1   b1   b1   bG1
         bTile = map.GetTile(2, 1)
         self.run_map_delta_test(map, aTile, bTile, general, enemyGeneral, debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove)
 
-    def run_out_of_fog_collision_test(self, debugMode, aArmy, bArmy, aMove, bMove, turn):
+    def run_out_of_fog_collision_test(self, debugMode: bool, aArmy: int, bArmy: int, aMove: typing.Tuple[int, int], bMove: typing.Tuple[int, int], turn: int, includeFogKnowledge: bool):
         # 4x4 map, with all fog scenarios covered.
         data = """
 |    |    |    |
@@ -200,9 +201,9 @@ a1   b1   b1   bG1
             fill_out_tiles=False,
             player_index=0)
 
-        aTile = map.GetTile(1, 1)
+        aTile = map.GetTile(0, 1)
         bTile = map.GetTile(2, 1)
-        self.run_map_delta_test(map, aTile, bTile, general, enemyGeneral, debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, includeFogKnowledgeCases=True)
+        self.run_map_delta_test(map, aTile, bTile, general, enemyGeneral, debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, includeFogKnowledge=includeFogKnowledge)
 
     def test_tile_delta_against_neutral(self):
         mapRaw = """
@@ -650,15 +651,23 @@ C5
 
     def test_generate_all_out_of_fog_collision_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
-        moveOpts = [None, (1, 0), (-1, 0), (0, 1), (0, -1)]
+        aMoveOpts = [None, (1, 0), (0, 1)]  # no left or up
+        bMoveOpts = [None, (1, 0), (-1, 0), (0, 1), (0, -1)]
 
         for aArmy in [10, 11, 12, 15, 20, 2, 5, 8, 9]:
             for bArmy in [10, 11, 12, 15, 20, 2, 5, 8, 9]:
-                for aMove in moveOpts:
-                    for bMove in moveOpts:
+                for aMove in aMoveOpts:
+                    for bMove in bMoveOpts:
                         for turn in [96, 97]:
-                            with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn):
-                                self.run_out_of_fog_collision_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
+                            for includeFogKnowledge in [True, False]:
+                                with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn, includeFogKnowledge=includeFogKnowledge):
+                                    # f 3312
+                                    # f 3304
+                                    self.run_out_of_fog_collision_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn, includeFogKnowledge=includeFogKnowledge)
+
+    def test_run_one_off_out_of_fog_collision_test(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        self.run_out_of_fog_collision_test(debugMode=debugMode, aArmy=10, bArmy=11, aMove=(1, 0), bMove=(0, 1), turn=97, includeFogKnowledge=False)
 
     def test_generate_all_adjacent_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -670,6 +679,8 @@ C5
                     for bMove in moveOpts:
                         for turn in [96, 97]:
                             with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn):
+                                # f 474
+                                # f 474
                                 self.run_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_adj_test(self):
@@ -687,8 +698,10 @@ C5
                     for bMove in moveOpts:
                         for turn in [96, 97]:
                             with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn):
+                                # f 73
+                                # f 69
                                 self.run_diag_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_diag_test(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
-        self.run_diag_test(debugMode=debugMode, aArmy=9, bArmy=15, aMove=(0, 1), bMove=(-1, 0), turn=97)
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        self.run_diag_test(debugMode=debugMode, aArmy=10, bArmy=11, aMove=(0, 1), bMove=(-1, 0), turn=97)

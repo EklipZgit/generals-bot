@@ -170,7 +170,6 @@ class GameSimulatorTests(TestBase):
         self.begin_capturing_logging()
         simHost.run_sim(run_real_time=debugMode, turn_time=0.5)
 
-
     def test_game_simulator__correctly_updates_client_fog_of_war__robust_against_manually_tweaked_maps(self):
         map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/243.txtmap', 243, player_index=1)
         fakeEnemyGen = map.GetTile(2, 16)

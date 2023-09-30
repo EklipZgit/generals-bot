@@ -5361,67 +5361,96 @@ class EklipZBot(object):
 
         for player in self._map.players:
             seenPlayer = self.generalApproximations[player.index][2] > 0 or self._map.generals[player.index] is not None
-            if not player.dead and player.index != self._map.player_index and seenPlayer:
-                curScore = 300
+            if player.dead or player.index == self._map.player_index or not seenPlayer:
+                continue
 
-                if self._map.remainingPlayers > 3:
-                    # ? I"M FRIENDLY I SWEAR
-                    curScore = -30
-                    if player.aggression_factor < 25:
-                        curScore -= 50
+            curScore = 300
 
-                alreadyTargetingBonus = 120
-                if player.index == self.targetPlayer:
-                    curScore += alreadyTargetingBonus
+            if self._map.remainingPlayers > 3:
+                # ? I"M FRIENDLY I SWEAR
+                curScore = -30
+                if player.aggression_factor < 25:
+                    curScore -= 50
 
-                knowsWhereEnemyGeneralIsBonus = 100
-                if self._map.generals[player.index] is not None:
-                    curScore += knowsWhereEnemyGeneralIsBonus
+            enGen = self._map.generals[player.index]
 
-                curScore += player.aggression_factor
+            knowsWhereEnemyGeneralIsBonus = 100
+            if enGen is not None:
+                curScore += knowsWhereEnemyGeneralIsBonus
 
-                # target players with better economies first
-                #curScore += (player.tileCount + player.cityCount * 20 - player.standingArmy ** 0.88) / 4
-
-                if generalPlayer.standingArmy > player.standingArmy * 0.7:
-                    # target players with better economies first more when we are winning
-                    curScore += player.cityCount * 20
-                    curScore += player.tileCount
-                    # 30% bonus for winning
-                    curScore *= 1.3
-
-                if player.knowsKingLocation:
-                    curScore += 150
-                    curScore *= 2
-
-                if self.generalApproximations[player.index][3] is not None:
-                    genDist = self.distance_from_general(self.generalApproximations[player.index][3])
-                else:
-                    logging.info("           wot {} didn't have a gen approx tile???".format(self._map.usernames[targetPlayer]))
-                    genDist = self.euclidDist(self.generalApproximations[player.index][0], self.generalApproximations[player.index][1], self.general.x, self.general.y)
-                curScore = curScore + 2 * curScore / (max(10, genDist) - 2)
-
-                if player.index != self.targetPlayer:
-                    curScore = curScore / 2
-
-                # deprio small players
-                if (player.tileCount < 4 and player.general is None) or (player.general is not None and player.general.army > player.standingArmy * 0.6):
-                    curScore = -100
-
-                # losing massively to this player? -200 to target even single tile players higher than big fish
-                if self._map.remainingPlayers > 2 and not self.winning_on_army(0.7, False, player.index) and not self.winning_on_economy(0.7, 20, player.index):
-                    curScore = -200
-
-                if 'PurdBlob' in self._map.usernames[player.index]:
-                    curScore += 300
-
-                if 'PurdPath' in self._map.usernames[player.index]:
+            if player.leftGame and not player.dead:
+                armyEnGenCutoffFactor = 0.75
+                if enGen is not None:
+                    if enGen.army < generalPlayer.standingArmy ** armyEnGenCutoffFactor:
+                        self.viewInfo.addAdditionalInfoLine(f'leftGame GEN bonus army generalPlayer.standingArmy ** {armyEnGenCutoffFactor} {generalPlayer.standingArmy ** armyEnGenCutoffFactor} > enGen.army {enGen.army}')
+                        curScore += 300
+                    else:
+                        curScore += 2500 // player.tileCount
+                factor = 0.95
+                if generalPlayer.standingArmy > player.standingArmy ** factor:
+                    self.viewInfo.addAdditionalInfoLine(f'leftGame bonus army generalPlayer.standingArmy {generalPlayer.standingArmy} > player.standingArmy ** {factor} {player.standingArmy ** factor}')
                     curScore += 200
+                factor = 0.88
+                if generalPlayer.standingArmy > player.standingArmy ** factor:
+                    self.viewInfo.addAdditionalInfoLine(f'leftGame bonus army generalPlayer.standingArmy {generalPlayer.standingArmy} > player.standingArmy ** {factor} {player.standingArmy ** factor}')
+                    curScore += 100
+                factor = 0.81
+                if generalPlayer.standingArmy > player.standingArmy ** factor:
+                    self.viewInfo.addAdditionalInfoLine(f'leftGame bonus army generalPlayer.standingArmy {generalPlayer.standingArmy} > player.standingArmy ** {factor} {player.standingArmy ** factor}')
+                    curScore += 50
+                factor = 0.75
+                if generalPlayer.standingArmy > player.standingArmy ** factor:
+                    self.viewInfo.addAdditionalInfoLine(f'leftGame bonus army generalPlayer.standingArmy {generalPlayer.standingArmy} > player.standingArmy ** {factor} {player.standingArmy ** factor}')
+                    curScore += 30
 
-                if curScore > playerScore and player.index not in self._map.teammates:
-                    playerScore = curScore
-                    targetPlayer = player.index
-                self.playerTargetScores[player.index] = curScore
+            alreadyTargetingBonus = 120
+            if player.index == self.targetPlayer:
+                curScore += alreadyTargetingBonus
+
+            curScore += player.aggression_factor
+
+            # target players with better economies first
+            #curScore += (player.tileCount + player.cityCount * 20 - player.standingArmy ** 0.88) / 4
+
+            if generalPlayer.standingArmy > player.standingArmy * 0.7:
+                # target players with better economies first more when we are winning
+                curScore += player.cityCount * 20
+                curScore += player.tileCount
+                # 30% bonus for winning
+                curScore *= 1.3
+
+            if player.knowsKingLocation:
+                curScore += 150
+                curScore *= 2
+
+            if self.generalApproximations[player.index][3] is not None:
+                genDist = self.distance_from_general(self.generalApproximations[player.index][3])
+            else:
+                logging.info("           wot {} didn't have a gen approx tile???".format(self._map.usernames[targetPlayer]))
+                genDist = self.euclidDist(self.generalApproximations[player.index][0], self.generalApproximations[player.index][1], self.general.x, self.general.y)
+            curScore = curScore + 2 * curScore / (max(10, genDist) - 2)
+
+            if player.index != self.targetPlayer:
+                curScore = curScore / 2
+
+            # deprio small players
+            if (player.tileCount < 4 and player.general is None) or (player.general is not None and player.general.army > player.standingArmy * 0.6):
+                curScore = -100
+
+            # losing massively to this player? -200 to target even single tile players higher than big fish
+            if self._map.remainingPlayers > 2 and not self.winning_on_army(0.7, False, player.index) and not self.winning_on_economy(0.7, 20, player.index):
+                curScore = -200
+
+            if 'PurdBlob' in self._map.usernames[player.index]:
+                curScore += 300
+
+            if 'PurdPath' in self._map.usernames[player.index]:
+                curScore += 200
+
+            if curScore > playerScore and player.index not in self._map.teammates:
+                playerScore = curScore
+                targetPlayer = player.index
+            self.playerTargetScores[player.index] = curScore
 
         # don't target big fish when there are other players left
         if self._map.remainingPlayers > 2 and playerScore < -100:
@@ -5912,8 +5941,8 @@ class EklipZBot(object):
             self.viewInfo.color_path(PathColorer(self.target_player_gather_path, 60, 50, 00, alpha, alphaDec, minAlpha))
 
         if self.board_analysis.intergeneral_analysis is not None:
-            self.viewInfo.add_map_zone(self.board_analysis.core_play_area_matrix, (100, 255, 100), alpha=50)
-            self.viewInfo.add_map_zone(self.board_analysis.extended_play_area_matrix, (255, 220, 0), alpha=50)
+            self.viewInfo.add_map_zone(self.board_analysis.core_play_area_matrix, (0, 0, 0), alpha=40)
+            # self.viewInfo.add_map_zone(self.board_analysis.extended_play_area_matrix, (255, 220, 0), alpha=50)
             self.viewInfo.add_map_division(self.board_analysis.extended_play_area_matrix, (255, 230, 0), alpha=100)
 
     def get_move_if_afk_player_situation(self) -> Move | None:

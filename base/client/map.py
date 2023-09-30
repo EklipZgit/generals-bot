@@ -33,8 +33,16 @@ class Player(object):
         self.index: int = player_index
         self.stars = 0
         self.score: int = 0
+
         self.scoreDelta: int = 0
         """The player score delta since last move."""
+
+        self.tileDelta: int = 0
+        """The player tile delta since last move."""
+
+        self.unexplainedTileDelta: int = 0
+        """The tile delta unexplained by known moves."""
+
         self.tiles: typing.List[Tile] = []
         self.tileCount: int = 0
         self.standingArmy: int = 0
@@ -45,10 +53,30 @@ class Player(object):
         self.delta25score: int = 0
         self.actualScoreDelta: int = 0
         self.expectedScoreDelta: int = 0
+
+        self.fighting_with_player_history: typing.List[int] = []
+
         self.fighting_with_player: int = -1
+        """
+        If player score deltas show players fighting with each other on this turn, then this will be set. 
+        If multiple players are found that all match deltas, then tiebreaks are performed based on recent historical
+        fights. If the player is clearly fighting with someone but the deltas dont line up because a third party is
+        involved, then this value will be unmodified from previous turn, usually continuing to indicate the last player
+        they were already fighting with.
+        """
+
+        self.last_move: typing.Tuple[Tile | None, Tile | None] | None = None
+        """Populated by the map based on tile and player deltas IF the map can determine FOR SURE what move the player made. (source, dest). One or the other may be null if one can be determined but the other can't."""
+
         self.dead = False
+        """Set to true once a player is killed, or after they disconnect and the 50-turn-disconnect timer expires."""
+
         self.leftGame = False
+        """True after a player has left the game."""
+
         self.leftGameTurn: int = -1
+        """The turn the player left the game. Useful to know how many turns to attempt a capture are left."""
+
         self.capturedBy = None
         self.knowsKingLocation = False
         self.aggression_factor: int = 0
@@ -658,6 +686,8 @@ class MapBase(object):
             # print("player {}".format(player.index))
             player.scoreDelta = self.scores[player.index].total - player.score
             player.score = self.scores[player.index].total
+            player.tileDelta = self.scores[player.index].tiles - player.tileCount
+            player.unexplainedTileDelta = player.tileDelta
             player.tileCount = self.scores[player.index].tiles
             player.standingArmy = self.scores[player.index].total - self.scores[player.index].tiles
 
@@ -866,6 +896,8 @@ class MapBase(object):
             self.scoreHistory[i] = self.scoreHistory[i - 1]
         self.scoreHistory[0] = self.scores
 
+        self._update_player_information()
+
         # right now all tile deltas are completely raw, as applied by the raw server update, with the exception of lost-vision-fog.
 
         if not self.USE_OLD_MOVEMENT_DETECTION:
@@ -920,7 +952,6 @@ class MapBase(object):
 
         # we know our players city count + his general because we can see all our own cities
         self.players[self.player_index].cityCount = len(self.players[self.player_index].cities) + 1
-        self._update_player_information()
 
         return self
 
@@ -1030,7 +1061,7 @@ class MapBase(object):
         tile.isMountain = True
         tile.isGeneral = False
 
-    def set_tile_moved(self, toTile: Tile, fromTile: Tile, fullFromDiffCovered = True, fullToDiffCovered = True):
+    def set_tile_probably_moved(self, toTile: Tile, fromTile: Tile, fullFromDiffCovered = True, fullToDiffCovered = True, byPlayer = -1):
         """
         Sets the tiles delta.armyMoveHeres appropriately based on the *DiffCovered params.
         Updates the delta.fromTile and delta.toTile.
@@ -1040,9 +1071,13 @@ class MapBase(object):
         @param fromTile:
         @param fullFromDiffCovered: Whether you determined the movement accounts for the entirety of the from-tiles army delta diff, excluding it from any future calculations this turn.
         @param fullToDiffCovered: Whether you determined the movement accounts for the entirety of the to-tiles army delta diff, excluding it from any future calculations this turn.
+        @param byPlayer: if not provided will be determined based on fromTile.delta.oldOwner. Provide this for moves from fog where oldOwner might be incorrect.
         @return:
         """
-        logging.info(f'MOVE {repr(fromTile)} -> {repr(toTile)}')
+        if byPlayer == -1:
+            byPlayer = fromTile.delta.oldOwner
+
+        logging.info(f'MOVE {repr(fromTile)} -> {repr(toTile)} (fullFromDiffCovered {fullFromDiffCovered}, fullToDiffCovered {fullToDiffCovered})')
         self.army_moved_grid[fromTile.y][fromTile.x] = not fullFromDiffCovered
         if not self.USE_OLD_MOVEMENT_DETECTION:
             fromTile.delta.armyMovedHere = not fullFromDiffCovered
@@ -1063,8 +1098,8 @@ class MapBase(object):
             toTile.delta.armyDelta += expectedDelta
             if toTile.army < 0:
                 toTile.army = 0 - toTile.army
-                toTile.player = fromTile.player
-                toTile.delta.newOwner = fromTile.player
+                toTile.player = byPlayer
+                toTile.delta.newOwner = byPlayer
                 # toTile.delta.unexplainedDelta = 0
 
         # prefer leaving enemy move froms, as they're harder for armytracker to track since it doesn't have the last move spelled out like it does for friendly moves.
@@ -1072,6 +1107,45 @@ class MapBase(object):
             toTile.delta.fromTile = fromTile
         fromTile.delta.toTile = toTile
         logging.info(f'  done: {repr(fromTile)} -> {repr(toTile)}')
+
+    def set_tile_moved(self, toTile: Tile, fromTile: Tile, fullFromDiffCovered = True, fullToDiffCovered = True, byPlayer=-1):
+        """
+        Only call this when you KNOW the tile moved to the dest location.
+
+        Sets the tiles delta.armyMoveHeres appropriately based on the *DiffCovered params.
+        Updates the delta.fromTile and delta.toTile.
+        If either tile is not visible, corrects the armyDelta, unexplainedDelta, newOwner, etc in the delta.
+        Sets the players last move.
+
+        @param toTile:
+        @param fromTile:
+        @param fullFromDiffCovered: Whether you determined the movement accounts for the entirety of the from-tiles army delta diff, excluding it from any future calculations this turn.
+        @param fullToDiffCovered: Whether you determined the movement accounts for the entirety of the to-tiles army delta diff, excluding it from any future calculations this turn.
+        @param byPlayer: if not provided will be determined based on fromTile.delta.oldOwner. Provide this for moves from fog where oldOwner might be incorrect.
+        @return:
+        """
+
+        if byPlayer == -1:
+            byPlayer = fromTile.delta.oldOwner
+
+        self.set_tile_probably_moved(
+            toTile,
+            fromTile,
+            fullFromDiffCovered,
+            fullToDiffCovered
+        )
+
+        movingPlayer = self.players[byPlayer]
+
+        if toTile.delta.oldOwner != toTile.player and toTile.player == byPlayer:
+            movingPlayer.unexplainedTileDelta -= 1
+            logging.info(f'   captured a tile, dropping the tile delta from unexplained for capturer p{movingPlayer.index} ({movingPlayer.unexplainedTileDelta + 1}->{movingPlayer.unexplainedTileDelta}).')
+            if toTile.delta.oldOwner != -1:
+                attackedPlayer = self.players[toTile.delta.oldOwner]
+                attackedPlayer.unexplainedTileDelta += 1
+                logging.info(f'   captured a tile, dropping the tile delta from unexplained for capturee p{attackedPlayer.index} ({attackedPlayer.unexplainedTileDelta - 1}->{attackedPlayer.unexplainedTileDelta}).')
+
+        movingPlayer.last_move = (fromTile, toTile)
 
     def _is_partial_army_movement_delta_match(self, source: Tile, dest: Tile):
         if source.delta.imperfectArmyDelta:
@@ -1081,6 +1155,9 @@ class MapBase(object):
         if dest.delta.imperfectArmyDelta:
             if source.delta.unexplainedDelta != 0:
                 return True
+            return False
+
+        if self._move_would_violate_known_player_deltas(source, dest):
             return False
 
         deltaToDest = self._get_expected_delta_amount_toward(source, dest)
@@ -1094,6 +1171,8 @@ class MapBase(object):
         if source.delta.imperfectArmyDelta:
             return False
         if dest.delta.imperfectArmyDelta:
+            return False
+        if self._move_would_violate_known_player_deltas(source, dest):
             return False
 
         deltaToDest = self._get_expected_delta_amount_toward(source, dest)
@@ -1260,7 +1339,8 @@ class MapBase(object):
                     dest,
                     src,
                     fullFromDiffCovered=src.delta.unexplainedDelta == 0,
-                    fullToDiffCovered=dest.delta.unexplainedDelta == 0)
+                    fullToDiffCovered=dest.delta.unexplainedDelta == 0,
+                    byPlayer=self.player_index)
 
         # # TODO for debugging only
         # tilesWithDiffs = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
@@ -1293,7 +1373,7 @@ class MapBase(object):
                     continue
 
                 potentialSources = []
-                destWasAttackedNonLethalOrVacatedOrUnmoved = destTile.delta.armyDelta <= 0 #and destTile.delta.oldOwner == destTile.delta.newOwner
+                destWasAttackedNonLethalOrVacatedOrUnmoved = destTile.delta.unexplainedDelta <= 0 #and destTile.delta.oldOwner == destTile.delta.newOwner
                 if destWasAttackedNonLethalOrVacatedOrUnmoved:
                     continue
 
@@ -1364,7 +1444,7 @@ class MapBase(object):
                     if potentialSource.delta.oldOwner == self.player_index:
                         continue
                     if potentialSource.delta.armyDelta > 0:
-                        # then this was DEFINITELY gathered to.
+                        # then this was DEFINITELY gathered to, which would make this not a potential source. 2v2 violates this
                         continue
                     sourceWasAttackedNonLethalOrVacated = potentialSource.delta.armyDelta < 0
                     # if  sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
@@ -1546,6 +1626,43 @@ class MapBase(object):
                         player.fighting_with_player = otherPlayer.index
             else:
                 player.fighting_with_player = -1
+
+    def _move_would_violate_known_player_deltas(self, source: Tile, dest: Tile):
+        knowSourceOwner = source.was_visible_last_turn() or self.remainingPlayers == 2 and source.discovered and source.player >= 0
+        if knowSourceOwner:
+            sourceOwner = self.players[source.delta.oldOwner]
+            knowDestOwner = dest.was_visible_last_turn() or self.remainingPlayers == 2 and dest.discovered and dest.player >= 0
+            if knowDestOwner:
+                destOwner = self.players[dest.delta.oldOwner]
+                if sourceOwner == destOwner:
+                    # ok we know the players are fighting with each other, we know one move attacked the source tile
+                    if sourceOwner.unexplainedTileDelta == 1:
+                        logging.info(f'move {str(source)}->{str(dest)} by p{sourceOwner.index} can be discarded '
+                                     f'outright, as it would not have captured a tile and the player '
+                                     f'DID capture a tile.')
+
+                        return True
+
+                elif self.remainingPlayers == 2 and destOwner.unexplainedTileDelta == 1:
+                    logging.info(f'move {str(source)}->{str(dest)} by p{sourceOwner.index} can be discarded '
+                                 f'outright, as it would have captured a tile and instead dest player'
+                                 f' p{destOwner.index} gained tiles.')
+                    return True
+
+                elif self.remainingPlayers == 2 and sourceOwner.unexplainedTileDelta < 0:
+                    logging.info(f'move {str(source)}->{str(dest)} by p{sourceOwner.index} can be discarded '
+                                 f'outright, as it would have captured a tile and instead they lost at '
+                                 f'least one net tile. This should be accurate unless the player is being '
+                                 f'attacked by more than two players at once.')
+                    return True
+
+                elif self.remainingPlayers == 2 and sourceOwner.unexplainedTileDelta == 0:
+                    logging.info(f'move {str(source)}->{str(dest)} by p{sourceOwner.index} is sketchy but allowed, '
+                                 f'as it would have captured a tile and they did not gain tiles. TODO make this '
+                                 f'more of a spectrum and weight these possible moves lower.')
+
+        return False
+
 
 class Map(MapBase):
     """

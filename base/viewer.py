@@ -1054,10 +1054,10 @@ class GeneralsViewer(object):
         return color_font
 
     def get_tile_color(self, tile) -> typing.Tuple[int, int, int]:
-        color = WHITE
+        pColor = WHITE
 
         if tile.isMountain:  # Mountain
-            color = BLACK
+            pColor = BLACK
         elif tile.player >= 0:
             playercolor = PLAYER_COLORS[tile.player]
             colorR = playercolor[0]
@@ -1075,38 +1075,28 @@ class GeneralsViewer(object):
                     colorR = colorR / 2 + 20
                     colorG = colorG / 2 + 20
                     colorB = colorB / 2 + 20
-            color = (colorR, colorG, colorB)
+            pColor = (colorR, colorG, colorB)
         elif tile.isNotPathable:  # Obstacle
-            color = GRAY_DARK
+            pColor = GRAY_DARK
         elif not tile.discovered:
-            color = UNDISCOVERED_GRAY
-        elif tile.isCity and tile.player == -1:
-            color = NEUT_CITY_GRAY
+            pColor = UNDISCOVERED_GRAY
+        elif tile.player == -1 and (tile.army != 0 or tile.isCity):
+            pColor = NEUT_CITY_GRAY
             if not tile.visible:
-                colorR = color[0] / 2 + 40
-                colorG = color[1] / 2 + 40
-                colorB = color[2] / 2 + 40
-                color = (colorR, colorB, colorG)
+                colorR = pColor[0] / 2 + 40
+                colorG = pColor[1] / 2 + 40
+                colorB = pColor[2] / 2 + 40
+                pColor = (colorR, colorB, colorG)
 
         elif not tile.visible:
-            color = GRAY
+            pColor = GRAY
 
         # adjust color by map divisions:
-        # for (divisionMatrix, (r, g, b), alpha) in self._viewInfo._divisions:
-        #     divisionLine = DirectionalShape(self.get_line(r, g, b, width=2), rotateInitial=90)
-        #
-        #     def draw_border_func(tile):
-        #         for move in tile.movable:
-        #             if move.isMountain or move.isNotPathable:
-        #                 continue
-        #
-        #             if divisionMatrix[tile] != divisionMatrix[move]:
-        #                 self.draw_between_tiles(divisionLine, tile, move, alpha=alpha)
-        #     if len(self._viewInfo.board_analysis.intergeneral_analysis.shortestPathWay.tiles) > 0:
-        #         startTiles = [t for t in self._viewInfo.board_analysis.intergeneral_analysis.shortestPathWay.tiles]
-        #         SearchUtils.breadth_first_foreach(self._map, startTiles, 1000, draw_border_func)
+        for (divisionMatrix, (r, g, b), alpha) in self._viewInfo._zones:
+            if tile in divisionMatrix:
+                pColor = rescale_color(alpha, 0, 255, pColor, (r, g, b))
 
-        return color
+        return pColor
 
     def get_color_from_target_style(self, targetStyle: TargetStyle) -> typing.Tuple[int, int, int]:
         if targetStyle == TargetStyle.RED:

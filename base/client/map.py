@@ -91,11 +91,18 @@ class Player(object):
 class TileDelta(object):
     def __init__(self):
         # Public Properties
-        self.oldOwner = -1
         self.oldArmy: int = 0
+        self.oldOwner = -1
         self.newOwner = -1
         self.gainedSight = False
+        """True on turns where the player JUST gained sight of the tile, not when the tile was already visible the turn before."""
+
         self.lostSight = False
+        """True on turns where the player JUST lost sight of the tile, and no others."""
+
+        self.discovered: bool = False
+        """ True on the turn a tile is discovered and ONLY that turn."""
+
         self.imperfectArmyDelta = False
         """True when we either just gained vision of the tile or dont have vision of the tile. Means armyDelta can be ignored and fudged."""
 
@@ -391,7 +398,9 @@ class Tile(object):
         if not self.visible:
             self.delta.imperfectArmyDelta = True
         if tile >= TILE_MOUNTAIN:
-            self.discovered = True
+            if not self.discovered:
+                self.discovered = True
+                self.delta.discovered = True
             self.lastSeen = map.turn
             if not self.visible:
                 self.delta.gainedSight = True
@@ -439,7 +448,7 @@ class Tile(object):
                 self.player = -1
 
         # can only 'expect' army deltas for tiles we can see. Visible is already calculated above at this point.
-        if self.visible:
+        if self.visible and not self.delta.discovered:
             expectedDelta: int = 0
             if (self.isCity or self.isGeneral) and self.player >= 0 and map.is_city_bonus_turn:
                 expectedDelta += 1
@@ -1248,6 +1257,11 @@ class MapBase(object):
 
         source, dest, move_half = last_player_index_submitted_move
 
+        # source.delta.imperfectArmyDelta = False
+        # dest.delta.imperfectArmyDelta = False
+        source.delta.armyMovedHere = False
+        dest.delta.armyMovedHere = False
+
         logging.info(
             f"    tile (last_player_index_submitted_move) probably moved from {str(source)} to {str(dest)} with move_half {move_half}")
         # don't use the delta getter function because that operates off of the observed delta instead of what
@@ -1326,6 +1340,7 @@ class MapBase(object):
                     # self.unaccounted_tile_diffs[source] = amountAttacked  # negative number
 
                     source.delta.unexplainedDelta = amountAttacked
+                    source.delta.armyMovedHere = True
                     # TODO this is wrong...? Need to account for the amount of dest delta we think made it...?
                     # dest.delta.unexplainedDelta = 0
             else:
@@ -1336,7 +1351,6 @@ class MapBase(object):
                     logging.warning(
                         f'MOVE {str(last_player_index_submitted_move)} ? src attacked for amountAttacked {amountAttacked} WITHOUT priority based on actualSrcDelta {actualSrcDelta} vs expectedSourceDelta {expectedSourceDelta}')
                 elif destHasEnPriorityDeltasNearby:
-                    # if we DIDNT have priority (this is hit or miss in FFA, tho).
                     armyMadeItToDest = dest.delta.unexplainedDelta
                     amountAttacked = expectedDestDelta - armyMadeItToDest
                     if source.army == 0:
@@ -1349,8 +1363,10 @@ class MapBase(object):
                     # TODO what to do here?
                     logging.warning(
                         f'???MOVE {str(last_player_index_submitted_move)} ? player had priority but we still had a dest delta as well as source delta...?')
+                    dest.delta.armyMovedHere = True
 
                 source.delta.unexplainedDelta = amountAttacked  # negative number
+                source.delta.armyMovedHere = True
                 if not destArmyInterferedToo:
                     # intentionally do nothing about the dest tile diff if we found a source tile diff, as it is really unlikely that both source and dest get interfered with on same turn.
                     # self.army_moved(army, dest, trackingArmies)
@@ -1371,8 +1387,10 @@ class MapBase(object):
                 # the source tile could have been attacked for non-lethal damage BEFORE the move was made to target.
                 source.delta.unexplainedDelta = unexplainedDelta
                 source.delta.imperfectArmyDelta = True
+                source.delta.armyMovedHere = True
 
             dest.delta.unexplainedDelta = unexplainedDelta
+            dest.delta.armyMovedHere = True
 
             if sourceHasEnPriorityDeltasNearby:
                 logging.info(
@@ -1478,30 +1496,13 @@ class MapBase(object):
             self.players[self.player_index].last_move = self._apply_last_player_move(self.last_player_index_submitted_move)
             if self.last_player_index_submitted_move is not None:
                 src, dest, move_half = self.last_player_index_submitted_move
-                potentialSourceInterference = False
-                """
-                We know we have vision around our source tiles so nobody can interfere with source from fog within
-                one turn. If we eliminate deltas on all tiles around our source then we can safely assert
-                that the only tile that could have interfered with the army movement would be the dest tile
-                itself, which should anihilate with our source army and means we can fully exclude the source from
-                all future calcs.
-                """
-                for tile in src.movable:
-                    if tile == dest:
-                        continue
-                    if tile.delta.oldOwner == self.player_index:
-                        continue
-                    if tile.delta.unexplainedDelta != 0:
-                        potentialSourceInterference = True
-
-                potentialSourceInterference = potentialSourceInterference and (src.delta.unexplainedDelta != 0)
 
                 # already logged
                 self.set_tile_moved(
                     dest,
                     src,
-                    fullFromDiffCovered=not potentialSourceInterference,
-                    fullToDiffCovered=dest.delta.unexplainedDelta == 0,
+                    fullFromDiffCovered=not src.delta.armyMovedHere,
+                    fullToDiffCovered=not dest.delta.armyMovedHere,
                     byPlayer=self.player_index)
 
         # # TODO for debugging only

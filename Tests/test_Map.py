@@ -61,12 +61,14 @@ class MapTests(TestBase):
                     failures.append(f'(pMap {player} tile {str(tile)}) expected player {tile.player} on {repr(tile)}, found {playerTile.player} on {repr(playerTile)}')
                 if playerTile.isCity != tile.isCity:
                     failures.append(f'(pMap {player} tile {str(tile)}) expected isCity {tile.isCity} on {repr(tile)}, found {playerTile.isCity} on {repr(playerTile)}')
-                if playerTile.delta.armyDelta != tile.delta.armyDelta:
-                    failures.append(f'(pMap {player} tile {str(tile)}) expected tile.delta.armyDelta {tile.delta.armyDelta} on {repr(tile)}, found {playerTile.delta.armyDelta} on {repr(playerTile)}')
-                if playerTile.delta.oldArmy != tile.delta.oldArmy:
-                    failures.append(f'(pMap {player} tile {str(tile)}) expected delta.oldArmy {tile.delta.oldArmy} on {repr(tile)}, found {playerTile.delta.oldArmy} on {repr(playerTile)}')
-                if playerTile.delta.oldOwner != tile.delta.oldOwner:
-                    failures.append(f'(pMap {player} tile {str(tile)}) expected delta.oldOwner {tile.delta.oldOwner} on {repr(tile)}, found {playerTile.delta.oldOwner} on {repr(playerTile)}')
+                if not playerTile.delta.discovered:
+                    # these asserts are not valid the turn of discovery...?
+                    if playerTile.delta.armyDelta != tile.delta.armyDelta:
+                        failures.append(f'(pMap {player} tile {str(tile)}) expected tile.delta.armyDelta {tile.delta.armyDelta} on {repr(tile)}, found {playerTile.delta.armyDelta} on {repr(playerTile)}')
+                    if playerTile.delta.oldArmy != tile.delta.oldArmy:
+                        failures.append(f'(pMap {player} tile {str(tile)}) expected delta.oldArmy {tile.delta.oldArmy} on {repr(tile)}, found {playerTile.delta.oldArmy} on {repr(playerTile)}')
+                    if playerTile.delta.oldOwner != tile.delta.oldOwner:
+                        failures.append(f'(pMap {player} tile {str(tile)}) expected delta.oldOwner {tile.delta.oldOwner} on {repr(tile)}, found {playerTile.delta.oldOwner} on {repr(playerTile)}')
                 if playerTile.delta.newOwner != tile.delta.newOwner:
                     failures.append(f'(pMap {player} tile {str(tile)}) expected delta.newOwner {tile.delta.newOwner} on {repr(tile)}, found {playerTile.delta.newOwner} on {repr(playerTile)}')
                 if playerTile not in skipFromToCollisionTiles:
@@ -139,8 +141,8 @@ class MapTests(TestBase):
 
             # renderTurnBeforeSim = True
             # renderTurnBeforePlayers = True
-            renderP0 = True
-            # renderP1 = True
+            # renderP0 = True
+            renderP1 = True
 
             def mapRenderer():
                 if map.turn >= startTurn:
@@ -714,12 +716,13 @@ C5
                                     # f 357
                                     # f 357
                                     # f 357
+                                    # f 181
+                                    # f 0
                                     self.run_out_of_fog_collision_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn, includeFogKnowledge=includeFogKnowledge)
 
     def test_run_one_off_out_of_fog_collision_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        self.run_out_of_fog_collision_test(debugMode=debugMode, aArmy=20, bArmy=10, aMove=(1, 0), bMove=(-1, 0), turn=96, includeFogKnowledge=False)
-        self.run_out_of_fog_collision_test(debugMode=debugMode, aArmy=10, bArmy=10, aMove=(0, 1), bMove=(1, 0), turn=97, includeFogKnowledge=True)
+        self.run_out_of_fog_collision_test(debugMode=debugMode, aArmy=9, bArmy=9, aMove=(0, 1), bMove=(-1, 0), turn=96, includeFogKnowledge=False)
 
     def test_generate_all_adjacent_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -738,11 +741,12 @@ C5
                                 # f 474
                                 # f 376
                                 # f 295
+                                # 391
                                 self.run_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_adj_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        self.run_adj_test(debugMode=debugMode, aArmy=20, bArmy=12, aMove=(-1, 0), bMove=(-1, 0), turn=96)
+        self.run_adj_test(debugMode=debugMode, aArmy=8, bArmy=10, aMove=(1, 0), bMove=(0, 1), turn=97)
 
     def test_generate_all_diagonal_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False

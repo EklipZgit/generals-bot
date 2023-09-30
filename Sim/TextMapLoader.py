@@ -145,6 +145,22 @@ class TextMapLoader(object):
                 player = 6
             case 'h':
                 player = 7
+            case 'i':
+                player = 8
+            case 'j':
+                player = 9
+            case 'k':
+                player = 10
+            case 'l':
+                player = 11
+            case 'm':
+                player = 12
+            case 'n':
+                player = 13
+            case 'o':
+                player = 14
+            case 'p':
+                player = 15
             case 'C':
                 tile.tile = -1
             case 'N':
@@ -194,6 +210,14 @@ class TextMapLoader(object):
             ('f', 5),
             ('g', 6),
             ('h', 7),
+            ('i', 8),
+            ('j', 9),
+            ('k', 10),
+            ('l', 11),
+            ('m', 12),
+            ('n', 13),
+            ('o', 14),
+            ('p', 15),
         ]
 
     @staticmethod

@@ -249,3 +249,42 @@ class CityGatherTests(TestBase):
 
         city = self.get_player_tile(14, 19, simHost.sim, general.player)
         self.assertEqual(general.player, city.player)
+    
+    def test_should_retake_city_rapidly_and_not_throw_small_armies_at_it(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_retake_city_rapidly_and_not_throw_small_armies_at_it___t0hg-eIwL---1--329.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 329, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=329)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=35)
+        self.assertIsNone(winner)
+
+        city = self.get_player_tile(10, 11, simHost.sim, general.player)
+        self.assertEqual(general.player, city.player)
+    
+    def test_should_not_fucking_sit_and_watch_itself_die_while_opponent_sits_on_distant_but_defensable_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_fucking_sit_and_watch_itself_die_while_opponent_sits_on_distant_but_defensable_city___gxNegaHi4---0--502.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 502, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=502)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
+        self.assertIsNone(winner)
+
+        # TODO add asserts for should_not_fucking_sit_and_watch_itself_die_while_opponent_sits_on_distant_but_defensable_city

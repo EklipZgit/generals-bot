@@ -466,6 +466,20 @@ function Start-WindowsTerminalLiveBots {
         }
     }
     <#
+    Human
+    #>
+    wt -w LiveBots new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-Human -game 1v1, 1v1, ffa, ffa, 1v1, 1v1, 1v1 -sleepMax 30'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+    <#
     private live
     #>
     wt -w LiveBots new-tab pwsh -NoExit -c { 
@@ -577,11 +591,12 @@ function Create-Checkpoint {
 function Run-Human {
     Param(
         $game = @('1v1', 'ffa', '1v1'),
-        $sleepMax = 3
+        $sleepMax = 3,
+        [switch] $left
     )
     $splat = @{
         noui = $false
-        right = $true
+        right = -not $left
     }
     while ($true)
     {

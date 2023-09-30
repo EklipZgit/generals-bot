@@ -869,3 +869,21 @@ class DefenseTests(TestBase):
 
         otherSideOfChokeCity = self.get_player_tile(13, 1, simHost.sim, general.player)
         self.assertEqual(general.player, otherSideOfChokeCity.player)
+    
+    def test_should_attempt_to_finish_threat_gath_at_distance(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_attempt_to_finish_threat_gath_at_distance___pCCBjXEVT---0--247.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 247, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=247)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '5,10->6,10->6,11->6,12->6,13->6,14->6,15')
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=10)
+        self.assertIsNone(winner)

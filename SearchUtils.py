@@ -1862,6 +1862,9 @@ def breadth_first_foreach(map: MapBase, startTiles, maxDepth, foreachFunc, negat
     @param bypassDefaultSkip: If true, does NOT skip mountains / undiscovered obstacles
     @return:
     """
+    if len(startTiles) == 0:
+        return
+
     frontier = deque()
     globalVisited = new_value_grid(map, False)
     if skipTiles is not None:
@@ -1933,6 +1936,9 @@ def breadth_first_foreach_dist(map, startTiles, maxDepth, foreachFunc, negativeF
     @param bypassDefaultSkip: If true, does NOT skip mountains / undiscovered obstacles
     @return:
     """
+    if len(startTiles) == 0:
+        return
+
     frontier = deque()
     globalVisited = new_value_grid(map, False)
     if skipTiles is not None:

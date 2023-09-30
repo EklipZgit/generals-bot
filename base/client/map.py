@@ -10,6 +10,8 @@ import typing
 import uuid
 from collections import deque
 
+import BotLogging
+
 LEFT_GAME_FFA_CAPTURE_LIMIT = 50
 """How many turns after an FFA player disconnects that you can capture their gen."""
 
@@ -41,6 +43,9 @@ class Player(object):
         self.cityGainedTurn: int = 0
         self.delta25tiles: int = 0
         self.delta25score: int = 0
+        self.actualScoreDelta: int = 0
+        self.expectedScoreDelta: int = 0
+        self.fighting_with_player: int = -1
         self.dead = False
         self.leftGame = False
         self.leftGameTurn: int = -1
@@ -261,6 +266,22 @@ class Tile(object):
                 return 'g'
             case 7:
                 return 'h'
+            case 8:
+                return 'i'
+            case 9:
+                return 'j'
+            case 10:
+                return 'k'
+            case 11:
+                return 'l'
+            case 12:
+                return 'm'
+            case 13:
+                return 'n'
+            case 14:
+                return 'o'
+            case 15:
+                return 'p'
 
     def __repr__(self):
         vRep = self.get_value_representation()
@@ -370,24 +391,24 @@ class Tile(object):
                     # we lost SIGHT of enemy tile, IF this tile has positive army, then army could have come from here TO another tile.
                     logging.info(f'enemy tile adjacent to vision lost was lost, army moved here true for {str(self)}')
                     # armyMovedHere = True
-            elif tile == TILE_MOUNTAIN:
-                if not self.isMountain:
-                    for movableTile in self.movable:
-                        if self in movableTile.movable:
-                            movableTile.movable.remove(self)
-
-                self.isMountain = True
-
-                if self.player != -1 or self.isCity or self.army != 0:
-                    # mis-predicted city.
-                    self.isCity = False
-                    self.player = -1
-                    self.army = 0
-
             elif tile >= TILE_EMPTY:
                 self._player = tile
 
             self.tile = tile
+
+        if tile == TILE_MOUNTAIN:
+            if not self.isMountain:
+                for movableTile in self.movable:
+                    if self in movableTile.movable:
+                        movableTile.movable.remove(self)
+
+                self.isMountain = True
+
+            if self.player != -1 or self.isCity or self.army != 0:
+                # mis-predicted city.
+                self.isCity = False
+                self.army = 0
+                self.player = -1
 
         # can only 'expect' army deltas for tiles we can see. Visible is already calculated above at this point.
         if self.visible:
@@ -423,24 +444,10 @@ class Tile(object):
             if self.delta.armyDelta != 0:
                 armyMovedHere = True
 
-        if isCity:
+        if isCity and not self.isCity:
             self.isCity = True
             self.isGeneral = False
-            # if self in map.cities:
-            #	map.cities.remove(self)
-            # map.cities.append(self)
-            # TODO remove, this should NOT happen here
-            if not self in map.cities:
-                map.cities.append(self)
 
-            # playerObj = map.players[self._player]
-
-            # if not self in playerObj.cities:
-            #	playerObj.cities.append(self)
-
-            # TODO remove, this should NOT happen here
-            if self in map.generals:
-                map.generals[self._general_index] = None
         elif isGeneral:
             playerObj = map.players[self._player]
             playerObj.general = self
@@ -553,21 +560,21 @@ class MapBase(object):
         self.generals: typing.List[typing.Union[Tile, None]] = [
             None
             for x
-            in range(8)]
+            in range(16)]
 
         self.init_grid_movable()
 
-        self._turn: int = turn  # Integer Turn # (1 turn / 0.5 seconds)
         self.is_city_bonus_turn: bool = turn & 1 == 0
         self.is_army_bonus_turn: bool = turn % 50 == 0
+        
+        self._turn: int = turn  # Integer Turn # (1 turn / 0.5 seconds)
         # List of City Tiles. Need concept of hidden cities from sim..? or maintain two maps, maybe. one the sim maintains perfect knowledge of, and one for each bot with imperfect knowledge from the sim.
-        self.cities: typing.List[Tile] = []
         self.replay_url = replay_url
         self.replay_id = replay_id
         if self.replay_id is None:
             self.replay_id = f'TEST__{str(uuid.uuid4())}'
 
-        self.scores: typing.List[Score] = [Score(x, 0, 0, False) for x in range(8)]  # List of Player Scores
+        self.scores: typing.List[Score] = [Score(x, 0, 0, False) for x in range(16)]  # List of Player Scores
 
         self.complete: bool = False
         """Game Complete"""
@@ -576,6 +583,8 @@ class MapBase(object):
         """Game Result (True = Won)"""
 
         self.scoreHistory: typing.List[typing.Union[None, typing.List[Score]]] = [None for i in range(50)]
+        """Last 50 turns worth of score histories, by player."""
+
         self.remainingPlayers = 0
 
     def __repr__(self):
@@ -693,9 +702,9 @@ class MapBase(object):
                 else:
                     self.remainingPlayers += 1
 
-        if self.remainingPlayers == 2:
-            self.calculate_player_city_counts_1v1()
-        elif self.remainingPlayers > 2:
+        self.calculate_player_deltas()
+
+        if self.remainingPlayers > 2 and self.is_city_bonus_turn:
             for i, player in enumerate(self.players):
                 if not player.dead and player.index != self.player_index:
                     if player.cityCount < cityCounts[i]:
@@ -705,73 +714,17 @@ class MapBase(object):
                         player.cityCount = cityCounts[i]
                         player.cityLostTurn = self.turn
 
-    def calculate_player_city_counts_1v1(self):
-        myPlayer = self.players[self.player_index]
-        otherPlayer = None
-        for player in self.players:
-            if not player.dead and player != myPlayer:
-                otherPlayer = player
-
-        if not self.is_city_bonus_turn:
-            logging.info("do nothing, we can't calculate cities on a non-even turn")
-            return
-
-        expectedPlayerDelta = 0
-        expectedEnemyDelta = 0
-        if self.is_city_bonus_turn:
-            expectedPlayerDelta += myPlayer.cityCount
-
-        if self.is_army_bonus_turn:
-            expectedPlayerDelta += myPlayer.tileCount
-            expectedEnemyDelta += otherPlayer.tileCount
-
-        lastScores = self.scoreHistory[1]
-        if lastScores is None:
-            logging.info("no last scores?????")
-            return
-
-        logging.info(f"myPlayer score {myPlayer.score}, lastScores myPlayer total {lastScores[myPlayer.index].total}")
-        actualPlayerDelta = myPlayer.score - lastScores[myPlayer.index].total
-        logging.info(
-            f'otherPlayer score {otherPlayer.score}, lastScores otherPlayer total {lastScores[otherPlayer.index].total}')
-
-        actualEnemyDelta = otherPlayer.score - lastScores[otherPlayer.index].total
-
-        # in a 1v1, if we lost army, then opponent also lost equal army (unless we just took a neutral tile)
-        # this means we can still calculate city counts, even when fights are ongoing and both players are losing army
-        # so we get the amount of unexpected delta on our player, and add that to actual opponent delta, and get the opponents city count
-        fightDelta = expectedPlayerDelta - actualPlayerDelta
-        realEnemyCities = actualEnemyDelta + fightDelta - expectedEnemyDelta
-        if realEnemyCities <= -30:
-            # then opp just took a neutral city
-            otherPlayer.cityCount += 1
-            logging.info("set otherPlayer cityCount += 1 to {} because it appears he just took a city.")
-        elif realEnemyCities >= 30 and actualPlayerDelta < -30:
-            # then our player just took a neutral city, noop
-            logging.info(
-                "myPlayer just took a city? (or fighting in ffa) ignoring realEnemyCities this turn, realEnemyCities >= 38 and actualPlayerDelta < -30")
-        else:
-            otherPlayer.cityCount = realEnemyCities
-            logging.info(
-                "set otherPlayer cityCount to {}. expectedPlayerDelta {}, actualPlayerDelta {}, expectedEnemyDelta {}, actualEnemyDelta {}, fightDelta {}, realEnemyCities {}".format(
-                    otherPlayer.cityCount, expectedPlayerDelta, actualPlayerDelta, expectedEnemyDelta, actualEnemyDelta,
-                    fightDelta, realEnemyCities))
-
     def handle_player_capture(self, text):
         capturer, capturee = text.split(" captured ")
-        capturee = capturee.rstrip('.')
+        capturee = capturee[:-1]
 
         # print("\n\n    ~~~~~~~~~\nPlayer captured: {} by {}\n    ~~~~~~~~~\n".format(capturer, capturee))
         capturerIdx = self.get_id_from_username(capturer)
         captureeIdx = self.get_id_from_username(capturee)
         for handler in self.notify_player_captures:
             handler(captureeIdx, capturerIdx)
-        logging.info("\n\n    ~~~~~~~~~\nPlayer captured: {} ({}) by {} ({})\n    ~~~~~~~~~\n".format(capturee, captureeIdx,
-                                                                                               capturer, capturerIdx))
-
-        if capturerIdx == self.player_index:
-            # ignore, player was us, our tiles will update
-            return
+        logging.info(
+            f"\n\n    ~~~~~~~~~\nPlayer captured: {capturee} ({captureeIdx}) by {capturer} ({capturerIdx})\n    ~~~~~~~~~\n")
 
         if captureeIdx < 0:
             raise AssertionError('what?')
@@ -783,9 +736,20 @@ class MapBase(object):
             for eventHandler in self.notify_city_found:
                 eventHandler(capturedGen)
         self.generals[captureeIdx] = None
+
         capturingPlayer = self.players[capturerIdx]
         for tile in self.get_all_tiles():
             if tile.player != captureeIdx:
+                continue
+
+            if not tile.discovered:
+                if tile.isCity:
+                    self.convert_tile_to_mountain(tile)
+
+                tile.army = 0
+                tile.tile = TILE_FOG
+                tile.player = -1
+                tile.isGeneral = False
                 continue
 
             tile.discoveredAsNeutral = True
@@ -806,6 +770,10 @@ class MapBase(object):
         for i, curName in enumerate(self.usernames):
             if username == curName:
                 return i
+        for i, curName in enumerate(self.usernames):
+            if BotLogging.get_file_safe_username(username) == BotLogging.get_file_safe_username(curName):
+                return i
+
         return -1
 
     def update_turn(self, turn: int):
@@ -843,7 +811,12 @@ class MapBase(object):
         wasVisible = curTile.visible
         wasDiscovered = curTile.discovered
         wasGeneral = curTile.isGeneral
+        if curTile.isCity and tile_type >= TILE_EMPTY and not is_city:
+            curTile.isCity = False
         maybeMoved = curTile.update(self, tile_type, tile_army, is_city, is_general)
+        if not is_general and tile_type >= TILE_EMPTY and curTile.isGeneral:
+            curTile.isGeneral = False
+
         self.army_moved_grid[y][x] = maybeMoved
         if curTile.delta.oldOwner != curTile.delta.newOwner:
             curTile.turn_captured = self.turn
@@ -866,7 +839,14 @@ class MapBase(object):
         if wasGeneral != curTile.isGeneral:
             for eventHandler in self.notify_general_revealed:
                 eventHandler(curTile)
-            self.generals[curTile.player] = curTile
+            if curTile.isGeneral:
+                self.generals[curTile.player] = curTile
+            else:
+                for i, maybeNotGen in list(enumerate(self.generals)):
+                    if maybeNotGen is not None and maybeNotGen.player != i:
+                        maybeNotGen.isCity = True
+                        maybeNotGen.isGeneral = False
+                        self.generals[i] = None
 
 
     # expects _applyUpdateDiff to have been run to update the hidden grid info first
@@ -1034,16 +1014,12 @@ class MapBase(object):
     @staticmethod
     def player_had_priority_over_other(player: int, otherPlayer: int, turn: int):
         """Whether the player HAD priority on the current turns move that they sent last turn"""
-        if turn & 1 == 1:
-            return player > otherPlayer
-        return player < otherPlayer
+        return (turn & 1 == 0) == (player > otherPlayer)
 
     @staticmethod
     def player_has_priority_over_other(player: int, otherPlayer: int, turn: int):
         """Whether the player WILL HAVE priority on the move they are about to make on current turn"""
-        if turn & 1 == 0:
-            return player > otherPlayer
-        return player < otherPlayer
+        return (turn & 1 == 0) != (player > otherPlayer)
 
     def convert_tile_to_mountain(self, tile: Tile):
         self.pathableTiles.discard(tile)
@@ -1127,8 +1103,8 @@ class MapBase(object):
 
     def _get_expected_delta_amount_toward(self, source: Tile, dest: Tile) -> int:
         if source.delta.oldOwner == dest.delta.oldOwner:
-            return 0 - source.delta.armyDelta
-        return source.delta.armyDelta
+            return 0 - source.delta.unexplainedDelta
+        return source.delta.unexplainedDelta
 
     def _apply_last_player_move(self, last_player_index_move: typing.Tuple[Tile, Tile, bool]) -> typing.Tuple[Tile, Tile, bool] | None:
         """
@@ -1247,6 +1223,7 @@ class MapBase(object):
                     self.turn):
                 # the source tile could have been attacked for non-lethal damage BEFORE the move was made to target.
                 source.delta.unexplainedDelta = unexplainedDelta
+                source.delta.imperfectArmyDelta = True
             dest.delta.unexplainedDelta = unexplainedDelta
             logging.info(
                 f'MOVE {str(last_player_index_move)} with expectedDestDelta {expectedDestDelta} likely collided with unexplainedDelta {unexplainedDelta} at dest based on actualDestDelta {actualDestDelta}.')
@@ -1302,12 +1279,11 @@ class MapBase(object):
         #                 destTile.delta.armyMovedHere = True
 
         # TODO for debugging only
-        tilesWithDiffsPreSource = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
-        tilesWithMovedHerePreSource = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
+        tilesWithDiffsPrePos = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
+        tilesWithMovedHerePrePos = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
 
-        logging.info(f'Tiles with diffs pre-source: {str([str(t) for t in tilesWithDiffsPreSource])}')
-        logging.info(f'Tiles with MovedHere pre-source: {str([str(t) for t in tilesWithMovedHerePreSource])}')
-
+        logging.info(f'Tiles with diffs pre-pos: {str([str(t) for t in tilesWithDiffsPrePos])}')
+        logging.info(f'Tiles with MovedHere pre-pos: {str([str(t) for t in tilesWithMovedHerePrePos])}')
 
         # scan for tiles with positive deltas first, those tiles MUST have been gathered to from a friendly tile by the player they are on, letting us eliminate tons of options outright.
         for x in range(self.cols):
@@ -1364,6 +1340,13 @@ class MapBase(object):
                         potentialSources[0],
                         fullFromDiffCovered=exactMatch,
                         fullToDiffCovered=exactMatch)
+
+        # TODO for debugging only
+        tilesWithDiffsPreSource = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
+        tilesWithMovedHerePreSource = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
+
+        logging.info(f'Tiles with diffs pre-source: {str([str(t) for t in tilesWithDiffsPreSource])}')
+        logging.info(f'Tiles with MovedHere pre-source: {str([str(t) for t in tilesWithMovedHerePreSource])}')
 
         # Then attacked dest tiles. This should catch obvious moves from fog as well as all moves between visible tiles.
         for x in range(self.cols):
@@ -1467,6 +1450,102 @@ class MapBase(object):
         logging.info(f'Tiles with MovedHere at end: {str([str(t) for t in tilesWithMovedHereEnd])}')
         return
 
+    def calculate_player_deltas(self):
+        myPlayer = self.players[self.player_index]
+
+        lastScores = self.scoreHistory[1]
+        if lastScores is None:
+            logging.info("no last scores?????")
+            return
+
+        expectedMeDelta = 0
+
+        if self.is_army_bonus_turn:
+            expectedMeDelta += myPlayer.tileCount
+        if self.is_city_bonus_turn:
+            expectedMeDelta += myPlayer.cityCount
+
+        logging.info(f"myPlayer score {myPlayer.score}, lastScores myPlayer total {lastScores[myPlayer.index].total}")
+        actualPlayerDelta = myPlayer.score - lastScores[myPlayer.index].total
+
+        for player in self.players:
+            if player.dead:
+                player.expectedScoreDelta = 0
+                player.actualScoreDelta = 0
+                continue
+
+            otherPlayer = player
+
+            expectedEnemyDelta = 0
+
+            if self.is_army_bonus_turn:
+                expectedEnemyDelta += otherPlayer.tileCount
+            if self.is_city_bonus_turn:
+                expectedEnemyDelta += otherPlayer.cityCount
+
+            logging.info(
+                f'otherPlayer score {otherPlayer.score}, lastScores otherPlayer total {lastScores[otherPlayer.index].total}')
+
+            otherPlayer.actualScoreDelta = otherPlayer.score - lastScores[otherPlayer.index].total
+            otherPlayer.expectedScoreDelta = expectedEnemyDelta
+
+            # nothing past here runs for us
+            if otherPlayer.index == self.player_index:
+                continue
+
+            if self.is_city_bonus_turn:
+                if self.remainingPlayers == 2:
+                    # if NOT 1v1 we use the outer, dumber city count calculation that works reliably for FFA.
+                    # in a 1v1, if we lost army, then opponent also lost equal army (unless we just took a neutral tile)
+                    # this means we can still calculate city counts, even when fights are ongoing and both players are losing army
+                    # so we get the amount of unexpected delta on our player, and add that to actual opponent delta, and get the opponents city count
+                    friendlyFightDelta = expectedMeDelta - actualPlayerDelta
+
+                    realEnemyCities = otherPlayer.cityCount + otherPlayer.actualScoreDelta + friendlyFightDelta - expectedEnemyDelta
+
+                    # if otherPlayer.
+
+                    if realEnemyCities <= -30:
+                        # then opp just took a neutral city
+                        otherPlayer.cityCount += 1
+                        logging.info("set otherPlayer cityCount += 1 to {} because it appears he just took a city.")
+                    elif realEnemyCities >= 30 and actualPlayerDelta < -30:
+                        # then our player just took a neutral city, noop
+                        logging.info(
+                            "myPlayer just took a city? (or fighting in ffa) ignoring realEnemyCities this turn, realEnemyCities >= 38 and actualPlayerDelta < -30")
+                    else:
+                        otherPlayer.cityCount = realEnemyCities
+                        logging.info(
+                            f"set otherPlayer cityCount to {otherPlayer.cityCount}. expectedMeDelta {expectedMeDelta}, "
+                            f"actualPlayerDelta {actualPlayerDelta}, expectedEnemyDelta {expectedEnemyDelta}, "
+                            f"otherPlayer.actualScoreDelta {otherPlayer.actualScoreDelta}, fightDelta {friendlyFightDelta}, "
+                            f"realEnemyCities {realEnemyCities}")
+
+        for player in self.players:
+            playerDeltaDiff = player.actualScoreDelta - player.expectedScoreDelta
+            if playerDeltaDiff < 0:
+                # either they're fighting someone, attacking a neutral city, attacking neutral tiles, or someone captured one of their cities.
+                # first try whoever they were fighting last turn if any:
+                if player.fighting_with_player >= 0:
+                    otherPlayer = self.players[player.fighting_with_player]
+                    otherPlayerDeltaDiff = otherPlayer.actualScoreDelta - otherPlayer.expectedScoreDelta
+                    if otherPlayerDeltaDiff == playerDeltaDiff:
+                        # already set to the right player, leave it alone
+                        continue
+                    elif otherPlayerDeltaDiff < 0:
+                        # not as sure, here, but LIKELY still fighting the same player.
+                        continue
+
+                for otherPlayer in self.players:
+                    if otherPlayer == player:
+                        continue
+                    otherPlayerDeltaDiff = otherPlayer.actualScoreDelta - otherPlayer.expectedScoreDelta
+                    if otherPlayerDeltaDiff == playerDeltaDiff:
+                        # then these two are probably fighting each other!?!?!?!?
+                        otherPlayer.fighting_with_player = player.index
+                        player.fighting_with_player = otherPlayer.index
+            else:
+                player.fighting_with_player = -1
 
 class Map(MapBase):
     """
@@ -1475,7 +1554,7 @@ class Map(MapBase):
     def __init__(self, start_data, data):
         # Start Data
 
-        self.stars: typing.List[int] = [0 for x in range(8)]
+        self.stars: typing.List[int] = [0 for x in range(16)]
         self._start_data = start_data
         replay_url = _REPLAY_URLS["na"] + start_data['replay_id']  # String Replay URL # TODO: Use Client Region
 

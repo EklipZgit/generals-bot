@@ -32,12 +32,15 @@ NEUT_CITY_GRAY = (90, 90, 90)
 GRAY = (160, 160, 160)
 WHITE = (255, 255, 255)
 RED = (200, 40, 40)
+ORANGE = (220, 110, 40)
+LIGHT_BLUE = (4, 160, 200)
+LIGHT_PINK = (170, 138, 141)
 PURPLE = (190, 30, 210)
 DARK_PURPLE = (140, 0, 180)
 CHOKE_PURPLE = (93, 0, 111)
 
 OFF_BLACK = (40, 40, 40)
-WHITE_PURPLE = (255, 225, 250)
+WHITE_PURPLE = (190, 150, 230)
 
 P_RED = (245, 65, 50)
 P_BLUE = (30, 30, 230)
@@ -46,11 +49,23 @@ P_PURPLE = (128, 30, 128)
 P_TEAL = (30, 128, 128)
 P_DARK_GREEN = (5, 75, 45)
 P_DARK_RED = (100, 5, 35)
-P_YELLOW = (170, 140, 20)
-P_BRIGHT_GREEN = (10, 20, 10)
+P_YELLOW = (160, 150, 20)
 
 # P_BRIGHT_GREEN = (10,225,90)
-PLAYER_COLORS = [P_RED, P_BLUE, P_GREEN, P_PURPLE, P_TEAL, P_DARK_GREEN, P_YELLOW, P_DARK_RED, P_BRIGHT_GREEN]
+PLAYER_COLORS = [
+    P_RED,
+    P_BLUE,
+    P_GREEN,
+    P_PURPLE,
+    P_TEAL,
+    P_DARK_GREEN,
+    P_YELLOW,
+    P_DARK_RED,
+    ORANGE,
+    LIGHT_BLUE,
+    LIGHT_PINK,
+    WHITE_PURPLE,
+]
 FOG_COLOR_OFFSET = 25
 KING_COLOR_OFFSET = 35
 
@@ -209,9 +224,14 @@ class GeneralsViewer(object):
         self.infoRowHeight = 250
 
         if self.cellHeight is None:
-            self.cellHeight = min(60, (1080 - self.infoRowHeight - self.scoreRowHeight) // (self._map.rows + 1) - 2)
-            self.cellHeight = max(35, self.cellHeight)
+            self.cellHeight = min(85, (1080 - self.infoRowHeight - self.scoreRowHeight) // (self._map.rows + 1) - 2)
+            self.cellHeight = max(28, self.cellHeight)
             self.cellWidth = self.cellHeight
+
+        self.scoreRowHeight = int((self.cellHeight + 2) * 1.5)
+
+        self.tile_surface = pygame.Surface((self.cellWidth, self.cellHeight))
+        self.player_fight_indicator_width = 2 * self.cellWidth
 
         x = 3 + self.offset1080Above1440p
         if not alignLeft:
@@ -228,7 +248,6 @@ class GeneralsViewer(object):
         os.environ['SDL_HINT_VIDEO_ALLOW_SCREENSAVER'] = "1"
         pygame.init()
 
-        self.scoreRowHeight = self.cellHeight + 3
         self.square = Rect(0, 0, self.cellWidth, self.cellHeight)
         self.square_inner_1 = Rect(1, 1, self.cellWidth - 2, self.cellHeight - 2)
         self.square_inner_2 = Rect(2, 2, self.cellWidth - 4, self.cellHeight - 4)
@@ -340,13 +359,18 @@ class GeneralsViewer(object):
 
                 self.updateGrid(viewInfo, map)
 
+                start = time.perf_counter()
                 if not self.noLog:
                     logging.info("GeneralsViewer drawing grid:")
                 self._drawGrid()
+                if not self.noLog:
+                    logging.info(f"GeneralsViewer drawing grid took {time.perf_counter() - start:.3f}")
 
                 if not self.noLog:
+                    start = time.perf_counter()
                     logging.info("GeneralsViewer saving image:")
                     self.save_image()
+                    logging.info(f"GeneralsViewer saving image took {time.perf_counter() - start:.3f}")
             except queue.Empty:
                 elapsed = time.perf_counter() - self.last_update_received
                 if not self.noLog:
@@ -393,7 +417,7 @@ class GeneralsViewer(object):
 
             # Draw Bottom Info Text
             self._screen.blit(self._lrgFont.render(
-                "Turn: {}, ({})".format(self._map.turn, ("%.2f" % self._viewInfo.lastMoveDuration).lstrip('0')),
+                f"Turn: {self._map.turn}, ({('%.2f' % self._viewInfo.lastMoveDuration).lstrip('0')})",
                 True, WHITE), (10, self._window_size[1] - self.infoRowHeight + 4))
             curInfoTextHeight = 0
             self._screen.blit(self._infoFont.render(self._viewInfo.infoText, True, WHITE),
@@ -435,41 +459,8 @@ class GeneralsViewer(object):
                 perfEventHeight += self.infoLineHeight
 
             # Draw Scores
-            pos_top = self._window_size[1] - self.infoRowHeight - self.scoreRowHeight
-            score_width = self._window_size[0] / len(self._map.players)
-            # self._scores = sorted(update.scores, key=lambda general: general['total'], reverse=True)
-            if self._map is not None:
-                playersByScore = sorted(self._map.players, key=lambda player: player.score, reverse=True)  # Sort Scores
+            self.draw_player_scores()
 
-                for i, player in enumerate(playersByScore):
-                    if player is not None:
-                        score_color = PLAYER_COLORS[player.index]
-                        if player.leftGame:
-                            score_color = BLACK
-                        if player.dead:
-                            score_color = GRAY_DARK
-                        pygame.draw.rect(self._screen, score_color,
-                                         [score_width * i, pos_top, score_width, self.scoreRowHeight])
-                        if self._viewInfo.targetPlayer == player.index:
-                            pygame.draw.rect(self._screen, GRAY,
-                                             [score_width * i, pos_top, score_width, self.scoreRowHeight], 1)
-                        userName = self._map.usernames[player.index]
-                        userString = f"({player.stars}) {userName}"
-                        try:
-                            self._screen.blit(self._medFont.render(userString, True, WHITE),
-                                              (score_width * i + 3, pos_top + 1))
-                        except:
-                            userString = f"({player.stars}) INVALID_NAME"
-                            self._screen.blit(self._medFont.render(userString, True, WHITE),
-                                              (score_width * i + 3, pos_top + 1))
-
-                        playerSubtext = f"{player.score} {player.tileCount}t {player.cityCount}c"
-                        if player.index != self._map.player_index and len(self._viewInfo.playerTargetScores) > 0:
-                            playerSubtext += f" {player.aggression_factor}a"
-                        if self._map.remainingPlayers > 2 and player.index != self._map.player_index and len(self._viewInfo.playerTargetScores) > 0:
-                            playerSubtext += f"  {int(self._viewInfo.playerTargetScores[player.index])}ts"
-                        self._screen.blit(self._medFont.render(playerSubtext, True, WHITE),
-                                          (score_width * i + 3, pos_top + 1 + self._medFont.get_height()))
             # for i, score in enumerate(self._scores):
             #    score_color = PLAYER_COLORS[int(score['i'])]
             #    if (score['dead'] == True):
@@ -770,21 +761,22 @@ class GeneralsViewer(object):
         if shape is None:
             shape = self.square
         key = BLACK
-        color = (min(255, R), min(255, G), min(255, B))
-        s = pygame.Surface((self.cellWidth, self.cellHeight))
-        # first, "erase" the surface by filling it with a color and
-        # setting this color as colorkey, so the surface is empty
-        s.fill(key)
-        s.set_colorkey(key)
 
         pos_left = (CELL_MARGIN + self.cellWidth) * tile.x + CELL_MARGIN
         pos_top = (CELL_MARGIN + self.cellHeight) * tile.y + CELL_MARGIN
+
+        color = (min(255, R), min(255, G), min(255, B))
+
+        # first, "erase" the surface by filling it with a color and
+        # setting this color as colorkey, so the surface is empty
+        self.tile_surface.fill(key)
+        self.tile_surface.set_colorkey(key)
         # logging.info("drawing square for tile {} alpha {} width {} at pos {},{}".format(tile.toString(), alpha, width, pos_left, pos_top))
 
-        pygame.draw.rect(s, color, shape, width)
+        pygame.draw.rect(self.tile_surface, color, shape, width)
 
-        s.set_alpha(alpha)
-        self._screen.blit(s, (pos_left, pos_top))
+        self.tile_surface.set_alpha(alpha)
+        self._screen.blit(self.tile_surface, (pos_left, pos_top))
 
     def draw_army(self, army, R, G, B, alphaStart):
         # after drawing the circle, we can set the
@@ -1157,13 +1149,90 @@ class GeneralsViewer(object):
         return int(len(text) * estFontWidthPx)
 
     def save_image(self):
-        pygame.image.save(self._screen, "{}\\{}.png".format(self.logDirectory, self._map.turn))
+        pygame.image.save(self._screen, f"{self.logDirectory}\\{self._map.turn}.png")
 
     def send_killed_event(self):
         self.send_closed_event(killedByUserClose=False)
 
     def send_closed_event(self, killedByUserClose: bool):
         self._event_queue.put(killedByUserClose)
+
+    def draw_player_scores(self):
+        pos_top = self._window_size[1] - self.infoRowHeight - self.scoreRowHeight
+        # self._scores = sorted(update.scores, key=lambda general: general['total'], reverse=True)
+        if self._map is None:
+            return
+
+        numAlive = 0
+        numDead = 0
+        for p in self._map.players:
+            if p.dead:
+                numDead += 1
+            else:
+                numAlive += 1
+
+        # alive players get double the space of dead players.
+        totalCapacity = numAlive * 2 + numDead
+
+        alive_score_width = 2 * self._window_size[0] / totalCapacity
+        dead_score_width = self._window_size[0] / totalCapacity
+
+
+        # Sort Scores by score then by the turn they left the game if they are dead.
+        playersByScore = sorted(self._map.players, key=lambda player: (player.score, player.leftGameTurn), reverse=True)
+
+        pos_left = 0
+
+        for i, player in enumerate(playersByScore):
+            if player is None:
+                continue
+
+            score_color = PLAYER_COLORS[player.index]
+            if player.leftGame:
+                # make them 70% black after leaving game
+                score_color = rescale_color(0.6, 0, 1.0, score_color, GRAY)
+
+            curScoreWidth = alive_score_width
+            if player.dead:
+                score_color = GRAY_DARK
+                curScoreWidth = dead_score_width
+
+            pygame.draw.rect(self._screen, score_color, [pos_left, pos_top, curScoreWidth, self.scoreRowHeight])
+
+            if player.fighting_with_player >= 0:
+                otherPlayerColor = PLAYER_COLORS[player.fighting_with_player]
+                desiredHeight = self.cellHeight // 5
+                pygame.draw.rect(self._screen, otherPlayerColor,[pos_left, pos_top + self.scoreRowHeight - desiredHeight, curScoreWidth, desiredHeight])
+
+            if self._viewInfo.targetPlayer == player.index:
+                pygame.draw.rect(self._screen, GRAY,
+                                 [pos_left, pos_top, curScoreWidth, self.scoreRowHeight], 1)
+            userName = self._map.usernames[player.index]
+            userString = f"({player.stars}) {userName}"
+            try:
+                self._screen.blit(self._medFont.render(userString, True, WHITE),
+                                  (pos_left + 3, pos_top + 1))
+            except:
+                userString = f"({player.stars}) INVALID_NAME"
+                self._screen.blit(self._medFont.render(userString, True, WHITE),
+                                  (pos_left + 3, pos_top + 1))
+
+            playerSubtext = f"{player.score} {player.tileCount}t {player.cityCount}c ({player.tileCount + player.cityCount * 25})"
+            if player.index != self._map.player_index and len(self._viewInfo.playerTargetScores) > 0:
+                playerSubtext += f"   {player.aggression_factor}a"
+            if self._map.remainingPlayers > 2 and player.index != self._map.player_index and len(
+                    self._viewInfo.playerTargetScores) > 0:
+                playerSubtext += f" {int(self._viewInfo.playerTargetScores[player.index])}ts"
+            self._screen.blit(self._medFont.render(playerSubtext, True, WHITE),
+                              (pos_left + 3, pos_top + 1 + self._medFont.get_height()))
+
+            playerSubSubtext = f"{player.expectedScoreDelta:+4d}ed {player.actualScoreDelta:+4d}a - {player.delta25score:+4d}dc {player.delta25tiles:+4d}tc"
+            self._screen.blit(self._medFont.render(playerSubSubtext, True, WHITE),
+                              (pos_left + 3, pos_top + 2 + 2 * self._medFont.get_height()))
+
+            pos_left = pos_left + curScoreWidth
+
+
 
 
 def rescale_color(

@@ -802,8 +802,9 @@ class TestBase(unittest.TestCase):
         scores[general.player] = Score(general.player, countScoreGeneral.value, countTilesGeneral.value, dead=False)
         scores[enemyGeneral.player] = Score(enemyGeneral.player, countScoreEnemy.value, countTilesEnemy.value, dead=False)
 
-        map.update()
         map.clear_deltas_and_score_history()
+        map.update_scores(scores)
+        map.update()
 
     def generate_enemy_general_opposite_general(self, map: MapBase, general: Tile) -> Tile:
         map.generals[general.player] = general

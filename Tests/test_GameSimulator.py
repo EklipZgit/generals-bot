@@ -409,189 +409,36 @@ aG7
         p1targetTile = self.get_player_tile(collisionTarget.x, collisionTarget.y, sim, 1)
         self.assertEqual(abs(aMovedAmount - bMovedAmount), abs(p1targetTile.delta.armyDelta))
 
-    def test_simulates_a_game_from_turn_1__1(self):
+    def test_should_recognize_real_world_loss_on_army_priority(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
-        self.begin_capturing_logging()
+        """
+        real world game where bot lost on priority while thinking it won...
+        """
 
-        def configure_b(bBot: EklipZBot):
-            pass
+        for turn in [495, 496]:
+            with self.subTest(turn=turn):
+                mapFile = 'GameContinuationEntries/should_recognize_loss_on_army_priority___ayWl0cB6S---1--495.txtmap'
+                map, general, enemyGen = self.load_map_and_generals(mapFile, turn, fill_out_tiles=True)
+                # self.ensure_player_tiles_and_scores(map, general, generalTileCount=20)
 
-        def configure_a(aBot: EklipZBot):
-            # 238-238, AGAIN
-            # 232-237, meaningless, .4 it is
-            # aBot.mcts_engine.biased_move_ratio_while_available = 0.35  # b is now 0.4
+                genPlayer = general.player
+                enPlayer = enemyGen.player
 
-            # 229-265
-            # aBot.mcts_engine.biased_move_ratio_while_available = 0.45  # b is now 0.4
+                sim = GameSimulator(map)
+                pMap = sim.players[general.player].map
+                eMap = sim.players[enemyGen.player].map
+                sim.make_move(general.player, Move(pMap.GetTile(6, 7), pMap.GetTile(5, 7)))
+                sim.make_move(enemyGen.player, Move(eMap.GetTile(6, 9), eMap.GetTile(5, 9)))
+                sim.execute_turn()
+                sim.make_move(general.player, Move(pMap.GetTile(5, 7), pMap.GetTile(5, 8)))
+                sim.make_move(enemyGen.player, Move(eMap.GetTile(5, 9), eMap.GetTile(5, 8)))
+                sim.execute_turn()
 
-            # 134-113, whoo! A-B against 0.4, now. Other tests are retesting 0.45 as well as 0.4, so now a-b them.
-            # aBot.mcts_engine.biased_move_ratio_while_available = 0.45
-
-            # 113-135
-            # aBot.mcts_engine.biased_move_ratio_while_available = 0.55
-
-            # 54-66
-            # aBot.mcts_engine.biased_move_ratio_while_available = 0.45  # b was 0.5, and biased allowed is 7 now.
-
-            # 84-91
-            # aBot.mcts_engine.biased_move_ratio_while_available = 0.6  # b was 0.5, and biased allowed is 7 now.
-
-            # 112-138. Try higher...?
-            # aBot.mcts_engine.biased_move_ratio_while_available = 0.35  # was 0.5, and biased allowed is 7 now.
-
-            # codified
-            # aBot.expansion_force_no_global_visited = True
-            # aBot.expansion_single_iteration_time_cap = 0.02
-
-            # 3 went 19-11 against gather_include_distance_from_enemy_general_as_negatives 0.85
-            # 3 went 18-11 against gather_include_distance_from_enemy_general_as_negatives 0.5, codified
-            # aBot.gather_include_distance_from_enemy_TERRITORY_as_negatives = 3
-
-            # 121-128
-            # aBot.mcts_engine.biased_move_ratio_while_available = 0.7 # current 0.5
-
-            # 251-246, but did worse than the other test of 7, 0.5. Testing 0.33 with 7 above
-            # aBot.mcts_engine.biased_playouts_allowed_per_trial = 6  # was 4
-            # aBot.mcts_engine.biased_move_ratio_while_available = 0.33  # was 0.5, so this should be the same number of biased moves on average per move but it will go later in the trial
-
-            pass
-
-        self.a_b_test(
-            numRuns=500,
-            configureA=configure_a,
-            configureB=configure_b,
-            debugMode=debugMode,
-            debugModeTurnTime=0.25,
-            debugModeRenderAllPlayers=False,
-            # mapFile='SymmetricTestMaps/even_playground_map_small_short_spawns__top_left_bot_right.txtmap',
-            noCities=None,
-        )
-
-    def test_simulates_a_game_from_turn_1__2(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
-        self.begin_capturing_logging()
-
-        def configure_b(bBot: EklipZBot):
-            pass
-
-        def configure_a(aBot: EklipZBot):
-            # 250-217, codified.
-            # aBot.behavior_launch_timing_offset = +3  # b is +4
-
-            # 117-128
-            # aBot.behavior_launch_timing_offset = +5  # b is +4
-
-            # 114-132, huh...? Bigger should always be better here we'd have thought. AGAIN
-            # 109-139 ok try 5
-            # aBot.behavior_launch_timing_offset = +6  # b is +4
-
-            # 126-119
-            # aBot.behavior_launch_timing_offset = 4
-
-            # 85-87, again
-            # 67-56, ok but it lost mostly in other games soooooo
-            # aBot.engine_mcts_move_estimation_net_differential_cutoff = 2
-
-            # 108-137, so, we're making engine moves when we shouldn't be. Try higher..?
-            # aBot.engine_mcts_move_estimation_net_differential_cutoff = -1  # current 0
-
-            # RUNNING WITH NOT PER DIST PER TILE
-            # aBot.expansion_use_multi_per_dist_per_tile = True
-            # aBot.expansion_force_no_global_visited = False
-
-            # 108-123
-            # aBot.gather_include_distance_from_enemy_TILES_as_negatives = 2
-            # aBot.engine_always_include_last_move_tile_in_scrims = True
-            # aBot.engine_mcts_scrim_armies_per_player_limit = 1
-
-            # 103-125 unclear B, rerunning with B False, 3
-            # 129-121...?
-            # aBot.engine_always_include_last_move_tile_in_scrims = True
-            # aBot.engine_mcts_scrim_armies_per_player_limit = 2
-
-            # 114-134, ok so this is bad
-            # aBot.mcts_engine.biased_playouts_allowed_per_trial = 6 # current 4
-
-            # 245-251. 7 already won elsewhere so nuking
-            # aBot.mcts_engine.biased_playouts_allowed_per_trial = 3  # current 4
-
-            pass
-
-        self.a_b_test(
-            numRuns=500,
-            configureA=configure_a,
-            configureB=configure_b,
-            debugMode=debugMode,
-            debugModeTurnTime=0.001,
-            debugModeRenderAllPlayers=False,
-            noCities=None,
-        )
-
-    def test_simulates_a_game_from_turn_1__3(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
-        self.begin_capturing_logging()
-
-        def configure_b(bBot: EklipZBot):
-            pass
-
-        def configure_a(aBot: EklipZBot):
-            # 82-96, ok thats enough of these to convince me this is bad.
-            # aBot.engine_mcts_move_estimation_net_differential_cutoff = 3
-
-            # 118-131
-            # aBot.engine_mcts_move_estimation_net_differential_cutoff = 2  # was 0
-
-            # 226-272
-            # aBot.engine_mcts_move_estimation_net_differential_cutoff = -8  # was 0
-            pass
-
-        self.a_b_test(
-            numRuns=250,
-            configureA=configure_a,
-            configureB=configure_b,
-            debugMode=debugMode,
-            debugModeTurnTime=0.001,
-            debugModeRenderAllPlayers=False,
-            noCities=None,
-        )
-
-    def test_simulates_a_game_from_turn_1__4(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
-        self.begin_capturing_logging()
-
-        def configure_b(bBot: EklipZBot):
-            bBot.behavior_launch_timing_offset = +4
-            pass
-
-        def configure_a(aBot: EklipZBot):
-            # 127-120, codified but rerunning
-            # 230-239...? codified already under other tho because 260-200 over there.
-            # aBot.behavior_launch_timing_offset = +3  # b is +4
-
-            # 111-138, so bigger def not always better.
-            # aBot.behavior_launch_timing_offset = +7  # b is +4
-
-            # 113-134, so later launch timing always wins lol...?
-            # aBot.behavior_launch_timing_offset = +2  # b is +4
-
-            # 96-154
-            # aBot.behavior_launch_timing_offset = -2
-
-            # 45-73, killed
-            # aBot.behavior_launch_timing_offset = -4
-
-            # 78-47, retesting with larger game size but god damn
-            # 76-52, so yeah, bad
-            # aBot.behavior_early_retake_bonus_gather_turns = 0  # b is 3
-            pass
-
-        self.a_b_test(
-            numRuns=500,
-            configureA=configure_a,
-            configureB=configure_b,
-            debugMode=debugMode,
-            debugModeTurnTime=0.001,
-            debugModeRenderAllPlayers=False,
-            noCities=None,
-        )
-
+                if turn == 495:
+                    self.assertTrue(sim.is_game_over())
+                    self.assertTrue(pMap.players[genPlayer].dead)
+                    self.assertTrue(sim.players[genPlayer].dead)
+                else:
+                    self.assertFalse(sim.is_game_over())
+                    self.assertFalse(pMap.players[genPlayer].dead)
+                    self.assertFalse(sim.players[genPlayer].dead)

@@ -1,0 +1,67 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M         M              M         M    M                                  M    M
+M                             aC7  M                   M
+M         M         a2   a2   a1   MD   D    C43D                     M
+               M         a1   a1   a2D  a2D  a2D            M              M
+M                   a1   a1        MD   a4D  a2   M    C49
+                    a1   a2D  a2   a2   a3   a2   b3   M                             M
+                    a1   MD   a3   b2   b3   a2   b3   b2   b2   b2
+                    a1   D    a3   b2   a2   a2   a2   b3   a2   b1   C47       M
+          M    M    a1   D    M    b2   a2   b3   b2   M    a0   b1   M
+                    a1   M    M    b2   b2   b2   b2   b2   a2   M    bG12 M    M
+M                   a1   a1   b2   b2   b2   b2   M    b1   b1   b1   b1   b2   M    b3
+               M    M    a1   a1   a1   a1   a1   aC37 a1   a1   b2   b11  M    b1   b3
+M         M    M                   b3   b2   b2   b2   M    M    b1   b1   b1   b8   b1
+M                   M              b2   b2   b2   b2   b2   b2   b2   b1   b1   b2   b2
+                                             b2   b3   b3   b4   M    M    b1   M    b2
+          M                   M    M    M              b4   b3   b3   M    b1   b1   bC5
+                         M                        M         M    M    M    b1   bC6
+          M    M              M         M              M         b3   b3   b3   b3
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=4,5
+turn=329
+bot_player_index=1
+bot_all_in_counter=6
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=40
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=True
+bot_finishing_exploration=False
+bot_target_player=0
+bot_targeting_army=14,11
+bot_cur_path=None
+aUsername=Admins suck
+aTiles=85
+aScore=247
+aStandingArmy=162
+aStars=72
+aCityCount=4
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=910
+aDelta25Tiles=9
+aDelta25Score=41
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=326
+bUsername=Human.exe
+bTiles=72
+bScore=179
+bStandingArmy=107
+bStars=68
+bCityCount=3
+bGeneral=14,9
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=15
+bDelta25Tiles=-4
+bDelta25Score=-10
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=329

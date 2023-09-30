@@ -7,6 +7,7 @@ import typing
 import nashpy
 import numpy
 
+import DebugHelper
 import SearchUtils
 from ArmyAnalyzer import ArmyAnalyzer
 from ArmyTracker import Army
@@ -56,7 +57,7 @@ class ArmyEngine(object):
         self.mcts_runner: MctsDUCT | None = mctsRunner
         self.eval_params: ArmySimEvaluationParams = ArmySimEvaluationParams()
         self.honor_mcts_expected_score: bool = False
-        self.honor_mcts_expanded_expected_score: bool = False
+        self.honor_mcts_expanded_expected_score: bool = True
 
         ## CONFIGURATION PARAMETERS
 
@@ -125,9 +126,9 @@ class ArmyEngine(object):
         self.to_turn: int = 0
         """The turn to simulate up to."""
 
-        # if SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING:
-        #     self.iteration_limit = 200
-        #     self.time_limit = 10000000000.0
+        if DebugHelper.IS_DEBUGGING:
+            self.iteration_limit = 1000
+            self.time_limit = 10000000000.0
 
     def scan(
         self,

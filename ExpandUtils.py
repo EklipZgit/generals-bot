@@ -314,9 +314,17 @@ def _get_tile_path_value(tile, lastTile, negativeTiles, targetPlayer, enemyDistM
     return value
 
 
-def add_path_to_try_avoid_paths_crossing_tiles(path: Path, tryAvoidSet: typing.Set[Tile], pathsCrossingTiles: typing.Dict[Tile, typing.List[Path]]):
+def add_path_to_try_avoid_paths_crossing_tiles(
+        path: Path,
+        negativeTiles: typing.Set[Tile],
+        tryAvoidSet: typing.Set[Tile],
+        pathsCrossingTiles: typing.Dict[Tile, typing.List[Path]],
+        addToNegativeTiles = False,
+):
     for t in path.tileList:
         tryAvoidSet.add(t)
+        if addToNegativeTiles:
+            negativeTiles.add(t)
         tileCrossList = pathsCrossingTiles.get(t, [])
         tileCrossList.append(path)
         if len(tileCrossList) == 1:
@@ -356,7 +364,9 @@ def get_optimal_expansion(
         leafMovesFirst: bool = False,
         calculateTrimmable=True,
         singleIterationPathTimeCap=0.03,
-        forceNoGlobalVisited: bool = False,
+        forceNoGlobalVisited: bool = True,
+        forceGlobalVisitedStage1: bool = False,
+        useIterativeNegTiles: bool = False,
         allowMultiPathMultiDistReturn: bool = False,
         smallTileExpansionTimeRatio: float = 1.0,
         time_limit = 0.2,
@@ -743,7 +753,7 @@ def get_optimal_expansion(
                 if leafMove.source.isGeneral or leafMove.source.isCity:
                     cityCount += 1
                 paths.append((cityCount, value, path))
-                add_path_to_try_avoid_paths_crossing_tiles(path, tryAvoidSet, pathsCrossingTiles)
+                add_path_to_try_avoid_paths_crossing_tiles(path, negativeTiles, tryAvoidSet, pathsCrossingTiles, addToNegativeTiles=useIterativeNegTiles)
                 if allowMultiPathMultiDistReturn:
                     curTileDict = multiPathDict.get(leafMove.source, {})
                     existingMax, existingPath = curTileDict.get(path.length, defaultNoPathValue)
@@ -832,6 +842,10 @@ def get_optimal_expansion(
         if inStage2 and smallTileExpansionTimeRatio != 1.0:
             timeCap = singleIterationPathTimeCap * smallTileExpansionTimeRatio
 
+        useGlobalVisited = not forceNoGlobalVisited
+        if forceGlobalVisitedStage1 and not inStage2:
+            useGlobalVisited = True
+
         if not allowMultiPathMultiDistReturn:
             path = breadth_first_dynamic_max(
                 map,
@@ -844,8 +858,7 @@ def get_optimal_expansion(
                 negativeTiles=negativeTiles,
                 searchingPlayer=searchingPlayer,
                 priorityFunc=priorityFunc,
-                # useGlobalVisitedSet=inStage2 and not forceNoGlobalVisited,
-                useGlobalVisitedSet=not forceNoGlobalVisited,
+                useGlobalVisitedSet=useGlobalVisited,
                 incrementBackward=True,
                 skipFunc=skipFunc,
                 logResultValues=logStuff,
@@ -903,8 +916,7 @@ def get_optimal_expansion(
                 negativeTiles=negativeTiles,
                 searchingPlayer=searchingPlayer,
                 priorityFunc=priorityFunc,
-                # useGlobalVisitedSet=inStage2 and not forceNoGlobalVisited,
-                useGlobalVisitedSet=not forceNoGlobalVisited,
+                useGlobalVisitedSet=useGlobalVisited,
                 skipFunc=skipFunc,
                 logResultValues=logStuff,
                 fullOnly=False,
@@ -954,7 +966,7 @@ def get_optimal_expansion(
             else:
                 for value, path in newPaths:
                     logging.info(f'  new path {value:.2f}v  {value/path.length:.2f}vt  {str(path)}')
-                    add_path_to_try_avoid_paths_crossing_tiles(path, tryAvoidSet, pathsCrossingTiles)
+                    add_path_to_try_avoid_paths_crossing_tiles(path, negativeTiles, tryAvoidSet, pathsCrossingTiles, addToNegativeTiles=useIterativeNegTiles)
 
     # expansionGather = greedy_backpack_gather(map, tilesLargerThanAverage, turns, None, valueFunc, baseCaseFunc, negativeTiles, None, searchingPlayer, priorityFunc, skipFunc = None)
     if allowLeafMoves and leafMoves is not None:
@@ -982,7 +994,7 @@ def get_optimal_expansion(
                 if leafMove.source.isGeneral or leafMove.source.isCity:
                     cityCount += 1
                 paths.append((cityCount, value, path))
-                add_path_to_try_avoid_paths_crossing_tiles(path, tryAvoidSet, pathsCrossingTiles)
+                add_path_to_try_avoid_paths_crossing_tiles(path, negativeTiles, tryAvoidSet, pathsCrossingTiles, addToNegativeTiles=useIterativeNegTiles)
                 if allowMultiPathMultiDistReturn:
                     curTileDict = multiPathDict.get(leafMove.source, {})
                     existingMax, existingPath = curTileDict.get(path.length, defaultNoPathValue)

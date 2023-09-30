@@ -18,9 +18,8 @@ import numpy
 from scipy.special import expit
 
 from DataModels import Move
-from Engine.ArmyEngineModels import ArmySimState, ArmySimResult, ArmySimEvaluationParams
+from Engine.ArmyEngineModels import ArmySimState, ArmySimEvaluationParams
 from PerformanceTimer import PerformanceTimer
-from base.client.map import MapBase
 
 
 #
@@ -64,8 +63,14 @@ class MctsDUCT(object):
             self,
             # player: int,
             logStuff: bool = True,
-            nodeSelectionFunction: MoveSelectionFunction = MoveSelectionFunction.RobustChild,
+            nodeSelectionFunction: MoveSelectionFunction = MoveSelectionFunction.MaxAverageValue,
     ):
+        self.min_expanded_visit_count_to_count_for_score: int = 1
+        """Basically this is setting the minimum number of trials that must have been run below a given board state before its score will be used as the 'net_economy_differential' for the sim."""
+
+        self.min_expanded_visit_count_to_count_for_moves: int = 1
+        """Shouldn't really matter, just for pruning the last moves the engine suggests if they haven't been well explored, so they dont look so weird/confusing."""
+
         self.logAll: bool = False
         self.player = 0
         """This isn't the actual player int from generals game, this is just the playing-players index into the players array. The 'bot' is always the first player from MCTS's point of view."""
@@ -347,7 +352,9 @@ class MctsDUCT(object):
             rootNode,
             selectionFunc=self._node_selection_function,
             game=rootNode.context.game,
-            finalPlayoutEstimationDepth=self.final_playout_estimation_depth
+            finalPlayoutEstimationDepth=self.final_playout_estimation_depth,
+            minExpandedVisitCountToCountForMoves=self.min_expanded_visit_count_to_count_for_moves,
+            minExpandedVisitCountToCountForScore=self.min_expanded_visit_count_to_count_for_score
         )
         return summary
 
@@ -369,7 +376,7 @@ class MctsDUCT(object):
                 if visitCount != 0:
                     avgScore = sumScores / visitCount
 
-                logging.info(f'p{p} t{node.context.turn} move {str(move)} visits {visitCount} score {avgScore:.3f}')
+                logging.info(f'p{p} t{node.context.turn} move {str(move)} visits {visitCount} score {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f})')
 
             for i, move in enumerate(pMoves):
                 sumScores: float = node.scoreSums[p][i]
@@ -381,7 +388,7 @@ class MctsDUCT(object):
                 if visitCount > bestVisitCount:
                     logging.info(f'p{p} t{node.context.turn} new best move {str(move)} had \r\n'
                                  f'   visitCount {visitCount} > bestVisitCount {bestVisitCount}, \r\n'
-                                 f'   avgScore {avgScore:.3f} vs bestAvgScore {bestAvgScore:.3f}, \r\n'
+                                 f'   avgScore {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f}) vs bestAvgScore {bestAvgScore:.3f} ({self.decompress_player_utility(bestAvgScore) / 10:.1f}), \r\n'
                                  f'   new bestMove {str(move)} > old bestMove {str(bestMove)}, \r\n'
                                  f'   new bestState {str(node.context.board_state)}')
                     bestVisitCount = visitCount
@@ -391,7 +398,7 @@ class MctsDUCT(object):
                 elif visitCount == bestVisitCount:
                     if avgScore > bestAvgScore:
                         logging.info(f'p{p} t{node.context.turn} visit tie - new best move {str(move)} had \r\n'
-                                     f'   avgScore {avgScore:.3f} vs bestAvgScore {bestAvgScore:.3f}, \r\n'
+                                     f'   avgScore {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f}) vs bestAvgScore {bestAvgScore:.3f} ({self.decompress_player_utility(bestAvgScore) / 10:.1f}), \r\n'
                                      f'   visitCount {visitCount} > bestVisitCount {bestVisitCount}, \r\n'
                                      f'   new bestMove {str(move)} > old bestMove {str(bestMove)}, \r\n'
                                      f'   new bestState {str(node.context.board_state)}')
@@ -404,7 +411,7 @@ class MctsDUCT(object):
 
                         logging.info(f'p{p} t{node.context.turn} TIEBREAK move {str(move)} had \r\n'
                                      f'   visitCount {visitCount} == bestVisitCount {bestVisitCount}, \r\n'
-                                     f'   avgScore {avgScore:.3f} vs bestAvgScore {bestAvgScore:.3f}, \r\n'
+                                     f'   avgScore {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f}) vs bestAvgScore {bestAvgScore:.3f} ({self.decompress_player_utility(bestAvgScore) / 10:.1f}), \r\n'
                                      f'   move {str(move)} vs bestMove {str(bestMove)}, \r\n'
                                      f'   state {str(node.context.board_state)}')
                         if self.get_rand_int() % numBestFound == 0:
@@ -416,7 +423,7 @@ class MctsDUCT(object):
                             logging.info('  (lost tie break)')
             logging.info(f'p{p} t{node.context.turn} best move {str(bestMove)} had \r\n'
                          f'   visitCount {bestVisitCount}, \r\n'
-                         f'   bestAvgScore {bestAvgScore:.3f}')
+                         f'   bestAvgScore {bestAvgScore:.3f} ({self.decompress_player_utility(bestAvgScore) / 10:.1f})')
             playerMoves.append(bestMove)
             playerScores.append(bestAvgScore)
             playerVisitCounts.append(bestVisitCount)
@@ -425,7 +432,7 @@ class MctsDUCT(object):
 
         logging.info(f't{node.context.turn} COMBINED move {str(boardMove)} had \r\n'
                      f'   visitCounts {str(playerVisitCounts)}, \r\n'
-                     f'   bestAvgScores {str([f"{s:.3f}" for s in playerScores])}')
+                     f'   bestAvgScores {str([f"{s:.3f} ({self.decompress_player_utility(s) / 10:.1f})" for s in playerScores])}')
         return playerScores[0], boardMove
 
     def maximum_average_value_selection_func(self, node: MctsNode) -> typing.Tuple[float, BoardMoves]:
@@ -446,7 +453,7 @@ class MctsDUCT(object):
                 if visitCount != 0:
                     avgScore = sumScores / visitCount
 
-                logging.info(f'p{p} t{node.context.turn} move {str(move)} visits {visitCount} score {avgScore:.3f}')
+                logging.info(f'p{p} t{node.context.turn} move {str(move)} visits {visitCount} score {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f})')
 
             for i, move in enumerate(pMoves):
                 sumScores: float = node.scoreSums[p][i]
@@ -457,7 +464,7 @@ class MctsDUCT(object):
 
                 if avgScore > bestAvgScore:
                     logging.info(f'p{p} t{node.context.turn} visit tie - new best move {str(move)} had \r\n'
-                                 f'   avgScore {avgScore:.3f} vs bestAvgScore {bestAvgScore:.3f}, \r\n'
+                                 f'   avgScore {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f}) vs bestAvgScore {bestAvgScore:.3f} ({self.decompress_player_utility(bestAvgScore) / 10:.1f}), \r\n'
                                  f'   visitCount {visitCount} > bestVisitCount {bestVisitCount}, \r\n'
                                  f'   new bestMove {str(move)} > old bestMove {str(bestMove)}, \r\n'
                                  f'   new bestState {str(node.context.board_state)}')
@@ -469,7 +476,7 @@ class MctsDUCT(object):
                     numBestFound += 1
 
                     logging.info(f'p{p} t{node.context.turn} TIEBREAK move {str(move)} had \r\n'
-                                 f'   avgScore {avgScore:.3f} vs bestAvgScore {bestAvgScore:.3f}, \r\n'
+                                 f'   avgScore {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f}) vs bestAvgScore {bestAvgScore:.3f} ({self.decompress_player_utility(bestAvgScore) / 10:.1f}), \r\n'
                                  f'   visitCount {visitCount} == bestVisitCount {bestVisitCount}, \r\n'
                                  f'   move {str(move)} vs bestMove {str(bestMove)}, \r\n'
                                  f'   state {str(node.context.board_state)}')
@@ -482,7 +489,7 @@ class MctsDUCT(object):
                         logging.info('  (lost tie break)')
             logging.info(f'p{p} t{node.context.turn} best move {str(bestMove)} had \r\n'
                          f'   visitCount {bestVisitCount}, \r\n'
-                         f'   bestAvgScore {bestAvgScore:.3f}')
+                         f'   bestAvgScore {bestAvgScore:.3f} ({self.decompress_player_utility(bestAvgScore) / 10:.1f})')
             playerMoves.append(bestMove)
             playerScores.append(bestAvgScore)
             playerVisitCounts.append(bestVisitCount)
@@ -491,7 +498,7 @@ class MctsDUCT(object):
 
         logging.info(f't{node.context.turn} COMBINED move {str(boardMove)} had \r\n'
                      f'   visitCounts {str(playerVisitCounts)}, \r\n'
-                     f'   bestAvgScores {str([f"{s:.3f}" for s in playerScores])}')
+                     f'   bestAvgScores {str([f"{s:.3f} ({self.decompress_player_utility(s) / 10:.1f})" for s in playerScores])}')
         return playerScores[0], boardMove
 
     def get_rand_int(self):
@@ -592,7 +599,9 @@ class MctsEngineSummary(object):
             rootNode: MctsNode,
             selectionFunc: typing.Callable[[MctsNode], typing.Tuple[float, BoardMoves]],
             game: Game,
-            finalPlayoutEstimationDepth: int
+            finalPlayoutEstimationDepth: int,
+            minExpandedVisitCountToCountForScore: int = 5,
+            minExpandedVisitCountToCountForMoves: int = 3
     ):
         """
 
@@ -622,12 +631,12 @@ class MctsEngineSummary(object):
             curNode = curNode.children.get(bestMoves, None)
 
             # break if we hit a node that hasn't really been tested outside of a single trial, instead do a biased final trial.
-            if curNode is None or (curNode.totalVisitCount <= 3 and not curNode.context.trial.over()):
+            if curNode is None or (curNode.totalVisitCount <= minExpandedVisitCountToCountForMoves and not curNode.context.trial.over()):
                 break
 
             nextScore, bestMoves = selectionFunc(curNode)
 
-            if curNode.totalVisitCount > 10 or curNode.context.trial.over():
+            if curNode.totalVisitCount > minExpandedVisitCountToCountForScore or curNode.context.trial.over():
                 # dont record score for nodes once we hit low confidence.
                 score = nextScore
 

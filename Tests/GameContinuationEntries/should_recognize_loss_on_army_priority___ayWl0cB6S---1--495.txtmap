@@ -1,0 +1,71 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          M    M                   M    M    a3   a3                       M    M
+     M              M    M    a3   a2   a2   b1   b1   a5        M
+               a4   b2   b2   M    b1   b1   b1   b1   M    a4   a3   M                        M
+     M         a4   b2   b2   b1   b1   b2   a4   b1   a3   b2   b2   b3                  M
+          M    M    M    b2   b1   M    a6   M    b1   a3   b2   b3   b3                  M    M
+          M    M    b3   M    b1   b1   M    b1   b1   M         b3   C41  M    M    M         M
+               M    b3   b2   b1   C40  b1   b1   b1   b1   M    b1   b1   b1   b1   C45
+M              b2   b2   b2   b34  b1   b3   M    b1   b1   b1   b1   M    b1   b3   b3   b2   b2   M
+          b4   b2   b2   bG27 b1   b1   b1   M    M    b1   b1   M    b3   b3   b3   b2   M    b2   b2
+               M    b1   b1   a57  a1   a1   a1   a1   a1   a1   a1   a1   a1   b2   b2   a3   a3
+M         M    M    b3   M    b2   b3   b2   a1   M         M    b2   b3   a1   a1   a3   a3
+          M    b3   b3   M    b2        b3   a1   b4   M    M    M    b3   b3   a1   MD
+          M    b3   M    M    M    C41  M    a1   a1   a1   a1   b3   b4   b3   a1   M    MD        M
+          M    b4   M                   MD   D    M    b1   b1        M    b1   b1   a1   a1D  D
+               b3   b3                       M    a3   a3   a1   M    M    M    a2   a2   a1D  MD   MD
+     M         M         M                        a3D  a3D  a1D  a1D  a1D  a1D  a1D  a2D  a1D  a1D  MD
+     M                   M              M         D    D    a3D  a3D  D    D    D    MD   a2D  a1D  MD
+                         M         M              M    M    M         M    M         D    MD   a1D  a7D
+M    M              M         M              M    M                        M    M    M    aG8D a1D  a6D
+                    M              M    M                   M    M         M              a1   MD   a6D
+M    M    M                   M                   M              M                        M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=18,18
+turn=495
+bot_player_index=1
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=40
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=True
+bot_finishing_exploration=False
+bot_target_player=0
+bot_targeting_army=6,9
+bot_cur_path=None
+aUsername=lmat
+aTiles=80
+aScore=222
+aStandingArmy=142
+aStars=15
+aCityCount=1
+aGeneral=18,18
+aKnowsKingLocation=True
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=705
+aDelta25Tiles=-8
+aDelta25Score=48
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=495
+bUsername=Human.exe
+bTiles=98
+bScore=245
+bStandingArmy=147
+bStars=70
+bCityCount=1
+bGeneral=5,8
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=9
+bDelta25Score=57
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=495

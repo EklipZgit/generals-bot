@@ -567,7 +567,7 @@ class GameSimulatorHost(object):
     def make_player_afk(self, player: int):
         self.forced_afk_players.append(player)
 
-    def reveal_player_general(self, playerToReveal, playerToRevealTo, hidden=False):
+    def reveal_player_general(self, playerToReveal: int, playerToRevealTo: int, hidden=False):
         self.sim.set_general_vision(playerToReveal, playerToRevealTo, hidden=hidden)
         revealPlayer = self.sim.players[playerToRevealTo]
         revealGeneral = self.sim.sim_map.generals[playerToReveal]

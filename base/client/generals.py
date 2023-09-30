@@ -54,7 +54,7 @@ class GeneralsClient(object):
         self.public_server = public_server
         self.lastCommunicationTime = time.time()
 
-        self.bot_key = "sd09fjd203i0ejwi"
+        self.bot_key = "sd09fjd203i0ejwi_changeme"
         self._lock = threading.RLock()
         # clearly, I do not condone racist / sexist words or mean comments. The bot does not say any of these.
         # These are used to trigger a passive aggressive response from the bot to players who call it names etc,
@@ -203,8 +203,8 @@ class GeneralsClient(object):
                 continue
 
             # ignore heartbeats and connection acks
-            if msg in {"2", "3", "40"}:
-                logging.info("2, 3 and 40 ignored, " + json.dumps(msg))
+            if msg in {"2", "3", "40", "41"}:
+                logging.info("2, 3 40, 41 ignored, " + json.dumps(msg))
                 continue
 
             # remove numeric prefix

@@ -1903,7 +1903,7 @@ def prune_mst_to_max_army_per_turn_with_values(
     @param invalidMoveFunc: func(GatherTreeNode) -> bool, return true if you want a leaf GatherTreeNode to always be prune. For example, pruning gather nodes that begin at an enemy tile or that are 1's.
     @param allowBranchPrune: Optionally, pass false to disable pruning whole branches. Allowing branch prunes produces lower value per turn trees but also smaller trees.
 
-    @return: The list same list of rootnodes passed in, modified.
+    @return: (totalCount, totalValue, The list same list of rootnodes passed in, modified)
     """
 
     cityCounter = SearchUtils.Counter(0)
@@ -1960,11 +1960,19 @@ def prune_mst_to_max_army_per_turn_with_values(
         curValuePerTurn.value = pruneValPerTurn
         return False
 
+    def pruneOrderFunc(node: GatherTreeNode, curObj):
+        if node.gatherTurns == 0 or node.trunkDistance == 0:
+            msg = f'ERR PRUNE node {repr(node)} had trunkDist {node.trunkDistance} or gatherTurns {node.gatherTurns} of 0...?'
+            if USE_DEBUG_ASSERTS:
+                viewInfo.addAdditionalInfoLine(msg)
+            return -1, -1, -1
+        return (node.value / node.gatherTurns), node.trunkValue / node.trunkDistance, node.trunkDistance
+
     return prune_mst_until(
         rootNodes,
         untilFunc=untilFunc,
         # if we dont include trunkVal/node.trunkDistance we end up keeping shitty branches just because they have a far, large tile on the end.
-        pruneOrderFunc=lambda node, curObj: (node.value / node.gatherTurns if node.gatherTurns > 0 else 0.0, node.trunkValue/node.trunkDistance, node.trunkDistance),
+        pruneOrderFunc=pruneOrderFunc,
         # pruneOrderFunc=lambda node, curObj: (node.value, node.trunkValue / node.trunkDistance, node.trunkDistance),
         # pruneOrderFunc=lambda node, curObj: (node.value / node.gatherTurns, node.trunkValue / node.trunkDistance, node.trunkDistance),
         invalidMoveFunc=invalidMoveFunc,
@@ -1999,7 +2007,7 @@ def prune_mst_to_max_army_per_turn(
     @param allowBranchPrune: Optionally, pass false to disable pruning whole branches.
     Allowing branch prunes produces lower value per turn trees but also smaller trees.
 
-    @return: The list same list of rootnodes passed in, modified.
+    @return: (totalCount, totalValue, The list same list of rootnodes passed in, modified).
     """
 
     count, totalValue, rootNodes = prune_mst_to_max_army_per_turn_with_values(

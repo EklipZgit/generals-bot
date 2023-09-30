@@ -1021,3 +1021,41 @@ class BotBehaviorTests(TestBase):
 
         self.assertGreater(cityDiff, 4, 'should have taken at least some cities before switching gears to defense')
         self.assertLess(cityDiff, 9, 'should not have kept up the rapid city taking once dominating econ and under attack')
+    
+    def test_should_expand_effectively(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_take_19_years_to_make_move___HN1IDtUZ4---1--54.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 54, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=54)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=46)
+        self.assertIsNone(winner)
+        genMap = simHost.get_player_map(general.player)
+        self.assertGreater(genMap.players[general.player].tileCount, 50)  # actually can probably capture more than 50...?
+    
+    def test_should_all_in_general_when_contested_cities_out_of_position_and_knows_no_army_on_general(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_all_in_general_when_contested_cities_out_of_position_and_knows_no_army_on_general___z1yhdwnBO---0--327.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 327, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=327)
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
+        self.assertIsNone(winner)
+
+        # TODO add asserts for should_all_in_general_when_contested_cities_out_of_position_and_knows_no_army_on_general

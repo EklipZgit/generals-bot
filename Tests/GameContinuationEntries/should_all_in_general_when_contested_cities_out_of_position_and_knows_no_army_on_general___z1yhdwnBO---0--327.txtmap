@@ -1,0 +1,249 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M              j3   M              M    M    C46            M         M         M                                            M         M    M              M    M    M    M         M
+j2        M    j3D  j2D  j2D  j2D  MD   j4   a3   a3   a3   M    jC3                 M    M              M                   M                   M                                                 M
+j2        j2   M    j3   j2   j5D  jG6D j3   M    a3   a4   j3   j21  M                        M                                                 M    M         M                        M
+     j2   a2   a2   a2   M    MD   j1D  j3D  M    j1   a3   j3   j3   M                                  M                                       M                   M         M                   M
+     j2   a2   j2   a3   M    j1   j1   j1   j1D  j1   j1   a4   a4   M                        M                        M    M    M    M              M
+MD   j2   a2   a2   j1   j1   j1   a2   j1   j4D  M    a3   a3   a4   a4        M    M         M    M                        M                                       M                             M
+MD   jC8  j1   j1   jC19 M    a4             M         j4   M         a4   M                        M    M         M                   M                             M         M                   M
+D    MD   M    a1   a1   M    a4        M    M    M    a3   a5   M    a4                  M                                            M         M    M
+               j1   a1   j6   a3   M    a2   a2   a3   a3   M    a4   a4                            M                                  M         M    M         M                   M              M
+M         M         a1   a2   a2   a2   M    a2   a3   M    a4   a4   C46            M              M                   M         M                                       M         M              M
+M    a2   a2   a2   a1   j3   j4   a2   a2   a2   a3   a2   a4   a4   M              M    M                   M    M                   M                   M
+C48       M    a2   a1   M    a3   a3   a3   aG31 a2   a2   M    a4                            M    M              M              M         M         M         M
+          M    a3   a1   M    a3   a3   a3   a2   M    a50  a1   a1        M                                                      M    M                             M    M                   M    M
+          a4   a2   a1   a1   a3   a4   a3   a2   a2   M    aC2  a1   M    M                             M              M                        M              M                        M         M
+          a4   a2   M    a1   M    a4   M    a4   M    a1   a1   M                   M                   M              M                   M    M         M                                       M
+          M    a2   a2   a1   M    C43       a4   M    M    a1   a4   a4                                           M         M         M                                            M              M
+          M    a2   a1   a1   a1   M              M         a4   M         M         M    M                   M                   M         M              M    M         M    M
+M    M         M    a4   a2   a4   a4   M    M    M         C47                                                    M    M    M    M    M         M                   M    M
+                    C46  a2   a4   a4   M         M    M                        M                        M              M    M                                       M         M
+                         M    a4   M         M                                                                     M              M                        M    M
+     M         M    M    M    a4        M         M                                       M    M         M         M    M                   M                                                 M    M
+               M              M                                                                                         M    M                   M                   M         M    M    M
+                                   M                             M                             M                        M                        M    M              M                   M
+     M    M         M              M    M                                  M         M         M              M         M                   M         M         M                             M
+                    M                             M                   M                   M              M    M                   M                                       M         M
+     M         M         M    M              M                             M                   M         M                                                 M
+               M                                       M    M                                  M    M                                                      M         M                   M
+M                        M         M                                                 M    M                                  M                             M    M                   M
+M                        M                   M                             M    M    M    M    M         M                   M         M                   M         M         M    M
+                              M                                  M    M         M         M         M                                       M
+                                             M                   M              M         M    M                                  M         M    M
+     M    M                   M    M    M              M    M              M              M    M                                  M         M                        M              M    M
+     M                   M                             M              M                                            M         M              M    M         M
+M                                  M    M         M                   M              M                                                           M              M                   M
+                                   M                                            M         M    M         M              M         M    M                        M                   M
+                              M                   M    M              M                   M                   M         M    M                             M         M              M
+                                   M    M              M    M         M                             M                   M         M                        M                                  M
+                         M         M                        M                        M         M    M         M    M                             M    M              M              M
+          M    M                                                           M              M              M              M              M                             M         M    M
+M                   M    M                                                      M                                  M                        M              M                                       M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=7,2
+turn=327
+bot_player_index=0
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=40
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=True
+bot_finishing_exploration=False
+bot_target_player=9
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=112
+aScore=371
+aStandingArmy=259
+aStars=69
+aCityCount=2
+aGeneral=9,11
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=3
+aDelta25Score=21
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=327
+bUsername=Anonymous
+bTiles=0
+bScore=0
+bStandingArmy=0
+bStars=0
+bCityCount=1
+bKnowsKingLocation=False
+bDead=True
+bLeftGame=True
+bLeftGameTurn=229
+bAggressionFactor=0
+bDelta25Tiles=-29
+bDelta25Score=-78
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=0
+cUsername=Waterin
+cTiles=83
+cScore=293
+cStandingArmy=210
+cStars=66
+cCityCount=4
+cKnowsKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=-13
+cDelta25Score=-48
+cCityGainedTurn=292
+cCityLostTurn=0
+cLastSeenMoveTurn=0
+dUsername=hkuhujgjhvh
+dTiles=0
+dScore=0
+dStandingArmy=0
+dStars=39
+dCityCount=1
+dKnowsKingLocation=False
+dDead=True
+dLeftGame=True
+dLeftGameTurn=176
+dAggressionFactor=0
+dDelta25Tiles=-24
+dDelta25Score=-62
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=0
+eUsername=Aviate1
+eTiles=0
+eScore=0
+eStandingArmy=0
+eStars=67
+eCityCount=1
+eKnowsKingLocation=False
+eDead=True
+eLeftGame=True
+eLeftGameTurn=20
+eAggressionFactor=0
+eDelta25Tiles=-1
+eDelta25Score=-11
+eCityGainedTurn=0
+eCityLostTurn=0
+eLastSeenMoveTurn=0
+fUsername=Trickster
+fTiles=112
+fScore=383
+fStandingArmy=271
+fStars=69
+fCityCount=4
+fKnowsKingLocation=False
+fDead=False
+fLeftGame=False
+fLeftGameTurn=-1
+fAggressionFactor=0
+fDelta25Tiles=16
+fDelta25Score=23
+fCityGainedTurn=304
+fCityLostTurn=0
+fLastSeenMoveTurn=0
+gUsername=gorlami
+gTiles=0
+gScore=0
+gStandingArmy=0
+gStars=65
+gCityCount=1
+gKnowsKingLocation=False
+gDead=True
+gLeftGame=True
+gLeftGameTurn=228
+gAggressionFactor=0
+gDelta25Tiles=-46
+gDelta25Score=-121
+gCityGainedTurn=162
+gCityLostTurn=210
+gLastSeenMoveTurn=0
+hUsername=Tong_274
+hTiles=0
+hScore=0
+hStandingArmy=0
+hStars=65
+hCityCount=1
+hKnowsKingLocation=False
+hDead=True
+hLeftGame=True
+hLeftGameTurn=138
+hAggressionFactor=0
+hDelta25Tiles=-14
+hDelta25Score=-19
+hCityGainedTurn=0
+hCityLostTurn=0
+hLastSeenMoveTurn=0
+iUsername=Jayden115
+iTiles=0
+iScore=0
+iStandingArmy=0
+iStars=67
+iCityCount=1
+iKnowsKingLocation=False
+iDead=True
+iLeftGame=True
+iLeftGameTurn=86
+iAggressionFactor=0
+iDelta25Tiles=-16
+iDelta25Score=-19
+iCityGainedTurn=0
+iCityLostTurn=0
+iLastSeenMoveTurn=0
+jUsername=rawr
+jTiles=46
+jScore=150
+jStandingArmy=104
+jStars=71
+jCityCount=3
+jGeneral=7,2
+jKnowsKingLocation=False
+jDead=False
+jLeftGame=False
+jLeftGameTurn=-1
+jAggressionFactor=905
+jDelta25Tiles=-3
+jDelta25Score=-41
+jCityGainedTurn=172
+jCityLostTurn=0
+jLastSeenMoveTurn=327
+kUsername=kingstart
+kTiles=112
+kScore=442
+kStandingArmy=330
+kStars=60
+kCityCount=6
+kKnowsKingLocation=False
+kDead=False
+kLeftGame=False
+kLeftGameTurn=-1
+kAggressionFactor=0
+kDelta25Tiles=26
+kDelta25Score=143
+kCityGainedTurn=296
+kCityLostTurn=0
+kLastSeenMoveTurn=0
+lUsername=jayhawk
+lTiles=120
+lScore=393
+lStandingArmy=273
+lStars=67
+lCityCount=5
+lKnowsKingLocation=False
+lDead=False
+lLeftGame=False
+lLeftGameTurn=-1
+lAggressionFactor=2
+lDelta25Tiles=9
+lDelta25Score=127
+lCityGainedTurn=312
+lCityLostTurn=0
+lLastSeenMoveTurn=288

@@ -232,7 +232,7 @@ class TestBase(unittest.TestCase):
         map = MapBase(player_index=player_index, teams=None, user_names=usernames[0:num_players], turn=turn, map_grid_y_x=tiles, replay_url='42069')
         map.update_scores(fakeScores)
         map.update_turn(turn)
-        map.update()
+        map.update(bypassDeltas=True)
         return map
 
     def get_empty_weight_map(self, map: MapBase, empty_value = 0):
@@ -804,7 +804,7 @@ class TestBase(unittest.TestCase):
 
         map.clear_deltas_and_score_history()
         map.update_scores(scores)
-        map.update()
+        map.update(bypassDeltas=True)
 
     def generate_enemy_general_opposite_general(self, map: MapBase, general: Tile) -> Tile:
         map.generals[general.player] = general

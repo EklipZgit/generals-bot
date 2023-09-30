@@ -576,11 +576,14 @@ class ArmyTrackerTests(TestBase):
 
     def test_should_not_perform_army_increment_or_city_increment_on_initial_test_map_load(self):
         mapFile = 'GameContinuationEntries/should_not_duplicate_army_back_into_fog_on_small_player_intersection___HeEzmHU03---0--350.txtmap'
+        self.begin_capturing_logging()
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 350, fill_out_tiles=True)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=350)
+        # assert they start equal raw
+        self.assertEqual(map.GetTile(7, 12).army, rawMap.GetTile(7, 12).army)
 
         simHost = GameSimulatorHost(
             map,
@@ -588,9 +591,11 @@ class ArmyTrackerTests(TestBase):
             playerMapVision=rawMap,
             allAfkExceptMapPlayer=True)
 
+        # assert still equal after loading the sim engine
+        self.assertEqual(map.GetTile(7, 12).army, rawMap.GetTile(7, 12).army)
+
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        self.begin_capturing_logging()
         self.assertNoFogMismatches(simHost, general.player)
     
     def test_should_not_duplicate_army_back_into_fog_on_small_player_army_collision(self):

@@ -361,6 +361,8 @@ class GameSimulator(object):
         # call update
 
         for player in self.players:
+            logging.info(f'----')
+            logging.info(f'----')
             logging.info(f'SIM SENDING TURN {self.turn} MAP UPDATES TO PLAYER {player.index}')
             player.map.update_turn(self.turn)
 
@@ -378,9 +380,7 @@ class GameSimulator(object):
                 else:
                     self._send_player_lost_vision_of_tile(player, tile)
 
-            if noDeltas:
-                player.map.clear_deltas_and_score_history()
-            player.map.update()
+            player.map.update(bypassDeltas=noDeltas)
             player.tiles_lost_this_turn = set()
             player.tiles_gained_this_turn = set()
         logging.info(f'END SIM PLAYER MAP UPDATES FOR TURN {self.turn}')

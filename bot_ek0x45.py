@@ -4894,13 +4894,13 @@ class EklipZBot(object):
         cityCount = player.cityCount
 
         citiesAvoided = 0
-        if player.cityCount > 3:
+        if player.cityCount > 4:
             for city in sorted(player.cities, key=lambda c: c.army):
+                if citiesAvoided >= cityCount // 2 - 2:
+                    break
                 citiesAvoided += 1
                 self.viewInfo.addAdditionalInfoLine(f'AVOIDING CITY {repr(city)}')
                 self.cities_gathered_this_cycle.add(city)
-                if citiesAvoided >= cityCount // 2:
-                    break
 
     def dump_turn_data_to_string(self):
         charMap = {

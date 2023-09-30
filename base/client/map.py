@@ -1280,9 +1280,29 @@ class MapBase(object):
 
         sourceDeltaMismatch = expectedSourceDelta != actualSrcDelta
         destDeltaMismatch = expectedDestDelta != actualDestDelta
+        #
+        # # TODO works for 1v1 but not FFA
+        # fakeOtherPlayer = (self.player_index + 1) & 1
 
-        # TODO works for 1v1 but not FFA
-        fakeOtherPlayer = (self.player_index + 1) & 1
+        sourceHasEnPriorityDeltasNearby = False
+        destHasEnPriorityDeltasNearby = False
+        for tile in source.movable:
+            if (
+                    tile != dest
+                    and (tile.delta.unexplainedDelta != 0 or tile.delta.lostSight)
+                    and tile.delta.oldOwner != self.player_index
+            ):
+                if MapBase.player_had_priority_over_other(tile.delta.oldOwner, self.player_index, self.turn):
+                    sourceHasEnPriorityDeltasNearby = True
+
+        for tile in dest.movable:
+            if (
+                    tile != source
+                    and (tile.delta.unexplainedDelta != 0 or tile.delta.lostSight or not tile.visible)
+                    and tile.delta.oldOwner != self.player_index
+            ):
+                if MapBase.player_had_priority_over_other(tile.delta.oldOwner, self.player_index, self.turn):
+                    destHasEnPriorityDeltasNearby = True
 
         sourceWasAttackedWithPriority = False
         sourceWasCaptured = False
@@ -1290,7 +1310,7 @@ class MapBase(object):
             amountAttacked = actualSrcDelta - expectedSourceDelta
             if source.player != self.player_index:
                 sourceWasCaptured = True
-                if MapBase.player_had_priority_over_other(source.player, self.player_index, self.turn):
+                if sourceHasEnPriorityDeltasNearby:
                     sourceWasAttackedWithPriority = True
                     logging.info(
                         f'MOVE {str(last_player_index_submitted_move)} seems to have been captured with priority. Nuking our last move.')
@@ -1315,7 +1335,7 @@ class MapBase(object):
                     # then we almost certainly didn't have source attacked with priority.
                     logging.warning(
                         f'MOVE {str(last_player_index_submitted_move)} ? src attacked for amountAttacked {amountAttacked} WITHOUT priority based on actualSrcDelta {actualSrcDelta} vs expectedSourceDelta {expectedSourceDelta}')
-                elif not MapBase.player_had_priority_over_other(self.player_index, fakeOtherPlayer, self.turn):
+                elif destHasEnPriorityDeltasNearby:
                     # if we DIDNT have priority (this is hit or miss in FFA, tho).
                     armyMadeItToDest = dest.delta.unexplainedDelta
                     amountAttacked = expectedDestDelta - armyMadeItToDest
@@ -1347,17 +1367,19 @@ class MapBase(object):
             unexplainedDelta = actualDestDelta - expectedDestDelta
             # if dest.delta.oldOwner == self.player_index:
             #     unexplainedDelta = 0 - unexplainedDelta
-
-            if not MapBase.player_had_priority_over_other(
-                    self.player_index,
-                    fakeOtherPlayer,
-                    self.turn):
+            if sourceHasEnPriorityDeltasNearby:
                 # the source tile could have been attacked for non-lethal damage BEFORE the move was made to target.
                 source.delta.unexplainedDelta = unexplainedDelta
                 source.delta.imperfectArmyDelta = True
+
             dest.delta.unexplainedDelta = unexplainedDelta
-            logging.info(
-                f'MOVE {str(last_player_index_submitted_move)} with expectedDestDelta {expectedDestDelta} likely collided with unexplainedDelta {unexplainedDelta} at dest based on actualDestDelta {actualDestDelta}.')
+
+            if sourceHasEnPriorityDeltasNearby:
+                logging.info(
+                    f'MOVE {str(last_player_index_submitted_move)} with expectedDestDelta {expectedDestDelta} likely collided with unexplainedDelta {unexplainedDelta} at dest OR SOURCE based on actualDestDelta {actualDestDelta}.')
+            else:
+                logging.info(
+                    f'MOVE {str(last_player_index_submitted_move)} with expectedDestDelta {expectedDestDelta} likely collided with unexplainedDelta {unexplainedDelta} at DEST based on actualDestDelta {actualDestDelta}.')
         else:
             logging.info(
                 f'!MOVE {str(last_player_index_submitted_move)} made it to dest with no issues, moving army.\r\n    expectedDestDelta {expectedDestDelta}, actualDestDelta {actualDestDelta}, expectedSourceDelta {expectedSourceDelta}, actualSrcDelta {actualSrcDelta}, sourceWasAttackedWithPriority {sourceWasAttackedWithPriority}, sourceWasCaptured {sourceWasCaptured}')
@@ -1568,7 +1590,8 @@ class MapBase(object):
                         fullToDiffCovered=True,  # otherwise we try to find the fog move to this tile again. This being wrong should be exceedingly rare, like 3 players all moving to the same tile rare.
                         byPlayer=destTile.delta.oldOwner)
                 else:
-                    logging.info(f'POS DELTA SCAN DEST {repr(destTile)} RESULTED IN MULTIPLE SOURCES {repr([repr(s) for s in potentialSources])}, UNHANDLED FOR NOW')
+                    if len(potentialSources) > 0:
+                        logging.info(f'POS DELTA SCAN DEST {repr(destTile)} RESULTED IN MULTIPLE SOURCES {repr([repr(s) for s in potentialSources])}, UNHANDLED FOR NOW')
                     possibleMovesDict[destTile] = potentialSources
 
         # TODO for debugging only
@@ -1652,7 +1675,8 @@ class MapBase(object):
                     else:
                         logging.error(f'ATTK DELTA SCAN DEST {repr(destTile)} SRC {repr(exclusiveSrc)} UNABLE TO EXECUTE DUE TO UNABLE TO FIND byPlayer THAT ISNT NEUTRAL')
                 else:
-                    logging.info(f'ATTK DELTA SCAN DEST {repr(destTile)} RESULTED IN MULTIPLE SOURCES {repr([repr(s) for s in potentialSources])}, UNHANDLED FOR NOW')
+                    if len(potentialSources) > 0:
+                        logging.info(f'ATTK DELTA SCAN DEST {repr(destTile)} RESULTED IN MULTIPLE SOURCES {repr([repr(s) for s in potentialSources])}, UNHANDLED FOR NOW')
                     possibleMovesDict[destTile] = potentialSources
 
         # TODO for debugging only
@@ -1712,7 +1736,8 @@ class MapBase(object):
                         fullToDiffCovered=exactMatch,
                         byPlayer=byPlayer)
                 else:
-                    logging.info(f'FOG SOURCE SCAN SRC {repr(sourceTile)} RESULTED IN MULTIPLE DESTS {repr([repr(s) for s in potentialDests])}, UNHANDLED FOR NOW')
+                    if len(potentialDests) > 0:
+                        logging.info(f'FOG SOURCE SCAN SRC {repr(sourceTile)} RESULTED IN MULTIPLE DESTS {repr([repr(s) for s in potentialDests])}, UNHANDLED FOR NOW')
                     possibleMovesDict[sourceTile] = potentialDests
         # TODO compare potential sources limited to one per player.
 

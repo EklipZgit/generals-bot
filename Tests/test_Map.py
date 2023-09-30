@@ -29,6 +29,11 @@ class MapTests(TestBase):
 
         failures = []
 
+        if len(simHost.sim.moves_history) > 0:
+            skipFromToCollisionTiles = self.get_collision_tiles(simHost.sim.moves_history[-1])
+        else:
+            skipFromToCollisionTiles = set()
+
         for player in players:
             playerMap = simHost.get_player_map(player)
             # playerBot = simHost.get_bot(player)
@@ -64,24 +69,47 @@ class MapTests(TestBase):
                     failures.append(f'(pMap {player} tile {str(tile)}) expected delta.oldOwner {tile.delta.oldOwner} on {repr(tile)}, found {playerTile.delta.oldOwner} on {repr(playerTile)}')
                 if playerTile.delta.newOwner != tile.delta.newOwner:
                     failures.append(f'(pMap {player} tile {str(tile)}) expected delta.newOwner {tile.delta.newOwner} on {repr(tile)}, found {playerTile.delta.newOwner} on {repr(playerTile)}')
-                if playerTile.delta.fromTile != tile.delta.fromTile:
-                    # a tile can be moved to from multiple tiles at once. However a tile cannot move TO multiple tiles
-                    # at once, so cross reference the mismatched froms corresponding to-tiles in the real map.
-                    # If they match, then this mismatch is fine.
-                    fMessage = f'(pMap {player} tile {str(tile)}) expected delta.fromTile {str(tile.delta.fromTile)} on {repr(tile)}, found {str(playerTile.delta.fromTile)} on {repr(playerTile)}'
-                    # all bets are off when the dest tile has no delta and both players moved at each others armies. Both players think their move took effect and the other player didn't move, as those two cases are indistinguishable from each players perspective.
-                    if playerTile.delta.fromTile is None:
-                        failures.append(fMessage)
-                    else:
-                        realPlayerFrom = realMap.GetTile(playerTile.delta.fromTile.x, playerTile.delta.fromTile.y)
-                        realFrom = tile.delta.fromTile
-                        if realFrom is None or realPlayerFrom.delta.toTile != realFrom.delta.toTile:
+                if playerTile not in skipFromToCollisionTiles:
+                    if playerTile.delta.fromTile != tile.delta.fromTile:
+                        # a tile can be moved to from multiple tiles at once. However a tile cannot move TO multiple tiles
+                        # at once, so cross reference the mismatched froms corresponding to-tiles in the real map.
+                        # If they match, then this mismatch is fine.
+                        fMessage = f'(pMap {player} tile {str(tile)}) expected delta.fromTile {str(tile.delta.fromTile)} on {repr(tile)}, found {str(playerTile.delta.fromTile)} on {repr(playerTile)}'
+                        # all bets are off when the dest tile has no delta and both players moved at each others armies. Both players think their move took effect and the other player didn't move, as those two cases are indistinguishable from each players perspective.
+                        if playerTile.delta.fromTile is None:
                             failures.append(fMessage)
-                if playerTile.delta.toTile != tile.delta.toTile:
-                    failures.append(f'(pMap {player} tile {str(tile)}) expected delta.toTile {str(tile.delta.toTile)} on {repr(tile)}, found {str(playerTile.delta.toTile)} on {repr(playerTile)}')
+                        else:
+                            realPlayerFrom = realMap.GetTile(playerTile.delta.fromTile.x, playerTile.delta.fromTile.y)
+                            realFrom = tile.delta.fromTile
+                            if realFrom is None or realPlayerFrom.delta.toTile != realFrom.delta.toTile:
+                                failures.append(fMessage)
+                    if playerTile.delta.toTile != tile.delta.toTile:
+                        failures.append(f'(pMap {player} tile {str(tile)}) expected delta.toTile {str(tile.delta.toTile)} on {repr(tile)}, found {str(playerTile.delta.toTile)} on {repr(playerTile)}')
 
         if len(failures) > 0:
             self.fail(f'TURN {simHost.sim.turn}\r\n' + '\r\n'.join(failures))
+
+    def get_collision_tiles(self, playerMoves: typing.List[Move | None]) -> typing.Set[Tile]:
+        ignoreCollisions: typing.Set[Tile] = set()
+        for pMove in playerMoves:
+            if pMove is None:
+                continue
+            for opMove in playerMoves:
+                if opMove is None:
+                    continue
+                if pMove == opMove:
+                    continue
+                if (
+                        pMove.source.x == opMove.dest.x
+                        and pMove.source.y == opMove.dest.y
+                        and pMove.dest.x == opMove.source.x
+                        and pMove.dest.y == opMove.source.y
+                ):
+                    # then these moves collided completely and the players will not be able to differentiate whether
+                    # the player with the smaller army tile made a move at all.
+                    ignoreCollisions.add(pMove.source)
+                    ignoreCollisions.add(pMove.dest)
+        return ignoreCollisions
 
     def run_map_delta_test(
             self,
@@ -111,8 +139,8 @@ class MapTests(TestBase):
 
             # renderTurnBeforeSim = True
             # renderTurnBeforePlayers = True
-            # renderP0 = True
-            renderP1 = True
+            renderP0 = True
+            # renderP1 = True
 
             def mapRenderer():
                 if map.turn >= startTurn:
@@ -684,6 +712,8 @@ C5
                                     # f 1765
                                     # f 1765
                                     # f 357
+                                    # f 357
+                                    # f 357
                                     self.run_out_of_fog_collision_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn, includeFogKnowledge=includeFogKnowledge)
 
     def test_run_one_off_out_of_fog_collision_test(self):
@@ -706,11 +736,13 @@ C5
                                 # f 474
                                 # f 474
                                 # f 474
+                                # f 376
+                                # f 295
                                 self.run_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_adj_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        self.run_adj_test(debugMode=debugMode, aArmy=10, bArmy=11, aMove=(1, 0), bMove=(0, 1), turn=97)
+        self.run_adj_test(debugMode=debugMode, aArmy=20, bArmy=12, aMove=(-1, 0), bMove=(-1, 0), turn=96)
 
     def test_generate_all_diagonal_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False

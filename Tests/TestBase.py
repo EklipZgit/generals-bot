@@ -878,6 +878,8 @@ class TestBase(unittest.TestCase):
 
         aWins = 0
         bWins = 0
+        aDroppedMoves = 0
+        bDroppedMoves = 0
         for i in range(numRuns):
             a = i % 2
             b = (a + 1) % 2
@@ -893,6 +895,7 @@ class TestBase(unittest.TestCase):
             try:
                 lastWinTurns = 0
                 winner = -1
+                simHost: GameSimulatorHost = None
                 while lastWinTurns < minGameDurationToCount:
                     self.stop_capturing_logging()
                     map, general, enemyGen = self.load_map_and_generals(curMapFile, 1, fill_out_tiles=False)
@@ -935,7 +938,11 @@ class TestBase(unittest.TestCase):
                 else:
                     raise AssertionError(f"wtf, winner was {str(winner)}")
                 self.begin_capturing_logging()
-                logging.info(f'aWins: {aWins}, bWins: {bWins} (games {aWins + bWins})')
+                aLastDropped = simHost.dropped_move_counts_by_player[a]
+                bLastDropped = simHost.dropped_move_counts_by_player[b]
+                aDroppedMoves += aLastDropped
+                bDroppedMoves += bLastDropped
+                logging.info(f'aWins: {aWins}, bWins: {bWins} (games {aWins + bWins}), aDropped {aLastDropped} total {aDroppedMoves}, bDropped {bLastDropped} total {bDroppedMoves}')
                 self.stop_capturing_logging()
             except:
                 self.begin_capturing_logging()

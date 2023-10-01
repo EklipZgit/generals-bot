@@ -442,6 +442,7 @@ class GameSimulatorHost(object):
         self.sim = GameSimulator(map, ignore_illegal_moves=False)
 
         self.bot_hosts: typing.List[BotHostBase | None] = [None for player in self.sim.players]
+        self.dropped_move_counts_by_player: typing.List[int] = [0 for player in self.sim.players]
 
         self.player_move_cutoff_time: float = 0.450
         """If a player takes longer to move than this, and a debugger is not attached, then the players move will be discarded and an error logged. Does not include the first 12 turns."""
@@ -517,6 +518,7 @@ class GameSimulatorHost(object):
         @return:
         """
         self.give_players_perfect_initial_city_information()
+        self.dropped_move_counts_by_player = [0 for player in self.sim.players]
 
         for playerIndex, botHost in enumerate(self.bot_hosts):
             if botHost is None:
@@ -553,6 +555,7 @@ class GameSimulatorHost(object):
 
             logging.error(f"(error v running bot sim turn {self.sim.turn})")
             logging.error(traceback.format_exc())
+            logging.fatal(f'IMPORT TEST FILES FOR TURN {self.sim.turn} FROM @ {repr([b.eklipz_bot.logDirectory for b in self.bot_hosts if b is not None])}')
             raise
 
         self.sim.end_game()
@@ -646,11 +649,16 @@ class GameSimulatorHost(object):
 
             if not player.dead and not player.index in self.forced_afk_players:
                 moveStart = time.perf_counter()
-                botHost.make_move(player.map)
+                try:
+                    botHost.make_move(player.map)
+                except:
+                    raise AssertionError(f'{traceback.format_exc()}\r\n\r\nIMPORT TEST FILES FOR TURN {self.sim.turn} FROM @ {botHost.eklipz_bot.logDirectory}')
+
                 moveTime = time.perf_counter() - moveStart
                 if self.sim.sim_map.turn > 20 and moveTime > self.player_move_cutoff_time and not DebugHelper.IS_DEBUGGING:
                     logging.error(f'turn {self.sim.sim_map.turn}: player {playerIndex} {self.sim.sim_map.usernames[playerIndex]} took {moveTime:.3f} to move, discarding its move!')
                     self.sim.make_move(playerIndex, None, force=True)
+                    self.dropped_move_counts_by_player[playerIndex] += 1
 
             # if we have a move queued explicitly, overwrite their move with the test-forced move.
             if len(self.move_queue[playerIndex]) > 0:

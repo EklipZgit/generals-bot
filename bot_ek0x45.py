@@ -23,6 +23,7 @@ from ArmyEngine import ArmyEngine, ArmySimResult
 from CityAnalyzer import CityAnalyzer, CityScoreData
 from GatherAnalyzer import GatherAnalyzer
 from KnapsackUtils import solve_knapsack
+from MapMatrix import MapMatrix
 from MctsLudii import MctsDUCT
 from Path import Path
 from PerformanceTimer import PerformanceTimer
@@ -244,6 +245,21 @@ class EklipZBot(object):
         self.behavior_launch_timing_offset: int = 3
         """Negative means launch x turns earlier, positive means later. The actual answer here is probably 'launch after your opponent', so a dynamic launch timing would make the most sense."""
 
+        self.info_render_gather_values: bool = False
+
+        self.info_render_leaf_move_values: bool = False
+
+        self.info_render_army_emergence_values: bool = True
+
+        self.info_render_city_priority_debug_info: bool = True
+
+        self.info_render_general_undiscovered_prediction_values: bool = False
+
+        self.info_render_tile_deltas: bool = True
+
+        self.info_render_gather_locality_values: bool = False
+
+
     def __repr__(self):
         return str(self)
 
@@ -304,13 +320,6 @@ class EklipZBot(object):
                 logging.info("Returned a move using the tile that was curPath, but wasn't the next path move. Resetting path...")
                 self.curPath = None
                 self.curPathPrio = -1
-
-            if self.armyTracker is not None:
-                for tile in self._map.reachableTiles:
-                    val = self.armyTracker.emergenceLocationMap[self.targetPlayer][tile.x][tile.y]
-                    if val != 0:
-                        textVal = f"e{val:.0f}"
-                        self.viewInfo.bottomMidRightGridText[tile.x][tile.y] = textVal
 
             if self._map.turn not in self.history.move_history:
                 self.history.move_history[self._map.turn] = []
@@ -580,9 +589,6 @@ class EklipZBot(object):
     def get_timings(self):
         with self.perf_timer.begin_move_event('GatherAnalyzer scan'):
             self.gatherAnalyzer.scan()
-            for tile in self._map.pathableTiles:
-                if tile.player == self.general.player:
-                    self.viewInfo.bottomMidRightGridText[tile.x][tile.y] = f'g{self.gatherAnalyzer.gather_locality_map[tile]}'
 
         countOnPath = 0
         if self.target_player_gather_targets is not None:
@@ -760,7 +766,11 @@ class EklipZBot(object):
                 with self.perf_timer.begin_move_event(f"USING OLD MST GATH depth {depth}"):
                     GatherTreeNodes = self.build_mst(startTiles, 1.0, depth - 1, negativeTiles)
                     # self.redGatherTreeNodes = [node.deep_clone() for node in GatherTreeNodes]
-                    GatherTreeNodes = GatherUtils.prune_mst_to_turns(GatherTreeNodes, depth - 1, self.general.player, self.viewInfo)
+                    GatherTreeNodes = GatherUtils.prune_mst_to_turns(
+                        GatherTreeNodes,
+                        depth - 1,
+                        self.general.player,
+                        self.viewInfo if self.info_render_gather_values else None)
                 gatherMove = self.get_tree_move_default(GatherTreeNodes)
                 if gatherMove is not None:
                     self.viewInfo.addAdditionalInfoLine(
@@ -785,7 +795,7 @@ class EklipZBot(object):
                     negativeTiles = negativeTiles,
                     searchingPlayer = self.general.player,
                     skipFunc = skipFunc,
-                    viewInfo = self.viewInfo,
+                    viewInfo = self.viewInfo if self.info_render_gather_values else None,
                     skipTiles = skipTiles,
                     distPriorityMap = enemyDistanceMap,
                     priorityTiles = priorityTiles,
@@ -802,7 +812,7 @@ class EklipZBot(object):
                         gatherNodes,
                         minArmy=minGather,
                         searchingPlayer=self.general.player,
-                        viewInfo=self.viewInfo,
+                        viewInfo=self.viewInfo if self.info_render_gather_values else None,
                         allowBranchPrune=False
                     )
                     self.viewInfo.addAdditionalInfoLine(f"{reason}pruned to max gather/turn {prunedValue}/{prunedCount} (min {minGather})")
@@ -992,7 +1002,7 @@ class EklipZBot(object):
 
         self.threat = threat
         if threat is not None and threat.saveTile is not None:
-            self.viewInfo.lastEvaluatedGrid[threat.saveTile.x][threat.saveTile.y] = 200
+            self.viewInfo.evaluatedGrid[threat.saveTile.x][threat.saveTile.y] = 200
 
         enemyNearGen = self.sum_enemy_army_near_tile(self.general)
         genArmyWeighted = self.general.army - enemyNearGen
@@ -1441,6 +1451,7 @@ class EklipZBot(object):
                     negativeTiles=defenseCriticalTileSet,
                     searchingPlayer=self.general.player,
                     incrementBackward=False,
+                    viewInfo= self.viewInfo if self.info_render_gather_values else None,
                     ignoreStartTile=True,
                     useTrueValueGathered=True)
             self.gatherNodes = gatherNodes
@@ -1466,7 +1477,7 @@ class EklipZBot(object):
                 self.info("quickExpand leafMove {}".format(move.toString()))
                 return move
 
-        with self.perf_timer.begin_move_event('GATHER OUTER'):
+        with self.perf_timer.begin_move_event('GATHER OUTER NO MOVE'):
             gathMove = self.try_find_gather_move(threat, defenseCriticalTileSet, self.leafMoves, needToKillTiles)
         if gathMove is not None:
             # already logged / perf countered internally
@@ -1487,7 +1498,7 @@ class EklipZBot(object):
                 gathers,
                 1,
                 self.general.player,
-                self.viewInfo)
+                self.viewInfo if self.info_render_gather_values else None)
 
             self.gatherNodes = gathers
             #move = self.get_gather_move(gathers, None, 1, 0, preferNeutral = True)
@@ -2903,167 +2914,6 @@ class EklipZBot(object):
 
         return GatherUtils.get_tree_move(gathers, priorityFunc, valueFunc)
 
-    def get_gather_move(self, gathers, parent, minGatherAmount = 0, pruneThreshold = None, preferNeutral = True, allowNonKill = False, leaveCitiesLast = True):
-        #logging.info("G A T H E R I N G :  minGatherAmount {}, pruneThreshold {}, preferNeutral {}, allowNonKill {}".format(minGatherAmount, pruneThreshold, preferNeutral, allowNonKill))
-        if pruneThreshold is None:
-            player = self._map.players[self.general.player]
-            pruneThreshPercent = 45
-            pruneThreshold = self.get_median_tile_value(pruneThreshPercent) - 1
-            logging.info("~!~!~!~!~!~!~ MEDIAN {}: {}".format(20, self.get_median_tile_value(20)))
-            logging.info("~!~!~!~!~!~!~ MEDIAN {}: {}".format(35, self.get_median_tile_value(35)))
-            logging.info("~!~!~!~!~!~!~ MEDIAN {}: {}".format(50, self.get_median_tile_value(50)))
-            #logging.info("~!~!~!~!~!~!~ MEDIAN {}: {}".format(65, self.get_median_tile_value(65)))
-            logging.info("~!~!~!~!~!~!~ MEDIAN {}: {}".format(75, self.get_median_tile_value(75)))
-            logging.info("~!~!~!~!~!~!~ pruneThreshold {}: {}".format(pruneThreshPercent, pruneThreshold))
-
-            pruneThreshold = math.floor((player.standingArmy - self.general.army) / player.tileCount)
-            logging.info("~!~!~!~!~!~!~ pruneThreshold via average {}%: {}".format(pruneThreshPercent, pruneThreshold))
-        logging.info("G A T H E R I N G :  minGatherAmount {}, pruneThreshold {}, preferNeutral {}, allowNonKill {}".format(minGatherAmount, pruneThreshold, preferNeutral, allowNonKill))
-        start = time.perf_counter()
-        logging.info("Gathering :)")
-        move = self._get_gather_move_int_v2(gathers, parent, minGatherAmount, pruneThreshold, preferNeutral, allowNonKill = allowNonKill, leaveCitiesLast = leaveCitiesLast)
-        if move is None and pruneThreshold > 0:
-            newThreshold = max(0, self.get_median_tile_value(25) - 2)
-            logging.info("\nEEEEEEEEEEEEEEEEEEEEEEEE\nEEEEEEEEE\nEE\nNo move found for pruneThreshold {}, retrying with {}".format(pruneThreshold, newThreshold))
-            move = self._get_gather_move_int_v2(gathers, parent, minGatherAmount, newThreshold, preferNeutral, allowNonKill = allowNonKill, leaveCitiesLast = leaveCitiesLast)
-        if move is None:
-            logging.info("\nNo move found......... :(")
-            newThreshold = 0
-            logging.info("\nEEEEEEEEEEEEEEEEEEEEEEEE\nEEEEEEEEE\nEE\nNo move found for pruneThreshold {}, retrying with {}".format(pruneThreshold, newThreshold))
-            move = self._get_gather_move_int_v2(gathers, parent, minGatherAmount, newThreshold, preferNeutral, allowNonKill = allowNonKill, leaveCitiesLast = leaveCitiesLast)
-        if move is None:
-            logging.info("\nNo move found......... :(")
-        logging.info("GATHER MOVE DURATION: {:.2f}".format(time.perf_counter() - start))
-        return move
-
-
-    def _get_gather_move_int_v2(self, gathers, parent, minGatherAmount = 0, pruneThreshold = 0, preferNeutral = False, allowNonKill = False, leaveCitiesLast = True):
-        LOG_STUFF = False
-        pX = "  "
-        pY = "  "
-        minGatherAmount = 0
-        if parent is not None:
-            pX = parent.tile.x
-            pY = parent.tile.y
-        move = None
-        maxGather = None
-        for gather in gathers:
-            curMove = None
-            gatherWorthwhile = is_gather_worthwhile(gather, parent)
-            if parent is None or gatherWorthwhile:
-                curMove = self._get_gather_move_int_v2(gather.children, gather, minGatherAmount, pruneThreshold, preferNeutral, allowNonKill, leaveCitiesLast = leaveCitiesLast)
-                #update this gathers value with its changed childrens values
-                newVal = 0
-                newTurns = 1
-                if parent is not None:
-                    newVal = gather.tile.army - 1
-                    if gather.tile.player != self.general.player:
-                        newVal = -1 - gather.tile.army
-                for child in gather.children:
-                    newVal += child.value
-                    newTurns += child.gatherTurns
-                if LOG_STUFF:
-                    logging.info("{},{} <- [update] Gather {},{} updated value {}->{} and turns {}->{}".format(pX, pY, gather.tile.x, gather.tile.y, gather.value, newVal, gather.gatherTurns, newTurns))
-                gather.value = newVal
-                gather.gatherTurns = newTurns
-            if gather.value > 0:
-                self.leafValueGrid[gather.tile.x][gather.tile.y] = gather.value
-            else:
-                if LOG_STUFF:
-                    logging.info("{},{} <- [!worth] Gather {},{} val-turns {}-{} was new maxGather".format(pX, pY, gather.tile.x, gather.tile.y, gather.value, gather.gatherTurns))
-            #if maxGather is None or (gather.value - gather.tile.army) / gather.gatherTurns > (maxGather.value - maxGather.tile.army) / maxGather.gatherTurns:
-            if gather.value / gather.gatherTurns > pruneThreshold and gather.value >= minGatherAmount:
-                if gather == compare_gathers(maxGather, gather, preferNeutral, leaveCitiesLast = leaveCitiesLast):
-                    if LOG_STUFF:
-                        logging.info("{},{} <- [max!] Gather {},{} val-turns {}-{} was new maxGather".format(pX, pY, gather.tile.x, gather.tile.y, gather.value, gather.gatherTurns))
-                    maxGather = gather
-                    if self.is_move_safe_valid(curMove, allowNonKill = allowNonKill):
-                        if LOG_STUFF:
-                            logging.info("{},{} <- [max!] Gather {},{} val-turns {}-{} was new maxGather".format(pX, pY, gather.tile.x, gather.tile.y, gather.value, gather.gatherTurns))
-                        move = curMove
-                    elif curMove is not None:
-                        if LOG_STUFF:
-                            logging.info("{},{} <- [inval] Gather MOVE {},{} <- {},{} returned by gather {},{} wasn't safe or wasn't valid".format(pX, pY, curMove.dest.x, curMove.dest.y, curMove.source.x, curMove.source.y, gather.tile.x, gather.tile.y))
-                    else:
-                        if LOG_STUFF and False:
-                            logging.info("{},{} <- [     ] Gather {},{} didn't return any child moves".format(pX, pY, gather.tile.x, gather.tile.y))
-                else:
-                    if LOG_STUFF:
-                        logging.info("{},{} <- [worse] Gather {},{} val-turns {}-{} was worse than maxGather {},{} val-turns {}-{}".format(pX, pY, gather.tile.x, gather.tile.y, gather.value, gather.gatherTurns, maxGather.tile.x, maxGather.tile.y, maxGather.value, maxGather.gatherTurns))
-            else:
-                if LOG_STUFF:
-                    logging.info("{},{} <- [prune] Gather {},{} val-turns {}-{} did not meet the prune threshold or min gather amount.".format(pX, pY, gather.tile.x, gather.tile.y, gather.value, gather.gatherTurns))
-
-
-        if move is not None:
-            return move
-        if maxGather is not None:
-            if LOG_STUFF:
-                logging.info("{},{} <- maxGather was {},{} but no move. We should be considering making this as a move.".format(pX, pY, maxGather.tile.x, maxGather.tile.y))
-            if parent is not None:
-                if maxGather.tile.army <= 1 or maxGather.tile.player != self._map.player_index:
-                    if LOG_STUFF:
-                        logging.info("{},{} <- WTF tried to move {},{} with 1 or less army :v".format(pX, pY, maxGather.tile.x, maxGather.tile.y))
-                elif maxGather.value > 0:
-                    if LOG_STUFF:
-                        logging.info("{},{} <- Returning {},{} -> {},{}".format(pX, pY, maxGather.tile.x, maxGather.tile.y, pX, pY))
-                    #parent.children.remove(maxGather)
-                    maxGather.children = []
-                    maxGather.value = maxGather.tile.army - 1
-                    maxGather.gatherTurns = 1
-                    self.leafValueGrid[maxGather.tile.x][maxGather.tile.y] = maxGather.value
-                    return Move(maxGather.tile, parent.tile)
-        if LOG_STUFF:
-            logging.info("{},{} <- FUCK! NO POSITIVE GATHER MOVE FOUND".format(pX, pY))
-        return None
-
-    def _get_gather_move_int(self, gathers, parent, minGatherAmount = 0, pruneThreshold = 0, preferNeutral = False, allowNonKill = False):
-        move = None
-        maxGather = None
-        for gather in gathers:
-            if gather.value <= 0:
-                logging.info("gather {},{} worthless".format(gather.tile.x, gather.tile.y))
-                # then just prune it and don't log it?
-                continue
-            #if maxGather is None or (gather.value - gather.tile.army) / gather.gatherTurns > (maxGather.value - maxGather.tile.army) / maxGather.gatherTurns:
-            if gather.value / gather.gatherTurns > pruneThreshold:
-                if gather.value >= minGatherAmount:
-                    if gather == compare_gathers(maxGather, gather, preferNeutral):
-                        maxGather = gather
-                    else:
-                        logging.info("[non] gather {},{} was worse than maxGather in compare_gathers, value/gather.gatherTurns {}/{} ({})".format(gather.tile.x, gather.tile.y, gather.value, gather.gatherTurns, (gather.value/gather.gatherTurns)))
-                else:
-                    logging.info("[low] gather {},{} value {} was less than minGatherAmount {}".format(gather.tile.x, gather.tile.y, gather.value, minGatherAmount))
-            else:
-                logging.info("[prn] gather {},{} value/gather.gatherTurns {}/{} ({}) was less than pruneThreshold {}".format(gather.tile.x, gather.tile.y, gather.value, gather.gatherTurns, (gather.value/gather.gatherTurns), pruneThreshold))
-
-        # if maxGather is not None and (parent is None or maxGather.value / maxGather.gatherTurns > parent.value / parent.gatherTurns):
-        if maxGather is not None:
-            logging.info("}}max{{ gather {},{} was maxGather! value/gather.gatherTurns {}/{} ({}) pruneThreshold {}".format(maxGather.tile.x, maxGather.tile.y, maxGather.value, maxGather.gatherTurns, (maxGather.value/maxGather.gatherTurns), pruneThreshold))
-            gatherWorthwhile = is_gather_worthwhile(maxGather, parent)
-            if parent is None or gatherWorthwhile:
-                # minGatherAmount = 1 is a hack because until the full gather is planned out in advance,
-                # we don't know what will be pruned and can't keep this number evaluated correctly recursively.
-                # So we only use it to pick an initial gather branch, and then don't prune any further than the trunk with it for now.
-                minGatherAmount = 1
-                move = self._get_gather_move_int(maxGather.children, maxGather, minGatherAmount, pruneThreshold, preferNeutral, allowNonKill)
-                if self.is_move_safe_valid(move, allowNonKill = allowNonKill):
-                    logging.info("Returning child move {},{} -> {},{}".format(move.source.x, move.source.y, move.dest.x, move.dest.y))
-                    return move
-            else:
-                logging.info("Cut {},{} because not gatherWorthwhile or no parent".format(maxGather.tile.x, maxGather.tile.y))
-            if parent is not None:
-                if maxGather.tile.army <= 1 or maxGather.tile.player != self._map.player_index:
-                    logging.info("WTF tried to move {},{} with 1 or less army :v".format(maxGather.tile.x, maxGather.tile.y))
-                elif maxGather.value > 0:
-                    logging.info("Returning {},{} -> {},{}".format(maxGather.tile.x, maxGather.tile.y, parent.tile.x, parent.tile.y))
-                    parent.children.remove(maxGather)
-                    return Move(maxGather.tile, parent.tile)
-            logging.info("FUCK! NO POSITIVE, LEGAL, SAFE GATHER MOVE FOUND at gather {},{} value {} gatherTurns {}".format(maxGather.tile.x, maxGather.tile.y, maxGather.value, maxGather.gatherTurns))
-        else:
-            logging.info("FUCK! NO POSITIVE GATHER MOVE FOUND, no maxGather")
-
-        return None
 
     def get_threat_killer_move(self, threat: ThreatObj, searchTurns, negativeTiles):
         """
@@ -3200,15 +3050,16 @@ class EklipZBot(object):
             tileScores = self.cityAnalyzer.get_sorted_neutral_scores()
             enemyTileScores = self.cityAnalyzer.get_sorted_enemy_scores()
 
-            for i, ts in enumerate(tileScores):
-                tile, cityScore = ts
-                self.viewInfo.midLeftGridText[tile.x][tile.y] = f'c{i}'
-                EklipZBot.add_city_score_to_view_info(cityScore, self.viewInfo)
+            if self.info_render_city_priority_debug_info:
+                for i, ts in enumerate(tileScores):
+                    tile, cityScore = ts
+                    self.viewInfo.midLeftGridText[tile.x][tile.y] = f'c{i}'
+                    EklipZBot.add_city_score_to_view_info(cityScore, self.viewInfo)
 
-            for i, ts in enumerate(enemyTileScores):
-                tile, cityScore = ts
-                self.viewInfo.midLeftGridText[tile.x][tile.y] = f'm{i}'
-                EklipZBot.add_city_score_to_view_info(cityScore, self.viewInfo)
+                for i, ts in enumerate(enemyTileScores):
+                    tile, cityScore = ts
+                    self.viewInfo.midLeftGridText[tile.x][tile.y] = f'm{i}'
+                    EklipZBot.add_city_score_to_view_info(cityScore, self.viewInfo)
 
         # detect FFA scenarios where we're ahead on army but behind on cities and have lots of tiles and
         # should just rapid-capture tons of cities.
@@ -3269,7 +3120,7 @@ class EklipZBot(object):
         else:
             killSearchDist = 3
 
-        self.viewInfo.lastEvaluatedGrid[target.x][target.y] = 140
+        self.viewInfo.evaluatedGrid[target.x][target.y] = 140
         # gather to the 2 tiles in front of the city
         logging.info(
             f"xxxxxxxxx\n    SEARCHED AND FOUND NEAREST NEUTRAL / ENEMY CITY {target.x},{target.y} dist {path.length}. Searching {targetArmy} army searchDist {killSearchDist}\nxxxxxxxx")
@@ -3310,7 +3161,7 @@ class EklipZBot(object):
         return capturePath, move
 
     def mark_tile(self, tile, alpha = 100):
-        self.viewInfo.lastEvaluatedGrid[tile.x][tile.y] = alpha
+        self.viewInfo.evaluatedGrid[tile.x][tile.y] = alpha
 
     def find_neutral_city_path(self) -> Path | None:
         """
@@ -3925,7 +3776,7 @@ class EklipZBot(object):
             if leaf.dest.player != -1 and leaf.dest.player != self.targetPlayer and self.distance_from_general(leaf.dest) > self.distance_from_general(self.targetPlayerExpectedGeneralLocation) // 3:
                 # skip non-close tiles owned by enemies who are not the current target.
                 # TODO support agrod enemies who are actively attacking us despite not being the current target. Also improve reprioritization for players aggroing us.
-                self.viewInfo.lastEvaluatedGrid[leaf.dest.x][leaf.dest.y] = 200
+                self.viewInfo.evaluatedGrid[leaf.dest.x][leaf.dest.y] = 200
                 self.leafValueGrid[leaf.dest.x][leaf.dest.y] = -1000000
                 continue
             elif leaf.dest.player == self.targetPlayer and self._map.turn < 50:
@@ -4616,7 +4467,8 @@ class EklipZBot(object):
                 distFromCenter = self.get_distance_from_board_center(tile, center_ratio=0.25)
 
                 counter = SearchUtils.Counter(genDist - distFromCenter)
-                self.viewInfo.bottomLeftGridText[tile.x][tile.y] = genDist - distFromCenter
+                if self.info_render_general_undiscovered_prediction_values:
+                    self.viewInfo.bottomLeftGridText[tile.x][tile.y] = genDist - distFromCenter
 
                 # the lambda for counting stuff!
                 def count_undiscovered(curTile):
@@ -4635,7 +4487,8 @@ class EklipZBot(object):
             def mark_undiscovered(curTile):
                 if tile_meets_criteria_for_value_around_general(curTile):
                     self._evaluatedUndiscoveredCache.append(curTile)
-                    self.viewInfo.evaluatedGrid[curTile.x][curTile.y] = 1
+                    if self.info_render_general_undiscovered_prediction_values:
+                        self.viewInfo.evaluatedGrid[curTile.x][curTile.y] = 1
 
             SearchUtils.breadth_first_foreach(self._map, [localMaxTile], undiscoveredCounterDepth, mark_undiscovered, noLog=True)
 
@@ -4757,7 +4610,8 @@ class EklipZBot(object):
                 maxOldAmount = foundValue
 
             if foundValue > 0:
-                self.viewInfo.bottomLeftGridText[tile.x][tile.y] = foundValue
+                if self.info_render_general_undiscovered_prediction_values:
+                    self.viewInfo.midLeftGridText[tile.x][tile.y] = f'pe{foundValue}'
 
             if self.armyTracker.emergenceLocationMap[self.targetPlayer][tile.x][tile.y] > 0:
                 # foundValue += emergenceLogFactor * math.log(self.armyTracker.emergenceLocationMap[self.targetPlayer][tile.x][tile.y], 2)
@@ -4766,8 +4620,8 @@ class EklipZBot(object):
             if enemyCounter.value > 0 and foundValue > maxAmount:
                 maxTile = tile
                 maxAmount = foundValue
-            if foundValue > 0:
-                self.viewInfo.midRightGridText[tile.x][tile.y] = foundValue // 10
+            if foundValue > 0 and self.info_render_general_undiscovered_prediction_values:
+                self.viewInfo.midRightGridText[tile.x][tile.y] = f'we{foundValue}'
 
         self.viewInfo.add_targeted_tile(maxOldTile, TargetStyle.GOLD)
         self.viewInfo.add_targeted_tile(maxTile, TargetStyle.BLUE)
@@ -5332,7 +5186,7 @@ class EklipZBot(object):
             #             kingKillPath = path
             #     if bestPath is not None:
             #         self.info(f"A* Killpath! {king.toString()},  {bestPath.toString()}")
-            #         self.viewInfo.lastEvaluatedGrid[king.x][king.y] = 200
+            #         self.viewInfo.evaluatedGrid[king.x][king.y] = 200
             #         move = Move(bestPath.start.tile, bestPath.start.next.tile)
             #         return move, path, canRace
         return None, kingKillPath, canRace
@@ -5531,7 +5385,11 @@ class EklipZBot(object):
                 move, valueGathered, turnsUsed, gatherNodes = self.get_gather_to_threat_path(threat)
             if move:
                 pruned = [node.deep_clone() for node in gatherNodes]
-                pruned = GatherUtils.prune_mst_to_turns(pruned, threat.turns - 2, self.general.player, self.viewInfo)
+                pruned = GatherUtils.prune_mst_to_turns(
+                    pruned,
+                    threat.turns - 2,
+                    self.general.player,
+                    self.viewInfo)
                 sumPruned = 0
                 sumPrunedTurns = 0
                 for pruneNode in pruned:
@@ -5934,6 +5792,21 @@ class EklipZBot(object):
         self.viewInfo.generalApproximations = self.generalApproximations
         self.viewInfo.playerTargetScores = self.playerTargetScores
 
+        if self.armyTracker is not None and self.info_render_army_emergence_values:
+            for tile in self._map.reachableTiles:
+                val = self.armyTracker.emergenceLocationMap[self.targetPlayer][tile.x][tile.y]
+                if val != 0:
+                    textVal = f"e{val:.0f}"
+                    self.viewInfo.bottomMidRightGridText[tile.x][tile.y] = textVal
+
+        if self.gatherAnalyzer is not None and self.info_render_gather_locality_values:
+            for tile in self._map.pathableTiles:
+                if tile.player == self.general.player:
+                    self.viewInfo.bottomMidRightGridText[tile.x][tile.y] = f'g{self.gatherAnalyzer.gather_locality_map[tile]}'
+
+        if self.info_render_tile_deltas:
+            self.render_tile_deltas_in_view_info(self.viewInfo, self._map)
+
         if self.target_player_gather_path is not None:
             alpha = 140
             minAlpha = 100
@@ -5941,7 +5814,12 @@ class EklipZBot(object):
             self.viewInfo.color_path(PathColorer(self.target_player_gather_path, 60, 50, 00, alpha, alphaDec, minAlpha))
 
         if self.board_analysis.intergeneral_analysis is not None:
-            self.viewInfo.add_map_zone(self.board_analysis.core_play_area_matrix, (0, 0, 0), alpha=40)
+            nonZoneMatrix = MapMatrix(self._map, False)
+            for tile in self._map.get_all_tiles():
+                if tile not in self.board_analysis.core_play_area_matrix:
+                    nonZoneMatrix[tile] = True
+            self.viewInfo.add_map_zone(nonZoneMatrix, (0, 0, 0), alpha=50)
+
             # self.viewInfo.add_map_zone(self.board_analysis.extended_play_area_matrix, (255, 220, 0), alpha=50)
             self.viewInfo.add_map_division(self.board_analysis.extended_play_area_matrix, (255, 230, 0), alpha=100)
 
@@ -6047,7 +5925,7 @@ class EklipZBot(object):
                     maxAmount = self.undiscovered_priorities[x][y]
                     maxTile = tile
                 if self.targetPlayer == -1:
-                    if self.undiscovered_priorities[x][y] > 0:
+                    if self.undiscovered_priorities[x][y] > 0 and self.info_render_general_undiscovered_prediction_values:
                         self.viewInfo.bottomRightGridText[x][y] = f'u{self.undiscovered_priorities[x][y]}'
 
         self.viewInfo.add_targeted_tile(maxTile, TargetStyle.PURPLE)
@@ -7044,7 +6922,7 @@ class EklipZBot(object):
             logging.info(
                 f"found depth {killPath.length} dest bfs kill on Neutral or Enemy city {targetCity.x},{targetCity.y} \n{str(killPath)}")
             self.info(f"City killpath {targetCity.x},{targetCity.y}  setting GatherTreeNodes to None")
-            self.viewInfo.lastEvaluatedGrid[targetCity.x][targetCity.y] = 300
+            self.viewInfo.evaluatedGrid[targetCity.x][targetCity.y] = 300
             self.gatherNodes = None
             addlArmy = 0
             if targetCity.player != -1:
@@ -7108,27 +6986,27 @@ class EklipZBot(object):
                         gatherNodes,
                         targetGatherArmy,
                         self.general.player,
-                        self.viewInfo)
+                         self.viewInfo if self.info_render_gather_values else None)
                     prunedTurns, prunedValue, prunedGatherNodes = GatherUtils.prune_mst_to_army_with_values(
                         prunedGatherNodes,
                         targetGatherArmy,
                         self.general.player,
-                        self.viewInfo)
+                         self.viewInfo if self.info_render_gather_values else None)
                     if prunedTurns != origPrunedTurns or prunedValue != origPrunedValue:
-                        self.viewInfo.addAdditionalInfoLine(f'prune to army pass 2 diff than pass 1. Turns {origPrunedTurns} vs {prunedTurns}, val {origPrunedValue} vs {prunedValue}')
+                         self.viewInfo.addAdditionalInfoLine(f'prune to army pass 2 diff than pass 1. Turns {origPrunedTurns} vs {prunedTurns}, val {origPrunedValue} vs {prunedValue}')
                 else:
                     prunedTurns, prunedValue, prunedGatherNodes = GatherUtils.prune_mst_to_max_army_per_turn_with_values(
                         gatherNodes,
                         targetGatherArmy,
                         self.general.player,
-                        self.viewInfo)
+                         self.viewInfo if self.info_render_gather_values else None)
 
                 move = self.get_tree_move_default(prunedGatherNodes)
 
                 self.gatherNodes = prunedGatherNodes
                 self.info(
                     f"Gath city {str(targetCity)}, proact {self.should_proactively_take_cities()}, move {str(move)}, v{prunedValue + armyAlreadyPrepped}/{gatherValue + armyAlreadyPrepped}/{targetGatherArmy + armyAlreadyPrepped}, t{prunedTurns}/{gatherTurns}/{gatherDist}")
-                self.viewInfo.lastEvaluatedGrid[targetCity.x][targetCity.y] = 300
+                self.viewInfo.evaluatedGrid[targetCity.x][targetCity.y] = 300
                 return None, move
 
         return None, None
@@ -7842,3 +7720,47 @@ class EklipZBot(object):
             logging.info("No gather move found")
 
         return None
+
+    @staticmethod
+    def render_tile_deltas_in_view_info(viewInfo: ViewInfo, map: MapBase):
+        for tile in map.get_all_tiles():
+            renderMore = False
+            if (
+                tile.delta.armyMovedHere
+                or tile.delta.lostSight
+                or tile.delta.gainedSight
+                or tile.delta.discovered
+                or tile.delta.armyDelta != 0
+                or tile.delta.unexplainedDelta != 0
+                or tile.delta.fromTile is not None
+                or tile.delta.toTile is not None
+            ):
+                renderMore = True
+
+            s = []
+            if tile.delta.armyMovedHere:
+                s.append('M')
+            if tile.delta.imperfectArmyDelta:
+                s.append('I')
+            if tile.delta.lostSight:
+                s.append('L')
+            if tile.delta.gainedSight:
+                s.append('G')
+            if tile.delta.discovered:
+                s.append('D')
+            viewInfo.bottomLeftGridText[tile.x][tile.y] = ''.join(s)
+
+            if tile.delta.armyDelta != 0:
+                viewInfo.midLeftGridText[tile.x][tile.y] = f'd{tile.delta.armyDelta:+d}'
+            if tile.delta.unexplainedDelta != 0:
+                viewInfo.bottomMidLeftGridText[tile.x][tile.y] = f'u{tile.delta.unexplainedDelta:+d}'
+            if renderMore:
+                moves = []
+                if tile.delta.fromTile:
+                    moves.append(f'{str(tile.delta.fromTile)}-')
+                if tile.delta.toTile:
+                    moves.append(f'-{str(tile.delta.toTile)}')
+                viewInfo.bottomRightGridText[tile.x][tile.y] = ''.join(moves)
+                viewInfo.bottomMidRightGridText[tile.x][tile.y] = f'{tile.delta.oldArmy}'
+                if tile.delta.oldOwner != tile.delta.newOwner:
+                    viewInfo.midRightGridText[tile.x][tile.y] = f'{tile.delta.oldOwner}->{tile.delta.newOwner}'

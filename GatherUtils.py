@@ -199,16 +199,28 @@ def extend_tree_node_lookup(
         if pathNode.tile in gatherTreeNodeLookup:
             currentGatherTreeNode = gatherTreeNodeLookup[pathNode.tile]
         else:
+            startTilesDictStringed = "\r\n      ".join([repr(t) for t in startTilesDict.items()])
+            gatherTreeNodeLookupStringed = "\r\n      ".join([repr(t) for t in gatherTreeNodeLookup.items()])
+            newPathsStringed = "\r\n      ".join([repr(t) for t in newPaths])
+            msg = (f'Should never get here with no root tree pathNode. pathNode.tile {str(pathNode.tile)} dist {distance} in path {str(valuePerTurnPath)}.\r\n'
+                        f'  Path was {repr(valuePerTurnPath)}\r\n'
+                        f'  startTiles was\r\n      {startTilesDictStringed}\r\n'
+                        f'  gatherTreeNodeLookup was\r\n      {gatherTreeNodeLookupStringed}\r\n'
+                        f'  newPaths was\r\n      {newPathsStringed}')
+            logging.error(msg)
+
             if not force:
-                raise AssertionError(f'Should never get here with no root tree pathNode. pathNode.tile {str(pathNode.tile)}.')
+                raise AssertionError(msg)
+
             currentGatherTreeNode = GatherTreeNode(pathNode.tile, None, distance)
             # currentGatherTreeNode.gatherTurns = 1
             gatherTreeNodeLookup[pathNode.tile] = currentGatherTreeNode
-        GatherTreeNodePathAddingOnTo = currentGatherTreeNode
+
+        gatherTreeNodePathAddingOnTo = currentGatherTreeNode
         # runningValue = valuePerTurnPath.value - pathNode.tile.army
         runningValue = valuePerTurnPath.value
-        runningTrunkDist = GatherTreeNodePathAddingOnTo.trunkDistance
-        runningTrunkValue = GatherTreeNodePathAddingOnTo.trunkValue
+        runningTrunkDist = gatherTreeNodePathAddingOnTo.trunkDistance
+        runningTrunkValue = gatherTreeNodePathAddingOnTo.trunkValue
         # if pathNode.tile.player == searchingPlayer:
         #     runningValue -= pathNode.tile.army
         # elif useTrueValueGathered:
@@ -253,13 +265,30 @@ def extend_tree_node_lookup(
             pathNode = pathNode.next
 
         # now bubble the value of the path and turns up the tree
-        curGatherTreeNode = GatherTreeNodePathAddingOnTo
+        curGatherTreeNode = gatherTreeNodePathAddingOnTo
         while True:
             curGatherTreeNode.value += valuePerTurnPath.value
             curGatherTreeNode.gatherTurns += valuePerTurnPath.length
             if curGatherTreeNode.fromTile is None:
                 break
-            curGatherTreeNode = gatherTreeNodeLookup[curGatherTreeNode.fromTile]
+            nextGatherTreeNode = gatherTreeNodeLookup.get(curGatherTreeNode.fromTile, None)
+            if nextGatherTreeNode is None:
+                startTilesDictStringed = "\r\n      ".join([repr(t) for t in startTilesDict.items()])
+                gatherTreeNodeLookupStringed = "\r\n      ".join([repr(t) for t in gatherTreeNodeLookup.items()])
+                newPathsStringed = "\r\n      ".join([repr(t) for t in newPaths])
+                fromDist = distanceLookup.get(curGatherTreeNode.fromTile, None)
+                curDist = distanceLookup.get(curGatherTreeNode.tile, None)
+                msg = (f'curGatherTreeNode {repr(curGatherTreeNode)} HAD A FROM TILE {repr(curGatherTreeNode.fromTile)} fromDist [{fromDist}] curDist [{curDist}] THAT WAS NOT IN THE gatherTreeNodeLookup...?\r\n'
+                        f'  Path was {repr(valuePerTurnPath)}\r\n'
+                        f'  startTiles was\r\n      {startTilesDictStringed}\r\n'
+                        f'  gatherTreeNodeLookup was\r\n      {gatherTreeNodeLookupStringed}\r\n'
+                        f'  newPaths was\r\n      {newPathsStringed}')
+                if not force:
+                    raise AssertionError(msg)
+                else:
+                    logging.error(msg)
+                break
+            curGatherTreeNode = nextGatherTreeNode
 
     return gatherTreeNodeLookup
 
@@ -875,7 +904,7 @@ def knapsack_levels_backpack_gather_with_value(
         ignoreStartTile=False,
         incrementBackward=True,
         preferNeutral=False,
-        viewInfo=None,
+        viewInfo: ViewInfo | None =None,
         distPriorityMap=None,
         useTrueValueGathered=False,
         includeGatherTreeNodesThatGatherNegative=False,
@@ -1222,6 +1251,7 @@ def greedy_backpack_gather(
     )
 
     return nodes
+
 
 def greedy_backpack_gather_values(
         map,

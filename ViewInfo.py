@@ -80,7 +80,6 @@ class ViewInfo(object):
 
         # per-tile int that darkens the red 'evaluated' X drawn on evaluated tiles.
         self.evaluatedGrid: typing.List[typing.List[int]] = []
-        self.lastEvaluatedGrid: typing.List[typing.List[int]] = []
         self.infoText = "(replace with whatever text here)"
         self.cols = cols
         self.rows = rows
@@ -130,9 +129,6 @@ class ViewInfo(object):
         # self.redTargetedTileHistory[0] = self.targetedTiles
         self.targetedTiles = []
 
-        self.lastEvaluatedGrid = self.evaluatedGrid
-        if len(self.lastEvaluatedGrid) == 0:
-            self.lastEvaluatedGrid = [[0 for y in range(self.rows)] for x in range(self.cols)]
         self.evaluatedGrid = [[0 for y in range(self.rows)] for x in range(self.cols)]
 
     def add_targeted_tile(self, tile: Tile, targetStyle: TargetStyle = TargetStyle.RED):

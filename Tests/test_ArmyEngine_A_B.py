@@ -809,6 +809,8 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
+            aBot.expansion_full_time_limit = 0.3
+
             # 238-238, AGAIN
             # 232-237, meaningless, .4 it is
             # aBot.mcts_engine.biased_move_ratio_while_available = 0.35  # b is now 0.4

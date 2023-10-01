@@ -40,7 +40,7 @@ DARK_PURPLE = (140, 0, 180)
 CHOKE_PURPLE = (93, 0, 111)
 
 OFF_BLACK = (40, 40, 40)
-WHITE_PURPLE = (190, 150, 230)
+WHITE_PURPLE = (255, 230, 240)
 
 P_RED = (245, 65, 50)
 P_BLUE = (30, 30, 230)
@@ -50,6 +50,7 @@ P_TEAL = (30, 128, 128)
 P_DARK_GREEN = (5, 75, 45)
 P_DARK_RED = (100, 5, 35)
 P_YELLOW = (160, 150, 20)
+P_LIGHT_PURPLE = (190, 150, 230)
 
 # P_BRIGHT_GREEN = (10,225,90)
 PLAYER_COLORS = [
@@ -64,7 +65,7 @@ PLAYER_COLORS = [
     ORANGE,
     LIGHT_BLUE,
     LIGHT_PINK,
-    WHITE_PURPLE,
+    P_LIGHT_PURPLE,
 ]
 FOG_COLOR_OFFSET = 25
 KING_COLOR_OFFSET = 35
@@ -609,8 +610,7 @@ class GeneralsViewer(object):
                     self._viewInfo.evaluatedGrid) > 0):
                 for row in range(self._map.rows):
                     for column in range(self._map.cols):
-                        countEvaluated = int(self._viewInfo.evaluatedGrid[column][row] +
-                                             self._viewInfo.lastEvaluatedGrid[column][row])
+                        countEvaluated = int(self._viewInfo.evaluatedGrid[column][row])
                         if countEvaluated > 0:
                             pos_left = (CELL_MARGIN + self.cellWidth) * column + CELL_MARGIN
                             pos_top = (CELL_MARGIN + self.cellHeight) * row + CELL_MARGIN

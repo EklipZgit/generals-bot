@@ -22,6 +22,7 @@ def generate_player_map(player_index: int, map_raw: MapBase) -> MapBase:
 
     map = MapBase(player_index=player_index, teams=None, user_names=map_raw.usernames, turn=map_raw.turn,
                   map_grid_y_x=playerMap, replay_url='42069')
+    # map.USE_OLD_MOVEMENT_DETECTION = False
     map.update_scores(scores)
     map.update_turn(map_raw.turn)
     for x in range(map_raw.cols):

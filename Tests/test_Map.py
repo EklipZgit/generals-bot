@@ -169,9 +169,9 @@ class MapTests(TestBase):
             simHost.apply_map_vision(player=0, rawMap=map)
             simHost.apply_map_vision(player=1, rawMap=map)
 
-        simHost.sim.sim_map.USE_OLD_MOVEMENT_DETECTION = False
-        simHost.get_player_map(0).USE_OLD_MOVEMENT_DETECTION = False
-        simHost.get_player_map(1).USE_OLD_MOVEMENT_DETECTION = False
+        # simHost.sim.sim_map.USE_OLD_MOVEMENT_DETECTION = False
+        # simHost.get_player_map(0).USE_OLD_MOVEMENT_DETECTION = False
+        # simHost.get_player_map(1).USE_OLD_MOVEMENT_DETECTION = False
 
         if aMove is not None:
             aX, aY = aMove
@@ -751,11 +751,12 @@ C5
                                 # 271
                                 # 55
                                 # 46
+                                # 37 poggers
                                 self.run_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_adj_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        self.run_adj_test(debugMode=debugMode, aArmy=10, bArmy=10, aMove=(1, 0), bMove=(0, -1), turn=97)
+        self.run_adj_test(debugMode=debugMode, aArmy=10, bArmy=12, aMove=(1, 0), bMove=(0, 1), turn=97)
 
     def test_generate_all_diagonal_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False

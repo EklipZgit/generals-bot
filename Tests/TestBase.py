@@ -9,6 +9,7 @@ import BotHost
 import EarlyExpandUtils
 import GatherUtils
 import SearchUtils
+import base
 from ArmyEngine import ArmySimResult
 from ArmyTracker import Army
 from DataModels import Move
@@ -386,12 +387,14 @@ class TestBase(unittest.TestCase):
         EarlyExpandUtils.DEBUG_ASSERTS = True
         GatherUtils.USE_DEBUG_ASSERTS = True
         BotHost.FORCE_NO_VIEWER = False
+        base.client.map.ENABLE_DEBUG_ASSERTS = True
 
     def enable_search_time_limits_and_disable_debug_asserts(self):
         SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING = False
         EarlyExpandUtils.DEBUG_ASSERTS = False
         GatherUtils.USE_DEBUG_ASSERTS = False
         BotHost.FORCE_NO_VIEWER = False
+        # base.client.map.ENABLE_DEBUG_ASSERTS = True
 
     def reset_map_to_just_generals(self, map: MapBase, turn: int = 16):
         """

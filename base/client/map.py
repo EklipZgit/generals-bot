@@ -1148,6 +1148,12 @@ class MapBase(object):
         # prefer leaving enemy move froms, as they're harder for armytracker to track since it doesn't have the last move spelled out like it does for friendly moves.
         if toTile.delta.fromTile is None or toTile.delta.fromTile.delta.oldOwner != self.player_index:
             toTile.delta.fromTile = fromTile
+
+        if fullFromDiffCovered:
+            fromTile.delta.unexplainedDelta = 0
+        if fullToDiffCovered:
+            toTile.delta.unexplainedDelta = 0
+
         fromTile.delta.toTile = toTile
         logging.info(f'  done: {repr(fromTile)} -> {repr(toTile)}')
 
@@ -1663,7 +1669,7 @@ class MapBase(object):
                         logging.info(f'ATTK DELTA SCAN DEST {repr(destTile)} SRC {repr(potentialSource)} SKIPPED BECAUSE GATHERED TO, NOT ATTACKED. potentialSource.delta.armyDelta > 0')
                         # then this was DEFINITELY gathered to, which would make this not a potential source. 2v2 violates this
                         continue
-                    sourceWasAttackedNonLethalOrVacated = potentialSource.delta.armyDelta < 0
+                    sourceWasAttackedNonLethalOrVacated = potentialSource.delta.armyDelta < 0 or potentialSource.delta.lostSight
                     # if  sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
                     if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
                         potentialSources = [potentialSource]

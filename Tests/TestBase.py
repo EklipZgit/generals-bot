@@ -521,7 +521,7 @@ class TestBase(unittest.TestCase):
             viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
             time.sleep(0.1)
 
-    def render_map(self, map: MapBase, infoString: str | None = None):
+    def render_map(self, map: MapBase, infoString: str | None = None, includeTileDiffs: bool = False):
         titleString = infoString
         if titleString is None:
             titleString = self._testMethodName
@@ -530,6 +530,8 @@ class TestBase(unittest.TestCase):
         viewInfo = self.get_renderable_view_info(map)
         if infoString is not None:
             viewInfo.infoText = infoString
+        if includeTileDiffs:
+            EklipZBot.render_tile_deltas_in_view_info(viewInfo, map)
         viewer.start()
         viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
 

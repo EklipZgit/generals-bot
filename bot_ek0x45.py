@@ -7732,6 +7732,7 @@ class EklipZBot(object):
                 or tile.delta.discovered
                 or tile.delta.armyDelta != 0
                 or tile.delta.unexplainedDelta != 0
+                # or tile.delta.imperfectArmyDelta
                 or tile.delta.fromTile is not None
                 or tile.delta.toTile is not None
             ):
@@ -7748,19 +7749,22 @@ class EklipZBot(object):
                 s.append('G')
             if tile.delta.discovered:
                 s.append('D')
-            viewInfo.bottomLeftGridText[tile.x][tile.y] = ''.join(s)
+            s.append(' ')
+            viewInfo.bottomRightGridText[tile.x][tile.y] = ''.join(s)
 
             if tile.delta.armyDelta != 0:
-                viewInfo.midLeftGridText[tile.x][tile.y] = f'd{tile.delta.armyDelta:+d}'
+                viewInfo.bottomLeftGridText[tile.x][tile.y] = f'd{tile.delta.armyDelta:+d}'
             if tile.delta.unexplainedDelta != 0:
                 viewInfo.bottomMidLeftGridText[tile.x][tile.y] = f'u{tile.delta.unexplainedDelta:+d}'
             if renderMore:
-                moves = []
-                if tile.delta.fromTile:
-                    moves.append(f'{str(tile.delta.fromTile)}-')
-                if tile.delta.toTile:
-                    moves.append(f'-{str(tile.delta.toTile)}')
-                viewInfo.bottomRightGridText[tile.x][tile.y] = ''.join(moves)
-                viewInfo.bottomMidRightGridText[tile.x][tile.y] = f'{tile.delta.oldArmy}'
+                moves = ''
+                if tile.delta.toTile and tile.delta.fromTile:
+                    moves = f'{str(tile.delta.fromTile)}-{str(tile.delta.toTile)}'
+                elif tile.delta.fromTile:
+                    moves = f'<-{str(tile.delta.fromTile)}'
+                elif tile.delta.toTile:
+                    moves = f'->{str(tile.delta.toTile)}'
+                viewInfo.topRightGridText[tile.x][tile.y] = moves
+                viewInfo.midRightGridText[tile.x][tile.y] = f'{tile.delta.oldArmy}'
                 if tile.delta.oldOwner != tile.delta.newOwner:
-                    viewInfo.midRightGridText[tile.x][tile.y] = f'{tile.delta.oldOwner}->{tile.delta.newOwner}'
+                    viewInfo.bottomMidRightGridText[tile.x][tile.y] = f'{tile.delta.oldOwner}-{tile.delta.newOwner}'

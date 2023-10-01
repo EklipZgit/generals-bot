@@ -225,8 +225,8 @@ class GeneralsViewer(object):
         self.infoRowHeight = 250
 
         if self.cellHeight is None:
-            self.cellHeight = min(85, (1080 - self.infoRowHeight - self.scoreRowHeight) // (self._map.rows + 1) - 2)
-            self.cellHeight = max(28, self.cellHeight)
+            self.cellHeight = min(85, (1080 - self.infoRowHeight - self.scoreRowHeight) // (self._map.rows + 1))
+            self.cellHeight = max(29, self.cellHeight)
             self.cellWidth = self.cellHeight
 
         self.scoreRowHeight = int((self.cellHeight + 2) * 1.5)
@@ -267,9 +267,9 @@ class GeneralsViewer(object):
 
         window_title = str(self._name)
         pygame.display.set_caption(window_title)
-        self._medFontHeight = 2 * self.cellHeight // 5
-        self._smallFontHeight = self.cellHeight // 4
-        self._lrgFontHeight = 3 * self.cellHeight // 4
+        self._medFontHeight = min(2 * self.cellHeight // 5, 30)
+        self._smallFontHeight = min(self.cellHeight // 4, 17)
+        self._lrgFontHeight = 3 * self.cellHeight // 5
         self._medFont = pygame.font.SysFont('Arial', self._medFontHeight)
         self._infoFont = pygame.font.SysFont('Arial', self.infoLineHeight)
         self._smallFont = pygame.font.SysFont('Arial', self._smallFontHeight)

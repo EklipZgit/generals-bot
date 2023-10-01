@@ -1614,8 +1614,8 @@ class MapBase(object):
         for x in range(self.cols):
             for y in range(self.rows):
                 destTile = self.grid[y][x]
-                # if not destTile.delta.armyMovedHere or destTile.delta.imperfectArmyDelta:
-                if not destTile.delta.armyMovedHere:
+                # if not destTile.delta.armyMovedHere:
+                if not destTile.delta.armyMovedHere or destTile.delta.imperfectArmyDelta:
                     continue
 
                 potentialSources = []
@@ -1639,7 +1639,7 @@ class MapBase(object):
 
                     # no effect on diagonal
                     # if potentialSource.delta.imperfectArmyDelta and (not sourceWasAttackedNonLethalOrVacated or (potentialSource.player >= 0 and potentialSource.player != destTile.delta.oldOwner)):
-                    if (potentialSource.delta.imperfectArmyDelta or destTile.delta.imperfectArmyDelta) and not destWasAttackedNonLethalOrVacated and not self._move_would_violate_known_player_deltas(potentialSource, destTile):
+                    if potentialSource.delta.imperfectArmyDelta and not destWasAttackedNonLethalOrVacated and not self._move_would_violate_known_player_deltas(potentialSource, destTile):
                         potentialSources.append(potentialSource)
                     if destWasAttackedNonLethalOrVacated and self.remainingPlayers > 2 and self._is_partial_army_movement_delta_match(source=potentialSource, dest=destTile):
                         if destTile.army < 3:

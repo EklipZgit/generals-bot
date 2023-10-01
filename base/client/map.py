@@ -429,7 +429,7 @@ class Tile(object):
                     self._player = -1
                 elif self._player >= 0 and self.army > 1:
                     # we lost SIGHT of enemy tile, IF this tile has positive army, then army could have come from here TO another tile.
-                    logging.info(f'enemy tile adjacent to vision lost was lost, army moved here true for {str(self)}')
+                    logging.info(f'enemy tile adjacent to vision lost was lost, army moved here true for {str(self)}')  # TODO
                     # armyMovedHere = True
             elif tile >= TILE_EMPTY:
                 self._player = tile
@@ -1228,7 +1228,7 @@ class MapBase(object):
 
     def _is_exact_army_movement_delta_match(self, source: Tile, dest: Tile):
         if source.delta.imperfectArmyDelta:
-            return False
+            return self._is_exact_lost_vision_movement_delta_match(source, dest)
         if dest.delta.imperfectArmyDelta:
             return False
         if self._move_would_violate_known_player_deltas(source, dest):
@@ -1239,19 +1239,48 @@ class MapBase(object):
             return True
         return False
 
-    def _get_expected_delta_amount_toward(self, source: Tile, dest: Tile) -> int:
+    def _is_exact_lost_vision_movement_delta_match(self, source: Tile, dest: Tile):
+        """Detects if a move from a tile that we just lost vision of would have resulted in the exact dest delta."""
+        if not source.delta.lostSight:
+            return False
+        if self._move_would_violate_known_player_deltas(source, dest):
+            return False
+
+        deltaToDest = self._get_expected_delta_amount_toward(source, dest)
+        if deltaToDest == dest.delta.unexplainedDelta:
+            return True
+
+        deltaToDest = self._get_expected_delta_amount_toward(source, dest, moveHalf=True)
+        if deltaToDest == dest.delta.unexplainedDelta:
+            return True
+
+        return False
+
+    def _get_expected_delta_amount_toward(self, source: Tile, dest: Tile, moveHalf: bool = False) -> int:
         sourceDelta = source.delta.unexplainedDelta
         sameOwnerMove = source.delta.oldOwner == dest.delta.oldOwner
         if not source.visible:
-            sourceDelta = dest.delta.unexplainedDelta
-            if not dest.visible:
-                sourceDelta = source.delta.oldArmy - 1
+            if not source.delta.lostSight:
+                sourceDelta = dest.delta.unexplainedDelta
+
+                # if not dest.visible:
+                #     sourceDelta = source.delta.oldArmy - 1
+                #     # OK so this ^ was wrong, all tests pass with it commented out, should have been:
+                #     sourceDelta = 0 - (source.delta.oldArmy - 1)
+
+            else:
+                sourceDelta = 0 - (source.delta.oldArmy - 1)
+                if moveHalf:
+                    sourceDelta = 0 - source.delta.oldArmy // 2
+
             # TODO does this need to get fancier with potential movers vs the dest owner...?
-            sameOwnerMove = sameOwnerMove or source.player == -1
+            sameOwnerMove = sameOwnerMove or (source.player == -1 and not source.delta.lostSight)
             # TODO should check move-half too probably
             # if source.player == -1:
             #     # then just assume same owner move...?
             #     sourceDelta = dest.delta.unexplainedDelta
+        elif moveHalf:
+            raise AssertionError(f'cannot provide moveHalf directive for visible tile {str(source)}, visible tiles exclusively use tile deltas.')
         if sameOwnerMove:
             return 0 - sourceDelta
         return sourceDelta
@@ -1677,8 +1706,16 @@ class MapBase(object):
                         break
 
                     # no effect on diagonal
-                    # if potentialSource.delta.imperfectArmyDelta and (not sourceWasAttackedNonLethalOrVacated or (potentialSource.player >= 0 and potentialSource.player != destTile.delta.oldOwner)):
-                    if potentialSource.delta.imperfectArmyDelta and not destWasAttackedNonLethalOrVacated and not self._move_would_violate_known_player_deltas(potentialSource, destTile):
+                    if (
+                            potentialSource.delta.imperfectArmyDelta
+                            and not destWasAttackedNonLethalOrVacated
+                            # no effect on diagonal
+                            # and (
+                            #     not sourceWasAttackedNonLethalOrVacated
+                            #     or (potentialSource.player >= 0 and potentialSource.player != destTile.delta.oldOwner)
+                            # )
+                            and not self._move_would_violate_known_player_deltas(potentialSource, destTile)
+                    ):
                         potentialSources.append(potentialSource)
                     if destWasAttackedNonLethalOrVacated and self.remainingPlayers > 2 and self._is_partial_army_movement_delta_match(source=potentialSource, dest=destTile):
                         if destTile.army < 3:
@@ -1742,6 +1779,8 @@ class MapBase(object):
                 if not sourceTile.delta.armyMovedHere:
                     continue
                 if sourceTile.delta.imperfectArmyDelta:
+                    continue
+                if sourceTile.delta.oldOwner == self.player_index:
                     continue
 
                 potentialDests = []

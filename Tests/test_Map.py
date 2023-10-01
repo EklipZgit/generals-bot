@@ -141,7 +141,7 @@ class MapTests(TestBase):
 
             # renderTurnBeforeSim = True
             # renderTurnBeforePlayers = True
-            # renderP0 = True
+            renderP0 = True
             renderP1 = True
 
             def mapRenderer():
@@ -759,13 +759,13 @@ C5
                         for turn in [96, 97]:
                             for seenFog in [True, False]:
                                 with self.subTest(aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bArmyAdjacent=bArmyAdjacent):
-                                    # 1908
                                     # 1905
+                                    # 113
                                     self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bArmyAdjacent=bArmyAdjacent)
 
     def test_run_one_off_fog_island_border_capture_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=12, bArmy=20, bMove=(1, 0), turn=96, seenFog=False, bArmyAdjacent=False)
+        self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=10, bArmy=5, bMove=None, turn=97, seenFog=True, bArmyAdjacent=True)
 
     def test_generate_all_fog_island_full_capture_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -778,8 +778,8 @@ C5
                         for turn in [96, 97]:
                             for seenFog in [True, False]:
                                 with self.subTest(aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bHasNearbyVision=bHasNearbyVision):
-                                    # 1342
                                     # 1329
+                                    # 1073
                                     self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bHasNearbyVision=bHasNearbyVision)
 
     def test_run_one_off_fog_island_full_capture_test(self):
@@ -798,17 +798,6 @@ C5
                         for turn in [96, 97]:
                             for seenFog in [True, False]:
                                 with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn, seenFog=seenFog):
-                                    # 3312
-                                    # 3304
-                                    # 1765
-                                    # 1765
-                                    # 357
-                                    # 357
-                                    # 357
-                                    # 181
-                                    # 0
-                                    # 37
-                                    # 0
                                     # 0
                                     self.run_out_of_fog_collision_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn, seenFog=seenFog)
 
@@ -826,22 +815,6 @@ C5
                     for bArmy in [10, 11, 12, 15, 20, 2, 5, 8, 9]:
                         for turn in [96, 97]:
                             with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn):
-                                # 474
-                                # 474
-                                # 474
-                                # 474
-                                # 474
-                                # 376
-                                # 295
-                                # 391
-                                # 487
-                                # 407
-                                # 335
-                                # 271
-                                # 55
-                                # 46
-                                # 37 poggers
-                                # 3...?
                                 # 0
                                 self.run_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
@@ -860,15 +833,9 @@ C5
                     for bArmy in [10, 11, 12, 15, 20, 2, 5, 8, 9]:
                         for turn in [96, 97]:
                             with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn):
-                                # 73
-                                # 69
-                                # 69
-                                # 0 (!)
-                                # 0 (!)
-                                # 289
                                 # 0
                                 self.run_diag_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_diag_test(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
-        self.run_diag_test(debugMode=debugMode, aArmy=20, bArmy=15, aMove=(1, 0), bMove=(1, 0), turn=96)
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        self.run_diag_test(debugMode=debugMode, aArmy=5, bArmy=15, aMove=(0, 1), bMove=(1, 0), turn=96)

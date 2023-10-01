@@ -1313,7 +1313,7 @@ class MapBase(object):
             if (
                     tile != source
                     and (tile.delta.unexplainedDelta != 0 or not tile.visible)
-                    and tile.delta.oldOwner != self.player_index
+                    and (tile.delta.oldOwner != self.player_index or tile.delta.newOwner != self.player_index)
             ):
                 destHasEnDeltasNearby = True
 
@@ -1532,8 +1532,8 @@ class MapBase(object):
         tilesWithDiffsPrePos = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
         tilesWithMovedHerePrePos = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
 
-        logging.info(f'Tiles with diffs pre-pos: {str([str(t) for t in tilesWithDiffsPrePos])}')
-        logging.info(f'Tiles with MovedHere pre-pos: {str([str(t) for t in tilesWithMovedHerePrePos])}')
+        logging.info(f'Tiles with diffs pre-POS: {str([str(t) for t in tilesWithDiffsPrePos])}')
+        logging.info(f'Tiles with MovedHere pre-POS: {str([str(t) for t in tilesWithMovedHerePrePos])}')
 
         # scan for tiles with positive deltas first, those tiles MUST have been gathered to from a friendly tile by the player they are on, letting us eliminate tons of options outright.
         for x in range(self.cols):
@@ -1606,8 +1606,8 @@ class MapBase(object):
         tilesWithDiffsPreSource = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
         tilesWithMovedHerePreSource = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
 
-        logging.info(f'Tiles with diffs pre-source: {str([str(t) for t in tilesWithDiffsPreSource])}')
-        logging.info(f'Tiles with MovedHere pre-source: {str([str(t) for t in tilesWithMovedHerePreSource])}')
+        logging.info(f'Tiles with diffs pre-ATTK: {str([str(t) for t in tilesWithDiffsPreSource])}')
+        logging.info(f'Tiles with MovedHere pre-ATTK: {str([str(t) for t in tilesWithMovedHerePreSource])}')
 
         # Then attacked dest tiles. This should catch obvious moves from fog as well as all moves between visible tiles.
         # currently also catches moves into fog, which it shouldnt...?
@@ -1693,8 +1693,8 @@ class MapBase(object):
         tilesWithDiffsPreFog = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
         tilesWithMovedHerePreFog = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
 
-        logging.info(f'Tiles with diffs at pre-fog: {str([str(t) for t in tilesWithDiffsPreFog])}')
-        logging.info(f'Tiles with MovedHere at pre-fog: {str([str(t) for t in tilesWithMovedHerePreFog])}')
+        logging.info(f'Tiles with diffs at pre-FOG: {str([str(t) for t in tilesWithDiffsPreFog])}')
+        logging.info(f'Tiles with MovedHere at pre-FOG: {str([str(t) for t in tilesWithMovedHerePreFog])}')
 
         # now check for destinations into fog
         for x in range(self.cols):

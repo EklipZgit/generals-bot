@@ -748,6 +748,7 @@ C5
                                 # 487
                                 # 407
                                 # 335
+                                # 271
                                 self.run_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_adj_test(self):

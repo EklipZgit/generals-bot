@@ -1317,31 +1317,44 @@ class MapBase(object):
             ):
                 destHasEnDeltasNearby = True
 
-        sourceWasAttackedWithPriority = False
         sourceWasCaptured = False
-        if sourceDeltaMismatch or source.player != self.player_index:
+        sourceWasAttackedWithPriority = False
+        if sourceDeltaMismatch or source.player != self.player_index or (actualDestDelta == 0 and sourceHasEnPriorityDeltasNearby):
             amountAttacked = actualSrcDelta - expectedSourceDelta
-            if source.player != self.player_index:
-                sourceWasCaptured = True
-                if sourceHasEnPriorityDeltasNearby:
-                    sourceWasAttackedWithPriority = True
+            if sourceHasEnPriorityDeltasNearby:
+                sourceWasAttackedWithPriority = True
+                if source.player != self.player_index:
+                    sourceWasCaptured = True
                     logging.info(
                         f'MOVE {str(last_player_index_submitted_move)} seems to have been captured with priority. Nuking our last move.')
                     if destDeltaMismatch:
                         logging.error(
                             f'  ^ {str(last_player_index_submitted_move)} IS QUESTIONABLE THOUGH BECAUSE DEST DID HAVE AN UNEXPLAINED DIFF. NUKING ANYWAY.')
                     # self.unaccounted_tile_diffs[source] = amountAttacked  # negative number
+                    # source.delta.unexplainedDelta = amountAttacked
+                    source.delta.armyMovedHere = True
                     self.last_player_index_submitted_move = None
                     return None
                 else:
-                    logging.info(
-                        f'MOVE {str(last_player_index_submitted_move)} was capped WITHOUT priority..? Adding unexplained diff {amountAttacked} based on actualSrcDelta {actualSrcDelta} - expectedSourceDelta {expectedSourceDelta}. Continuing with dest diff calc')
-                    # self.unaccounted_tile_diffs[source] = amountAttacked  # negative number
-
+                    if actualDestDelta == 0:
+                        logging.info(
+                            f'MOVE {str(last_player_index_submitted_move)} seems to have been attacked with priority down to where we dont capture anything. Nuking our last move.')
+                        # self.unaccounted_tile_diffs[source] = amountAttacked  # negative number
+                        # source.delta.unexplainedDelta = amountAttacked
+                        source.delta.armyMovedHere = True
+                        self.last_player_index_submitted_move = None
+                        return None
                     source.delta.unexplainedDelta = amountAttacked
                     source.delta.armyMovedHere = True
-                    # TODO this is wrong...? Need to account for the amount of dest delta we think made it...?
-                    # dest.delta.unexplainedDelta = 0
+            elif source.player != self.player_index:
+                logging.info(
+                    f'MOVE {str(last_player_index_submitted_move)} was capped WITHOUT priority..? Adding unexplained diff {amountAttacked} based on actualSrcDelta {actualSrcDelta} - expectedSourceDelta {expectedSourceDelta}. Continuing with dest diff calc')
+                # self.unaccounted_tile_diffs[source] = amountAttacked  # negative number
+
+                source.delta.unexplainedDelta = amountAttacked
+                source.delta.armyMovedHere = True
+                # TODO this is wrong...? Need to account for the amount of dest delta we think made it...?
+                # dest.delta.unexplainedDelta = 0
             else:
                 # we can get here if the source tile was attacked with priority but not for full damage, OR if it was attacked without priority for non full damage...
                 destArmyInterferedToo = False

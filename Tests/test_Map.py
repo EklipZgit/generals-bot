@@ -749,11 +749,13 @@ C5
                                 # 407
                                 # 335
                                 # 271
+                                # 55
+                                # 46
                                 self.run_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_adj_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        self.run_adj_test(debugMode=debugMode, aArmy=10, bArmy=10, aMove=(1, 0), bMove=(0, -1), turn=96)
+        self.run_adj_test(debugMode=debugMode, aArmy=10, bArmy=10, aMove=(1, 0), bMove=(0, -1), turn=97)
 
     def test_generate_all_diagonal_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False

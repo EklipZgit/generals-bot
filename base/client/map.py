@@ -1299,7 +1299,6 @@ class MapBase(object):
         # fakeOtherPlayer = (self.player_index + 1) & 1
 
         sourceHasEnPriorityDeltasNearby = False
-        destHasEnPriorityDeltasNearby = False
         for tile in source.movable:
             if (
                     tile != dest
@@ -1309,14 +1308,14 @@ class MapBase(object):
                 if MapBase.player_had_priority_over_other(tile.delta.oldOwner, self.player_index, self.turn):
                     sourceHasEnPriorityDeltasNearby = True
 
+        destHasEnDeltasNearby = False
         for tile in dest.movable:
             if (
                     tile != source
-                    and (tile.delta.unexplainedDelta != 0 or tile.delta.lostSight or not tile.visible)
+                    and (tile.delta.unexplainedDelta != 0 or not tile.visible)
                     and tile.delta.oldOwner != self.player_index
             ):
-                if MapBase.player_had_priority_over_other(tile.delta.oldOwner, self.player_index, self.turn):
-                    destHasEnPriorityDeltasNearby = True
+                destHasEnDeltasNearby = True
 
         sourceWasAttackedWithPriority = False
         sourceWasCaptured = False
@@ -1350,7 +1349,7 @@ class MapBase(object):
                     # then we almost certainly didn't have source attacked with priority.
                     logging.warning(
                         f'MOVE {str(last_player_index_submitted_move)} ? src attacked for amountAttacked {amountAttacked} WITHOUT priority based on actualSrcDelta {actualSrcDelta} vs expectedSourceDelta {expectedSourceDelta}')
-                elif destHasEnPriorityDeltasNearby:
+                elif destHasEnDeltasNearby:
                     armyMadeItToDest = dest.delta.unexplainedDelta
                     amountAttacked = expectedDestDelta - armyMadeItToDest
                     if source.army == 0:
@@ -1386,11 +1385,15 @@ class MapBase(object):
             if sourceHasEnPriorityDeltasNearby:
                 # the source tile could have been attacked for non-lethal damage BEFORE the move was made to target.
                 source.delta.unexplainedDelta = unexplainedDelta
-                source.delta.imperfectArmyDelta = True
+                source.delta.imperfectArmyDelta = destHasEnDeltasNearby
                 source.delta.armyMovedHere = True
 
-            dest.delta.unexplainedDelta = unexplainedDelta
-            dest.delta.armyMovedHere = True
+            # dest.delta.unexplainedDelta = unexplainedDelta
+            # dest.delta.armyMovedHere = True
+            if destHasEnDeltasNearby:
+                dest.delta.unexplainedDelta = unexplainedDelta
+                dest.delta.armyMovedHere = True
+                # dest.delta.imperfectArmyDelta = sourceHasEnPriorityDeltasNearby
 
             if sourceHasEnPriorityDeltasNearby:
                 logging.info(
@@ -1408,6 +1411,10 @@ class MapBase(object):
             # skip.add(dest)  # might not need this at alll.....? TODO ??
 
         # self.army_moved(army, dest, trackingArmies)
+        if actualDestDelta == 0 and dest.delta.unexplainedDelta == 0:
+            self.last_player_index_submitted_move = None
+            return None
+        
         self.last_player_index_submitted_move = last_player_index_submitted_move
         return source, dest
 
@@ -1603,10 +1610,12 @@ class MapBase(object):
         logging.info(f'Tiles with MovedHere pre-source: {str([str(t) for t in tilesWithMovedHerePreSource])}')
 
         # Then attacked dest tiles. This should catch obvious moves from fog as well as all moves between visible tiles.
+        # currently also catches moves into fog, which it shouldnt...?
         for x in range(self.cols):
             for y in range(self.rows):
                 destTile = self.grid[y][x]
-                if not destTile.delta.armyMovedHere or destTile.delta.imperfectArmyDelta:
+                # if not destTile.delta.armyMovedHere or destTile.delta.imperfectArmyDelta:
+                if not destTile.delta.armyMovedHere:
                     continue
 
                 potentialSources = []
@@ -1617,7 +1626,7 @@ class MapBase(object):
                     # we already track our own moves successfully prior to this.
                     if potentialSource.delta.oldOwner == self.player_index:
                         continue
-                    if potentialSource.delta.armyDelta > 0:
+                    if potentialSource.delta.armyDelta > 0 and not potentialSource.delta.gainedSight:
                         logging.info(f'ATTK DELTA SCAN DEST {repr(destTile)} SRC {repr(potentialSource)} SKIPPED BECAUSE GATHERED TO, NOT ATTACKED. potentialSource.delta.armyDelta > 0')
                         # then this was DEFINITELY gathered to, which would make this not a potential source. 2v2 violates this
                         continue
@@ -1630,7 +1639,7 @@ class MapBase(object):
 
                     # no effect on diagonal
                     # if potentialSource.delta.imperfectArmyDelta and (not sourceWasAttackedNonLethalOrVacated or (potentialSource.player >= 0 and potentialSource.player != destTile.delta.oldOwner)):
-                    if potentialSource.delta.imperfectArmyDelta and not destWasAttackedNonLethalOrVacated and not self._move_would_violate_known_player_deltas(potentialSource, destTile):
+                    if (potentialSource.delta.imperfectArmyDelta or destTile.delta.imperfectArmyDelta) and not destWasAttackedNonLethalOrVacated and not self._move_would_violate_known_player_deltas(potentialSource, destTile):
                         potentialSources.append(potentialSource)
                     if destWasAttackedNonLethalOrVacated and self.remainingPlayers > 2 and self._is_partial_army_movement_delta_match(source=potentialSource, dest=destTile):
                         if destTile.army < 3:
@@ -1700,6 +1709,8 @@ class MapBase(object):
                 sourceWasAttackedNonLethalOrVacated = sourceTile.delta.armyDelta < 0 and sourceTile.delta.oldOwner == sourceTile.delta.newOwner
                 # sourceWasAttackedNonLethalOrVacated = sourceTile.delta.oldArmy + sourceTile.delta.armyDelta < sourceTile.delta.oldArmy
                 for potentialDest in sourceTile.movable:
+                    if potentialDest.visible and not potentialDest.delta.gainedSight:
+                        continue
                     if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(sourceTile, potentialDest):
                         logging.info(
                             f'FOG SOURCE SCAN DEST {repr(potentialDest)} SRC {repr(sourceTile)} WAS sourceWasAttackedNonLethalOrVacated {sourceWasAttackedNonLethalOrVacated} FORCE-SELECTED DUE TO EXACT MATCH, BREAKING EARLY')

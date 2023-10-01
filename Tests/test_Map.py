@@ -141,7 +141,7 @@ class MapTests(TestBase):
 
             # renderTurnBeforeSim = True
             # renderTurnBeforePlayers = True
-            # renderP0 = True
+            renderP0 = True
             renderP1 = True
 
             def mapRenderer():
@@ -709,15 +709,18 @@ C5
                         for turn in [96, 97]:
                             for includeFogKnowledge in [True, False]:
                                 with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn, includeFogKnowledge=includeFogKnowledge):
-                                    # f 3312
-                                    # f 3304
-                                    # f 1765
-                                    # f 1765
-                                    # f 357
-                                    # f 357
-                                    # f 357
-                                    # f 181
-                                    # f 0
+                                    # 3312
+                                    # 3304
+                                    # 1765
+                                    # 1765
+                                    # 357
+                                    # 357
+                                    # 357
+                                    # 181
+                                    # 0
+                                    # 37
+                                    # 0
+                                    # 0
                                     self.run_out_of_fog_collision_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn, includeFogKnowledge=includeFogKnowledge)
 
     def test_run_one_off_out_of_fog_collision_test(self):
@@ -734,19 +737,22 @@ C5
                     for bMove in moveOpts:
                         for turn in [96, 97]:
                             with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn):
-                                # f 474
-                                # f 474
-                                # f 474
-                                # f 474
-                                # f 474
-                                # f 376
-                                # f 295
+                                # 474
+                                # 474
+                                # 474
+                                # 474
+                                # 474
+                                # 376
+                                # 295
                                 # 391
+                                # 487
+                                # 407
+                                # 335
                                 self.run_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_adj_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        self.run_adj_test(debugMode=debugMode, aArmy=8, bArmy=10, aMove=(1, 0), bMove=(0, 1), turn=97)
+        self.run_adj_test(debugMode=debugMode, aArmy=10, bArmy=10, aMove=(1, 0), bMove=(0, -1), turn=96)
 
     def test_generate_all_diagonal_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -759,13 +765,15 @@ C5
                     for bMove in moveOpts:
                         for turn in [96, 97]:
                             with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn):
-                                # f 73
-                                # f 69
-                                # f 69
-                                # f 0 (!)
-                                # f 0 (!)
+                                # 73
+                                # 69
+                                # 69
+                                # 0 (!)
+                                # 0 (!)
+                                # 289
+                                # 0
                                 self.run_diag_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_diag_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        self.run_diag_test(debugMode=debugMode, aArmy=8, bArmy=9, aMove=(0, 1), bMove=(-1, 0), turn=96)
+        self.run_diag_test(debugMode=debugMode, aArmy=20, bArmy=15, aMove=(1, 0), bMove=(1, 0), turn=96)

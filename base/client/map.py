@@ -211,6 +211,9 @@ class Tile(object):
         self.lastSeen: int = -1
         """Turn the tile was last seen"""
 
+        self.lastMovedTurn: int = -1
+        """Turn the tile last had an unexpected delta on it"""
+
         self.isMountain: bool = isMountain
 
         self.delta: TileDelta = TileDelta()
@@ -508,6 +511,7 @@ class Tile(object):
 
         if armyMovedHere:
             logging.debug(f'armyMovedHere True for {str(self)} (expected delta was {self.delta.expectedDelta}, actual was {self.delta.armyDelta})')
+            self.lastMovedTurn = map.turn
 
         if not self.visible:
             self.delta.imperfectArmyDelta = True
@@ -1595,182 +1599,13 @@ class MapBase(object):
         #                     f'Setting {str(destTile)} as potential move candidate due to multiple deltas near it {str([str(m) for m in movableWithDeltas])}')
         #                 destTile.delta.armyMovedHere = True
 
-        # TODO for debugging only
-        tilesWithDiffsPrePos = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
-        tilesWithMovedHerePrePos = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
+        self.run_positive_delta_movement_scan(possibleMovesDict, allowFogSource=False)
 
-        logging.info(f'Tiles with diffs pre-POS: {str([str(t) for t in tilesWithDiffsPrePos])}')
-        logging.info(f'Tiles with MovedHere pre-POS: {str([str(t) for t in tilesWithMovedHerePrePos])}')
+        self.run_attacked_tile_movement_scan(possibleMovesDict, allowFogSource=False)
 
-        # scan for tiles with positive deltas first, those tiles MUST have been gathered to from a friendly tile by the player they are on, letting us eliminate tons of options outright.
-        for x in range(self.cols):
-            for y in range(self.rows):
-                destTile = self.grid[y][x]
-                if not destTile.delta.armyMovedHere or destTile.delta.imperfectArmyDelta:
-                    continue
+        self.run_positive_delta_movement_scan(possibleMovesDict, allowFogSource=True)
 
-                potentialSources = []
-                destWasAttackedNonLethalOrVacatedOrUnmoved = destTile.delta.unexplainedDelta <= 0 #and destTile.delta.oldOwner == destTile.delta.newOwner
-                if destWasAttackedNonLethalOrVacatedOrUnmoved:
-                    logging.info(f'POS DELTA SCAN DEST {repr(destTile)} SKIPPED BECAUSE destWasAttackedNonLethalOrVacatedOrUnmoved {destWasAttackedNonLethalOrVacatedOrUnmoved}')
-                    continue
-
-                for potentialSource in destTile.movable:
-                    if potentialSource.delta.oldOwner == self.player_index:
-                        # we already track our own moves successfully prior to this.
-                        continue
-                    if potentialSource.was_visible_last_turn() and potentialSource.delta.oldOwner != destTile.delta.oldOwner:
-                        # only the player who owns the resulting tile can move one of their own tiles into it. TODO 2v2...?
-                        logging.info(f'POS DELTA SCAN DEST {repr(destTile)} SRC {repr(potentialSource)} SKIPPED BECAUSE potentialSource.was_visible_last_turn() and potentialSource.delta.oldOwner != destTile.player')
-                        continue
-                    if destTile.delta.armyDelta > 0 and destTile.was_visible_last_turn() and potentialSource.was_visible_last_turn() and potentialSource.delta.armyDelta > 0:
-                        msg = f'This shouldnt be possible, two of the same players tiles increasing on the same turn...? {repr(potentialSource)} - {repr(destTile)}'
-                        if ENABLE_DEBUG_ASSERTS:
-                            raise AssertionError(msg)
-                        else:
-                            logging.error(msg)
-                        # continue
-
-                    sourceWasAttackedNonLethalOrVacated = potentialSource.delta.armyDelta < 0
-                    # if  sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
-                    if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
-                        potentialSources = [potentialSource]
-                        logging.info(f'POS DELTA SCAN DEST {repr(destTile)} SRC {repr(potentialSource)} FORCE-SELECTED DUE TO EXACT MATCH, BREAKING EARLY')
-                        break
-
-                    # no effect on diagonal
-                    # if potentialSource.delta.imperfectArmyDelta and (not sourceWasAttackedNonLethalOrVacated or (potentialSource.player >= 0 and potentialSource.player != destTile.delta.oldOwner)):
-                    if potentialSource.delta.imperfectArmyDelta and not self._move_would_violate_known_player_deltas(potentialSource, destTile):
-                        logging.info(f'POS DELTA SCAN DEST {repr(destTile)} SRC {repr(potentialSource)} INCLUDED AS POTENTIAL SOURCE BUT CONTINUING TO LOOK FOR MORE')
-                        potentialSources.append(potentialSource)
-                    elif self.remainingPlayers > 2 and self._is_partial_army_movement_delta_match(source=potentialSource, dest=destTile):
-                        if destTile.army < 3:
-                            logging.info(f'POS DELTA SCAN DEST {repr(destTile)} SRC {repr(potentialSource)} refusing to include potential FFA third party attack because tile appears to have been moved, something seems messed up...')
-                        else:
-                            logging.info(f'POS DELTA SCAN DEST {repr(destTile)} SRC {repr(potentialSource)} including potential FFA third party attack from fog as tile damager.')
-                            potentialSources.append(potentialSource)
-
-                if len(potentialSources) == 1:
-                    exclusiveSrc = potentialSources[0]
-                    # we have our source...?
-                    exactMatch = (
-                            not destTile.delta.imperfectArmyDelta
-                            and not exclusiveSrc.delta.imperfectArmyDelta
-                            and self._is_exact_army_movement_delta_match(exclusiveSrc, destTile)
-                    )
-
-                    logging.info(f'POS DELTA SCAN DEST {repr(destTile)} SRC {repr(exclusiveSrc)} WAS EXCLUSIVE SOURCE, EXACT MATCH {exactMatch} INCLUDING IN MOVES')
-
-                    byPlayer = destTile.delta.oldOwner
-                    if byPlayer == -1:
-                        byPlayer = destTile.player
-
-                    self.set_tile_moved(
-                        destTile,
-                        exclusiveSrc,
-                        # fullFromDiffCovered=exactMatch, #both this and hardcoding true currently have the same result in tests...?
-                        fullFromDiffCovered=True,
-                        fullToDiffCovered=True,  # otherwise we try to find the fog move to this tile again. This being wrong should be exceedingly rare, like 3 players all moving to the same tile rare.
-                        byPlayer=byPlayer)
-                else:
-                    if len(potentialSources) > 0:
-                        logging.info(f'POS DELTA SCAN DEST {repr(destTile)} RESULTED IN MULTIPLE SOURCES {repr([repr(s) for s in potentialSources])}, UNHANDLED FOR NOW')
-                    possibleMovesDict[destTile] = potentialSources
-
-        # TODO for debugging only
-        tilesWithDiffsPreSource = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
-        tilesWithMovedHerePreSource = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
-
-        logging.info(f'Tiles with diffs pre-ATTK: {str([str(t) for t in tilesWithDiffsPreSource])}')
-        logging.info(f'Tiles with MovedHere pre-ATTK: {str([str(t) for t in tilesWithMovedHerePreSource])}')
-
-        # Then attacked dest tiles. This should catch obvious moves from fog as well as all moves between visible tiles.
-        # currently also catches moves into fog, which it shouldnt...?
-        for x in range(self.cols):
-            for y in range(self.rows):
-                destTile = self.grid[y][x]
-                # if not destTile.delta.armyMovedHere:
-                if not destTile.delta.armyMovedHere or destTile.delta.imperfectArmyDelta:
-                    continue
-
-                potentialSources = []
-                destWasAttackedNonLethalOrVacated = destTile.delta.armyDelta < 0  # and destTile.delta.oldOwner == destTile.delta.newOwner
-                # destWasAttackedNonLethalOrVacated = True
-                # destWasAttackedNonLethalOrVacated = destTile.delta.oldArmy + destTile.delta.armyDelta < destTile.delta.oldArmy
-                for potentialSource in destTile.movable:
-                    # we already track our own moves successfully prior to this.
-                    if potentialSource.delta.oldOwner == self.player_index:
-                        continue
-                    if potentialSource.delta.armyDelta > 0 and not potentialSource.delta.gainedSight:
-                        logging.info(f'ATTK DELTA SCAN DEST {repr(destTile)} SRC {repr(potentialSource)} SKIPPED BECAUSE GATHERED TO, NOT ATTACKED. potentialSource.delta.armyDelta > 0')
-                        # then this was DEFINITELY gathered to, which would make this not a potential source. 2v2 violates this
-                        continue
-                    sourceWasAttackedNonLethalOrVacated = potentialSource.delta.armyDelta < 0 or potentialSource.delta.lostSight
-                    # if  sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
-                    if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
-                        potentialSources = [potentialSource]
-                        logging.info(f'ATTK DELTA SCAN DEST {repr(destTile)} SRC {repr(potentialSource)} FORCE-SELECTED DUE TO EXACT MATCH, BREAKING EARLY')
-                        break
-
-                    # no effect on diagonal
-                    if (
-                            potentialSource.delta.imperfectArmyDelta
-                            and not destWasAttackedNonLethalOrVacated
-                            # no effect on diagonal
-                            # and (
-                            #     not sourceWasAttackedNonLethalOrVacated
-                            #     or (potentialSource.player >= 0 and potentialSource.player != destTile.delta.oldOwner)
-                            # )
-                            and not self._move_would_violate_known_player_deltas(potentialSource, destTile)
-                    ):
-                        potentialSources.append(potentialSource)
-                    if destWasAttackedNonLethalOrVacated and self.remainingPlayers > 2 and self._is_partial_army_movement_delta_match(source=potentialSource, dest=destTile):
-                        if destTile.army < 3:
-                            logging.info(f'ATTK DELTA SCAN DEST {repr(destTile)} SRC {repr(potentialSource)} refusing to include potential FFA third party attack because tile appears to have been moved, something seems messed up...')
-                        else:
-                            logging.info(f'ATTK DELTA SCAN DEST {repr(destTile)} SRC {repr(potentialSource)} including potential FFA third party attack from fog as tile damager.')
-                            potentialSources.append(potentialSource)
-
-                if len(potentialSources) == 1:
-                    exclusiveSrc = potentialSources[0]
-                    # we have our source...?
-                    exactMatch = (
-                            not destTile.delta.imperfectArmyDelta
-                            and not exclusiveSrc.delta.imperfectArmyDelta
-                            and self._is_exact_army_movement_delta_match(exclusiveSrc, destTile)
-                    )
-
-                    byPlayer = exclusiveSrc.delta.oldOwner
-                    if byPlayer == -1 or self.players[byPlayer].last_move is not None:
-                        byPlayer = self.players[destTile.delta.oldOwner].fighting_with_player
-                    if byPlayer == -1:
-                        possibilities = list(filter(lambda p: (
-                                not p.dead
-                                and not p.leftGame
-                                and p.last_move is None
-                                and p.unexplainedTileDelta < 0
-                                and p.index != self.player_index
-                                and p.index != destTile.delta.oldOwner
-                        ), self.players))
-                        if len(possibilities) > 0:
-                            byPlayer = possibilities[0].index
-
-                    logging.info(
-                        f'ATTK DELTA SCAN DEST {repr(destTile)} SRC {repr(exclusiveSrc)} WAS EXCLUSIVE SOURCE, EXACT MATCH {exactMatch} INCLUDING IN MOVES, CALCED PLAYER {byPlayer}')
-
-                    if byPlayer != -1:
-                        self.set_tile_moved(
-                            destTile,
-                            exclusiveSrc,
-                            fullFromDiffCovered=exactMatch,
-                            fullToDiffCovered=exactMatch,
-                            byPlayer=byPlayer)
-                    else:
-                        logging.error(f'ATTK DELTA SCAN DEST {repr(destTile)} SRC {repr(exclusiveSrc)} UNABLE TO EXECUTE DUE TO UNABLE TO FIND byPlayer THAT ISNT NEUTRAL')
-                else:
-                    if len(potentialSources) > 0:
-                        logging.info(f'ATTK DELTA SCAN DEST {repr(destTile)} RESULTED IN MULTIPLE SOURCES {repr([repr(s) for s in potentialSources])}, UNHANDLED FOR NOW')
-                    possibleMovesDict[destTile] = potentialSources
+        self.run_attacked_tile_movement_scan(possibleMovesDict, allowFogSource=True)
 
         # TODO for debugging only
         tilesWithDiffsPreFog = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
@@ -1838,6 +1673,58 @@ class MapBase(object):
                     if len(potentialDests) > 0:
                         logging.info(f'FOG SOURCE SCAN SRC {repr(sourceTile)} RESULTED IN MULTIPLE DESTS {repr([repr(s) for s in potentialDests])}, UNHANDLED FOR NOW')
                     possibleMovesDict[sourceTile] = potentialDests
+
+        # TODO for debugging only
+        tilesWithDiffsPreIsland = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
+        tilesWithMovedHerePreIsland = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
+
+        logging.info(f'Tiles with diffs at pre-ISLAND-VISION-LOSS: {str([str(t) for t in tilesWithDiffsPreIsland])}')
+        logging.info(f'Tiles with MovedHere at pre-ISLAND-VISION-LOSS: {str([str(t) for t in tilesWithMovedHerePreIsland])}')
+
+        # now check for island vision loss
+        for x in range(self.cols):
+            for y in range(self.rows):
+                destTile = self.grid[y][x]
+
+                if not destTile.delta.armyMovedHere:
+                    continue
+                if not destTile.delta.lostSight:
+                    continue
+                if not destTile.delta.oldOwner == self.player_index:
+                    continue
+
+                potentialSources = []
+                destWasAttackedNonLethalOrVacated = destTile.delta.armyDelta < 0  # and destTile.delta.oldOwner == destTile.delta.newOwner
+                # destWasAttackedNonLethalOrVacated = True
+                # destWasAttackedNonLethalOrVacated = destTile.delta.oldArmy + destTile.delta.armyDelta < destTile.delta.oldArmy
+
+                # prefer most recently moved, followed by smallest capturer
+                for potentialSource in sorted(destTile.movable, key=lambda t: (0 - t.lastMovedTurn, t.army)):
+                    # we already track our own moves successfully prior to this.
+                    if potentialSource.delta.oldOwner == self.player_index or potentialSource.delta.oldOwner == -1:
+                        continue
+                    if not potentialSource.delta.lostSight:
+                        logging.info(f'ISLAND FOG DEST {repr(destTile)}: SRC {repr(potentialSource)} SKIPPED BECAUSE DIDNT LOSE VISION OF SOURCE, WHICH MEANS IT SHOULD HAVE BEEN CAUGHT BY ANOTHER HANDLER ALREADY (?)')
+                        continue
+                    if evaluateIslandFogMove(destTile, potentialSource):
+                        byPlayer = potentialSource.delta.oldOwner
+
+                        logging.info(
+                            f'ISLAND FOG DEST {repr(destTile)} SRC {repr(potentialSource)} WAS EXCLUSIVE SOURCE, INCLUDING IN MOVES, CALCED PLAYER {byPlayer}')
+
+                        self.set_tile_moved(
+                            destTile,
+                            potentialSource,
+                            fullFromDiffCovered=True,
+                            fullToDiffCovered=True,
+                            byPlayer=byPlayer)
+
+                        break
+
+                else:
+                    if len(potentialSources) > 0:
+                        logging.info(f'ISLAND FOG DEST {repr(destTile)} RESULTED IN MULTIPLE SOURCES {repr([repr(s) for s in potentialSources])}, UNHANDLED FOR NOW')
+                    possibleMovesDict[destTile] = potentialSources
         # TODO compare potential sources limited to one per player.
 
         # TODO for debugging only
@@ -2006,6 +1893,207 @@ class MapBase(object):
         logging.info(f'+++EMERGENCE {repr(fromTile)} = {armyEmerged}')
         self.army_emergences[fromTile] = armyEmerged
 
+    def run_positive_delta_movement_scan(self, possibleMovesDict: typing.Dict[Tile, typing.List[Tile]], allowFogSource: bool):
+        fogFlag = ""
+        if allowFogSource:
+            fogFlag = " (FOG)"
+
+        # TODO for debugging only
+        tilesWithDiffsPrePos = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
+        tilesWithMovedHerePrePos = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
+
+        logging.info(f'Tiles with diffs pre-POS{fogFlag}: {str([str(t) for t in tilesWithDiffsPrePos])}')
+        logging.info(f'Tiles with MovedHere pre-POS{fogFlag}: {str([str(t) for t in tilesWithMovedHerePrePos])}')
+
+        # scan for tiles with positive deltas first, those tiles MUST have been gathered to from a friendly tile by the player they are on, letting us eliminate tons of options outright.
+        for x in range(self.cols):
+            for y in range(self.rows):
+                destTile = self.grid[y][x]
+                if not destTile.delta.armyMovedHere or destTile.delta.imperfectArmyDelta:
+                    continue
+
+                potentialSources = []
+                destWasAttackedNonLethalOrVacatedOrUnmoved = destTile.delta.unexplainedDelta <= 0 #and destTile.delta.oldOwner == destTile.delta.newOwner
+                if destWasAttackedNonLethalOrVacatedOrUnmoved:
+                    logging.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} SKIPPED BECAUSE destWasAttackedNonLethalOrVacatedOrUnmoved {destWasAttackedNonLethalOrVacatedOrUnmoved}')
+                    continue
+
+                for potentialSource in destTile.movable:
+                    if potentialSource.delta.oldOwner == self.player_index:
+                        # we already track our own moves successfully prior to this.
+                        continue
+                    if not allowFogSource and not potentialSource.visible and not potentialSource.delta.lostSight:
+                        continue
+                    if potentialSource.was_visible_last_turn() and potentialSource.delta.oldOwner != destTile.delta.oldOwner:
+                        # only the player who owns the resulting tile can move one of their own tiles into it. TODO 2v2...?
+                        logging.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)}: SRC {repr(potentialSource)} SKIPPED BECAUSE potentialSource.was_visible_last_turn() and potentialSource.delta.oldOwner != destTile.player')
+                        continue
+                    if destTile.delta.armyDelta > 0 and destTile.was_visible_last_turn() and potentialSource.was_visible_last_turn() and potentialSource.delta.armyDelta > 0:
+                        msg = f'This shouldnt be possible, two of the same players tiles increasing on the same turn...? {repr(potentialSource)} - {repr(destTile)}'
+                        if ENABLE_DEBUG_ASSERTS:
+                            raise AssertionError(msg)
+                        else:
+                            logging.error(msg)
+                        # continue
+
+                    sourceWasAttackedNonLethalOrVacated = potentialSource.delta.armyDelta < 0
+                    # if  sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
+                    if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
+                        potentialSources = [potentialSource]
+                        logging.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(potentialSource)} FORCE-SELECTED DUE TO EXACT MATCH, BREAKING EARLY')
+                        break
+
+                    # no effect on diagonal
+                    # if potentialSource.delta.imperfectArmyDelta and (not sourceWasAttackedNonLethalOrVacated or (potentialSource.player >= 0 and potentialSource.player != destTile.delta.oldOwner)):
+                    if potentialSource.delta.imperfectArmyDelta and not self._move_would_violate_known_player_deltas(potentialSource, destTile):
+                        logging.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(potentialSource)} INCLUDED AS POTENTIAL SOURCE BUT CONTINUING TO LOOK FOR MORE')
+                        potentialSources.append(potentialSource)
+                    elif self.remainingPlayers > 2 and self._is_partial_army_movement_delta_match(source=potentialSource, dest=destTile):
+                        if destTile.army < 3:
+                            logging.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(potentialSource)} refusing to include potential FFA third party attack because tile appears to have been moved, something seems messed up...')
+                        else:
+                            logging.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(potentialSource)} including potential FFA third party attack from fog as tile damager.')
+                            potentialSources.append(potentialSource)
+
+                if len(potentialSources) == 1:
+                    exclusiveSrc = potentialSources[0]
+                    # we have our source...?
+                    exactMatch = (
+                            not destTile.delta.imperfectArmyDelta
+                            and not exclusiveSrc.delta.imperfectArmyDelta
+                            and self._is_exact_army_movement_delta_match(exclusiveSrc, destTile)
+                    )
+
+                    logging.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(exclusiveSrc)} WAS EXCLUSIVE SOURCE, EXACT MATCH {exactMatch} INCLUDING IN MOVES')
+
+                    byPlayer = destTile.delta.oldOwner
+                    if byPlayer == -1:
+                        byPlayer = destTile.player
+
+                    self.set_tile_moved(
+                        destTile,
+                        exclusiveSrc,
+                        # fullFromDiffCovered=exactMatch, #both this and hardcoding true currently have the same result in tests...?
+                        fullFromDiffCovered=True,
+                        fullToDiffCovered=True,  # otherwise we try to find the fog move to this tile again. This being wrong should be exceedingly rare, like 3 players all moving to the same tile rare.
+                        byPlayer=byPlayer)
+                else:
+                    if len(potentialSources) > 0:
+                        logging.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} RESULTED IN MULTIPLE SOURCES {repr([repr(s) for s in potentialSources])}, UNHANDLED FOR NOW')
+                    possibleMovesDict[destTile] = potentialSources
+
+    def run_attacked_tile_movement_scan(self, possibleMovesDict: typing.Dict[Tile, typing.List[Tile]], allowFogSource: bool):
+        fogFlag = ""
+        if allowFogSource:
+            fogFlag = "(FOG) "
+
+        # TODO for debugging only
+        tilesWithDiffsPreSource = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
+        tilesWithMovedHerePreSource = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
+
+        logging.info(f'Tiles with diffs pre-ATTK{fogFlag}: {str([str(t) for t in tilesWithDiffsPreSource])}')
+        logging.info(f'Tiles with MovedHere pre-ATTK{fogFlag}: {str([str(t) for t in tilesWithMovedHerePreSource])}')
+
+        # Then attacked dest tiles. This should catch obvious moves from fog as well as all moves between visible tiles.
+        # currently also catches moves into fog, which it shouldnt...?
+        for x in range(self.cols):
+            for y in range(self.rows):
+                destTile = self.grid[y][x]
+                # if not destTile.delta.armyMovedHere:
+                if not destTile.delta.armyMovedHere or destTile.delta.imperfectArmyDelta:
+                    continue
+                if not allowFogSource and not destTile.visible and not destTile.delta.lostSight:
+                    continue
+
+                potentialSources = []
+                destWasAttackedNonLethalOrVacated = destTile.delta.armyDelta < 0  # and destTile.delta.oldOwner == destTile.delta.newOwner
+                # destWasAttackedNonLethalOrVacated = True
+                # destWasAttackedNonLethalOrVacated = destTile.delta.oldArmy + destTile.delta.armyDelta < destTile.delta.oldArmy
+                for potentialSource in destTile.movable:
+                    # we already track our own moves successfully prior to this.
+                    if potentialSource.delta.oldOwner == self.player_index:
+                        continue
+                    if not allowFogSource and not potentialSource.visible and not potentialSource.delta.lostSight:
+                        continue
+                    if potentialSource.delta.armyDelta > 0 and not potentialSource.delta.gainedSight:
+                        logging.info(
+                            f'ATTK DELTA SCAN{fogFlag} DEST {repr(destTile)}: SRC {repr(potentialSource)} SKIPPED BECAUSE GATHERED TO, NOT ATTACKED. potentialSource.delta.armyDelta > 0')
+                        # then this was DEFINITELY gathered to, which would make this not a potential source. 2v2 violates this
+                        continue
+                    sourceWasAttackedNonLethalOrVacated = potentialSource.delta.armyDelta < 0 or potentialSource.delta.lostSight
+                    # if  sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
+                    if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource,
+                                                                                                        destTile):
+                        potentialSources = [potentialSource]
+                        logging.info(
+                            f'ATTK DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(potentialSource)} FORCE-SELECTED DUE TO EXACT MATCH, BREAKING EARLY')
+                        break
+
+                    # no effect on diagonal
+                    if (
+                            potentialSource.delta.imperfectArmyDelta
+                            and not destWasAttackedNonLethalOrVacated
+                            # no effect on diagonal
+                            # and (
+                            #     not sourceWasAttackedNonLethalOrVacated
+                            #     or (potentialSource.player >= 0 and potentialSource.player != destTile.delta.oldOwner)
+                            # )
+                            and not self._move_would_violate_known_player_deltas(potentialSource, destTile)
+                    ):
+                        potentialSources.append(potentialSource)
+                    if destWasAttackedNonLethalOrVacated and self.remainingPlayers > 2 and self._is_partial_army_movement_delta_match(
+                            source=potentialSource, dest=destTile):
+                        if destTile.army < 3:
+                            logging.info(
+                                f'ATTK DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(potentialSource)} refusing to include potential FFA third party attack because tile appears to have been moved, something seems messed up...')
+                        else:
+                            logging.info(
+                                f'ATTK DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(potentialSource)} including potential FFA third party attack from fog as tile damager.')
+                            potentialSources.append(potentialSource)
+
+                if len(potentialSources) == 1:
+                    exclusiveSrc = potentialSources[0]
+                    # we have our source...?
+                    exactMatch = (
+                            not destTile.delta.imperfectArmyDelta
+                            and not exclusiveSrc.delta.imperfectArmyDelta
+                            and self._is_exact_army_movement_delta_match(exclusiveSrc, destTile)
+                    )
+
+                    byPlayer = exclusiveSrc.delta.oldOwner
+                    if byPlayer == -1 or self.players[byPlayer].last_move is not None:
+                        byPlayer = self.players[destTile.delta.oldOwner].fighting_with_player
+                    if byPlayer == -1:
+                        possibilities = list(filter(lambda p: (
+                                not p.dead
+                                and not p.leftGame
+                                and p.last_move is None
+                                and p.unexplainedTileDelta < 0
+                                and p.index != self.player_index
+                                and p.index != destTile.delta.oldOwner
+                        ), self.players))
+                        if len(possibilities) > 0:
+                            byPlayer = possibilities[0].index
+
+                    logging.info(
+                        f'ATTK DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(exclusiveSrc)} WAS EXCLUSIVE SOURCE, EXACT MATCH {exactMatch} INCLUDING IN MOVES, CALCED PLAYER {byPlayer}')
+
+                    if byPlayer != -1:
+                        self.set_tile_moved(
+                            destTile,
+                            exclusiveSrc,
+                            fullFromDiffCovered=exactMatch,
+                            fullToDiffCovered=exactMatch,
+                            byPlayer=byPlayer)
+                    else:
+                        logging.error(
+                            f'ATTK DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(exclusiveSrc)} UNABLE TO EXECUTE DUE TO UNABLE TO FIND byPlayer THAT ISNT NEUTRAL')
+                else:
+                    if len(potentialSources) > 0:
+                        logging.info(
+                            f'ATTK DELTA SCAN{fogFlag} DEST {repr(destTile)} RESULTED IN MULTIPLE SOURCES {repr([repr(s) for s in potentialSources])}, UNHANDLED FOR NOW')
+                    possibleMovesDict[destTile] = potentialSources
+
 
 class Map(MapBase):
     """
@@ -2109,170 +2197,13 @@ def new_value_grid(map, initValue) -> typing.List[typing.List[int]]:
     return [[initValue] * map.rows for _ in range(map.cols)]
 
 
-def evaluateTileDiffsInt(tile: Tile, candidateTile: Tile) -> int:
-    if tile.visible:
-        # both visible
-        if candidateTile.visible:
-            if candidateTile.isMountain:
-                return -100
-            return evaluateDualVisibleTileDiffs(tile, candidateTile)
-        else:
-            return evaluateMoveHalfFog(tile, candidateTile)
-    else:
-        return evaluateIslandFogMove(tile, candidateTile)
+def evaluateIslandFogMove(tile: Tile, candidateTile: Tile) -> bool:
+    if tile.visible or candidateTile.visible:
+        raise AssertionError(f"wtf, can't call this for visible tiles my guy. tile {repr(tile)} candidateTile {repr(candidateTile)} ")
 
-
-def evaluateTileDiffsVisible(curTile) -> Tile | None:
-    bestCandTile = None
-    bestCandValue = 95
-    for candidateTile in filter(lambda t: t.visible, curTile.movable):
-        if candidateTile.isMountain:
-            continue
-        candValue = evaluateTileDiffsInt(curTile, candidateTile)
-        if candValue > bestCandValue:
-            bestCandValue = candValue
-            bestCandTile = candidateTile
-
-    return bestCandTile
-
-
-def evaluateTileDiffsFog(curTile) -> Tile | None:
-    bestCandTile = None
-    bestCandValue = 1
-    for candidateTile in curTile.movable:
-        candValue = evaluateTileDiffsInt(curTile, candidateTile)
-        if candValue > bestCandValue:
-            bestCandValue = candValue
-            bestCandTile = candidateTile
-
-    return bestCandTile
-
-
-def evaluateDualVisibleTileDiffs(tile: Tile, candidateTile: Tile):
-    if tile.delta.oldOwner != tile.delta.newOwner:
-        if tile.delta != 0:
-            deltasMatch = tile.delta.armyDelta == candidateTile.delta.armyDelta
-            if deltasMatch:
-                return 1000
-
-        else:
-            # something fishy happened here because by getting into this method, we KNOW the tile was interacted with
-            # but if its delta is zero then it means two armies collided. Just look for a candidate tile with a delta, then.
-
-            if candidateTile.delta.armyDelta < 0 and candidateTile.player == tile.delta.newOwner:
-                logging.info(f'evaluateDualVisibleTileDiffs {str(tile)} capped by {str(candidateTile)} despite collision, as determined by tile delta player match')
-                return 1000
-
-            if candidateTile.delta.armyDelta < 0:
-                # then may have collided without capping it
-                return 75
-    elif (candidateTile.delta.oldOwner == candidateTile.delta.newOwner
-            and candidateTile.player == tile.player):
-        return evaluateSameOwnerMoves(tile, candidateTile)
-    # elif (tile.delta.oldOwner == -1
-    #         and candidateTile.delta.oldOwner == candidateTile.delta.newOwner
-    #         and candidateTile.player == tile.player):
-    #     return evaluateSameOwnerMoves(tile, candidateTile)
-    # return evaluateSameOwnerMoves(tile, candidateTile)
-    return -100
-
-
-def evaluateMoveHalfFog(tile: Tile, candidateTile: Tile):
-    """
-    Evaluates whether an army moved from a fog tile into a tile that is in vision.
-    Returns an int where negative means definitely not and positive int means probably, with 100 being high probability.
-    """
-    # if tile.delta.oldOwner == tile.delta.newOwner:
-    #     return -100
-    if candidateTile.visible:
-        return -100
-
-    if tile.delta.armyDelta == 0:
-        # then we're in this weird situation where we KNOW the tile was captured or something but armies collided in the process
-        # if ONLY one tile adjacent is fog, then MUST have come from there, or we'd have already picked a visible tile with a delta
-        if candidateTile.army > 0:
-            logging.info(f'(evaluateMoveFromFog, weird situation) candidateTile.army > 0 '
-                         f'{candidateTile.x},{candidateTile.y}({candidateTile.delta.armyDelta})'
-                         f'->{tile.x},{tile.y}({tile.delta.armyDelta})')
-            return 10
-
-        logging.info(f'(evaluateMoveFromFog) tile.delta.armyDelta == 0 '
-                     f'{candidateTile.x},{candidateTile.y}({candidateTile.delta.armyDelta})'
-                     f'->{tile.x},{tile.y}({tile.delta.armyDelta})')
-        return -100
-
-    candidateDelta = candidateTile.army + tile.delta.armyDelta - 1
-    if candidateDelta == 0:
-        logging.info(f'(evaluateMoveFromFog) candidateDelta == 0 '
-                     f'{candidateTile.x},{candidateTile.y}({candidateTile.delta.armyDelta})'
-                     f'->{tile.x},{tile.y}({tile.delta.armyDelta})')
-        # return 40
-        return 100
-
-    halfMoveAmount = (candidateTile.army // 2)
-    halfDelta = halfMoveAmount + tile.delta.armyDelta
-    if halfMoveAmount > 0 and halfDelta == 0:
-        logging.info(f'(evaluateMoveFromFog) halfMoveAmount > 0 and halfDelta == 0 '
-                     f'{candidateTile.x},{candidateTile.y}({candidateTile.delta.armyDelta})'
-                     f'->{tile.x},{tile.y}({tile.delta.armyDelta})')
-        return 35
-
-    return -100
-
-
-def evaluateIslandFogMove(tile: Tile, candidateTile: Tile):
-    if tile.visible:
-        raise AssertionError("wtf, can't call this for visible tiles my guy")
-
-    # print(str(tile.army) + " : " + str(candidateTile.army))
-    if candidateTile.visible:
-        if tile.army + candidateTile.delta.armyDelta < -1 and candidateTile.player != -1:
-            tile.player = candidateTile.player
-            tile.delta.newOwner = candidateTile.player
-            oldArmy = tile.army
-            tile.army = 0 - candidateTile.delta.armyDelta - tile.army
-            # THIS HANDLED EXTERNAL IN THE UPDATE LOOP, AFTER THIS LOGIC HAPPENS
-            # if tile.isCity and isCityBonusTurn:
-            #     tile.army += 1
-            # if isArmyBonusTurn:
-            #     tile.army += 1
-            logging.info(f" (islandFog 1) tile {str(tile)} army from {oldArmy} to {tile.army}")
-            return 100
-    elif tile.army - candidateTile.army < -1 and candidateTile.player != -1:
-        tile.player = candidateTile.player
-        tile.delta.newOwner = candidateTile.player
-        oldArmy = tile.army
-        tile.army = candidateTile.army - tile.army - 1
-        oldCandArmy = candidateTile.army
-        candidateTile.army = 1
-        # THIS HANDLED EXTERNAL IN THE UPDATE LOOP, AFTER THIS LOGIC HAPPENS
-        # if candidateTile.isCity and isCityBonusTurn:
-        #     candidateTile.army += 1
-        # if isArmyBonusTurn:
-        #     candidateTile.army += 1
-        logging.info(f" (islandFog 2) tile {str(tile)} army from {oldArmy} to {tile.army}")
-        logging.info(
-            f" (islandFog 2) candTile {candidateTile.toString()} army from {oldCandArmy} to {candidateTile.army}")
-        return 100
-    return -100
-
-
-def evaluateSameOwnerMoves(tile: Tile, candidateTile: Tile):
-    if tile.delta.armyDelta > 0:
-        delta = tile.delta.armyDelta + candidateTile.delta.armyDelta
-        if delta == 0:
-            logging.info(f'same owner tile delta evaluation of '
-                         f'{candidateTile.x},{candidateTile.y}({candidateTile.delta.armyDelta})'
-                         f'->{tile.x},{tile.y}({tile.delta.armyDelta}) '
-                         f'resulted in a delta of {delta}, obviously was correct movement')
-            return 100
-        if candidateTile.delta.armyDelta < 0:
-            logging.info(f'same owner tile delta evaluation of '
-                         f'{candidateTile.x},{candidateTile.y}({candidateTile.delta.armyDelta})'
-                         f'->{tile.x},{tile.y}({tile.delta.armyDelta}) '
-                         f'resulted in a delta of {delta}')
-            return 75
-    return -100
+    if tile.army - candidateTile.army < -1 and candidateTile.player != -1:
+        return True
+    return False
 
 
 def _apply_diff(cache, diff):

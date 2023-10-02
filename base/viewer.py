@@ -269,7 +269,7 @@ class GeneralsViewer(object):
         pygame.display.set_caption(window_title)
         self._medFontHeight = min(2 * self.cellHeight // 5, 30)
         self._smallFontHeight = min(self.cellHeight // 4, 17)
-        self._lrgFontHeight = 3 * self.cellHeight // 5
+        self._lrgFontHeight = 3 * self.cellHeight // 5 + 1
         self._medFont = pygame.font.SysFont('Arial', self._medFontHeight)
         self._infoFont = pygame.font.SysFont('Arial', self.infoLineHeight)
         self._smallFont = pygame.font.SysFont('Arial', self._smallFontHeight)

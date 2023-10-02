@@ -141,7 +141,7 @@ class MapTests(TestBase):
 
             # renderTurnBeforeSim = True
             # renderTurnBeforePlayers = True
-            renderP0 = True
+            # renderP0 = True
             renderP1 = True
 
             def mapRenderer():
@@ -782,11 +782,12 @@ C5
                                     # 1329
                                     # 1073
                                     # 1073
+                                    # 177
                                     self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bHasNearbyVision=bHasNearbyVision)
 
     def test_run_one_off_fog_island_full_capture_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=9, bArmy=9, bMove=(-1, 0), turn=96, seenFog=False, bHasNearbyVision=True)
+        self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=8, bArmy=9, bMove=(1, 0), turn=97, seenFog=False, bHasNearbyVision=False)
 
     def test_generate_all_out_of_fog_collision_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -805,7 +806,7 @@ C5
 
     def test_run_one_off_out_of_fog_collision_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        self.run_out_of_fog_collision_test(debugMode=debugMode, aArmy=9, bArmy=9, aMove=(0, 1), bMove=(-1, 0), turn=96, seenFog=False)
+        self.run_out_of_fog_collision_test(debugMode=debugMode, aArmy=8, bArmy=5, aMove=(0, 1), bMove=(0, -1), turn=96, seenFog=False)
 
     def test_generate_all_adjacent_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False

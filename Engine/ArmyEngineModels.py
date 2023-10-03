@@ -372,7 +372,7 @@ class ArmySimResult(object):
         """
 
     def __str__(self):
-        return f'({self.net_economy_differential:+d}) {str(self.best_result_state)}'
+        return f'(net{self.net_economy_differential:+d}) {str(self.best_result_state)}'
 
     def __repr__(self):
         return f'{str(self)} [{self.best_result_state.calculate_value_int()}]'

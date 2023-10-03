@@ -1059,3 +1059,45 @@ class BotBehaviorTests(TestBase):
         self.assertIsNone(winner)
 
         # TODO add asserts for should_all_in_general_when_contested_cities_out_of_position_and_knows_no_army_on_general
+    
+    def test_should_not_try_to_trade_when_not_sure_of_general_location(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_try_to_trade_when_not_sure_of_general_location___2WlVf4R5G---0--182.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 182, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=182)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+        self.set_general_emergence_around(4, 4, simHost, general.player, enemyGeneral.player)
+
+        simHost.queue_player_moves_str(enemyGeneral.player, '2,8->2,9->2,10->2,11->3,11->4,11->4,12->5,12->6,12->7,12->7,13->8,13->8,14->8,15->9,15->10,15')
+        simHost.queue_player_moves_str(general.player, '6,9->5,9')
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=15)
+        self.assertIsNone(winner)
+    
+    def test_should_not_fail_defense(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_fail_defense___B3wF_LC3Y---4--599.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 599, fill_out_tiles=True)
+
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 23, 6)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=599)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+        self.set_general_emergence_around(17, 1, simHost, general.player, enemyGeneral.player)
+
+        simHost.queue_player_moves_str(enemyGeneral.player, '12,8->12,9->12,10->12,11->12,12->12,13->11,13->11,14->11,15->11,16->11,17->11,18->11,19->12,19->12,20->12,21->12,22->12,23->12,24->11,24')
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=25)
+        self.assertIsNone(winner)

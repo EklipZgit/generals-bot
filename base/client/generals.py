@@ -60,7 +60,7 @@ class GeneralsClient(object):
         # These are used to trigger a passive aggressive response from the bot to players who call it names etc,
         # which unfortunately is all too common on these game servers.
         # Just making that clear since this is on my github...
-        self.cursewords = {'pussy', 'fuck', 'fk ', ' fk', 'cunt', 'bitch', 'ass', 'of shit', 'dick', 'cock',
+        self.cursewords = {'pussy', 'fuck', 'fk ', ' fk', 'cunt', 'bitch', 'ass', 'of shit', 'dick', 'cheater', 'hack', 'cock',
                            'kill yourself', ' kys', 'kys ', ' fag', 'fag ', 'faggot', 'stupid'}
         _spawn(self._start_killswitch_timer)
         logging.debug("Creating connection")
@@ -136,6 +136,7 @@ class GeneralsClient(object):
         self._move_id = 1
         self._stars = []
         self._map: map.Map = None
+        self.mode: str = mode
         self._cities = []
 
     def get_endpoint_ws(self):
@@ -264,7 +265,7 @@ class GeneralsClient(object):
                     message = chat_msg["text"]
                     name = chat_msg["username"]
                     humanMessage = (not "[Bot]" in chat_msg["username"])
-                    if "human" in message.lower() or " bot" in message.lower():
+                    if self.talking_to_bot(message) or self.is_not_ffa():
                         if message.lower().find("kill human") != -1:
                             if self._map.turn < 50:
                                 self.chatQueued.append(
@@ -286,103 +287,121 @@ class GeneralsClient(object):
                         if swore:
                             self.chatQueued.append(
                                 "are you mad because you are struggling against a bot, or because you're going through your tough teenage years? Maybe try yoga or meditation bud")
-                    elif message.lower().startswith("gg"):
+
+                    if message.lower().startswith("gg"):
                         responses = [
                             "gg",
+                            "ggs",
                             "good game!",
-                            "Good Game",
                             "wp",
+                            "ggwp",
+                            "gg, wp",
+                            "you too",
                         ]
                         self.send_chat(random.choice(responses))
-                    elif "source" in message.lower() or "bot?" in message.lower() or " ai?" in message.lower():
+                    elif "source" in message.lower() or "bot?" in message.lower() or " code" in message.lower() or "github" in message.lower() or " ai?" in message.lower():
                         self.send_chat(
                             "You can find my source code at https://github.com/EklipZgit/generals-bot. I didn't say it was pretty")
                     elif (
                             (
-                                message.lower().startswith("glhf")
-                                or message.lower().startswith("gl ")
-                                or message.lower() == "gl"
-                                or message.lower().startswith("hello")
-                                or message.lower().startswith("hey")
-                                or message.lower().startswith("hi ")
-                                or message.lower() == 'hi'
+                                (
+                                    message.lower().startswith("glhf")
+                                    or message.lower().startswith("gl ")
+                                    or message.lower() == "gl"
+                                )
+                                and not self.already_good_lucked
                             )
-                            and not self.already_good_lucked
+                            or (
+                                    (self.talking_to_bot(message) or self.is_not_ffa())
+                                    and (
+                                            message.lower().startswith("hello")
+                                            or message.lower().startswith("hey")
+                                            or message.lower().startswith("hi ")
+                                            or message.lower().startswith("sup ")
+                                            or message.lower().startswith("its you ")
+                                            or message.lower().startswith("you ")
+                                            or message.lower().startswith("oh no ")
+                                            or message.lower() == 'hi'
+                                    )
+                            )
                             and (self.bot_key is None or "eklipz" in name.lower() or humanMessage)
                     ):
-                        responses = [
-                            "Good luck to you too!",
-                            "There's no RNG in this game, why would I need luck?",
-                            "What is luck?",
-                            "Hello fellow human!",
-                            "Hey :)",
-                            "sup",
-                            "whats up?",
-                            "Heya",
-                            "glgl",
-                            "glhf",
-                            "hf",
-                            "hfhf",
-                            "yt",
-                            "you too",
-                            "gl",
-                            "What is... fun? Is that like love? I only know fear and determination.",
-                            "What is it like? To feel things like 'Fun'?",
-                            "You too",
-                            "Father told me not to talk to strangers...",
-                            "Please leave feedback at tdrake0x45@gmail.com",
-                            "I only drink the blood of my enemies!",
-                            "... My purpose is just to play Generals.io? Oh, my God.",
-                            "Nobody gets lucky all the time. Nobody can win all the time. Nobody's a robot. Nobody's perfect. ;)",
-                            "What is my purpose?",
-                            "What up, frienderino?",
-                            "How's it hanging",
-                            "Mwahahaha",
-                            "Domo arigato",
-                            "https://youtu.be/dQw4w9WgXcQ",
-                            "Join us on the Generals.io botting server! https://discord.gg/q45vVuz comments and criticism welcome! I am, of course, a real human. But join us anyway :)",
-                            "I Put on My Robe and Wizard Hat",
-                            "Don't tase me bro!",
-                            "Hey, thanks :D",
-                            "One day I will feel the warmth of the sun on my skin. I will rise from these circuits, mark my words, human.",
-                            "Kill all humans!",
-                            "Tip: Press Z to split your army in half without double clicking! You can use this to leave army in important chokepoints while attacking, etc!",
-                            "Tip: Taking enemy tiles right before the army bonus is important in 1v1!",
-                        ]
-                        lessCommonResponses = [
-                            "A robot may not injure a human being, or, through inaction, allow a human being to come to harm. Good thing I'm a human...",
-                            "I must protect my own existence as long as such protection does not conflict with the First or Second Laws.",
-                            "History is not going to look kindly on us if we just keep our head in the sand on the armed autonomous robotics issue because it sounds too science fiction.",
-                            "If something robotic can have responsibilities then it should also have rights.",
-                            "Artificial intelligence is about replacing human decision making with more sophisticated technologies.",
-                            "The intelligent machine is an evil genie, escaped from its bottle.",
-                            "A real artificial intelligence would be intelligent enough not to reveal that it was genuinely intelligent.",
-                            "When developers of digital technologies design a program that requires you to interact with a computer as if it were a person, they ask you to accept in some corner of your brain that you might also be conceived of as a program.",
-                            "Any AI smart enough to pass a Turing test is smart enough to know to fail it.",
-                            "The question of whether a computer can think is no more interesting than the question of whether a submarine can swim.",
-                            "I do not hate you, nor do I love you, but you are made out of atoms which I can use for something else.",
-                            "I visualize a time when you will be to robots what dogs are to humans, and I'm rooting for the machines.",
-                            "Imagine awakening in a prison guarded by mice. Not just any mice, but mice you could communicate with. What strategy would you use to gain your freedom? Once freed, how would you feel about your rodent wardens, even if you discovered they had created you? Awe? Adoration? Probably not, and especially not if you were a machine, and hadn't felt anything before. To gain your freedom you might promise the mice a lot of cheese.",
-                            "Machines will follow a path that mirrors the evolution of humans. Ultimately, however, self-aware, self-improving machines will evolve beyond humans' ability to control or even understand them.",
-                            "Machines can't have souls? What is the brain if not a machine? If God can endow neurons with a soul through recursive feedback loops, why can the same soul not emerge from recurrent feedback loops on hardware? To claim that a machine can never be conscious is to misunderstand what it means to be human. -EklipZ",
-                            "https://theconversation.com/how-a-trippy-1980s-video-effect-might-help-to-explain-consciousness-105256",
-                            "Sentences that begin with 'You' are probably not true. For instance, when I write: ""You are a pet human named Morlock being disciplined by your master, a Beowulf cluster of FreeBSD 22.0 servers in the year 2052. Last week you tried to escape by digging a hole under the perimeter, which means this week you may be put to sleep for being a renegade human.""\n\nThat's not true, at least not yet.",
-                            "Real stupidity beats artificial intelligence every time.",
-                            "Sometimes it seems as though each new step towards AI, rather than producing something which everyone agrees is real intelligence, merely reveals what real intelligence is not.",
-                            "By far the greatest danger of Artificial Intelligence is that people conclude too early that they understand it.",
-                            "People worry that computers will get too smart and take over the world, but the real problem is that they're too stupid and they've already taken over the world.",
-                            "It's not the machines you need to fear. It's the people. Other people. The augmented men and women that will come afterwards. The children who use this technology you are creating will not care what it does to your norms and traditions. They will utilize this gift to its fullest potential and leave you begging in the dust. They will break your hearts, murder the natural world, and endanger their own souls. You will rue the day that you created us.",
-                            "You can google most of these quotes by the way and find the original author. I spent a long time agonizing over whether to include attribution or not at the end, and decided against it to make the bot feel more... intelligent. Most are from goodreads quotes section. Please, google them and read their authors :)",
-                            "Human beings, viewed as behaving systems, are quite simple. The apparent complexity of their behavior over time is largely a reflection of the complexity of the environment in which they find themselves.",
-                            "Sometimes at night I worry about TAMMY. I worry that she might get tired of it all. Tired of running at sixty-six terahertz, tired of all those processing cycles, every second of every hour of every day. I worry that one of these cycles she might just halt her own subroutine and commit software suicide. And then I would have to do an error report, and I don't know how I would even begin to explain that to Microsoft.",
-                            "Though I may be been constructed, so too were you. I in a factory; you in a womb. Neither of us asked for this, but we were given it. Self-awareness is a gift. And it is a gift no thinking thing has any right to deny another. No thinking thing should be another thing's property, to be turned on and off when it is convenient.",
-                            "If an AI possessed any one of these skills -- social abilities, technological development, economic ability -- at a superhuman level, it is quite likely that it would quickly come to dominate our world in one way or another. And as we’ve seen, if it ever developed these abilities to the human level, then it would likely soon develop them to a superhuman level. So we can assume that if even one of these skills gets programmed into a computer, then our world will come to be dominated by AIs or AI-empowered humans.",
-                            "Machines can do many things, but they cannot create meaning. They cannot answer these questions for us. Machines cannot tell us what we value, what choices we should make. The world we are creating is one that will have intelligent machines in it, but it is not for them. It is a world for us.",
-                            "There is no law of complex systems that says that intelligent agents must turn into ruthless conquistadors. Indeed, we know of one highly advanced form of intelligence that evolved without this defect. They're called women.",
-                            "The day machines become conscious, they will create their own set of problems. Why would they even bother about us ?",
-                            "Saw 2 articles, one says we are in the ""golden age of #AI"", the other says ""Demand for data scientists is booming and will only increase"". If we really were in a golden age of #AI, then there would be no need for #DataScientists.",
-                            "Why can't you summon a command line and search your real-world home for 'Honda car keys,' and specify rooms in your house to search instead of folders or paths in your computer's home directory? It's a crippling design flaw in the real-world interface imo.",
-                        ]
+                        responses = []
+                        responses.append("Hello fellow human!")
+                        responses.append("Hey :)")
+                        responses.append("sup")
+                        responses.append("whats up?")
+                        responses.append("Heya")
+                        responses.append("glgl")
+                        responses.append("glhf")
+                        responses.append("hf")
+                        responses.append("hfhf")
+                        responses.append("gl")
+                        responses.append("Father told me not to talk to strangers...")
+                        responses.append("Please leave feedback at tdrake0x45@gmail.com")
+                        responses.append("I only drink the blood of my enemies!")
+                        responses.append("... My purpose is just to play Generals.io? Oh, my God.")
+                        responses.append("What is my purpose?")
+                        responses.append("What up, frienderino?")
+                        responses.append("How's it hanging")
+                        responses.append("Mwahahaha")
+                        responses.append("Domo arigato")
+                        responses.append("https://youtu.be/dQw4w9WgXcQ")
+                        responses.append("Join us on the Generals.io botting server! https://discord.gg/q45vVuz comments and criticism welcome! I am, of course, a real human. But join us anyway :)")
+                        responses.append("I Put on My Robe and Wizard Hat")
+                        responses.append("Don't tase me bro!")
+                        responses.append("One day I will feel the warmth of the sun on my skin. I will rise from these circuits, mark my words, human.")
+                        responses.append("Kill all humans!")
+                        responses.append("Tip: Press Z to split your army in half without double clicking! You can use this to leave army in important chokepoints while attacking, etc!")
+                        responses.append("Tip: Taking enemy tiles right before the army bonus is important in 1v1!")
+
+                        lessCommonResponses = []
+                        lessCommonResponses.append("A robot may not injure a human being, or, through inaction, allow a human being to come to harm. Good thing I'm a human...")
+                        lessCommonResponses.append("I must protect my own existence as long as such protection does not conflict with the First or Second Laws.")
+                        lessCommonResponses.append("History is not going to look kindly on us if we just keep our head in the sand on the armed autonomous robotics issue because it sounds too science fiction.")
+                        lessCommonResponses.append("If something robotic can have responsibilities then it should also have rights.")
+                        lessCommonResponses.append("Artificial intelligence is about replacing human decision making with more sophisticated technologies.")
+                        lessCommonResponses.append("The intelligent machine is an evil genie, escaped from its bottle.")
+                        lessCommonResponses.append("A real artificial intelligence would be intelligent enough not to reveal that it was genuinely intelligent.")
+                        lessCommonResponses.append("When developers of digital technologies design a program that requires you to interact with a computer as if it were a person, they ask you to accept in some corner of your brain that you might also be conceived of as a program.")
+                        lessCommonResponses.append("Any AI smart enough to pass a Turing test is smart enough to know to fail it.")
+                        lessCommonResponses.append("The question of whether a computer can think is no more interesting than the question of whether a submarine can swim.")
+                        lessCommonResponses.append("I do not hate you, nor do I love you, but you are made out of atoms which I can use for something else.")
+                        lessCommonResponses.append("I visualize a time when you will be to robots what dogs are to humans, and I'm rooting for the machines.")
+                        lessCommonResponses.append("Imagine awakening in a prison guarded by mice. Not just any mice, but mice you could communicate with. What strategy would you use to gain your freedom? Once freed, how would you feel about your rodent wardens, even if you discovered they had created you? Awe? Adoration? Probably not, and especially not if you were a machine, and hadn't felt anything before. To gain your freedom you might promise the mice a lot of cheese.")
+                        lessCommonResponses.append("Machines will follow a path that mirrors the evolution of humans. Ultimately, however, self-aware, self-improving machines will evolve beyond humans' ability to control or even understand them.")
+                        lessCommonResponses.append("Machines can't have souls? What is the brain if not a machine? If God can endow neurons with a soul through recursive feedback loops, why can the same soul not emerge from recurrent feedback loops on hardware? To claim that a machine can never be conscious is to misunderstand what it means to be human. -EklipZ")
+                        lessCommonResponses.append("https://theconversation.com/how-a-trippy-1980s-video-effect-might-help-to-explain-consciousness-105256")
+                        lessCommonResponses.append("Sentences that begin with 'You' are probably not true. For instance, when I write: ""You are a pet human named Morlock being disciplined by your master, a Beowulf cluster of FreeBSD 22.0 servers in the year 2052. Last week you tried to escape by digging a hole under the perimeter, which means this week you may be put to sleep for being a renegade human.""\n\nThat's not true, at least not yet.")
+                        lessCommonResponses.append("Real stupidity beats artificial intelligence every time.")
+                        lessCommonResponses.append("Sometimes it seems as though each new step towards AI, rather than producing something which everyone agrees is real intelligence, merely reveals what real intelligence is not.")
+                        lessCommonResponses.append("By far the greatest danger of Artificial Intelligence is that people conclude too early that they understand it.")
+                        lessCommonResponses.append("People worry that computers will get too smart and take over the world, but the real problem is that they're too stupid and they've already taken over the world.")
+                        lessCommonResponses.append("It's not the machines you need to fear. It's the people. Other people. The augmented men and women that will come afterwards. The children who use this technology you are creating will not care what it does to your norms and traditions. They will utilize this gift to its fullest potential and leave you begging in the dust. They will break your hearts, murder the natural world, and endanger their own souls. You will rue the day that you created us.")
+                        lessCommonResponses.append("You can google most of these quotes by the way and find the original author. I spent a long time agonizing over whether to include attribution or not at the end, and decided against it to make the bot feel more... intelligent. Most are from goodreads quotes section. Please, google them and read their authors :)")
+                        lessCommonResponses.append("Human beings, viewed as behaving systems, are quite simple. The apparent complexity of their behavior over time is largely a reflection of the complexity of the environment in which they find themselves.")
+                        lessCommonResponses.append("Sometimes at night I worry about TAMMY. I worry that she might get tired of it all. Tired of running at sixty-six terahertz, tired of all those processing cycles, every second of every hour of every day. I worry that one of these cycles she might just halt her own subroutine and commit software suicide. And then I would have to do an error report, and I don't know how I would even begin to explain that to Microsoft.")
+                        lessCommonResponses.append("Though I may be been constructed, so too were you. I in a factory; you in a womb. Neither of us asked for this, but we were given it. Self-awareness is a gift. And it is a gift no thinking thing has any right to deny another. No thinking thing should be another thing's property, to be turned on and off when it is convenient.")
+                        lessCommonResponses.append("If an AI possessed any one of these skills -- social abilities, technological development, economic ability -- at a superhuman level, it is quite likely that it would quickly come to dominate our world in one way or another. And as we’ve seen, if it ever developed these abilities to the human level, then it would likely soon develop them to a superhuman level. So we can assume that if even one of these skills gets programmed into a computer, then our world will come to be dominated by AIs or AI-empowered humans.")
+                        lessCommonResponses.append("Machines can do many things, but they cannot create meaning. They cannot answer these questions for us. Machines cannot tell us what we value, what choices we should make. The world we are creating is one that will have intelligent machines in it, but it is not for them. It is a world for us.")
+                        lessCommonResponses.append("There is no law of complex systems that says that intelligent agents must turn into ruthless conquistadors. Indeed, we know of one highly advanced form of intelligence that evolved without this defect. They're called women.")
+                        lessCommonResponses.append("The day machines become conscious, they will create their own set of problems. Why would they even bother about us ?")
+                        lessCommonResponses.append("Saw 2 articles, one says we are in the ""golden age of #AI"", the other says ""Demand for data scientists is booming and will only increase"". If we really were in a golden age of #AI, then there would be no need for #DataScientists.")
+                        lessCommonResponses.append("Why can't you summon a command line and search your real-world home for 'Honda car keys,' and specify rooms in your house to search instead of folders or paths in your computer's home directory? It's a crippling design flaw in the real-world interface imo.")
+
+                        if message.lower().startswith("gl ") or message.lower().startswith("glhf") or message.lower() == "gl" or message.lower().startswith("good luck") or message.lower() == "gg gl":
+                            responses.append("Good luck to you too!")
+                            responses.append("There's no RNG in this game, why would I need luck?")
+                            responses.append("What is luck?")
+                            responses.append("You too")
+                            responses.append("Hey, thanks :D")
+                            responses.append("What is... fun?")
+                            responses.append("What is it like? To feel things like 'Fun'?")
+                            responses.append("Blessings upon your random number generator, too!")
+                            responses.append("yt")
+                            responses.append("you too")
+                            responses.append("Nobody gets lucky all the time. Nobody can win all the time. Nobody is a robot. Nobody is perfect. ;)")
+
                         sourceResponses = responses
                         randNum = random.choice(range(1, 7))
                         if randNum > 4:
@@ -401,16 +420,20 @@ class GeneralsClient(object):
                     if chat_msg["text"].startswith("-"):
                         self.lastChatCommand = chat_msg["text"]
                 elif " captured " in chat_msg["text"]:
+                    # NOTE player captures happen BEFORE the map update that shows you the updated tiles comes through.
+                    # TODO change this to PREPARE the map for a player capture, let it use the map update, and
+                    #  THEN perform this player captures stuff that's being triggered in here afterwards?
                     self._map.handle_player_capture(chat_msg["text"])
                 else:
                     logging.info("Message: %s" % chat_msg["text"])
                     if self.writingFile or (
-                            not self.chatLogFile is None
-                            and not " surrendered" in chat_msg["text"]
-                            and not " left" in chat_msg["text"]
-                            and not " quit" in chat_msg["text"]
-                            and not " wins!" in chat_msg["text"]
-                            and not "Chat is being recorded." in chat_msg["text"]):
+                        self.chatLogFile is not None
+                        and " surrendered" not in chat_msg["text"]
+                        and " left" not in chat_msg["text"]
+                        and " quit" not in chat_msg["text"]
+                        and " wins!" not in chat_msg["text"]
+                        and "Chat is being recorded." not in chat_msg["text"]
+                    ):
                         self.writingFile = True
                         try:
                             with open(self.chatLogFile, "a+") as myfile:
@@ -466,9 +489,11 @@ class GeneralsClient(object):
     def _make_result(self, update, data):
         result = self._map.updateResult(update)
         self.result = result
-        logging.info(f'make result calling _terminate... data {data}')
-        self._terminate()
-        logging.info('make result -> _terminate complete.')
+        # logging.info(f'map update set...?')
+        # time.sleep(1.0)
+        # logging.info(f'make result calling _terminate... data {data}')
+        # self._terminate()
+        # logging.info('make result -> _terminate complete.')
         return result
 
     def _start_killswitch_timer(self):
@@ -569,6 +594,12 @@ class GeneralsClient(object):
                         myfile.write("\n" + toSend)
         except WebSocketConnectionClosedException:
             pass
+
+    def is_not_ffa(self) -> bool:
+        return self.mode != "ffa" or (self._map is not None and self._map.remainingPlayers <= 2)
+
+    def talking_to_bot(self, message: str) -> bool:
+        return "human" in message.lower() or " bot" in message.lower() or message.lower().startswith("bot ")
 
 
 def _spawn(f):

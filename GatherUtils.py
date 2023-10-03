@@ -781,27 +781,27 @@ def _knapsack_levels_gather_iterative_prune(
 
     return totalValue, rootNodes
 
-def _debug_print_diff_between_start_dict_and_GatherTreeNodes(
-        GatherTreeNodes: typing.Dict[Tile, GatherTreeNode],
+def _debug_print_diff_between_start_dict_and_tree_nodes(
+        gatherTreeNodes: typing.Dict[Tile, GatherTreeNode],
         startDict: typing.Dict[Tile, typing.Tuple[typing.Any, int]]
 ):
-    if len(GatherTreeNodes) != len(startDict):
-        logging.info(f'~~startDict: {len(startDict)}, vs GatherTreeNodes {len(GatherTreeNodes)}')
+    if len(gatherTreeNodes) != len(startDict):
+        logging.info(f'~~startDict: {len(startDict)}, vs GatherTreeNodes {len(gatherTreeNodes)}')
     else:
-        logging.info(f'startDict: {len(startDict)}, vs GatherTreeNodes {len(GatherTreeNodes)}')
+        logging.info(f'startDict: {len(startDict)}, vs GatherTreeNodes {len(gatherTreeNodes)}')
 
-    for tile, node in sorted(GatherTreeNodes.items()):
+    for tile, node in sorted(gatherTreeNodes.items()):
         if tile not in startDict:
             path = Path()
             curNode = node
             while curNode is not None:
                 path.add_next(curNode.tile)
-                curNode = GatherTreeNodes.get(curNode.fromTile, None)
+                curNode = gatherTreeNodes.get(curNode.fromTile, None)
             logging.info(f'  missing from startDict: {str(tile)}  ({str(node)}), path {str(path)}')
 
     for tile, val in sorted(startDict.items()):
         (prioThing, dist) = val
-        if tile not in GatherTreeNodes:
+        if tile not in gatherTreeNodes:
             logging.info(f'  missing from GatherTreeNodes: {str(tile)}  (dist {dist}, [{str(prioThing)}])')
 
 
@@ -1189,7 +1189,7 @@ def knapsack_levels_backpack_gather_with_value(
             shouldLog=shouldLog
         )
 
-        rootNodes: typing.List[GatherTreeNode] = list(where(gatherTreeNodeLookup.values(), lambda GatherTreeNode: GatherTreeNode.fromTile is None))
+        rootNodes: typing.List[GatherTreeNode] = list(where(gatherTreeNodeLookup.values(), lambda treeNode: treeNode.fromTile is None))
 
         totalValue, totalTurns = recalculate_tree_values(
             rootNodes,
@@ -1502,7 +1502,7 @@ def greedy_backpack_gather_values(
         if valuePerTurnPath is None:
             break
 
-    rootNodes = list(where(gatherTreeNodeLookup.values(), lambda GatherTreeNode: GatherTreeNode.fromTile is None))
+    rootNodes = list(where(gatherTreeNodeLookup.values(), lambda gatherTreeNode: gatherTreeNode.fromTile is None))
 
     totalValue, turnsUsed = recalculate_tree_values(
         rootNodes,
@@ -1542,14 +1542,14 @@ def recalculate_tree_values(
 
     # find the leaves
     queue = deque()
-    for GatherTreeNode in rootNodes:
-        if shouldAssert and GatherTreeNode.trunkValue != 0:
-            raise AssertionError(f'root node {str(GatherTreeNode)} trunk value should have been 0 but was {GatherTreeNode.trunkValue}')
-        if shouldAssert and GatherTreeNode.trunkDistance != 0:
-            raise AssertionError(f'root node {str(GatherTreeNode)} trunk dist should have been 0 but was {GatherTreeNode.trunkDistance}')
-        GatherTreeNode.trunkValue = 0
-        GatherTreeNode.trunkDistance = 0
-        queue.appendleft(GatherTreeNode)
+    for treeNode in rootNodes:
+        if shouldAssert and treeNode.trunkValue != 0:
+            raise AssertionError(f'root node {str(treeNode)} trunk value should have been 0 but was {treeNode.trunkValue}')
+        if shouldAssert and treeNode.trunkDistance != 0:
+            raise AssertionError(f'root node {str(treeNode)} trunk dist should have been 0 but was {treeNode.trunkDistance}')
+        treeNode.trunkValue = 0
+        treeNode.trunkDistance = 0
+        queue.appendleft(treeNode)
 
     while not len(queue) == 0:
         current = queue.pop()
@@ -1993,7 +1993,8 @@ def prune_mst_to_max_army_per_turn_with_values(
     def pruneOrderFunc(node: GatherTreeNode, curObj):
         if node.gatherTurns == 0 or node.trunkDistance == 0:
             msg = f'ERR PRUNE node {repr(node)} had trunkDist {node.trunkDistance} or gatherTurns {node.gatherTurns} of 0...?'
-            if USE_DEBUG_ASSERTS:
+            # if USE_DEBUG_ASSERTS:
+            if viewInfo:
                 viewInfo.addAdditionalInfoLine(msg)
             return -1, -1, -1
         return (node.value / node.gatherTurns), node.trunkValue / node.trunkDistance, node.trunkDistance
@@ -2223,11 +2224,11 @@ def prune_mst_until(
 
 
 def iterate_tree_nodes(
-        GatherTreeNodes: typing.List[GatherTreeNode],
+        gatherTreeNodes: typing.List[GatherTreeNode],
         forEachFunc: typing.Callable[[GatherTreeNode], None]
 ):
     q: typing.Deque[GatherTreeNode] = deque()
-    for n in GatherTreeNodes:
+    for n in gatherTreeNodes:
         q.append(n)
     while len(q) > 0:
         cur = q.popleft()

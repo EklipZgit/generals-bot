@@ -152,6 +152,7 @@ class ArmyTracker(object):
         if turn > self.lastTurn:
             advancedTurn = True
             if self.lastTurn == -1:
+                logging.info('armyTracker last turn wasnt set, exclusively scanning for new armies to avoid pushing fog tiles around on the turn the map was loaded up')
                 self.lastTurn = turn
                 self.find_new_armies()
                 return
@@ -435,15 +436,15 @@ class ArmyTracker(object):
         if army.scrapped:
             army.expectedPath = None
         else:
-            if army.expectedPath is not None \
-                    and army.expectedPath.start.next is not None \
-                    and army.expectedPath.start.next.tile == army.tile:
-                army.expectedPath.made_move()
-            else:
-                # Ok then we need to recalculate the expected path.
-                # TODO detect if enemy army is likely trying to defend
-                army.expectedPath = self.get_army_expected_path(army)
-                logging.info(f'set army {str(army)} expected path to {str(army.expectedPath)}')
+            # if army.expectedPath is not None \
+            #         and army.expectedPath.start.next is not None \
+            #         and army.expectedPath.start.next.tile == army.tile:
+            #     army.expectedPath.made_move()
+            # else:
+            # Ok then we need to recalculate the expected path.
+            # TODO detect if enemy army is likely trying to defend
+            army.expectedPath = self.get_army_expected_path(army)
+            logging.info(f'set army {str(army)} expected path to {str(army.expectedPath)}')
 
         army.last_moved_turn = self.map.turn - 1
 
@@ -541,12 +542,41 @@ class ArmyTracker(object):
             logging.info(f'RAISING TRACK THRESHOLD FROM {self.track_threshold} TO {newTrackThreshold}')
             self.track_threshold = newTrackThreshold
 
+        playerMoves: typing.Dict[Tile, typing.Set[int]] = {}
+        for player in self.map.players:
+            if player == self.map.player_index:
+                continue
+            if player.last_move is not None:
+                src: Tile
+                dest: Tile
+                src, dest = player.last_move
+                if src is not None:
+                    l = playerMoves.get(src, set())
+                    l.add(player.index)
+                    if len(l) == 1:
+                        playerMoves[src] = l
+                if dest is not None:
+                    l = playerMoves.get(dest, set())
+                    l.add(player.index)
+                    if len(l) == 1:
+                        playerMoves[dest] = l
+
         # don't do largest tile for now?
         # for tile in self.map.pathableTiles:
         #    if tile.player != -1 and (playerLargest[tile.player] == None or tile.army > playerLargest[tile.player].army):
         #        playerLargest[tile.player] = tile
         for tile in self.map.pathableTiles:
             notOurMove = (self.lastMove is None or (tile != self.lastMove.source and tile != self.lastMove.dest))
+
+            movingPlayer = tile.player
+            anyPlayersMoves = playerMoves.get(tile, None)
+
+            if anyPlayersMoves is not None:
+                movingPlayer = [p for p in anyPlayersMoves][0]
+
+            if tile.delta.oldOwner != self.map.player_index and (tile.delta.oldOwner != tile.delta.newOwner or tile.delta.unexplainedDelta > 0):
+                self.handle_unaccounted_delta(tile, movingPlayer, unaccountedForDelta=abs(tile.delta.unexplainedDelta))
+
             tileNewlyMovedByEnemy = (
                 tile not in self.armies
                 and not tile.delta.gainedSight
@@ -570,22 +600,10 @@ class ArmyTracker(object):
             ):
                 logging.info(
                     f"{str(tile)} Discovered as Army! (tile.army {tile.army}, tile.delta {tile.delta.armyDelta}) Determining if came from fog")
-                resolvedFogSourceArmy = False
-                resolvedReasonableFogValuePath = False
-                delta = abs(tile.delta.armyDelta)
-                if delta > tile.army / 2:
-                    # maybe this came out of the fog?
-                    sourceFogArmyPath = self.find_fog_source(tile.player, tile, delta)
-                    if sourceFogArmyPath is not None:
-                        self.use_fog_source_path(tile, sourceFogArmyPath, delta)
 
-                        self.resolve_fog_emergence(sourceFogArmyPath, tile)
-                if not resolvedFogSourceArmy:
-                    # then tile is a new army.
-                    army = self.get_or_create_army_at(tile)
-                    if not army.visible:
-                        army.value = army.tile.army - 1
-                    self.new_army_emerged(tile, delta)
+                army = self.get_or_create_army_at(tile)
+                if not army.visible:
+                    army.value = army.tile.army - 1
             # if tile WAS bordered by fog find the closest fog army and remove it (not tile.visible or tile.delta.gainedSight)
 
     def new_army_emerged(self, emergedTile: Tile, armyEmergenceValue: int):
@@ -879,27 +897,28 @@ class ArmyTracker(object):
 
         return None
 
-    def resolve_fog_emergence(self, sourceFogArmyPath, fogTile):
+    def resolve_fog_emergence(self, player: int, sourceFogArmyPath, fogTile):
         existingArmy = None
         armiesFromFog = []
         existingArmy = self.armies.pop(fogTile, None)
-        if existingArmy is not None and existingArmy.player == fogTile.player:
+        if existingArmy is not None and existingArmy.player == player:
             armiesFromFog.append(existingArmy)
 
         node = sourceFogArmyPath.start.next
         while node is not None:
             logging.info(f"resolve_fog_emergence tile {str(node.tile)}")
             fogArmy = self.armies.pop(node.tile, None)
-            if fogArmy is not None and fogArmy.player == fogTile.player:
+            if fogArmy is not None and fogArmy.player == player:
                 logging.info(f"  was army {str(node.tile)}")
                 armiesFromFog.append(fogArmy)
-            # if node.tile.army > 0:
-            node.tile.army = 1
-            node.tile.player = fogTile.player
-            if self.map.is_army_bonus_turn:
-                node.tile.army += 1
-            if self.map.is_city_bonus_turn and (node.tile.isCity or node.tile.isGeneral):
-                node.tile.army += 1
+            if not node.tile.visible:
+                # if node.tile.army > 0:
+                node.tile.army = 1
+                node.tile.player = player
+                if self.map.is_army_bonus_turn:
+                    node.tile.army += 1
+                if self.map.is_city_bonus_turn and (node.tile.isCity or node.tile.isGeneral):
+                    node.tile.army += 1
             node = node.next
 
         maxArmy = None
@@ -1248,12 +1267,7 @@ class ArmyTracker(object):
         if source is None:
             logging.info(
                 f"Army {army.toString()} must have been gathered to from under the fog, searching:")
-            sourceFogArmyPath = self.find_fog_source(army.player, army.tile, unaccountedForDelta)
-            if sourceFogArmyPath is not None:
-                armyTile = army.tile
-                self.use_fog_source_path(armyTile, sourceFogArmyPath, unaccountedForDelta)
-
-                self.resolve_fog_emergence(sourceFogArmyPath, army.tile)
+            self.handle_unaccounted_delta(army.tile, army.player, unaccountedForDelta)
         else:
             if source in self.armies:
                 sourceArmy = self.armies[source]
@@ -1412,6 +1426,7 @@ class ArmyTracker(object):
                 else:
                     skip.add(entangled.tile)
 
+        logging.info(f'Looking for army {str(army)}s expected movement path:')
         path = SearchUtils.breadth_first_find_queue(
             self.map,
             [army.tile],
@@ -1437,3 +1452,11 @@ class ArmyTracker(object):
 
         self.map.players[player].cities.append(tile)
         self.map.update_reachable()
+
+    def handle_unaccounted_delta(self, tile: Tile, player: int, unaccountedForDelta: int):
+        """Sources a delta army amount from fog and announces army emergence if not well-resolved."""
+        sourceFogArmyPath = self.find_fog_source(player, tile, unaccountedForDelta)
+        if sourceFogArmyPath is not None:
+            self.use_fog_source_path(tile, sourceFogArmyPath, unaccountedForDelta)
+
+            self.resolve_fog_emergence(player, sourceFogArmyPath, tile)

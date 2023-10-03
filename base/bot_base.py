@@ -112,8 +112,13 @@ class GeneralsClientHost(object):
             if '_moves_realized' in dir(self):
                 logging.info("Moves: %d, Realized: %d" % (self._update.turn, self._moves_realized))
             self._running = False
+
+            # tell the bot it can make one last move so it renders the final board state...?
+            self._update = update
+            self._move_event.set()
+
             # why was this sleep here?
-            # time.sleep(2.0)
+            time.sleep(2.0)
             logging.info("terminating in _set_update")
             self._game._terminate()
             time.sleep(2.0)

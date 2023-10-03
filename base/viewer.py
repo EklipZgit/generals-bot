@@ -30,6 +30,7 @@ GRAY_DARK = (52, 52, 52)
 UNDISCOVERED_GRAY = (110, 110, 110)
 NEUT_CITY_GRAY = (90, 90, 90)
 GRAY = (160, 160, 160)
+LIGHT_GRAY = (220, 220, 210)
 WHITE = (255, 255, 255)
 RED = (200, 40, 40)
 ORANGE = (220, 110, 40)
@@ -340,7 +341,6 @@ class GeneralsViewer(object):
         while not done:
             if self._killed:
                 done = True  # Flag done
-                # self._map.result = False
                 self._map.complete = True
                 break
 
@@ -349,8 +349,6 @@ class GeneralsViewer(object):
                     logging.info("GeneralsViewer waiting for queue event:")
                 viewInfo, map, isComplete = self._update_queue.get(block=True, timeout=1.0)
                 self.last_update_received = time.perf_counter()
-                # if self.verbose:
-                #     BL.info('Watcher: Oh, shit, got ticker {} out of the queue???'.format(ticker))
                 if isComplete:
                     logging.info("GeneralsViewer received done event!")
                     done = True
@@ -653,7 +651,7 @@ class GeneralsViewer(object):
                         self._screen.blit(self._medFont.render(textVal, True, color_font),
                                           (pos_left + (self.cellWidth - textWidth) / 2, pos_top + self.cellHeight / 4))
                     # Draw coords
-                    textVal = "{},{}".format(tile.x, tile.y)
+                    textVal = f"{tile.x},{tile.y}"
                     self._screen.blit(self.small_font(textVal, color_font),
                                       (pos_left, pos_top - 2))
 
@@ -771,7 +769,6 @@ class GeneralsViewer(object):
         # setting this color as colorkey, so the surface is empty
         self.tile_surface.fill(key)
         self.tile_surface.set_colorkey(key)
-        # logging.info("drawing square for tile {} alpha {} width {} at pos {},{}".format(tile.toString(), alpha, width, pos_left, pos_top))
 
         pygame.draw.rect(self.tile_surface, color, shape, width)
 
@@ -1068,26 +1065,32 @@ class GeneralsViewer(object):
                 colorG = colorG + KING_COLOR_OFFSET if colorG <= 255 - KING_COLOR_OFFSET else 255
                 colorB = colorB + KING_COLOR_OFFSET if colorB <= 255 - KING_COLOR_OFFSET else 255
             if not tile.visible:
-                colorR = colorR / 2 + 40
-                colorG = colorG / 2 + 40
-                colorB = colorB / 2 + 40
-                if not tile.discovered and tile.player != -1:
-                    colorR = colorR / 2 + 20
-                    colorG = colorG / 2 + 20
-                    colorB = colorB / 2 + 20
+                colorR = colorR // 2 + 40
+                colorG = colorG // 2 + 40
+                colorB = colorB // 2 + 40
+                if not tile.discovered:
+                    colorR = colorR // 3 + 50
+                    colorG = colorG // 3 + 50
+                    colorB = colorB // 3 + 50
             pColor = (colorR, colorG, colorB)
         elif tile.isNotPathable:  # Obstacle
             pColor = GRAY_DARK
         elif not tile.discovered:
             pColor = UNDISCOVERED_GRAY
-        elif tile.player == -1 and (tile.army != 0 or tile.isCity):
+        elif tile.player == -1 and tile.isCity:
             pColor = NEUT_CITY_GRAY
             if not tile.visible:
-                colorR = pColor[0] / 2 + 40
-                colorG = pColor[1] / 2 + 40
-                colorB = pColor[2] / 2 + 40
+                colorR = pColor[0] // 2 + 40
+                colorG = pColor[1] // 2 + 40
+                colorB = pColor[2] // 2 + 40
                 pColor = (colorR, colorB, colorG)
-
+        elif tile.player == -1 and tile.army != 0:
+            pColor = LIGHT_GRAY
+            if not tile.visible:
+                colorR = pColor[0] // 2 + 50
+                colorG = pColor[1] // 2 + 50
+                colorB = pColor[2] // 2 + 50
+                pColor = (colorR, colorB, colorG)
         elif not tile.visible:
             pColor = GRAY
 

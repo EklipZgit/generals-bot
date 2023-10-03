@@ -80,7 +80,7 @@ class Player(object):
         self.leftGameTurn: int = -1
         """The turn the player left the game. Useful to know how many turns to attempt a capture are left."""
 
-        self.capturedBy = None
+        self.capturedBy: int | None = None
         self.knowsKingLocation = False
         self.aggression_factor: int = 0
         """"""
@@ -536,6 +536,20 @@ class Tile(object):
             self.isGeneral = False
             self.isCity = True
 
+    def reset_wrong_undiscovered_fog_guess(self):
+        """
+        DO NOT call this for discovered-neutral-cities that were fog-guessed as captured, or they will be 'undiscovered' again.
+        Changes fog cities back to undiscovered mountains.
+        Changes player-capped-tiles back to undiscovered neutrals.
+        """
+        if self.isCity:
+            self.tile = TILE_OBSTACLE
+            self.isCity = False
+        else:
+            self.tile = TILE_FOG
+        self.army = 0
+        self._player = -1
+
 
 class Score(object):
     def __init__(self, player: int, total: int, tiles: int, dead: bool):
@@ -700,6 +714,8 @@ class MapBase(object):
     def _update_player_information(self):
         cityCounts = [0 for i in range(len(self.players))]
         for player in self.players:
+            if self.scores[player.index] is None:
+                continue
             # print("player {}".format(player.index))
             player.scoreDelta = self.scores[player.index].total - player.score
             player.score = self.scores[player.index].total
@@ -785,6 +801,8 @@ class MapBase(object):
         self.generals[captureeIdx] = None
 
         capturingPlayer = self.players[capturerIdx]
+        captureePlayer = self.players[captureeIdx]
+        captureePlayer.capturedBy = capturerIdx
         for tile in self.get_all_tiles():
             if tile.player != captureeIdx:
                 continue
@@ -800,10 +818,17 @@ class MapBase(object):
                 continue
 
             tile.discoveredAsNeutral = True
-            tile.update(self, tile.tile, tile.army // 2, overridePlayer=capturerIdx)
+            # DONT use this, this sets deltas :s
+            # tile.update(self, tile.tile, tile.army // 2, overridePlayer=capturerIdx)
+
+            tile.army = (tile.army + 1) // 2
+            tile.tile = capturerIdx
+            tile.player = capturerIdx
             if tile.isGeneral:
                 tile.isGeneral = False
                 tile.isCity = True
+
+                # TODO not safe to call all these delta methods, pretty sure...
                 for eventHandler in self.notify_city_found:
                     eventHandler(tile)
             for eventHandler in self.notify_tile_deltas:
@@ -1131,6 +1156,9 @@ class MapBase(object):
                     else:
                         logging.error(msg)
                         fromTile.army = 0 - fromTile.army
+                if fromTile.isUndiscoveredObstacle:
+                    fromTile.isCity = True
+                    fromTile.army = 0
 
             self.set_fog_moved_from_army_incremented(fromTile, byPlayer, expectedDelta)
 
@@ -1147,6 +1175,8 @@ class MapBase(object):
                 toTile.player = byPlayer
                 # toTile.delta.newOwner = byPlayer
                 toTile.delta.newOwner = byPlayer
+            if toTile.isUndiscoveredObstacle:
+                toTile.isCity = True
                 # toTile.delta.unexplainedDelta = 0
 
         # prefer leaving enemy move froms, as they're harder for armytracker to track since it doesn't have the last move spelled out like it does for friendly moves.
@@ -1583,29 +1613,18 @@ class MapBase(object):
                     fullToDiffCovered=not dest.delta.armyMovedHere,
                     byPlayer=self.player_index)
 
-        # # TODO for debugging only
-        # tilesWithDiffs = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
-        # tilesWithMovedHere = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
+        skipPlayers: typing.Set[int] = set()
+        for p in self.players:
+            if p.dead and p.capturedBy is not None:
+                skipPlayers.add(p.index)
 
-        # # this might not be necessary now that we track player move first, it should handle 0-delta targets gracefully and set unexplainedDelta on those to be nonzero...?
-        # for x in range(self.cols):
-        #     for y in range(self.rows):
-        #         destTile = self.grid[y][x]
-        #         if destTile.visible:
-        #             movableWithDeltas = [m for m in destTile.movable if
-        #                                  m.delta.armyDelta != 0 or m.delta.imperfectArmyDelta]
-        #             if len(movableWithDeltas) > 1:
-        #                 logging.info(
-        #                     f'Setting {str(destTile)} as potential move candidate due to multiple deltas near it {str([str(m) for m in movableWithDeltas])}')
-        #                 destTile.delta.armyMovedHere = True
+        self.run_positive_delta_movement_scan(skipPlayers, possibleMovesDict, allowFogSource=False)
 
-        self.run_positive_delta_movement_scan(possibleMovesDict, allowFogSource=False)
+        self.run_attacked_tile_movement_scan(skipPlayers, possibleMovesDict, allowFogSource=False)
 
-        self.run_attacked_tile_movement_scan(possibleMovesDict, allowFogSource=False)
+        self.run_positive_delta_movement_scan(skipPlayers, possibleMovesDict, allowFogSource=True)
 
-        self.run_positive_delta_movement_scan(possibleMovesDict, allowFogSource=True)
-
-        self.run_attacked_tile_movement_scan(possibleMovesDict, allowFogSource=True)
+        self.run_attacked_tile_movement_scan(skipPlayers, possibleMovesDict, allowFogSource=True)
 
         # TODO for debugging only
         tilesWithDiffsPreFog = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
@@ -1624,6 +1643,8 @@ class MapBase(object):
                     continue
                 if sourceTile.delta.oldOwner == self.player_index:
                     continue
+                if sourceTile.delta.oldOwner in skipPlayers:
+                    continue
 
                 potentialDests = []
                 sourceWasAttackedNonLethalOrVacated = sourceTile.delta.armyDelta < 0 and sourceTile.delta.oldOwner == sourceTile.delta.newOwner
@@ -1636,6 +1657,8 @@ class MapBase(object):
                             f'FOG SOURCE SCAN DEST {repr(potentialDest)} SRC {repr(sourceTile)} WAS sourceWasAttackedNonLethalOrVacated {sourceWasAttackedNonLethalOrVacated} FORCE-SELECTED DUE TO EXACT MATCH, BREAKING EARLY')
                         potentialDests = [potentialDest]
                         break
+                    if potentialDest.delta.oldOwner in skipPlayers:
+                        continue
 
                     if potentialDest.delta.imperfectArmyDelta and sourceWasAttackedNonLethalOrVacated:
                         logging.info(
@@ -1659,6 +1682,8 @@ class MapBase(object):
                     byPlayer = sourceTile.delta.oldOwner
                     if byPlayer == -1:
                         byPlayer = sourceTile.player
+                    if byPlayer == -1:
+                        byPlayer = exclusiveDest.player
 
                     logging.info(
                         f'FOG SOURCE SCAN DEST {repr(exclusiveDest)} SRC {repr(sourceTile)} WAS EXCLUSIVE DEST, EXACT MATCH {exactMatch} INCLUDING IN MOVES, CALCED PLAYER {byPlayer}')
@@ -1893,7 +1918,7 @@ class MapBase(object):
         logging.info(f'+++EMERGENCE {repr(fromTile)} = {armyEmerged}')
         self.army_emergences[fromTile] = armyEmerged
 
-    def run_positive_delta_movement_scan(self, possibleMovesDict: typing.Dict[Tile, typing.List[Tile]], allowFogSource: bool):
+    def run_positive_delta_movement_scan(self, skipPlayers: typing.Set[int], possibleMovesDict: typing.Dict[Tile, typing.List[Tile]], allowFogSource: bool):
         fogFlag = ""
         if allowFogSource:
             fogFlag = " (FOG)"
@@ -1911,6 +1936,8 @@ class MapBase(object):
                 destTile = self.grid[y][x]
                 if not destTile.delta.armyMovedHere or destTile.delta.imperfectArmyDelta:
                     continue
+                if destTile.delta.oldOwner in skipPlayers:
+                    continue
 
                 potentialSources = []
                 destWasAttackedNonLethalOrVacatedOrUnmoved = destTile.delta.unexplainedDelta <= 0 #and destTile.delta.oldOwner == destTile.delta.newOwner
@@ -1923,6 +1950,8 @@ class MapBase(object):
                         # we already track our own moves successfully prior to this.
                         continue
                     if not allowFogSource and not potentialSource.visible and not potentialSource.delta.lostSight:
+                        continue
+                    if potentialSource.delta.oldOwner in skipPlayers:
                         continue
                     if potentialSource.was_visible_last_turn() and potentialSource.delta.oldOwner != destTile.delta.oldOwner:
                         # only the player who owns the resulting tile can move one of their own tiles into it. TODO 2v2...?
@@ -1982,7 +2011,7 @@ class MapBase(object):
                         logging.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} RESULTED IN MULTIPLE SOURCES {repr([repr(s) for s in potentialSources])}, UNHANDLED FOR NOW')
                     possibleMovesDict[destTile] = potentialSources
 
-    def run_attacked_tile_movement_scan(self, possibleMovesDict: typing.Dict[Tile, typing.List[Tile]], allowFogSource: bool):
+    def run_attacked_tile_movement_scan(self, skipPlayers: typing.Set[int], possibleMovesDict: typing.Dict[Tile, typing.List[Tile]], allowFogSource: bool):
         fogFlag = ""
         if allowFogSource:
             fogFlag = "(FOG) "
@@ -2004,6 +2033,8 @@ class MapBase(object):
                     continue
                 if not allowFogSource and not destTile.visible and not destTile.delta.lostSight:
                     continue
+                if destTile.delta.oldOwner in skipPlayers:
+                    continue
 
                 potentialSources = []
                 destWasAttackedNonLethalOrVacated = destTile.delta.armyDelta < 0  # and destTile.delta.oldOwner == destTile.delta.newOwner
@@ -2014,6 +2045,8 @@ class MapBase(object):
                     if potentialSource.delta.oldOwner == self.player_index:
                         continue
                     if not allowFogSource and not potentialSource.visible and not potentialSource.delta.lostSight:
+                        continue
+                    if potentialSource.delta.oldOwner in skipPlayers:
                         continue
                     if potentialSource.delta.armyDelta > 0 and not potentialSource.delta.gainedSight:
                         logging.info(

@@ -444,7 +444,7 @@ class GameSimulatorHost(object):
         self.bot_hosts: typing.List[BotHostBase | None] = [None for player in self.sim.players]
         self.dropped_move_counts_by_player: typing.List[int] = [0 for player in self.sim.players]
 
-        self.player_move_cutoff_time: float = 0.450
+        self.player_move_cutoff_time: float = 0.475
         """If a player takes longer to move than this, and a debugger is not attached, then the players move will be discarded and an error logged. Does not include the first 12 turns."""
 
         self._between_turns_funcs: typing.List[typing.Callable] = []
@@ -541,6 +541,13 @@ class GameSimulatorHost(object):
                 if winner is not None:
                     break
                 turnsRun += 1
+            if not self.sim.is_game_over():
+                for idx, botHost in enumerate(self.bot_hosts):
+                    if botHost is not None:
+                        # perform the final 'bot' turn without actual executing the move or getting the next
+                        # server update. Allows things like the army tracker etc and the map viewer to update with the
+                        # bots final calculated map state and everything.
+                        botHost.make_move(self.sim.players[idx].map)
         except:
             try:
                 self.sim.end_game()
@@ -557,6 +564,8 @@ class GameSimulatorHost(object):
             logging.error(traceback.format_exc())
             logging.fatal(f'IMPORT TEST FILES FOR TURN {self.sim.turn} FROM @ {repr([b.eklipz_bot.logDirectory for b in self.bot_hosts if b is not None])}')
             raise
+
+        self.wait_until_viewer_closed_or_time_elapses(max(3.0, turn_time * 4))
 
         self.sim.end_game()
         for botHost in self.bot_hosts:
@@ -683,14 +692,7 @@ class GameSimulatorHost(object):
                     player.map.last_player_index_submitted_move = (move.source, move.dest, move.move_half)
 
         for func in self._between_turns_funcs:
-            try:
-                func()
-            except:
-                if run_real_time:
-                    logging.error(f'assertion failure while running live, turn {self.sim.turn}')
-                    logging.error(traceback.format_exc())
-                    time.sleep(20)
-                raise
+            self._run_between_turns_func(run_real_time, func)
 
         if run_real_time:
             elapsed = time.perf_counter() - start
@@ -709,14 +711,7 @@ class GameSimulatorHost(object):
         if self.sim.is_game_over() or gameEndedByUser:
             # run these one last time
             for func in self._between_turns_funcs:
-                try:
-                    func()
-                except:
-                    if run_real_time:
-                        logging.error(f'assertion failure while running live, turn {self.sim.turn}')
-                        logging.error(traceback.format_exc())
-                        time.sleep(20)
-                    raise
+                self._run_between_turns_func(run_real_time, func)
             self.sim.end_game()
             for player in self.sim.players:
                 if not player.dead:
@@ -784,4 +779,28 @@ class GameSimulatorHost(object):
             for i, otherPlayer in enumerate(self.sim.players):
                 player.map.players[i].cityCount = otherPlayer.map.players[otherPlayer.map.player_index].cityCount
 
+    def _run_between_turns_func(self, run_real_time: bool, func):
+        try:
+            func()
+        except:
+            logging.error(f'assertion failure while running live, turn {self.sim.turn}')
+            logging.error(traceback.format_exc())
+            if run_real_time:
+                self.wait_until_viewer_closed_or_time_elapses(600)
+            raise
 
+    def any_bot_has_viewer_running(self) -> bool:
+        for bot in self.bot_hosts:
+            if bot is not None and bot.has_viewer and not bot.is_viewer_closed_by_user():
+                return True
+
+        return False
+
+    def wait_until_viewer_closed_or_time_elapses(self, max_seconds_to_wait: float):
+        if not self.any_bot_has_viewer_running():
+            return
+
+        start = time.perf_counter()
+        logging.info(f'(WAITING UNTIL YOU CLOSE THE VIEWER OR {max_seconds_to_wait} SECONDS ELAPSES....)')
+        while self.any_bot_has_viewer_running() and time.perf_counter() - start < max_seconds_to_wait:
+            time.sleep(1)

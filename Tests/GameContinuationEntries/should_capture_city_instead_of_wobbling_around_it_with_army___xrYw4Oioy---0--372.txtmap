@@ -1,0 +1,68 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M    M              M                                  M    a3   C43  M    M    a1   M
+     M                        M         M         M         a3   a2   a2   M    a1   a1   a3   C48
+          M                        M              a3   a3   a3   a3   M    a3   a1   a3   M    a2   C50
+          M              M              M    a3   a3   a3   a2   a2   a3   a1   a1   a1   a2   a2   a3
+          M    M         N1   N1   N1             M    a3   M    a2   a2   a2   a1   M    a2   a2   a1
+               M    M    N1   M    M         M    M    M    a3   a2   a2   a2   a22  M    a2   a1   a1
+                         N1             b2        M    M    C44  a1   a1   a2   a2   M    a2   a1   M
+     M                   N1        M    b2   M                   M    a1   a6   aG16 a2   a2   a1   a1
+          M         M    N1   M         b2                  M    M    a2   a2   M    a1   a1   a2   a1
+          M    M    N1   N1        M    b2   D    MD   C46D b2D  b2   M    a2   a2   M    a3   a1   a5
+     M              N1   M    b2   b2   b2D  MD   b2D  b2D  b2   b2   a3   a2   a2   b2   M    M    b2
+          M    M    N1   b2   b2   M    b2D  b2D  b2D  b2D  M    a3   M    M    C49  b2   b4   b2   b2D
+                         N1   M    D    b3D  b3D  MD   b2D       M    a3   M    M    a2   a2   M    D
+                    M    N1   b4   b4D  b3D  b4D  b2D  b3D  b2   b1   b1   a2   a2   a2   M         M
+                              b4   b7D  b3D  MD   b2D  MD   b2   a1   b2   a3   M    a4   a4
+     M                   M    b4   MD   b3D  MD   b2             a1   M    C44  M                   M
+                    M         b2   b2   b2   b2   b2                  M         M    M
+M                        M         N1   N1   M    N1   M    M
+                              M    b2   b2   b2   b2        M    M    M    M    M                   M
+     M                        M    M         M    b2   b2                            M    M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=6,15
+turn=372
+bot_player_index=0
+bot_all_in_counter=1
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=40
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_target_player=1
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=83
+aScore=209
+aStandingArmy=126
+aStars=69
+aCityCount=1
+aGeneral=16,7
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=10
+aDelta25Score=11
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=372
+bUsername=Serge 2
+bTiles=70
+bScore=167
+bStandingArmy=97
+bStars=67
+bCityCount=2
+bKnowsKingLocation=True
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=231
+bDelta25Tiles=-5
+bDelta25Score=-43
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=352

@@ -65,6 +65,12 @@ class ViewerHost(object):
             self.process.kill()
 
     def check_viewer_closed(self) -> bool:
+        if self._viewer is None:
+            return True
+
+        # if not self.process.is_alive():
+        #     return True
+
         try:
             completedSuccessfully = self._viewer_event_queue.get(block=False)
             if not completedSuccessfully:

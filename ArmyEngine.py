@@ -122,7 +122,9 @@ class ArmyEngine(object):
         self.time_limit: float = timeCap
         self._time_limit_dec: float = 0.01
         """The amount of time to give long running brute force scans per pruned level"""
+
         self.start_time: float = 0.0
+
         self.to_turn: int = 0
         """The turn to simulate up to."""
 

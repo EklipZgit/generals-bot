@@ -1,0 +1,70 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+M         M                             M         M         a1   a1   a1   a1   a1        M              M
+               M         M    M    M    M    M    a3   a3   a3   M         M    a1                  M
+     M                   a8   a8   a8   a8        b2   b2   b2   b2   M    a2D  a2D
+     M    M         M    a8   M         a8        b2   a4   a3   a2   aC17 a2D  a2D  a3D
+M    M              M    a8        M    a8   a3   b2   a3   a2   aC14DMD   a2D  a2D  a3D  a3   a1
+                         a5             aC2  a3   b2   b2   a2   MD   a5D  a4   a3   M         a2        M
+               M    MD   a5D  D    a61  a32  M         M    a2   a5D  a5   M    b7   b2   M    aC5  M    M
+          M         D    a1             M         M    b3   a2   a5D  M    b1   b1   M         a1
+     M         M    D    a5   b4   b6   b8   M    M    b5   a2   M    a2   b1   M         a1   a1   M    M
+     M              MD   a5   b4   b5   b5   b6   b5   b5   a2   a2   b1   b1             a1
+          M    M    a1D       a4   a5   a5   a5   b5   M    M    M    b2   b2   M                        M
+          M         aC5  M    M    a5   M    b4   b5   b4   b4   b2   b4   b2   b2   b2        M
+               M         M    b4   b5   a5   a4   b4   M    b2   b2   M    b2   M              M
+                    M         b4   b5   b5   M    b4   b4   b2   bG16 b7   b2   M                   M
+M    M    M         M    b3   b3   b3   b3   b3   b3   b3   b3   b2   b1   b2   M                   M
+     M              M              b1   b1   b1   b1   b1   b1   b30  b4   b2   b2   M
+                                   b1   M    b1   M    b3   b3   bC46 b3   b2   b23  b3
+M         M         M    M              M         b3   b3   b5   b5   b3   b2   bC1  M              M
+                    M                        b4   bC51 b5        b4   b3                       M
+               M                             M                   b4                                 M
+                                   M              M              b4
+               M                   M              M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=18,3
+turn=565
+bot_player_index=1
+bot_all_in_counter=30
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=40
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_target_player=0
+bot_cur_path=None
+aUsername=Ginger
+aTiles=88
+aScore=410
+aStandingArmy=322
+aStars=70
+aCityCount=5
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=344
+aDelta25Tiles=1
+aDelta25Score=-114
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=549
+bUsername=Human.exe
+bTiles=97
+bScore=447
+bStandingArmy=350
+bStars=70
+bCityCount=4
+bGeneral=13,13
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=5
+bDelta25Tiles=1
+bDelta25Score=-114
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=565

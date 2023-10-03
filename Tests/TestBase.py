@@ -209,6 +209,18 @@ class TestBase(unittest.TestCase):
 
         return map, general, enemyGen
 
+    def set_general_emergence_around(self, x: int, y: int, simHost: GameSimulatorHost, botPlayer: int, emergencePlayer: int):
+        bot = simHost.get_bot(botPlayer)
+
+        botTile = bot._map.GetTile(x, y)
+
+        def emergenceMarker(t: Tile, dist: int):
+            bot.armyTracker.emergenceLocationMap[emergencePlayer][t.x][t.y] = 200 // (dist + 5)
+
+        SearchUtils.breadth_first_foreach_dist(bot._map, [botTile], 5, emergenceMarker)
+
+        bot.armyTracker.emergenceLocationMap[emergencePlayer][x][y] += 30
+
     def get_test_map(self, tiles: typing.List[typing.List[Tile]], turn: int = 1, player_index: int = 0, dont_set_seen_visible_discovered: bool = False, num_players: int = -1) -> MapBase:
         self._initialize()
         figureOutPlayerCount = num_players == -1

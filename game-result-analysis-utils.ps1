@@ -220,16 +220,16 @@ function Create-TestContinuingGameFrom {
         mapFile = 'GameContinuationEntries/$newName'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, $turn, fill_out_tiles=True)
 
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=$turn)
         
+        self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
 
-        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=3.0, turns=10)
         self.assertIsNone(winner)
 
         # TODO add asserts for $TestName

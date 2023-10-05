@@ -1059,6 +1059,7 @@ C5
                                     # 0
                                     # 261~
                                     # 197~
+                                    # 181
                                     self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bArmyAdjacent=bArmyAdjacent)
 
     def test_run_one_off_fog_island_border_capture_test(self):
@@ -1083,12 +1084,13 @@ C5
                                     # 177
                                     # 697~
                                     # 569~
+                                    # 921
                                     self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bHasNearbyVision=bHasNearbyVision)
 
     def test_run_one_off_fog_island_full_capture_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         # TODO
-        self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=15, bArmy=20, bMove=(-1, 0), turn=97, seenFog=False, bHasNearbyVision=True)
+        self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=20, bArmy=2, bMove=(0, 1), turn=96, seenFog=False, bHasNearbyVision=True)
 
     def test_generate_all_out_of_fog_collision_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1122,6 +1124,7 @@ C5
                                 # 0
                                 # 163~
                                 # 99~
+                                # 91
                                 self.run_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_adj_test(self):

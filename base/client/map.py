@@ -1361,10 +1361,12 @@ class MapBase(object):
         if dest.delta.oldOwner != self.player_index:
             expectedDestDelta = 0 - expectedDestDelta
 
+        sourceWouldHaveCappedDest = dest.delta.oldOwner == self.player_index or dest.delta.oldArmy + expectedSourceDelta < 0
+
         likelyDroppedMove = False
         if source.delta.unexplainedDelta == 0 and source.visible:
             likelyDroppedMove = True
-            if dest.delta.unexplainedDelta == 0:
+            if dest.delta.unexplainedDelta == 0 and dest.visible:
                 logging.error(
                     f'    map determined player DEFINITELY dropped move {str(last_player_index_submitted_move)}. Setting last move to none...')
                 self.last_player_index_submitted_move = None
@@ -1378,16 +1380,34 @@ class MapBase(object):
         actualSrcDelta = source.delta.unexplainedDelta
         actualDestDelta = dest.delta.unexplainedDelta
 
-        sourceDeltaMismatch = expectedSourceDelta != actualSrcDelta
-        destDeltaMismatch = expectedDestDelta != actualDestDelta
-        #
-        # # TODO works for 1v1 but not FFA
-        # fakeOtherPlayer = (self.player_index + 1) & 1
+        srcUnexpectedDelta = actualSrcDelta - expectedSourceDelta
+        sourceDeltaMismatch = srcUnexpectedDelta != 0
+
+        destUnexpectedDelta = actualDestDelta - expectedDestDelta
+        destDeltaMismatch = destUnexpectedDelta != 0
+
+        weHadPriority = MapBase.player_had_priority_over_other(self.player_index, dest.delta.oldOwner, self.turn)
+
+        sourceDefinitelyKilledWithPriority = not source.visible and not dest.visible and sourceWouldHaveCappedDest
+
+        # check for mutual attack
+        if (
+            sourceDeltaMismatch
+            and destUnexpectedDelta == srcUnexpectedDelta
+            and dest.delta.oldOwner != self.player_index
+        ):
+            logging.info(f'MOVE {str(last_player_index_submitted_move)} was mutual attack?')
+            self.set_tile_moved(toTile=source, fromTile=dest, fullFromDiffCovered=True, fullToDiffCovered=True, byPlayer=dest.delta.oldOwner)
+            if actualDestDelta <= expectedSourceDelta:
+                logging.info(f'   Mutual attack appears to have fully cancelled out our move, returning no move from us.')
+                # source.delta.armyMovedHere = True
+                self.last_player_index_submitted_move = None
+                return None
 
         sourceHasEnPriorityDeltasNearby = False
         for tile in source.movable:
             if (
-                    (tile != dest or destDeltaMismatch)
+                    tile != dest
                     and (tile.delta.unexplainedDelta != 0 or tile.delta.lostSight)
                     and tile.delta.oldOwner != self.player_index
             ):
@@ -1397,7 +1417,7 @@ class MapBase(object):
         destHasEnDeltasNearby = False
         for tile in dest.movable:
             if (
-                    (tile != source or sourceDeltaMismatch)
+                    tile != source
                     and (tile.delta.unexplainedDelta != 0 or not tile.visible)
                     #and (tile.delta.oldOwner != self.player_index or tile.delta.newOwner != self.player_index)
             ):
@@ -1406,19 +1426,18 @@ class MapBase(object):
         sourceWasCaptured = False
         sourceWasAttackedWithPriority = False
         # if sourceDeltaMismatch or source.player != self.player_index or (actualDestDelta == 0 and sourceHasEnPriorityDeltasNearby):
-        if sourceDeltaMismatch or source.player != self.player_index or (destDeltaMismatch and sourceHasEnPriorityDeltasNearby):
-            amountAttacked = actualSrcDelta - expectedSourceDelta
+        if sourceDeltaMismatch or source.player != self.player_index or (destDeltaMismatch and sourceHasEnPriorityDeltasNearby) or sourceDefinitelyKilledWithPriority:
             if sourceHasEnPriorityDeltasNearby:
                 sourceWasAttackedWithPriority = True
-                if source.player != self.player_index:
+                if source.player != self.player_index or not source.visible:
                     sourceWasCaptured = True
                     logging.info(
                         f'MOVE {str(last_player_index_submitted_move)} seems to have been captured with priority. Nuking our last move.')
                     if destDeltaMismatch:
                         logging.error(
                             f'  ^ {str(last_player_index_submitted_move)} IS QUESTIONABLE THOUGH BECAUSE DEST DID HAVE AN UNEXPLAINED DIFF. NUKING ANYWAY.')
-                    # self.unaccounted_tile_diffs[source] = amountAttacked  # negative number
-                    # source.delta.unexplainedDelta = amountAttacked
+                    # self.unaccounted_tile_diffs[source] = srcUnexpectedDelta  # negative number
+                    # source.delta.destUnexpectedDelta = srcUnexpectedDelta
                     source.delta.armyMovedHere = True
                     self.last_player_index_submitted_move = None
                     return None
@@ -1426,39 +1445,39 @@ class MapBase(object):
                     if actualDestDelta == 0:
                         logging.info(
                             f'MOVE {str(last_player_index_submitted_move)} seems to have been attacked with priority down to where we dont capture anything. Nuking our last move.')
-                        # self.unaccounted_tile_diffs[source] = amountAttacked  # negative number
-                        # source.delta.unexplainedDelta = amountAttacked
+                        # self.unaccounted_tile_diffs[source] = srcUnexpectedDelta  # negative number
+                        # source.delta.destUnexpectedDelta = srcUnexpectedDelta
                         source.delta.armyMovedHere = True
                         self.last_player_index_submitted_move = None
                         return None
-                    # source.delta.unexplainedDelta -= actualDestDelta
+                    # source.delta.destUnexpectedDelta -= actualDestDelta
                     # source.delta.armyMovedHere = True
                     # # source.delta.imperfectArmyDelta = destHasEnDeltasNearby
                     # # return source, dest
             elif source.player != self.player_index:
                 logging.info(
-                    f'MOVE {str(last_player_index_submitted_move)} was capped WITHOUT priority..? Adding unexplained diff {amountAttacked} based on actualSrcDelta {actualSrcDelta} - expectedSourceDelta {expectedSourceDelta}. Continuing with dest diff calc')
-                # self.unaccounted_tile_diffs[source] = amountAttacked  # negative number
+                    f'MOVE {str(last_player_index_submitted_move)} was capped WITHOUT priority..? Adding unexplained diff {srcUnexpectedDelta} based on actualSrcDelta {actualSrcDelta} - expectedSourceDelta {expectedSourceDelta}. Continuing with dest diff calc')
+                # self.unaccounted_tile_diffs[source] = srcUnexpectedDelta  # negative number
 
-                source.delta.unexplainedDelta = amountAttacked - actualDestDelta + expectedDestDelta
+                source.delta.unexplainedDelta = srcUnexpectedDelta - actualDestDelta + expectedDestDelta
                 source.delta.armyMovedHere = True
                 # TODO this is wrong...? Need to account for the amount of dest delta we think made it...?
-                # dest.delta.unexplainedDelta = 0
+                # dest.delta.destUnexpectedDelta = 0
             else:
                 # we can get here if the source tile was attacked with priority but not for full damage, OR if it was attacked without priority for non full damage...
                 destArmyInterferedToo = False
                 if not destDeltaMismatch:
                     # then we almost certainly didn't have source attacked with priority.
                     logging.warning(
-                        f'MOVE {str(last_player_index_submitted_move)} ? src attacked for amountAttacked {amountAttacked} WITHOUT priority based on actualSrcDelta {actualSrcDelta} vs expectedSourceDelta {expectedSourceDelta}')
+                        f'MOVE {str(last_player_index_submitted_move)} ? src attacked for srcUnexpectedDelta {srcUnexpectedDelta} WITHOUT priority based on actualSrcDelta {actualSrcDelta} vs expectedSourceDelta {expectedSourceDelta}')
                 elif destHasEnDeltasNearby:
                     armyMadeItToDest = dest.delta.unexplainedDelta
-                    amountAttacked = expectedDestDelta - armyMadeItToDest
+                    srcUnexpectedDelta = expectedDestDelta - armyMadeItToDest
                     if source.army == 0:
-                        amountAttacked -= 1  # enemy can attack us down to 0 without flipping the tile, special case this
+                        srcUnexpectedDelta -= 1  # enemy can attack us down to 0 without flipping the tile, special case this
 
                     logging.warning(
-                        f'MOVE {str(last_player_index_submitted_move)} ? src attacked for amountAttacked {amountAttacked} based on destDelta {dest.delta.unexplainedDelta} vs expectedDestDelta {expectedDestDelta}')
+                        f'MOVE {str(last_player_index_submitted_move)} ? src attacked for srcUnexpectedDelta {srcUnexpectedDelta} based on destDelta {dest.delta.unexplainedDelta} vs expectedDestDelta {expectedDestDelta}')
                 else:
                     destArmyInterferedToo = True
                     # TODO what to do here?
@@ -1466,7 +1485,7 @@ class MapBase(object):
                         f'???MOVE {str(last_player_index_submitted_move)} ? player had priority but we still had a dest delta as well as source delta...?')
                     dest.delta.armyMovedHere = True
 
-                source.delta.unexplainedDelta = amountAttacked  # negative number
+                source.delta.unexplainedDelta = srcUnexpectedDelta  # negative number
                 source.delta.armyMovedHere = True
                 if not destArmyInterferedToo:
                     # intentionally do nothing about the dest tile diff if we found a source tile diff, as it is really unlikely that both source and dest get interfered with on same turn.
@@ -1488,28 +1507,29 @@ class MapBase(object):
                     dest.delta.armyMovedHere = True
                     dest.delta.imperfectArmyDelta = True
             else:
-                unexplainedDelta = actualDestDelta - expectedDestDelta
-
-                # dest.delta.unexplainedDelta = unexplainedDelta
+                # dest.delta.destUnexpectedDelta = destUnexpectedDelta
                 # dest.delta.armyMovedHere = True
                 if destHasEnDeltasNearby:
-                    dest.delta.unexplainedDelta = unexplainedDelta
+                    dest.delta.unexplainedDelta = destUnexpectedDelta
                     dest.delta.armyMovedHere = True
                     # dest.delta.imperfectArmyDelta = sourceHasEnPriorityDeltasNearby
 
                 if sourceHasEnPriorityDeltasNearby:
                     logging.info(
-                        f'MOVE {str(last_player_index_submitted_move)} with expectedDestDelta {expectedDestDelta} likely collided with unexplainedDelta {unexplainedDelta} at dest OR SOURCE based on actualDestDelta {actualDestDelta}.')
+                        f'MOVE {str(last_player_index_submitted_move)} with expectedDestDelta {expectedDestDelta} likely collided with destUnexpectedDelta {destUnexpectedDelta} at dest OR SOURCE based on actualDestDelta {actualDestDelta}.')
                 else:
                     logging.info(
-                        f'MOVE {str(last_player_index_submitted_move)} with expectedDestDelta {expectedDestDelta} likely collided with unexplainedDelta {unexplainedDelta} at DEST based on actualDestDelta {actualDestDelta}.')
+                        f'MOVE {str(last_player_index_submitted_move)} with expectedDestDelta {expectedDestDelta} likely collided with destUnexpectedDelta {destUnexpectedDelta} at DEST based on actualDestDelta {actualDestDelta}.')
 
                 # TODO this might need to also happen when lost sight, but idk how to get the right delta...? Repro...?
                 if sourceHasEnPriorityDeltasNearby:
                     # the source tile could have been attacked for non-lethal damage BEFORE the move was made to target.
-                    source.delta.unexplainedDelta = unexplainedDelta
+                    source.delta.unexplainedDelta = destUnexpectedDelta
                     if dest.delta.oldOwner != self.player_index:
-                        source.delta.unexplainedDelta = 0 - unexplainedDelta
+                        source.delta.unexplainedDelta = 0 - destUnexpectedDelta
+                    # source.delta.unexplainedDelta = srcUnexpectedDelta
+                    # if dest.delta.oldOwner != self.player_index:
+                    #     source.delta.unexplainedDelta = 0 - destUnexpectedDelta
                     source.delta.imperfectArmyDelta = destHasEnDeltasNearby
                     source.delta.armyMovedHere = True
         else:

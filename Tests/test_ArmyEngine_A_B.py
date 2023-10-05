@@ -167,8 +167,12 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
+            # try just 0.98
             aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 0.98  # was 0.95
-            aBot.behavior_pre_gather_greedy_leaves_offset = -7  # was -5
+
+            # 133-133
+            # aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 0.98  # was 0.95
+            # aBot.behavior_pre_gather_greedy_leaves_offset = -7  # was -5
 
             # 138-162.
             # aBot.behavior_pre_gather_greedy_leaves_offset = -15  # was -5
@@ -344,6 +348,7 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
+            # 139-121, AGAIN
             aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 1.0  # was 0.95
 
             # 138-166
@@ -476,7 +481,8 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
-            # try 3
+            # try 3 (b is -5)
+            # 151-113, AGAIN
             aBot.behavior_pre_gather_greedy_leaves_offset = -3
 
             # 130-156
@@ -611,9 +617,11 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
+            aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 0.9  # b is 0.95
+
             # 142-149, AGAIN
             # 125-132
-            aBot.behavior_allow_pre_gather_greedy_leaves = False  # b true obviously
+            # aBot.behavior_allow_pre_gather_greedy_leaves = False  # b true obviously
 
             # 249-214, codified. Thought this was already codified, weird.
             # aBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.MaxAverageValue)
@@ -835,7 +843,7 @@ class ArmyEngineABTests(TestBase):
 
         def configure_a(aBot: EklipZBot):
             # 140-155
-            aBot.expansion_full_time_limit = 0.3
+            # aBot.expansion_full_time_limit = 0.3
 
             # 238-238, AGAIN
             # 232-237, meaningless, .4 it is

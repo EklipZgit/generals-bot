@@ -1159,7 +1159,7 @@ class MapBase(object):
             fromTile.delta.armyDelta = fromDelta
             if fromTile.player != byPlayer:
                 fromTile.player = byPlayer
-                if fromTile.army > 0:
+                if fromTile.army > 0 and fromTile.delta.oldOwner != self.player_index:
                     msg = f'fromTile was neutral/otherPlayer {fromTile.delta.oldOwner} with positive army {fromTile.army} in the fog. From->To: {repr(fromTile)} -> {repr(toTile)}'
                     if ENABLE_DEBUG_ASSERTS:
                         raise AssertionError(msg)
@@ -1378,6 +1378,9 @@ class MapBase(object):
         # ok, then probably we didn't drop a move.
 
         actualSrcDelta = source.delta.unexplainedDelta
+        if source.delta.lostSight:
+            actualSrcDelta = -1 - source.delta.oldArmy
+
         actualDestDelta = dest.delta.unexplainedDelta
 
         srcUnexpectedDelta = actualSrcDelta - expectedSourceDelta

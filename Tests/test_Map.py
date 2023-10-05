@@ -1085,6 +1085,7 @@ C5
                                     # 697~
                                     # 569~
                                     # 921
+                                    # 521
                                     self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bHasNearbyVision=bHasNearbyVision)
 
     def test_run_one_off_fog_island_full_capture_test(self):

@@ -1,0 +1,66 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+b3   b3   b3   b3   b3   b3             b3   b3   b3   b2   b2   b2        M    M         M
+M              N1   N1   D    D    MD   b3D  N1   N1   b2   M    M    M
+     M              M    C40  b2D  b2D  b3D  M         b2                  M              M
+     N1   N1        a3   M    b2   b2D  D    MD        b2   M         M         M         M
+     N1        C45  a2   a3   b2   b2   b2   b2   b2   b2   M              M
+     M                   M    b2   M    a1   b2   M    M         M         M    M         M
+               M              C42  b2   a2   M    a2   M    M                        M
+                    M         a2   a3   a2   a2   a2   M    M    M                        M
+M         M         M    M    a2   a2   a2   a2                  M                        M
+                         M    a1   M    b2   a2   M                   M    M              M
+M                   M    a1   a1   a1   a1   a1        M
+     M    M         a1   a1   M                        M    M         M    M
+          M    C45  a1   a1   M         C43                 M
+M    a2        a26  a1   a1   a2   a2             M              M
+a1   a1   M    a2   a2   a2   a2   M                                       M              M
+a2   a1   a1   a20  a2   a2   M         M              M                        M
+     M    aG2  a2   M
+M    M    a1   a2   M              M                        M              M    M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=10,2
+turn=172
+bot_player_index=0
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=40
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_target_player=1
+bot_cur_path=[0 len 3] 3,15 -> 3,14 -> 3,13 -> 3,12
+aUsername=Human.exe
+aTiles=48
+aScore=123
+aStandingArmy=75
+aStars=71
+aCityCount=1
+aGeneral=2,16
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=7
+aDelta25Score=22
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=172
+bUsername=adsf3r23
+bTiles=51
+bScore=127
+bStandingArmy=76
+bStars=61
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=65
+bDelta25Tiles=-1
+bDelta25Score=25
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=145

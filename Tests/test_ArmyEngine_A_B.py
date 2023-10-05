@@ -167,9 +167,15 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
-            # 249-213
-            aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 1  # b is 5. 10 is actually the old value
-            aBot.mcts_engine.min_expanded_visit_count_to_count_for_moves = 1
+            aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 0.98  # was 0.95
+            aBot.behavior_pre_gather_greedy_leaves_offset = -7  # was -5
+
+            # 138-162.
+            # aBot.behavior_pre_gather_greedy_leaves_offset = -15  # was -5
+
+            # # 249-213
+            # aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 1  # b is 5. 10 is actually the old value
+            # aBot.mcts_engine.min_expanded_visit_count_to_count_for_moves = 1
 
             # 230-243, pretty meaningless. Try 1...?
             # aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 10  # b is 5. 10 is actually the old value
@@ -338,8 +344,13 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
-            # 267-202
-            aBot.expansion_force_no_global_visited = False  # was true, AFTER the expansion fixups. Trying false.
+            aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 1.0  # was 0.95
+
+            # 138-166
+            # aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 0.9  # was 0.95
+
+            # # 267-202, codified
+            # aBot.expansion_force_no_global_visited = False  # was true, AFTER the expansion fixups. Trying false.
 
             # running as-is against old,
             # 222-156
@@ -465,6 +476,12 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
+            # try 3
+            aBot.behavior_pre_gather_greedy_leaves_offset = -3
+
+            # 130-156
+            # aBot.behavior_pre_gather_greedy_leaves_offset = -10
+
             # killed 239-143
             # aBot.expansion_force_global_visited_stage_1 = True  # was false
             # aBot.expansion_force_no_global_visited = True  # was true
@@ -594,8 +611,12 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
+            # 142-149, AGAIN
+            # 125-132
+            aBot.behavior_allow_pre_gather_greedy_leaves = False  # b true obviously
+
             # 249-214, codified. Thought this was already codified, weird.
-            aBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.MaxAverageValue)
+            # aBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.MaxAverageValue)
 
             # fully codified, killed 252-144=1.75 exactly
             # aBot.expansion_force_global_visited_stage_1 = True  # was false
@@ -690,12 +711,16 @@ class ArmyEngineABTests(TestBase):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         def configure_b(bBot: EklipZBot):
-            bBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.RobustChild)
+            # bBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.RobustChild)
             pass
 
         def configure_a(aBot: EklipZBot):
+            # 141-153, AGAIN
+            # 151-140, AGAIN
+            aBot.behavior_allow_pre_gather_greedy_leaves = False  # b true obviously
+
             # 229-233 but other tests did 249-214 and 244-218 so we're currently at 722-665, 52% winrate, so barely.
-            aBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.MaxAverageValue)
+            # aBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.MaxAverageValue)
 
             # codifying in advance
             # 242-138 = 1.7536
@@ -809,6 +834,7 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
+            # 140-155
             aBot.expansion_full_time_limit = 0.3
 
             # 238-238, AGAIN

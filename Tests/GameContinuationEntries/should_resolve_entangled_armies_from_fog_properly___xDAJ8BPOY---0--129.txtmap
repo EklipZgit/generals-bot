@@ -1,0 +1,66 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          M                             M                   M    M                   M
+               M                   M                        M                        M
+     M                        M    M              M
+M                   M              M              M    M    M
+                              M    M                        M    M    M
+M    M    M         M                   M              M    M
+                         M         M         b1                            M    M
+a6             M    M    M         M    M    b1   b1                  M
+a36       M                        M         M    b1   M
+a1             M    M                   b1   b1   b1                       M         M
+a1        C44       MD   MD   D    D    b51  M    M    M
+a1   a1   a1   M    b1   b3D  b2D  b2D  b2   a2   a2   a2   M
+a1   M    a1   a1   b1   C42D D    D    M    a2   a2   a2   b2        M    M    M
+a1   M    a2   a3   b1   b1                  C43  M    a2   b2   M
+aG4  M    a1   a1   M    a1   M    a1   M    M    a2   a11
+a1   a1   a1   a1   a1   a1   a1   a1   a1   a1   a1   M    M
+a1   a2   a1   a1   a2   a2   a2   a2   M              M         M              M    M
+a1   M    a1   a1                            M                        M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=10,4
+turn=129
+bot_player_index=0
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=40
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_target_player=1
+bot_cur_path=[37 len 4] 0,8 -> 0,7 -> 1,7 -> 2,7 -> 2,6
+aUsername=Human.exe
+aTiles=49
+aScore=118
+aStandingArmy=69
+aStars=72
+aCityCount=1
+aGeneral=0,14
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=18
+aDelta25Score=54
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=129
+bUsername=zzd_bot release
+bTiles=49
+bScore=125
+bStandingArmy=76
+bStars=74
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=135
+bDelta25Tiles=11
+bDelta25Score=62
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=109

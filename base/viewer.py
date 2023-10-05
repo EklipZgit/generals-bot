@@ -304,7 +304,8 @@ class GeneralsViewer(object):
 
     def run_main_viewer_loop(self, alignTop=True, alignLeft=True):
         termSec = 600
-        BotLogging.set_up_logger(logging.INFO)
+        if not self.noLog:
+            BotLogging.set_up_logger(logging.INFO)
         while not self._receivedUpdate:  # Wait for first update
             try:
                 viewInfo, map, isComplete = self._update_queue.get(block=True, timeout=15.0)
@@ -734,6 +735,8 @@ class GeneralsViewer(object):
 
             self.draw_armies()
 
+            self.draw_emergences()
+
             # Go ahead and update the screen with what we've drawn.
             pygame.display.flip()
 
@@ -803,9 +806,27 @@ class GeneralsViewer(object):
         if self._viewInfo.armyTracker is not None:
             for army in list(self._viewInfo.armyTracker.armies.values()):
                 if army.scrapped:
-                    self.draw_army(army, 200, 200, 200, 70)
+                    self.draw_army(army, 200, 200, 200, 80)
                 else:
-                    self.draw_army(army, 255, 255, 255, 120)
+                    self.draw_army(army, 255, 255, 255, 150)
+
+    def draw_emergences(self):
+        alphaMin = 100
+        for tile, emergenceTuple in self._map.army_emergences.items():
+            emergenceValue, emergencePlayer = emergenceTuple
+            (playerR, playerG, playerB) = PLAYER_COLORS[emergencePlayer]
+            playerR = int(playerR * 1.25 + 20)
+            playerG = int(playerG * 1.25 + 20)
+            playerB = int(playerB * 1.25 + 20)
+
+            if tile.player != emergencePlayer:
+                (playerR, playerG, playerB) = PLAYER_COLORS[emergencePlayer]
+
+            alpha = min(alphaMin, max(255, rescale_value(abs(emergenceValue), 0, 50, alphaMin, 255)))
+            # playerR = (playerR + 256) // 2
+            # playerG = (playerG + 256) // 2
+            # playerB = (playerB + 256) // 2
+            self.draw_square(tile, 2, playerR, playerG, playerB, alpha=alpha)
 
     def draw_army_analysis(self, analysis: ArmyAnalyzer, chokeColor=None, draw_pathways=True, outerChokeColor=None,
                            innerChokeColor=None):
@@ -1224,7 +1245,6 @@ class GeneralsViewer(object):
                               (pos_left + 3, pos_top + 2 + 2 * self._medFont.get_height()))
 
             pos_left = pos_left + curScoreWidth
-
 
 
 

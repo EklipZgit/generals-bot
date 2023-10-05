@@ -1797,10 +1797,11 @@ def prune_mst_to_army_with_values(
         rootNodes: typing.List[GatherTreeNode],
         army: int,
         searchingPlayer: int,
+        turn: int,
         viewInfo: ViewInfo | None = None,
         noLog: bool = True,
         gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
-        invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None
+        invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
 ) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
     """
     Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
@@ -1809,14 +1810,17 @@ def prune_mst_to_army_with_values(
     @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
     @param army: The army amount to prune the MST down to
     @param searchingPlayer:
+    @param turn: the current map turn, used to calculate city increment values.
     @param viewInfo:
     @param noLog:
     @param gatherTreeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
     @param invalidMoveFunc: func(GatherTreeNode) -> bool, return true if you want a leaf GatherTreeNode to always be prune. For example, pruning gather nodes that begin at an enemy tile or that are 1's.
 
-    @return: The list same list of rootnodes passed in, modified.
+    @return: gatherTurns, gatherValue, rootNodes
     """
     start = time.perf_counter()
+
+    turnIncFactor = (1 + turn) & 1
 
     cityCounter = SearchUtils.Counter(0)
     cityGatherDepthCounter = SearchUtils.Counter(0)
@@ -1834,7 +1838,20 @@ def prune_mst_to_army_with_values(
                 cityGatherDepthCounter.add(node.trunkDistance)
             else:
                 cityCounter.add(-1)
-    iterate_tree_nodes(rootNodes, cityCounterFunc)
+
+        for child in node.children:
+            cityCounterFunc(child)
+
+    for n in rootNodes:
+        cityCounterFunc(n)
+
+    def setCountersToPruneCitiesRecurse(node: GatherTreeNode):
+        for child in node.children:
+            setCountersToPruneCitiesRecurse(child)
+
+        if node.tile.player == searchingPlayer and (node.tile.isCity or node.tile.isGeneral):
+            cityGatherDepthCounter.add(0 - node.trunkDistance)
+            cityCounter.add(-1)
 
     if invalidMoveFunc is None:
         def invalid_move_func(node: GatherTreeNode):
@@ -1844,21 +1861,28 @@ def prune_mst_to_army_with_values(
                 return True
         invalidMoveFunc = invalid_move_func
 
+    def getCurrentCityIncAmount(gatherTurnsLeft: int) -> int:
+        cityIncrementAmount = (cityCounter.value * (gatherTurnsLeft - turnIncFactor)) // 2  # +1 here definitely causes it to under-gather
+        cityIncrementAmount -= cityGatherDepthCounter.value // 2
+        return cityIncrementAmount
+
     def untilFunc(node: GatherTreeNode, _, turnsLeft: int, curValue: int):
         turnsLeftIfPruned = turnsLeft - node.gatherTurns
-        cityIncrementAmount = cityCounter.value * ((turnsLeftIfPruned + 1) // 2)
-        cityIncrementAmount -= (cityGatherDepthCounter.value - 1) // 2
+
+        # act as though we're pruning the city so we can calculate the gather value without it
+        setCountersToPruneCitiesRecurse(node)
+
+        cityIncrementAmount = getCurrentCityIncAmount(turnsLeftIfPruned)
         armyLeftIfPruned = curValue - node.value + cityIncrementAmount
 
         if armyLeftIfPruned < army:
+            # not pruning here, put the city increments back
+            cityCounterFunc(node)
             return True
 
-        if node.tile.player == searchingPlayer and (node.tile.isCity or node.tile.isGeneral):
-            cityGatherDepthCounter.add(0 - node.trunkDistance)
-            cityCounter.add(-1)
         return False
 
-    return prune_mst_until(
+    prunedTurns, noCityCalcGathValue, nodes = prune_mst_until(
         rootNodes,
         untilFunc=untilFunc,
         # if we dont include trunkVal/node.trunkDistance we end up keeping shitty branches just because they have a far, large tile on the end.
@@ -1872,15 +1896,21 @@ def prune_mst_to_army_with_values(
         pruneBranches=True
     )
 
+    finalIncValue = getCurrentCityIncAmount(prunedTurns)
+    gathValue = noCityCalcGathValue + finalIncValue
+
+    return prunedTurns, gathValue, nodes
+
 
 def prune_mst_to_army(
         rootNodes: typing.List[GatherTreeNode],
         army: int,
         searchingPlayer: int,
+        turn: int,
         viewInfo: ViewInfo | None = None,
         noLog: bool = True,
         gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
-        invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None
+        invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
 ) -> typing.List[GatherTreeNode]:
     """
     Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
@@ -1894,13 +1924,14 @@ def prune_mst_to_army(
     @param gatherTreeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
     @param invalidMoveFunc: func(GatherTreeNode) -> bool, return true if you want a leaf GatherTreeNode to always be prune. For example, pruning gather nodes that begin at an enemy tile or that are 1's.
 
-    @return: The list same list of rootnodes passed in, modified.
+    @return: gatherTurns, gatherValue, rootNodes
     """
 
     count, totalValue, rootNodes = prune_mst_to_army_with_values(
         rootNodes=rootNodes,
         army=army,
         searchingPlayer=searchingPlayer,
+        turn=turn,
         viewInfo=viewInfo,
         noLog=noLog,
         gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,

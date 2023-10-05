@@ -1081,7 +1081,7 @@ class BotBehaviorTests(TestBase):
         self.assertIsNone(winner)
     
     def test_should_not_fail_defense(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_fail_defense___B3wF_LC3Y---4--599.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 599, fill_out_tiles=True)
 
@@ -1101,3 +1101,26 @@ class BotBehaviorTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=25)
         self.assertIsNone(winner)
+    
+    def test_should_prioritize_attack_paths_through_indirect_fog(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_prioritize_attack_paths_through_indirect_fog___qEDoraK55---1--100.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 100, fill_out_tiles=True)
+        self.move_enemy_general(map, enemyGeneral, 17, 18)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=100)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        self.set_general_emergence_around(14, 18, simHost, general.player, enemyGeneral.player, emergenceAmt=40)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.5, turns=1)
+        self.assertIsNone(winner)
+        bot = simHost.get_bot(general.player)
+        self.assertIn(bot._map.GetTile(17, 11), bot.target_player_gather_path.tileSet)
+        self.assertIn(bot._map.GetTile(17, 12), bot.target_player_gather_path.tileSet)
+        self.assertIn(bot._map.GetTile(17, 13), bot.target_player_gather_path.tileSet)
+

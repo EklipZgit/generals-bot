@@ -1,0 +1,68 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M              M                   M         M    M         M
+M                                                 M                   M
+     M         M    M                                  M                   M    M
+M         M              M    M              M                   M    M
+                         b2   b2   b2   a2   bG7  M
+     M         M    M         M    b2   b2   b2   M    C42                      M    M
+                                   M    b2   b2   b2   b2                                 M
+M    M    M    M                        a2   b5                  M
+M    M    M              M    M    b2   a2   a2                                           M
+                                        M    a2   D    D    MD   M                   M
+M    M              M    b2   b2   b2   b2   a2   a2D  a2D  D    M                        M
+     M                   b2   b2        M         D    a2D  D                             M
+     M         M         b2   b2   M    M    M    M    a2   C42                 M
+                              b2   b2   b2   b2   b2   b2   M              M              M
+          M                                  M    M    b2   b2        M    M
+                         M                   M              b2             M              M
+     M    M         M         M              M              b2   M    M
+     M              M                                  M    b11  a2   a2             M    M
+M                             M                   a2   a2   a2   a2   a2
+     M                   M         M                                       M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=14,18
+turn=100
+bot_player_index=1
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=40
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_target_player=0
+bot_cur_path=None
+aUsername=Omphalos
+aTiles=37
+aScore=87
+aStandingArmy=50
+aStars=79
+aCityCount=1
+aKnowsKingLocation=True
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=215
+aDelta25Tiles=12
+aDelta25Score=36
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=93
+bUsername=Human.exe
+bTiles=32
+bScore=81
+bStandingArmy=49
+bStars=70
+bCityCount=1
+bGeneral=9,4
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=7
+bDelta25Score=31
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=100

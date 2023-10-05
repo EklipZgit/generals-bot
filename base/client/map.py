@@ -454,7 +454,9 @@ class Tile(object):
                 self.player = -1
 
         # can only 'expect' army deltas for tiles we can see. Visible is already calculated above at this point.
-        if self.visible and not self.delta.discovered:
+        # WAS
+        # if self.visible and not self.delta.discovered:
+        if tile >= TILE_EMPTY:
             expectedDelta: int = 0
             if (self.isCity or self.isGeneral) and self.player >= 0 and map.is_city_bonus_turn:
                 expectedDelta += 1
@@ -506,6 +508,13 @@ class Tile(object):
 
         # if self.delta.oldOwner == self.delta.newOwner and self.delta.armyDelta == 0:
         #     armyMovedHere = False
+
+        if tile == TILE_MOUNTAIN or (tile == TILE_EMPTY and isCity and self.delta.gainedSight):
+            armyMovedHere = False
+            if tile == TILE_MOUNTAIN or army > 38:
+                self.delta.imperfectArmyDelta = False
+                self.delta.armyDelta = 0
+                self.delta.unexplainedDelta = 0
 
         self.delta.armyMovedHere = armyMovedHere
 
@@ -613,7 +622,8 @@ class MapBase(object):
         self.cols: int = len(map_grid_y_x[0])  # Integer Number Grid Cols
         self.grid: typing.List[typing.List[Tile]] = map_grid_y_x
         self.army_moved_grid: typing.List[typing.List[bool]] = []
-        self.army_emergences: typing.Dict[Tile, int] = {}
+        self.army_emergences: typing.Dict[Tile, typing.Tuple[int, int]] = {}
+        """Lookup from Tile to (emergedAmount, emergingPlayer)"""
 
         # List of 8 Generals (None if not found)
         self.generals: typing.List[typing.Union[Tile, None]] = [
@@ -1377,7 +1387,7 @@ class MapBase(object):
         sourceHasEnPriorityDeltasNearby = False
         for tile in source.movable:
             if (
-                    tile != dest
+                    (tile != dest or destDeltaMismatch)
                     and (tile.delta.unexplainedDelta != 0 or tile.delta.lostSight)
                     and tile.delta.oldOwner != self.player_index
             ):
@@ -1387,7 +1397,7 @@ class MapBase(object):
         destHasEnDeltasNearby = False
         for tile in dest.movable:
             if (
-                    tile != source
+                    (tile != source or sourceDeltaMismatch)
                     and (tile.delta.unexplainedDelta != 0 or not tile.visible)
                     #and (tile.delta.oldOwner != self.player_index or tile.delta.newOwner != self.player_index)
             ):
@@ -1731,7 +1741,7 @@ class MapBase(object):
                     if not potentialSource.delta.lostSight:
                         logging.info(f'ISLAND FOG DEST {repr(destTile)}: SRC {repr(potentialSource)} SKIPPED BECAUSE DIDNT LOSE VISION OF SOURCE, WHICH MEANS IT SHOULD HAVE BEEN CAUGHT BY ANOTHER HANDLER ALREADY (?)')
                         continue
-                    if evaluateIslandFogMove(destTile, potentialSource):
+                    if evaluate_island_fog_move(destTile, potentialSource):
                         byPlayer = potentialSource.delta.oldOwner
 
                         logging.info(
@@ -1758,6 +1768,19 @@ class MapBase(object):
 
         logging.info(f'Tiles with diffs at end: {str([str(t) for t in tilesWithDiffsEnd])}')
         logging.info(f'Tiles with MovedHere at end: {str([str(t) for t in tilesWithMovedHereEnd])}')
+
+        for t in self.get_all_tiles():
+            if t.delta.unexplainedDelta == 0:
+                continue
+            if not t.visible:
+                continue
+            if t.player == -1:
+                continue
+            if t in self.army_emergences:
+                continue
+
+            self.army_emergences[t] = (t.delta.unexplainedDelta, t.player)
+
         return
 
     def calculate_player_deltas(self):
@@ -1858,12 +1881,15 @@ class MapBase(object):
                 player.fighting_with_player = -1
 
     def _move_would_violate_known_player_deltas(self, source: Tile, dest: Tile):
-        knowSourceOwner = source.was_visible_last_turn() or self.remainingPlayers == 2 and source.discovered and source.player >= 0
+        knowSourceOwner = source.was_visible_last_turn() or (self.remainingPlayers == 2 and source.discovered and source.player >= 0)
         if knowSourceOwner:
             sourceOwner = self.players[source.delta.oldOwner]
-            knowDestOwner = dest.was_visible_last_turn() or self.remainingPlayers == 2 and dest.discovered and dest.player >= 0
+            knowDestOwner = dest.was_visible_last_turn() or (self.remainingPlayers == 2 and dest.discovered and dest.delta.oldOwner >= 0)
             if knowDestOwner:
-                destOwner = self.players[dest.delta.oldOwner]
+                destOwner = None
+
+                if dest.delta.oldOwner >= 0:
+                    destOwner = self.players[dest.delta.oldOwner]
                 if sourceOwner == destOwner:
                     # ok we know the players are fighting with each other, we know one move attacked the source tile
                     if sourceOwner.unexplainedTileDelta == 1:
@@ -1873,7 +1899,7 @@ class MapBase(object):
 
                         return True
 
-                elif self.remainingPlayers == 2 and destOwner.unexplainedTileDelta == 1:
+                elif self.remainingPlayers == 2 and destOwner is not None and destOwner.unexplainedTileDelta == 1:
                     logging.info(f'move {str(source)}->{str(dest)} by p{sourceOwner.index} can be discarded '
                                  f'outright, as it would have captured a tile and instead dest player'
                                  f' p{destOwner.index} gained tiles.')
@@ -1899,7 +1925,7 @@ class MapBase(object):
         if expectedDelta is not None:
             potentialArmy = tile.delta.oldArmy + expectedDelta
             if potentialArmy <= 0:
-                self.set_fog_emergence(tile, 0 - expectedDelta)
+                self.set_fog_emergence(tile, 0 - expectedDelta, byPlayer)
                 potentialArmy = 1
             army = potentialArmy
 
@@ -1914,9 +1940,9 @@ class MapBase(object):
         tile.delta.oldOwner = byPlayer
         tile.delta.newOwner = byPlayer
 
-    def set_fog_emergence(self, fromTile: Tile, armyEmerged: int):
+    def set_fog_emergence(self, fromTile: Tile, armyEmerged: int, byPlayer: int):
         logging.info(f'+++EMERGENCE {repr(fromTile)} = {armyEmerged}')
-        self.army_emergences[fromTile] = armyEmerged
+        self.army_emergences[fromTile] = (armyEmerged, byPlayer)
 
     def run_positive_delta_movement_scan(self, skipPlayers: typing.Set[int], possibleMovesDict: typing.Dict[Tile, typing.List[Tile]], allowFogSource: bool):
         fogFlag = ""
@@ -2230,7 +2256,7 @@ def new_value_grid(map, initValue) -> typing.List[typing.List[int]]:
     return [[initValue] * map.rows for _ in range(map.cols)]
 
 
-def evaluateIslandFogMove(tile: Tile, candidateTile: Tile) -> bool:
+def evaluate_island_fog_move(tile: Tile, candidateTile: Tile) -> bool:
     if tile.visible or candidateTile.visible:
         raise AssertionError(f"wtf, can't call this for visible tiles my guy. tile {repr(tile)} candidateTile {repr(candidateTile)} ")
 

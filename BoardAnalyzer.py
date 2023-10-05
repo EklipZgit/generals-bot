@@ -1,8 +1,8 @@
 """
-	@ Travis Drake (EklipZ) eklipz.io - tdrake0x45 at gmail)
-	July 2019
-	Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
-	EklipZ bot - Tries to play generals lol
+    @ Travis Drake (EklipZ) eklipz.io - tdrake0x45 at gmail)
+    July 2019
+    Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
+    EklipZ bot - Tries to play generals lol
 """
 
 import logging
@@ -10,154 +10,176 @@ import time
 import json
 from ArmyAnalyzer import *
 from SearchUtils import *
-from collections import deque 
-from queue import PriorityQueue 
+from collections import deque
+from queue import PriorityQueue
 from Path import Path
 
 
 class BoardAnalyzer:
-	def __init__(self, map: MapBase, general: Tile):
-		startTime = time.time()
-		self.map: MapBase = map
-		self.general: Tile = general
-		self.should_rescan = False
+    def __init__(self, map: MapBase, general: Tile):
+        startTime = time.time()
+        self.map: MapBase = map
+        self.general: Tile = general
+        self.should_rescan = False
 
-		# TODO probably calc these chokes for the enemy, too?
-		self.innerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
-		"""Tiles that only have one outward path away from our general."""
+        # TODO probably calc these chokes for the enemy, too?
+        self.innerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
+        """Tiles that only have one outward path away from our general."""
 
-		self.outerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
-		"""Tiles that only have a single inward path towards our general."""
+        self.outerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
+        """Tiles that only have a single inward path towards our general."""
 
-		self.intergeneral_analysis: ArmyAnalyzer = None
+        self.intergeneral_analysis: ArmyAnalyzer = None
 
-		self.core_play_area_matrix: MapMatrix[bool] = None
+        self.core_play_area_matrix: MapMatrix[bool] = None
 
-		self.extended_play_area_matrix: MapMatrix[bool] = None
+        self.extended_play_area_matrix: MapMatrix[bool] = None
 
-		self.inter_general_distance: int = 0
-		"""The (possibly estimated) distance between our gen and target player gen."""
+        self.flank_danger_play_area_matrix: MapMatrix[bool] = None
 
-		self.within_core_play_area_threshold: int = 1
-		"""The cutoff point where we draw pink borders as the 'core' play area between generals."""
+        self.inter_general_distance: int = 0
+        """The (possibly estimated) distance between our gen and target player gen."""
 
-		self.within_extended_play_area_threshold: int = 2
-		"""The cutoff point where we draw yellow borders as the 'extended' play area between generals."""
+        self.within_core_play_area_threshold: int = 1
+        """The cutoff point where we draw pink borders as the 'core' play area between generals."""
 
-		self.rescan_chokes()
+        self.within_extended_play_area_threshold: int = 2
+        """The cutoff point where we draw yellow borders as the 'extended' play area between generals."""
 
-		logging.info("BoardAnalyzer completed in {:.3f}".format(time.time() - startTime))
+        self.within_flank_danger_play_area_threshold: int = 4
+        """The cutoff point where we draw red borders as the flank danger surface area."""
 
-	def __getstate__(self):
-		state = self.__dict__.copy()
-		if "map" in state:
-			del state["map"]
-		return state
+        self.rescan_chokes()
 
-	def __setstate__(self, state):
-		self.__dict__.update(state)
-		self.map = None
+        logging.info("BoardAnalyzer completed in {:.3f}".format(time.time() - startTime))
 
-	def rescan_chokes(self):
-		self.should_rescan = False
-		oldInner = self.innerChokes
-		oldOuter = self.outerChokes
-		self.innerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        if "map" in state:
+            del state["map"]
+        return state
 
-		self.outerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.map = None
 
-		self.genDistMap = build_distance_map(self.map, [self.general])
-		for tile in self.map.pathableTiles:
-			# logging.info("Rescanning chokes for {}".format(tile.toString()))
-			tileDist = self.genDistMap[tile.x][tile.y]
-			movableInnerCount = count(tile.movable, lambda adj: tileDist == self.genDistMap[adj.x][adj.y] - 1)
-			movableOuterCount = count(tile.movable, lambda adj: tileDist == self.genDistMap[adj.x][adj.y] + 1)
-			if movableInnerCount == 1:
-				self.outerChokes[tile.x][tile.y] = True
-			# checking movableInner to avoid considering dead ends 'chokes'
-			if (movableOuterCount == 1
-					# and movableInnerCount >= 1
-			):
-				self.innerChokes[tile.x][tile.y] = True
-			if self.map.turn > 4:
-				if oldInner[tile.x][tile.y] != self.innerChokes[tile.x][tile.y]:
-					logging.info(
-						f"  inner choke change: tile {tile.toString()}, old {oldInner[tile.x][tile.y]}, new {self.innerChokes[tile.x][tile.y]}")
-				if oldOuter[tile.x][tile.y] != self.outerChokes[tile.x][tile.y]:
-					logging.info(
-						f"  outer choke change: tile {tile.toString()}, old {oldOuter[tile.x][tile.y]}, new {self.outerChokes[tile.x][tile.y]}")
+    def rescan_chokes(self):
+        self.should_rescan = False
+        oldInner = self.innerChokes
+        oldOuter = self.outerChokes
+        self.innerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
 
-	def rebuild_intergeneral_analysis(self, opponentGeneral):
-		self.intergeneral_analysis = ArmyAnalyzer(self.map, self.general, opponentGeneral)
+        self.outerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
 
-		enemyDistMap = self.intergeneral_analysis.bMap
-		generalDistMap = self.intergeneral_analysis.aMap
-		general = self.general
+        self.genDistMap = build_distance_map(self.map, [self.general])
+        for tile in self.map.pathableTiles:
+            # logging.info("Rescanning chokes for {}".format(tile.toString()))
+            tileDist = self.genDistMap[tile.x][tile.y]
+            movableInnerCount = count(tile.movable, lambda adj: tileDist == self.genDistMap[adj.x][adj.y] - 1)
+            movableOuterCount = count(tile.movable, lambda adj: tileDist == self.genDistMap[adj.x][adj.y] + 1)
+            if movableInnerCount == 1:
+                self.outerChokes[tile.x][tile.y] = True
+            # checking movableInner to avoid considering dead ends 'chokes'
+            if (movableOuterCount == 1
+                    # and movableInnerCount >= 1
+            ):
+                self.innerChokes[tile.x][tile.y] = True
+            if self.map.turn > 4:
+                if oldInner[tile.x][tile.y] != self.innerChokes[tile.x][tile.y]:
+                    logging.info(
+                        f"  inner choke change: tile {tile.toString()}, old {oldInner[tile.x][tile.y]}, new {self.innerChokes[tile.x][tile.y]}")
+                if oldOuter[tile.x][tile.y] != self.outerChokes[tile.x][tile.y]:
+                    logging.info(
+                        f"  outer choke change: tile {tile.toString()}, old {oldOuter[tile.x][tile.y]}, new {self.outerChokes[tile.x][tile.y]}")
 
-		self.inter_general_distance = enemyDistMap[general.x][general.y]
-		self.within_extended_play_area_threshold = int((self.inter_general_distance + 2) * 1.2)
-		self.within_core_play_area_threshold = int((self.inter_general_distance + 1) * 1.1)
+    def rebuild_intergeneral_analysis(self, opponentGeneral):
+        self.intergeneral_analysis = ArmyAnalyzer(self.map, self.general, opponentGeneral)
 
-		self.extended_play_area_matrix: MapMatrix[bool] = MapMatrix(self.map, initVal=False)
-		self.core_play_area_matrix: MapMatrix[bool] = MapMatrix(self.map, initVal=False)
+        enemyDistMap = self.intergeneral_analysis.bMap
+        generalDistMap = self.intergeneral_analysis.aMap
+        general = self.general
 
-		for tile in self.map.pathableTiles:
-			tileDistSum = enemyDistMap[tile.x][tile.y] + generalDistMap[tile.x][tile.y]
-			if tileDistSum < self.within_extended_play_area_threshold:
-				self.extended_play_area_matrix[tile] = True
-			if tileDistSum < self.within_core_play_area_threshold:
-				self.core_play_area_matrix[tile] = True
+        self.inter_general_distance = enemyDistMap[general.x][general.y]
+        self.within_core_play_area_threshold = int((self.inter_general_distance + 1) * 1.1)
+        self.within_extended_play_area_threshold = int((self.inter_general_distance + 2) * 1.2)
+        self.within_flank_danger_play_area_threshold = int((self.inter_general_distance + 2) * 1.3)
+        logging.info(f'BOARD ANALYSIS THRESHOLDS:\r\n'
+                     f'     board shortest dist: {self.inter_general_distance}\r\n'
+                     f'     core area dist: {self.within_core_play_area_threshold}\r\n'
+                     f'     extended area dist: {self.within_extended_play_area_threshold}\r\n'
+                     f'     flank danger dist: {self.within_flank_danger_play_area_threshold}')
 
-	def get_tile_usefulness_score(self, x: int, y: int):
-		# score a tile based on how far out of the play area it is and whether it is on a good flank path
-		return 100
+        self.core_play_area_matrix: MapMatrix[bool] = MapMatrix(self.map, initVal=False)
+        self.extended_play_area_matrix: MapMatrix[bool] = MapMatrix(self.map, initVal=False)
+        self.flank_danger_play_area_matrix: MapMatrix[bool] = MapMatrix(self.map, initVal=False)
 
-	def get_flank_pathways(
-			self,
-			filter_out_players: typing.List[int] | None = None,
-	) -> typing.Set[Tile]:
-		flankDistToCheck = int(self.intergeneral_analysis.shortestPathWay.distance * 1.5)
-		flankPathTiles = set()
-		for pathway in self.intergeneral_analysis.pathWays:
-			if pathway.distance < flankDistToCheck and len(pathway.tiles) >= self.intergeneral_analysis.shortestPathWay.distance:
-				for tile in pathway.tiles:
-					if filter_out_players is None or tile.player not in filter_out_players:
-						flankPathTiles.add(tile)
+        for tile in self.map.pathableTiles:
+            enDist = enemyDistMap[tile.x][tile.y]
+            frDist = generalDistMap[tile.x][tile.y]
+            tileDistSum = enDist + frDist
+            if tileDistSum < self.within_extended_play_area_threshold:
+                self.extended_play_area_matrix[tile] = True
 
-		return flankPathTiles
+            if tileDistSum < self.within_core_play_area_threshold:
+                self.core_play_area_matrix[tile] = True
 
-	# minAltPathCount will force that many paths to be included even if they are greater than maxAltLength
-	def find_flank_leaves(
-			self,
-			leafMoves,
-			minAltPathCount,
-			maxAltLength
-	) -> typing.List[Move]:
-		goodLeaves: typing.List[Move] = []
+            if (
+                    tileDistSum < self.within_flank_danger_play_area_threshold
+                    # and tileDistSum > self.within_core_play_area_threshold
+                    and frDist / (enDist + 1) < 0.7  # prevent us from considering tiles more than 2/3rds into enemy territory as flank danger
+            ):
+                self.flank_danger_play_area_matrix[tile] = True
 
-		# order by: totalDistance, then pick tile by closestToOpponent
-		cutoffDist = self.intergeneral_analysis.shortestPathWay.distance // 4
-		includedPathways = set()
-		for move in leafMoves:
-			# sometimes these might be cut off by only being routed through the general
-			neutralCity = (move.dest.isCity and move.dest.player == -1)
-			if not neutralCity and move.dest in self.intergeneral_analysis.pathWayLookupMatrix and move.source in self.intergeneral_analysis.pathWayLookupMatrix:
-				pathwaySource = self.intergeneral_analysis.pathWayLookupMatrix[move.source]
-				pathwayDest = self.intergeneral_analysis.pathWayLookupMatrix[move.dest]
-				if pathwaySource.distance <= maxAltLength:
-					#if pathwaySource not in includedPathways:
-					if pathwaySource.distance > pathwayDest.distance or pathwaySource.distance == pathwayDest.distance:
-						# moving to a shorter path or moving along same distance path
-						# If getting further from our general (and by extension closer to opp since distance is equal)
-						gettingFurtherFromOurGen = self.intergeneral_analysis.aMap[move.source.x][move.source.y] < self.intergeneral_analysis.aMap[move.dest.x][move.dest.y]
-						# not more than cutoffDist tiles behind our general, effectively
+    def get_tile_usefulness_score(self, x: int, y: int):
+        # score a tile based on how far out of the play area it is and whether it is on a good flank path
+        return 100
 
-						reasonablyCloseToTheirGeneral = self.intergeneral_analysis.bMap[move.dest.x][move.dest.y] < cutoffDist + self.intergeneral_analysis.aMap[self.intergeneral_analysis.tileB.x][self.intergeneral_analysis.tileB.y]
-					
-						if (gettingFurtherFromOurGen and reasonablyCloseToTheirGeneral):
-							includedPathways.add(pathwaySource)
-							goodLeaves.append(move)
-					else:
-						logging.info("Pathway for tile {} was already included, skipping".format(move.source.toString()))
+    def get_flank_pathways(
+            self,
+            filter_out_players: typing.List[int] | None = None,
+    ) -> typing.Set[Tile]:
+        flankDistToCheck = int(self.intergeneral_analysis.shortestPathWay.distance * 1.5)
+        flankPathTiles = set()
+        for pathway in self.intergeneral_analysis.pathWays:
+            if pathway.distance < flankDistToCheck and len(pathway.tiles) >= self.intergeneral_analysis.shortestPathWay.distance:
+                for tile in pathway.tiles:
+                    if filter_out_players is None or tile.player not in filter_out_players:
+                        flankPathTiles.add(tile)
 
-		return goodLeaves
+        return flankPathTiles
+
+    # minAltPathCount will force that many paths to be included even if they are greater than maxAltLength
+    def find_flank_leaves(
+            self,
+            leafMoves,
+            minAltPathCount,
+            maxAltLength
+    ) -> typing.List[Move]:
+        goodLeaves: typing.List[Move] = []
+
+        # order by: totalDistance, then pick tile by closestToOpponent
+        cutoffDist = self.intergeneral_analysis.shortestPathWay.distance // 4
+        includedPathways = set()
+        for move in leafMoves:
+            # sometimes these might be cut off by only being routed through the general
+            neutralCity = (move.dest.isCity and move.dest.player == -1)
+            if not neutralCity and move.dest in self.intergeneral_analysis.pathWayLookupMatrix and move.source in self.intergeneral_analysis.pathWayLookupMatrix:
+                pathwaySource = self.intergeneral_analysis.pathWayLookupMatrix[move.source]
+                pathwayDest = self.intergeneral_analysis.pathWayLookupMatrix[move.dest]
+                if pathwaySource.distance <= maxAltLength:
+                    #if pathwaySource not in includedPathways:
+                    if pathwaySource.distance > pathwayDest.distance or pathwaySource.distance == pathwayDest.distance:
+                        # moving to a shorter path or moving along same distance path
+                        # If getting further from our general (and by extension closer to opp since distance is equal)
+                        gettingFurtherFromOurGen = self.intergeneral_analysis.aMap[move.source.x][move.source.y] < self.intergeneral_analysis.aMap[move.dest.x][move.dest.y]
+                        # not more than cutoffDist tiles behind our general, effectively
+
+                        reasonablyCloseToTheirGeneral = self.intergeneral_analysis.bMap[move.dest.x][move.dest.y] < cutoffDist + self.intergeneral_analysis.aMap[self.intergeneral_analysis.tileB.x][self.intergeneral_analysis.tileB.y]
+
+                        if (gettingFurtherFromOurGen and reasonablyCloseToTheirGeneral):
+                            includedPathways.add(pathwaySource)
+                            goodLeaves.append(move)
+                    else:
+                        logging.info("Pathway for tile {} was already included, skipping".format(move.source.toString()))
+
+        return goodLeaves

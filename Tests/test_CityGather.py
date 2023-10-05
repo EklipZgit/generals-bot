@@ -303,7 +303,7 @@ class CityGatherTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=28)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=28)
         self.assertIsNone(winner)
 
         city = self.get_player_tile(12, 6, simHost.sim, general.player)
@@ -327,3 +327,43 @@ class CityGatherTests(TestBase):
         self.assertIsNone(winner)
 
         # TODO add asserts for should_not_gather_loop
+    
+    def test_should_capture_city_without_leaving_it_at_0(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_capture_city_without_leaving_it_at_0___VMdrjWFo2---0--172.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 172, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=172)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=4)
+        self.assertIsNone(winner)
+
+        misAttackedCity = self.get_player_tile(3, 12, simHost.sim, general.player)
+        self.assertEqual(general.player, misAttackedCity.player)
+    
+    def test_should_capture_city_without_leaving_it_at_0__longer(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_capture_city_without_leaving_it_at_0__longer___VMdrjWFo2---0--167.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 167, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=167)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=9)
+        self.assertIsNone(winner)
+
+        misAttackedCity = self.get_player_tile(3, 12, simHost.sim, general.player)
+        self.assertEqual(general.player, misAttackedCity.player)

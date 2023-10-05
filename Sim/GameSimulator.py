@@ -8,6 +8,7 @@ from BotHost import BotHostBase
 from DataModels import Move
 from Path import Path
 from SearchUtils import count, where
+from Sim.TextMapLoader import TextMapLoader
 from base.bot_base import create_thread
 from base.client.map import MapBase, Tile, TILE_EMPTY, TILE_OBSTACLE, Score, TILE_FOG, TILE_MOUNTAIN, TileDelta
 from bot_ek0x45 import EklipZBot
@@ -180,6 +181,7 @@ class GameSimulator(object):
         self.sim_map: MapBase = map_raw
         self.moves: typing.List[typing.Union[None, Move]] = [None for i in range(len(map_raw.players))]
         self.moves_history: typing.List[typing.List[typing.Union[None, Move]]] = []
+        """moves_history[-1] is the most recent set of moves, and moves_history[-1][0] would be player 0's selected move."""
         self.tiles_updated_this_cycle: typing.Set[Tile] = set()
         self.ignore_illegal_moves = ignore_illegal_moves
 
@@ -458,16 +460,7 @@ class GameSimulatorHost(object):
 
         self.player_with_viewer: int = player_with_viewer
 
-        charMap = {
-            0: 'a',
-            1: 'b',
-            2: 'c',
-            3: 'd',
-            4: 'e',
-            5: 'f',
-            6: 'g',
-            7: 'h'
-        }
+        charMap = [c for c, idx in TextMapLoader.get_player_char_index_map()]
 
         for i in range(len(self.bot_hosts)):
             char = charMap[i]
@@ -530,7 +523,7 @@ class GameSimulatorHost(object):
                 botHost.run_viewer_loop()
 
         if run_real_time:
-            # time to look at the first move
+            # time to look at the first move, pygame doesn't start up that quickly
             time.sleep(2)
 
         winner = None
@@ -565,7 +558,8 @@ class GameSimulatorHost(object):
             logging.fatal(f'IMPORT TEST FILES FOR TURN {self.sim.turn} FROM @ {repr([b.eklipz_bot.logDirectory for b in self.bot_hosts if b is not None])}')
             raise
 
-        self.wait_until_viewer_closed_or_time_elapses(max(3.0, turn_time * 4))
+        if run_real_time:
+            self.wait_until_viewer_closed_or_time_elapses(max(3.0, turn_time * 4))
 
         self.sim.end_game()
         for botHost in self.bot_hosts:
@@ -609,7 +603,6 @@ class GameSimulatorHost(object):
     def apply_map_vision(self, player: int, rawMap: MapBase):
         playerToGiveVision = self.sim.players[player]
         playerToGiveVision.set_map_vision(rawMap)
-
 
     def queue_player_moves_str(self, player: int, moves_str: str):
         """
@@ -665,7 +658,7 @@ class GameSimulatorHost(object):
 
                 moveTime = time.perf_counter() - moveStart
                 if self.sim.sim_map.turn > 20 and moveTime > self.player_move_cutoff_time and not DebugHelper.IS_DEBUGGING:
-                    logging.error(f'turn {self.sim.sim_map.turn}: player {playerIndex} {self.sim.sim_map.usernames[playerIndex]} took {moveTime:.3f} to move, discarding its move!')
+                    logging.error(f'turn {self.sim.sim_map.turn}: player {playerIndex} {self.sim.sim_map.usernames[playerIndex]} took {moveTime:.3f} to move, dropping its move!')
                     self.sim.make_move(playerIndex, None, force=True)
                     self.dropped_move_counts_by_player[playerIndex] += 1
 

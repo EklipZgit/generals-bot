@@ -66,8 +66,12 @@ class TestBase(unittest.TestCase):
     ) -> typing.Tuple[MapBase, Tile]:
         board = TextMapLoader.load_map_from_string(rawMapDataString)
         data = TextMapLoader.load_data_from_string(rawMapDataString)
+        numPlayers = 0
+        for character, index in TextMapLoader.get_player_char_index_map():
+            if f'{character}Tiles' in data:
+                numPlayers = index + 1
 
-        map = self.get_test_map(board, turn=turn, dont_set_seen_visible_discovered=respect_undiscovered)
+        map = self.get_test_map(board, turn=turn, dont_set_seen_visible_discovered=respect_undiscovered, num_players=numPlayers)
         TextMapLoader.load_map_data_into_map(map, data)
         general = next(t for t in map.pathableTiles if t.isGeneral and (t.player == player_index or player_index == -1))
         map.player_index = general.player
@@ -209,17 +213,17 @@ class TestBase(unittest.TestCase):
 
         return map, general, enemyGen
 
-    def set_general_emergence_around(self, x: int, y: int, simHost: GameSimulatorHost, botPlayer: int, emergencePlayer: int):
+    def set_general_emergence_around(self, x: int, y: int, simHost: GameSimulatorHost, botPlayer: int, emergencePlayer: int, emergenceAmt: int = 40):
         bot = simHost.get_bot(botPlayer)
 
         botTile = bot._map.GetTile(x, y)
 
         def emergenceMarker(t: Tile, dist: int):
-            bot.armyTracker.emergenceLocationMap[emergencePlayer][t.x][t.y] = 200 // (dist + 5)
+            bot.armyTracker.emergenceLocationMap[emergencePlayer][t.x][t.y] = (emergenceAmt * 5) // (dist + 5)
 
-        SearchUtils.breadth_first_foreach_dist(bot._map, [botTile], 5, emergenceMarker)
+        SearchUtils.breadth_first_foreach_dist(bot._map, [botTile], 5, emergenceMarker, skipFunc=lambda t: t.discovered or t.visible)
 
-        bot.armyTracker.emergenceLocationMap[emergencePlayer][x][y] += 30
+        bot.armyTracker.emergenceLocationMap[emergencePlayer][x][y] += emergenceAmt
 
     def get_test_map(self, tiles: typing.List[typing.List[Tile]], turn: int = 1, player_index: int = 0, dont_set_seen_visible_discovered: bool = False, num_players: int = -1) -> MapBase:
         self._initialize()
@@ -240,7 +244,7 @@ class TestBase(unittest.TestCase):
 
         fakeScores = [Score(n, 100, 100, False) for n in range(0, num_players)]
 
-        usernames = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+        usernames = [c for c, idx in TextMapLoader.get_player_char_index_map()]
 
         map = MapBase(player_index=player_index, teams=None, user_names=usernames[0:num_players], turn=turn, map_grid_y_x=tiles, replay_url='42069')
         map.update_scores(fakeScores)
@@ -791,8 +795,13 @@ class TestBase(unittest.TestCase):
             if tile.player == enemyGeneral.player:
                 countScoreEnemy.add(tile.army)
 
-        SearchUtils.breadth_first_foreach_dist(map, [general, enemyGeneral], 100, generateTilesFunc,
-                                               skipFunc=lambda tile: tile.isObstacle, bypassDefaultSkip=True)
+        SearchUtils.breadth_first_foreach_dist(
+            map,
+            [general, enemyGeneral],
+            100,
+            generateTilesFunc,
+            skipFunc=lambda tile: tile.isObstacle,
+            bypassDefaultSkip=True)
 
         if enemyGeneralTargetScore is not None and countScoreEnemy.value > enemyGeneralTargetScore:
             countScoreEnemy.value = countScoreEnemy.value - enemyGeneral.army + 1
@@ -815,7 +824,7 @@ class TestBase(unittest.TestCase):
                     countScoreGeneral.add(1)
                     tile.army += 1
 
-        scores: typing.List[None | Score] = [None for _ in map.players]
+        scores: typing.List[Score] = [Score(idx, 0, 0, True) for idx, p in enumerate(map.players)]
         scores[general.player] = Score(general.player, countScoreGeneral.value, countTilesGeneral.value, dead=False)
         scores[enemyGeneral.player] = Score(enemyGeneral.player, countScoreEnemy.value, countTilesEnemy.value, dead=False)
 

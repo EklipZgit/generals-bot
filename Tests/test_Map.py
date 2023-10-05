@@ -7,7 +7,7 @@ from DataModels import Move
 from Sim.GameSimulator import GameSimulator, GameSimulatorHost
 from TestBase import TestBase
 from ViewInfo import ViewInfo
-from base.client.map import MapBase, Tile, TILE_FOG, TILE_OBSTACLE
+from base.client.map import MapBase, Tile, TILE_FOG, TILE_OBSTACLE, TILE_MOUNTAIN, Score
 from bot_ek0x45 import EklipZBot
 
 
@@ -29,16 +29,60 @@ class MapTests(TestBase):
 
         failures = []
 
-        if len(simHost.sim.moves_history) > 0:
-            skipFromToCollisionTiles = self.get_collision_tiles(simHost.sim.moves_history[-1])
-        else:
-            skipFromToCollisionTiles = set()
+        skipFromToCollisionTiles = set()
+        # WHY WOULD WE SKIP COLLISION TILES, THIS IS MESSING UP test_run_adj_collision_mutual TEST!?
+        # if len(simHost.sim.moves_history) > 0:
+        #     skipFromToCollisionTiles = self.get_collision_tiles(simHost.sim.moves_history[-1])
 
         for player in players:
             playerMap = simHost.get_player_map(player)
             # playerBot = simHost.get_bot(player)
             # if playerBot.armyTracker.lastTurn != realMap.turn:
             #     playerBot.init_turn()
+
+            for playerMapPlayer in playerMap.players:
+                if len(simHost.sim.moves_history) > 0:
+                    simPlayerMove = simHost.sim.moves_history[-1][playerMapPlayer.index]
+                    if simPlayerMove is None and playerMapPlayer.last_move is not None:
+                        failures.append(
+                            f'(pMap {player} had incorrect last move for player {playerMapPlayer.index}. Expected None, found {str(playerMapPlayer.last_move)}')
+                    elif simPlayerMove is not None:
+                        # ignore if the target players move got nuked with priority:
+                        simDest = simHost.sim.sim_map.GetTile(simPlayerMove.dest.x, simPlayerMove.dest.y)
+                        if simDest.delta.armyDelta == 0:
+                            continue
+                        simSrc = simHost.sim.sim_map.GetTile(simPlayerMove.source.x, simPlayerMove.source.y)
+                        priorityKillerMoves = []
+                        for i, move in enumerate(simHost.sim.moves_history[-1]):
+                            if i == playerMapPlayer.index:
+                                continue
+                            if move is None:
+                                continue
+                            if (
+                                    move.dest.x == simSrc.x
+                                    and move.dest.y == simSrc.y
+                                    and MapBase.player_had_priority_over_other(i, playerMapPlayer.index,
+                                                                               simHost.sim.turn)
+                                    and move.army_moved > simSrc.delta.oldArmy - 1
+                            ):
+                                priorityKillerMoves.append(move)
+
+                        if len(priorityKillerMoves) > 0:
+                            continue
+
+                        if playerMapPlayer.last_move is None:
+                            failures.append(
+                                f'(pMap {player} had incorrect last move for player {playerMapPlayer.index}. Expected {str(simPlayerMove)}, found None')
+                        else:
+                            pSource, pDest = playerMapPlayer.last_move
+                            if (
+                                    simPlayerMove.source.x != pSource.x
+                                    or simPlayerMove.source.y != pSource.y
+                                    or simPlayerMove.dest.x != pDest.x
+                                    or simPlayerMove.dest.y != pDest.y
+                            ):
+                                failures.append(
+                                    f'(pMap {player} had incorrect last move for player {playerMapPlayer.index}. Expected {str(simPlayerMove)}, found {str(playerMapPlayer.last_move)}')
 
             for tile in realMap.get_all_tiles():
                 playerTile = playerMap.GetTile(tile.x, tile.y)
@@ -61,6 +105,7 @@ class MapTests(TestBase):
                     failures.append(f'(pMap {player} tile {str(tile)}) expected player {tile.player} on {repr(tile)}, found {playerTile.player} on {repr(playerTile)}')
                 if playerTile.isCity != tile.isCity:
                     failures.append(f'(pMap {player} tile {str(tile)}) expected isCity {tile.isCity} on {repr(tile)}, found {playerTile.isCity} on {repr(playerTile)}')
+
                 if not playerTile.delta.discovered:
                     # these asserts are not valid the turn of discovery...?
                     if playerTile.delta.armyDelta != tile.delta.armyDelta:
@@ -93,10 +138,10 @@ class MapTests(TestBase):
 
     def get_collision_tiles(self, playerMoves: typing.List[Move | None]) -> typing.Set[Tile]:
         ignoreCollisions: typing.Set[Tile] = set()
-        for pMove in playerMoves:
+        for pp, pMove in enumerate(playerMoves):
             if pMove is None:
                 continue
-            for opMove in playerMoves:
+            for op, opMove in enumerate(playerMoves):
                 if opMove is None:
                     continue
                 if pMove == opMove:
@@ -109,8 +154,12 @@ class MapTests(TestBase):
                 ):
                     # then these moves collided completely and the players will not be able to differentiate whether
                     # the player with the smaller army tile made a move at all.
-                    ignoreCollisions.add(pMove.source)
-                    ignoreCollisions.add(pMove.dest)
+                    if pMove.source.army - 1 < opMove.source.army:
+                        # then cant differentiate this from no move
+                        ignoreCollisions.add(pMove.source)
+                    if opMove.source.army - 1 < pMove.source.army:
+                        # then cant differentiate this from no move
+                        ignoreCollisions.add(pMove.dest)
         return ignoreCollisions
 
     def run_map_delta_test(
@@ -139,9 +188,9 @@ class MapTests(TestBase):
             renderP0 = False
             renderP1 = False
 
-            # renderTurnBeforeSim = True
+            renderTurnBeforeSim = True
             # renderTurnBeforePlayers = True
-            # renderP0 = True
+            renderP0 = True
             renderP1 = True
 
             def mapRenderer():
@@ -380,33 +429,274 @@ b1
         self.assertEqual(general, targetTile.delta.fromTile)
         self.assertEqual(targetTile, general.delta.toTile)
 
-        def test_tile_delta_against_neutral_city_non_bonus_turn(self):
-            mapRaw = """
-    |  
-    aG7
-    C5
+    def test_tile_delta_against_neutral_city_non_bonus_turn(self):
+        mapRaw = """
+|  
+aG7
+C5
 
 
-    | 
-    """
-            map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=0)
+| 
+"""
+        map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=0)
 
-            targetTile = map.GetTile(0, 1)
-            genArmyMoved = general.army - 1
+        targetTile = map.GetTile(0, 1)
+        genArmyMoved = general.army - 1
 
-            map.update_turn(13)
-            map.update_visible_tile(targetTile.x, targetTile.y, general.player, genArmyMoved - targetTile.army,
-                                    is_city=True,
-                                    is_general=False)
-            map.update_visible_tile(general.x, general.y, general.player, 1, is_city=False, is_general=True)
-            map.update()
+        map.update_turn(13)
+        map.update_visible_tile(targetTile.x, targetTile.y, general.player, genArmyMoved - targetTile.army,
+                                is_city=True,
+                                is_general=False)
+        map.update_visible_tile(general.x, general.y, general.player, 1, is_city=False, is_general=True)
+        map.update()
 
-            self.assertEqual(0 - genArmyMoved, general.delta.armyDelta)
-            self.assertEqual(0 - genArmyMoved, targetTile.delta.armyDelta)
-            self.assertEqual(1, targetTile.army)
-            self.assertEqual(0, targetTile.player)
-            self.assertEqual(general, targetTile.delta.fromTile)
-            self.assertEqual(targetTile, general.delta.toTile)
+        self.assertEqual(0 - genArmyMoved, general.delta.armyDelta)
+        self.assertEqual(0 - genArmyMoved, targetTile.delta.armyDelta)
+        self.assertEqual(1, targetTile.army)
+        self.assertEqual(0, targetTile.player)
+        self.assertEqual(general, targetTile.delta.fromTile)
+        self.assertEqual(targetTile, general.delta.toTile)
+
+    def test_incorrect_city_fog_prediction_one_of_each_incorrect_adjacent(self):
+        mapRaw = """
+|    |    |    |    |
+aG7
+      
+aC10
+aC9
+aC5       b5        bG1
+|    |    |    |    |
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapRaw, turn=13, player_index=1)
+
+        targetTileActuallyEnCity = map.GetTile(0, 2)
+        targetTileActuallyEnCity.discovered = False
+        targetTileActuallyEnCity.visible = False
+        targetTileActuallyEnCity.tile = TILE_OBSTACLE
+        targetTileActuallyEnCity.lastSeen = -1
+        targetTileActuallyEnCity.lastMovedTurn = -1
+
+        targetTileActuallyNeutral = map.GetTile(0, 3)
+        targetTileActuallyNeutral.discovered = False
+        targetTileActuallyNeutral.visible = False
+        targetTileActuallyNeutral.tile = TILE_OBSTACLE
+        targetTileActuallyNeutral.lastSeen = -1
+        targetTileActuallyNeutral.lastMovedTurn = -1
+
+        targetTileActuallyMountain = map.GetTile(0, 4)
+        targetTileActuallyMountain.discovered = False
+        targetTileActuallyMountain.visible = False
+        targetTileActuallyMountain.tile = TILE_OBSTACLE
+        targetTileActuallyMountain.lastSeen = -1
+        targetTileActuallyMountain.lastMovedTurn = -1
+
+        self.assertFalse(targetTileActuallyEnCity.isNeutral)
+        self.assertEqual(10, targetTileActuallyEnCity.army)  # would have been 11 on this turn due to city increment, so 1 more than expected.
+        self.assertEqual(0, targetTileActuallyEnCity.delta.unexplainedDelta)
+
+        self.begin_capturing_logging()
+        map.update_turn(14)
+        map.update_scores([
+            Score(enemyGeneral.player, map.scores[enemyGeneral.player].total + 2, map.scores[enemyGeneral.player].tiles, False),
+            Score(general.player, map.scores[general.player].total + 1, map.scores[general.player].tiles, False)
+        ])
+
+        map.update_visible_tile(targetTileActuallyEnCity.x, targetTileActuallyEnCity.y, enemyGeneral.player, 12, is_city=True, is_general=False)
+        # should result in delta of 1..?
+
+        map.update_visible_tile(targetTileActuallyNeutral.x, targetTileActuallyNeutral.y, -1, 45, is_city=True, is_general=False)
+
+        map.update_visible_tile(targetTileActuallyMountain.x, targetTileActuallyMountain.y, TILE_MOUNTAIN, 0, is_city=False, is_general=False)
+
+        map.update()
+
+        self.assertFalse(targetTileActuallyEnCity.isNeutral)
+        self.assertEqual(12, targetTileActuallyEnCity.army)  # would have been 11 on this turn due to city increment, so 1 more than expected.
+        self.assertEqual(1, targetTileActuallyEnCity.delta.unexplainedDelta)
+        self.assertIn(targetTileActuallyEnCity, map.army_emergences)
+
+        emergenceVal, emergencePlayer = map.army_emergences[targetTileActuallyEnCity]
+        self.assertEqual(1, emergenceVal)
+        self.assertEqual(0, emergencePlayer)
+
+        self.assertFalse(targetTileActuallyEnCity.isMountain)
+        self.assertFalse(targetTileActuallyEnCity.isUndiscoveredObstacle)
+        self.assertFalse(targetTileActuallyEnCity.isObstacle)  # player cities are not obstacles
+        self.assertEqual(enemyGeneral.player, targetTileActuallyEnCity.delta.oldOwner)
+        self.assertEqual(enemyGeneral.player, targetTileActuallyEnCity.delta.newOwner)
+        self.assertEqual(enemyGeneral.player, targetTileActuallyEnCity.player)
+        self.assertTrue(targetTileActuallyEnCity.delta.armyMovedHere)
+        self.assertTrue(targetTileActuallyEnCity.delta.imperfectArmyDelta)  # since it isn't neutral, we don't know for sure what happened between turns since we just gained vision.
+
+        self.assertTrue(targetTileActuallyNeutral.isNeutral)
+        self.assertEqual(45, targetTileActuallyNeutral.army)
+        self.assertFalse(targetTileActuallyNeutral.isMountain)
+        self.assertFalse(targetTileActuallyNeutral.isUndiscoveredObstacle)
+        self.assertTrue(targetTileActuallyNeutral.isObstacle)
+        self.assertEqual(enemyGeneral.player, targetTileActuallyNeutral.delta.oldOwner)
+        self.assertFalse(targetTileActuallyNeutral.delta.armyMovedHere)
+        self.assertFalse(targetTileActuallyNeutral.delta.imperfectArmyDelta)
+        self.assertEqual(0, targetTileActuallyNeutral.delta.armyDelta)
+        self.assertEqual(0, targetTileActuallyNeutral.delta.unexplainedDelta)
+
+        self.assertEqual(0, targetTileActuallyMountain.army)
+        self.assertTrue(targetTileActuallyMountain.isMountain)
+        self.assertFalse(targetTileActuallyMountain.isUndiscoveredObstacle)
+        self.assertTrue(targetTileActuallyMountain.isObstacle)
+        self.assertEqual(enemyGeneral.player, targetTileActuallyMountain.delta.oldOwner)
+        self.assertEqual(-1, targetTileActuallyMountain.delta.newOwner)
+        self.assertFalse(targetTileActuallyMountain.delta.armyMovedHere)
+        self.assertEqual(0, targetTileActuallyMountain.delta.armyDelta)
+        self.assertEqual(0, targetTileActuallyMountain.delta.unexplainedDelta)
+        self.assertFalse(targetTileActuallyMountain.delta.imperfectArmyDelta)
+        self.assertFalse(targetTileActuallyMountain.isCity)
+        self.assertEqual(TILE_MOUNTAIN, targetTileActuallyMountain.tile)
+
+        self.assertEqual(1, len(map.army_emergences))  # should only be the one emergence in there.
+
+    def test_incorrect_city_fog_prediction_correct_but_wrong_army(self):
+        mapRaw = """
+|    |    |    |    |
+aG7
+      
+aC10
+C45
+M         b5        bG1
+|    |    |    |    |
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapRaw, turn=13, player_index=1)
+
+        targetTileActuallyEnCity = map.GetTile(0, 2)
+        targetTileActuallyEnCity.discovered = False
+        targetTileActuallyEnCity.visible = False
+        targetTileActuallyEnCity.tile = TILE_OBSTACLE
+        targetTileActuallyEnCity.lastSeen = -1
+        targetTileActuallyEnCity.lastMovedTurn = -1
+
+        self.assertFalse(targetTileActuallyEnCity.isNeutral)
+        self.assertEqual(10, targetTileActuallyEnCity.army)  # would have been 11 on this turn due to city increment, so 1 more than expected.
+        self.assertEqual(0, targetTileActuallyEnCity.delta.unexplainedDelta)
+
+        self.begin_capturing_logging()
+        map.update_turn(14)
+        map.update_scores([
+            Score(enemyGeneral.player, map.scores[enemyGeneral.player].total + 2, map.scores[enemyGeneral.player].tiles, False),
+            Score(general.player, map.scores[general.player].total + 1, map.scores[general.player].tiles, False)
+        ])
+
+        map.update_visible_tile(targetTileActuallyEnCity.x, targetTileActuallyEnCity.y, enemyGeneral.player, 12, is_city=True, is_general=False)
+        # should result in delta of 1..?
+
+        map.update()
+
+        self.assertFalse(targetTileActuallyEnCity.isNeutral)
+        self.assertEqual(12, targetTileActuallyEnCity.army)  # would have been 11 on this turn due to city increment, so 1 more than expected.
+        self.assertEqual(1, targetTileActuallyEnCity.delta.unexplainedDelta)
+        self.assertEqual(1, targetTileActuallyEnCity.delta.armyDelta)
+        self.assertIn(targetTileActuallyEnCity, map.army_emergences)
+
+        emergenceVal, emergencePlayer = map.army_emergences[targetTileActuallyEnCity]
+        self.assertEqual(1, emergenceVal)
+        self.assertEqual(0, emergencePlayer)
+
+        self.assertFalse(targetTileActuallyEnCity.isMountain)
+        self.assertFalse(targetTileActuallyEnCity.isUndiscoveredObstacle)
+        self.assertFalse(targetTileActuallyEnCity.isObstacle)  # player cities are not obstacles
+        self.assertEqual(enemyGeneral.player, targetTileActuallyEnCity.delta.oldOwner)
+        self.assertEqual(enemyGeneral.player, targetTileActuallyEnCity.delta.newOwner)
+        self.assertEqual(enemyGeneral.player, targetTileActuallyEnCity.player)
+        self.assertTrue(targetTileActuallyEnCity.delta.armyMovedHere)
+        self.assertTrue(targetTileActuallyEnCity.delta.imperfectArmyDelta)  # since it isn't neutral, we don't know for sure what happened between turns since we just gained vision.
+
+        self.assertEqual(1, len(map.army_emergences))  # should only be the one emergence in there.
+
+    def test_incorrect_city_fog_prediction_was_neutral_city(self):
+        mapRaw = """
+|    |    |    |    |
+aG7
+      
+M
+aC9
+M         b5        bG1
+|    |    |    |    |
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapRaw, turn=13, player_index=1)
+
+        targetTileActuallyNeutral = map.GetTile(0, 3)
+        targetTileActuallyNeutral.discovered = False
+        targetTileActuallyNeutral.visible = False
+        targetTileActuallyNeutral.tile = TILE_OBSTACLE
+        targetTileActuallyNeutral.lastSeen = -1
+        targetTileActuallyNeutral.lastMovedTurn = -1
+
+        self.begin_capturing_logging()
+        map.update_turn(14)
+        map.update_scores([
+            Score(enemyGeneral.player, map.scores[enemyGeneral.player].total + 2, map.scores[enemyGeneral.player].tiles, False),
+            Score(general.player, map.scores[general.player].total + 1, map.scores[general.player].tiles, False)
+        ])
+
+        map.update_visible_tile(targetTileActuallyNeutral.x, targetTileActuallyNeutral.y, -1, 45, is_city=True, is_general=False)
+
+        map.update()
+
+        self.assertTrue(targetTileActuallyNeutral.isNeutral)
+        self.assertEqual(45, targetTileActuallyNeutral.army)
+        self.assertFalse(targetTileActuallyNeutral.isMountain)
+        self.assertFalse(targetTileActuallyNeutral.isUndiscoveredObstacle)
+        self.assertTrue(targetTileActuallyNeutral.isObstacle)
+        self.assertEqual(enemyGeneral.player, targetTileActuallyNeutral.delta.oldOwner)
+        self.assertFalse(targetTileActuallyNeutral.delta.armyMovedHere)
+        self.assertFalse(targetTileActuallyNeutral.delta.imperfectArmyDelta)
+        self.assertEqual(0, targetTileActuallyNeutral.delta.unexplainedDelta)
+        self.assertEqual(0, targetTileActuallyNeutral.delta.armyDelta)
+
+        self.assertEqual(0, len(map.army_emergences))  # should only be the one emergence in there.
+
+    def test_incorrect_city_fog_prediction_was_mountain(self):
+        mapRaw = """
+|    |    |    |    |
+aG7
+      
+M 
+M
+aC5       b5        bG1
+|    |    |    |    |
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapRaw, turn=13, player_index=1)
+
+        targetTileActuallyMountain = map.GetTile(0, 4)
+        targetTileActuallyMountain.discovered = False
+        targetTileActuallyMountain.visible = False
+        targetTileActuallyMountain.tile = TILE_OBSTACLE
+        targetTileActuallyMountain.lastSeen = -1
+        targetTileActuallyMountain.lastMovedTurn = -1
+
+        self.begin_capturing_logging()
+        map.update_turn(14)
+        map.update_scores([
+            Score(enemyGeneral.player, map.scores[enemyGeneral.player].total + 2, map.scores[enemyGeneral.player].tiles, False),
+            Score(general.player, map.scores[general.player].total + 1, map.scores[general.player].tiles, False)
+        ])
+
+        map.update_visible_tile(targetTileActuallyMountain.x, targetTileActuallyMountain.y, TILE_MOUNTAIN, 0, is_city=False, is_general=False)
+
+        map.update()
+
+        self.assertEqual(0, targetTileActuallyMountain.army)
+        self.assertTrue(targetTileActuallyMountain.isMountain)
+        self.assertFalse(targetTileActuallyMountain.isUndiscoveredObstacle)
+        self.assertTrue(targetTileActuallyMountain.isObstacle)
+        self.assertEqual(enemyGeneral.player, targetTileActuallyMountain.delta.oldOwner)
+        self.assertEqual(-1, targetTileActuallyMountain.delta.newOwner)
+        self.assertEqual(0, targetTileActuallyMountain.delta.armyDelta)
+        self.assertEqual(0, targetTileActuallyMountain.delta.unexplainedDelta)
+        self.assertFalse(targetTileActuallyMountain.delta.imperfectArmyDelta)
+        self.assertFalse(targetTileActuallyMountain.isCity)
+        self.assertEqual(TILE_MOUNTAIN, targetTileActuallyMountain.tile)
+        self.assertFalse(targetTileActuallyMountain.delta.armyMovedHere)
+
+        self.assertEqual(0, len(map.army_emergences))  # should only be the one emergence in there.
 
     def test_tile_delta_against_neutral_city_on_bonus_turn(self):
         mapRaw = """
@@ -633,6 +923,11 @@ C5
         self.assertEqual(enemyPlayer, m.GetTile(11, 12).player)
         self.assertEqual(enemyPlayer, m.GetTile(12, 12).player)
 
+    def test_run_adj_collision_mutual(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        # DONT CHANGE THIS ONE, IT WAS FAILING AND BYPASSING THE COLLISION ASSERTS...
+        self.run_adj_test(debugMode=debugMode, aArmy=20, bArmy=5, aMove=(1, 0), bMove=(-1, -0), turn=96)
+
 # TODO missing test for army collision deltas? Actually I think that test exists, somewhere
     
     def test_small_gather_adj_to_fog_should_not_double_gather_from_fog(self):
@@ -762,11 +1057,14 @@ C5
                                     # 1905
                                     # 113
                                     # 0
+                                    # 261~
+                                    # 197~
                                     self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bArmyAdjacent=bArmyAdjacent)
 
     def test_run_one_off_fog_island_border_capture_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=20, bArmy=12, bMove=(-1, 0), turn=96, seenFog=True, bArmyAdjacent=True)
+        # TODO!!
+        self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=8, bArmy=9, bMove=(-1, 0), turn=96, seenFog=False, bArmyAdjacent=True)
 
     def test_generate_all_fog_island_full_capture_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -783,11 +1081,14 @@ C5
                                     # 1073
                                     # 1073
                                     # 177
+                                    # 697~
+                                    # 569~
                                     self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bHasNearbyVision=bHasNearbyVision)
 
     def test_run_one_off_fog_island_full_capture_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=8, bArmy=9, bMove=(1, 0), turn=97, seenFog=False, bHasNearbyVision=False)
+        # TODO
+        self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=15, bArmy=20, bMove=(-1, 0), turn=97, seenFog=False, bHasNearbyVision=True)
 
     def test_generate_all_out_of_fog_collision_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -819,11 +1120,14 @@ C5
                         for turn in [96, 97]:
                             with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn):
                                 # 0
+                                # 163~
+                                # 99~
                                 self.run_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_adj_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        self.run_adj_test(debugMode=debugMode, aArmy=5, bArmy=9, aMove=(1, 0), bMove=(0, -1), turn=97)
+        # TODO
+        self.run_adj_test(debugMode=debugMode, aArmy=8, bArmy=12, aMove=(1, 0), bMove=(-1, 0), turn=96)
 
     def test_generate_all_diagonal_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -840,5 +1144,5 @@ C5
                                 self.run_diag_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_diag_test(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         self.run_diag_test(debugMode=debugMode, aArmy=5, bArmy=15, aMove=(0, 1), bMove=(1, 0), turn=96)

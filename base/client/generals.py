@@ -268,24 +268,24 @@ class GeneralsClient(object):
                     if self.talking_to_bot(message) or self.is_not_ffa():
                         if message.lower().find("kill human") != -1:
                             if self._map.turn < 50:
-                                self.chatQueued.append(
+                                self.send_chat_broken_up_by_sentence(
                                     "Teaming at game start is against the rules. This has been logged. My dad is a microsoft ur gonna get banned")
-                                self.chatQueued.append(
+                                self.send_chat_broken_up_by_sentence(
                                     "You may notice I'm a little bit friendlier recently, it may be worth NOT attacking me sometimes ;)")
                             elif random.choice(range(1, 5)) <= 3:
                                 self.send_chat(
                                     "Yo, you know I have feelings just like everyone else, right? I'm trying to get stars and have fun, just like you :(")
                             else:
-                                self.chatQueued.append(
+                                self.send_chat_broken_up_by_sentence(
                                     "Hey everyone who isn't this guy: just a heads up, my creator is working on my teaming capabilities.")
-                                self.chatQueued.append(
+                                self.send_chat_broken_up_by_sentence(
                                     "You may notice I'm a little bit friendlier recently, it may be worth NOT attacking me sometimes ;)")
                         swore = False
                         for curseword in self.cursewords:
                             if curseword in message:
                                 swore = True
                         if swore:
-                            self.chatQueued.append(
+                            self.send_chat_broken_up_by_sentence(
                                 "are you mad because you are struggling against a bot, or because you're going through your tough teenage years? Maybe try yoga or meditation bud")
 
                     if message.lower().startswith("gg"):
@@ -406,7 +406,7 @@ class GeneralsClient(object):
                         randNum = random.choice(range(1, 7))
                         if randNum > 4:
                             sourceResponses = lessCommonResponses
-                        self.chatQueued.append(random.choice(sourceResponses))
+                        self.send_chat_broken_up_by_sentence(random.choice(sourceResponses))
                         self.already_good_lucked = True
                     if self.writingFile or humanMessage:
                         self.writingFile = True
@@ -575,10 +575,9 @@ class GeneralsClient(object):
     def _delayed_chat_thread(self):
         while True:
             if len(self.chatQueued) > 0:
-                message = self.chatQueued[0]
-                self.chatQueued.remove(message)
+                message = self.chatQueued.pop(0)
                 self.send_chat(message)
-            time.sleep(3)
+            time.sleep(4)
 
     def _send(self, msg):
         try:
@@ -600,6 +599,10 @@ class GeneralsClient(object):
 
     def talking_to_bot(self, message: str) -> bool:
         return "human" in message.lower() or " bot" in message.lower() or message.lower().startswith("bot ")
+
+    def send_chat_broken_up_by_sentence(self, message: str):
+        for msgSplit in message.split('. '):
+            self.chatQueued.append(msgSplit)
 
 
 def _spawn(f):

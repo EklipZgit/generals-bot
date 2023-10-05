@@ -21,7 +21,7 @@ class GameSimulatorTests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player)
 
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.501)
+        simHost.run_sim(run_real_time=debugMode, turn_time=0.0001)
 
     def test_loads_map_data_correctly_per_player(self):
         map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/242.txtmap', 242, player_index=1)

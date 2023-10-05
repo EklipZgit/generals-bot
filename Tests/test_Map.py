@@ -31,8 +31,8 @@ class MapTests(TestBase):
 
         skipFromToCollisionTiles = set()
         # WHY WOULD WE SKIP COLLISION TILES, THIS IS MESSING UP test_run_adj_collision_mutual TEST!?
-        # if len(simHost.sim.moves_history) > 0:
-        #     skipFromToCollisionTiles = self.get_collision_tiles(simHost.sim.moves_history[-1])
+        if len(simHost.sim.moves_history) > 0:
+            skipFromToCollisionTiles = self.get_collision_tiles(simHost.sim.moves_history[-1])
 
         for player in players:
             playerMap = simHost.get_player_map(player)
@@ -43,6 +43,7 @@ class MapTests(TestBase):
             for playerMapPlayer in playerMap.players:
                 if len(simHost.sim.moves_history) > 0:
                     simPlayerMove = simHost.sim.moves_history[-1][playerMapPlayer.index]
+
                     if simPlayerMove is None and playerMapPlayer.last_move is not None:
                         failures.append(
                             f'(pMap {player} had incorrect last move for player {playerMapPlayer.index}. Expected None, found {str(playerMapPlayer.last_move)}')
@@ -52,6 +53,7 @@ class MapTests(TestBase):
                         if simDest.delta.armyDelta == 0:
                             continue
                         simSrc = simHost.sim.sim_map.GetTile(simPlayerMove.source.x, simPlayerMove.source.y)
+                        simDest = simHost.sim.sim_map.GetTile(simPlayerMove.dest.x, simPlayerMove.dest.y)
                         priorityKillerMoves = []
                         for i, move in enumerate(simHost.sim.moves_history[-1]):
                             if i == playerMapPlayer.index:
@@ -61,10 +63,19 @@ class MapTests(TestBase):
                             if (
                                     move.dest.x == simSrc.x
                                     and move.dest.y == simSrc.y
-                                    and MapBase.player_had_priority_over_other(i, playerMapPlayer.index,
-                                                                               simHost.sim.turn)
-                                    and move.army_moved > simSrc.delta.oldArmy - 1
+                                    and MapBase.player_had_priority_over_other(i, playerMapPlayer.index, simHost.sim.turn)
+                                    and move.army_moved >= simSrc.delta.oldArmy - 1
                             ):
+                                priorityKillerMoves.append(move)
+
+                            if (
+                                    move.dest.x == simSrc.x
+                                    and move.dest.y == simSrc.y
+                                    and move.source.x == simDest.x
+                                    and move.source.y == simDest.y
+                                    and move.army_moved >= simSrc.delta.oldArmy - 1
+                            ):
+                                # then this is a collision and doesn't have enough information to differentiate between
                                 priorityKillerMoves.append(move)
 
                         if len(priorityKillerMoves) > 0:
@@ -1060,6 +1071,7 @@ C5
                                     # 261~
                                     # 197~
                                     # 181
+                                    # 133
                                     self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bArmyAdjacent=bArmyAdjacent)
 
     def test_run_one_off_fog_island_border_capture_test(self):
@@ -1086,12 +1098,13 @@ C5
                                     # 569~
                                     # 921
                                     # 521
+                                    # 425
                                     self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bHasNearbyVision=bHasNearbyVision)
 
     def test_run_one_off_fog_island_full_capture_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         # TODO
-        self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=20, bArmy=2, bMove=(0, 1), turn=96, seenFog=False, bHasNearbyVision=True)
+        self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=2, bArmy=2, bMove=(-1, 0), turn=96, seenFog=True, bHasNearbyVision=True)
 
     def test_generate_all_out_of_fog_collision_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1126,6 +1139,7 @@ C5
                                 # 163~
                                 # 99~
                                 # 91
+                                # 67
                                 self.run_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_adj_test(self):

@@ -1098,9 +1098,9 @@ class ArmyEngine(object):
         logging.info(f'MCTS {decompressedExpectedScore:.0f} : {decompressedExpandedExpectedScore:.0f} iter {mctsSummary.iterations}, nodesExplored {mctsSummary.nodes_explored}, rollouts {mctsSummary.trials_performed}, backprops {mctsSummary.backprop_iter}, rolloutExpansions {mctsSummary.rollout_expansions}, biasedRolloutExpansions {mctsSummary.biased_rollout_expansions}')
 
         if self.honor_mcts_expected_score:
-            result.net_economy_differential = int(round(mctsSummary.expected_score))
+            result.net_economy_differential = int(decompressedExpectedScore)
         elif self.honor_mcts_expanded_expected_score:
-            result.net_economy_differential = int(round(mctsSummary.expanded_expected_score))
+            result.net_economy_differential = int(decompressedExpandedExpectedScore)
 
         return result, mctsSummary
 

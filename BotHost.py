@@ -1,5 +1,6 @@
 import argparse
 import logging
+import queue
 import sys
 import time
 import traceback
@@ -21,7 +22,7 @@ class BotHostBase(object):
     def __init__(
         self,
         name: str,
-        placeMoveFunc: typing.Callable[[Tile, Tile, bool], bool],
+        placeMoveFunc: typing.Callable[[Tile, Tile, bool], None],
         gameType: str,
         noUi: bool = True,
         alignBottom: bool = False,
@@ -42,7 +43,7 @@ class BotHostBase(object):
         self._name = name
         self._game_type = gameType
 
-        self.place_move_func: typing.Callable[[Tile, Tile, bool], bool] = placeMoveFunc
+        self.place_move_func: typing.Callable[[Tile, Tile, bool], None] = placeMoveFunc
 
         self.eklipz_bot = EklipZBot(threadCount=42069)
         self.has_viewer: bool = not FORCE_NO_VIEWER and not noUi
@@ -87,29 +88,16 @@ class BotHostBase(object):
                         f"!!!!!!!!! {move.source.x},{move.source.y} -> {move.dest.x},{move.dest.y} was a bad move from enemy / 1 tile!!!! This turn will do nothing :(")
                 else:
                     with moveTimer.begin_event(f'Sending move {str(move)} to server'):
-                        if not self.place_move_func(move.source, move.dest, move.move_half):
-                            logging.info(
-                                "!!!!!!!!! {},{} -> {},{} was an illegal move!!!! This turn will do nothing :(".format(
-                                    move.source.x, move.source.y,
-                                    move.dest.x, move.dest.y))
-
-            if self.has_viewer and self._viewer is not None:
-                with moveTimer.begin_event(f'Sending turn {currentMap.turn} update to Viewer'):
-                    if timer:
-                        max = 15
-                        cur = 0
-                        for entry in sorted(timer.current_move.event_list, key=lambda e: e.get_duration(),
-                                            reverse=True):
-                            self.eklipz_bot.viewInfo.perfEvents.append(
-                                f'{entry.get_duration():.3f} {entry.event_name}'.lstrip('0'))
-                            cur += 1
-                            if cur > max:
-                                break
-                    self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, currentMap, currentMap.complete)
+                        self.place_move_func(move.source, move.dest, move.move_half)
 
             if not self.eklipz_bot.no_file_logging:
                 with moveTimer.begin_event(f'Dump {currentMap.turn}.txtmap to disk'):
                     self.save_txtmap(currentMap)
+
+            if self.has_viewer and self._viewer is not None:
+                with moveTimer.begin_event(f'Sending turn {currentMap.turn} update to Viewer'):
+                    self.eklipz_bot.viewInfo.perfEvents.extend(moveTimer.get_events_organized_longest_to_shortest(limit=15, indentSize=2))
+                    self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, currentMap, currentMap.complete)
 
             with moveTimer.begin_event(f'Main thread check for pygame exit'):
                 if self.is_viewer_closed_by_user():
@@ -118,6 +106,47 @@ class BotHostBase(object):
                     self.notify_game_over()
 
         return
+
+    def receive_update_no_move(self, currentMap: MapBase):
+        timer: PerformanceTimer = self.eklipz_bot.perf_timer
+        timer.record_update(currentMap.turn)
+
+        if not self.eklipz_bot.isInitialized:
+            self.eklipz_bot.initialize_map_for_first_time(currentMap)
+        self.eklipz_bot._map = currentMap
+
+        startTime = time.perf_counter()
+        with timer.begin_move(currentMap.turn) as moveTimer:
+            try:
+                with moveTimer.begin_event(f'Init turn - no move'):
+                    self.eklipz_bot.init_turn()
+            except:
+                errMsg = traceback.format_exc()
+                self.eklipz_bot.viewInfo.addAdditionalInfoLine(f'ERROR: {errMsg}')
+                logging.error('ERROR: IN EKBOT.init_turn():')
+                logging.error(errMsg)
+                if self.rethrow:
+                    raise
+
+            duration = time.perf_counter() - startTime
+            self.eklipz_bot.viewInfo.lastMoveDuration = duration
+            self.eklipz_bot.viewInfo.addAdditionalInfoLine(f'Missed move chance turn {currentMap.turn}')
+
+            if not self.eklipz_bot.no_file_logging:
+                with moveTimer.begin_event(f'Dump {currentMap.turn}.txtmap to disk'):
+                    self.save_txtmap(currentMap)
+
+            if self.has_viewer and self._viewer is not None:
+                with moveTimer.begin_event(f'Sending turn {currentMap.turn} update to Viewer'):
+                    self.eklipz_bot.viewInfo.perfEvents.extend(moveTimer.get_events_organized_longest_to_shortest(limit=15, indentSize=2))
+                    self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, currentMap, currentMap.complete)
+
+            with moveTimer.begin_event(f'Main thread check for pygame exit'):
+                if self.is_viewer_closed_by_user():
+                    currentMap.complete = True
+                    currentMap.result = False
+                    self.notify_game_over()
+
 
     def save_txtmap(self, map: MapBase):
         try:
@@ -180,6 +209,7 @@ class BotHostLiveServer(BotHostBase):
         # also creates the viewer, for now. Need to move that out to view sim games
         self.bot_client = bot_base.GeneralsClientHost(
             self.make_move,
+            self.receive_update_no_move,
             name=self._name,
             userId=userId,
             gameType=self._game_type,
@@ -189,14 +219,13 @@ class BotHostLiveServer(BotHostBase):
         self.eklipz_bot.clear_moves_func = self.bot_client.send_clear_moves
 
     # returns whether the placed move was valid
-    def place_move(self, source: Tile, dest: Tile, move_half=False) -> bool:
+    def place_move(self, source: Tile, dest: Tile, move_half=False):
         if source.army == 1 or source.army == 0:
             logging.info(
-                "BOT PLACED BAD MOVE! {},{} to {},{}. Will send anyway, i guess.".format(source.x, source.y, dest.x,
-                                                                                         dest.y))
+                f"BOT PLACED BAD MOVE! {source.x},{source.y} to {dest.x},{dest.y}. Will send anyway, i guess.")
         else:
-            logging.info("Placing move: {},{} to {},{}".format(source.x, source.y, dest.x, dest.y))
-        return self.bot_client.place_move(source, dest, move_half=move_half)
+            logging.info(f"Placing move: {source.x},{source.y} to {dest.x},{dest.y}")
+        self.bot_client.place_move(source, dest, move_half=move_half)
 
     # consumes main thread until game complete
     def run(self):

@@ -439,7 +439,23 @@ class GameSimulator(object):
 
 
 class GameSimulatorHost(object):
-    def __init__(self, map: MapBase, player_with_viewer: int = -1, playerMapVision: MapBase | None = None, afkPlayers: None | typing.List[int] = None, allAfkExceptMapPlayer: bool =False):
+    def __init__(
+            self,
+            map: MapBase,
+            player_with_viewer: int = -1,
+            playerMapVision: MapBase | None = None,
+            afkPlayers: None | typing.List[int] = None,
+            allAfkExceptMapPlayer: bool = False,
+            respectTurnTimeLimitToDropMoves: bool = False):
+        """
+
+        @param map:
+        @param player_with_viewer:
+        @param playerMapVision:
+        @param afkPlayers:
+        @param allAfkExceptMapPlayer:
+        @param respectTurnTimeLimitToDropMoves: Note that if capturing logging in pycharm unit tests, the logging makes the program REALLY slow so moves will drop like flies...
+        """
         self.move_queue: typing.List[typing.List[Move | None]] = [[] for player in map.players]
         self.sim = GameSimulator(map, ignore_illegal_moves=False)
 
@@ -459,6 +475,8 @@ class GameSimulatorHost(object):
             self.forced_afk_players = [i for i in where(range(len(map.players)), lambda p: p != map.player_index)]
 
         self.player_with_viewer: int = player_with_viewer
+
+        self.respect_turn_time_limit: bool = respectTurnTimeLimitToDropMoves
 
         charMap = [c for c, idx in TextMapLoader.get_player_char_index_map()]
 
@@ -657,7 +675,7 @@ class GameSimulatorHost(object):
                     raise AssertionError(f'{traceback.format_exc()}\r\n\r\nIMPORT TEST FILES FOR TURN {self.sim.turn} FROM @ {botHost.eklipz_bot.logDirectory}')
 
                 moveTime = time.perf_counter() - moveStart
-                if self.sim.sim_map.turn > 20 and moveTime > self.player_move_cutoff_time and not DebugHelper.IS_DEBUGGING:
+                if self.respect_turn_time_limit and self.sim.sim_map.turn > 20 and moveTime > self.player_move_cutoff_time and not DebugHelper.IS_DEBUGGING:
                     logging.error(f'turn {self.sim.sim_map.turn}: player {playerIndex} {self.sim.sim_map.usernames[playerIndex]} took {moveTime:.3f} to move, dropping its move!')
                     self.sim.make_move(playerIndex, None, force=True)
                     self.dropped_move_counts_by_player[playerIndex] += 1

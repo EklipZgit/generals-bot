@@ -559,6 +559,11 @@ class Tile(object):
         self.army = 0
         self._player = -1
 
+    @classmethod
+    def get_move_half_amount(cls, army: int) -> int:
+        """This is the amount of army that will leave the tile, not the amount that will be left on the tile."""
+        return army // 2
+
 
 class Score(object):
     def __init__(self, player: int, total: int, tiles: int, dead: bool):
@@ -791,16 +796,22 @@ class MapBase(object):
         capturer, capturee = text.split(" captured ")
         capturee = capturee[:-1]
 
-        # print("\n\n    ~~~~~~~~~\nPlayer captured: {} by {}\n    ~~~~~~~~~\n".format(capturer, capturee))
         capturerIdx = self.get_id_from_username(capturer)
         captureeIdx = self.get_id_from_username(capturee)
-        for handler in self.notify_player_captures:
-            handler(captureeIdx, capturerIdx)
+
+        if captureeIdx == self.player_index:
+            logging.info(
+                f"\n\n    ~~~~~~~~~\nWE WERE CAPTURED, IGNORING CAPTURE: {capturee} ({captureeIdx}) by {capturer} ({capturerIdx})\n    ~~~~~~~~~\n")
+            return
+
         logging.info(
             f"\n\n    ~~~~~~~~~\nPlayer captured: {capturee} ({captureeIdx}) by {capturer} ({capturerIdx})\n    ~~~~~~~~~\n")
 
         if captureeIdx < 0:
-            raise AssertionError('what?')
+            raise AssertionError(f'what? Player captured was {captureeIdx}')
+
+        for handler in self.notify_player_captures:
+            handler(captureeIdx, capturerIdx)
 
         capturedGen = self.generals[captureeIdx]
         if capturedGen is not None:
@@ -1020,11 +1031,6 @@ class MapBase(object):
 
         return self
 
-    def updateResult(self, result):
-        self.complete = True
-        self.result = result == "game_won"
-        return self
-
     def init_grid_movable(self):
         for x in range(self.cols):
             for y in range(self.rows):
@@ -1144,9 +1150,9 @@ class MapBase(object):
             byPlayer = fromTile.delta.oldOwner
 
         logging.info(f'MOVE {repr(fromTile)} -> {repr(toTile)} (fullFromDiffCovered {fullFromDiffCovered}, fullToDiffCovered {fullToDiffCovered})')
-        self.army_moved_grid[fromTile.y][fromTile.x] = not fullFromDiffCovered
+        self.army_moved_grid[fromTile.y][fromTile.x] = self.army_moved_grid[fromTile.y][fromTile.x] and not fullFromDiffCovered
         # if not self.USE_OLD_MOVEMENT_DETECTION:
-        fromTile.delta.armyMovedHere = not fullFromDiffCovered
+        fromTile.delta.armyMovedHere = fromTile.delta.armyMovedHere and not fullFromDiffCovered
 
         expectedDelta = self._get_expected_delta_amount_toward(fromTile, toTile)
         # used to be if value greater than 75 or something
@@ -1173,9 +1179,9 @@ class MapBase(object):
             self.set_fog_moved_from_army_incremented(fromTile, byPlayer, expectedDelta)
 
         # only say the army is completely covered if the confidence was high, otherwise we can have two armies move here from diff players
-        self.army_moved_grid[toTile.y][toTile.x] = not fullToDiffCovered
+        self.army_moved_grid[toTile.y][toTile.x] = self.army_moved_grid[toTile.y][toTile.x] and not fullToDiffCovered
         # if not self.USE_OLD_MOVEMENT_DETECTION:
-        toTile.delta.armyMovedHere = not fullToDiffCovered
+        toTile.delta.armyMovedHere = toTile.delta.armyMovedHere and not fullToDiffCovered
 
         if not toTile.visible:
             toTile.army = toTile.army + expectedDelta
@@ -1302,7 +1308,7 @@ class MapBase(object):
 
     def _get_expected_delta_amount_toward(self, source: Tile, dest: Tile, moveHalf: bool = False) -> int:
         sourceDelta = source.delta.unexplainedDelta
-        sameOwnerMove = source.delta.oldOwner == dest.delta.oldOwner
+        sameOwnerMove = source.delta.oldOwner == dest.delta.oldOwner and source.delta.oldOwner != -1
         if not source.visible:
             if not source.delta.lostSight:
                 sourceDelta = dest.delta.unexplainedDelta
@@ -1318,7 +1324,8 @@ class MapBase(object):
                     sourceDelta = 0 - source.delta.oldArmy // 2
 
             # TODO does this need to get fancier with potential movers vs the dest owner...?
-            sameOwnerMove = sameOwnerMove or (source.player == -1 and not source.delta.lostSight)
+            # TODO try commenting this out...?
+            sameOwnerMove = (sameOwnerMove or (source.player == -1 and not source.delta.lostSight)) and dest.delta.oldOwner != -1
             # TODO should check move-half too probably
             # if source.player == -1:
             #     # then just assume same owner move...?
@@ -2086,7 +2093,7 @@ class MapBase(object):
                     continue
 
                 potentialSources = []
-                destWasAttackedNonLethalOrVacated = destTile.delta.armyDelta < 0  # and destTile.delta.oldOwner == destTile.delta.newOwner
+                destWasAttackedNonLethalOrVacated = destTile.delta.armyDelta < 0  and destTile.delta.oldOwner == destTile.delta.newOwner
                 # destWasAttackedNonLethalOrVacated = True
                 # destWasAttackedNonLethalOrVacated = destTile.delta.oldArmy + destTile.delta.armyDelta < destTile.delta.oldArmy
                 for potentialSource in destTile.movable:
@@ -2102,7 +2109,7 @@ class MapBase(object):
                             f'ATTK DELTA SCAN{fogFlag} DEST {repr(destTile)}: SRC {repr(potentialSource)} SKIPPED BECAUSE GATHERED TO, NOT ATTACKED. potentialSource.delta.armyDelta > 0')
                         # then this was DEFINITELY gathered to, which would make this not a potential source. 2v2 violates this
                         continue
-                    sourceWasAttackedNonLethalOrVacated = potentialSource.delta.armyDelta < 0 or potentialSource.delta.lostSight
+                    sourceWasAttackedNonLethalOrVacated = potentialSource.delta.armyDelta < 0 or potentialSource.delta.lostSight or (not potentialSource.visible and allowFogSource)
                     # if  sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
                     if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource,
                                                                                                         destTile):
@@ -2143,6 +2150,8 @@ class MapBase(object):
                     )
 
                     byPlayer = exclusiveSrc.delta.oldOwner
+                    if self.was_captured_this_turn(destTile):
+                        byPlayer = destTile.player
                     if byPlayer == -1 or self.players[byPlayer].last_move is not None:
                         byPlayer = self.players[destTile.delta.oldOwner].fighting_with_player
                     if byPlayer == -1:
@@ -2175,6 +2184,22 @@ class MapBase(object):
                         logging.info(
                             f'ATTK DELTA SCAN{fogFlag} DEST {repr(destTile)} RESULTED IN MULTIPLE SOURCES {repr([repr(s) for s in potentialSources])}, UNHANDLED FOR NOW')
                     possibleMovesDict[destTile] = potentialSources
+
+    def was_captured_this_turn(self, tile: Tile) -> bool:
+        """Returns true if the tile was definitely captured THIS TURN by the player who now owns the tile"""
+        if tile.delta.gainedSight:
+            return False
+        if tile.delta.oldOwner == tile.player:
+            return False
+
+        return True
+
+    def handle_game_result(self, won: bool, killer: int = -1):
+        self.result = won
+        self.complete = True
+        if killer >= 0:
+            self.players[self.player_index].capturedBy = killer
+
 
 
 class Map(MapBase):
@@ -2234,6 +2259,16 @@ class Map(MapBase):
             player.stars = self.stars[player.index]
 
         return mapResult
+
+    def _handle_server_game_result(self, result: str, data: typing.Dict[str, int] | None) -> bool:
+        killer = -1
+        if data is not None and 'killer' in data:
+            killer = data['killer']
+        won = result == "game_won"
+
+        self.handle_game_result(won=won, killer=killer)
+
+        return self.result
 
     def _get_raw_scores_from_data(self, data):
         scores = {s['i']: s for s in data['scores']}

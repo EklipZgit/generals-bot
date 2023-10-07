@@ -41,6 +41,10 @@ class Timings():
 		adjustedTurn = (turn + self.offsetTurns) % self.cycleTurns
 		return adjustedTurn
 
+	def get_turns_left_in_cycle(self, turn):
+		adjustedTurn = self.cycleTurns - (turn + self.offsetTurns) % self.cycleTurns
+		return adjustedTurn
+
 	def __str__(self):
 		return f"C{self.cycleTurns}  Q{self.quickExpandTurns}  G{self.splitTurns}  L{self.launchTiming}  Off{self.offsetTurns}"
 

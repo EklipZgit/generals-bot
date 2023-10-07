@@ -203,6 +203,8 @@ BLUE: general evaluation ACTUAL approximation
 
 human server, EklipZ user_id = rkmslNatx
 
+bot server, EklipZ user_id = EklipZ
+
 
 
 

@@ -1,0 +1,68 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                    M         M                        M                        M         M
+                    M         M    M    M                        M         M         M
+M                   M    M                                  M                             M
+          M    M         M                                       M    M         M
+M              M         M                             M
+     M    M                                                 M         M
+                    M              M         M                                       M
+M                   a2   a2   a2                            M                   M         M
+M    M              a2        a2   a2        M                        M
+          M         a2             a2   M                        M                        M
+M    M    M    C41  a2   M    a2   a2   a3   b2   b2   b2        M         M    M         M
+               a2   a2        b2   a2   a2   M         M
+          a2   a2   M         b2   a2   M    M              M              M
+     M    a2   a2   b2   b2   b2   a2             M
+     M    M         a2   a2   a2   a2        M    M              M                   M
+M              M    a2             a2        M         M    M    M                        M
+     M    a2   a2   a2   a2   a2   a2                                 M
+C48  a20  aG3  a2   a2   a2   M    a2             M    M         M    M              M
+a2   M    a2   a2   C43  a2   M    M    M         M
+a2   a3   a2   M    M                                                      M              M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=14,11
+turn=100
+bot_player_index=0
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=40
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_target_player=1
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=47
+aScore=115
+aStandingArmy=68
+aStars=70
+aCityCount=1
+aGeneral=2,17
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=22
+aDelta25Score=64
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=100
+bUsername=binarybits
+bTiles=52
+bScore=119
+bStandingArmy=67
+bStars=60
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=75
+bDelta25Tiles=27
+bDelta25Score=69
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=94

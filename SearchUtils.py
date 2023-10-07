@@ -834,7 +834,7 @@ def breadth_first_dynamic_max(
         if tile is not None:
             if not noLog:
                 if prioVal is not None:
-                    prioStr = ']\t['.join(str(x) for x in prioVal)
+                    prioStr = '] ['.join(str(x) for x in prioVal)
                     logging.info(f"  PATH TILE {str(tile)}: Prio [{prioStr}]")
                 else:
                     logging.info(f"  PATH TILE {str(tile)}: Prio [None]")
@@ -1704,13 +1704,16 @@ def breadth_first_find_queue(
         noNeutralCities=False,
         negativeTiles=None,
         skipTiles=None,
+        bypassDefaultSkipLogic: bool = False,
         searchingPlayer=-2,
         ignoreStartTile=False,
-        prioFunc: typing.Callable[[Tile], typing.Any] | None = None
+        prioFunc: typing.Callable[[Tile], typing.Any] | None = None,
+        noLog: bool = False,
 ) -> Path | None:
     """
     goalFunc is goalFunc(current, army, dist)
     prioFunc is prioFunc(tile) - bigger is better, tuples supported, True comes before False etc.
+    bypassDefaultSkipLogic allows you to search through undiscovered mountains etc.
     """
 
     if searchingPlayer == -2:
@@ -1722,11 +1725,11 @@ def breadth_first_find_queue(
     if isinstance(startTiles, dict):
         for tile in startTiles.keys():
             (startDist, startArmy) = startTiles[tile]
-            if tile.isMountain:
+            if tile.isMountain and not bypassDefaultSkipLogic:
                 # logging.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
                 continue
             goalInc = 0
-            if tile.isCity or tile.isGeneral:
+            if (tile.isCity or tile.isGeneral) and tile.player != -1:
                 goalInc = -0.5
             startArmy = tile.army - 1
             if tile.player != searchingPlayer:
@@ -1738,7 +1741,7 @@ def breadth_first_find_queue(
             frontier.appendleft((tile, startDist, startArmy, goalInc))
     else:
         for tile in startTiles:
-            if tile.isMountain:
+            if tile.isMountain and not bypassDefaultSkipLogic:
                 # logging.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
                 continue
             goalInc = 0
@@ -1746,7 +1749,7 @@ def breadth_first_find_queue(
             if tile.player != searchingPlayer:
                 startArmy = 0 - tile.army - 1
             nodeValues[tile.x][tile.y] = (startArmy, None)
-            if tile.isCity or tile.isGeneral:
+            if (tile.isCity or tile.isGeneral) and tile.player != -1:
                 goalInc = 0.5
             if ignoreStartTile:
                 startArmy = 0
@@ -1779,10 +1782,15 @@ def breadth_first_find_queue(
                 nextSearch = sorted(current.movable, key=prioFunc, reverse=True)
             for next in nextSearch:  # new spots to try
                 if (
-                        next.isMountain
-                        or (noNeutralCities and next.isCity and next.player == -1)
-                        or (not next.discovered and next.isNotPathable)
-                        or next in visited
+                    (
+                        not bypassDefaultSkipLogic
+                        and (
+                            next.isMountain
+                            or (noNeutralCities and next.isCity and next.player == -1)
+                            or (not next.discovered and next.isNotPathable)
+                        )
+                    )
+                    or next in visited
                 ):
                     continue
 
@@ -1799,8 +1807,9 @@ def breadth_first_find_queue(
                     nodeValues[next.x][next.y] = (nextArmy, current)
                 frontier.appendleft((next, newDist, nextArmy, goalInc))
 
-    logging.info(
-        f"BFS-FIND-QUEUE ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
+    if not noLog:
+        logging.info(
+            f"BFS-FIND-QUEUE ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         return None
 
@@ -1837,8 +1846,9 @@ def breadth_first_find_queue(
     #         dist -= 1
     #         path = PathNode(node, path, army, dist, -1, None)
 
-    logging.info(
-        f"BFS-FIND-QUEUE found path OF LENGTH {pathObject.length} VALUE {pathObject.value}\n{pathObject.toString()}")
+    if not noLog:
+        logging.info(
+            f"BFS-FIND-QUEUE found path OF LENGTH {pathObject.length} VALUE {pathObject.value}\n{pathObject.toString()}")
     return pathObject
 
 

@@ -361,7 +361,7 @@ def get_optimal_expansion(
         skipFunc=None,
         boundFunc=None,
         allowLeafMoves=True,
-        leafMovesFirst: bool = False,
+        useLeafMovesFirst: bool = False,
         calculateTrimmable=True,
         singleIterationPathTimeCap=0.03,
         forceNoGlobalVisited: bool = True,
@@ -369,6 +369,7 @@ def get_optimal_expansion(
         useIterativeNegTiles: bool = False,
         allowMultiPathMultiDistReturn: bool = False,
         smallTileExpansionTimeRatio: float = 1.0,
+        lengthWeightOffset: float = -0.3,
         time_limit = 0.2,
         useCutoff: bool = True,
         perfTimer: PerformanceTimer | None = None,
@@ -392,11 +393,10 @@ def get_optimal_expansion(
 
     ## The more turns remaining, the more we prioritize longer paths. Towards the end of expansion, we prioritize sheer captured tiles.
     ## This hopefully leads to finding more ideal expansion plans earlier on while being greedier later
-    # lengthWeight = 0.3 * ((turns ** 0.5) - 3)
-    # lengthWeight = max(0.25, lengthWeight)
+    # lengthWeightOffset = 0.3 * ((turns ** 0.5) - 3)
+    # lengthWeightOffset = max(0.25, lengthWeightOffset)
 
-    lengthWeight = -0.3
-    logging.info(f"\n\nAttempting Optimal Expansion (tm) for turns {turns} (lengthWeight {lengthWeight}):\n")
+    logging.info(f"\n\nAttempting Optimal Expansion (tm) for turns {turns} (lengthWeightOffset {lengthWeightOffset}):\n")
     startTime = time.perf_counter()
     generalPlayer = map.players[searchingPlayer]
     searchingPlayer = searchingPlayer
@@ -459,9 +459,9 @@ def get_optimal_expansion(
                 viewInfo.evaluatedGrid[currentTile.x][currentTile.y] += 1
 
             if distSoFar > 0 and tileCapturePoints < 0:
-                dist = distSoFar + lengthWeight
+                dist = distSoFar + lengthWeightOffset
                 # negative points for wasted moves until the end of expansion
-                value = 0 - tileCapturePoints #- 2 * wastedMoves * lengthWeight
+                value = 0 - tileCapturePoints #- 2 * wastedMoves * lengthWeightOffset
 
             if value < 0:
                 return None
@@ -490,10 +490,11 @@ def get_optimal_expansion(
             if nextTile in tileSetSoFar:
                 # logging.info("Prio None for visited {}".format(nextTile.toString()))
                 return None
+            nextTerritory = territoryMap[nextTile.x][nextTile.y]
             armyRemaining = 0 - negArmyRemaining
             distSoFar += 1
             fakeDistSoFar += 1
-            if nextTile.player == -1:
+            if nextTile.player == -1 and nextTerritory != targetPlayer:
                 fakeDistSoFar += 1
             # weight tiles closer to the target player higher
 
@@ -529,11 +530,11 @@ def get_optimal_expansion(
             # enemytiles or enemyterritory undiscovered tiles
             isProbablyEnemyTile = (nextTile.isNeutral
                                    and not nextTile.visible
-                                   and territoryMap[nextTile.x][nextTile.y] != -1
-                                   and territoryMap[nextTile.x][nextTile.y] != searchingPlayer)
+                                   and nextTerritory != -1
+                                   and nextTerritory != searchingPlayer)
             if isProbablyEnemyTile:
                 armyRemaining -= expectedUnseenEnemyTileArmy
-            if targetPlayer != -1 and (nextTile.player == targetPlayer or isProbablyEnemyTile):
+            if targetPlayer != -1 and (nextTile.player == targetPlayer or isProbablyEnemyTile) and nextTile not in tryAvoidSet and nextTile not in negativeTiles:
                 # if nextTile.player == -1:
                 #     # these are usually 1 or more army since usually after army bonus
                 #     armyRemaining -= 1
@@ -546,7 +547,7 @@ def get_optimal_expansion(
                 # numEnemyLocked = count(releventAdjacents, lambda adjTile: adjTile.player == targetPlayer)
                 ##    for every other nearby enemy tile on the path that we've already included in the path, add some priority
                 # addedPriority += (numEnemyNear - numEnemyLocked) * 12
-            elif nextTile.player == -1:
+            elif nextTile.player == -1 and nextTile not in tryAvoidSet and nextTile not in negativeTiles:
                 # if nextTile.isCity: #TODO and is reasonably placed?
                 #    neutralTiles -= 12
                 # we'd prefer to be killing enemy tiles, yeah?
@@ -603,7 +604,7 @@ def get_optimal_expansion(
             #        tileCapturePoints += ENEMY_EXPANSION_TILE_PENALTY
             newPathPriority = pathPriority - addedPriority
             # prioPerTurn = newPathPriority/distSoFar
-            prioPerTurn = (negTileCapturePoints - 1) / (distSoFar + lengthWeight) - addedPriority / 4
+            prioPerTurn = (negTileCapturePoints) / (distSoFar + lengthWeightOffset) - addedPriority / 4
             if iter[0] < 50 and fullLog:
                 logging.info(
                     f" - nextTile {str(nextTile)}, waste [{wastedMoves:.2f}], prioPerTurn [{prioPerTurn:.2f}], dsf {distSoFar}, capPts [{negTileCapturePoints:.2f}], negArmRem [{0 - armyRemaining}]\n    eTiles {enemyTiles}, nTiles {neutralTiles}, npPrio {newPathPriority:.2f}, nextTileSet {len(nextTileSet)}\n    nextAdjSet {None}, enemyExpVal {enemyExpansionValue}, nextEnExpSet {None}")
@@ -727,13 +728,13 @@ def get_optimal_expansion(
     """Contains the current max value path per distance per start tile"""
 
     # expansionGather = greedy_backpack_gather(map, tilesLargerThanAverage, turns, None, valueFunc, baseCaseFunc, negativeTiles, None, searchingPlayer, priorityFunc, skipFunc = None)
-    if allowLeafMoves and leafMoves is not None and leafMovesFirst:
+    if allowLeafMoves and leafMoves is not None and useLeafMovesFirst:
         logging.info("Allowing leafMoves FIRST as part of optimal expansion....")
         for leafMove in leafMoves:
             if (leafMove.source not in negativeTiles
                     and leafMove.dest not in negativeTiles
                     and (leafMove.dest.player == -1 or leafMove.dest.player == targetPlayer)):
-                if leafMove.source.army >= 30:
+                if leafMove.source.army - leafMove.dest.army >= 3:
                     logging.info(
                         f"Did NOT add leafMove {str(leafMove)} to knapsack input because its value was high. Why wasn't it already input if it is a good move?")
                     continue
@@ -982,7 +983,7 @@ def get_optimal_expansion(
                 if leafMove.source.army - 1 <= leafMove.dest.army:
                     continue
 
-                if not move_can_cap_more(leafMove) and leafMovesFirst:
+                if not move_can_cap_more(leafMove) and useLeafMovesFirst:
                     continue  # already added first
 
                 logging.info(f"adding leafMove {str(leafMove)} to knapsack input")
@@ -1321,7 +1322,7 @@ def should_consider_path_move_half(
     dest = path.start.next.tile
     if src.player != dest.player:
         capAmt = src.army - 1 - dest.army
-        halfCapAmt = src.army // 2 - dest.army
+        halfCapAmt = Tile.get_move_half_amount(src.army) - dest.army
         halfCapLeftBehind = src.army - halfCapAmt
         canCapWithSplit = halfCapAmt > 0
         moreCapTile = None

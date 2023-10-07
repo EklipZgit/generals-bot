@@ -77,8 +77,6 @@ def get_sub_knapsack_gather(
         useTrueValueGathered: bool = False,
         shouldLog: bool = False
 ) -> typing.Tuple[int, typing.List[Path]]:
-    logging.info(f"Sub-knap looking for the next path with remainingTurns {remainingTurns} (fullTurns {fullTurns})")
-
     if len(startTilesDict) < remainingTurns // 10:
         logging.info(f"DUE TO SMALL SEARCH START TILE COUNT {len(startTilesDict)}, FALLING BACK TO FINDING AN INITIAL MAX-VALUE-PER-TURN PATH FOR {remainingTurns} (fullTurns {fullTurns})")
         valuePerTurnPath = SearchUtils.breadth_first_dynamic_max(
@@ -97,6 +95,7 @@ def get_sub_knapsack_gather(
             ignoreStartTile=ignoreStartTile,
             incrementBackward=incrementBackward,
             preferNeutral=preferNeutral,
+            useGlobalVisitedSet=True,
             logResultValues=shouldLog,
             ignoreNonPlayerArmy=not useTrueValueGathered,
             ignoreIncrement=True)
@@ -445,6 +444,8 @@ def _knapsack_levels_gather_recurse(
     maxIterationGatheredArmy: int = -1
     maxIterationPaths: typing.List[Path] = []
 
+    startTime = time.perf_counter()
+
     turnCombos = set()
     turnCombos.add(remainingTurns)
     if remainingTurns > 3:
@@ -463,6 +464,7 @@ def _knapsack_levels_gather_recurse(
         if turnsToTry <= 0:
             continue
 
+        logging.info(f"Sub-knap ({time.perf_counter() - startTime:.3f} into search) looking for the next path with remainingTurns {turnsToTry} (fullTurns {fullTurns})")
         newGatheredArmy, newPaths = get_sub_knapsack_gather(
             map,
             startTilesDict,
@@ -645,10 +647,12 @@ def _knapsack_levels_gather_iterative_prune(
 
     lastPrunedTo = 0
 
+    startTime = time.perf_counter()
+
     while lastPrunedTo < fullTurns:
         itr.add(1)
         turnsToGather = fullTurns - turnsSoFar
-        logging.info(f'Beginning {turnsToGather} sub_knapsack, fullTurns {fullTurns}, turnsSoFar {turnsSoFar}')
+        logging.info(f'Sub Knap (iter {itr.value} {time.perf_counter() - startTime:.3f} in) turns {turnsToGather} sub_knapsack, fullTurns {fullTurns}, turnsSoFar {turnsSoFar}')
         newGatheredArmy, newPaths = get_sub_knapsack_gather(
             map,
             newStartTilesDict,
@@ -1528,6 +1532,7 @@ def recalculate_tree_values(
 ) -> typing.Tuple[int, int]:
     totalValue = 0
     totalTurns = 0
+    logging.info('recalcing treenodes....')
     for currentNode in rootNodes:
         _recalculate_tree_values_recurse(
             currentNode,

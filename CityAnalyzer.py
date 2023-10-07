@@ -57,6 +57,8 @@ class CityScoreData(object):
 
     def get_weighted_enemy_capture_value(self) -> float:
         totalScore = self.city_defensability_score * self.city_relevance_score
+        if not self.tile.discovered:
+            totalScore = totalScore / 2
         logging.info(f"cityScore enemy {self.tile.x},{self.tile.y}: re{self.city_relevance_score:.4f}, def{self.city_defensability_score:.4f}, tot{totalScore:.3f}")
         return totalScore
 

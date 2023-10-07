@@ -727,6 +727,43 @@ class BotBehaviorTests(TestBase):
 
         sumArmyNear = bot.sum_player_army_near_or_on_tiles(bot.shortest_path_to_target_player.tileList, distance=3)
         self.assertGreater(sumArmyNear, 60)
+
+    def test_set_all_in_to_hit_with_timings(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_spend_nearly_full_cycle_gathering_out_of_play_armies___Nw5bXrfqz---0--102.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 102, fill_out_tiles=True, respect_player_vision=True)
+        for x in range(5, 15):
+            y = 6
+            tile = map.GetTile(x, y)
+            tile.army = 0
+            tile.player = -1
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 2, 2)
+
+        def update_player(t: Tile):
+            t.player = enemyGeneral.player
+            t.army = 2
+
+        SearchUtils.breadth_first_foreach(map, [enemyGeneral], 3, update_player)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=102)
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        bot = simHost.get_bot(general.player)
+        bot.targetPlayerExpectedGeneralLocation = self.get_player_tile(14, 5, simHost.sim, general.player)
+        bot.armyTracker.emergenceLocationMap = [[[0 for y in range(map.rows)] for x in range(map.cols)] for p in map.players]
+        bot.timings = Timings(50, 5, 20, 31, 0, 0, disallowEnemyGather=False)
+        bot.behavior_out_of_play_defense_threshold = 0.3
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.7, turns=75)
+        self.assertIsNone(winner)
+
+        sumArmyNear = bot.sum_player_army_near_or_on_tiles(bot.shortest_path_to_target_player.tileList, distance=3)
+        self.assertGreater(sumArmyNear, 60)
     
     def test_should_not_leave_large_tile_in_middle_of_territory__should_continue_attack__dies_to_completely_inefficient_flank_all_the_way_around_right_side_due_to_sitting_on_71_in_middle(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1123,4 +1160,163 @@ class BotBehaviorTests(TestBase):
         self.assertIn(bot._map.GetTile(17, 11), bot.target_player_gather_path.tileSet)
         self.assertIn(bot._map.GetTile(17, 12), bot.target_player_gather_path.tileSet)
         self.assertIn(bot._map.GetTile(17, 13), bot.target_player_gather_path.tileSet)
+    
+    def test_should_prepare_for_flanks_the_way_humans_would_plan_them(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_prepare_for_flanks_the_way_humans_would_plan_them___tXhUT4E-o---0--100.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 100, fill_out_tiles=True)
 
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=100)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        self.set_general_emergence_around(14, 11, simHost, general.player, enemyGeneral.player, 10)
+        # simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=30)
+        self.assertIsNone(winner)
+
+        tiles = [
+            self.get_player_tile(5, 19, simHost.sim, general.player),
+            self.get_player_tile(6, 19, simHost.sim, general.player),
+            self.get_player_tile(7, 19, simHost.sim, general.player),
+            self.get_player_tile(8, 19, simHost.sim, general.player),
+        ]
+
+        for tile in tiles:
+            self.assertEqual(general.player, tile.player, "should have gathered to the most obvious human flank path with the most visionless tiles.")
+    
+    def test_should_continue_attack_over_switching_to_econ_defense_over_large_tile(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_continue_attack_over_switching_to_econ_defense_over_large_tile___SgzO3laga---0--137.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 137, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=137)
+        
+        # self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        # self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.5, turns=15)
+        self.assertIsNone(winner)
+
+        pMap = simHost.get_player_map(general.player)
+        self.assertGreater(pMap.players[general.player].tileCount, 84, "should have captured tiles instead of getting weird and defensive.")
+    
+    def test_should_not_run_army_away_from_threat_slash_city_gather_stupidly(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_run_army_away_from_threat_slash_city_gather_stupidly___FUmJfZrMo---1--440.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 440, fill_out_tiles=True)
+        self.move_enemy_general(map, enemyGeneral, 19, 0)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=440)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=3.0, turns=20)
+        self.assertIsNone(winner)
+
+        cityA = self.get_player_tile(10, 17, simHost.sim, general.player)
+        cityB = self.get_player_tile(11, 16, simHost.sim, general.player)
+
+        self.assertEqual(general.player, cityA.player)
+        self.assertEqual(general.player, cityB.player)
+    
+    def test_should_not_switch_to_all_in_and_time_with_cycle_appropriately(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+
+        for turn, expectCityTaken in [(199, True), (179, False)]:
+            with self.subTest(turn=turn):
+                mapFile = 'GameContinuationEntries/should_switch_to_all_in_and_time_with_cycle_appropriately___zXtNQLyfR---1--179.txtmap'
+                # has enough army to take city in this variation in both cases
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, turn, fill_out_tiles=True)
+                self.move_enemy_general(map, enemyGeneral, 16, 1)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=turn)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+                self.set_general_emergence_around(13, 5, simHost, general.player, enemyGeneral.player, 8)
+                bot = simHost.get_bot(general.player)
+
+                # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=21)
+                self.assertIsNone(winner)
+
+                self.assertNoRepetition(simHost, minForRepetition=2)
+                city = self.get_player_tile(15, 12, simHost.sim, general.player)
+                if expectCityTaken:
+                    self.assertEqual(general.player, city.player)
+                else:
+                    self.assertGreater(bot._map.players[general.player].tileCount, 65)
+                    self.assertEqual(-1, city.player)
+
+                self.assertFalse(bot.is_all_in())
+
+    def test_should_switch_to_all_in_and_time_with_cycle_appropriately(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        for turn, shouldAllIn, moveEnemyCity, runForTurns in [(200, True, True, 25), (200, True, False, 15), (179, False, True, 15)]:
+            with self.subTest(turn=turn, moveEnemyCity=moveEnemyCity):
+                mapFile = 'GameContinuationEntries/should_switch_to_all_in_and_time_with_cycle_appropriately___zXtNQLyfR---1--179.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, turn, fill_out_tiles=True)
+                cityToRemove = map.GetTile(15, 12)
+                map.convert_tile_to_mountain(cityToRemove)
+                enCity = map.GetTile(14, 5)
+
+                if moveEnemyCity:
+                    map.convert_tile_to_mountain(enCity)
+                    map.players[enemyGeneral.player].cities.remove(enCity)
+                    newEnCity = map.GetTile(8, 0)
+                    newEnCity.tile = enemyGeneral.player
+                    newEnCity.isMountain = False
+                    newEnCity.isCity = True
+                    newEnCity.army = 2
+                    newEnCity.player = enemyGeneral.player
+                    enCity = newEnCity
+                    map.players[enemyGeneral.player].cities.append(enCity)
+
+                self.move_enemy_general(map, enemyGeneral, 18, 0)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=turn)
+                rawMap.convert_tile_to_mountain(rawMap.GetTile(15, 12))
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+                self.set_general_emergence_around(13, 5, simHost, general.player, enemyGeneral.player, 8)
+                bot = simHost.get_bot(general.player)
+
+                # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=runForTurns)
+                self.assertIsNone(winner)
+
+                city = self.get_player_tile(enCity.x, enCity.y, simHost.sim, general.player)
+                if shouldAllIn:
+                    if not moveEnemyCity:
+                        self.assertEqual(general.player, city.player)
+                        self.assertFalse(bot.is_all_in(), "should have immediately found and sat on the enemy city, and stopped all-inning to hold the city instead.")
+                        self.assertNoRepetition(simHost, minForRepetition=2)
+                    else:
+                        self.assertTrue(bot.all_in_city_behind, "should still be all-inning for cities")
+                        self.assertTrue(bot.is_all_in(), "should not have immediately found and sat on the enemy city, and still be all-inning")
+                else:
+                    self.assertGreater(bot._map.players[general.player].tileCount, 63)
+                    self.assertEqual(-1, city.player)
+                    self.assertNoRepetition(simHost, minForRepetition=2)

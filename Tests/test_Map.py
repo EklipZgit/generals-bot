@@ -30,11 +30,13 @@ class MapTests(TestBase):
         failures = []
 
         skipFromToCollisionTiles = set()
-        # WHY WOULD WE SKIP COLLISION TILES, THIS IS MESSING UP test_run_adj_collision_mutual TEST!?
-        if len(simHost.sim.moves_history) > 0:
-            skipFromToCollisionTiles = self.get_collision_tiles(simHost.sim.moves_history[-1])
+        # # WHY WOULD WE SKIP COLLISION TILES, THIS IS MESSING UP test_run_adj_collision_mutual TEST!?
+        # if len(simHost.sim.moves_history) > 0:
+        #     skipFromToCollisionTiles = self.get_collision_tiles(simHost.sim.moves_history[-1])
 
+        killedOrIndeterminateMoves: typing.Set[Move] = set()
         for player in players:
+
             playerMap = simHost.get_player_map(player)
             # playerBot = simHost.get_bot(player)
             # if playerBot.armyTracker.lastTurn != realMap.turn:
@@ -79,6 +81,7 @@ class MapTests(TestBase):
                                 priorityKillerMoves.append(move)
 
                         if len(priorityKillerMoves) > 0:
+                            killedOrIndeterminateMoves.add(simPlayerMove)
                             continue
 
                         if playerMapPlayer.last_move is None:
@@ -94,6 +97,9 @@ class MapTests(TestBase):
                             ):
                                 failures.append(
                                     f'(pMap {player} had incorrect last move for player {playerMapPlayer.index}. Expected {str(simPlayerMove)}, found {str(playerMapPlayer.last_move)}')
+
+        for player in players:
+            playerMap = simHost.get_player_map(player)
 
             for tile in realMap.get_all_tiles():
                 playerTile = playerMap.GetTile(tile.x, tile.y)
@@ -135,14 +141,27 @@ class MapTests(TestBase):
                         fMessage = f'(pMap {player} tile {str(tile)}) expected delta.fromTile {str(tile.delta.fromTile)} on {repr(tile)}, found {str(playerTile.delta.fromTile)} on {repr(playerTile)}'
                         # all bets are off when the dest tile has no delta and both players moved at each others armies. Both players think their move took effect and the other player didn't move, as those two cases are indistinguishable from each players perspective.
                         if playerTile.delta.fromTile is None:
-                            failures.append(fMessage)
+                            if Move(tile.delta.fromTile, tile) not in killedOrIndeterminateMoves:
+                                failures.append(fMessage)
                         else:
                             realPlayerFrom = realMap.GetTile(playerTile.delta.fromTile.x, playerTile.delta.fromTile.y)
                             realFrom = tile.delta.fromTile
-                            if realFrom is None or realPlayerFrom.delta.toTile != realFrom.delta.toTile:
+                            if realFrom is None:
+                                if Move(realPlayerFrom, playerTile) not in killedOrIndeterminateMoves:
+                                    failures.append(fMessage)
+                            elif realPlayerFrom.delta.toTile != realFrom.delta.toTile and Move(realFrom, realFrom.delta.toTile) not in killedOrIndeterminateMoves:
                                 failures.append(fMessage)
+
                     if playerTile.delta.toTile != tile.delta.toTile:
-                        failures.append(f'(pMap {player} tile {str(tile)}) expected delta.toTile {str(tile.delta.toTile)} on {repr(tile)}, found {str(playerTile.delta.toTile)} on {repr(playerTile)}')
+                        fMessage = f'(pMap {player} tile {str(tile)}) expected delta.toTile {str(tile.delta.toTile)} on {repr(tile)}, found {str(playerTile.delta.toTile)} on {repr(playerTile)}'
+                        if tile.delta.toTile is None:
+                            if Move(playerTile, playerTile.delta.toTile) not in killedOrIndeterminateMoves:
+                                failures.append(fMessage)
+                        elif playerTile.delta.toTile is None:
+                            if Move(tile, tile.delta.toTile) not in killedOrIndeterminateMoves:
+                                failures.append(fMessage)
+                        else:
+                            failures.append(fMessage)
 
         if len(failures) > 0:
             self.fail(f'TURN {simHost.sim.turn}\r\n' + '\r\n'.join(failures))
@@ -1072,6 +1091,7 @@ C5
                                     # 197~
                                     # 181
                                     # 133
+                                    # 181
                                     self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bArmyAdjacent=bArmyAdjacent)
 
     def test_run_one_off_fog_island_border_capture_test(self):
@@ -1099,12 +1119,14 @@ C5
                                     # 921
                                     # 521
                                     # 425
+                                    # 521
+                                    # 161 after fixing move determinism assert detection
                                     self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bHasNearbyVision=bHasNearbyVision)
 
     def test_run_one_off_fog_island_full_capture_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         # TODO
-        self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=2, bArmy=2, bMove=(-1, 0), turn=96, seenFog=True, bHasNearbyVision=True)
+        self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=5, bArmy=2, bMove=(1, 0), turn=96, seenFog=True, bHasNearbyVision=True)
 
     def test_generate_all_out_of_fog_collision_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1140,12 +1162,16 @@ C5
                                 # 99~
                                 # 91
                                 # 67
+                                # 19
+                                # 91
+                                # 163
+                                # 73  after fixing move determinism assert detection
                                 self.run_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_adj_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         # TODO
-        self.run_adj_test(debugMode=debugMode, aArmy=8, bArmy=12, aMove=(1, 0), bMove=(-1, 0), turn=96)
+        self.run_adj_test(debugMode=debugMode, aArmy=20, bArmy=20, aMove=(1, 0), bMove=(-1, 0), turn=97)
 
     def test_generate_all_diagonal_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False

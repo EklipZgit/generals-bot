@@ -167,8 +167,12 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
+            aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 1.02  # was 0.98
+
             # try just 0.98
-            aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 0.98  # was 0.95
+            # 98-85, try again
+            # 215-178
+            # aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 0.98  # was 0.95
 
             # 133-133
             # aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 0.98  # was 0.95
@@ -348,8 +352,12 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
+            # 130-127
+            aBot.engine_mcts_move_estimation_net_differential_cutoff = 2
+
             # 139-121, AGAIN
-            aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 1.0  # was 0.95
+            # killed 132-111 because already codified 0.98 and testing 1.02
+            # aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 1.0  # was 0.95
 
             # 138-166
             # aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 0.9  # was 0.95
@@ -483,6 +491,7 @@ class ArmyEngineABTests(TestBase):
         def configure_a(aBot: EklipZBot):
             # try 3 (b is -5)
             # 151-113, AGAIN
+            # codified at 20-11 but continuing to run, which got 192-181
             aBot.behavior_pre_gather_greedy_leaves_offset = -3
 
             # 130-156
@@ -617,7 +626,11 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 0.9  # b is 0.95
+            # codified in advance but ended up 112-108
+            aBot.behavior_pre_gather_greedy_leaves_offset = 0  # b is -3
+
+            # killed 121-133 because codified other direction already.
+            # aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 0.9  # b is 0.95
 
             # 142-149, AGAIN
             # 125-132
@@ -725,6 +738,8 @@ class ArmyEngineABTests(TestBase):
         def configure_a(aBot: EklipZBot):
             # 141-153, AGAIN
             # 151-140, AGAIN
+            # 86-87, lmao
+            # 196-186 lol, AGAIN with tweaked params!
             aBot.behavior_allow_pre_gather_greedy_leaves = False  # b true obviously
 
             # 229-233 but other tests did 249-214 and 244-218 so we're currently at 722-665, 52% winrate, so barely.
@@ -839,9 +854,22 @@ class ArmyEngineABTests(TestBase):
         self.begin_capturing_logging()
 
         def configure_b(bBot: EklipZBot):
+            # bBot.expansion_length_weight_offset = -0.3
+            # bBot.behavior_launch_timing_offset = +4
             pass
 
         def configure_a(aBot: EklipZBot):
+            # 133-117, AGAIN
+            aBot.mcts_engine.min_expanded_visit_count_to_count_for_moves = 2
+
+            # 182-187, huh. Try 2...?
+            # aBot.mcts_engine.min_expanded_visit_count_to_count_for_moves = 10
+
+            # 184-200, trying again with leaf move army cutoff changes
+            # killed 96-171
+            # aBot.expansion_length_weight_offset = 0.0  # vs -0.3
+            # aBot.expansion_use_leaf_moves_first = False
+
             # 140-155
             # aBot.expansion_full_time_limit = 0.3
 
@@ -904,6 +932,15 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
+            aBot.expansion_length_weight_offset = 0.5  # b is 0.3
+
+            # 202-166, significant, AGAIN
+            # pre-codifying 94-61 finished 161-102
+            # aBot.expansion_length_weight_offset = 0.1  # b = 0.0
+
+            # 176-210 (where b was -0.3
+            # aBot.expansion_length_weight_offset = -0.6
+
             # 250-217, codified.
             # aBot.behavior_launch_timing_offset = +3  # b is +4
 
@@ -962,9 +999,13 @@ class ArmyEngineABTests(TestBase):
         self.begin_capturing_logging()
 
         def configure_b(bBot: EklipZBot):
+            bBot.expansion_length_weight_offset = -0.3
             pass
 
         def configure_a(aBot: EklipZBot):
+            # 194-198, b -0.3, AGAIN
+            # 191-180, not significant
+            aBot.expansion_length_weight_offset = 0.0
             # 82-96, ok thats enough of these to convince me this is bad.
             # aBot.engine_mcts_move_estimation_net_differential_cutoff = 3
 
@@ -991,10 +1032,21 @@ class ArmyEngineABTests(TestBase):
         self.begin_capturing_logging()
 
         def configure_b(bBot: EklipZBot):
-            bBot.behavior_launch_timing_offset = +4
+            # bBot.expansion_length_weight_offset = -0.3
+            # bBot.behavior_launch_timing_offset = +4
             pass
 
         def configure_a(aBot: EklipZBot):
+            # also testing 0.5 too
+            aBot.expansion_length_weight_offset = 0.3
+
+            # 129-102
+            # aBot.expansion_length_weight_offset = 0.3  # b is 0.1
+
+            # 193-196, not significant
+            # aBot.expansion_length_weight_offset = -0.1
+            # aBot.expansion_use_leaf_moves_first = False
+
             # 127-120, codified but rerunning
             # 230-239...? codified already under other tho because 260-200 over there.
             # aBot.behavior_launch_timing_offset = +3  # b is +4
@@ -1021,7 +1073,7 @@ class ArmyEngineABTests(TestBase):
             configureA=configure_a,
             configureB=configure_b,
             debugMode=debugMode,
-            debugModeTurnTime=0.001,
+            debugModeTurnTime=0.4,
             debugModeRenderAllPlayers=False,
             noCities=None,
         )

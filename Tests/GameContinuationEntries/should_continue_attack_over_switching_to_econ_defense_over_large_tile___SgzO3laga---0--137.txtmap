@@ -1,0 +1,66 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M                        M    M    M              M                   M                   M    M
+M         M              M         M                   M                             M
+M         M              M    M    M         M         M                        M
+M    M    M    M                        M         M         b1                       M              M
+M                   M    M              M    M              b1   M                             M    M
+M    M    a1   a1   a1   a1   a1   a1   a1   a1   a1   a23  b1   b1        M    M
+          a1                  M         M              M    b46  b1   b2        M         M
+          a1   M                        M              b1        M    a2   M                        M
+a1   M    a1                       M    M    M    M    b1   C47  a2   a2   b2   M                   M
+a1   a1   a1        M         C42  M    a2   a2   b1   b1   a2   a2   M         M    M    M
+M    a1   a1                  a2   a2   a1   a1   b1   a1   a2   M    b2
+     a1   a1   M    a2   a2   a2   a2   a1   a1   a2   a1   a2   M    b2        M                   M
+     a1   a1   a1   a2             M    a1   a1   a1   a1        M                             M
+     a2   a1   M         M    M    a2   a2   a2   a1   a1                                 M    M
+C42  a2   a1        M    a2   a2   a1   a1        C42       M                   M                   M
+     a1   aG12 M    a2   a2   M              M              M         M
+     a1   a2   a2   a1   a1   M         M              M                             M              M
+          a2   a2   a1   a1             M    M    M                   M              M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=17,4
+turn=137
+bot_player_index=0
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=40
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_target_player=1
+bot_cur_path=None
+aUsername=[Bot]EklipZ_ai
+aTiles=77
+aScore=140
+aStandingArmy=63
+aStars=54
+aCityCount=1
+aGeneral=2,15
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=34
+aDelta25Score=70
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=137
+bUsername=[Bot] EklipZ_ai_14
+bTiles=66
+bScore=138
+bStandingArmy=72
+bStars=59
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=13
+bDelta25Score=69
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=104

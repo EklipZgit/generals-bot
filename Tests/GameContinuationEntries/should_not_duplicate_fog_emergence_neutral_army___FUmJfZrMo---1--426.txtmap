@@ -1,0 +1,68 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                              M         M              M         M    a3        a3   a3   a3   a3   a3
+M              M         M         M    M    M                        a3   M              a3   M
+                         M                                  M    M    a3   a3        a3   a2   a2   a2
+                                             M         M              M    a6D  a4D  a2D  a2        M
+               M         M    M         M         M                   M    a6D  aC55Da2D  a3D  MD
+                              M                        M         M         MD   a3D  a2D  a3D  a3D  M
+M    M              M    M    M    M              M                   aC2  D    a3D  a2D  a3D  a3D  D
+M                                                                M    a3   MD   a3D  a2D  a3D  a7D  MD
+M    M                             M              M    M    M    b114 a2   a2D  a3D  a2D  MD   MD   D
+     M    M    M                        M         M    a5   b1   b1   M    a2D  a2D  a2   a6   a6   M
+                    b5   b5   M    b5   b5   b3   b4   M    b1   M         M    a2   a2   b1   b1   M
+     b5   b5   b6   b5   b5   b4   b4   b3   b3   b3   b3   b1   a5   M         a2   b1   b1   b1   a6
+     b5   b6   b6   b11  b2   b4   M    bC28 M    b3   b2   b1   b3   b3   M    a7   b2   M    b1   bC27
+     b5   b6   b2   b6   b4   b4   M    bC27 b2   M    M    b1   M    b3   b3   M    b2   a5   M    a2
+     M    b3   b2   b2   b4   b4   b4   b2   b2   M    M    b1   b1   a1   a1   a1   a1   a1   a1D  a1D
+     b2   b2   b2   b4   b4   M    M    b2   b4   b4   M    b1   b1   b4   a4   M    a5D  MD   a1D  D
+M         b2   b2   b2   b2   M    b4   b2   b5   M    bC6  b1   M    M    b5   a6   a2   a1D  a1D  MD
+b6   b2   b2   b2   M    b2   bG25 b2   b2   M    bC19 a9   b1   b5   b5   M    b3   a5   M    M
+b3   b3   b3   b3   b3   b3   b3   M    b2   b2   b2   b3   b1   b5   b5   M    b3   b2   b2        M
+b3   M    b6   M    b3   M    b5   b2   b4        M    b5   b5                  M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=17,2
+turn=426
+bot_player_index=1
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=40
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_target_player=0
+bot_cur_path=[103 len 3] 13,8 -> 14,8 -> 14,7 -> 14,6
+aUsername=Daddy000
+aTiles=100
+aScore=553
+aStandingArmy=453
+aStars=57
+aCityCount=4
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=875
+aDelta25Tiles=-2
+aDelta25Score=0
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=411
+bUsername=Human.exe
+bTiles=123
+bScore=608
+bStandingArmy=485
+bStars=68
+bCityCount=6
+bGeneral=6,17
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=8
+bDelta25Score=23
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=426

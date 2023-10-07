@@ -213,7 +213,15 @@ class TestBase(unittest.TestCase):
 
         return map, general, enemyGen
 
-    def set_general_emergence_around(self, x: int, y: int, simHost: GameSimulatorHost, botPlayer: int, emergencePlayer: int, emergenceAmt: int = 40):
+    def set_general_emergence_around(
+            self,
+            x: int,
+            y: int,
+            simHost: GameSimulatorHost,
+            botPlayer: int,
+            emergencePlayer: int,
+            emergenceAmt: int = 40,
+            doNotSetTargetLocation: bool = False):
         bot = simHost.get_bot(botPlayer)
 
         botTile = bot._map.GetTile(x, y)
@@ -224,6 +232,7 @@ class TestBase(unittest.TestCase):
         SearchUtils.breadth_first_foreach_dist(bot._map, [botTile], 5, emergenceMarker, skipFunc=lambda t: t.discovered or t.visible)
 
         bot.armyTracker.emergenceLocationMap[emergencePlayer][x][y] += emergenceAmt
+        bot.timing_cycle_ended()
 
     def get_test_map(self, tiles: typing.List[typing.List[Tile]], turn: int = 1, player_index: int = 0, dont_set_seen_visible_discovered: bool = False, num_players: int = -1) -> MapBase:
         self._initialize()
@@ -936,7 +945,7 @@ class TestBase(unittest.TestCase):
                     playerToRender = a
                     if debugMode and debugModeRenderAllPlayers:
                         playerToRender = -2
-                    simHost = GameSimulatorHost(map, player_with_viewer=playerToRender)
+                    simHost = GameSimulatorHost(map, player_with_viewer=playerToRender, respectTurnTimeLimitToDropMoves=True)
                     aBot = simHost.get_bot(a)
                     bBot = simHost.get_bot(b)
 

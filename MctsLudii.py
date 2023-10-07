@@ -192,7 +192,7 @@ class MctsDUCT(object):
 
             # Backpropagate utilities through the tree
             while currentNode is not None:
-                if currentNode.totalVisitCount > 0:
+                if currentNode.totalVisitCount > 0:  # -1...?
                     # This node was not newly expanded in this iteration
                     for p in range(game.numPlayers):
                         # logging.info(f'backpropogating {str(contextEnd.board_state)} at t{contextEnd.turn} up through the tree to {str(currentNode.context.board_state)} t{currentNode.context.turn}')
@@ -288,12 +288,13 @@ class MctsDUCT(object):
                 if curMoveVisits != 0:
                     curMoveSumScore = current.scoreSums[p][i]
                     exploit = curMoveSumScore / curMoveVisits
+
                 explore: float = MctsDUCT.two_parent_log_explore(twoParentLog, childVisitCount=curMoveVisits)
 
                 ucb1Value: float = exploit + explore
 
                 if self.logAll:
-                    logging.info(f't{current.context.turn} p{p} move {str(move)}, oit {exploit:.3f}, ore {explore:.3f}, ucb1 {ucb1Value:.3f} vs {bestValue:.3f}')
+                    logging.info(f't{current.context.turn} p{p} move {str(move)}, oit {exploit:.3f}, ore {explore:.3f}, ucb1 {ucb1Value:.3f} vs {bestValue:.3f} (exploit was scoreSum {curMoveSumScore} / visits {curMoveVisits})')
                 if ucb1Value >= bestValue:
                     if ucb1Value == bestValue:
                         numBestFound += 1

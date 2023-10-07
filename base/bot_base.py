@@ -4,22 +4,33 @@
     Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
     Generals Bot: Base Bot Class
 """
-
 import sys
 import traceback
 import logging
 import os
+import queue
 import threading
 import time
+import typing
 
 from .client import generals
-from .client.map import MapBase
+from .client.map import Map
 
 
 class GeneralsClientHost(object):
-    def __init__(self, updateMethod, name="PurdueBot", userId=None, gameType="private", privateRoomID="PurdueBot", public_server=False):
+    def __init__(self, updateMethod, inBetweenUpdateMethod, name="PurdueBot", userId=None, gameType="private", privateRoomID="PurdueBot", public_server=False):
         # Save Config
+
+        self._seen_update: bool = False
         self._updateMethod = updateMethod
+
+        self._handleUpdateNoMove = inBetweenUpdateMethod
+
+        self._map: Map | None = None
+
+        self._server_updates_queue: "queue.Queue[typing.Tuple[str, typing.Any]]" = queue.Queue()
+        """Used to pass server updates from the websocket thread to the bot move thread."""
+
         self._name = name
         if userId is None:
             userId = "efg" + self._name
@@ -28,10 +39,7 @@ class GeneralsClientHost(object):
         self._privateRoomID = privateRoomID
         self._public_server = public_server
 
-        # ----- Start Game -----
-
         self._running = True
-        self._move_event = threading.Event()
 
     def run(self, additional_thread_methods: list):
         # Start Game Thread
@@ -61,27 +69,21 @@ class GeneralsClientHost(object):
         time.sleep(0.1)
         exit(0)
 
-    ######################### Handle Updates From Server #########################
-    
-    def getLastCommand(self):
-        return self._game.lastChatCommand
-
     def _start_game_thread(self):
         # Create Game
         if self._gameType in ['1v1', 'ffa', 'private']:
             self._game = generals.GeneralsClient(self._userId, self._name, self._gameType, gameid=self._privateRoomID, public_server=self._public_server)
-        elif self._gameType == "team": # team
-            self._game = generals.GeneralsClient(self._userId, self._name, 'team')
+        elif self._gameType == "team":
+            self._game = generals.GeneralsClient(self._userId, self._name, 'team', public_server=self._public_server)
 
         logging.info("game start...?")
 
         # Start Receiving Updates
         try:
             for update in self._game.get_updates():
-                self._set_update(update)
-
-                # Perform Make Move
-                self._move_event.set()
+                over = self._set_update(update)
+                if over:
+                    break
 
         except ValueError:  # Already in match, restart
             exc_type, exc_value, exc_traceback = sys.exc_info()
@@ -106,41 +108,60 @@ class GeneralsClientHost(object):
 
         create_thread(self._suicide_in_4_seconds)
 
-    def _set_update(self, update):
-        if update.complete and update.turn > 2:
-            logging.info("!!!! Game Complete. Result = " + str(update.result) + " !!!!")
-            if '_moves_realized' in dir(self):
-                logging.info("Moves: %d, Realized: %d" % (self._update.turn, self._moves_realized))
-            self._running = False
+    def _set_update(self, updateTuple: typing.Tuple[str, typing.Any]) -> bool:
+        """Returns True if the game is over, False otherwise."""
+        updateType, update = updateTuple
+        self._server_updates_queue.put((updateType, update), block=True, timeout=5.0)
 
-            # tell the bot it can make one last move so it renders the final board state...?
-            self._update = update
-            self._move_event.set()
+        over = False
+        if updateType == "game_won":
+            over = True
+        elif updateType == "game_lost":
+            over = True
+
+        if over:
+            logging.info(f"!!!! Game Complete. Result = {updateType} !!!!")
+            if '_moves_realized' in dir(self):
+                logging.info(f"Moves: {self._updates_received:d}, Realized: {self._moves_realized:d}")
 
             # why was this sleep here?
             time.sleep(2.0)
+            self._running = False
             logging.info("terminating in _set_update")
             self._game._terminate()
             time.sleep(2.0)
-            logging.info("os.exiting...?")
+            logging.info("Spawning suicide thread from server-updates thread..?")
             try:
                 create_thread(self._suicide_in_4_seconds)
             except:
                 logging.info(traceback.format_exc())
-            return
 
-        self._update = update
+        return over
 
     ######################### Move Generation #########################
 
     def _start_moves_thread(self):
         self._moves_realized = 0
+        self._updates_received = 0
         while self._running:
             try:
-                self._move_event.wait()
-                self._move_event.clear()
-                self._make_move()
+                updateType, update = self._server_updates_queue.get(block=True, timeout=1.0)
+
+                try:
+                    while True:
+                        self._handle_server_update(updateType, update)
+                        self._updates_received += 1
+                        updateType, update = self._server_updates_queue.get(block=False, timeout=0.0)
+                        logging.info(f'UH OH, MULTIPLE SERVER UPDATES RECEIVED IN A ROW, TURN {self._map.turn} MISSED MOVE CHANCE')
+                        self._notify_bot_of_missed_update(self._map)
+                except queue.Empty:
+                    pass  # this is what we expect to happen 99.9% of the time unless the server is laggy or the bot takes too long making a previous move and queues up server updates...
+
+                self._ask_bot_for_move(self._map)
+
                 self._moves_realized += 1
+            except queue.Empty:
+                logging.info('no update received after 1s of waiting...?')
             except:
                 exc_type, exc_value, exc_traceback = sys.exc_info()
                 lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
@@ -151,11 +172,38 @@ class GeneralsClientHost(object):
                 logging.info("err")  # Log it or whatever here
                 logging.error(''.join('!! ' + line for line in lines))  # Log it or whatever here
 
-    def _make_move(self):
-        self._updateMethod(self._update)
+    def _process_map_diff(self, data):
+        if not self._seen_update:
+            logging.info('First update...?')
+            self._seen_update = True
+            self._map = Map(self._game._start_data, data)
 
+        logging.info('applying server update...?')
 
-    ######################### Chat Messages #########################
+        self._map.apply_server_update(data)
+
+    def _make_result(self, update, data: dict | None):
+        """
+
+        @param update:
+        @param data: dict containing {'killer'=int} if we lost
+        @return:
+        """
+        result = self._map._handle_server_game_result(update, data)
+
+        self.result = result
+
+    def _ask_bot_for_move(self, update):
+        self._updateMethod(update)
+
+    def _notify_bot_of_missed_update(self, update):
+        self._handleUpdateNoMove(update)
+
+    def place_move(self, source, dest, move_half=False):
+        self._game.move(source.y, source.x, dest.y, dest.x, self._map.cols, move_half)
+
+    def send_clear_moves(self):
+        self._game.send_clear_moves()
 
     def _start_chat_thread(self):
         # Send Chat Messages
@@ -169,17 +217,20 @@ class GeneralsClientHost(object):
 
         return
 
-    def place_move(self, source, dest, move_half=False) -> bool:
-        if self.validPosition(dest.x, dest.y):
-            self._game.move(source.y, source.x, dest.y, dest.x, move_half)
-            return True
-        return False
+    def _handle_server_update(self, updateType: str, update: typing.Any):
+        if updateType == "game_won":
+            self._make_result(updateType, update)
+        elif updateType == "game_lost":
+            self._make_result(updateType, update)
+        elif updateType == "player_capture":
+            # NOTE player captures happen BEFORE the map update that shows you the updated tiles comes through.
+            # TODO change this to PREPARE the map for a player capture, let it use the map update, and
+            #  THEN perform this player captures stuff that's being triggered in here afterwards?
+            self._map.handle_player_capture(update["text"])
+            return
 
-    def validPosition(self, x, y):
-        return 0 <= y < self._update.rows and 0 <= x < self._update.cols and self._update._tile_grid[y][x] != generals.map.TILE_MOUNTAIN
-
-    def send_clear_moves(self):
-        self._game.send_clear_moves()
+        if update is not None and 'map_diff' in update:
+            self._process_map_diff(update)
 
 
 def create_thread(f):

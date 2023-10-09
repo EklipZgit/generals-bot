@@ -396,7 +396,7 @@ def get_optimal_expansion(
     # lengthWeightOffset = 0.3 * ((turns ** 0.5) - 3)
     # lengthWeightOffset = max(0.25, lengthWeightOffset)
 
-    logging.info(f"\n\nAttempting Optimal Expansion (tm) for turns {turns} (lengthWeightOffset {lengthWeightOffset}):\n")
+    logging.info(f"\n\nAttempting Optimal Expansion (tm) for turns {turns} (lengthWeightOffset {lengthWeightOffset}), negatives {str([str(t) for t in negativeTiles])}:\n")
     startTime = time.perf_counter()
     generalPlayer = map.players[searchingPlayer]
     searchingPlayer = searchingPlayer
@@ -440,6 +440,10 @@ def get_optimal_expansion(
             # skip if out of army, or if we've wasted a bunch of moves already and have nothing to show
             if negArmyRemaining >= 0 or (wastedMoves > wastedMoveCap and tileCapturePoints > -5):
                 return True
+
+            if nextTile.isCity and nextTile.isNeutral:
+                return True
+
             return False
 
         skipFunc = skip_after_out_of_army
@@ -534,7 +538,7 @@ def get_optimal_expansion(
                                    and nextTerritory != searchingPlayer)
             if isProbablyEnemyTile:
                 armyRemaining -= expectedUnseenEnemyTileArmy
-            if targetPlayer != -1 and (nextTile.player == targetPlayer or isProbablyEnemyTile) and nextTile not in tryAvoidSet and nextTile not in negativeTiles:
+            if targetPlayer != -1 and (nextTile.player == targetPlayer) and nextTile not in tryAvoidSet and nextTile not in negativeTiles:
                 # if nextTile.player == -1:
                 #     # these are usually 1 or more army since usually after army bonus
                 #     armyRemaining -= 1
@@ -773,6 +777,8 @@ def get_optimal_expansion(
     stage2 = time_limit / 2
     breakStage = 3 * time_limit / 4
 
+    overrideGlobalVisitedOneCycle = False
+
     while True:
         if remainingTurns <= 0:
             logging.info("breaking due to remainingTurns <= 0")
@@ -846,6 +852,11 @@ def get_optimal_expansion(
         useGlobalVisited = not forceNoGlobalVisited
         if forceGlobalVisitedStage1 and not inStage2:
             useGlobalVisited = True
+        if remainingTurns < 8:
+            useGlobalVisited = False
+        if overrideGlobalVisitedOneCycle:
+            useGlobalVisited = False
+            overrideGlobalVisitedOneCycle = False
 
         if not allowMultiPathMultiDistReturn:
             path = breadth_first_dynamic_max(
@@ -964,6 +975,7 @@ def get_optimal_expansion(
             if len(newPaths) == 0:
                 logging.info(
                     f"No multi path found for remainingTurns {remainingTurns}, cutoffFactor {cutoffFactor}. Incrementing cutoffFactor")
+                overrideGlobalVisitedOneCycle = True
             else:
                 for value, path in newPaths:
                     logging.info(f'  new path {value:.2f}v  {value/path.length:.2f}vt  {str(path)}')
@@ -1207,7 +1219,7 @@ def find_best_expansion_path_to_move_first_by_city_weights(
         logging.info('bypassing waiting city paths due to them covering most of the expansion plan')
         waitingPaths = []
     for p in maxPaths:
-        thisVal = postPathEvalFunction(p, originalNegativeTiles)
+        thisVal = postPathEvalFunction(p, originalNegativeTiles) + (p.start.tile.army * p.start.tile.army - 4)
         thisUncertainty = _get_uncertainty_capture_rating(searchingPlayer, p, originalNegativeTiles)
 
         if thisUncertainty > maxUncertainty or thisUncertainty == maxUncertainty and thisVal > maxVal:

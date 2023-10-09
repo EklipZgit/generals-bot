@@ -1405,6 +1405,7 @@ class MapBase(object):
             sourceDeltaMismatch
             and destUnexpectedDelta == srcUnexpectedDelta
             and dest.delta.oldOwner != self.player_index
+            and dest.delta.oldOwner != -1
         ):
             logging.info(f'MOVE {str(last_player_index_submitted_move)} was mutual attack?')
             self.set_tile_moved(toTile=source, fromTile=dest, fullFromDiffCovered=True, fullToDiffCovered=True, byPlayer=dest.delta.oldOwner)

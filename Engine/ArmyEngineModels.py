@@ -356,7 +356,7 @@ class ArmySimResult(object):
 
         self.best_result_state_depth: int = 0
 
-        self.net_economy_differential: int = 0
+        self.net_economy_differential: float = 0
 
         self.expected_best_moves: typing.List[typing.Tuple[Move, Move]] = []
         """A list of (friendly, enemy) move tuples that the min-max best move board state is expected to take"""
@@ -372,7 +372,7 @@ class ArmySimResult(object):
         """
 
     def __str__(self):
-        return f'(net{self.net_economy_differential:+d}) {str(self.best_result_state)}'
+        return f'(net{self.net_economy_differential:+.1f}) {str(self.best_result_state)}'
 
     def __repr__(self):
         return f'{str(self)} [{self.best_result_state.calculate_value_int()}]'

@@ -31,6 +31,7 @@ function Run-BotOnce {
     }
     if ($right) { [void] $arguments.Add("--right") }
     if ($noui) { [void] $arguments.Add("--no-ui") }
+    if ($nolog) { [void] $arguments.Add("--no-log") }
     if ($public) { 
         [void] $arguments.Add("--public")
     }
@@ -121,15 +122,17 @@ function Run-BotOnce {
 
     Start-Sleep -Seconds 1
 
-    Get-ChildItem "D:\GeneralsLogs" | 
-        ? { `$_.FullName -notlike '*_chat*' } | 
-        ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-120) } | 
-        Remove-Item -Force -Recurse -ErrorAction Ignore
-    
-    Get-ChildItem "D:\GeneralsLogs\GroupedLogs" -Directory | 
-        ? { `$_.FullName -notlike '*_chat*' } | 
-        ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-120) } |
-        Remove-Item -Force -Recurse -ErrorAction Ignore
+    if (-not `$$($nolog.tostring())) {
+        Get-ChildItem "D:\GeneralsLogs" | 
+            ? { `$_.FullName -notlike '*_chat*' } | 
+            ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-120) } | 
+            Remove-Item -Force -Recurse -ErrorAction Ignore
+        
+        Get-ChildItem "D:\GeneralsLogs\GroupedLogs" -Directory | 
+            ? { `$_.FullName -notlike '*_chat*' } | 
+            ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-120) } |
+            Remove-Item -Force -Recurse -ErrorAction Ignore
+    }
 "@
 
     $randNums = 1..10 | Get-Random -Count 10
@@ -401,7 +404,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w LiveBots new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai"'
+        $command = 'run-bot -game ffa -name "EklipZ_ai" -right'
         try {
             Invoke-Expression $command
         } finally {
@@ -466,12 +469,26 @@ function Start-WindowsTerminalLiveBots {
         }
     }
     <#
-    Human
+    Human 1v1
     #>
     wt -w LiveBots new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-Human -game 1v1, 1v1, ffa, ffa, 1v1, 1v1, 1v1 -sleepMax 30'
+        $command = 'Run-Human -left -game 1v1 -sleepMax 30'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+    <#
+    Human ffa
+    #>
+    wt -w LiveBots new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-Human -right -game ffa -sleepMax 30'
         try {
             Invoke-Expression $command
         } finally {
@@ -485,7 +502,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w LiveBots new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'run-bot -game 1v1 -name "EklipZ_ai" -right -privateGame testing'
+        $command = 'run-bot -game 1v1 -name "EklipZ_ai" -left -privateGame testing'
         try {
             Invoke-Expression $command
         } finally {

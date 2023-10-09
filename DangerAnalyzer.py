@@ -39,12 +39,29 @@ class ThreatObj(object):
         self.saveTile: typing.Union[None, Tile] = saveTile
         self.armyAnalysis: ArmyAnalyzer = armyAnalysis
 
-    def convert_to_dist_dict(self, offset: int = -1) -> typing.Dict[Tile, int]:
-        dict = self.path.get_reversed().convert_to_dist_dict(offset=-1)
-        for tile in self.path.tileSet:
+    def convert_to_dist_dict(self, offset: int = -1, allowNonChoke: bool = False) -> typing.Dict[Tile, int]:
+        if offset == -1 and not self.path.tail.tile.isGeneral:
+            offset = 0
+
+        dict = self.path.get_reversed().convert_to_dist_dict(offset=offset)
+        for tile in self.path.tileList:
+            dist = dict[tile]
             if tile.isGeneral:
                 # need to gather to general 1 turn earlier than otherwise necessary
-                dict[tile] = dict[tile] + 1
+                dict[tile] = dist + 1
+            elif not allowNonChoke and tile not in self.armyAnalysis.pathChokes and not self.path.start.next.tile in tile.movable:
+                pathWay = self.armyAnalysis.pathWayLookupMatrix[tile]
+                neighbors = where(pathWay.tiles, lambda t: t != tile and self.armyAnalysis.aMap[t.x][t.y] == self.armyAnalysis.aMap[tile.x][tile.y] and self.armyAnalysis.bMap[t.x][t.y] == self.armyAnalysis.bMap[tile.x][tile.y])
+                newDist = dist + 1
+                # if len(neighbors) < 2:
+                #     # dict[tile] = newDist
+                #     del dict[tile]
+                #     pass
+                # else:
+                del dict[tile]
+                logging.info(f'Threat path tile {str(tile)} increased to dist {newDist} based on neighbors {neighbors}')
+            else:
+                logging.info(f'Threat path tile {str(tile)} left at dist {dist}')
 
         return dict
 

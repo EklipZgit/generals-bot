@@ -957,3 +957,22 @@ bot_player_index=0
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=15)
         self.assertIsNone(winner)
 
+    
+    def test_should_not_get_errors_about_nodes_missing_from_tree(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_get_errors_about_nodes_missing_from_tree___nY3K5KoTe---1--267.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 267, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=267)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=2)
+        self.assertIsNone(winner)

@@ -1150,16 +1150,19 @@ class BotBehaviorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         self.set_general_emergence_around(14, 18, simHost, general.player, enemyGeneral.player, emergenceAmt=40)
+        bot = simHost.get_bot(general.player)
+        bot.timings = None
+        bot.recalculate_player_paths(force=True)
 
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.5, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=30)
         self.assertIsNone(winner)
-        bot = simHost.get_bot(general.player)
         self.assertIn(bot._map.GetTile(17, 11), bot.target_player_gather_path.tileSet)
         self.assertIn(bot._map.GetTile(17, 12), bot.target_player_gather_path.tileSet)
         self.assertIn(bot._map.GetTile(17, 13), bot.target_player_gather_path.tileSet)
+        self.assertGreater(simHost.get_player_map(general.player).players[general.player].tileCount, 50)
     
     def test_should_prepare_for_flanks_the_way_humans_would_plan_them(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1171,6 +1174,8 @@ class BotBehaviorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         self.set_general_emergence_around(14, 11, simHost, general.player, enemyGeneral.player, 10)
+        bot = simHost.get_bot(general.player)
+        bot.timings = None
         # simHost.queue_player_moves_str(enemyGeneral.player, 'None')
 
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -1320,3 +1325,88 @@ class BotBehaviorTests(TestBase):
                     self.assertGreater(bot._map.players[general.player].tileCount, 63)
                     self.assertEqual(-1, city.player)
                     self.assertNoRepetition(simHost, minForRepetition=2)
+    
+    def test_should_not_intercept_army_when_better_to_keep_expanding(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_intercept_army_when_better_to_keep_expanding___C0hgOAomT---0--145.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 145, fill_out_tiles=True)
+        self.move_enemy_general(map, enemyGeneral, 10, 20)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=145)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '5,3->5,2->4,2->4,1->3,1->2,1')
+        simHost.queue_player_moves_str(general.player, '12,14->12,15')
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=3.0, turns=5)
+        self.assertIsNone(winner)
+
+        pMap = simHost.get_player_map(general.player)
+        self.assertEqual(56, pMap.players[general.player].tileCount)
+        self.assertEqual(57, pMap.players[enemyGeneral.player].tileCount)
+    
+    def test_should_swap_timings_off_of_long_econ_defense(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_swap_timings_off_of_long_econ_defense___C0hgOAomT---0--192.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 192, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=192)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=3.0, turns=10)
+        self.assertIsNone(winner)
+
+        # TODO add asserts for should_swap_timings_off_of_long_econ_defense
+    
+    def test_should_not_waste_rest_of_cycle_after_city_capture(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_waste_rest_of_cycle_after_city_capture___C0hgOAomT---0--186.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 186, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=186)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # simHost.queue_player_moves_str(general.player, '1,3->2,3')
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=14)
+        self.assertIsNone(winner)
+
+        self.assertPlayerTileCountGreater(simHost, general.player, 60)
+    
+    def test_should_drop_defensive_timings_when_opp_takes_a_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_drop_defensive_timings_when_opp_takes_a_city___7GsHdUn99---0--238.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 238, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=238)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+        bot._lastTargetPlayerCityCount = 1
+        bot.timings.splitTurns = 42
+        bot.timings.launchTiming = 42
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=12)
+        self.assertIsNone(winner)
+
+        self.assertPlayerTileCountGreater(simHost, general.player, 76)

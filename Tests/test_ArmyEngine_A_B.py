@@ -167,7 +167,8 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 1.02  # was 0.98
+            aBot.behavior_max_allowed_quick_expand = 8  # b 5
+            # aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 1.02  # was 0.98
 
             # try just 0.98
             # 98-85, try again
@@ -352,8 +353,16 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
+            aBot.engine_mcts_move_estimation_net_differential_cutoff = 0.9  # b 0
+
+            # killed 92-95, try 0.9
+            # aBot.engine_mcts_move_estimation_net_differential_cutoff = 1.9  # b 0
+
+            # killed at 80-61 is I realized I needed to divide by 10
+            # aBot.engine_mcts_move_estimation_net_differential_cutoff = 3  # b 0
+
             # 130-127
-            aBot.engine_mcts_move_estimation_net_differential_cutoff = 2
+            # aBot.engine_mcts_move_estimation_net_differential_cutoff = 2
 
             # 139-121, AGAIN
             # killed 132-111 because already codified 0.98 and testing 1.02
@@ -489,10 +498,15 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
+            aBot.behavior_max_allowed_quick_expand = 3  # b 5
+
+            # killed 22-40
+            # aBot.behavior_max_allowed_quick_expand = 0
+
             # try 3 (b is -5)
             # 151-113, AGAIN
             # codified at 20-11 but continuing to run, which got 192-181
-            aBot.behavior_pre_gather_greedy_leaves_offset = -3
+            # aBot.behavior_pre_gather_greedy_leaves_offset = -3
 
             # 130-156
             # aBot.behavior_pre_gather_greedy_leaves_offset = -10
@@ -626,8 +640,18 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
+            aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 40  # b 20
+
+            # killed 106-139
+            # aBot.engine_honor_mcts_expected_score = True
+            # aBot.engine_honor_mcts_expanded_expected_score = False
+
+            # 106-111 when b was 1 I think
+            # aBot.mcts_engine.min_expanded_visit_count_to_count_for_moves = 5
+            # aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 6
+
             # codified in advance but ended up 112-108
-            aBot.behavior_pre_gather_greedy_leaves_offset = 0  # b is -3
+            # aBot.behavior_pre_gather_greedy_leaves_offset = 0  # b is -3
 
             # killed 121-133 because codified other direction already.
             # aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 0.9  # b is 0.95
@@ -736,11 +760,16 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
+            aBot.mcts_engine.min_expanded_visit_count_to_count_for_moves = 20  # b 5, should do NOTHING
+
+            # killed 95-119
+            # aBot.mcts_engine.disable_positional_win_detection_in_rollouts = False
+
             # 141-153, AGAIN
             # 151-140, AGAIN
             # 86-87, lmao
             # 196-186 lol, AGAIN with tweaked params!
-            aBot.behavior_allow_pre_gather_greedy_leaves = False  # b true obviously
+            # aBot.behavior_allow_pre_gather_greedy_leaves = False  # b true obviously
 
             # 229-233 but other tests did 249-214 and 244-218 so we're currently at 722-665, 52% winrate, so barely.
             # aBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.MaxAverageValue)
@@ -840,6 +869,7 @@ class ArmyEngineABTests(TestBase):
 
             # 126-121
             # aBot.expansion_small_tile_time_ratio = 1.0
+            pass
 
         self.a_b_test(
             numRuns,
@@ -859,8 +889,14 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
+            # 189-179, killed
+            # aBot.mcts_engine.min_expanded_visit_count_to_count_for_moves = 10  # b is 5
+            # aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 5  # b is 10
+
             # 133-117, AGAIN
-            aBot.mcts_engine.min_expanded_visit_count_to_count_for_moves = 2
+            # 131-106, codified
+            # aBot.mcts_engine.min_expanded_visit_count_to_count_for_moves = 5
+            # aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 10
 
             # 182-187, huh. Try 2...?
             # aBot.mcts_engine.min_expanded_visit_count_to_count_for_moves = 10
@@ -932,7 +968,11 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.expansion_length_weight_offset = 0.5  # b is 0.3
+            # pre-codified at 14-10 but UNDONE
+            aBot.expansion_length_weight_offset = 0.8  # b is 0.5
+
+            # 127-96, codified, trying 0.8
+            # aBot.expansion_length_weight_offset = 0.5  # b is 0.3
 
             # 202-166, significant, AGAIN
             # pre-codifying 94-61 finished 161-102
@@ -1037,8 +1077,15 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
-            # also testing 0.5 too
-            aBot.expansion_length_weight_offset = 0.3
+            aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 50  # v 20
+
+            # pre codified at 19-10
+            # killed 192-173
+            # aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 20  # v 10
+
+            # 129-102
+            # aBot.mcts_engine.min_expanded_visit_count_to_count_for_moves = 5  # v 1
+            # aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 10  # v 1
 
             # 129-102
             # aBot.expansion_length_weight_offset = 0.3  # b is 0.1

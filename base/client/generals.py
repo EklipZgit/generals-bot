@@ -272,7 +272,7 @@ class GeneralsClient(object):
                     message = chat_msg["text"]
                     fromUsername = chat_msg["username"]
 
-                    recordMessage = False
+                    recordMessage = True
                     if fromUsername != self.server_username:
                         recordMessage = self.handle_chat_message(fromUsername, message)
 
@@ -296,6 +296,7 @@ class GeneralsClient(object):
                         and " quit" not in chat_msg["text"]
                         and " wins!" not in chat_msg["text"]
                         and "Chat is being recorded." not in chat_msg["text"]
+                        and "Chat is being limited." not in chat_msg["text"]
                     ):
                         self.writingFile = True
                         try:

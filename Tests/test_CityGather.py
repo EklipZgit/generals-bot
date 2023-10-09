@@ -367,3 +367,29 @@ class CityGatherTests(TestBase):
 
         misAttackedCity = self.get_player_tile(3, 12, simHost.sim, general.player)
         self.assertEqual(general.player, misAttackedCity.player)
+    
+    def test_should_contest_cities_over_looping_neutral(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_contest_cities_over_looping_neutral___EklipZ_ai-Bl_nov1Wp---0--523.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 523, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=523)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        self.set_general_emergence_around(3, 15, simHost, general.player, enemyGeneral.player, 42)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=20)
+        self.assertIsNone(winner)
+
+        problemCity = self.get_player_tile(8, 4, simHost.sim, general.player)
+        shouldCap1 = self.get_player_tile(14, 6, simHost.sim, general.player)
+        shouldCap2 = self.get_player_tile(13, 9, simHost.sim, general.player)
+
+        self.assertEqual(-1, problemCity.player)
+        self.assertEqual(general.player, shouldCap1.player)
+        self.assertEqual(general.player, shouldCap2.player)

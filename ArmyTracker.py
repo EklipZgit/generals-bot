@@ -131,6 +131,8 @@ class ArmyTracker(object):
 
         self.player_aggression_ratings = [PlayerAggressionTracker(z) for z in range(len(self.map.players))]
         self.lastTurn = -1
+        self.decremented_fog_tiles_this_turn: typing.Set[Tile] = set()
+        self.dropped_fog_tiles_this_turn: typing.Set[Tile] = set()
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -152,6 +154,8 @@ class ArmyTracker(object):
     def scan(self, lastMove: Move | None, turn: int, genDistances: typing.List[typing.List[int]]):
         self.lastMove = lastMove
         self.genDistances = genDistances
+        self.decremented_fog_tiles_this_turn = set()
+        self.dropped_fog_tiles_this_turn = set()
 
         advancedTurn = False
         if turn > self.lastTurn:
@@ -187,6 +191,8 @@ class ArmyTracker(object):
 
         if advancedTurn:
             self.move_fogged_army_paths()
+
+        self.verify_player_tile_and_army_counts_valid()
 
     def move_fogged_army_paths(self):
         for army in list(self.armies.values()):
@@ -878,15 +884,15 @@ class ArmyTracker(object):
                     consecutiveUndiscovered += 1
                     undiscVal = self.emergenceLocationMap[armyPlayer][nextTile.x][nextTile.y]
                     negBonusScore -= undiscVal
-                    if nextTile.player == -1:
-                        if undiscVal > 0:
-                            emergenceLocalityBonusArmy = max(1, round(undiscVal ** 0.25 - 1))
-                            negArmy -= emergenceLocalityBonusArmy
+                    # if nextTile.player == -1:
+                    #     if undiscVal > 0:
+                    #         emergenceLocalityBonusArmy = max(1, round(undiscVal ** 0.25 - 1))
+                    #         negArmy -= emergenceLocalityBonusArmy
                 else:
                     consecutiveUndiscovered = 0
                 if nextTile.player == armyPlayer:
                     negArmy -= nextTile.army - 1
-                else:
+                elif nextTile.discovered:
                     negArmy += nextTile.army + 1
 
             if negArmy <= 0:
@@ -1703,4 +1709,96 @@ class ArmyTracker(object):
         if reasonablePath is not None:
             return False
         return True
+
+    def verify_player_tile_and_army_counts_valid(self):
+        """
+        Makes sure we dont have too many fog tiles or too much fog army for what is visible and known on the player map.
+
+        @return:
+        """
+
+        logging.info(f'PLAYER FOG TILE RE-EVALUATION')
+        for player in self.map.players:
+            actualTileCount = player.tileCount
+
+            mapTileCount = len(player.tiles)
+
+            visibleMapTileCount = 0
+
+            for tile in player.tiles:
+                if tile.visible:
+                    visibleMapTileCount += 1
+
+            if actualTileCount < mapTileCount:
+                logging.info(f'reducing player {player.index} over-tiles')
+                # strip extra tiles
+                tilesAsEncountered = PriorityQueue()
+                for tile in self.map.get_all_tiles():
+                    if tile.player == player.index and not tile.discovered:
+                        dist = self.genDistances[tile.x][tile.y]
+                        emergenceBonus = max(0, self.emergenceLocationMap[player.index][tile.x][tile.y])
+                        tilesAsEncountered.put((0 - dist + emergenceBonus, tile))
+
+                while mapTileCount > actualTileCount and not tilesAsEncountered.empty():
+                    toRemove: Tile
+                    score, toRemove = tilesAsEncountered.get()
+                    if not toRemove.isCity:
+                        logging.info(f'dropped player {player.index} over-tile tile {str(toRemove)}')
+                        toRemove.reset_wrong_undiscovered_fog_guess()
+                        mapTileCount -= 1
+                        self.dropped_fog_tiles_this_turn.add(toRemove)
+                        army = self.armies.get(toRemove, None)
+                        if army:
+                            self.scrap_army(army)
+
+                player.tiles = [t for t in self.map.get_all_tiles() if t.player == player.index]
+
+            actualScore = player.score
+            mapScore = 0
+            visibleMapScore = 0
+            for tile in player.tiles:
+                if tile.visible:
+                    visibleMapScore += tile.army
+                mapScore += tile.army
+
+            if actualScore < mapScore:
+                logging.info(f'reducing player {player.index} over-score')
+                # strip extra tiles
+                tilesAsEncountered = PriorityQueue()
+                for tile in self.map.get_all_tiles():
+                    genCityDePriority = 0
+
+                    if tile.isGeneral or tile.isCity:
+                        genCityDePriority = 50
+
+                    if tile in self.armies:
+                        genCityDePriority += 10
+
+                    if tile.player == player.index and not tile.visible:
+                        dist = self.genDistances[tile.x][tile.y]
+                        tilesAsEncountered.put((0 - tile.lastSeen + genCityDePriority - dist / 10, tile))
+
+                while mapTileCount > actualTileCount and not tilesAsEncountered.empty():
+                    toReduce: Tile
+                    score, toReduce = tilesAsEncountered.get()
+                    reduceTo = 1
+                    if self.map.turn % 50 < 15:
+                        reduceTo = 2
+
+                    reduceBy = toReduce.army - reduceTo
+                    if mapTileCount - reduceBy < actualTileCount:
+                        reduceBy = actualTileCount - mapTileCount
+
+                    logging.info(f'dropped player {player.index} over-tile tile {str(toReduce)}')
+
+                    toReduce.army = toReduce.army - reduceBy
+                    mapTileCount -= reduceBy
+                    self.decremented_fog_tiles_this_turn.add(toReduce)
+                    army = self.armies.get(toReduce, None)
+                    if army:
+                        army.value = toReduce.army - 1
+                        if army.value == 0:
+                            self.scrap_army(army)
+
+
 

@@ -148,13 +148,16 @@ function Create-ManyTestsByTurnFromFolders {
 }
 
 function Create-TestContinuingGameFrom {
+    [Alias("ctc")]
     Param(
         [Parameter(ValueFromPipeline = $true)]
-        $TestMapFile = "path to test map file",
+        $TestMapFile = "path to test map file or log screenshot file",
 
+        [Parameter(Position=0)]
+        $TestCategory = "BotBehavior",
+        
+        [Parameter(Position=1)]
         $TestName = "shouldnt_die_in_some_scenario",
-
-        $TestCategory = "Defense",
 
         $DestFolderRoot = "D:\2019_reformat_Backup\generals-bot\Tests\"
     )
@@ -225,11 +228,13 @@ function Create-TestContinuingGameFrom {
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
 
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=3.0, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
         self.assertIsNone(winner)
 
         # TODO add asserts for $TestName

@@ -1061,7 +1061,7 @@ def knapsack_levels_backpack_gather_with_value(
                 depthDist,
                 dist + 1,
                 realDist,
-                numPrioTiles / depthDist,
+                numPrioTiles / max(1, depthDist),
                 negGatheredSum,
                 negArmySum,
                 #xSum + nextTile.x,

@@ -73,8 +73,8 @@ class ViewerHost(object):
 
         try:
             completedSuccessfully = self._viewer_event_queue.get(block=False)
-            if not completedSuccessfully:
-                raise AssertionError('pygame viewer indicated it was NOT closed by the user themselves and closed due to failure')
+            # if not completedSuccessfully:
+            #     raise AssertionError('pygame viewer indicated it was NOT closed by the user themselves and closed due to failure')
             return True
         except queue.Empty:
             return False

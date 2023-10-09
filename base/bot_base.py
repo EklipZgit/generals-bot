@@ -144,6 +144,11 @@ class GeneralsClientHost(object):
         self._moves_realized = 0
         self._updates_received = 0
         while self._running:
+            if self._map is not None and self._map.complete:
+                # bot gave up, terminate
+                self._running = False
+                logging.info(f'bot gave up :(')
+                break
             try:
                 updateType, update = self._server_updates_queue.get(block=True, timeout=1.0)
 

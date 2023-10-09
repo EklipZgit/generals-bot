@@ -304,8 +304,8 @@ class GeneralsViewer(object):
 
     def run_main_viewer_loop(self, alignTop=True, alignLeft=True):
         termSec = 600
-        if not self.noLog:
-            BotLogging.set_up_logger(logging.INFO)
+        # if not self.noLog:
+        #     BotLogging.set_up_logger(logging.INFO)
         while not self._receivedUpdate:  # Wait for first update
             try:
                 viewInfo, map, isComplete = self._update_queue.get(block=True, timeout=15.0)

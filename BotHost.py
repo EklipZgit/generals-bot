@@ -27,7 +27,8 @@ class BotHostBase(object):
         noUi: bool = True,
         alignBottom: bool = False,
         alignRight: bool = False,
-        throw: bool = False
+        throw: bool = False,
+        noLog: bool = False
     ):
         """
 
@@ -52,7 +53,8 @@ class BotHostBase(object):
         self.align_right: bool = alignRight
 
         self._viewer: ViewerHost | None = None
-        self.rethrow = throw
+        self.rethrow: bool = throw
+        self.noLog: bool = noLog
 
     def run_viewer_loop(self):
         logging.info("attempting to start viewer loop")
@@ -149,6 +151,9 @@ class BotHostBase(object):
 
 
     def save_txtmap(self, map: MapBase):
+        if self.noLog:
+            return
+        
         try:
             mapStr = TextMapLoader.dump_map_to_string(map, split_every=5)
         except:
@@ -199,9 +204,10 @@ class BotHostLiveServer(BotHostBase):
             isPublic: bool,
             noUi: bool,
             alignBottom: bool,
-            alignRight: bool
+            alignRight: bool,
+            noLog: bool,
     ):
-        super().__init__(name, self.place_move, gameType, noUi, alignBottom, alignRight)
+        super().__init__(name, self.place_move, gameType, noUi, alignBottom, alignRight, noLog=noLog)
 
         if FORCE_PRIVATE and self._game_type != 'private':
             raise AssertionError('Bot forced private only for the moment')
@@ -253,8 +259,6 @@ class BotHostLiveServer(BotHostBase):
 if __name__ == '__main__':
     import BotLogging
 
-    BotLogging.set_up_logger(logging.INFO)
-
     # raise AssertionError("stop")
     parser = argparse.ArgumentParser()
     parser.add_argument('-name', metavar='str', type=str, default='helpImAlive2',
@@ -269,6 +273,7 @@ if __name__ == '__main__':
     parser.add_argument('--right', action='store_true')
     parser.add_argument('--bottom', action='store_true')
     parser.add_argument('--no-ui', action='store_true', help="Hide UI (no game viewer)")
+    parser.add_argument('--no-log', action='store_true', help="Skip all logging")
     parser.add_argument('--public', action='store_true', help="Run on public (not bot) server")
     args = vars(parser.parse_args())
 
@@ -280,11 +285,15 @@ if __name__ == '__main__':
     roomId = args['roomID']
     isPublic: bool = args['public']
     noUi = args['no_ui']
+    noLog = args['no_log']
     alignBottom: bool = args['bottom']
     alignRight: bool = args['right']
 
+    if not noLog:
+        BotLogging.set_up_logger(logging.INFO)
+
     logging.info("newing up bot host")
-    host = BotHostLiveServer(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight)
+    host = BotHostLiveServer(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight, noLog=noLog)
 
     logging.info("running bot host")
     host.run()

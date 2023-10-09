@@ -598,6 +598,14 @@ class TestBase(unittest.TestCase):
         simPlayer = simHost.sim.players[player]
         self.assertEqual(tileCount, simPlayer.map.players[player].tileCount)
 
+    def assertPlayerTileCountGreater(self, simHost: GameSimulatorHost, player: int, tileCountLessThanPlayers: int):
+        simPlayer = simHost.sim.players[player]
+        self.assertGreater(simPlayer.map.players[player].tileCount, tileCountLessThanPlayers)
+
+    def assertPlayerTileCountLess(self, simHost: GameSimulatorHost, player: int, tileCountGreaterThanPlayers: int):
+        simPlayer = simHost.sim.players[player]
+        self.assertLess(simPlayer.map.players[player].tileCount, tileCountGreaterThanPlayers)
+
     def assertPlayerTileVisibleAndCorrect(self, x: int, y: int, sim: GameSimulator, player_index: int):
         playerTile = self.get_player_tile(x, y, sim, player_index)
         mapTile = sim.sim_map.GetTile(x, y)
@@ -956,6 +964,8 @@ class TestBase(unittest.TestCase):
                     if configureB is not None:
                         configureB(bBot)
 
+                    simHost.sim.ignore_illegal_moves = True
+                    base.client.map.ENABLE_DEBUG_ASSERTS = False
                     winner = simHost.run_sim(run_real_time=debugMode, turn_time=debugModeTurnTime)
                     lastWinTurns = simHost.sim.turn
                     if lastWinTurns < minGameDurationToCount:

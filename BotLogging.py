@@ -18,7 +18,6 @@ def add_file_log_output(botName: str, gameMode: str, replayId: str, logFolder: s
     # rootLogger.addHandler(fileHandler)
     pass
 
-
 def set_up_logger(logLevel: int):
     global LOGGING_SET_UP
 

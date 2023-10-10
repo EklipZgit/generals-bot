@@ -1410,3 +1410,100 @@ class BotBehaviorTests(TestBase):
         self.assertIsNone(winner)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 76)
+    
+    def test_should_intercept_army_instead_of_allowing_city_capture(self):
+        # ref D:\KeptGeneralsLogs\almostBeatSpraget_Human.exe-1v1-2023-10-09_01-49-26---6ZAGySdUX
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_intercept_army_instead_of_allowing_city_capture___6ZAGySdUX---1--201.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 201, fill_out_tiles=True)
+        self.move_enemy_general(map, enemyGeneral, 14, 6)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=201)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '7,5->7,4->6,4->5,4->5,3->5,2->4,2->4,1->3,1->2,1')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=9)
+        self.assertIsNone(winner)
+
+        city = self.get_player_tile(4, 1, simHost.sim, general.player)
+        self.assertEqual(general.player, city.player, "should not have let Spraget capture the city")
+    
+    def test_should_play_defensive_when_just_recaptured_city(self):
+        # ref D:\KeptGeneralsLogs\almostBeatSpraget_Human.exe-1v1-2023-10-09_01-49-26---6ZAGySdUX
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_play_defensive_when_just_recaptured_city___6ZAGySdUX---1--214.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 214, fill_out_tiles=True)
+        self.move_enemy_general(map, enemyGeneral, 14, 6)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=214)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=15)
+        self.assertIsNone(winner)
+
+        self.assertGatheredNear(simHost, general.player, 4, 8, 4, requiredAvgTileValue=1.5)
+
+    def test_should_detect_incoming_all_in_attack_and_maintain_defense_when_up_on_econ_and_opp_keeps_gathering(self):
+        # ref D:\KeptGeneralsLogs\almostBeatSpraget_Human.exe-1v1-2023-10-09_01-49-26---6ZAGySdUX
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_play_defensive_when_just_recaptured_city___6ZAGySdUX---1--214.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 214, fill_out_tiles=True)
+        self.move_enemy_general(map, enemyGeneral, 14, 6)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=214)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=36)
+        self.assertIsNone(winner)
+
+        self.assertGatheredNear(simHost, general.player, 3, 9, 4, requiredAvgTileValue=1.5)
+
+        botTiles = playerMap.players[general.player].tileCount
+        enTiles = playerMap.players[enemyGeneral.player].tileCount
+
+        self.assertGreater(botTiles, enTiles - 6, "Bot should kind of catch up on tiles a little while playing super defensive gatherwise.")
+        self.assertCleanedUpTilesNear(simHost, general.player, 6, 3, 4, capturedWithinLastTurns=30, requireCountCapturedInWindow=7)
+    
+    def test_should_over_gather_when_most_army_out_of_play(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_over_gather_when_most_army_out_of_play___wSZd30ZzN---1--100.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 100, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=100)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=32)
+        self.assertIsNone(winner)
+
+        self.assertPlayerTileCountLess(simHost, general.player, 60, "should have spent the whole time gathering defensively")

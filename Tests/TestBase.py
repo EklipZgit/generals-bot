@@ -526,6 +526,20 @@ class TestBase(unittest.TestCase):
 
         return enemyGeneral
 
+    def get_tile_differential(self, simHost: GameSimulatorHost, player: int) -> int:
+        """
+        Returns the current tile differential, positive means player has more, negative means opp has more. Only works for 2 player games (not FFA with only 2 players left).
+
+        @param simHost:
+        @param player:
+        @return:
+        """
+        pMap = simHost.get_player_map(player)
+        pTiles = pMap.players[player].tileCount
+        enTiles = pMap.players[player - 1].tileCount
+
+        return pTiles - enTiles
+
     def get_renderable_view_info(self, map: MapBase) -> ViewInfo:
         viewInfo = ViewInfo(1, map.cols, map.rows)
         viewInfo.playerTargetScores = [0 for p in map.players]
@@ -594,17 +608,17 @@ class TestBase(unittest.TestCase):
         if len(failures) > 0:
             self.fail(msg + '\r\n' + '\r\n'.join(failures))
 
-    def assertPlayerTileCount(self, simHost: GameSimulatorHost, player: int, tileCount: int):
+    def assertPlayerTileCount(self, simHost: GameSimulatorHost, player: int, tileCount: int, message: str | None = None):
         simPlayer = simHost.sim.players[player]
-        self.assertEqual(tileCount, simPlayer.map.players[player].tileCount)
+        self.assertEqual(tileCount, simPlayer.map.players[player].tileCount, message)
 
-    def assertPlayerTileCountGreater(self, simHost: GameSimulatorHost, player: int, tileCountLessThanPlayers: int):
+    def assertPlayerTileCountGreater(self, simHost: GameSimulatorHost, player: int, tileCountLessThanPlayers: int, message: str | None = None):
         simPlayer = simHost.sim.players[player]
-        self.assertGreater(simPlayer.map.players[player].tileCount, tileCountLessThanPlayers)
+        self.assertGreater(simPlayer.map.players[player].tileCount, tileCountLessThanPlayers, message)
 
-    def assertPlayerTileCountLess(self, simHost: GameSimulatorHost, player: int, tileCountGreaterThanPlayers: int):
+    def assertPlayerTileCountLess(self, simHost: GameSimulatorHost, player: int, tileCountGreaterThanPlayers: int, message: str | None = None):
         simPlayer = simHost.sim.players[player]
-        self.assertLess(simPlayer.map.players[player].tileCount, tileCountGreaterThanPlayers)
+        self.assertLess(simPlayer.map.players[player].tileCount, tileCountGreaterThanPlayers, message)
 
     def assertPlayerTileVisibleAndCorrect(self, x: int, y: int, sim: GameSimulator, player_index: int):
         playerTile = self.get_player_tile(x, y, sim, player_index)

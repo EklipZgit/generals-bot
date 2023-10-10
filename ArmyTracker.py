@@ -176,6 +176,10 @@ class ArmyTracker(object):
 
         self.player_targets = self.map.players[self.map.player_index].cities.copy()
         self.player_targets.append(self.map.generals[self.map.player_index])
+        for teammate in self.map.teammates:
+            teamPlayer = self.map.players[teammate]
+            self.player_targets.extend(teamPlayer.cities)
+            self.player_targets.append(teamPlayer.general)
 
         # if we have perfect info about a players general / cities, we don't need to track emergence, clear the emergence map
         for player in self.map.players:
@@ -198,7 +202,7 @@ class ArmyTracker(object):
         for army in list(self.armies.values()):
             if army.tile.visible:
                 continue
-            if army.player == self.map.player_index:
+            if army.player == self.map.player_index or army.player in self.map.teammates:
                 self.scrap_army(army)
                 continue
             if army.last_moved_turn == self.map.turn - 1:
@@ -265,7 +269,7 @@ class ArmyTracker(object):
                 if army.tile in self.armies and self.armies[army.tile] == army:
                     del self.armies[army.tile]
                 continue
-            elif army.player == self.map.player_index and not army.tile.visible:
+            elif (army.player == self.map.player_index or army.player in self.map.teammates) and not army.tile.visible:
                 logging.info(f"Army {str(army)} was ours but under fog now, so was destroyed. Scrapping.")
                 self.scrap_army(army)
             elif army.tile.visible and len(army.entangledArmies) > 0 and army.tile.player == army.player:
@@ -693,7 +697,7 @@ class ArmyTracker(object):
         @return:
         """
 
-        if emergedTile.player == self.map.player_index:
+        if emergedTile.player == self.map.player_index or emergedTile.player in self.map.teammates:
             return
 
         emergingPlayer = emergedTile.player
@@ -734,7 +738,7 @@ class ArmyTracker(object):
 
         def foreachFunc(tile, dist):
             for i in range(len(self.emergenceLocationMap)):
-                if i == self.map.player_index:
+                if i == self.map.player_index or i in self.map.teammates:
                     continue
                 self.emergenceLocationMap[i][tile.x][tile.y] -= 1 * armyEmergenceValue // (dist + 5)
                 if self.emergenceLocationMap[i][tile.x][tile.y] < 0:
@@ -743,7 +747,7 @@ class ArmyTracker(object):
         def skipFunc(tile: Tile):
             if tile == neutralTile:
                 return False
-            isTileEnemy = tile.discovered and tile.player != self.map.player_index and tile.player >= 0
+            isTileEnemy = tile.discovered and self.map.is_tile_enemy(tile)
             if isTileEnemy:
                 return False
 
@@ -1588,7 +1592,7 @@ class ArmyTracker(object):
         if army.tile.isCity and army.expectedPath is None and army.tile.lastMovedTurn < self.map.turn - 2:
             return None
 
-        if army.player == self.map.player_index:
+        if army.player == self.map.player_index or army.player in self.map.teammates:
             return None
 
         armyDistFromGen = self.genDistances[army.tile.x][army.tile.y]

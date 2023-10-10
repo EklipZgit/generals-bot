@@ -153,27 +153,29 @@ class BotHostBase(object):
     def save_txtmap(self, map: MapBase):
         if self.noLog:
             return
-        
         try:
-            mapStr = TextMapLoader.dump_map_to_string(map, split_every=5)
-        except:
             try:
-                mapStr = TextMapLoader.dump_map_to_string(map, split_every=6)
+                mapStr = TextMapLoader.dump_map_to_string(map, split_every=5)
             except:
-                exc_type, exc_value, exc_traceback = sys.exc_info()
-                lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
+                try:
+                    mapStr = TextMapLoader.dump_map_to_string(map, split_every=6)
+                except:
+                    exc_type, exc_value, exc_traceback = sys.exc_info()
+                    lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
 
-                logging.info(f'failed to dump map, {lines}')
-                mapStr = f'failed to dump map, {lines}'
+                    logging.info(f'failed to dump map, {lines}')
+                    mapStr = f'failed to dump map, {lines}'
 
-        ekBotData = self.eklipz_bot.dump_turn_data_to_string()
+            ekBotData = self.eklipz_bot.dump_turn_data_to_string()
 
-        mapStr = f'{mapStr}\n{ekBotData}'
+            mapStr = f'{mapStr}\n{ekBotData}'
 
-        mapFilePath = "{}\\{}.txtmap".format(self.eklipz_bot.logDirectory, map.turn)
+            mapFilePath = "{}\\{}.txtmap".format(self.eklipz_bot.logDirectory, map.turn)
 
-        with open(mapFilePath, 'w') as mapFile:
-            mapFile.write(mapStr)
+            with open(mapFilePath, 'w') as mapFile:
+                mapFile.write(mapStr)
+        except:
+            logging.error(traceback.format_exc())
 
     def initialize_viewer(self, skip_file_logging: bool = False):
         window_title = "%s (%s)" % (self._name.split('_')[-1], self._game_type)

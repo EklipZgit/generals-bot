@@ -124,7 +124,7 @@ class GeneralsClient(object):
         elif mode == "1v1":
             self._send(["join_1v1", userid, self.bot_key])
         elif mode == "team":
-            self._send(["join_team", userid, self.bot_key])
+            self._send(["join_team", 'getRekt', userid, self.bot_key])
         elif mode == "ffa":
             self._send(["play", userid, self.bot_key])
         else:

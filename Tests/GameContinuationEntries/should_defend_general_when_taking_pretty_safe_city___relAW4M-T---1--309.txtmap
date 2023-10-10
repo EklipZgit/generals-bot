@@ -1,0 +1,69 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M                   M    b2   b2   b1   bG5  b1   b2   M    b3   M    b4   b4
+                              M    b2   b5   b2   b1   b1   b1   b1   b1   b4   b2   M
+M              M    b2   b2   b2   bC12 b2   b2   M    b2   b2   M    b1   b2   b2   b2   M
+          M         b2   b2   b2   M    b2   M    b2   b2   b2   M    b56  C50  b2   M    b4
+     M                        b2   b5   b2   a2   b2   a2   b3   M    b2   b2   b2   b2   b2
+M                   M    M    b2   b3   M    b3   a2   a2   b2   b2   b2        M    C44  b2
+                    M         b6   b5   b3   b3   b3   a2   C50  b3   b3   b4        M    b4
+     M    M    M              M    a2   M    M    b3   b3   b3   b3   b4   b4        M    b4
+     M    M              MD   a4D  a2D  D    M    M    b3   b3   C46  b3             M    b4
+M                   a5D  a3D  a3D  a2D  MD             M    b5   b2   b3                  b4
+     M    a5   a5   a5D  a3D  a3D  a2D  a2D  a2        M    M    b2   a2   a2   b2   b2   b4
+               M    D    a3D  MD   D    MD   a2   a2   a2   a2   a2   a2   a2   C40  M    M
+                    MD   a3D  D    M         a4        a3   a2   M         M              M
+                    a3   a3   a3        M    a4   M    a3   a2        M              M
+     M                   M    a3   M    M    a4   a2   a2   a2   a5             M
+M    a3   a3   a3   a3   a3   a3   a3   a3   M    a2   a3   M    a5        M         M    M
+                              a3   a3   a3   a3   a2   a3   M    a5             M
+          M    M    M                   a3        M    M         M         M
+          M    M    M                   a3                            M              M
+     M                                  a3                  M    M         M         M
+M    M                                       M         M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=10,15
+turn=309
+bot_player_index=1
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_target_player=0
+bot_cur_path=[5 len 1] 14,3 -> 15,3
+aUsername=Bot EklipZ_ai_10
+aTiles=85
+aScore=272
+aStandingArmy=187
+aStars=52
+aCityCount=1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=334
+aDelta25Tiles=6
+aDelta25Score=-27
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=293
+bUsername=[Bot]EklipZ_ai
+bTiles=86
+bScore=288
+bStandingArmy=202
+bStars=52
+bCityCount=2
+bGeneral=9,0
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=5
+bDelta25Score=-2
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=309

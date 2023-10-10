@@ -144,8 +144,6 @@ def __evaluate_plan_value(
     return pathValue, adjAvailable.value, 0-tileWeightSum, genDistSum
 
 
-
-
 def optimize_first_25(
         map: MapBase,
         general: Tile,
@@ -177,20 +175,21 @@ def optimize_first_25(
     genArmyAtStart = general.army
 
     if mapTurnAtStart > 25:
+        turnInCycle = mapTurnAtStart % 50
         result = _sub_optimize_remaining_cycle_expand_from_cities(
             map,
             general,
             genArmyAtStart,
             distToGenMap,
             tile_weight_map,
-            turn=mapTurnAtStart,
+            turn=turnInCycle,
             visited_set=visited,
             prune_below=0,
-            allow_wasted_moves=5,
+            allow_wasted_moves=turnInCycle // 4,
             dont_force_first=True,
             debug_view_info=debug_view_info,
             no_log=no_log)
-        val = get_start_expand_value(map, general, genArmyAtStart, mapTurnAtStart, result, visitedSet=visited, noLog=no_log)
+        val = get_start_expand_value(map, general, genArmyAtStart, turnInCycle, result, visitedSet=visited, noLog=False)
 
         return ExpansionPlan(val, result, mapTurnAtStart)
 
@@ -519,6 +518,9 @@ def _optimize_25_launch_segment(
         if currentTile in visited_set:
             return None
 
+        if map.is_tile_friendly(currentTile):
+            return None
+
         # if currentGenDist < fromTileGenDist:
         #     logging.info(f'bounded off loop path (value)...? {str(fromTile)}->{str(currentTile)}')
             # return None
@@ -588,13 +590,16 @@ def _optimize_25_launch_segment(
     loopingGeneralSearchCutoff = 500
 
     def skip_func(
-            nextTile,
+            nextTile: Tile,
             currentPriorityObject,
             pathList: typing.List[Tile]):
         _, genDist, _, pathCappedNeg, _, repeats, cappedAdj, maxGenDist = currentPriorityObject
         remainingArmy = pathCappedNeg + gen_army
 
         if repeats - force_wasted_moves > 0:
+            return True
+
+        if nextTile.player in map.teammates:
             return True
 
         if maxGenDist > genDist:

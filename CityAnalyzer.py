@@ -117,7 +117,7 @@ class CityAnalyzer(object):
                     self.player_city_scores[tile] = score
                     if self.is_contested(tile):
                         self.owned_contested_cities.add(tile)
-                else:
+                elif tile.player not in self.map.teammates:
                     self.enemy_city_scores[tile] = score
                     if self.is_contested(tile):
                         self.enemy_contested_cities.add(tile)

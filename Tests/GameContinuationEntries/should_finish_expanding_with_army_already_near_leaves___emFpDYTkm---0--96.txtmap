@@ -1,0 +1,70 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                              bG4D MD   b1D            M
+M    M    M                   b1D  b1D  b1D            M                        M
+               M              b1D  b1D  D    M                   M
+               M         D    b1D  b1D  D    b1                  M              M
+               M              b3   b1   b1D  M    b1   b1        M                        M
+                              a1        b1D  b1   b1   b1        M                   M
+          b1                  a1                  M    b1        M                   M
+     M    b1   M              a1             M         b1                  M    M              M
+     b1   b1             C44  a1             M         b1   M         M    M
+     b1   M              M    a1             M         b1             M
+     b1                       a1   a1                  b1   M
+                         M    a1   a1        a1   a1   b1   b1   b1   M
+          M    M         M    a1   a1   M    a1   a1   b1   b1   b1   M
+M         M              M    M    a1   a1   a1        b1   M    M                             M
+          M    M    M              a1   a1   M    M         M                             M    M
+          M                   M    M    a1   M                   M
+     a5   a1   C49       a1        M    a1        M    M              M         M         M
+     M    a1   M         a1   M         a1   M    M    M    M    M              M
+M    M    a1   a1   a1   a1   a1   a1   a1             M                   M              M
+                    M    a1   a1   a1   aG6  M         M         M                   M    M    M
+                              a1   M    a1        M                        M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=6,0
+turn=96
+bot_player_index=0
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_target_player=1
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=41
+aScore=50
+aStandingArmy=9
+aStars=74
+aCityCount=1
+aGeneral=8,19
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=19
+aDelta25Score=26
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=96
+bUsername=ImpossLT
+bTiles=43
+bScore=49
+bStandingArmy=6
+bStars=69
+bCityCount=1
+bGeneral=6,0
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=75
+bDelta25Tiles=20
+bDelta25Score=25
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=96

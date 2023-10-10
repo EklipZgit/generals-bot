@@ -634,3 +634,18 @@ function Run-Human {
         }
     }
 }
+
+
+function Run-HumanTeammate {
+    Param(
+        [switch] $left
+    )
+    $splat = @{
+        noui = $false
+        right = -not $left
+    }
+    while ($true)
+    {
+        Run-BotOnce -game "team" -name "Human.py" -public @splat
+    }
+}

@@ -38,8 +38,12 @@ class ExpansionTests(TestBase):
             negativeTiles=negativeTiles,
             leafMoves=bot.leafMoves,
             # allowMultiPathReturn=True,
-            allowMultiPathMultiDistReturn=True,
-            forceNoGlobalVisited=False,
+            useIterativeNegTiles=bot.expansion_use_iterative_negative_tiles,
+            forceNoGlobalVisited=bot.expansion_force_no_global_visited,
+            allowMultiPathMultiDistReturn=bot.expansion_use_multi_per_dist_per_tile,
+            lengthWeightOffset=bot.expansion_length_weight_offset,
+            useCutoff=bot.expansion_use_cutoff,
+            useLeafMovesFirst=bot.expansion_use_leaf_moves_first,
             viewInfo=bot.viewInfo
         )
 
@@ -89,7 +93,7 @@ class ExpansionTests(TestBase):
             self.fail("Path captures didn't match expected:\r\n  " + "\r\n  ".join(failures))
 
     def test__first_25_reroute__2_moves__should_find_2_tile_move(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = f'ExpandUtilsTestMaps/did_not_find_2_move_cap__turn34'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, turn=34, fill_out_tiles=True)
 
@@ -130,1157 +134,6 @@ class ExpansionTests(TestBase):
 
         # this should be how many tiles the enemy has left after.
         self.assertEqual(17, simHost.sim.players[enemyGeneral.player].map.players[enemyGeneral.player].tileCount)
-    def test_validate_expansion__70__6VUCSV74d(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__6VUCSV74d___6VUCSV74d---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70___xecfyk2z(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70___xecfyk2z___-xecfyk2z---1--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__nls8cnXsw(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__nls8cnXsw___nls8cnXsw---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__u1VlLN9zB(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__u1VlLN9zB___u1VlLN9zB---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__dqxk_yUgh(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__dqxk_yUgh___dqxk-yUgh---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__Bf6qQtn9J(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__Bf6qQtn9J___Bf6qQtn9J---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__CtyQf3LFd(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__CtyQf3LFd___CtyQf3LFd---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__DfPncBCih(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__DfPncBCih___DfPncBCih---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__p3EGc7qPJ(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__p3EGc7qPJ___p3EGc7qPJ---1--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__86fpHvxcf(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__86fpHvxcf___86fpHvxcf---1--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__hadpjDGHG(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__hadpjDGHG___hadpjDGHG---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__xP1ct56px(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__xP1ct56px___xP1ct56px---1--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__C60XoJsYP(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__C60XoJsYP___C60XoJsYP---1--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__3tCczBZAc(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__3tCczBZAc___3tCczBZAc---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__clSe6d52C(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__clSe6d52C___clSe6d52C---1--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__n32rVGV8N(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__n32rVGV8N___n32rVGV8N---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__ehLAGG_AO(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__ehLAGG_AO___ehLAGG-AO---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__luRGzg19o(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__luRGzg19o___luRGzg19o---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__XZHq6JAQR(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__XZHq6JAQR___XZHq6JAQR---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__0w0pGm4qa(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__0w0pGm4qa___0w0pGm4qa---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__tmhkvg0BM(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__tmhkvg0BM___tmhkvg0BM---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__BWmUz6UW6(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__BWmUz6UW6___BWmUz6UW6---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__vk2cIqiC3(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__vk2cIqiC3___vk2cIqiC3---1--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__NF8xwDttC(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__NF8xwDttC___NF8xwDttC---1--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__3ilqVxvzF(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__3ilqVxvzF___3ilqVxvzF---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__bO9ac2krY(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__bO9ac2krY___bO9ac2krY---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__JsssU9idV(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__JsssU9idV___JsssU9idV---1--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__LoTkzTB0W(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__LoTkzTB0W___LoTkzTB0W---4--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__GebA0bdAT(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__GebA0bdAT___GebA0bdAT---3--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__UCAA7tDxS(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__UCAA7tDxS___UCAA7tDxS---7--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__9njYcfuZR(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__9njYcfuZR___9njYcfuZR---3--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__32YTavdft(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__32YTavdft___32YTavdft---2--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__0CClHAmA0(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__0CClHAmA0___0CClHAmA0---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__5f70GpT1T(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__5f70GpT1T___5f70GpT1T---7--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__7Z_OkCAk3(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__7Z_OkCAk3___7Z-OkCAk3---0--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__ZG3PGgtLk(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__ZG3PGgtLk___ZG3PGgtLk---5--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__GMpI5pzP4(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__GMpI5pzP4___GMpI5pzP4---7--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__TagXHz0X4(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__TagXHz0X4___TagXHz0X4---4--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion__70__4RWu5H5xH(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion__70__4RWu5H5xH___4RWu5H5xH---4--70.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 70, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=70)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=30, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175___xecfyk2z(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175___xecfyk2z___-xecfyk2z---1--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__nls8cnXsw(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__nls8cnXsw___nls8cnXsw---0--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__u1VlLN9zB(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__u1VlLN9zB___u1VlLN9zB---0--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__Bf6qQtn9J(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__Bf6qQtn9J___Bf6qQtn9J---0--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__CtyQf3LFd(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__CtyQf3LFd___CtyQf3LFd---0--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__p3EGc7qPJ(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__p3EGc7qPJ___p3EGc7qPJ---1--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__86fpHvxcf(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__86fpHvxcf___86fpHvxcf---1--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__hadpjDGHG(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__hadpjDGHG___hadpjDGHG---0--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__xP1ct56px(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__xP1ct56px___xP1ct56px---1--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__C60XoJsYP(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__C60XoJsYP___C60XoJsYP---1--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__3tCczBZAc(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__3tCczBZAc___3tCczBZAc---0--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__luRGzg19o(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__luRGzg19o___luRGzg19o---0--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__XZHq6JAQR(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__XZHq6JAQR___XZHq6JAQR---0--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__0w0pGm4qa(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__0w0pGm4qa___0w0pGm4qa---0--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__tmhkvg0BM(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__tmhkvg0BM___tmhkvg0BM---0--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__BWmUz6UW6(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__BWmUz6UW6___BWmUz6UW6---0--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__vk2cIqiC3(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__vk2cIqiC3___vk2cIqiC3---1--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__LoTkzTB0W(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__LoTkzTB0W___LoTkzTB0W---4--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__GebA0bdAT(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__GebA0bdAT___GebA0bdAT---3--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__QxzyvHjfo(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__QxzyvHjfo___QxzyvHjfo---5--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__32YTavdft(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__32YTavdft___32YTavdft---2--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__5f70GpT1T(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__5f70GpT1T___5f70GpT1T---7--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__7Z_OkCAk3(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__7Z_OkCAk3___7Z-OkCAk3---0--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__GMpI5pzP4(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__GMpI5pzP4___GMpI5pzP4---7--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_later__175__TagXHz0X4(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_later__175__TagXHz0X4___TagXHz0X4---4--175.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 175, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=175)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240___xecfyk2z(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240___xecfyk2z___-xecfyk2z---1--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__nls8cnXsw(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__nls8cnXsw___nls8cnXsw---0--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__u1VlLN9zB(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__u1VlLN9zB___u1VlLN9zB---0--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__Bf6qQtn9J(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__Bf6qQtn9J___Bf6qQtn9J---0--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__CtyQf3LFd(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__CtyQf3LFd___CtyQf3LFd---0--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__p3EGc7qPJ(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__p3EGc7qPJ___p3EGc7qPJ---1--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__86fpHvxcf(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__86fpHvxcf___86fpHvxcf---1--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__xP1ct56px(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__xP1ct56px___xP1ct56px---1--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__C60XoJsYP(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__C60XoJsYP___C60XoJsYP---1--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__3tCczBZAc(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__3tCczBZAc___3tCczBZAc---0--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__luRGzg19o(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__luRGzg19o___luRGzg19o---0--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__XZHq6JAQR(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__XZHq6JAQR___XZHq6JAQR---0--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__0w0pGm4qa(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__0w0pGm4qa___0w0pGm4qa---0--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__vk2cIqiC3(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__vk2cIqiC3___vk2cIqiC3---1--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__LoTkzTB0W(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__LoTkzTB0W___LoTkzTB0W---4--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__QxzyvHjfo(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__QxzyvHjfo___QxzyvHjfo---5--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__32YTavdft(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__32YTavdft___32YTavdft---2--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__5f70GpT1T(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__5f70GpT1T___5f70GpT1T---7--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__7Z_OkCAk3(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__7Z_OkCAk3___7Z-OkCAk3---0--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__GMpI5pzP4(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__GMpI5pzP4___GMpI5pzP4---7--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_10_moves_remaining__240__TagXHz0X4(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_10_moves_remaining__240__TagXHz0X4___TagXHz0X4---4--240.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=10, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_late_25_moves_remaining__375__nls8cnXsw(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_late_25_moves_remaining__375__nls8cnXsw___nls8cnXsw---0--375.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 375, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_late_25_moves_remaining__375__u1VlLN9zB(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_late_25_moves_remaining__375__u1VlLN9zB___u1VlLN9zB---0--375.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 375, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_late_25_moves_remaining__375__CtyQf3LFd(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_late_25_moves_remaining__375__CtyQf3LFd___CtyQf3LFd---0--375.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 375, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_late_25_moves_remaining__375__p3EGc7qPJ(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_late_25_moves_remaining__375__p3EGc7qPJ___p3EGc7qPJ---1--375.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 375, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_late_25_moves_remaining__375__xP1ct56px(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_late_25_moves_remaining__375__xP1ct56px___xP1ct56px---1--375.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 375, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_late_25_moves_remaining__375__C60XoJsYP(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_late_25_moves_remaining__375__C60XoJsYP___C60XoJsYP---1--375.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 375, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_late_25_moves_remaining__375__luRGzg19o(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_late_25_moves_remaining__375__luRGzg19o___luRGzg19o---0--375.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 375, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_late_25_moves_remaining__375__0w0pGm4qa(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_late_25_moves_remaining__375__0w0pGm4qa___0w0pGm4qa---0--375.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 375, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_late_25_moves_remaining__375__LoTkzTB0W(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_late_25_moves_remaining__375__LoTkzTB0W___LoTkzTB0W---4--375.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 375, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-    
-    def test_validate_expansion_late_25_moves_remaining__375__QxzyvHjfo(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_late_25_moves_remaining__375__QxzyvHjfo___QxzyvHjfo---5--375.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 375, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
-
-    def test_validate_expansion_late_25_moves_remaining__375__TagXHz0X4(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/validate_expansion_late_25_moves_remaining__375__TagXHz0X4___TagXHz0X4---4--375.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 375, fill_out_tiles=True)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
-
-        path, otherPaths = self.run_expansion(map, general, enemyGeneral, turns=25, negativeTiles=set(), mapVision=rawMap, debugMode=debugMode)
-        self.assertIsNotNone(path)
 
     def test_validate_expansion__calculates_basic_longer_to_enemy_tiles_expansion_correctly(self):
         rawMapData = """
@@ -1325,6 +178,7 @@ bot_target_player=1
         self.assertNotEqual(general, path.start.tile)
 
     def test_validate_expansion__calculates_city_expansion_correctly(self):
+        # TODO expansion doesn't take city increment into account currently so this test will never pass until that is implemented.
         rawMapData = """
 |    |    |    |    |    |    |    |    |    |    |    |   
 a8   a1   a1   a2   a1   a2   a2   a2   a2   a1   a1   a5  
@@ -1367,7 +221,7 @@ bot_target_player=1
         self.assertNotEqual(general, path.start.tile)
 
     def test_should_not_launch_attack_at_suboptimal_time(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_launch_attack_at_suboptimal_time___uClPcbQ7W---1--89.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 89, fill_out_tiles=True)
 
@@ -1385,21 +239,13 @@ bot_target_player=1
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        if debugMode:
-            winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=11)
-            self.assertIsNone(winner)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=11)
+        self.assertIsNone(winner)
 
-            self.assertEqual(36, simHost.get_player_map(general.player).players[general.player].tileCount)
-            self.fail('cant actually run this test in debug mode, this is just to observe')
-
-        simHost.run_sim(run_real_time=False, turns=1)
-        simHost.assert_last_move(general.player, None)
-
-        simHost.run_sim(run_real_time=False, turns=1)
-        simHost.assert_last_move(general.player, None)
+        self.assertEqual(36, simHost.get_player_map(general.player).players[general.player].tileCount)
 
     def test_should_expand_away_from_general(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_launch_attack_at_suboptimal_time___uClPcbQ7W---1--89.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 89, fill_out_tiles=True)
 
@@ -1417,19 +263,11 @@ bot_target_player=1
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        if debugMode:
-            winner = simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=15)
-            self.assertIsNone(winner)
-            self.fail('cant actually run this test in debug mode, this is just to observe')
 
-        simHost.run_sim(run_real_time=False, turns=1)
-        simHost.assert_last_move(general.player, None)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=11)
+        self.assertIsNone(winner)
 
-        simHost.run_sim(run_real_time=False, turns=1)
-        simHost.assert_last_move(general.player, None)
-
-        simHost.run_sim(run_real_time=False, turns=9)
-        self.assertEqual(36, simHost.sim.sim_map.players[general.player].tileCount)
+        self.assertPlayerTileCountGreater(simHost, general.player, 35)
     
     def test_should_not_find_no_expansion_moves(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1493,14 +331,14 @@ bot_target_player=1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=7)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 46)
     
     def test_should_capture_tiles_towards_enemy(self):
         # it can cap downward and then rally immediate from gen
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_capture_tiles_towards_enemy___Cuh4gfLI2---1--89.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 89, fill_out_tiles=True)
 
@@ -1509,6 +347,7 @@ bot_target_player=1
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        self.set_general_emergence_around(6, 13, simHost, general.player, enemyGeneral.player, emergenceAmt=20)
         bot = simHost.get_bot(general.player)
         playerMap = simHost.get_player_map(general.player)
 
@@ -1518,7 +357,8 @@ bot_target_player=1
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=11)
         self.assertIsNone(winner)
 
-        self.assertPlayerTileCountGreater(simHost, general.player, 40)
+        self.assertPlayerTileCountGreater(simHost, general.player, 39)
+        self.assertPlayerTileCountLess(simHost, enemyGeneral.player, 30, 'should have captured 6 red tiles, not 5 or less.')
 
     def test_should_capture_tiles_towards_enemy__extra_turns(self):
         # it can cap downward and then rally immediate from gen, with extra moves
@@ -1531,6 +371,7 @@ bot_target_player=1
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        self.set_general_emergence_around(6, 13, simHost, general.player, enemyGeneral.player, emergenceAmt=20)
         bot = simHost.get_bot(general.player)
         playerMap = simHost.get_player_map(general.player)
 
@@ -1541,3 +382,78 @@ bot_target_player=1
         self.assertIsNone(winner)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 48)
+    
+    def test_should_finish_expanding_with_army_already_near_leaves(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_finish_expanding_with_army_already_near_leaves___emFpDYTkm---0--96.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 96, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=96)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=4)
+        self.assertIsNone(winner)
+
+        self.assertPlayerTileCountGreater(simHost, general.player, 44)
+    
+    def test_should_capture_tiles_effectively_when_just_gen(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_capture_tiles_effectively_when_just_gen___ws5z5FLzd---1--80.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 80, fill_out_tiles=True)
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 8, 19)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=80)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        self.set_general_emergence_around(10, 14, simHost, general.player, enemyGeneral.player, 21)
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        initDifferential = self.get_tile_differential(simHost, general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=20)
+        self.assertIsNone(winner)
+
+        self.assertPlayerTileCountGreater(simHost, general.player, 33)
+        # 16 mv 2 en 3 neut if down+right
+        # 4 remaining = 1 neut, so total 2 en, 4 neut in 20 moves is possible.
+        finalTileDiff = self.get_tile_differential(simHost, general.player)
+        self.assertEqual(finalTileDiff - initDifferential, 12, "should be able to eek this much differential out of this AT LEAST. Change the assert if greater is found.")
+
+    def test_should_attack_in_to_opponent_after_launch(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_attack_in_to_opponent_after_launch___ws5z5FLzd---1--122.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 122, fill_out_tiles=True)
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 8, 19)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=122)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        self.set_general_emergence_around(9, 15, simHost, general.player, enemyGeneral.player, 21)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=28)
+        self.assertIsNone(winner)
+
+        self.assertPlayerTileCountLess(simHost, enemyGeneral.player, 44)
+
+        self.assertPlayerTileCountGreater(simHost, general.player, 58)

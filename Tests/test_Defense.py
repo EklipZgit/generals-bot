@@ -619,7 +619,7 @@ class DefenseTests(TestBase):
         # TODO add asserts for should_detect_enemy_kill_threat__2_5__at__4_5
     
     def test_should_not_loop_forever_defense_gathering(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_loop_forever_defense_gathering___EklipZ_ai-rx8fCvt63---b--216.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 216, fill_out_tiles=True)
 
@@ -704,7 +704,7 @@ class DefenseTests(TestBase):
         self.assertIsNone(winner)
     
     def test_should_not_make_nonsense_scrim_move(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_make_nonsense_scrim_move___Hxp3ym3Th---b--383.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 383, fill_out_tiles=True)
 
@@ -884,8 +884,10 @@ class DefenseTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
         self.assertIsNone(winner)
+
+        self.assertPlayerTileCountGreater(simHost, general.player, 70)
     
     def test_should_not_sit_and_die_with_defendable_path(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False

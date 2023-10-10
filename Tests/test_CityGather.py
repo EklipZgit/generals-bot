@@ -3,6 +3,7 @@ import time
 import typing
 
 import GatherUtils
+from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
 
@@ -393,3 +394,27 @@ class CityGatherTests(TestBase):
         self.assertEqual(-1, problemCity.player)
         self.assertEqual(general.player, shouldCap1.player)
         self.assertEqual(general.player, shouldCap2.player)
+    
+    def test_should_defend_general_when_taking_pretty_safe_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_defend_general_when_taking_pretty_safe_city___relAW4M-T---1--309.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 309, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=309)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        bot.curPath = Path()
+        playerMap = simHost.get_player_map(general.player)
+        bot.curPath.add_next(playerMap.GetTile(14, 3))
+        bot.curPath.add_next(playerMap.GetTile(15, 3))
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=2)
+        self.assertIsNone(winner)
+
+        self.assertEqual(playerMap.GetTile(general.x, general.y), bot.locked_launch_point)

@@ -596,11 +596,16 @@ class MapBase(object):
         self.last_player_index_submitted_move: typing.Tuple[Tile, Tile, bool] | None = None
         self.player_index: int = player_index  # Integer Player Index
         # TODO TEAMMATE
+        self.is_2v2: bool = False
         self.teammates = set()
+
         if teams is not None:
+            self.is_2v2 = True
             for player, team in enumerate(teams):
                 if team == teams[self.player_index] and player != self.player_index:
                     self.teammates.add(player)
+
+        self.teams: typing.List[int] | None = teams
 
         self.usernames: typing.List[str] = user_names  # List of String Usernames
         self.players: typing.List[Player] = [Player(x) for x in range(len(self.usernames))]
@@ -876,6 +881,17 @@ class MapBase(object):
     def update_scores(self, scores: typing.List[Score]):
         """ONLY call this when simulating the game"""
         self.scores = scores
+
+    def is_tile_friendly(self, tile: Tile) -> bool:
+        if tile.player == self.player_index or tile.player in self.teammates:
+            return True
+        return False
+
+    def is_tile_enemy(self, tile: Tile) -> bool:
+        if not self.is_tile_friendly(tile) and tile.player >= 0:
+            return True
+
+        return False
 
     # Emulates a tile update event from the server. Changes player tile ownership, or mountain to city, etc, and fires events
     def update_visible_tile(
@@ -1829,87 +1845,135 @@ class MapBase(object):
         if self.is_city_bonus_turn:
             expectedMeDelta += myPlayer.cityCount
 
+        if self.is_2v2:
+            for teammate in self.teammates:
+                teammatePlayer = self.players[teammate]
+                if teammatePlayer.dead:
+                    continue
+
+                if self.is_army_bonus_turn:
+                    expectedMeDelta += teammatePlayer.tileCount
+                if self.is_city_bonus_turn:
+                    expectedMeDelta += teammatePlayer.cityCount
+
         logging.info(f"myPlayer score {myPlayer.score}, lastScores myPlayer total {lastScores[myPlayer.index].total}")
         actualPlayerDelta = myPlayer.score - lastScores[myPlayer.index].total
 
-        for player in self.players:
-            if player.dead:
-                player.expectedScoreDelta = 0
-                player.actualScoreDelta = 0
-                continue
+        teams = [i for i in range(len(self.players))]
 
-            otherPlayer = player
+        if self.teams is not None:
+            teams = self.teams
 
-            expectedEnemyDelta = 0
+        teamDict = {}
 
-            if self.is_army_bonus_turn:
-                expectedEnemyDelta += otherPlayer.tileCount
+        for pIndex, teamIndex in enumerate(teams):
+            teamList = teamDict.get(teamIndex, [])
+            if len(teamList) == 0:
+                teamDict[teamIndex] = teamList
+            teamList.append(pIndex)
+
+        for teamIndex, teamList in teamDict.items():
+
+            actualEnemyTeamDelta = 0
+            expectedEnemyTeamDelta = 0
+            teamCityCount = 0
+            for playerIndex in teamList:
+                otherPlayer = self.players[playerIndex]
+
+                if otherPlayer.dead:
+                    otherPlayer.expectedScoreDelta = 0
+                    otherPlayer.actualScoreDelta = 0
+                    continue
+
+                expectedEnemyDelta = 0
+                if self.is_army_bonus_turn:
+                    expectedEnemyDelta += otherPlayer.tileCount
+                if self.is_city_bonus_turn:
+                    expectedEnemyDelta += otherPlayer.cityCount
+
+                logging.info(
+                    f'otherPlayer score {otherPlayer.score}, lastScores otherPlayer total {lastScores[otherPlayer.index].total}')
+
+                otherPlayer.actualScoreDelta = otherPlayer.score - lastScores[otherPlayer.index].total
+                otherPlayer.expectedScoreDelta = expectedEnemyDelta
+                teamCityCount += otherPlayer.cityCount
+                expectedEnemyTeamDelta += expectedEnemyDelta
+
+                actualEnemyTeamDelta += otherPlayer.actualScoreDelta
+
+                # nothing past here runs for us
+                if otherPlayer.index == self.player_index:
+                    continue
+
+            newCityCount = teamCityCount
             if self.is_city_bonus_turn:
-                expectedEnemyDelta += otherPlayer.cityCount
-
-            logging.info(
-                f'otherPlayer score {otherPlayer.score}, lastScores otherPlayer total {lastScores[otherPlayer.index].total}')
-
-            otherPlayer.actualScoreDelta = otherPlayer.score - lastScores[otherPlayer.index].total
-            otherPlayer.expectedScoreDelta = expectedEnemyDelta
-
-            # nothing past here runs for us
-            if otherPlayer.index == self.player_index:
-                continue
-
-            if self.is_city_bonus_turn:
-                if self.remainingPlayers == 2:
+                if self.remainingPlayers == 2 or self.is_2v2:
                     # if NOT 1v1 we use the outer, dumber city count calculation that works reliably for FFA.
                     # in a 1v1, if we lost army, then opponent also lost equal army (unless we just took a neutral tile)
                     # this means we can still calculate city counts, even when fights are ongoing and both players are losing army
                     # so we get the amount of unexpected delta on our player, and add that to actual opponent delta, and get the opponents city count
                     friendlyFightDelta = expectedMeDelta - actualPlayerDelta
 
-                    realEnemyCities = otherPlayer.cityCount + otherPlayer.actualScoreDelta + friendlyFightDelta - expectedEnemyDelta
+                    realEnemyCities = teamCityCount + actualEnemyTeamDelta + friendlyFightDelta - expectedEnemyTeamDelta
 
                     # if otherPlayer.
 
                     if realEnemyCities <= -30:
                         # then opp just took a neutral city
-                        otherPlayer.cityCount += 1
+                        newCityCount += 1
                         logging.info("set otherPlayer cityCount += 1 to {} because it appears he just took a city.")
                     elif realEnemyCities >= 30 and actualPlayerDelta < -30:
                         # then our player just took a neutral city, noop
                         logging.info(
                             "myPlayer just took a city? (or fighting in ffa) ignoring realEnemyCities this turn, realEnemyCities >= 38 and actualPlayerDelta < -30")
                     else:
-                        otherPlayer.cityCount = realEnemyCities
+                        newCityCount = realEnemyCities
                         logging.info(
-                            f"set otherPlayer cityCount to {otherPlayer.cityCount}. expectedMeDelta {expectedMeDelta}, "
-                            f"actualPlayerDelta {actualPlayerDelta}, expectedEnemyDelta {expectedEnemyDelta}, "
-                            f"otherPlayer.actualScoreDelta {otherPlayer.actualScoreDelta}, fightDelta {friendlyFightDelta}, "
+                            f"set otherPlayer cityCount to {newCityCount}. expectedMeDelta {expectedMeDelta}, "
+                            f"actualPlayerDelta {actualPlayerDelta}, expectedEnemyTeamDelta {expectedEnemyTeamDelta}, "
+                            f"otherPlayer.actualScoreDelta {actualEnemyTeamDelta}, fightDelta {friendlyFightDelta}, "
                             f"realEnemyCities {realEnemyCities}")
 
-        for player in self.players:
-            playerDeltaDiff = player.actualScoreDelta - player.expectedScoreDelta
-            if playerDeltaDiff < 0:
-                # either they're fighting someone, attacking a neutral city, attacking neutral tiles, or someone captured one of their cities.
-                # first try whoever they were fighting last turn if any:
-                if player.fighting_with_player >= 0:
-                    otherPlayer = self.players[player.fighting_with_player]
-                    otherPlayerDeltaDiff = otherPlayer.actualScoreDelta - otherPlayer.expectedScoreDelta
-                    if otherPlayerDeltaDiff == playerDeltaDiff:
-                        # already set to the right player, leave it alone
-                        continue
-                    elif otherPlayerDeltaDiff < 0:
-                        # not as sure, here, but LIKELY still fighting the same player.
-                        continue
+                sum = 0
+                for playerIndex in teamList:
+                    otherPlayer = self.players[playerIndex]
+                    otherPlayer.cityCount = newCityCount // len(teamList)
+                    sum += otherPlayer.cityCount
 
-                for otherPlayer in self.players:
-                    if otherPlayer == player:
-                        continue
-                    otherPlayerDeltaDiff = otherPlayer.actualScoreDelta - otherPlayer.expectedScoreDelta
-                    if otherPlayerDeltaDiff == playerDeltaDiff:
-                        # then these two are probably fighting each other!?!?!?!?
-                        otherPlayer.fighting_with_player = player.index
-                        player.fighting_with_player = otherPlayer.index
-            else:
-                player.fighting_with_player = -1
+                while sum < newCityCount:
+                    for playerIndex in teamList:
+                        otherPlayer = self.players[playerIndex]
+                        otherPlayer.cityCount += 1
+                        sum += 1
+                        if sum >= newCityCount:
+                            break
+
+        if not self.is_2v2:
+            for player in self.players:
+                playerDeltaDiff = player.actualScoreDelta - player.expectedScoreDelta
+                if playerDeltaDiff < 0:
+                    # either they're fighting someone, attacking a neutral city, attacking neutral tiles, or someone captured one of their cities.
+                    # first try whoever they were fighting last turn if any:
+                    if player.fighting_with_player >= 0:
+                        otherPlayer = self.players[player.fighting_with_player]
+                        otherPlayerDeltaDiff = otherPlayer.actualScoreDelta - otherPlayer.expectedScoreDelta
+                        if otherPlayerDeltaDiff == playerDeltaDiff:
+                            # already set to the right player, leave it alone
+                            continue
+                        elif otherPlayerDeltaDiff < 0:
+                            # not as sure, here, but LIKELY still fighting the same player.
+                            continue
+
+                    for otherPlayer in self.players:
+                        if otherPlayer == player:
+                            continue
+                        otherPlayerDeltaDiff = otherPlayer.actualScoreDelta - otherPlayer.expectedScoreDelta
+                        if otherPlayerDeltaDiff == playerDeltaDiff:
+                            # then these two are probably fighting each other!?!?!?!?
+                            otherPlayer.fighting_with_player = player.index
+                            player.fighting_with_player = otherPlayer.index
+                else:
+                    player.fighting_with_player = -1
 
     def _move_would_violate_known_player_deltas(self, source: Tile, dest: Tile):
         knowSourceOwner = source.was_visible_last_turn() or (self.remainingPlayers == 2 and source.discovered and source.player >= 0)

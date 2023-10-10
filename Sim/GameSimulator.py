@@ -535,6 +535,10 @@ class GameSimulatorHost(object):
             if botHost is None:
                 continue
 
+            botHost.eklipz_bot.expand_plan = None
+            botHost.eklipz_bot.timings = None
+            botHost.eklipz_bot.curPath = None
+
             if botHost.has_viewer and run_real_time:
                 botHost.initialize_viewer(botHost.eklipz_bot.no_file_logging)
                 botHost._viewer.send_update_to_viewer(botHost.eklipz_bot.viewInfo, botHost.eklipz_bot._map)

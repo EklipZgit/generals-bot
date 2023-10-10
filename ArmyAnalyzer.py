@@ -59,15 +59,17 @@ class ArmyAnalyzer:
 		logging.info("ArmyAnalyzer analyzing {} and {}".format(self.tileA.toString(), self.tileB.toString()))
 			
 		# a map of distances from point A
-		self.aMap = build_distance_map(self.map, [self.tileA], [self.tileB])
-		closestTile = min(self.tileB.movable, key=lambda tile: self.aMap[tile.x][tile.y])
-		self.aMap[self.tileB.x][self.tileB.y] = self.aMap[closestTile.x][closestTile.y] + 1
-		logging.info("set aMap({}) to {}".format(self.tileB.toString(), self.aMap[self.tileB.x][self.tileB.y]))
+		# self.aMap = build_distance_map(self.map, [self.tileA], [self.tileB])
+		self.aMap = build_distance_map(self.map, [self.tileA], [])
+		# closestTile = min(self.tileB.movable, key=lambda tile: self.aMap[tile.x][tile.y])
+		# self.aMap[self.tileB.x][self.tileB.y] = self.aMap[closestTile.x][closestTile.y] + 1
+		# logging.info("set aMap({}) to {}".format(self.tileB.toString(), self.aMap[self.tileB.x][self.tileB.y]))
 		# a map of distances from point B
-		self.bMap = build_distance_map(self.map, [self.tileB], [self.tileA])
-		closestTile = min(self.tileA.movable, key=lambda tile: self.bMap[tile.x][tile.y])
-		self.bMap[self.tileA.x][self.tileA.y] = self.bMap[closestTile.x][closestTile.y] + 1
-		logging.info("set bMap({}) to {}".format(self.tileA.toString(), self.bMap[self.tileA.x][self.tileA.y]))
+		# self.bMap = build_distance_map(self.map, [self.tileB], [self.tileA])
+		self.bMap = build_distance_map(self.map, [self.tileB], [])
+		# closestTile = min(self.tileA.movable, key=lambda tile: self.bMap[tile.x][tile.y])
+		# self.bMap[self.tileA.x][self.tileA.y] = self.bMap[closestTile.x][closestTile.y] + 1
+		# logging.info("set bMap({}) to {}".format(self.tileA.toString(), self.bMap[self.tileA.x][self.tileA.y]))
 
 		self.scan()
 		logging.info("ArmyAnalyzer completed for tiles {} and {} in {:.3f}".format(self.tileA.toString(), self.tileB.toString(), time.time() - startTime))

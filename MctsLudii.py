@@ -68,7 +68,7 @@ class MctsDUCT(object):
         self.min_expanded_visit_count_to_count_for_score: int = 20
         """Basically this is setting the minimum number of trials that must have been run below a given board state before its score will be used as the 'net_economy_differential' for the sim."""
 
-        self.min_expanded_visit_count_to_count_for_moves: int = 5
+        self.min_expanded_visit_count_to_count_for_moves: int = 20
         """Shouldn't really matter, just for pruning the last moves the engine suggests if they haven't been well explored, so they dont look so weird/confusing."""
 
         self.logAll: bool = False

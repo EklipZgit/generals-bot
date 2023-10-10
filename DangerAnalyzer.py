@@ -44,6 +44,7 @@ class ThreatObj(object):
             offset = 0
 
         dict = self.path.get_reversed().convert_to_dist_dict(offset=offset)
+
         for tile in self.path.tileList:
             dist = dict[tile]
             if tile.isGeneral:
@@ -53,12 +54,7 @@ class ThreatObj(object):
                 pathWay = self.armyAnalysis.pathWayLookupMatrix[tile]
                 neighbors = where(pathWay.tiles, lambda t: t != tile and self.armyAnalysis.aMap[t.x][t.y] == self.armyAnalysis.aMap[tile.x][tile.y] and self.armyAnalysis.bMap[t.x][t.y] == self.armyAnalysis.bMap[tile.x][tile.y])
                 newDist = dist + 1
-                # if len(neighbors) < 2:
-                #     # dict[tile] = newDist
-                #     del dict[tile]
-                #     pass
-                # else:
-                del dict[tile]
+                del dict[tile]  # necessary for 'test_should_not_make_move_away_from_threat' to pass.
                 logging.info(f'Threat path tile {str(tile)} increased to dist {newDist} based on neighbors {neighbors}')
             else:
                 logging.info(f'Threat path tile {str(tile)} left at dist {dist}')
@@ -73,6 +69,10 @@ class DangerAnalyzer(object):
         self.fastestThreat: typing.Union[None, ThreatObj] = None
         self.highestThreat: typing.Union[None, ThreatObj] = None
         self.playerTiles = None
+
+        self.alliedGenerals: typing.List[Tile] = [self.map.generals[self.map.player_index]]
+        for teammate in self.map.teammates:
+            self.alliedGenerals.append(self.map.generals[teammate])
 
         self.anyThreat = False
 
@@ -93,59 +93,70 @@ class DangerAnalyzer(object):
     def analyze(self, general: Tile, depth: int, armies: typing.Dict[Tile, Army]):
         self.scan(general)
 
-        self.fastestThreat = self.getFastestThreat(general, depth, armies)
+        self.fastestThreat = self.getFastestThreat(depth, armies)
         self.highestThreat = self.getHighestThreat(general, depth, armies)
-        self.fastestVisionThreat = self.getVisionThreat(general, 9, armies)
+        self.fastestVisionThreat = self.getVisionThreat(9, armies)
 
         self.anyThreat = self.fastestThreat is not None or self.fastestVisionThreat is not None or self.highestThreat is not None
 
-    def getVisionThreat(self, general: Tile, depth: int, armies: typing.Dict[Tile, Army]):
+    def getVisionThreat(self, depth: int, armies: typing.Dict[Tile, Army]):
         startTime = time.time()
         logging.info("------  VISION threat analyzer: depth {}".format(depth))
         curThreat = None
-        for tile in general.adjacents:
-            if tile.player != -1 and tile.player != general.player:
-                logging.info(
-                    f"not searching general vision due to tile {tile.x},{tile.y} of player {tile.player}")
-                # there is already general vision.
-                return None
+
+        threatenedGen = None
         for player in self.map.players:
-            if not player.dead and (player.index != general.player) and len(self.playerTiles[player.index]) > 0 and \
-                    self.map.players[player.index].tileCount > 10:
-                path = dest_breadth_first_target(
-                    map=self.map,
-                    goalList=general.adjacents,
-                    targetArmy=0.5,
-                    maxTime=0.01,
-                    maxDepth=depth,
-                    negativeTiles=None,
-                    searchingPlayer=player.index,
-                    dontEvacCities=False,
-                    dupeThreshold=2)
-                if path is not None and (curThreat is None or path.length < curThreat.length or (
-                        path.length == curThreat.length and path.value > curThreat.value)):
-                    # self.viewInfo.addSearched(path[1].tile)
-                    logging.info(f"dest BFS found VISION against our general:\n{str(path)}")
-                    curThreat = path
+            if (
+                    not player.dead
+                    and (player.index != self.map.player_index)
+                    and len(self.playerTiles[player.index]) > 0
+                    and self.map.players[player.index].tileCount > 10
+                    and player.index not in self.map.teammates
+            ):
+                for general in self.alliedGenerals:
+                    skip = False
+                    for tile in general.adjacents:
+                        if tile.player != -1 and tile.player != general.player:
+                            logging.info(
+                                f"not searching general vision due to tile {tile.x},{tile.y} of player {tile.player}")
+                            # there is already general vision.
+                            skip = True
+                    if skip:
+                        continue
+
+                    path = dest_breadth_first_target(
+                        map=self.map,
+                        goalList=general.adjacents,
+                        targetArmy=0.5,
+                        maxTime=0.01,
+                        maxDepth=depth,
+                        negativeTiles=None,
+                        searchingPlayer=player.index,
+                        dontEvacCities=False,
+                        dupeThreshold=2)
+                    if path is not None and (curThreat is None or path.length < curThreat.length or (
+                            path.length == curThreat.length and path.value > curThreat.value)):
+                        # self.viewInfo.addSearched(path[1].tile)
+                        logging.info(f"dest BFS found VISION against our general:\n{str(path)}")
+                        curThreat = path
+                        threatenedGen = general
         threatObj = None
         if curThreat is not None:
             army = curThreat.start.tile
             if curThreat.start.tile in armies:
                 army = armies[army]
-            analysis = ArmyAnalyzer(self.map, general, army)
+            analysis = ArmyAnalyzer(self.map, threatenedGen, army)
             threatObj = ThreatObj(curThreat.length - 1, curThreat.value, curThreat, ThreatType.Vision, None, analysis)
         logging.info(f"VISION threat analyzer took {time.time() - startTime:.3f}")
         return threatObj
 
-    def getFastestThreat(self, general: Tile, depth: int, armies: typing.Dict[Tile, Army]):
+    def getFastestThreat(self, depth: int, armies: typing.Dict[Tile, Army]):
         startTime = time.time()
         logging.info(f"------  fastest threat analyzer: depth {depth}")
         curThreat = None
         saveTile = None
         # searchArmyAmount = -0.5  # commented during off by one defense issues and replaced with 0?
         # 0 has been leaving off-by-ones, trying -1.5 to see how that affects it
-
-        genPlayer = self.map.players[general.player]
 
         isFfaMode = self.map.remainingPlayers > 2
 
@@ -154,50 +165,57 @@ class DangerAnalyzer(object):
         for player in self.map.players:
             if player.dead:
                 continue
-            if player.index == general.player or player.index in self.map.teammates:
+            if player.index in self.map.teammates or player.index == self.map.player_index:
                 continue
             if len(self.playerTiles[player.index]) == 0 or player.tileCount <= 2:
                 continue
-            if player.score > genPlayer.score * 1.5 and isFfaMode:
-                continue
 
-            defendableFromPlayers.add(player.index)
+            for general in self.alliedGenerals:
+                genPlayer = self.map.players[general.player]
 
-            path = dest_breadth_first_target(
-                map=self.map,
-                goalList=[general],
-                targetArmy=searchArmyAmount,
-                maxTime=0.05,
-                maxDepth=depth,
-                negativeTiles=None,
-                searchingPlayer=player.index,
-                dontEvacCities=False,
-                dupeThreshold=3,
-                noLog=True)
-            if (path is not None
-                    and (curThreat is None
-                         or path.length < curThreat.length
-                         or (path.length == curThreat.length and path.value > curThreat.value))):
-                # If there is NOT another path to our general that doesn't hit the same tile next to our general,
-                # then we can use one extra turn on defense gathering to that 'saveTile'.
-                lastTile = path.tail.prev.tile
-                altPath = dest_breadth_first_target(
+                if player.index == general.player or player.index in self.map.teammates:
+                    continue
+
+                if player.score > genPlayer.score * 1.5 and isFfaMode:
+                    continue
+
+                defendableFromPlayers.add(player.index)
+
+                path = dest_breadth_first_target(
                     map=self.map,
                     goalList=[general],
                     targetArmy=searchArmyAmount,
                     maxTime=0.05,
-                    maxDepth=path.length + 5,
+                    maxDepth=depth,
                     negativeTiles=None,
                     searchingPlayer=player.index,
                     dontEvacCities=False,
-                    dupeThreshold=5,
-                    skipTiles=[lastTile])
-                if altPath is None or altPath.length > path.length:
-                    saveTile = lastTile
-                    logging.info(f"saveTile blocks path to our king: {saveTile.x},{saveTile.y}")
-                logging.info(f"dest BFS found KILL against our general:\n{str(path)}")
-                curThreat = path
-                # path.calculate_value(forPlayer=player.index)
+                    dupeThreshold=3,
+                    noLog=True)
+                if (path is not None
+                        and (curThreat is None
+                             or path.length < curThreat.length
+                             or (path.length == curThreat.length and path.value > curThreat.value))):
+                    # If there is NOT another path to our general that doesn't hit the same tile next to our general,
+                    # then we can use one extra turn on defense gathering to that 'saveTile'.
+                    lastTile = path.tail.prev.tile
+                    altPath = dest_breadth_first_target(
+                        map=self.map,
+                        goalList=[general],
+                        targetArmy=searchArmyAmount,
+                        maxTime=0.05,
+                        maxDepth=path.length + 5,
+                        negativeTiles=None,
+                        searchingPlayer=player.index,
+                        dontEvacCities=False,
+                        dupeThreshold=5,
+                        skipTiles=[lastTile])
+                    if altPath is None or altPath.length > path.length:
+                        saveTile = lastTile
+                        logging.info(f"saveTile blocks path to our king: {saveTile.x},{saveTile.y}")
+                    logging.info(f"dest BFS found KILL against our general:\n{str(path)}")
+                    curThreat = path
+                    # path.calculate_value(forPlayer=player.index)
 
         for armyTile, army in armies.items():
             # if this is an army in the fog that isn't on a tile owned by that player, lets see if we need to path it.
@@ -208,15 +226,21 @@ class DangerAnalyzer(object):
             if army.player not in defendableFromPlayers:
                 continue
 
+            if self.map.is_tile_friendly(armyTile):
+                continue
+
             if armyTile.player == army.player:
                 continue  # covered under normal search above
+
+            if armyTile.player in self.map.teammates:
+                continue
 
             if army.last_moved_turn < self.map.turn - 4:
                 continue  # dont defend against invisible predicted threats that probably arent real
 
             startTiles = {}
             startTiles[armyTile] = ((0, 0, 0, 0 - army.value - 1, armyTile.x, armyTile.y, 0.5), 0)
-            goalFunc = lambda tile, prio: tile == general
+            goalFunc = lambda tile, prio: tile in self.alliedGenerals
             path = breadth_first_dynamic(
                 self.map,
                 startTiles,
@@ -232,12 +256,13 @@ class DangerAnalyzer(object):
                         curThreat is None or path.length < curThreat.length or path.value > curThreat.value):
                     curThreat = path
                 army.expectedPath = path
+
         threatObj = None
         if curThreat is not None:
             army = curThreat.start.tile
             if curThreat.start.tile in armies:
                 army = armies[army]
-            analysis = ArmyAnalyzer(self.map, general, army)
+            analysis = ArmyAnalyzer(self.map, curThreat.tail.tile, army)
             threatObj = ThreatObj(curThreat.length - 1, curThreat.value, curThreat, ThreatType.Kill, saveTile, analysis)
         else:
             logging.info("no fastest threat found")

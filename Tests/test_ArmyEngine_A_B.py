@@ -167,6 +167,7 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
+            # 143-119, AGAIN but codifying in the meantime
             aBot.behavior_max_allowed_quick_expand = 8  # b 5
             # aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 1.02  # was 0.98
 
@@ -353,7 +354,10 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.engine_mcts_move_estimation_net_differential_cutoff = 0.9  # b 0
+            aBot.engine_mcts_move_estimation_net_differential_cutoff = -0.9  # b 0
+
+            # 219-240
+            # aBot.engine_mcts_move_estimation_net_differential_cutoff = 0.9  # b 0
 
             # killed 92-95, try 0.9
             # aBot.engine_mcts_move_estimation_net_differential_cutoff = 1.9  # b 0
@@ -498,7 +502,13 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.behavior_max_allowed_quick_expand = 3  # b 5
+            aBot.behavior_max_allowed_quick_expand = 7  # b 8
+
+            # 209-239
+            # aBot.behavior_max_allowed_quick_expand = 10  # b 8
+
+            # 226-221
+            # aBot.behavior_max_allowed_quick_expand = 3  # b 5
 
             # killed 22-40
             # aBot.behavior_max_allowed_quick_expand = 0
@@ -640,7 +650,10 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 40  # b 20
+            aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 30  # b 20
+
+            # 214-243, try 30...?
+            # aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 40  # b 20
 
             # killed 106-139
             # aBot.engine_honor_mcts_expected_score = True
@@ -760,6 +773,8 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
+            # 245-206 wtf...? why would this change anything, AGAIN
+            # codifying in advance though...? b still 5
             aBot.mcts_engine.min_expanded_visit_count_to_count_for_moves = 20  # b 5, should do NOTHING
 
             # killed 95-119

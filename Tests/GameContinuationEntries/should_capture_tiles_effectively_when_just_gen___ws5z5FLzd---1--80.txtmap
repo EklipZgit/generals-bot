@@ -1,0 +1,68 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M         M         M                        M                        M    M                   M
+M                        M    b1   b1   b1             M
+          M         b1   b1   b1                                           M    M
+          b1   b1   b1   b1   b1   M                             M    M                   M
+               M    b1   M    b1        C42            M    M         M         M         M    M    M
+          M    b1   bG8  M    b1   b1   b1   M    C44            M              M
+     M    M    b1   C43            b1   b1   b1        M                                  M
+               b1   b1                  M    b1   C48  M         M                                  M
+               M    M         M    M         b1   C48  M    M              M    M
+     M    M              M         M    b1   b1                                 M         M
+               M              M         M    a1   M                                  M    M
+     M              M                        a1             M              M
+                         M                   a1             M         M         M         M
+M         M         M    M                   a1   a1   a1   a1   a1   a1             M    M
+M                   M    M         M                                  a1
+M                   M                             M                   a1   a1                       M
+     M                                                      M    M              M    M
+M                                                      M         M    M              M
+          M    M              M                                            M    M              M    M
+     M              M              M              M              M         M                        M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=10,14
+turn=80
+bot_player_index=1
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_target_player=0
+bot_cur_path=None
+aUsername=Admins suck
+aTiles=26
+aScore=35
+aStandingArmy=9
+aStars=74
+aCityCount=1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=30
+aDelta25Tiles=18
+aDelta25Score=19
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=75
+bUsername=Human.exe
+bTiles=28
+bScore=35
+bStandingArmy=7
+bStars=73
+bCityCount=1
+bGeneral=4,5
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=18
+bDelta25Score=19
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=80

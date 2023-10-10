@@ -369,7 +369,11 @@ class GeneralsViewer(object):
                 if not self.noLog:
                     start = time.perf_counter()
                     logging.info("GeneralsViewer saving image:")
-                    self.save_image()
+                    try:
+                        self.save_image()
+                    except:
+                        logging.error(traceback.format_exc())
+
                     logging.info(f"GeneralsViewer saving image took {time.perf_counter() - start:.3f}")
             except queue.Empty:
                 elapsed = time.perf_counter() - self.last_update_received

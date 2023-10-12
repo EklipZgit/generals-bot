@@ -31,7 +31,7 @@ M         M    M         d2   d2   d2   d2   d2   M              M              
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=14,6
 turn=50
-bot_player_index=3
+player_index=3
 aTiles=21
 aScore=43
 aStandingArmy=22

@@ -4,6 +4,8 @@
     Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
     Map: Objects for representing Generals IO Map and Tiles
 """
+from __future__ import annotations
+
 import logging
 import random
 import typing
@@ -81,7 +83,8 @@ class Player(object):
         """The turn the player left the game. Useful to know how many turns to attempt a capture are left."""
 
         self.capturedBy: int | None = None
-        self.knowsKingLocation = False
+        self.knowsKingLocation: bool = False
+        self.knowsAllyKingLocation: bool = False
         self.aggression_factor: int = 0
         """"""
         self.last_seen_move_turn: int = 0
@@ -241,7 +244,7 @@ class Tile(object):
     @property
     def isNeutral(self) -> bool:
         """True if neutral and not a mountain or undiscovered obstacle"""
-        return self._player == -1 and not self.isNotPathable
+        return self._player == -1
 
     @property
     def isUndiscoveredObstacle(self) -> bool:
@@ -599,11 +602,14 @@ class MapBase(object):
         self.is_2v2: bool = False
         self.teammates = set()
 
+        uniqueTeams = set()
         if teams is not None:
-            self.is_2v2 = True
             for player, team in enumerate(teams):
+                uniqueTeams.add(team)
                 if team == teams[self.player_index] and player != self.player_index:
                     self.teammates.add(player)
+            if len(uniqueTeams) == 2:
+                self.is_2v2 = True
 
         self.teams: typing.List[int] | None = teams
 
@@ -787,7 +793,7 @@ class MapBase(object):
 
         self.calculate_player_deltas()
 
-        if self.remainingPlayers > 2 and self.is_city_bonus_turn:
+        if self.remainingPlayers > 2 and self.is_city_bonus_turn and not self.is_2v2:
             for i, player in enumerate(self.players):
                 if not player.dead and player.index != self.player_index:
                     if player.cityCount < cityCounts[i]:
@@ -806,8 +812,15 @@ class MapBase(object):
 
         if captureeIdx == self.player_index:
             logging.info(
-                f"\n\n    ~~~~~~~~~\nWE WERE CAPTURED, IGNORING CAPTURE: {capturee} ({captureeIdx}) by {capturer} ({capturerIdx})\n    ~~~~~~~~~\n")
+                f"\n\n    ~~~~~~~~~\nWE WERE CAPTURED BY {capturer}, IGNORING CAPTURE: {capturee} ({captureeIdx}) by {capturer} ({capturerIdx})\n    ~~~~~~~~~\n")
             return
+
+        if self.player_index == capturerIdx or capturerIdx in self.teammates:
+            logging.info(
+                f"\n\n    ~~~~~~~~~\nWE CAPTURED {captureeIdx}, NUKING UNDISCOVEREDS: {capturee} ({captureeIdx}) by {capturer} ({capturerIdx})\n    ~~~~~~~~~\n")
+            for tile in self.get_all_tiles():
+                if tile.player == captureeIdx and not tile.visible:
+                    tile.reset_wrong_undiscovered_fog_guess()
 
         logging.info(
             f"\n\n    ~~~~~~~~~\nPlayer captured: {capturee} ({captureeIdx}) by {capturer} ({capturerIdx})\n    ~~~~~~~~~\n")
@@ -835,7 +848,7 @@ class MapBase(object):
 
             if not tile.discovered:
                 if tile.isCity:
-                    self.convert_tile_to_mountain(tile)
+                    tile.reset_wrong_undiscovered_fog_guess()
 
                 tile.army = 0
                 tile.tile = TILE_FOG
@@ -1044,6 +1057,8 @@ class MapBase(object):
 
         # we know our players city count + his general because we can see all our own cities
         self.players[self.player_index].cityCount = len(self.players[self.player_index].cities) + 1
+        for teammate in self.teammates:
+            self.players[teammate].cityCount = len(self.players[teammate].cities) + 1
 
         return self
 
@@ -1381,10 +1396,10 @@ class MapBase(object):
 
         expectedSourceDelta = 0 - expectedDestDelta  # these should always match if no other army interferes.
 
-        if dest.delta.oldOwner != self.player_index:
+        if dest.delta.oldOwner != self.player_index and dest.delta.oldOwner not in self.teammates:
             expectedDestDelta = 0 - expectedDestDelta
 
-        sourceWouldHaveCappedDest = dest.delta.oldOwner == self.player_index or dest.delta.oldArmy + expectedSourceDelta < 0
+        sourceWouldHaveCappedDest = dest.delta.oldOwner == self.player_index or (dest.delta.oldOwner in self.teammates and not dest.isGeneral) or dest.delta.oldArmy + expectedSourceDelta < 0
 
         likelyDroppedMove = False
         if source.delta.unexplainedDelta == 0 and source.visible:
@@ -1421,6 +1436,7 @@ class MapBase(object):
             sourceDeltaMismatch
             and destUnexpectedDelta == srcUnexpectedDelta
             and dest.delta.oldOwner != self.player_index
+            and dest.delta.oldOwner not in self.teammates
             and dest.delta.oldOwner != -1
         ):
             logging.info(f'MOVE {str(last_player_index_submitted_move)} was mutual attack?')
@@ -1700,6 +1716,8 @@ class MapBase(object):
                     continue
                 if sourceTile.delta.oldOwner == self.player_index:
                     continue
+                if sourceTile.delta.oldOwner in self.teammates:
+                    continue
                 if sourceTile.delta.oldOwner in skipPlayers:
                     continue
 
@@ -1774,6 +1792,8 @@ class MapBase(object):
                     continue
                 if not destTile.delta.oldOwner == self.player_index:
                     continue
+                if not destTile.delta.oldOwner in self.teammates:
+                    continue
 
                 potentialSources = []
                 destWasAttackedNonLethalOrVacated = destTile.delta.armyDelta < 0  # and destTile.delta.oldOwner == destTile.delta.newOwner
@@ -1783,7 +1803,7 @@ class MapBase(object):
                 # prefer most recently moved, followed by smallest capturer
                 for potentialSource in sorted(destTile.movable, key=lambda t: (0 - t.lastMovedTurn, t.army)):
                     # we already track our own moves successfully prior to this.
-                    if potentialSource.delta.oldOwner == self.player_index or potentialSource.delta.oldOwner == -1:
+                    if potentialSource.delta.oldOwner == self.player_index or potentialSource.delta.oldOwner in self.teammates or potentialSource.delta.oldOwner == -1:
                         continue
                     if not potentialSource.delta.lostSight:
                         logging.info(f'ISLAND FOG DEST {repr(destTile)}: SRC {repr(potentialSource)} SKIPPED BECAUSE DIDNT LOSE VISION OF SOURCE, WHICH MEANS IT SHOULD HAVE BEEN CAUGHT BY ANOTHER HANDLER ALREADY (?)')
@@ -1838,12 +1858,15 @@ class MapBase(object):
             logging.info("no last scores?????")
             return
 
-        expectedMeDelta = 0
+        expectedFriendlyDelta = 0
 
         if self.is_army_bonus_turn:
-            expectedMeDelta += myPlayer.tileCount
+            expectedFriendlyDelta += myPlayer.tileCount
         if self.is_city_bonus_turn:
-            expectedMeDelta += myPlayer.cityCount
+            expectedFriendlyDelta += myPlayer.cityCount
+
+        actualMeDelta = myPlayer.score - lastScores[myPlayer.index].total
+        actualFriendlyDelta = actualMeDelta
 
         if self.is_2v2:
             for teammate in self.teammates:
@@ -1852,12 +1875,15 @@ class MapBase(object):
                     continue
 
                 if self.is_army_bonus_turn:
-                    expectedMeDelta += teammatePlayer.tileCount
+                    expectedFriendlyDelta += teammatePlayer.tileCount
                 if self.is_city_bonus_turn:
-                    expectedMeDelta += teammatePlayer.cityCount
+                    expectedFriendlyDelta += teammatePlayer.cityCount
 
-        logging.info(f"myPlayer score {myPlayer.score}, lastScores myPlayer total {lastScores[myPlayer.index].total}")
-        actualPlayerDelta = myPlayer.score - lastScores[myPlayer.index].total
+                actualFriendlyDelta += teammatePlayer.score - lastScores[teammatePlayer.index].total
+
+        friendlyFightDelta = expectedFriendlyDelta - actualFriendlyDelta
+
+        logging.info(f"myPlayer score {myPlayer.score}, lastScores myPlayer total {lastScores[myPlayer.index].total}, friendlyFightDelta {friendlyFightDelta}")
 
         teams = [i for i in range(len(self.players))]
 
@@ -1872,37 +1898,43 @@ class MapBase(object):
                 teamDict[teamIndex] = teamList
             teamList.append(pIndex)
 
+        teamCurrentCities = 0
         for teamIndex, teamList in teamDict.items():
-
             actualEnemyTeamDelta = 0
             expectedEnemyTeamDelta = 0
             teamCityCount = 0
             for playerIndex in teamList:
-                otherPlayer = self.players[playerIndex]
+                teamPlayer = self.players[playerIndex]
 
-                if otherPlayer.dead:
-                    otherPlayer.expectedScoreDelta = 0
-                    otherPlayer.actualScoreDelta = 0
+                if teamPlayer.dead:
+                    teamPlayer.expectedScoreDelta = 0
+                    teamPlayer.actualScoreDelta = 0
+                    teamPlayer.cityCount = 0
                     continue
 
                 expectedEnemyDelta = 0
                 if self.is_army_bonus_turn:
-                    expectedEnemyDelta += otherPlayer.tileCount
+                    expectedEnemyDelta += teamPlayer.tileCount
                 if self.is_city_bonus_turn:
-                    expectedEnemyDelta += otherPlayer.cityCount
+                    expectedEnemyDelta += teamPlayer.cityCount
 
                 logging.info(
-                    f'otherPlayer score {otherPlayer.score}, lastScores otherPlayer total {lastScores[otherPlayer.index].total}')
+                    f'teamPlayer score {teamPlayer.score}, lastScores teamPlayer total {lastScores[teamPlayer.index].total}')
 
-                otherPlayer.actualScoreDelta = otherPlayer.score - lastScores[otherPlayer.index].total
-                otherPlayer.expectedScoreDelta = expectedEnemyDelta
-                teamCityCount += otherPlayer.cityCount
+                teamPlayer.actualScoreDelta = teamPlayer.score - lastScores[teamPlayer.index].total
+                teamPlayer.expectedScoreDelta = expectedEnemyDelta
                 expectedEnemyTeamDelta += expectedEnemyDelta
 
-                actualEnemyTeamDelta += otherPlayer.actualScoreDelta
+                # potentialEnemyCities = teamPlayer.actualScoreDelta - teamPlayer.
+
+                actualEnemyTeamDelta += teamPlayer.actualScoreDelta
+
+                teamCurrentCities += teamPlayer.cityCount
+                teamCityCount += teamPlayer.cityCount
 
                 # nothing past here runs for us
-                if otherPlayer.index == self.player_index:
+                if self.player_index in teamList:
+                    teamPlayer.cityCount = len(teamPlayer.cities) + 1
                     continue
 
             newCityCount = teamCityCount
@@ -1912,68 +1944,94 @@ class MapBase(object):
                     # in a 1v1, if we lost army, then opponent also lost equal army (unless we just took a neutral tile)
                     # this means we can still calculate city counts, even when fights are ongoing and both players are losing army
                     # so we get the amount of unexpected delta on our player, and add that to actual opponent delta, and get the opponents city count
-                    friendlyFightDelta = expectedMeDelta - actualPlayerDelta
 
                     realEnemyCities = teamCityCount + actualEnemyTeamDelta + friendlyFightDelta - expectedEnemyTeamDelta
 
-                    # if otherPlayer.
+                    # if teamPlayer.
 
                     if realEnemyCities <= -30:
                         # then opp just took a neutral city
                         newCityCount += 1
-                        logging.info("set otherPlayer cityCount += 1 to {} because it appears he just took a city.")
-                    elif realEnemyCities >= 30 and actualPlayerDelta < -30:
+                        logging.info(f"set team {teamIndex} cityCount += 1 to {newCityCount} because it appears they just took a city based on realEnemyCities {realEnemyCities}.")
+                    elif realEnemyCities >= 30:
                         # then our player just took a neutral city, noop
                         logging.info(
-                            "myPlayer just took a city? (or fighting in ffa) ignoring realEnemyCities this turn, realEnemyCities >= 38 and actualPlayerDelta < -30")
+                            "myPlayer just took a city? (or fighting in ffa) ignoring realEnemyCities this turn, realEnemyCities >= 38 and actualMeDelta < -30")
                     else:
                         newCityCount = realEnemyCities
                         logging.info(
-                            f"set otherPlayer cityCount to {newCityCount}. expectedMeDelta {expectedMeDelta}, "
-                            f"actualPlayerDelta {actualPlayerDelta}, expectedEnemyTeamDelta {expectedEnemyTeamDelta}, "
-                            f"otherPlayer.actualScoreDelta {actualEnemyTeamDelta}, fightDelta {friendlyFightDelta}, "
-                            f"realEnemyCities {realEnemyCities}")
+                            f"want to set team {teamIndex} cityCount to {newCityCount}. "
+                            f"\nexpectedFriendlyDelta {expectedFriendlyDelta}, actualFriendlyDelta {actualFriendlyDelta},"
+                            f"\nexpectedEnemyTeamDelta {expectedEnemyTeamDelta}, actualEnemyTeamDelta {actualEnemyTeamDelta},"
+                            f"\nfrFightDelta {friendlyFightDelta} results in realEnemyCities {realEnemyCities} vs teamCurrentCities {teamCurrentCities}")
 
-                sum = 0
-                for playerIndex in teamList:
-                    otherPlayer = self.players[playerIndex]
-                    otherPlayer.cityCount = newCityCount // len(teamList)
-                    sum += otherPlayer.cityCount
+                logging.info(f'cities for team {teamIndex}, as {newCityCount} vs current {teamCurrentCities}?')
 
-                while sum < newCityCount:
+                if self.player_index in teamList:
+                    # we have perfect info of our own cities
+                    continue
+
+                if self.remainingPlayers > 2 and self.is_2v2 and newCityCount - teamCurrentCities > 5 and teamCurrentCities > 1:
+                    logging.info(f'miscounting cities for team {teamIndex}, as {newCityCount} vs current {teamCurrentCities}? ignoring')
+                    continue
+                if friendlyFightDelta == 0:
+                    logging.info(f'Trying to make cities for team {teamIndex} match {newCityCount} vs current {teamCurrentCities}?')
+                    sum = 0
                     for playerIndex in teamList:
-                        otherPlayer = self.players[playerIndex]
-                        otherPlayer.cityCount += 1
-                        sum += 1
-                        if sum >= newCityCount:
-                            break
+                        teamPlayer = self.players[playerIndex]
+                        if teamPlayer.dead:
+                            continue
+                        sum += teamPlayer.cityCount
 
-        if not self.is_2v2:
-            for player in self.players:
-                playerDeltaDiff = player.actualScoreDelta - player.expectedScoreDelta
-                if playerDeltaDiff < 0:
-                    # either they're fighting someone, attacking a neutral city, attacking neutral tiles, or someone captured one of their cities.
-                    # first try whoever they were fighting last turn if any:
-                    if player.fighting_with_player >= 0:
-                        otherPlayer = self.players[player.fighting_with_player]
-                        otherPlayerDeltaDiff = otherPlayer.actualScoreDelta - otherPlayer.expectedScoreDelta
-                        if otherPlayerDeltaDiff == playerDeltaDiff:
-                            # already set to the right player, leave it alone
-                            continue
-                        elif otherPlayerDeltaDiff < 0:
-                            # not as sure, here, but LIKELY still fighting the same player.
-                            continue
+                    while sum < newCityCount:
+                        for playerIndex in teamList:
+                            teamPlayer = self.players[playerIndex]
+                            if teamPlayer.dead:
+                                continue
+                            teamPlayer.cityCount += 1
+                            logging.info(f'Incrementing p{playerIndex} cities by 1 from {teamPlayer.cityCount - 1} to {teamPlayer.cityCount}')
+                            sum += 1
+                            if sum >= newCityCount:
+                                break
 
-                    for otherPlayer in self.players:
-                        if otherPlayer == player:
-                            continue
-                        otherPlayerDeltaDiff = otherPlayer.actualScoreDelta - otherPlayer.expectedScoreDelta
-                        if otherPlayerDeltaDiff == playerDeltaDiff:
-                            # then these two are probably fighting each other!?!?!?!?
-                            otherPlayer.fighting_with_player = player.index
-                            player.fighting_with_player = otherPlayer.index
-                else:
-                    player.fighting_with_player = -1
+                    while sum > newCityCount:
+                        for playerIndex in teamList:
+                            teamPlayer = self.players[playerIndex]
+                            if teamPlayer.dead:
+                                continue
+                            teamPlayer.cityCount -= 1
+                            logging.info(f'Decrementing p{playerIndex} cities by 1 from {teamPlayer.cityCount + 1} to {teamPlayer.cityCount}')
+                            sum -= 1
+                            if sum <= newCityCount:
+                                break
+
+        for player in self.players:
+            playerDeltaDiff = player.actualScoreDelta - player.expectedScoreDelta
+            if playerDeltaDiff < 0:
+                # either they're fighting someone, attacking a neutral city, attacking neutral tiles, or someone captured one of their cities.
+                # first try whoever they were fighting last turn if any:
+                if player.fighting_with_player >= 0:
+                    teamPlayer = self.players[player.fighting_with_player]
+                    otherPlayerDeltaDiff = teamPlayer.actualScoreDelta - teamPlayer.expectedScoreDelta
+                    if otherPlayerDeltaDiff == playerDeltaDiff:
+                        # already set to the right player, leave it alone
+                        continue
+                    elif otherPlayerDeltaDiff < 0:
+                        # not as sure, here, but LIKELY still fighting the same player.
+                        continue
+
+                for teamPlayer in self.players:
+                    if teamPlayer == player:
+                        continue
+                    otherPlayerDeltaDiff = teamPlayer.actualScoreDelta - teamPlayer.expectedScoreDelta
+                    # if self.is_2v2 and self.teammates[player.index] == self.teammates[teamPlayer.index]:
+                    #     teamPlayer = 0 - teamPlayer.expectedScoreDelta
+                    if otherPlayerDeltaDiff == playerDeltaDiff:
+                        # then these two are probably fighting each other!?!?!?!?
+                        teamPlayer.fighting_with_player = player.index
+                        player.fighting_with_player = teamPlayer.index
+            else:
+                player.fighting_with_player = -1
 
     def _move_would_violate_known_player_deltas(self, source: Tile, dest: Tile):
         knowSourceOwner = source.was_visible_last_turn() or (self.remainingPlayers == 2 and source.discovered and source.player >= 0)
@@ -2265,6 +2323,12 @@ class MapBase(object):
         if killer >= 0:
             self.players[self.player_index].capturedBy = killer
 
+    @staticmethod
+    def get_teams_array(map: MapBase) -> typing.List[int]:
+        teams = map.teams
+        if teams is None:
+            teams = [i for i in range(len(map.players))]
+        return teams
 
 
 class Map(MapBase):
@@ -2365,6 +2429,11 @@ class Map(MapBase):
         # Update Visible Generals
         self._visible_generals = [(-1, -1) if g == -1 else (g // self.cols, g % self.cols) for g in
                                   data['generals']]  # returns [(y,x)]
+
+    def convert_tile_server_index_to_x_y(self, tileIndex: int) -> typing.Tuple[int, int]:
+        y = tileIndex // self.cols
+        x = tileIndex % self.cols
+        return x, y
 
 
 def new_map_grid(map, initialValueXYFunc):

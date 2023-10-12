@@ -83,8 +83,8 @@ class TestBase(unittest.TestCase):
         try:
             if player_index == -1:
                 gameData = TextMapLoader.load_data_from_file(mapFilePath)
-                if 'bot_player_index' in gameData:
-                    player_index = int(gameData['bot_player_index'])
+                if 'player_index' in gameData:
+                    player_index = int(gameData['player_index'])
             rawMapStr = TextMapLoader.get_map_raw_string_from_file(mapFilePath)
             return self.load_map_and_general_from_string(rawMapStr, turn, player_index, respect_undiscovered)
         except:
@@ -111,8 +111,8 @@ class TestBase(unittest.TestCase):
             respect_player_vision: bool = False
     ) -> typing.Tuple[MapBase, Tile, Tile]:
         gameData = TextMapLoader.load_data_from_string(rawMapStr)
-        if player_index == -1 and 'bot_player_index' in gameData:
-            player_index = int(gameData['bot_player_index'])
+        if player_index == -1 and 'player_index' in gameData:
+            player_index = int(gameData['player_index'])
 
         map, general = self.load_map_and_general_from_string(rawMapStr, turn, player_index)
 
@@ -156,6 +156,8 @@ class TestBase(unittest.TestCase):
                     player.stars = float(gameData[f'{enemyChar}Stars'])
                 if f'{enemyChar}KnowsKingLocation' in gameData:
                     player.knowsKingLocation = gameData[f'{enemyChar}KnowsKingLocation'].lower() == 'true'
+                if f'{enemyChar}KnowsAllyKingLocation' in gameData:
+                    player.knowsAllyKingLocation = gameData[f'{enemyChar}KnowsAllyKingLocation'].lower() == 'true'
                 if f'{enemyChar}Dead' in gameData:
                     player.dead = gameData[f'{enemyChar}Dead'].lower() == 'true'
                 if f'{enemyChar}LeftGame' in gameData:
@@ -419,7 +421,7 @@ class TestBase(unittest.TestCase):
         EarlyExpandUtils.DEBUG_ASSERTS = False
         GatherUtils.USE_DEBUG_ASSERTS = False
         BotHost.FORCE_NO_VIEWER = False
-        # base.client.map.ENABLE_DEBUG_ASSERTS = True
+        base.client.map.ENABLE_DEBUG_ASSERTS = False
 
     def reset_map_to_just_generals(self, map: MapBase, turn: int = 16):
         """

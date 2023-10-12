@@ -1,8 +1,8 @@
 """
-	@ Travis Drake (EklipZ) eklipz.io - tdrake0x45 at gmail)
-	April 2017
-	Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
-	EklipZ bot - Tries to play generals lol
+    @ Travis Drake (EklipZ) eklipz.io - tdrake0x45 at gmail)
+    April 2017
+    Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
+    EklipZ bot - Tries to play generals lol
 """
 
 import logging
@@ -32,6 +32,10 @@ class TargetStyle(Enum):
     BLUE = 3
     GOLD = 4
     PURPLE = 5
+    TEAL = 6
+    ORANGE = 7
+    WHITE = 8
+    YELLOW = 9
 
 
 class PathColorer(object):

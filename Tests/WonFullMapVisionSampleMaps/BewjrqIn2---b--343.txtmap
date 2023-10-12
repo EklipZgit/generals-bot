@@ -20,7 +20,7 @@ M              M    M    M                   C44            M
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=12,0
 turn=343
-bot_player_index=1
+player_index=1
 aTiles=0
 aScore=0
 aStandingArmy=0

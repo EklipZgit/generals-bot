@@ -1,0 +1,111 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          M    M         M    M                   M    M    M    M                             M
+     M         M         M    M    M         M              M                             M    M
+     M    M              M                        M    M                        M    M    M
+                         M         M                                                      M
+M    M    M              M                   M         M    b1   b1   b1   M              M         M
+          b1        M    M    b1   M         M    b1   b1   b1   M    b1   b1                       M
+     M    b1   d1   d1   d7   b1   b1   b1   b1   b1        M    M    M    b1   M
+          d1   d1   b1   b1   a2   a1   a1   a1                  M         b1        M
+M         d1   M    M    M                   a1   M    M              M    b1        M         M
+          d1   M              M         M    a1   b1   b1   M    M    b1   b1                       M
+M         d1   d1   M              M    a1   a1   a1   b1   b1   b1   b1                       M
+     M    M    d1   d2   d2   a1   a1   a1   M    a1   a1   a1                       M    M    M
+          d1   d1   d2   C42  M    a2   M                   a1   M              M
+M    M    d1   d2   M         c1   a1   a1        c2        a1   a1   M    M    M
+d2   dG8  d1   d2        M    c1   a1   a1   M    c1   M    M    a1
+d2   M    d2   c6   c1   c2   c1   a1   a1   a1   c1             a1        M                   M
+C45  d2   d2   c3   c1   c1   c2   c2   c2   c2   c4             a1   M
+M    d2   d2   c2        M    M                   M
+          c1   cG16 C41  c1                                           M
+          c1   c1   c1   c1        M    M    M              M    M                        M    M
+                         M    M    M    M    M                   M    M         M
+M                             M              M    M    M              M         M         M    M
+                         M                   M                                  M
+     M         M                   M    M    M                                                      M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=65
+player_index=2
+teams=1,1,2,2
+mode=team
+targetPlayerExpectedGeneralLocation=9,6
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_target_player=1
+bot_cur_path=None
+aUsername=[Bot] Sora_ai_ek
+aTiles=32
+aScore=56
+aStandingArmy=24
+aStars=34
+aCityCount=1
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=31
+aDelta25Score=47
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=58
+bUsername=[Bot] Sora_ai_2
+bTiles=27
+bScore=48
+bStandingArmy=21
+bStars=34
+bCityCount=1
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=26
+bDelta25Score=39
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=57
+cUsername=Bot EklipZ_ai_2
+cTiles=25
+cScore=57
+cStandingArmy=32
+cStars=24
+cCityCount=1
+cGeneral=3,18
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=24
+cDelta25Score=48
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=65
+dUsername=EklipZ_0x45
+dTiles=27
+dScore=52
+dStandingArmy=25
+dStars=24
+dCityCount=1
+dGeneral=1,14
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+dDelta25Tiles=26
+dDelta25Score=43
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=65

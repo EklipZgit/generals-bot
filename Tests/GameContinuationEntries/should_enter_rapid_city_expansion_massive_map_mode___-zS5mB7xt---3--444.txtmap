@@ -28,7 +28,7 @@ dC191d2   C41  d4   d5   C47  M    d2   d4   d2   d6   d6   d5   C46  C44  d13  
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=20,6
 turn=444
-bot_player_index=3
+player_index=3
 aTiles=0
 aScore=0
 aStandingArmy=0

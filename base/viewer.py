@@ -322,7 +322,7 @@ class GeneralsViewer(object):
                 if elapsed > termSec:
                     logging.info(f'GeneralsViewer zombied with no game start, self-terminating after {termSec} seconds')
                     time.sleep(1.0)
-                    self.send_killed_event()
+                    # self.send_killed_event()  # this causes the bot itself to die when it finally starts a game after being in queue for a long time.
                     self._killed = True
                     self._receivedUpdate = True
                     time.sleep(1.0)
@@ -349,6 +349,7 @@ class GeneralsViewer(object):
                 if not self.noLog:
                     logging.info("GeneralsViewer waiting for queue event:")
                 viewInfo, map, isComplete = self._update_queue.get(block=True, timeout=1.0)
+                self._map = map
                 self.last_update_received = time.perf_counter()
                 if isComplete:
                     logging.info("GeneralsViewer received done event!")
@@ -369,10 +370,7 @@ class GeneralsViewer(object):
                 if not self.noLog:
                     start = time.perf_counter()
                     logging.info("GeneralsViewer saving image:")
-                    try:
-                        self.save_image()
-                    except:
-                        logging.error(traceback.format_exc())
+                    self.save_image()
 
                     logging.info(f"GeneralsViewer saving image took {time.perf_counter() - start:.3f}")
             except queue.Empty:
@@ -384,10 +382,12 @@ class GeneralsViewer(object):
                     done = True
                     self.send_killed_event()
                 pass
-            except BrokenPipeError:
-                logging.info('GeneralsViewer pipe died')
+            except EOFError:
+                logging.info('GeneralsViewer pipe died (EOFError)')
                 done = True
-                break
+            except BrokenPipeError:
+                logging.info('GeneralsViewer pipe died (BrokenPipeError)')
+                done = True
 
             for event in pygame.event.get():  # User did something
                 if event.type == pygame.QUIT:  # User clicked quit
@@ -405,7 +405,11 @@ class GeneralsViewer(object):
 
                     print("Click ", pos, "Grid coordinates: ", row, column)
 
-        logging.info(f'Pygame closed in GeneralsViewer, sending closedByUser {closedByUser} back to main threads')
+        logging.info(f'Pygame closed in GeneralsViewer, sending closedByUser {closedByUser} | map.complete {map.complete} back to main threads')
+
+        if map.complete:
+            closedByUser = True
+
         self.send_closed_event(closedByUser)
         logging.info('GeneralsViewer, exiting pygame w/ pygame.quit() in 1 second:')
         time.sleep(1.0)
@@ -560,16 +564,21 @@ class GeneralsViewer(object):
             self.draw_path(path, 0, 200, 50, alpha, alphaDec, alphaMin)
 
             if self._viewInfo.dangerAnalyzer is not None and self._viewInfo.dangerAnalyzer.anyThreat:
-
-                for threat in [self._viewInfo.dangerAnalyzer.fastestVisionThreat, self._viewInfo.dangerAnalyzer.fastestThreat,
-                               self._viewInfo.dangerAnalyzer.highestThreat]:
+                b = 0
+                for threat in [
+                    self._viewInfo.dangerAnalyzer.fastestVisionThreat,
+                    self._viewInfo.dangerAnalyzer.fastestThreat,
+                    self._viewInfo.dangerAnalyzer.fastestAllyThreat,
+                    self._viewInfo.dangerAnalyzer.highestThreat
+                ]:
                     if threat is None:
                         continue
                     # Draw danger path
                     alpha = 200
                     alphaDec = 6
                     alphaMin = 145
-                    self.draw_path(threat.path, 150, 0, 0, alpha, alphaDec, alphaMin)
+                    self.draw_path(threat.path, 150, 0, b, alpha, alphaDec, alphaMin)
+                    b += 30
 
             for (tile, targetStyle) in self._viewInfo.targetedTiles:
                 if tile is None:
@@ -1137,6 +1146,14 @@ class GeneralsViewer(object):
             return P_GREEN
         if targetStyle == TargetStyle.PURPLE:
             return P_PURPLE
+        if targetStyle == TargetStyle.TEAL:
+            return P_TEAL
+        if targetStyle == TargetStyle.YELLOW:
+            return P_YELLOW
+        if targetStyle == TargetStyle.WHITE:
+            return 200, 200, 200
+        if targetStyle == TargetStyle.ORANGE:
+            return ORANGE
         return GRAY
 
     def small_font(self, text_val: str, color_font: typing.Tuple[int, int, int]):
@@ -1167,13 +1184,21 @@ class GeneralsViewer(object):
         return int(len(text) * estFontWidthPx)
 
     def save_image(self):
-        pygame.image.save(self._screen, f"{self.logDirectory}\\{self._map.turn}.png")
+        try:
+            pygame.image.save(self._screen, f"{self.logDirectory}\\{self._map.turn}.png")
+        except:
+            logging.error(traceback.format_exc())
 
     def send_killed_event(self):
         self.send_closed_event(killedByUserClose=False)
 
     def send_closed_event(self, killedByUserClose: bool):
-        self._event_queue.put(killedByUserClose)
+        try:
+            self._event_queue.put(killedByUserClose)
+        except EOFError:
+            pass
+        except BrokenPipeError:
+            pass
 
     def draw_player_scores(self):
         pos_top = self._window_size[1] - self.infoRowHeight - self.scoreRowHeight

@@ -29,7 +29,7 @@ M         e1                                           e1                       
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=15,9
 turn=75
-bot_player_index=4
+player_index=4
 aTiles=25
 aScore=61
 aStandingArmy=36

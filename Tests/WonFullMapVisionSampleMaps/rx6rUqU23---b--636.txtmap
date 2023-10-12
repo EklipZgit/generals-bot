@@ -20,7 +20,7 @@ M         M    b3        b6   b3   b1   C46  b2   b3   b3   b1   b13  b1   M    
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=17,12
 turn=636
-bot_player_index=1
+player_index=1
 aTiles=0
 aScore=0
 aStandingArmy=0

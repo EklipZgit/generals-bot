@@ -20,7 +20,7 @@ b2   b2   bG5  b2   C40                                                    M    
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=7,2
 turn=54
-bot_player_index=1
+player_index=1
 bot_all_in_counter=0
 bot_all_in=False
 bot_all_in_army_advantage=False

@@ -25,7 +25,7 @@ M                                       M    M    M    M    a2   M    M         
 targetPlayerExpectedGeneralLocation=7,12
 loadAsIs=True
 turn=399
-bot_player_index=0
+player_index=0
 aTiles=69
 aScore=422
 aStandingArmy=353

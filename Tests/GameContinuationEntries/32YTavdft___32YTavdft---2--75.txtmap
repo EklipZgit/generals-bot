@@ -28,7 +28,7 @@ c1   c1   c1   c1   c1   c1   c1   c1   M         M                   M    M    
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=9,12
 turn=75
-bot_player_index=2
+player_index=2
 aTiles=1
 aScore=39
 aStandingArmy=38

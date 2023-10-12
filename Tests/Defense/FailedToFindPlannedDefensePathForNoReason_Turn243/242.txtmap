@@ -28,4 +28,4 @@ aTiles=61
 bCityCount=1
 aCityCount=1
 bot_target_player=0
-bot_player_index=1
+player_index=1

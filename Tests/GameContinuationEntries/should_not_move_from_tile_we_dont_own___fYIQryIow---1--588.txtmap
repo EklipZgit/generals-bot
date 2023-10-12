@@ -27,7 +27,7 @@ M         b4   b4   b4   bC102b2   M    b2   c4   M    c1   c1   c1        M    
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=14,18
 turn=588
-bot_player_index=1
+player_index=1
 aTiles=0
 aScore=0
 aStandingArmy=0

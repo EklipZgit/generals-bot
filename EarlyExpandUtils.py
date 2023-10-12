@@ -542,7 +542,6 @@ def _optimize_25_launch_segment(
             i.add(1)
             debug_view_info.bottomRightGridText[nextTile.x][nextTile.y] = i.value
 
-
         #
         # if pathCappedNeg + genArmy <= 0:
         #     logging.info(f'tile {str(nextTile)} ought to be skipped...?')

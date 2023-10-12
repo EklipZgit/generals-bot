@@ -19,7 +19,7 @@ aG6  a1   a1   M                        M    M                                  
 M              M                   M                        M    M         M
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=9,6
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aScore=17
 aTiles=11

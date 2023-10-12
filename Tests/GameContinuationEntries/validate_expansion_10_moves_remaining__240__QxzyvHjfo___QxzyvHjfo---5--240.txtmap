@@ -26,7 +26,7 @@ g1   M    g1   g2   f1   f1   f1   f4   M    f1   M                   M         
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=0,22
 turn=240
-bot_player_index=5
+player_index=5
 aTiles=0
 aScore=0
 aStandingArmy=0

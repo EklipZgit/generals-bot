@@ -93,7 +93,7 @@ class ArmyEngineABTests(TestBase):
 
     def test__mcts_should_beat_no_engine(self):
         numRuns = 20
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
 
         def configure_a(aBot: EklipZBot):
             aBot.engine_use_mcts = True
@@ -128,7 +128,7 @@ class ArmyEngineABTests(TestBase):
             # nothing? 10-10
 
             # 10-10 D:
-            aBot.engine_force_multi_tile_mcts = True
+            # aBot.engine_force_multi_tile_mcts = True
 
         def configure_b(bBot: EklipZBot):
             bBot.disable_engine = True
@@ -164,11 +164,17 @@ class ArmyEngineABTests(TestBase):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         def configure_b(bBot: EklipZBot):
+            bBot.behavior_max_allowed_quick_expand = 5
             pass
 
         def configure_a(aBot: EklipZBot):
+            # 163-190...?
+            aBot.behavior_max_allowed_quick_expand = 7  # b 5
+
             # 143-119, AGAIN but codifying in the meantime
-            aBot.behavior_max_allowed_quick_expand = 8  # b 5
+            # 218-241, AGAIN
+            # 259-206
+            # aBot.behavior_max_allowed_quick_expand = 8  # b 5
             # aBot.behavior_pre_gather_greedy_leaves_army_ratio_cutoff = 1.02  # was 0.98
 
             # try just 0.98
@@ -354,7 +360,11 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.engine_mcts_move_estimation_net_differential_cutoff = -0.9  # b 0
+            #196-160, AGAIN but pre-codifying
+            aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 15  # b 20
+
+            # 197-191
+            # aBot.engine_mcts_move_estimation_net_differential_cutoff = -0.9  # b 0
 
             # 219-240
             # aBot.engine_mcts_move_estimation_net_differential_cutoff = 0.9  # b 0
@@ -502,7 +512,11 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.behavior_max_allowed_quick_expand = 7  # b 8
+            # 180-190
+            aBot.behavior_max_allowed_quick_expand = 6  # b 7
+
+            # 101-84
+            # aBot.behavior_max_allowed_quick_expand = 7  # b 8
 
             # 209-239
             # aBot.behavior_max_allowed_quick_expand = 10  # b 8
@@ -650,7 +664,11 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 30  # b 20
+            # 189-191
+            aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 25  # b 20
+
+            # 222-233
+            # aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 30  # b 20
 
             # 214-243, try 30...?
             # aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 40  # b 20
@@ -770,12 +788,17 @@ class ArmyEngineABTests(TestBase):
 
         def configure_b(bBot: EklipZBot):
             # bBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.RobustChild)
+            bBot.mcts_engine.min_expanded_visit_count_to_count_for_moves = 1
             pass
 
         def configure_a(aBot: EklipZBot):
+            # 181-185
+            aBot.mcts_engine.min_expanded_visit_count_to_count_for_moves = 15  # b 1, should do NOTHING
+
             # 245-206 wtf...? why would this change anything, AGAIN
             # codifying in advance though...? b still 5
-            aBot.mcts_engine.min_expanded_visit_count_to_count_for_moves = 20  # b 5, should do NOTHING
+            # 221-225
+            # aBot.mcts_engine.min_expanded_visit_count_to_count_for_moves = 20  # b 5, should do NOTHING
 
             # killed 95-119
             # aBot.mcts_engine.disable_positional_win_detection_in_rollouts = False

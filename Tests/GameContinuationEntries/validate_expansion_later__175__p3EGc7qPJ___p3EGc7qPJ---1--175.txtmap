@@ -20,7 +20,7 @@ M    b1   b1   M    b1   C45                           M    M    a2             
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=11,3
 turn=175
-bot_player_index=1
+player_index=1
 aTiles=50
 aScore=129
 aStandingArmy=79

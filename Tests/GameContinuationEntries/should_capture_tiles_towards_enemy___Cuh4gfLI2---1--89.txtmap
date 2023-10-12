@@ -21,7 +21,7 @@ M                             M    a1D  a1D  D                                  
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=7,13
 turn=89
-bot_player_index=1
+player_index=1
 bot_all_in_counter=0
 bot_all_in=False
 bot_all_in_army_advantage=False

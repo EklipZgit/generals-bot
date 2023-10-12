@@ -20,7 +20,7 @@ C42  a2   a1        M    a2   a2   a1   a1        C42       M                   
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=17,4
 turn=137
-bot_player_index=0
+player_index=0
 bot_all_in_counter=0
 bot_all_in=False
 bot_all_in_army_advantage=False

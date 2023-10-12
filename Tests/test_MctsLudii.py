@@ -21,7 +21,7 @@ class MctsLudiiTests(TestBase):
           bG1          
 |    |    |    |    |    
 loadAsIs=True
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -46,7 +46,8 @@ bTiles=20
                 state = armyEngine.get_base_board_state()
 
                 context = Context()
-                game = Game(general.player, [enemyGen.player])
+                teams = [0, 1]
+                game = Game(general.player, enemyGen.player, teams, allowRandomRepetitions=False, allowRandomNoOps=False, disablePositionalWinDetectionInRollouts=True)
                 context.set_initial_board_state(armyEngine, state, game, map.turn)
                 # state.sim_tiles[map.GetTile()]
                 expectBDest = map.GetTile(2, 7)  # a should cap the tiles downward rather than its own tile next to it
@@ -60,8 +61,8 @@ bTiles=20
                     del state.sim_tiles[expectBDest]
                     del state.sim_tiles[expectADest]
 
-                bestFr = Game.pick_best_move_heuristic(general.player, state.generate_friendly_moves(), state, prevMove=None)
-                bestEn = Game.pick_best_move_heuristic(enemyGen.player, state.generate_enemy_moves(), state, prevMove=None)
+                bestFr = Game.pick_best_move_heuristic(general.player, enemyGen.player, teams, state.generate_friendly_moves(), state, prevMove=None)
+                bestEn = Game.pick_best_move_heuristic(enemyGen.player, general.player, teams, state.generate_enemy_moves(), state, prevMove=None)
 
                 if debugMode:
                     self.render_sim_analysis(map, ArmySimResult(state))
@@ -87,7 +88,7 @@ bTiles=20
           bG1          
 |    |    |    |    |    
 loadAsIs=True
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -112,7 +113,8 @@ bTiles=20
                 state = armyEngine.get_base_board_state()
 
                 context = Context()
-                game = Game(general.player, [enemyGen.player])
+                teams = [0, 1]
+                game = Game(general.player, enemyGen.player, teams, allowRandomRepetitions=False, allowRandomNoOps=False, disablePositionalWinDetectionInRollouts=True)
                 context.set_initial_board_state(armyEngine, state, game, map.turn)
                 # state.sim_tiles[map.GetTile()]
                 expectBDest = map.GetTile(2, 7)  # a should cap the tiles downward rather than its own tile next to it
@@ -126,8 +128,8 @@ bTiles=20
                         if tile.player >= 0:
                             state.sim_tiles[tile] = SimTile(tile)
 
-                bestFr = Game.pick_best_move_heuristic(general.player, state.generate_friendly_moves(), state, prevMove=None)
-                bestEn = Game.pick_best_move_heuristic(enemyGen.player, state.generate_enemy_moves(), state, prevMove=None)
+                bestFr = Game.pick_best_move_heuristic(general.player, enemyGen.player, teams, state.generate_friendly_moves(), state, prevMove=None)
+                bestEn = Game.pick_best_move_heuristic(enemyGen.player, general.player, teams, state.generate_enemy_moves(), state, prevMove=None)
 
                 if debugMode:
                     self.render_sim_analysis(map, ArmySimResult(state))
@@ -153,7 +155,7 @@ bTiles=20
           bG1          
 |    |    |    |    |    
 loadAsIs=True
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -176,7 +178,8 @@ bTiles=20
         state = armyEngine.get_base_board_state()
 
         context = Context()
-        game = Game(general.player, [enemyGen.player])
+        teams = [0, 1]
+        game = Game(general.player, enemyGen.player, teams, allowRandomRepetitions=False, allowRandomNoOps=False, disablePositionalWinDetectionInRollouts=True)
         context.set_initial_board_state(armyEngine, state, game, map.turn)
         # state.sim_tiles[map.GetTile()]
         bInScrim = map.GetTile(2, 7)  # a should cap the tiles downward rather than its own tile next to it
@@ -188,8 +191,8 @@ bTiles=20
         expectedBDest = map.GetTile(1, 6)  # should move left because the tile below is already in the sim
         expectedADest = map.GetTile(4, 6)  # should move up because the tile below is already in the sim
 
-        bestFr = Game.pick_best_move_heuristic(general.player, state.generate_friendly_moves(), state, prevMove=None)
-        bestEn = Game.pick_best_move_heuristic(enemyGen.player, state.generate_enemy_moves(), state, prevMove=None)
+        bestFr = Game.pick_best_move_heuristic(general.player, enemyGen.player, teams, state.generate_friendly_moves(), state, prevMove=None)
+        bestEn = Game.pick_best_move_heuristic(enemyGen.player, general.player, teams, state.generate_enemy_moves(), state, prevMove=None)
 
         if debugMode:
             self.render_sim_analysis(map, ArmySimResult(state))

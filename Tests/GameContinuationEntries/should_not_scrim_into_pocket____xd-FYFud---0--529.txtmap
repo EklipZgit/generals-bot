@@ -24,7 +24,7 @@ M    b4   b4   M         M              M    b2        M              b2   M    
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=0,12
 turn=529
-bot_player_index=0
+player_index=0
 bot_all_in_counter=0
 bot_all_in=False
 bot_all_in_army_advantage=False

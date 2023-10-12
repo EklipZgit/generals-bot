@@ -65,7 +65,7 @@ class MctsDUCT(object):
             logStuff: bool = True,
             nodeSelectionFunction: MoveSelectionFunction = MoveSelectionFunction.MaxAverageValue,
     ):
-        self.min_expanded_visit_count_to_count_for_score: int = 20
+        self.min_expanded_visit_count_to_count_for_score: int = 15
         """Basically this is setting the minimum number of trials that must have been run below a given board state before its score will be used as the 'net_economy_differential' for the sim."""
 
         self.min_expanded_visit_count_to_count_for_moves: int = 20
@@ -838,15 +838,17 @@ class Game(object):
     def __init__(
             self,
             player: int,
-            otherPlayers: typing.List[int],
+            enemyPlayer: int,
+            teams: typing.List[int],
             allowRandomRepetitions: bool,
             allowRandomNoOps: bool,
             disablePositionalWinDetectionInRollouts: bool
     ):
-        self.numPlayers: int = 1 + len(otherPlayers)
+        self.teams: typing.List[int] = teams
+        self.numPlayers: int = 2  # TODO len(teams)
 
         self.friendly_player: int = player
-        self.enemy_player: int = otherPlayers[0]
+        self.enemy_player: int = enemyPlayer
 
         self._rollout_expansions = 0
         self._biased_rollout_expansions: int = 0
@@ -1012,8 +1014,8 @@ class Game(object):
 
         enMoves: typing.List[Move | None] = bs.generate_enemy_moves()
 
-        bestFrMove = self.pick_best_move_heuristic(self.friendly_player, frMoves, bs, prevMove=bs.friendly_move)
-        bestEnMove = self.pick_best_move_heuristic(self.enemy_player, enMoves, bs, prevMove=bs.enemy_move)
+        bestFrMove = self.pick_best_move_heuristic(self.friendly_player, self.enemy_player, self.teams, frMoves, bs, prevMove=bs.friendly_move)
+        bestEnMove = self.pick_best_move_heuristic(self.enemy_player, self.friendly_player, self.teams, enMoves, bs, prevMove=bs.enemy_move)
 
         # if bestFrMove is not None and bs.friendly_move is not None and bestFrMove.dest.x == bs.friendly_move.source.x and bestFrMove.dest.y == bs.friendly_move.source.y:
         #     logging.info('wtf')
@@ -1034,6 +1036,8 @@ class Game(object):
     @staticmethod
     def pick_best_move_heuristic(
         player: int,
+        otherPlayer: int,
+        teams: typing.List[int],
         moves: typing.List[Move | None],
         boardState: ArmySimState,
         prevMove: Move | None,
@@ -1047,39 +1051,21 @@ class Game(object):
 
             val = 2  # cap neutral
             st = boardState.sim_tiles.get(move.dest, None)
-            # if st:
-            #     # then we're playing within the already scrimmed tiles. These are less valuable than running off into new territory.
-            #     if st.player == player:
-            #         val = 0
-            #
-            #         if prevMove is not None and move.dest == prevMove.source:
-            #             val = -10  # dont repetition in trials, if the tile is still owned by us and still in the play area.
-            #     else:
-            #         # must be enemy tile because its in the scrim
-            #         val = 4
-            # else:
-            #     if move.dest.player == player:
-            #         val = 1
-            #     elif move.dest.player >= 0:
-            #         val = 6
-            #     elif move.dest.isCity:
-            #         val = -20
-            #     # else this is indeed a neutral capture, continue
 
             # new logic
             p = move.dest.player
             a = move.dest.army
             if move.dest.isCity and not move.dest.isNeutral:
-                a += boardState.depth // 2
+                a += boardState.depth // 2  # TODO minus simTile.captured_turn, we're overestimating city amount when contesting cities in scrim
             if st:
                 # then we're playing within the already scrimmed tiles. These are less valuable than running off into new territory.
                 val -= 2
                 p = st.player
                 a = st.army
 
-            if p == player:
+            if teams[p] == teams[player]:
                 val = 1
-            elif p >= 0:
+            elif teams[p] == teams[otherPlayer]:
                 val = 6
                 if move.dest.isCity or move.dest.isGeneral:
                     src = boardState.sim_tiles.get(move.source)

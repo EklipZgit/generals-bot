@@ -24,7 +24,7 @@ M    e2   C48  e2        M                        M                             
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=17,14
 turn=50
-bot_player_index=4
+player_index=4
 aTiles=18
 aScore=44
 aStandingArmy=26

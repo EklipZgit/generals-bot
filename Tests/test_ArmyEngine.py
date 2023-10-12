@@ -79,7 +79,7 @@ class ArmyEngineTests(TestBase):
                     
           bG1          
 |    |    |    |    |    
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -139,7 +139,7 @@ bTiles=20
      M         M           
      M    bG1  M        
 |    |    |    |    |    |
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -192,7 +192,7 @@ bTiles=20
      M         M           
      M    bG1  M        
 |    |    |    |    |    |
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -242,7 +242,7 @@ bTiles=20
 
           bG1          
 |    |    |    |    |    |
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -294,7 +294,7 @@ bTiles=20
 
           bG1          
 |    |    |    |    |    |
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -345,7 +345,7 @@ bTiles=20
      M         M           
      M    bG1  M        
 |    |    |    |    |    |
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -396,7 +396,7 @@ bTiles=20
 a25  M    b25          
           bG1          
 |    |    |    |    |    
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -450,7 +450,7 @@ a1
 a1                
 a1        bG17          
 |    |    |    |    |    
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -510,7 +510,7 @@ a1
 a1                
 a1        bG20          
 |    |    |    |    |    
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -572,7 +572,7 @@ bTiles=20
      M         M   
 b1   M    bG20 M    a1     
 |    |    |    |    |    
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -625,7 +625,7 @@ bTiles=20
      b25  M        
 a25       bG1          
 |    |    |    |    |    
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -688,7 +688,7 @@ bTiles=20
 a25       bG1          
 |    |    |    |    |    
 loadAsIs=True
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -743,7 +743,7 @@ bTiles=20
           bG1          
 |    |    |    |    |    
 loadAsIs=True
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -797,7 +797,7 @@ bTiles=20
      M    a25  M   
           bG1          
 |    |    |    |    |    
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -942,7 +942,7 @@ a24
               
           bG1          
 |    |    |    |    |    
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -989,7 +989,7 @@ bTiles=20
 M              
           aG1          
 |    |    |    |    |    
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -1036,7 +1036,7 @@ bTiles=20
 a25  M              
      bG1  b25      
 |    |    |    |    | 
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -1102,7 +1102,7 @@ bTiles=20
                     
      a23  bG25          
 |    |    |    |    |    
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=15
 bTiles=15
@@ -1178,7 +1178,7 @@ bTiles=15
 
      bG1          
 |    |    |    |     
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=15
 bTiles=15
@@ -1246,7 +1246,7 @@ bTiles=15
 
      bG7          
 |    |    |    |     
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=15
 bTiles=15
@@ -1342,7 +1342,7 @@ bTiles=15
 
 a25       bG1          
 |    |    |    |    |    
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -1385,7 +1385,7 @@ bTiles=20
 
      a25  bG1          
 |    |    |    |    |    
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -1427,7 +1427,7 @@ bTiles=20
      M
 M    a25  bG1          
 |    |    |    |    |    
-bot_player_index=0
+player_index=0
 bot_target_player=1
 aTiles=20
 bTiles=20
@@ -1491,7 +1491,7 @@ bTiles=20
                     self.assertIsNotNone(bMove)
 
     def test_army_scrim_defense_should_not_avoid_kill_threat(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/army_scrim_defense_should_not_avoid_kill_threat___rgNPA7Zan---b--388.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 388, fill_out_tiles=True)
 

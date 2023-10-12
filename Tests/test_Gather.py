@@ -549,7 +549,7 @@ a2   a2   b1   b1   b1   b1   b1   b1
 a2   a2   b1   b1   b1   b1   b1   b1  
 a1   b1   b1   b1   b1   b1   bG1  b1
 |    |    |    |    | 
-bot_player_index=0
+player_index=0
 """
         cases = [
             (2, 40),
@@ -646,7 +646,7 @@ a2   a2   a1   b1   b1   b1   b1   b1
 a2   a2   b1   b1   b1   b2   b2   b2  
 a1   b1   b1   b1   b1   b2   bG70 b2
 |    |    |    |    | 
-bot_player_index=0
+player_index=0
 """
         cases = [
             (3, 4),
@@ -757,7 +757,7 @@ a10  a5   a5   a5   a5   a5   a10  a15
 a15  a5   b5   b5   b5   b5   b5   a25
 a20  b1   b1   b1   b1   b1   bG1  b1
 |    |    |    |    | 
-bot_player_index=0
+player_index=0
 """
         cases = [
             (24, 147),
@@ -859,7 +859,7 @@ a10  a5   a5   a5   a5   a5   a10  a15
 a15  a5   b5   b5   b5   b5   b5   a25
 a20  b1   b1   b1   b1   b1   bG1  b1
 |    |    |    |    | 
-bot_player_index=0
+player_index=0
 """
         cases = [
             (8, 9),
@@ -976,3 +976,24 @@ bot_player_index=0
 
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=2)
         self.assertIsNone(winner)
+    
+    def test_should_find_gather_in_2v2(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_find_gather_in_2v2___MCevHMnq----1--50.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 50, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=50)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        self.assertIsNone(winner)
+
+        # TODO add asserts for should_find_gather_in_2v2

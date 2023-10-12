@@ -1190,3 +1190,26 @@ C5
     def test_run_one_off_diag_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         self.run_diag_test(debugMode=debugMode, aArmy=5, bArmy=15, aMove=(0, 1), bMove=(1, 0), turn=96)
+    
+    def test_should_not_think_2v2_move_is_from_neut_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_think_2v2_move_is_from_neut_city___HeB_SpEW6---2--65.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 65, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=65)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=2, playerMapVision=rawMap, allAfkExceptMapPlayer=False)
+        simHost.queue_player_moves_str(0, '6,7->5,7  None')
+        simHost.queue_player_moves_str(3, '5,6->6,6  None')
+        simHost.queue_player_moves_str(1, 'None  None')
+        simHost.queue_player_moves_str(2, 'None  None')
+        # bot = simHost.get_bot(general.player)
+        # playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=2)
+        self.assertIsNone(winner)

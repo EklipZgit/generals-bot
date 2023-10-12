@@ -20,7 +20,7 @@ M                                                      a3   C47  b3             
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=16,6
 turn=300
-bot_player_index=1
+player_index=1
 aTiles=71
 aScore=173
 aStandingArmy=102

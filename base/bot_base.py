@@ -14,17 +14,32 @@ import time
 import typing
 
 from .client import generals
-from .client.map import Map
+from .client.map import Map, Tile
 
 
 class GeneralsClientHost(object):
-    def __init__(self, updateMethod, inBetweenUpdateMethod, name="PurdueBot", userId=None, gameType="private", privateRoomID="PurdueBot", public_server=False):
+    def __init__(
+            self,
+            updateMethod,
+            handleMissedMoveUpdate,
+            handleChatMessage,
+            handleTilePing,
+            name="PurdueBot",
+            userId=None,
+            gameType="private",
+            privateRoomID: str | None = None,
+            public_server=False
+    ):
         # Save Config
 
         self._seen_update: bool = False
         self._updateMethod = updateMethod
 
-        self._handleUpdateNoMove = inBetweenUpdateMethod
+        self._handleUpdateNoMove = handleMissedMoveUpdate
+
+        self._handleChatMessage = handleChatMessage
+
+        self._handleTilePing = handleTilePing
 
         self._map: Map | None = None
 
@@ -71,10 +86,7 @@ class GeneralsClientHost(object):
 
     def _start_game_thread(self):
         # Create Game
-        if self._gameType in ['1v1', 'ffa', 'private']:
-            self._game = generals.GeneralsClient(self._userId, self._name, self._gameType, gameid=self._privateRoomID, public_server=self._public_server)
-        elif self._gameType == "team":
-            self._game = generals.GeneralsClient(self._userId, self._name, 'team', public_server=self._public_server)
+        self._game = generals.GeneralsClient(self._userId, self._name, self._gameType, gameid=self._privateRoomID, public_server=self._public_server)
 
         logging.info("game start...?")
 
@@ -151,20 +163,28 @@ class GeneralsClientHost(object):
                 break
             try:
                 updateType, update = self._server_updates_queue.get(block=True, timeout=1.0)
+                gameUpdateReceived = False
+                botShouldMakeMove = False
+                countsForMakeMove = False
 
                 try:
                     while True:
-                        self._handle_server_update(updateType, update)
-                        self._updates_received += 1
+                        countsForMakeMove = self._handle_server_update(updateType, update)
+                        if countsForMakeMove:
+                            botShouldMakeMove = True
+                            self._updates_received += 1
+                            gameUpdateReceived = True
                         updateType, update = self._server_updates_queue.get(block=False, timeout=0.0)
-                        logging.info(f'UH OH, MULTIPLE SERVER UPDATES RECEIVED IN A ROW, TURN {self._map.turn} MISSED MOVE CHANCE')
-                        self._notify_bot_of_missed_update(self._map)
+                        if gameUpdateReceived and updateType == "game_update":
+                            logging.info(f'UH OH, MULTIPLE SERVER UPDATES RECEIVED IN A ROW, TURN {self._map.turn} MISSED MOVE CHANCE')
+                            self._notify_bot_of_missed_update(self._map)
                 except queue.Empty:
                     pass  # this is what we expect to happen 99.9% of the time unless the server is laggy or the bot takes too long making a previous move and queues up server updates...
 
-                self._ask_bot_for_move(self._map)
+                if botShouldMakeMove:
+                    self._ask_bot_for_move(self._map)
 
-                self._moves_realized += 1
+                    self._moves_realized += 1
             except queue.Empty:
                 logging.info('no update received after 1s of waiting...?')
             except:
@@ -222,7 +242,14 @@ class GeneralsClientHost(object):
 
         return
 
-    def _handle_server_update(self, updateType: str, update: typing.Any):
+    def _handle_server_update(self, updateType: str, update: typing.Any) -> bool:
+        """
+        Returns True if this update should trigger a bot move / board update, otherwise it gets passed as an update without triggering the missed-move logic.
+
+        @param updateType:
+        @param update:
+        @return:
+        """
         if updateType == "game_won":
             self._make_result(updateType, update)
         elif updateType == "game_lost":
@@ -232,10 +259,25 @@ class GeneralsClientHost(object):
             # TODO change this to PREPARE the map for a player capture, let it use the map update, and
             #  THEN perform this player captures stuff that's being triggered in here afterwards?
             self._map.handle_player_capture(update["text"])
-            return
+            return False
+        elif updateType == "chat_message":
+            self._handleChatMessage(update)
+            return False
+        elif updateType == "ping_tile":
+            x, y = self._map.convert_tile_server_index_to_x_y(update)
+            self._handleTilePing(self._map.GetTile(x, y))
+            return False
 
         if update is not None and 'map_diff' in update:
             self._process_map_diff(update)
+            return True
+        return False
+
+    def send_chat(self, chatMessage: str, teamChat: bool):
+        self._game.send_chat(chatMessage, teamChat)
+
+    def ping_tile(self, pingTile: Tile):
+        self._game.ping_tile(pingTile.y, pingTile.x, self._map.cols)
 
 
 def create_thread(f):

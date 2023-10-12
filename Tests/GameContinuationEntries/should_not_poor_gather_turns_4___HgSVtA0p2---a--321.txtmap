@@ -23,7 +23,7 @@ M                        M                                            M    M
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=13,5
 turn=321
-bot_player_index=0
+player_index=0
 aTiles=61
 aScore=148
 aStandingArmy=87

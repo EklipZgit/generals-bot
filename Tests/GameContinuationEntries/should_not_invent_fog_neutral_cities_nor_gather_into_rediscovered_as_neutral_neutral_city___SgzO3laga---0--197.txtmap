@@ -20,7 +20,7 @@ aC10 a1   a1        M    a1   a1   a2   a2   b1   bC7D b1D  MD                  
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=17,4
 turn=197
-bot_player_index=0
+player_index=0
 bot_all_in_counter=0
 bot_all_in=False
 bot_all_in_army_advantage=False

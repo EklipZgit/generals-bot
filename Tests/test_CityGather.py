@@ -418,3 +418,24 @@ class CityGatherTests(TestBase):
         self.assertIsNone(winner)
 
         self.assertEqual(playerMap.GetTile(general.x, general.y), bot.locked_launch_point)
+    
+    def test_should_not_take_city_when_infinitely_ahead_and_also_opp_all_in_and_also_80_army_barreling_towards_gen(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_take_city_when_infinitely_ahead_and_also_opp_all_in_and_also_80_army_barreling_towards_gen___9r7SwJVlM---unk--309.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 309, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=309)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        self.assertIsNone(winner)
+
+        # TODO add asserts for should_not_take_city_when_infinitely_ahead_and_also_opp_all_in_and_also_80_army_barreling_towards_gen

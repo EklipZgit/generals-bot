@@ -21,7 +21,7 @@ M                   M         M              b3   b4   b3   b2   M    M    C50  
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=9,5
 turn=303
-bot_player_index=1
+player_index=1
 aTiles=0
 aScore=0
 aStandingArmy=0

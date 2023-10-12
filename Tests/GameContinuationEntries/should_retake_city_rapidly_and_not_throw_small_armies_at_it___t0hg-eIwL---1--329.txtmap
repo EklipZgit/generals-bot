@@ -20,7 +20,7 @@ M                   M              b2   b2   b2   b2   b2   b2   b2   b1   b1   
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=4,5
 turn=329
-bot_player_index=1
+player_index=1
 bot_all_in_counter=6
 bot_all_in=False
 bot_all_in_army_advantage=False

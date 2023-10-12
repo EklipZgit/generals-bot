@@ -30,7 +30,7 @@ a7   a7   a7   a7   a8   a7   a8   a6   a6   a6   a7   a7   a6   a6   a5   a5   
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=20,7
 turn=410
-bot_player_index=0
+player_index=0
 bot_all_in_counter=38
 bot_all_in=False
 bot_all_in_army_advantage=False

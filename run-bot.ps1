@@ -8,6 +8,7 @@ function Run-BotOnce {
         [switch]$public, 
         [switch]$right, 
         $privateGame, 
+        $roomID = $null,
         [switch]$noui,
         $path = "D:\2019_reformat_Backup\generals-bot\BotHost.py",
         $userID = $null,
@@ -22,11 +23,17 @@ function Run-BotOnce {
         {
             $game = "custom"
         }
-        [void] $arguments.Add("--roomID")
+        [void] $arguments.Add("-roomID")
         [void] $arguments.Add($privateGame)
     }
+
+    if ($roomID) {
+        [void] $arguments.Add("-roomID")
+        [void] $arguments.Add($roomID)
+    }
+
     if ($userID) {
-        [void] $arguments.Add("--userid")
+        [void] $arguments.Add("-userID")
         [void] $arguments.Add($userID)
     }
     if ($right) { [void] $arguments.Add("--right") }
@@ -104,7 +111,7 @@ function Run-BotOnce {
 
             if (`$repId -and (`$path -notlike '*historical*'))
             {
-                `$folder = Get-ChildItem "D:\GeneralsLogs" -Filter "*`$repId*" -Directory
+                `$folder = Get-ChildItem "D:\GeneralsLogs" -Filter "*`$cleanName*`$repId*" -Directory
                 `$newLogPath = Join-Path `$folder.FullName "_`$logFile"
                 `$newContent | Set-Content -Path `$newLogPath -Force
                 `$null = mkdir D:\GeneralsLogs\GroupedLogs -Force
@@ -161,6 +168,16 @@ function Run-SoraAI {
         {
             run-botonce -game $g -name "[Bot] Sora_ai_ek" -userID "EKSORA" -path "D:\2019_reformat_Backup\Sora_AI\run_bot.py" -nolog
         }
+    }
+}
+
+
+function Run-SoraAITeammate {
+    Param(
+    )
+    while ($true)
+    {
+        run-botonce -game 'team' -name "[Bot] Sora_ai_2" -userID "EKSORA2" -path "D:\2019_reformat_Backup\Sora_AI\run_bot.py" -nolog
     }
 }
 
@@ -537,7 +554,8 @@ function Run-Bot {
         $game, 
         [switch]$public, 
         [switch]$right, 
-        $privateGame, 
+        $privateGame,  
+        $roomID, 
         [switch]$noui,
         $path = "D:\2019_reformat_Backup\generals-bot\BotHost.py",
         [switch]$nolog,
@@ -564,6 +582,7 @@ function Run-BotCheckpoint {
         [switch]$public, 
         [switch]$right, 
         $privateGame, 
+        $roomID, 
         [switch]$noui,
         [switch]$nocopy,
         [switch]$nolog,
@@ -609,6 +628,7 @@ function Run-Human {
     Param(
         $game = @('1v1', 'ffa', '1v1'),
         $sleepMax = 3,
+        $roomID = 'getRekt',
         [switch] $left
     )
     $splat = @{
@@ -619,7 +639,7 @@ function Run-Human {
     {
         foreach ($g in $game)
         {
-            Run-BotOnce -game $g -name "Human.exe" -public @splat
+            Run-BotOnce -game $g -name "Human.exe" -roomID $roomID -public @splat
             $sleepTimeA = (Get-Random -Min 0 -Max $sleepMax)
             $sleepTime = $sleepTimeA
 
@@ -638,14 +658,51 @@ function Run-Human {
 
 function Run-HumanTeammate {
     Param(
-        [switch] $left
+        [switch] $left,
+        $roomID = 'getRekt'
     )
+
     $splat = @{
         noui = $false
         right = -not $left
+        userID = 'efgHuman.py'
     }
+
     while ($true)
     {
-        Run-BotOnce -game "team" -name "Human.py" -public @splat
+        Run-BotOnce -game "team" -roomID $roomID -name "Exe.human" -public @splat
+    }
+}
+
+
+function Run-HumanBuddy {
+    Param(
+        [switch] $left,
+        $sleepMax = 120,
+        $roomID = 'matchmaking'
+    )
+
+    $splat = @{
+        noui = $false
+        right = -not $left
+        userID = 'efgBuddy.exe'
+        roomID = $roomID
+    }
+
+    while ($true)
+    {
+        Run-BotOnce -game "team" -name "Buddy.exe" -public @splat
+
+        $sleepTimeA = (Get-Random -Min 0 -Max $sleepMax)
+        $sleepTime = $sleepTimeA
+
+        # use min-of-2 strategy to more often pick lower sleep times but still have high sleep times available.
+        $sleepTimeB = (Get-Random -Min 0 -Max $sleepMax)
+        if ($sleepTimeB -lt $sleepTime) {
+            $sleepTime = $sleepTimeB
+        }
+
+        Write-Verbose "Powershell finished, sleeping $sleepTime" -Verbose
+        Start-Sleep -Seconds $sleepTime
     }
 }

@@ -186,7 +186,7 @@ function Create-TestContinuingGameFrom {
     $content = $map | Get-Content
     foreach ($line in $content)
     {
-        if ($line -like '*bot_player_index*')
+        if ($line -like '*player_index*')
         {
             $player = $line.Split('=')[1].Trim()
         }

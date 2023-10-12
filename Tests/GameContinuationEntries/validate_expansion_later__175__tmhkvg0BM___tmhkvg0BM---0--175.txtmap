@@ -22,7 +22,7 @@ M         M    C50  a2                  M                                  M    
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=0,11
 turn=175
-bot_player_index=0
+player_index=0
 aTiles=39
 aScore=96
 aStandingArmy=57

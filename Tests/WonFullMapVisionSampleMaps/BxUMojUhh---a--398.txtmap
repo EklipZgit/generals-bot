@@ -20,7 +20,7 @@ C43       M                             a3   a1   a1                            
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=13,2
 turn=398
-bot_player_index=0
+player_index=0
 aTiles=132
 aScore=207
 aStandingArmy=75

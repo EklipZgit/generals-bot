@@ -1314,3 +1314,22 @@ a1   b1   b1   bG1
         self.assertIsNone(winner)
 
         # TODO add asserts for should_not_duplicate_fog_emergence_neutral_army
+
+    def test_should_not_think_2v2_move_is_from_neut_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_think_2v2_move_is_from_neut_city___HeB_SpEW6---2--65.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 65, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=65)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=2, playerMapVision=rawMap, allAfkExceptMapPlayer=False)
+        simHost.queue_player_moves_str(0, '6,7->5,7  None')
+        simHost.queue_player_moves_str(3, '5,6->6,6  None')
+        simHost.queue_player_moves_str(1, 'None  None')
+        simHost.queue_player_moves_str(2, 'None  None')
+
+        self.begin_capturing_logging()
+        simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=True))
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=2)
+        self.assertIsNone(winner)

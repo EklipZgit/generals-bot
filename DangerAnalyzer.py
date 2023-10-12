@@ -65,9 +65,10 @@ class ThreatObj(object):
 class DangerAnalyzer(object):
     def __init__(self, map):
         self.map: MapBase = map
-        self.fastestVisionThreat: typing.Union[None, ThreatObj] = None
-        self.fastestThreat: typing.Union[None, ThreatObj] = None
-        self.highestThreat: typing.Union[None, ThreatObj] = None
+        self.fastestVisionThreat: ThreatObj | None = None
+        self.fastestThreat: ThreatObj | None = None
+        self.fastestAllyThreat: ThreatObj | None = None
+        self.highestThreat: ThreatObj | None = None
         self.playerTiles = None
 
         self.alliedGenerals: typing.List[Tile] = [self.map.generals[self.map.player_index]]
@@ -93,13 +94,16 @@ class DangerAnalyzer(object):
     def analyze(self, general: Tile, depth: int, armies: typing.Dict[Tile, Army]):
         self.scan(general)
 
-        self.fastestThreat = self.getFastestThreat(depth, armies)
+        self.fastestThreat = self.getFastestThreat(depth, armies, self.map.player_index)
+        if self.map.is_2v2:
+            for teammate in self.map.teammates:
+                self.fastestAllyThreat = self.getFastestThreat(depth, armies, teammate)
         self.highestThreat = self.getHighestThreat(general, depth, armies)
         self.fastestVisionThreat = self.getVisionThreat(9, armies)
 
         self.anyThreat = self.fastestThreat is not None or self.fastestVisionThreat is not None or self.highestThreat is not None
 
-    def getVisionThreat(self, depth: int, armies: typing.Dict[Tile, Army]):
+    def getVisionThreat(self, depth: int, armies: typing.Dict[Tile, Army]) -> ThreatObj | None:
         startTime = time.time()
         logging.info("------  VISION threat analyzer: depth {}".format(depth))
         curThreat = None
@@ -114,6 +118,11 @@ class DangerAnalyzer(object):
                     and player.index not in self.map.teammates
             ):
                 for general in self.alliedGenerals:
+                    if player.knowsKingLocation and general.player == self.map.player_index:
+                        continue
+                    if player.knowsAllyKingLocation and general.player in self.map.teammates:
+                        continue
+
                     skip = False
                     for tile in general.adjacents:
                         if tile.player != -1 and tile.player != general.player:
@@ -150,7 +159,7 @@ class DangerAnalyzer(object):
         logging.info(f"VISION threat analyzer took {time.time() - startTime:.3f}")
         return threatObj
 
-    def getFastestThreat(self, depth: int, armies: typing.Dict[Tile, Army]):
+    def getFastestThreat(self, depth: int, armies: typing.Dict[Tile, Army], againstPlayer: int) -> ThreatObj | None:
         startTime = time.time()
         logging.info(f"------  fastest threat analyzer: depth {depth}")
         curThreat = None
@@ -158,7 +167,11 @@ class DangerAnalyzer(object):
         # searchArmyAmount = -0.5  # commented during off by one defense issues and replaced with 0?
         # 0 has been leaving off-by-ones, trying -1.5 to see how that affects it
 
-        isFfaMode = self.map.remainingPlayers > 2
+        isFfaMode = self.map.remainingPlayers > 2 and len(self.alliedGenerals) == 1
+        genPlayer = self.map.players[againstPlayer]
+        if genPlayer.dead:
+            return None
+        general = self.map.generals[againstPlayer]
 
         searchArmyAmount = 0.5
         defendableFromPlayers = set()
@@ -170,52 +183,50 @@ class DangerAnalyzer(object):
             if len(self.playerTiles[player.index]) == 0 or player.tileCount <= 2:
                 continue
 
-            for general in self.alliedGenerals:
-                genPlayer = self.map.players[general.player]
+            # for general in self.alliedGenerals:
 
-                if player.index == general.player or player.index in self.map.teammates:
-                    continue
+            if player.index == general.player or player.index in self.map.teammates:
+                continue
 
-                if player.score > genPlayer.score * 1.5 and isFfaMode:
-                    continue
+            if player.score > genPlayer.score * 1.5 and isFfaMode:
+                continue
 
-                defendableFromPlayers.add(player.index)
+            defendableFromPlayers.add(player.index)
 
-                path = dest_breadth_first_target(
+            path = dest_breadth_first_target(
+                map=self.map,
+                goalList=[general],
+                targetArmy=searchArmyAmount,
+                maxTime=0.05,
+                maxDepth=depth,
+                negativeTiles=None,
+                searchingPlayer=player.index,
+                dontEvacCities=False,
+                dupeThreshold=3,
+                noLog=True)
+            if (path is not None
+                    and (curThreat is None
+                         or path.length < curThreat.length
+                         or (path.length == curThreat.length and path.value > curThreat.value))):
+                # If there is NOT another path to our general that doesn't hit the same tile next to our general,
+                # then we can use one extra turn on defense gathering to that 'saveTile'.
+                lastTile = path.tail.prev.tile
+                altPath = dest_breadth_first_target(
                     map=self.map,
                     goalList=[general],
                     targetArmy=searchArmyAmount,
                     maxTime=0.05,
-                    maxDepth=depth,
+                    maxDepth=path.length + 5,
                     negativeTiles=None,
                     searchingPlayer=player.index,
                     dontEvacCities=False,
-                    dupeThreshold=3,
-                    noLog=True)
-                if (path is not None
-                        and (curThreat is None
-                             or path.length < curThreat.length
-                             or (path.length == curThreat.length and path.value > curThreat.value))):
-                    # If there is NOT another path to our general that doesn't hit the same tile next to our general,
-                    # then we can use one extra turn on defense gathering to that 'saveTile'.
-                    lastTile = path.tail.prev.tile
-                    altPath = dest_breadth_first_target(
-                        map=self.map,
-                        goalList=[general],
-                        targetArmy=searchArmyAmount,
-                        maxTime=0.05,
-                        maxDepth=path.length + 5,
-                        negativeTiles=None,
-                        searchingPlayer=player.index,
-                        dontEvacCities=False,
-                        dupeThreshold=5,
-                        skipTiles=[lastTile])
-                    if altPath is None or altPath.length > path.length:
-                        saveTile = lastTile
-                        logging.info(f"saveTile blocks path to our king: {saveTile.x},{saveTile.y}")
-                    logging.info(f"dest BFS found KILL against our general:\n{str(path)}")
-                    curThreat = path
-                    # path.calculate_value(forPlayer=player.index)
+                    dupeThreshold=5,
+                    skipTiles=[lastTile])
+                if altPath is None or altPath.length > path.length:
+                    saveTile = lastTile
+                    logging.info(f"saveTile blocks path to our king: {saveTile.x},{saveTile.y}")
+                logging.info(f"dest BFS found KILL against our general:\n{str(path)}")
+                curThreat = path
 
         for armyTile, army in armies.items():
             # if this is an army in the fog that isn't on a tile owned by that player, lets see if we need to path it.
@@ -240,7 +251,7 @@ class DangerAnalyzer(object):
 
             startTiles = {}
             startTiles[armyTile] = ((0, 0, 0, 0 - army.value - 1, armyTile.x, armyTile.y, 0.5), 0)
-            goalFunc = lambda tile, prio: tile in self.alliedGenerals
+            goalFunc = lambda tile, prio: tile == general
             path = breadth_first_dynamic(
                 self.map,
                 startTiles,

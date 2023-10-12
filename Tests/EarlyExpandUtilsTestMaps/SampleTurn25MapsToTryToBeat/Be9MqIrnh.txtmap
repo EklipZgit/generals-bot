@@ -22,7 +22,7 @@ c2   M    M         M    c2   c2   c2   c2   c2        M                        
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=12,7
 turn=50
-bot_player_index=2
+player_index=2
 aTiles=20
 aScore=46
 aStandingArmy=26

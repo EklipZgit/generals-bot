@@ -133,6 +133,7 @@ def build_tree_node_lookup(
         newPaths: typing.List[Path],
         startTilesDict: typing.Dict[Tile, typing.Tuple[typing.Any, int]],
         searchingPlayer: int,
+        teams: typing.List[int],
         # negativeTiles: typing.Set[Tile],
         shouldLog: bool = False
 ) -> typing.Dict[Tile, GatherTreeNode]:
@@ -142,7 +143,9 @@ def build_tree_node_lookup(
         gatherTreeNodeLookup,
         startTilesDict,
         searchingPlayer,
-        shouldLog,
+        teams,
+        set(),
+        shouldLog=shouldLog,
         force=True
     )
 
@@ -151,6 +154,7 @@ def extend_tree_node_lookup(
         gatherTreeNodeLookup: typing.Dict[Tile, GatherTreeNode],
         startTilesDict: typing.Dict[Tile, typing.Tuple[typing.Any, int]],
         searchingPlayer: int,
+        teams: typing.List[int],
         negativeTiles: typing.Set[Tile],
         useTrueValueGathered: bool = False,
         shouldLog: bool = False,
@@ -240,7 +244,7 @@ def extend_tree_node_lookup(
             tileEffect = 1
 
             if negativeTiles is None or pathNode.tile not in negativeTiles:
-                if pathNode.tile.player == searchingPlayer:
+                if teams[pathNode.tile.player] == teams[searchingPlayer]:
                     tileEffect -= pathNode.tile.army
                 elif useTrueValueGathered:
                     tileEffect += pathNode.tile.army
@@ -635,6 +639,8 @@ def _knapsack_levels_gather_iterative_prune(
 
     maxPerIteration = max(4, fullTurns // 3 - 1)
 
+    teams = MapBase.get_teams_array(map)
+
     turnsSoFar = 0
     totalValue = 0
     newStartTilesDict = startTilesDict.copy()
@@ -688,6 +694,7 @@ def _knapsack_levels_gather_iterative_prune(
             gatherTreeNodeLookup,
             newStartTilesDict,
             searchingPlayer,
+            teams,
             useTrueValueGathered=useTrueValueGathered,
             negativeTiles=negativeTiles,
             shouldLog=shouldLog
@@ -701,6 +708,7 @@ def _knapsack_levels_gather_iterative_prune(
                 negativeTiles,
                 origStartTilesDict,
                 searchingPlayer,
+                teams,
                 onlyCalculateFriendlyArmy=not useTrueValueGathered,
                 viewInfo=viewInfo,
                 shouldAssert=True)
@@ -751,6 +759,7 @@ def _knapsack_levels_gather_iterative_prune(
                 negativeTiles,
                 newStartTilesDict,
                 searchingPlayer,
+                teams,
                 onlyCalculateFriendlyArmy=not useTrueValueGathered,
                 viewInfo=viewInfo,
                 shouldAssert=USE_DEBUG_ASSERTS
@@ -956,6 +965,8 @@ def knapsack_levels_backpack_gather_with_value(
         negativeTiles = negativeTiles.copy()
     else:
         negativeTiles = set()
+
+    teams = MapBase.get_teams_array(map)
         # negativeTilesOrig = set()
     # q = PriorityQueue()
 
@@ -1189,6 +1200,7 @@ def knapsack_levels_backpack_gather_with_value(
             maxPaths,
             startTilesDict,
             searchingPlayer,
+            teams,
             # negativeTiles
             shouldLog=shouldLog
         )
@@ -1200,6 +1212,7 @@ def knapsack_levels_backpack_gather_with_value(
             negativeTilesOrig,
             origStartTilesDict,
             searchingPlayer=searchingPlayer,
+            teams=teams,
             onlyCalculateFriendlyArmy=not useTrueValueGathered,
             viewInfo=viewInfo,
             shouldAssert=True)
@@ -1256,6 +1269,12 @@ def greedy_backpack_gather(
 
     return nodes
 
+def is_friendly_tile(map: MapBase, tile: Tile, searchingPlayer: int) -> bool:
+    if tile.player == searchingPlayer:
+        return True
+    if map.teams is not None and map.teams[tile.player] == map.teams[searchingPlayer]:
+        return True
+    return False
 
 def greedy_backpack_gather_values(
         map,
@@ -1320,6 +1339,8 @@ def greedy_backpack_gather_values(
     else:
         negativeTiles = set()
 
+    teams = MapBase.get_teams_array(map)
+
     # TODO factor in cities, right now they're not even incrementing. need to factor them into the timing and calculate when they'll be moved.
     if searchingPlayer == -2:
         if isinstance(startTiles, dict):
@@ -1342,7 +1363,7 @@ def greedy_backpack_gather_values(
              ySum,
              numPrioTiles) = priorityObject
 
-            if negArmySum >= 0:
+            if negArmySum >= 0 or currentTile.player != searchingPlayer:
                 return None
 
             value = 0 - (negGatheredSum / (max(1, realDist)))
@@ -1513,6 +1534,7 @@ def greedy_backpack_gather_values(
         negativeTilesOrig,
         origStartTiles,
         searchingPlayer=searchingPlayer,
+        teams=teams,
         onlyCalculateFriendlyArmy=not useTrueValueGathered,
         viewInfo=viewInfo)
 
@@ -1526,6 +1548,7 @@ def recalculate_tree_values(
         negativeTiles: typing.Set[Tile] | None,
         startTilesDict: typing.Dict[Tile, object],
         searchingPlayer: int,
+        teams: typing.List[int],
         onlyCalculateFriendlyArmy=False,
         viewInfo=None,
         shouldAssert=False
@@ -1539,6 +1562,7 @@ def recalculate_tree_values(
             negativeTiles,
             startTilesDict,
             searchingPlayer,
+            teams,
             onlyCalculateFriendlyArmy,
             viewInfo,
             shouldAssert)
@@ -1562,7 +1586,7 @@ def recalculate_tree_values(
             trunkValue = current.trunkValue
             trunkDistance = current.trunkDistance + 1
             if negativeTiles is None or child.tile not in negativeTiles:
-                if child.tile.player == searchingPlayer:
+                if teams[child.tile.player] == teams[searchingPlayer]:
                     trunkValue += child.tile.army
                 elif not onlyCalculateFriendlyArmy:
                     trunkValue -= child.tile.army
@@ -1586,6 +1610,7 @@ def _recalculate_tree_values_recurse(
         negativeTiles: typing.Set[Tile] | None,
         startTilesDict: typing.Dict[Tile, object],
         searchingPlayer: int,
+        teams: typing.List[int],
         onlyCalculateFriendlyArmy=False,
         viewInfo=None,
         shouldAssert=False
@@ -1612,7 +1637,7 @@ def _recalculate_tree_values_recurse(
         turns = 0
 
     if (negativeTiles is None or currentNode.tile not in negativeTiles) and not isStartNode:
-        if currentNode.tile.player == searchingPlayer:
+        if teams[currentNode.tile.player] == teams[searchingPlayer]:
             sum += currentNode.tile.army
         elif not onlyCalculateFriendlyArmy:
             sum -= currentNode.tile.army
@@ -1622,6 +1647,7 @@ def _recalculate_tree_values_recurse(
             negativeTiles,
             startTilesDict,
             searchingPlayer,
+            teams,
             onlyCalculateFriendlyArmy,
             viewInfo,
             shouldAssert=shouldAssert)
@@ -1802,6 +1828,7 @@ def prune_mst_to_army_with_values(
         rootNodes: typing.List[GatherTreeNode],
         army: int,
         searchingPlayer: int,
+        teams: typing.List[int],
         turn: int,
         viewInfo: ViewInfo | None = None,
         noLog: bool = True,
@@ -1832,12 +1859,12 @@ def prune_mst_to_army_with_values(
     citySkipTiles = set()
     for n in rootNodes:
         if (n.tile.isCity or n.tile.isGeneral) and not n.tile.isNeutral:
-            if n.tile.player == searchingPlayer:
+            if teams[n.tile.player] == [searchingPlayer]:
                 citySkipTiles.add(n.tile)
 
     def cityCounterFunc(node: GatherTreeNode):
         if (node.tile.isGeneral or node.tile.isCity) and not node.tile.isNeutral and node.tile not in citySkipTiles:
-            if node.tile.player == searchingPlayer:
+            if teams[node.tile.player] == teams[searchingPlayer]:
                 cityCounter.add(1)
                 # each time we add one of these we must gather all the other cities in the tree first too so we lose that many increment turns + that
                 cityGatherDepthCounter.add(node.trunkDistance)
@@ -1854,7 +1881,7 @@ def prune_mst_to_army_with_values(
         for child in node.children:
             setCountersToPruneCitiesRecurse(child)
 
-        if node.tile.player == searchingPlayer and (node.tile.isCity or node.tile.isGeneral):
+        if teams[node.tile.player] == teams[searchingPlayer] and (node.tile.isCity or node.tile.isGeneral):
             cityGatherDepthCounter.add(0 - node.trunkDistance)
             cityCounter.add(-1)
 
@@ -1887,11 +1914,15 @@ def prune_mst_to_army_with_values(
 
         return False
 
+    def pruneFunc(node: GatherTreeNode, curObj) -> typing.Tuple:
+        trunkValuePerTurn = node.trunkValue / node.trunkDistance if node.trunkDistance > 0 else 0
+        return node.value / node.gatherTurns, trunkValuePerTurn, node.trunkDistance
+
     prunedTurns, noCityCalcGathValue, nodes = prune_mst_until(
         rootNodes,
         untilFunc=untilFunc,
         # if we dont include trunkVal/node.trunkDistance we end up keeping shitty branches just because they have a far, large tile on the end.
-        pruneOrderFunc=lambda node, curObj: (node.value / node.gatherTurns, node.trunkValue/node.trunkDistance, node.trunkDistance),
+        pruneOrderFunc=pruneFunc,
         # pruneOrderFunc=lambda node, curObj: (node.value, node.trunkValue / node.trunkDistance, node.trunkDistance),
         # pruneOrderFunc=lambda node, curObj: (node.value / node.gatherTurns, node.trunkValue / node.trunkDistance, node.trunkDistance),
         invalidMoveFunc=invalidMoveFunc,
@@ -1911,6 +1942,7 @@ def prune_mst_to_army(
         rootNodes: typing.List[GatherTreeNode],
         army: int,
         searchingPlayer: int,
+        teams: typing.List[int],
         turn: int,
         viewInfo: ViewInfo | None = None,
         noLog: bool = True,
@@ -1936,6 +1968,7 @@ def prune_mst_to_army(
         rootNodes=rootNodes,
         army=army,
         searchingPlayer=searchingPlayer,
+        teams=teams,
         turn=turn,
         viewInfo=viewInfo,
         noLog=noLog,
@@ -1950,6 +1983,7 @@ def prune_mst_to_max_army_per_turn_with_values(
         rootNodes: typing.List[GatherTreeNode],
         minArmy: int,
         searchingPlayer: int,
+        teams: typing.List[int],
         viewInfo: ViewInfo | None = None,
         noLog: bool = True,
         gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
@@ -1979,7 +2013,7 @@ def prune_mst_to_max_army_per_turn_with_values(
     totalTurns = 0
     for n in rootNodes:
         if (n.tile.isCity or n.tile.isGeneral) and not n.tile.isNeutral:
-            if n.tile.player == searchingPlayer:
+            if teams[n.tile.player] == teams[searchingPlayer]:
                 citySkipTiles.add(n.tile)
 
         totalTurns += n.gatherTurns
@@ -1990,7 +2024,7 @@ def prune_mst_to_max_army_per_turn_with_values(
 
     def cityCounterFunc(node: GatherTreeNode):
         if (node.tile.isGeneral or node.tile.isCity) and not node.tile.isNeutral and node.tile not in citySkipTiles:
-            if node.tile.player == searchingPlayer:
+            if teams[node.tile.player] == teams[searchingPlayer]:
                 cityCounter.add(1)
                 # each time we add one of these we must gather all the other cities in the tree first too so we lose that many increment turns + that
                 cityGatherDepthCounter.add(node.trunkDistance)
@@ -2019,7 +2053,7 @@ def prune_mst_to_max_army_per_turn_with_values(
         if pruneValPerTurn < curValuePerTurn.value or armyLeftIfPruned < minArmy:
             return True
 
-        if node.tile.player == searchingPlayer and (node.tile.isCity or node.tile.isGeneral):
+        if teams[node.tile.player] == teams[searchingPlayer] and (node.tile.isCity or node.tile.isGeneral):
             cityGatherDepthCounter.add(0 - node.trunkDistance)
             cityCounter.add(-1)
 
@@ -2054,6 +2088,7 @@ def prune_mst_to_max_army_per_turn(
         rootNodes: typing.List[GatherTreeNode],
         minArmy: int,
         searchingPlayer: int,
+        teams: typing.List[int],
         viewInfo: ViewInfo | None = None,
         noLog: bool = True,
         gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
@@ -2081,6 +2116,7 @@ def prune_mst_to_max_army_per_turn(
         rootNodes=rootNodes,
         minArmy=minArmy,
         searchingPlayer=searchingPlayer,
+        teams=teams,
         viewInfo=viewInfo,
         noLog=noLog,
         gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,

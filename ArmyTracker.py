@@ -775,6 +775,24 @@ class ArmyTracker(object):
         # skipFunc = lambda tile: tile.discovered or any_where(tile.movable, lambda m: m.discovered and m.player >= 0 and m.player != self.map.player_index)
         # breadth_first_foreach_dist(self.map, [neutralTile], resetFogCitiesDist, foreachResetBadGuesses, negativeLambda, skipFunc)
 
+    def is_friendly_team(self, p1: int, p2: int) -> bool:
+        if p1 == p2:
+            return True
+        if p1 < 0 or p2 < 0:
+            return False
+        if self.map.teams is not None and self.map.teams[p1] == self.map.teams[p2]:
+            return True
+        return False
+
+    def is_enemy_team(self, p1: int, p2: int) -> bool:
+        if p1 == p2:
+            return False
+        if p1 < 0 or p2 < 0:
+            return False
+        if self.map.teams is not None and self.map.teams[p1] != self.map.teams[p2]:
+            return True
+        return False
+
     def find_fog_source(self, armyPlayer: int, tile: Tile, delta: int | None = None) -> Path | None:
         """
         Looks for a fog source to this tile that produces the provided (positive) delta, or if none provided, the
@@ -825,7 +843,7 @@ class ArmyTracker(object):
             else:
                 val = negArmy
 
-            if thisTile.player == armyPlayer and thisTile.army > 8:
+            if self.is_friendly_team(thisTile.player, armyPlayer) and thisTile.army > 8:
                 negArmy += thisTile.army // 2
 
                 if negArmy > 0:
@@ -857,7 +875,7 @@ class ArmyTracker(object):
             theArmy = self.armies.get(nextTile, None)
             if theArmy is not None:
                 consecutiveUndiscovered = 0
-                if theArmy.player == armyPlayer:
+                if self.is_friendly_team(theArmy.player, armyPlayer):
                     negArmy -= theArmy.value
                 else:
                     negArmy += theArmy.value
@@ -894,7 +912,7 @@ class ArmyTracker(object):
                     #         negArmy -= emergenceLocalityBonusArmy
                 else:
                     consecutiveUndiscovered = 0
-                if nextTile.player == armyPlayer:
+                if self.is_friendly_team(nextTile.player, armyPlayer):
                     negArmy -= nextTile.army - 1
                 elif nextTile.discovered:
                     negArmy += nextTile.army + 1
@@ -917,7 +935,7 @@ class ArmyTracker(object):
 
             # logging.info("nextTile {}: negArmy {}".format(nextTile.toString(), negArmy))
             return (
-                    (nextTile.visible and not nextTile.delta.gainedSight and not (wasDiscoveredEnemyTile and nextTile.player == tile.player))
+                    (nextTile.visible and not nextTile.delta.gainedSight and not (wasDiscoveredEnemyTile and self.is_friendly_team(nextTile.player, tile.player)))
                     or turnsNegative > 6
                     or consecutiveUndiscovered > 20
                     or dist > 30
@@ -1090,7 +1108,7 @@ class ArmyTracker(object):
         while node is not None:
             logging.info(f"resolve_fog_emergence tile {str(node.tile)}")
             fogArmy = self.armies.pop(node.tile, None)
-            if fogArmy is not None and fogArmy.player == player:
+            if fogArmy is not None and self.is_friendly_team(fogArmy.player, player):
                 logging.info(f"  ^ was army {str(node.tile)}")
                 armiesFromFog.append(fogArmy)
             if not node.tile.visible:
@@ -1127,6 +1145,7 @@ class ArmyTracker(object):
             logging.info(f'set fog source for {str(fogTile)} to {str(maxArmy)}')
             maxArmy.update_tile(fogTile)
             maxArmy.update()
+            # maxArmy.player = fogTile.player
             # self.armies[fogTile] = maxArmy
             maxArmy.path = sourceFogArmyPath
             maxArmy.expectedPath = None
@@ -1173,7 +1192,7 @@ class ArmyTracker(object):
         if self.lastMove.move_half:
             expectedDestDelta = (army.value + 1) // 2
         expectedSourceDelta = 0 - expectedDestDelta  # these should always match if no other army interferes.
-        if playerMoveDest.delta.oldOwner != self.map.player_index:
+        if not self.is_friendly_team(playerMoveDest.delta.oldOwner, self.map.player_index):
             expectedDestDelta = 0 - expectedDestDelta
 
         likelyDroppedMove = False

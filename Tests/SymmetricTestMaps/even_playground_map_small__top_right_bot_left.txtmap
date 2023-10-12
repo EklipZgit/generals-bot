@@ -18,7 +18,7 @@ M                                                      M
                M              C45                      M
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 turn=383
-bot_player_index=1
+player_index=1
 aTiles=55
 aScore=148
 aStandingArmy=93

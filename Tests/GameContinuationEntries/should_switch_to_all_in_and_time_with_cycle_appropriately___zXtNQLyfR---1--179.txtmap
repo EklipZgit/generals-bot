@@ -24,7 +24,7 @@ M    M                                       M    M              M         M    
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=13,5
 turn=179
-bot_player_index=1
+player_index=1
 bot_all_in_counter=201
 bot_all_in=True
 bot_all_in_army_advantage=False

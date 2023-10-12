@@ -20,7 +20,7 @@ M                                            M         M    a2   a2   M    aG16 
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=4,15
 turn=201
-bot_player_index=0
+player_index=0
 aTiles=73
 aScore=182
 aStandingArmy=109

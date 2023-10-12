@@ -11,6 +11,7 @@ from PerformanceTimer import PerformanceTimer
 from Sim.TextMapLoader import TextMapLoader
 from Viewer.ViewerProcessHost import ViewerHost
 from base import bot_base
+from base.client.generals import ChatUpdate
 from base.client.map import MapBase, Tile
 from bot_ek0x45 import EklipZBot
 
@@ -23,6 +24,8 @@ class BotHostBase(object):
         self,
         name: str,
         placeMoveFunc: typing.Callable[[Tile, Tile, bool], None],
+        pingTileFunc: typing.Callable[[Tile], None],
+        sendChatFunc: typing.Callable[[str, bool], None],
         gameType: str,
         noUi: bool = True,
         alignBottom: bool = False,
@@ -46,7 +49,11 @@ class BotHostBase(object):
 
         self.place_move_func: typing.Callable[[Tile, Tile, bool], None] = placeMoveFunc
 
-        self.eklipz_bot = EklipZBot(threadCount=42069)
+        self.ping_tile_func: typing.Callable[[Tile], None] = pingTileFunc
+
+        self.send_chat_func: typing.Callable[[str, bool], None] = sendChatFunc
+
+        self.eklipz_bot = EklipZBot()
         self.has_viewer: bool = not FORCE_NO_VIEWER and not noUi
 
         self.align_bottom: bool = alignBottom
@@ -91,6 +98,14 @@ class BotHostBase(object):
                 else:
                     with moveTimer.begin_event(f'Sending move {str(move)} to server'):
                         self.place_move_func(move.source, move.dest, move.move_half)
+
+            tilePings = self.eklipz_bot.get_queued_tile_pings()
+            for tilePing in tilePings:
+                self.ping_tile_func(tilePing)
+
+            teamChatMessages = self.eklipz_bot.get_queued_teammate_messages()
+            for teamChatMessage in teamChatMessages:
+                self.send_chat_func(teamChatMessage, True)
 
             if not self.eklipz_bot.no_file_logging:
                 with moveTimer.begin_event(f'Dump {currentMap.turn}.txtmap to disk'):
@@ -149,7 +164,6 @@ class BotHostBase(object):
                     currentMap.result = False
                     self.notify_game_over()
 
-
     def save_txtmap(self, map: MapBase):
         if self.noLog:
             return
@@ -195,6 +209,12 @@ class BotHostBase(object):
                 isComplete=True)
             self._viewer.kill()
 
+    def handle_chat_message(self, chatUpdate: ChatUpdate):
+        self.eklipz_bot.notify_chat_message(chatUpdate)
+
+    def handle_tile_ping(self, pingedTile: Tile):
+        self.eklipz_bot.notify_tile_ping(pingedTile)
+
 
 class BotHostLiveServer(BotHostBase):
     def __init__(
@@ -209,7 +229,7 @@ class BotHostLiveServer(BotHostBase):
             alignRight: bool,
             noLog: bool,
     ):
-        super().__init__(name, self.place_move, gameType, noUi, alignBottom, alignRight, noLog=noLog)
+        super().__init__(name, self.place_move, self.ping_server_tile, self.send_server_chat, gameType, noUi, alignBottom, alignRight, noLog=noLog)
 
         if FORCE_PRIVATE and self._game_type != 'private':
             raise AssertionError('Bot forced private only for the moment')
@@ -218,6 +238,8 @@ class BotHostLiveServer(BotHostBase):
         self.bot_client = bot_base.GeneralsClientHost(
             self.make_move,
             self.receive_update_no_move,
+            handleChatMessage=self.handle_chat_message,
+            handleTilePing=self.handle_tile_ping,
             name=self._name,
             userId=userId,
             gameType=self._game_type,
@@ -234,6 +256,12 @@ class BotHostLiveServer(BotHostBase):
         else:
             logging.info(f"Placing move: {source.x},{source.y} to {dest.x},{dest.y}")
         self.bot_client.place_move(source, dest, move_half=move_half)
+
+    def ping_server_tile(self, pingTile: Tile):
+        self.bot_client.ping_tile(pingTile)
+
+    def send_server_chat(self, chatMessage: str, teamChat: bool):
+        self.bot_client.send_chat(chatMessage, teamChat)
 
     # consumes main thread until game complete
     def run(self):
@@ -270,7 +298,7 @@ if __name__ == '__main__':
     parser.add_argument('-g', '--gameType', metavar='str', type=str,
                         choices=["private", "custom", "1v1", "ffa", "team"],
                         default="private", help='Game Type: private, custom, 1v1, ffa, or team')
-    parser.add_argument('--roomID', metavar='str', type=str, default="testing", help='Private Room ID (optional)')
+    parser.add_argument('-roomID', metavar='str', type=str, default="testing", help='Private Room ID (optional)')
     # parser.add_argument('--roomID', metavar='str', type=str, help='Private Room ID (optional)')
     parser.add_argument('--right', action='store_true')
     parser.add_argument('--bottom', action='store_true')

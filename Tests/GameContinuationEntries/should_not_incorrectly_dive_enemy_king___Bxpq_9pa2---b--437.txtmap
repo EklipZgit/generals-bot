@@ -20,7 +20,7 @@ M    aC12 a1   a2   a3   a7   a1                                 M              
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=4,0
 turn=437
-bot_player_index=1
+player_index=1
 aTiles=109
 aScore=466
 aStandingArmy=357

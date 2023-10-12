@@ -21,7 +21,7 @@ M         M    b1   b1   M    b1   b1   b1   b1   b1   M    b2   b2   b2   M
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=13,4
 turn=198
-bot_player_index=1
+player_index=1
 aTiles=0
 aScore=0
 aStandingArmy=0

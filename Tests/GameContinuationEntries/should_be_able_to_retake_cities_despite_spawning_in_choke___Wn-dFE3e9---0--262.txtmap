@@ -24,7 +24,7 @@ M              M    M                   D    D    MD                       b2
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=15,11
 turn=262
-bot_player_index=0
+player_index=0
 bot_all_in_counter=18
 bot_all_in=False
 bot_all_in_army_advantage=False

@@ -150,7 +150,7 @@ a1   a1   a1   aG1
       
                                                        bG50
 |    |    |    |    |    |    |    |    |    |    |    |
-bot_player_index=0
+player_index=0
 bot_target_player=1   
 """
         # 2 in 3 moves
@@ -193,7 +193,7 @@ a1   a1   a1   aG11
       
                                                        bG50
 |    |    |    |    |    |    |    |    |    |    |    |
-bot_player_index=0
+player_index=0
 bot_target_player=1   
 """
         # 2 in 3 moves

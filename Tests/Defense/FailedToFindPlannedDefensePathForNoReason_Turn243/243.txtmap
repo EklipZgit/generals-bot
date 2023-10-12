@@ -20,3 +20,12 @@ M              a1   a2   a1   M    a1   N3                       M              
           M         a3   a3   a3        M
      M
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+targetPlayerExpectedGeneralLocation=3,18
+bScore=123
+aScore=116
+bTiles=66
+aTiles=61
+bCityCount=1
+aCityCount=1
+bot_target_player=0
+player_index=1

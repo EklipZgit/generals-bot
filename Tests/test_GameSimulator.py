@@ -184,7 +184,56 @@ class GameSimulatorTests(TestBase):
         # simHost = GameSimulatorHost(map)
 
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.5)
+        simHost.run_sim(run_real_time=debugMode, turn_time=0.1)
+
+    def test_simulates_a_2v2_game(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapData = """
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                         M                                                                M
+M              M                   M                   M         cG7  M                             M
+          M                        M                   M              M    M    C45            M         M
+                                   M                   M                                            M
+     C48  M                                                                          M
+                                             M                   M         M                   M
+               M                                                           M              C41
+          C42       M    M                                            M    M                        M
+          M    C48  M                                                                dG7  M              M
+     M                                  M                   M                     
+               M    M                                                 M                   M
+               M                                                           M    M         M
+                    C41  C45       M                   M              M         C41
+     M                                                                          M    M                   M
+               M                   C43  M              C43  M           
+M    aG7                      M                   M                                  M              M    M
+                                        M                   M         M                   M         M
+                                             M                   M         M                   M
+          M                   bG7                      M
+     M                                                                               M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=4
+player_index=0
+teams=1,1,2,2
+mode=team
+targetPlayerExpectedGeneralLocation=7,7
+aUsername=A
+bUsername=B
+cUsername=C
+dUsername=D
+aTiles=1
+bTiles=1
+cTiles=1
+dTiles=1
+"""
+        map, general = self.load_map_and_general_from_string(mapData, 4, player_index=0)
+        self.reset_map_to_just_generals(map)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player)
+
+        self.begin_capturing_logging()
+        simHost.run_sim(run_real_time=debugMode, turn_time=0.3)
 
     def test_game_simulator__correctly_updates_client_fog_of_war__robust_against_manually_tweaked_maps(self):
         map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/243.txtmap', 243, player_index=1)

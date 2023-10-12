@@ -22,7 +22,7 @@ b5   b9   b9   b14  b3   b8   b10  b8        C43  M    C43                      
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=15,4
 turn=768
-bot_player_index=1
+player_index=1
 aTiles=0
 aScore=0
 aStandingArmy=0

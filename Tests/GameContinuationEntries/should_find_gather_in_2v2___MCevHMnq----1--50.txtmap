@@ -1,0 +1,107 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                    M                             M    M         M    M                   M
+M                                                                               M
+     M                             M                                                           M
+          M              M                   M                                            M
+M                                  M         M    M         M                   M
+M    M              M                   M    M                             M                   M
+                    M              M    M                                            M         M    M
+                              M                   M                                  M         M
+                    M              M                                                           M
+                                   M         M                                  b2                  M
+M                        M                        M         M    M    M    M    b2             M
+     M                             M         M    M    a2             M         b2        M    M    M
+          M              M                   C47  a2   a2   M         M    M    b2             M
+               M    M         M              a2   a2        C40       C45  b2   b2   M
+     M                        M    M         a2   M    M         M         b2   b2
+     M                             M    a2   a2        M    a2   b2   b2   b2   b2             M    M
+                              M         a2   a2   a2   M    a2   b2   b2   b2   b2   M
+                                        a2   a2   a2   a2   a2   b2   b2        b2        M    M
+                              M              M    a2   a2   b4   bG3  b2   b2   b2        M    M    M
+                                        M    a2   aG3  a2   a2   C44                 M              M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=50
+player_index=1
+teams=1,1,2,2
+mode=team
+targetPlayerExpectedGeneralLocation=11,2
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_target_player=-1
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=24
+aScore=49
+aStandingArmy=25
+aStars=50
+aCityCount=1
+aGeneral=10,19
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=23
+aDelta25Score=48
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=50
+bUsername=Exe.human
+bTiles=24
+bScore=51
+bStandingArmy=27
+bStars=50
+bCityCount=1
+bGeneral=13,18
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=23
+bDelta25Score=50
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=49
+cUsername=bobjones
+cTiles=16
+cScore=42
+cStandingArmy=26
+cStars=40
+cCityCount=1
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=15
+cDelta25Score=41
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=0
+dUsername=Hefei168
+dTiles=20
+dScore=46
+dStandingArmy=26
+dStars=40
+dCityCount=1
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+dDelta25Tiles=19
+dDelta25Score=45
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=0

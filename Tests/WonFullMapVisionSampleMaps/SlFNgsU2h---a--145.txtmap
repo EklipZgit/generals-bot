@@ -22,7 +22,7 @@ C48       M                                                      M    a1   a1   
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=17,12
 turn=145
-bot_player_index=0
+player_index=0
 aTiles=113
 aScore=182
 aStandingArmy=69

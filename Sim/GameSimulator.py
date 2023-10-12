@@ -10,6 +10,7 @@ from Path import Path
 from SearchUtils import count, where
 from Sim.TextMapLoader import TextMapLoader
 from base.bot_base import create_thread
+from base.client.generals import ChatUpdate
 from base.client.map import MapBase, Tile, TILE_EMPTY, TILE_OBSTACLE, Score, TILE_FOG, TILE_MOUNTAIN, TileDelta
 from bot_ek0x45 import EklipZBot
 
@@ -21,8 +22,23 @@ def generate_player_map(player_index: int, map_raw: MapBase) -> MapBase:
     scores = [Score(n, map_raw.players[n].score, map_raw.players[n].tileCount, map_raw.players[n].dead) for n in
               range(0, len(map_raw.players))]
 
-    map = MapBase(player_index=player_index, teams=None, user_names=map_raw.usernames, turn=map_raw.turn,
-                  map_grid_y_x=playerMap, replay_url='42069')
+    friendlyPlayers = [player_index]
+
+    teams = None
+    if map_raw.teams is not None:
+        teams = [i for i in map_raw.teams]
+        for p, t in enumerate(teams):
+            if p != player_index and teams[player_index] == t:
+                friendlyPlayers.append(p)
+
+    map = MapBase(
+        player_index=player_index,
+        teams=teams,
+        user_names=map_raw.usernames,
+        turn=map_raw.turn,
+        map_grid_y_x=playerMap,
+        replay_url='42069')
+
     # map.USE_OLD_MOVEMENT_DETECTION = False
     map.update_scores(scores)
     map.update_turn(map_raw.turn)
@@ -30,8 +46,8 @@ def generate_player_map(player_index: int, map_raw: MapBase) -> MapBase:
         for y in range(map_raw.rows):
             realTile = map_raw.grid[y][x]
 
-            hasVision = realTile.player == player_index or any(
-                filter(lambda tile: tile.player == player_index, realTile.adjacents))
+            hasVision = realTile.player in friendlyPlayers or any(
+                filter(lambda tile: tile.player in friendlyPlayers, realTile.adjacents))
 
             if hasVision:
                 map.update_visible_tile(realTile.x, realTile.y, realTile.tile, realTile.army, realTile.isCity, realTile.isGeneral)
@@ -53,41 +69,6 @@ def generate_player_map(player_index: int, map_raw: MapBase) -> MapBase:
     map.update(bypassDeltas=True)
 
     return map
-
-def generate_player_map_with_pre_existing_vision(player_index: int, map_raw: MapBase) -> MapBase:
-    playerMap = [[Tile(x, y, tile=TILE_FOG, army=0, player=-1) for x in range(map_raw.cols)] for y in range(map_raw.rows)]
-
-    scores = [Score(n, map_raw.players[n].score, map_raw.players[n].tileCount, map_raw.players[n].dead) for n in range(0, len(map_raw.players))]
-
-    map = MapBase(player_index=player_index, teams=None, user_names=map_raw.usernames, turn=map_raw.turn, map_grid_y_x=playerMap, replay_url='42069')
-    map.update_scores(scores)
-    map.update_turn(map_raw.turn)
-    for x in range(map_raw.cols):
-        for y in range(map_raw.rows):
-            playerTile = playerMap[y][x]
-            realTile = map_raw.grid[y][x]
-
-            hasVision = realTile.player == player_index or any(filter(lambda tile: tile.player == player_index, realTile.adjacents))
-            playerTile.visible = hasVision
-            playerTile.discovered = hasVision
-
-            if hasVision:
-                playerTile.isCity = realTile.isCity
-                playerTile.isMountain = realTile.isMountain
-                playerTile.player = realTile.player
-                playerTile.tile = realTile.tile
-                playerTile.army = realTile.army
-                playerTile.isGeneral = realTile.isGeneral
-                if playerTile.isGeneral:
-                    map.generals[playerTile.player] = playerTile
-            else:
-                if realTile.isCity or realTile.isMountain:
-                    playerTile.tile = TILE_OBSTACLE
-
-    map.update()
-
-    return map
-
 
 
 class GamePlayer(object):
@@ -176,6 +157,10 @@ class GameSimulator(object):
         map_raw.init_grid_movable()
         map_raw.update()
 
+        self.teams: typing.List[int] = map_raw.teams
+        if self.teams is None:
+            self.teams = [i for i in range(len(map_raw.players))]
+
         self.players: typing.List[GamePlayer] = [GamePlayer(map_raw, i) for i in range(len(map_raw.players))]
         self.turn: int = map_raw.turn
         self.sim_map: MapBase = map_raw
@@ -224,11 +209,16 @@ class GameSimulator(object):
         self.tiles_updated_this_cycle = set()
 
     def is_game_over(self) -> bool:
+        livingTeams = set()
         for player in self.players:
             if player.map.complete:
                 player.dead = True
+            if not player.dead:
+                livingTeams.add(self.teams[player.index])
+                logging.info(f'player {player.index} still alive')
 
-        if count(self.players, lambda player: not player.dead) > 1:
+        if len(livingTeams) > 1:
+            logging.info(f'living teams {livingTeams}')
             return False
 
         logging.info(f'Detected game win')
@@ -268,19 +258,30 @@ class GameSimulator(object):
         sourceTile.army = sourceTile.army - armyBeingMoved
         sourceTile.delta.armyDelta -= armyBeingMoved
 
-        if destTile.delta.oldOwner == player_index:
+        isAlliedGeneralDest = (destTile.isGeneral and self.teams[destTile.player] == self.teams[player_index])
+
+        if destTile.delta.oldOwner == player_index or isAlliedGeneralDest:
             destTile.delta.armyDelta += armyBeingMoved
         else:
             destTile.delta.armyDelta -= armyBeingMoved
 
-        if destTile.player == player_index:
+        if not destTile.isNeutral and self.teams[destTile.player] == self.teams[player_index]:
             destTile.army += armyBeingMoved
             # destTile.delta.armyDelta += armyBeingMoved
+            if not destTile.isGeneral and destTile.player != player_index:
+                # captured teammates tile
+                destPlayer = self.players[destTile.player]
+                destTile.player = player_index
+                destTile.delta.newOwner = player_index
+                destTile.delta.armyDelta = 0 - (destTile.delta.oldArmy + destTile.army)
+                self._stage_tile_captured_events(destTile, player, destPlayer)
+
         else:
+            destTile.army -= armyBeingMoved
+
             destPlayer = None
             if destTile.player >= 0:
                 destPlayer = self.players[destTile.player]
-            destTile.army -= armyBeingMoved
             # destTile.delta.armyDelta -= armyBeingMoved
 
             if destTile.army < 0:
@@ -377,7 +378,7 @@ class GameSimulator(object):
             for tile in self.sim_map.get_all_tiles():
                 # the way the game client works, it always 'updates' every tile on the players map even if it didn't get a server update, that's why the deltas were ghosting in the sim
                 # if tile in self.tiles_updated_this_cycle:
-                playerHasVision = tile.player == player.index or any(filter(lambda adj: adj.player == player.index, tile.adjacents))
+                playerHasVision = (not tile.isNeutral and self.teams[tile.player] == self.teams[player.index]) or any(filter(lambda adj: not adj.isNeutral and self.teams[adj.player] == self.teams[player.index], tile.adjacents))
                 if playerHasVision:
                     player.map.update_visible_tile(tile.x, tile.y, tile.tile, tile.army, tile.isCity, tile.isGeneral)
                 else:
@@ -490,7 +491,9 @@ class GameSimulatorHost(object):
             # i=i captures the current value of i in the lambda, otherwise all players lambdas would send the last players player index...
             hasUi = i == player_with_viewer or player_with_viewer == -2
             botMover = lambda source, dest, moveHalf, i=i: self.sim.make_move(player_index=i, move=Move(source, dest, moveHalf))
-            botHost = BotHostBase(char, botMover, 'test', noUi=not hasUi, alignBottom=True, throw=True)
+            botPinger = lambda tile, i=i: self.notify_teammates_tile_ping(player=i, tile=tile)
+            botChatter = lambda message, teamChat, i=i: self.notify_chat_message(player=i, message=message, teamChat=teamChat)
+            botHost = BotHostBase(char, botMover, botPinger, botChatter, 'test', noUi=not hasUi, alignBottom=True, throw=True)
 
             self.bot_hosts[i] = botHost
 
@@ -803,6 +806,25 @@ class GameSimulatorHost(object):
             if run_real_time:
                 self.wait_until_viewer_closed_or_time_elapses(600)
             raise
+
+    def notify_teammates_tile_ping(self, player: int, tile: Tile):
+        bot: BotHostBase
+        for p, bot in enumerate(self.bot_hosts):
+            if p == player or bot is None or bot.eklipz_bot is None:
+                continue
+            if self.sim.sim_map.teams[player] == self.sim.sim_map.teams[p]:
+                logging.info(f'SIM NOTIFYING TILE PING {str(tile)} FROM p{player} TO p{p}')
+                bot.eklipz_bot.notify_tile_ping(tile)
+
+    def notify_chat_message(self, player: int, message: str, teamChat: bool):
+        bot: BotHostBase
+        for p, bot in enumerate(self.bot_hosts):
+            if p == player or bot is None or bot.eklipz_bot is None:
+                continue
+            if not teamChat or self.sim.sim_map.teams[player] == self.sim.sim_map.teams[p]:
+                chatUpdate = ChatUpdate(self.sim.sim_map.usernames[player], teamChat, message)
+                logging.info(f'SIM NOTIFYING CHAT {str(chatUpdate)} FROM p{player} TO p{p}')
+                bot.eklipz_bot.notify_chat_message(chatUpdate)
 
     def any_bot_has_viewer_running(self) -> bool:
         for bot in self.bot_hosts:

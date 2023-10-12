@@ -20,7 +20,7 @@ a7   a5   a6   a7   a7   C40  D    b1D  b1D  b1                                 
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=20,9
 turn=532
-bot_player_index=0
+player_index=0
 bot_all_in_counter=53
 bot_all_in=False
 bot_all_in_army_advantage=False

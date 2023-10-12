@@ -20,7 +20,7 @@ bC3  M    M    b1   b1   bG5  b1   b1   M    bC1       M    M    b2   M    M    
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=10,1
 turn=179
-bot_player_index=1
+player_index=1
 aTiles=58
 aScore=146
 aStandingArmy=88

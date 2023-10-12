@@ -1,0 +1,106 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M                                                      M         M         M         M    M    M
+     d1   d1   d1             M    d1                                 M              M
+     d1   M              d1   d1        M              M    M                        M
+M    d1   d1   M    d1   d1   d1   M                        M         M    M
+d1   M    d1        M    d1   d1   M    d2   d2                       d5             a3   a2
+d1        d4   M    bC3  d1   d1   b2   b2   b2   b2   b2   M    M    d5   d5        M    a2
+d1   M    b46  b1   b1   M    d1   d1   d1   d87  d2   b2                       M         a3        M
+d1   d2   d2   d2   b1   b1   b1   M    D         d6   b2   a2   a5   a5        M         a3
+d1   d1D  d1D  d4   d4   d3   d3   M    C41       a3   b2   a2   a2   a5   b2        M    a3
+d1D  MD   d2D  MD   d4D  d3D  d4   a3   a5   M    a3   b2   b2   a2   a2   b2   M    a3   a3             M
+d3D  dC10Dd2D  d3D  d3D  d3   M    a3   a5   M    a5   M    b2   a2   a2   b3   M    a2   a3             M
+M    C44  d3   d3   MD   C47  a4   a3   a5   C48  a1   a1   b2   a2   a2   C41  a2   aC7  a2   a2   M
+a3   a3   a3   d3   d3D  M    a3   a1   a5   a4   a6   a6   b2   a2   a2   a2   a2   a2   a2   b2   b2   b3
+a3   a4   M    M    d3   d3   a3   M    M    a12  a1   a1   b2   b2   d0   a1   a2   aC13 a2   M    b3   b3
+a3   M         a3   a3   b5   b2   a1   a1   a1   M    C46  b2   M    b3   a2   M    aG14 M    a2   b3   b4
+a3   M         a3   M    M    b2   b2   M    b3   b3   C46  b2   b2   b3   a3   a2   a2   a2   a2   b3   b4
+a3   a3   a3   a3   b3   b3   a3   b2   b2   M    b3   bC19 M    b2   b2   a3   a3   a2        M    b3   b4
+          M    a3   a3   a3   a3   b2   b2   b2   b2   b2   b2   b2   b3   b3   a3   b3   b3   b3   b3   M
+     M                   b4   M    a4   b3   a4   a4   M    b2   bG18 M    M    a3                       M
+     M    M              b3   b3   b3   b3   M    M    M    b2   M    a3   a3   a3                  M
+M    M                   b3   b3   b3   b4   b2   b2   b4   b2   M    b2   M    a3        M    M
+     M                   M         b3   b3   b2   M    b1   b2   b2   b2   M    C41  M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    turn=309player_index=0teams=1,1,2,2mode=team
+targetPlayerExpectedGeneralLocation=0,7
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=40
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=True
+bot_finishing_exploration=False
+bot_target_player=3
+bot_cur_path=None
+aUsername=Exe.human
+aTiles=100
+aScore=314
+aStandingArmy=214
+aStars=50
+aCityCount=3
+aGeneral=17,14
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=9
+aDelta25Score=66
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=308
+bUsername=Human.exe
+bTiles=93
+bScore=303
+bStandingArmy=210
+bStars=50
+bCityCount=3
+bGeneral=13,18
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=15
+bDelta25Score=86
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=309
+cUsername=Alguy
+cTiles=0
+cScore=0
+cStandingArmy=0
+cStars=50
+cCityCount=0
+cGeneral=1,10
+cKnowsKingLocation=True
+cKnowsAllyKingLocation=False
+cDead=True
+cLeftGame=True
+cLeftGameTurn=208
+cAggressionFactor=23
+cDelta25Tiles=-38
+cDelta25Score=-93
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=206
+dUsername=EklipZ
+dTiles=63
+dScore=300
+dStandingArmy=237
+dStars=50
+dCityCount=3
+dKnowsKingLocation=True
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=349
+dDelta25Tiles=-12
+dDelta25Score=37
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=309

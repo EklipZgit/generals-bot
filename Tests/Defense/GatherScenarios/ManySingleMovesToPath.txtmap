@@ -10,5 +10,5 @@ b10  b1   M    M    M    M    M
 M    b1   b10  b1   b1   b1   b1
 M    a69  a1   a1   a1   a1   aG40
 |    |    |    |    |    |    |
-bot_player_index=1
+player_index=1
 loadAsIs=True

@@ -23,7 +23,7 @@ C41  M                   M                        M
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=6,11
 turn=151
-bot_player_index=1
+player_index=1
 aTiles=0
 aScore=0
 aStandingArmy=0

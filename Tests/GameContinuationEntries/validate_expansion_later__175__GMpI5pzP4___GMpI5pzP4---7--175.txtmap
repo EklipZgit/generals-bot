@@ -30,7 +30,7 @@ M                   M    h2   h1   h1   h1   h1   h1   M    h3   b2             
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=0,20
 turn=175
-bot_player_index=7
+player_index=7
 aTiles=60
 aScore=203
 aStandingArmy=143

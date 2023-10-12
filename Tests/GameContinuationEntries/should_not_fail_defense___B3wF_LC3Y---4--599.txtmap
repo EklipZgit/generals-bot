@@ -27,7 +27,7 @@ M         M    M         M    M    e9   e7   M    e4   M    e2   e3   e10  M    
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=17,1
 turn=599
-bot_player_index=4
+player_index=4
 bot_all_in_counter=0
 bot_all_in=False
 bot_all_in_army_advantage=False

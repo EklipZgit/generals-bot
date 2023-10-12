@@ -22,7 +22,7 @@ M              C43       M                                  M                   
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=8,12
 turn=78
-bot_player_index=0
+player_index=0
 aTiles=25
 aScore=59
 aStandingArmy=34

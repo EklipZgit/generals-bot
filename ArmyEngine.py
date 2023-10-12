@@ -548,31 +548,33 @@ class ArmyEngine(object):
                 nextBoardState.incrementing.add(destTile)
                 # nextBoardState.sim_tiles[destTile] = dest
 
-        if dest.player != source.player:
+        if not self.is_on_same_team(movingPlayer, dest.player):
             resultArmy = dest.army - source.army + 1
             if resultArmy < 0:
                 # captured tile
                 resultArmy = 0 - resultArmy
-                if dest.player == otherPlayer:
+                if self.is_on_same_team(otherPlayer, dest.player):
                     tileDif = 2
                     if dest.source_tile.isCity:
                         cityDif = 2
-                    if dest.source_tile.isGeneral:
+                    if dest.source_tile.isGeneral and (self.map.teams is None or self.map.teams[otherPlayer] != self.map.teams[movingPlayer]):
                         capsGeneral = True
                 else:  # then the player is capturing neutral / third party tiles
                     tileDif = 1
                     if dest.source_tile.isCity:
                         cityDif = 1
-                resultDest = SimTile(dest.source_tile, resultArmy, source.player)
+                resultDest = SimTile(dest.source_tile, resultArmy, movingPlayer)
             else:
                 resultDest = SimTile(dest.source_tile, resultArmy, dest.player)
         else:
             resultArmy = dest.army + source.army - 1  # no gathering in sim :V
             # TODO it SHOULD be the above instead of dest.army - 1 below, but shit is trying to waste moves gathering with scrim armies ffs
             # resultArmy = dest.army - 1
-            resultDest = SimTile(dest.source_tile, resultArmy, dest.player)
+            resultDest = SimTile(dest.source_tile, resultArmy, movingPlayer)
+            if resultDest.source_tile.isGeneral:
+                resultDest.player = resultDest.source_tile.player
 
-        nextBoardState.sim_tiles[source.source_tile] = SimTile(source.source_tile, 1, source.player)
+        nextBoardState.sim_tiles[source.source_tile] = SimTile(source.source_tile, 1, movingPlayer)
         nextBoardState.sim_tiles[dest.source_tile] = resultDest
 
         movingPlayerArmies = nextBoardState.friendly_living_armies
@@ -605,6 +607,16 @@ class ArmyEngine(object):
 
         nextBoardState.tile_differential += tileDif
         nextBoardState.city_differential += cityDif
+
+    def is_on_same_team(self, playerANotNeutral: int, playerB: int):
+        if playerB == playerANotNeutral:
+            return True
+        if playerB == -1:
+            return False
+        if self.map.teams is not None:
+            if self.map.teams[playerANotNeutral] == self.map.teams[playerB]:
+                return True
+        return False
 
     def get_base_board_state(self) -> ArmySimState:
         baseBoardState = ArmySimState(turn=self.map.turn, evaluationParams=self.eval_params)
@@ -1076,9 +1088,13 @@ class ArmyEngine(object):
         # multiFriendly = len(self.friendly_armies) > 1
         # multiEnemy = len(self.enemy_armies) > 1
         self.mcts_runner.reset()
+        teams = self.map.teams
+        if teams is None:
+            teams = [i for i in range(len(self.map.players))]
         game: Game = Game(
             player=self.friendly_player,
-            otherPlayers=[self.enemy_player],
+            enemyPlayer=self.enemy_player,
+            teams=teams,
             allowRandomRepetitions=self.mcts_runner.allow_random_repetitions,
             allowRandomNoOps=self.mcts_runner.allow_random_no_ops,
             disablePositionalWinDetectionInRollouts=self.mcts_runner.disable_positional_win_detection_in_rollouts)

@@ -32,7 +32,7 @@ M         M         M                        M    M    M         e4   e4        
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=24,13
 turn=278
-bot_player_index=4
+player_index=4
 aTiles=0
 aScore=0
 aStandingArmy=0

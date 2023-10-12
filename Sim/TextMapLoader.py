@@ -107,6 +107,25 @@ class TextMapLoader(object):
 
         raw = ''.join(outputToJoin)
         lines = raw.splitlines()
+
+        lines.append(f'turn={map.turn}')
+        lines.append(f'player_index={map.player_index}')
+
+        gameType = '1v1'
+        if len(map.players) > 2:
+            if map.is_2v2:
+                gameType = 'team'
+            elif map.teams is not None and len(map.teams) > 0:
+                gameType = 'custom_team'
+            else:
+                gameType = 'ffa'
+
+            if 'team' in gameType:
+                teams = ','.join([str(t) for t in map.teams])
+                lines.append(f'teams={teams}')
+
+        lines.append(f'mode={gameType}')
+
         return '\n'.join([line.rstrip() for line in lines])
 
     @staticmethod
@@ -233,6 +252,20 @@ class TextMapLoader(object):
                 map.players[tile.player].score += tile.army
                 map.players[tile.player].tileCount += 1
 
+        if f'player_index' in data:
+            map.player_index = int(data['player_index'])
+        if f'player_index' in data:
+            map.player_index = int(data['player_index'])
+
+        if f'teams' in data:
+            teams = data['teams'].split(',')
+            map.teams = [int(s) for s in teams]
+            playerTeam = map.teams[map.player_index]
+            map.teammates.update([p for p, t in enumerate(map.teams) if t == playerTeam and p != map.player_index])
+
+        if 'mode' in data:
+            map.is_2v2 = data['mode'] == 'team'
+
         for player in map.players:
             char, index = playerCharMap[player.index]
 
@@ -248,6 +281,8 @@ class TextMapLoader(object):
                 player.stars = float(data[f'{char}Stars'])
             if f'{char}KnowsKingLocation' in data:
                 player.knowsKingLocation = data[f'{char}KnowsKingLocation'].lower() == 'true'
+            if f'{char}KnowsAllyKingLocation' in data:
+                player.knowsAllyKingLocation = data[f'{char}KnowsAllyKingLocation'].lower() == 'true'
             if f'{char}Dead' in data:
                 player.dead = data[f'{char}Dead'].lower() == 'true'
             if f'{char}LeftGame' in data:

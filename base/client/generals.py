@@ -25,9 +25,29 @@ _ENDPOINT_PUBLIC = "://ws.generals.io/socket.io/?EIO=4"
 
 _LOG_WS = False
 
+
+class ChatUpdate(object):
+    def __init__(self, fromUser: str, fromTeam: bool, message: str):
+        self.from_user: str = fromUser
+        self.is_team_chat: bool = fromTeam
+        self.message: str = message
+
+    def __str__(self):
+        return f'{"[team] " if self.is_team_chat else ""}{self.from_user}: {self.message}'
+
+    def __repr__(self):
+        return str(self)
+
+
 class GeneralsClient(object):
-    def __init__(self, userid, username, mode="1v1", gameid=None,
-                 force_start=False, public_server=False):
+    def __init__(
+            self,
+            userid,
+            username,
+            mode="1v1",
+            gameid=None,
+            force_start=False,
+            public_server=False):
 
         self._terminated: bool = False
         """Prevent double-termination"""
@@ -124,7 +144,10 @@ class GeneralsClient(object):
         elif mode == "1v1":
             self._send(["join_1v1", userid, self.bot_key])
         elif mode == "team":
-            self._send(["join_team", 'getRekt', userid, self.bot_key])
+            self._gameid = gameid  # Set Game ID
+            if self._gameid is None:
+                self._gameid = 'getRekt'
+            self._send(["join_team", self._gameid, userid, self.bot_key])
         elif mode == "ffa":
             self._send(["play", userid, self.bot_key])
         else:
@@ -166,17 +189,28 @@ class GeneralsClient(object):
     # checkTwo = requests.get(self._endpointRequests() + "&t=ObyKmbC.0&sid=" + sid)
     # logging.debug("Check two: %s" % checkTwo.text)
 
-    def send_chat(self, msg):
-        self.chatQueued.append(msg)
+    def send_chat(self, msg, teamChat: bool = False):
+        if not teamChat:
+            self.chatQueued.append(msg)
+        else:
+            self._send_chat_immediate(msg, team=True)
 
-    def _send_chat_immediate(self, msg):
+    def _send_chat_immediate(self, msg: str, team: bool = False):
         if not self._seen_update:
             raise ValueError("Cannot chat before game starts")
 
-        if len(msg) < 2:
+        if len(msg.strip()) < 1:
             return
 
-        self._send(["chat_message", self._start_data['chat_room'], msg, None, ""])
+        # prefix is the prefix that appears in the chat box when you are typing. For some reason, the '[team] ' gets sent to the server for team chat, whatever, replicate it.
+        prefix = None
+        chatRoom = self._start_data['chat_room']
+        if team:
+            prefix = '[team] '
+            chatRoom = self._start_data['team_chat_room']
+
+        # self._send(["chat_message", chatRoom, msg, prefix, ""])  # myssix source had extra "" at end of array here? not sure why, but JS frontend doesn't send that.
+        self._send(["chat_message", chatRoom, msg, prefix])
 
     def move(self, y1: int, x1: int, y2: int, x2: int, cols: int, move_half=False):
         if not self._seen_update:
@@ -186,6 +220,13 @@ class GeneralsClient(object):
         b = y2 * cols + x2
         self._send(["attack", a, b, move_half, self._move_id])
         self._move_id += 1
+
+    def ping_tile(self, y1: int, x1: int, cols: int):
+        if not self._seen_update:
+            raise ValueError("Cannot ping tiles before first map seen")
+
+        tIndex = y1 * cols + x1
+        self._send(["ping_tile", tIndex])
 
     def get_updates(self) -> typing.Generator[typing.Tuple[str, dict], typing.Any, typing.Any]:
         while True:
@@ -259,13 +300,18 @@ class GeneralsClient(object):
                 self._seen_update = True
                 # self.last_update = msg[1]
                 yield msg[0], msg[1]
+            elif msg[0] == "ping_tile":
+                yield msg[0], msg[1]
             elif msg[0] in ["game_won", "game_lost"]:
                 logging.info(f'\r\nRESULT\r\nmsg[0] {json.dumps(msg[0])}\r\nmsg[1] {json.dumps(msg[1])}\r\n----')
                 yield msg[0], msg[1]
                 break
             elif msg[0] == "gio_error" and msg[1].startswith('You must choose a username'):
                 self._send(["set_username", self.userid, self.server_username, self.bot_key])
+            elif msg[0] == "removed_from_queue":
+                raise ValueError("Server kicked from queue, restart")
             elif msg[0] == "chat_message":
+                chat_room = msg[1]
                 chat_msg = msg[2]
                 if "username" in chat_msg:
                     logging.info("~~~\n~~~\nFrom %s: %s\n~~~\n~~~" % (chat_msg["username"], chat_msg["text"]))
@@ -275,6 +321,12 @@ class GeneralsClient(object):
                     recordMessage = True
                     if fromUsername != self.server_username:
                         recordMessage = self.handle_chat_message(fromUsername, message)
+
+                    fromTeam = 'team_chat_room' in self._start_data and self._start_data['team_chat_room'] == chat_room
+
+                    chatUpdate = ChatUpdate(fromUsername, fromTeam, message)
+
+                    yield "chat_message", chatUpdate
 
                     if self.writingFile or recordMessage:
                         self.writingFile = True
@@ -419,7 +471,7 @@ class GeneralsClient(object):
             if len(self.chatQueued) > 0:
                 message = self.chatQueued.pop(0)
                 self._send_chat_immediate(message)
-            time.sleep(5)
+            time.sleep(3)
 
     def _send(self, msg):
         try:

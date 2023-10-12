@@ -22,7 +22,7 @@ cG91 c7   cC43 c3   c3   c3   M              M              M    c6   c6   c6   
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=19,18
 turn=669
-bot_player_index=2
+player_index=2
 aTiles=0
 aScore=0
 aStandingArmy=0

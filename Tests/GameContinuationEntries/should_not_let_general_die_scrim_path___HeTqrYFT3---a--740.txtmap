@@ -20,7 +20,7 @@ a3   a3   a1   aG12 b137 a3   M    a3   a3   M                                  
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=14,4
 turn=740
-bot_player_index=0
+player_index=0
 aTiles=95
 aScore=507
 aStandingArmy=412

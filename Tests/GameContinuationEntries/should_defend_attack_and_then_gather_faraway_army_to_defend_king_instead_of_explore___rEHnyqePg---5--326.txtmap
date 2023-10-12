@@ -34,7 +34,7 @@ f3   f3   f3   f3   M    f3   f3   dC73 f2   f2   M                             
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=22,19
 turn=326
-bot_player_index=5
+player_index=5
 aTiles=0
 aScore=0
 aStandingArmy=0

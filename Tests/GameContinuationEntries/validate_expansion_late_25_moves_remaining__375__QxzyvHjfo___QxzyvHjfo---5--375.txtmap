@@ -26,7 +26,7 @@ f3   f3   M    f2   f2   M    f2   f21  fG1  M         M         M    M         
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=13,7
 turn=375
-bot_player_index=5
+player_index=5
 aTiles=0
 aScore=0
 aStandingArmy=0

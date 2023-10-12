@@ -20,7 +20,7 @@ M         M              D    b2   a3   a1   a1   a1   a1   a1   a1   a1   a1   
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=9,5
 turn=131
-bot_player_index=0
+player_index=0
 aTiles=43
 aScore=96
 aStandingArmy=53

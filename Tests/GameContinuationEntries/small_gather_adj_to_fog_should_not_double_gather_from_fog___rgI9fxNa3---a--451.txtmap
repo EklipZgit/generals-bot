@@ -23,7 +23,7 @@ M         b2   b2   b8   b2   b2   b6   b6   b1   b1   b1   C48       M         
 targetPlayerExpectedGeneralLocation=10,19
 loadAsIs=True
 turn=451
-bot_player_index=0
+player_index=0
 aTiles=78
 aScore=457
 aStandingArmy=379

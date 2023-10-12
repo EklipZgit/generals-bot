@@ -24,7 +24,7 @@ bC15 M    M    b3   b3   b1   b6   b3   M    M
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=0,21
 turn=883
-bot_player_index=1
+player_index=1
 aTiles=0
 aScore=0
 aStandingArmy=0

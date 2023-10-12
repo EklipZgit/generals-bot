@@ -24,7 +24,7 @@ M    M         M                             M                        M         
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=7,6
 turn=50
-bot_player_index=0
+player_index=0
 aTiles=24
 aScore=50
 aStandingArmy=26

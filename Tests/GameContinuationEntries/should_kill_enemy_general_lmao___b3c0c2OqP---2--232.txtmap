@@ -1,0 +1,110 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                         M              a1   a1   a1   a2   M    M
+               M         a1   a1   a1   a1   M    M    a2   a2        M                   M         M         M
+          M    M         a1   M    a1   a1   a2   M    a1   a1   M         a1                            M
+          M              a1   d2   d2   a7   a2   a3   aG12 c21  c1   M    a3   a3   c2   c2                  M
+                         a2   c2   a1   a3   d2   a1   M    M    c1   c1   c3   c3   M    c1   c2
+               M    a1   a2   c2   M    a2   d2   d2   a1   a1   a7   c1   c1   c2   M    c1   M    C42  c1
+     M    M              M    c2   d2   a2   a1   a1   a1   c2   c2   c1   M    c2   c1   c5   c1   c1   c1   M
+               M         d2   a2   dC22 d2   M    M    M    c2   c1   c1   c1   c1   c1   c1   cG9  c1   c1   M
+          M              d2   a2   d2   M         c2   c2   c2   M    M    d4   C46  M    M    c1   c2   M    C42
+M         M    M    d2   d2   M    d2   a2   M              c2   M         d1   d1   C41  c1   c1   c2   c2   c2
+     M              d2   d2   d2   d2   d2   d2   M         M    M    M    M    d1   d1   d1   d1   d1   c2   c2
+                    d2   d2   M    d2   a2   d2   d2   M    M                   d1   M    d1   d1   d1   M
+                              d2   C43  d3   d2   d2   d2   d2   d2   d2   d2   d1   d1   d1   d1   d1   M    M
+                         M    d2   d2   M    d2   d2   d2   d2                  M    M    dG19 M    M
+          M         d2   d2   d2   d2   d1   d1   d5   d2   d2   d2   d2   d2   d2   d2   d9   d1   d1   M
+     M         C44  d2   d2   d2   d2   M                   M         C44            M    d1   d1   M
+                         d2   d2   d2   d2   M                                            d1                  M
+M    M         M         M         M    d2   d2   M         M                   M    M    d1
+                    M                             M    M                        M    M    d1   M
+     M                             M    M                                       M    d1   d1                  M
+                              M                   M         M    M    M              C43
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=232
+player_index=2
+teams=1,1,2,2
+mode=team
+targetPlayerExpectedGeneralLocation=11,3
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=True
+bot_finishing_exploration=True
+bot_target_player=0
+bot_cur_path=None
+aUsername=Exe.human
+aTiles=45
+aScore=94
+aStandingArmy=49
+aStars=44
+aCityCount=1
+aGeneral=11,3
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=340
+aDelta25Tiles=-3
+aDelta25Score=-12
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=232
+bUsername=Human.exe
+bTiles=0
+bScore=0
+bStandingArmy=0
+bStars=44
+bCityCount=0
+bGeneral=7,7
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=True
+bLeftGame=True
+bLeftGameTurn=192
+bAggressionFactor=66
+bDelta25Tiles=-44
+bDelta25Score=-83
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=190
+cUsername=Teammate.exe
+cTiles=50
+cScore=107
+cStandingArmy=57
+cStars=34
+cCityCount=1
+cGeneral=19,7
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=2
+cDelta25Score=19
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=232
+dUsername=Spraget
+dTiles=92
+dScore=207
+dStandingArmy=115
+dStars=34
+dCityCount=2
+dGeneral=18,13
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=5
+dDelta25Tiles=55
+dDelta25Score=105
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=232

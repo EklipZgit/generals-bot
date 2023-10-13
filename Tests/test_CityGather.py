@@ -439,3 +439,24 @@ class CityGatherTests(TestBase):
         self.assertIsNone(winner)
 
         # TODO add asserts for should_not_take_city_when_infinitely_ahead_and_also_opp_all_in_and_also_80_army_barreling_towards_gen
+    
+    def test_should_not_take_neutral_cities_when_ally_is_in_short_spawns_and_under_attack(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_take_neutral_cities_when_ally_is_in_short_spawns_and_under_attack___HdGXbeKzC---2--150.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 150, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=150)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        self.assertIsNone(winner)
+
+        # TODO add asserts for should_not_take_neutral_cities_when_ally_is_in_short_spawns_and_under_attack

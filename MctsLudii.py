@@ -377,6 +377,7 @@ class MctsDUCT(object):
                 if visitCount != 0:
                     avgScore = sumScores / visitCount
 
+                # if len(pMoves) < 10:
                 logging.info(f'p{p} t{node.context.turn} move {str(move)} visits {visitCount} score {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f})')
 
             for i, move in enumerate(pMoves):

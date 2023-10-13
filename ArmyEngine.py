@@ -1111,7 +1111,7 @@ class ArmyEngine(object):
         decompressedExpectedScore = self.mcts_runner.decompress_player_utility(mctsSummary.expected_score)
         decompressedExpandedExpectedScore = self.mcts_runner.decompress_player_utility(mctsSummary.expanded_expected_score)
 
-        logging.info(f'MCTS {decompressedExpectedScore:.0f} : {decompressedExpandedExpectedScore:.0f} iter {mctsSummary.iterations}, nodesExplored {mctsSummary.nodes_explored}, rollouts {mctsSummary.trials_performed}, backprops {mctsSummary.backprop_iter}, rolloutExpansions {mctsSummary.rollout_expansions}, biasedRolloutExpansions {mctsSummary.biased_rollout_expansions}')
+        logging.info(f'MCTS e{decompressedExpectedScore/10:.1f} : ee{decompressedExpandedExpectedScore/10:.1f} iter {mctsSummary.iterations}, nodesExplored {mctsSummary.nodes_explored}, rollouts {mctsSummary.trials_performed}, backprops {mctsSummary.backprop_iter}, rolloutExpansions {mctsSummary.rollout_expansions}, biasedRolloutExpansions {mctsSummary.biased_rollout_expansions}')
 
         if self.honor_mcts_expected_score:
             result.net_economy_differential = decompressedExpectedScore / 10

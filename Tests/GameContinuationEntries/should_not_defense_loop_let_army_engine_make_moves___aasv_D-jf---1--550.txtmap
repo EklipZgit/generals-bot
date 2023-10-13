@@ -1,0 +1,71 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                                   b4   M    a2D  a2   b2   b2   b140 aC20 D              M              M
+               M    M    M    b3   b3   a2   a2D  M    bG20 b3   a2   a2   M    M                   M
+               M              M    b3   a2   MD   M    b2   M    a2   b5        MD   MD        M    M    M
+                    M         b6   b3   a2   a2   M    bC21 b2   a2   a2   a2   a2D       M
+               M              M    b3   b3   a2   a2   a2   M    a3   a2   a2   a2D  M    b8   b15  b5   C49
+M              M                   b6   b4   a2   b4   a3   M    aC31 b3   M    a2   a2   a2   b4   b4
+                                   b4   b4   b4   b4   b3   M    a3   M         M    b4   b3   b4   b7   M
+                              M         b6   b6   M    b16  b3   a3   D    M    b3   b3   b3   b4   b4   b9
+                         M    M         b6   b6        b4   b3   a3   M         a4   M    b4   b4   M    b5
+                                        b5   b3   b4   b4   b3   a3   b4   C47  a4D  M    b4   b4   a6   b5
+               M                        b7   b3   b3   b5   a2   a2   a5   a5   a4D  a5   M    a5   a6   b5
+M                        M    M    M    b3   b3   b3   b5   M    a2D  a3D  a4D  a4D  a4D  a5D  a5D  a7   a6
+          M    M    M    M              b3        b3   a2   a2   a2D  a3D  a3D  D    a4D  a6D  a5D  a5D  a5D
+          M              M              b3             M    a2D  D    MD   a3D  MD   a4D  a6D  D    D    a5D
+                                        b3   b3        D    a2D  D    M    a3   a4D  a4D  a5D  a5D  a5   a5
+                         M              M              D    a2D  MD   a5D  a3D  D    MD   a6D  M    M    a5
+M    M                             M              a6   D    a2D  a2D  a2D  a3D  MD        a5   a5        a5
+                         M                   M         D    a2D  MD   a2D  a2D  MD             a2   a2   a2
+                                   M    M         M    a2D  a2D  a2D  a2D  aC11Da2D  a2   a2   a2   M    a2
+M              M                             M         a2   a2   a2   a2D  a2D  a3D  a3   a2   a5   M    a2
+          M                   M              M         a2   a2   a2   a2   M    M    M    a2   M    M    a2
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=550
+player_index=1
+mode=1v1
+targetPlayerExpectedGeneralLocation=17,18
+bot_all_in_counter=57
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=True
+bot_finishing_exploration=False
+bot_target_player=0
+bot_targeting_army=13,5
+bot_cur_path=None
+aUsername=+qun_771923864
+aTiles=120
+aScore=618
+aStandingArmy=498
+aStars=75
+aCityCount=6
+aKnowsKingLocation=True
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=720
+aDelta25Tiles=21
+aDelta25Score=132
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=550
+bUsername=Human.exe
+bTiles=75
+bScore=492
+bStandingArmy=417
+bStars=70
+bCityCount=2
+bGeneral=11,1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=-21
+bDelta25Score=-15
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=550

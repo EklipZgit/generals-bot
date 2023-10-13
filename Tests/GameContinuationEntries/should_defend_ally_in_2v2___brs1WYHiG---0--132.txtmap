@@ -1,8 +1,8 @@
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
           M                                                      M                        M                        M
 a1   a1   a1        M                   M         M    M                             M
-a1   M              M                        M    M    a2   C48                 M    M         d2   d2             d1   d1   d1
-a1   a1   M         M         M         a2   a2   a2   a2   d1                            M    d1   d1   d1   d1   d1
+a1   M              M                        M    M    a2   C48                 M    M
+a1   a1   M         M         M         a2   a2   a2   a2   d1                            M    d1   d1
 M    a1   M              M              a2   M    M         d1   M                   M    d2   d1   d2   M              M
      a1   a2   a2   a2   a2   a2   a2   a2        M         MD   d2D  c1D  c1D  c1D  d1D  d1   d1   d2
 a1   a1   C49       b1   b1   b1             M    M         MD   d3D  d2D  d2D  c1D  d1D                 M         M
@@ -11,13 +11,13 @@ a1   a1   a1   M    a1   a2        M    b1   b6   bG12 b1   b1   d2   d2   d2   
 a1   a1   a1   a1   a1   a1   a60  c1   b1   b1   M    b1   M    C42  b3   M    b1   b2   c1   M              M              M
 a1   a1        a1   a1        M    c2   c2   b1   b1   C47  c1   c1   c1   M    b1   c1   c1        c1   c1   c1        M
 M    a2   C40  a1   a2   C44       D         b1   b1   c47  c1   M    c1D  c1   c1   c1   c1D  c1   c1   c1             M    M
-     a2   a2   a1   a2   M         M                        c1        c2D  MD   MD   c1D  c1D  c1   c1   M              M
-          a2   a1   M    M                   M              c1                            c1   c1                  M
-     M    M    a1   a2   a2        M                        c1   M                        c1   c1                            M
-M              a1   a1   C49       M                   M    c1                            M    c1                            M
-M                   a2                            M         c1                  c1   c1   c1   c1        M
-                    a2                                 M    c1             M    c1                  M              M
-          M    M                   M                        c1   c1   c1   c1             M    M         M    M
+     a2   a2   a1   a2   M         M                                  c2D  MD   MD   c1D  c1D  c1   c1   M              M
+          a2   a1   M    M                   M                                            c1   c1                  M
+     M    M    a1   a2   a2        M                             M                        c1   c1                            M
+M              a1   a1   C49       M                   M                                  M    c1                            M
+M                   a2                            M                             c1   c1   c1   c1        M
+                    a2                                 M                   M    c1                  M              M
+          M    M                   M                                                      M    M         M    M
 M                                            M                                  M    M                                  M    M
                M    M              M              M         M    M    M         M    M                        M              M
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |

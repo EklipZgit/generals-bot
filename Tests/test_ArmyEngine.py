@@ -2,6 +2,7 @@ import logging
 import time
 import traceback
 import typing
+from unittest import mock
 
 import SearchUtils
 from ArmyEngine import ArmyEngine, ArmySimResult
@@ -2030,3 +2031,34 @@ bTiles=20
         tgTile = self.get_player_tile(15, 19, simHost.sim, general.player)
         self.assertEqual(general.player, tgTile.player)
 
+    def test_should_not_take_more_than_expected_final_scrim_time__point303_tried__used_point_370(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_take_more_than_expected_final_scrim_time__point303_tried__used_point_370___Teammate.exe-1Yd71gW48---2--204.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 204, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=204)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+
+        # bot.perf_timer.current_move.move_beginning_time =
+
+        # playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        start = time.perf_counter()
+        # bot.init_turn()
+        # bot.viewInfo.turnInc()
+        # bot.viewInfo.armyTracker = bot.armyTracker
+        # bot.mcts_engine.explore_factor = 0.1
+        bot.find_end_of_turn_scrim_move(None, None)
+        duration = time.perf_counter() - start
+        if debugMode:
+            bot.prep_view_info_for_render()
+            self.render_view_info(bot._map, bot.viewInfo)
+        self.assertGreater(0.4, duration, 'should not have used way too much time making an end of turn scrim move.')
+        self.assertLess(0.1, duration, 'should still have used a lot of time, though')

@@ -828,7 +828,7 @@ class GameSimulatorHost(object):
 
     def any_bot_has_viewer_running(self) -> bool:
         for bot in self.bot_hosts:
-            if bot is not None and bot.has_viewer and not bot.is_viewer_closed_by_user():
+            if bot is not None and bot.has_viewer and not bot.is_viewer_closed():
                 return True
 
         return False

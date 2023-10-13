@@ -12,12 +12,12 @@ M         M                   M         b2   b2   a2   M    b2   b3   b1
                M    M                        a2   a2   b2   M    a1   b1   M    M
                     M                   a2D  a2   b2   b2   a2   b21  b1        M              M
                                         a2D            b2   b2   b1   b1   C49  M
-                    M              M    a2   a2   a2   b2   b23  M    b1   b1   b2        M    M
+                    M              M    a2   a2   a2   b2   b23  M    b1   b1   b3        M    M
                     M                   M         a2   a2   b1   b1   M    b2   b2   M
-M         M                                  M    b1   a2   M    b1   b1   M    b2   b2   M    M
+M         M                                  M    b3   a2   M    b1   b1   M    b2   b2   M    M
                                              b2   b1   a0   b1   b1   bG3  b1   M    b1
-                         M    M              b2   b1   b1   b1   b1   b1   b1   b1   b1
-                                        M         b2   b2   b2   M    b1   b1   M
+                         M    M              b3   b1   b1   b1   b1   b1   b1   b1   b3
+                                        M         b2   b2   b3   M    b3   b1   M
                                                   M         M
           M                                                 M    M
 M    M                                       M    M              M         M         M    M

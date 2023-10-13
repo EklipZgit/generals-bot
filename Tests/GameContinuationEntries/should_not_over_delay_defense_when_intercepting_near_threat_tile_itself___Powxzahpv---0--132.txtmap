@@ -1,0 +1,71 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                    M                                            M    aG21 a4   a1   a1   M
+     M         M              M                                  M    a1   a4   a1   a1   a1
+          M         M         M              M         M              C48  a2   a1   M    a1
+                         M                   M                   D    b43  a4   a1   a1   a1
+     M                        M         M                   M    D    b1   a5   a1   a1   a1
+M              M                             a1   a1   a2   M    b1   b1   a1   a1   a1
+M                             M              a1   a1   a1   a1   a3   a1   a1   M    a1
+     M    M    M         b1   b1             a2   M    b2   a1   b1   a2   a1   M
+                              M              a2   M    b2   a1   b1   a1   a1
+               M         M    M         a1   a1   a1   a1   b1   b1   b1   a1             M
+M         M                        C50       b2   b1   a1   b1   D         a1        b1   b1
+                                   M    M    b1   b1   M    b1
+                                        M              b1   b1   M    b1        M    M
+     M                        M    M                   b1   M         b1        M
+     M    M                             M         b1   b1             b1        M
+                              M              M    b1   M              b1   M              M
+M    M    M                   M    b1   b1   b1   b1   M              M    M
+M              M    M                             b1   M              M                   M
+                                             M         M         M         M              M
+                              M    M         M                             M    M
+          M                        M              M                   M                   M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=132
+player_index=0
+mode=1v1
+targetPlayerExpectedGeneralLocation=10,14
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=True
+bot_finishing_exploration=False
+bot_target_player=1
+bot_targeting_army=14,3
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=49
+aScore=89
+aStandingArmy=40
+aStars=70
+aCityCount=1
+aGeneral=14,0
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=23
+aDelta25Score=33
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=132
+bUsername=zzd_bot release
+bTiles=36
+bScore=92
+bStandingArmy=56
+bStars=73
+bCityCount=1
+bKnowsKingLocation=True
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=240
+bDelta25Tiles=-1
+bDelta25Score=36
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=132

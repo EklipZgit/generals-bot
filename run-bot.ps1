@@ -111,7 +111,9 @@ function Run-BotOnce {
 
             if (`$repId -and (`$path -notlike '*historical*'))
             {
-                `$folder = Get-ChildItem "D:\GeneralsLogs" -Filter "*`$cleanName*`$repId*" -Directory
+                `$filter = "*`$cleanName*`$repId*"
+                Write-Output "filter `$filter"
+                `$folder = Get-ChildItem "D:\GeneralsLogs" -Filter `$filter -Directory
                 `$newLogPath = Join-Path `$folder.FullName "_`$logFile"
                 `$newContent | Set-Content -Path `$newLogPath -Force
                 `$null = mkdir D:\GeneralsLogs\GroupedLogs -Force
@@ -130,15 +132,18 @@ function Run-BotOnce {
     Start-Sleep -Seconds 1
 
     if (-not `$$($nolog.tostring())) {
-        Get-ChildItem "D:\GeneralsLogs" | 
-            ? { `$_.FullName -notlike '*_chat*' } | 
-            ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-120) } | 
-            Remove-Item -Force -Recurse -ErrorAction Ignore
-        
-        Get-ChildItem "D:\GeneralsLogs\GroupedLogs" -Directory | 
-            ? { `$_.FullName -notlike '*_chat*' } | 
-            ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-120) } |
-            Remove-Item -Force -Recurse -ErrorAction Ignore
+        `$rand = Get-Random -Maximum 100
+        if (`$rand -eq 0) {
+            Get-ChildItem "D:\GeneralsLogs" | 
+                ? { `$_.FullName -notlike '*_chat*' } | 
+                ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-120) } | 
+                Remove-Item -Force -Recurse -ErrorAction Ignore
+            
+            Get-ChildItem "D:\GeneralsLogs\GroupedLogs" -Directory | 
+                ? { `$_.FullName -notlike '*_chat*' } | 
+                ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-120) } |
+                Remove-Item -Force -Recurse -ErrorAction Ignore
+        }
     }
 "@
 
@@ -675,7 +680,7 @@ function Run-HumanTeammate {
 }
 
 
-function Run-HumanBuddy {
+function Run-Teammate {
     Param(
         [switch] $left,
         $sleepMax = 120,
@@ -691,7 +696,7 @@ function Run-HumanBuddy {
 
     while ($true)
     {
-        Run-BotOnce -game "team" -name "Buddy.exe" -public @splat
+        Run-BotOnce -game "team" -name "Teammate.exe" -public @splat
 
         $sleepTimeA = (Get-Random -Min 0 -Max $sleepMax)
         $sleepTime = $sleepTimeA

@@ -135,7 +135,7 @@ class BotHostBase(object):
         startTime = time.perf_counter()
         with timer.begin_move(currentMap.turn) as moveTimer:
             try:
-                with moveTimer.begin_event(f'Init turn - no move'):
+                with moveTimer.begin_event(f'Init turn {currentMap.turn} - no move chance / dropped move'):
                     self.eklipz_bot.init_turn()
             except:
                 errMsg = traceback.format_exc()
@@ -196,6 +196,11 @@ class BotHostBase(object):
         self._viewer = ViewerHost(window_title, alignTop=not self.align_bottom, alignLeft=not self.align_right, noLog=skip_file_logging)
 
     def is_viewer_closed_by_user(self) -> bool:
+        if self.has_viewer and self._viewer is not None and self._viewer.check_viewer_closed_by_user():
+            return True
+        return False
+
+    def is_viewer_closed(self) -> bool:
         if self.has_viewer and self._viewer is not None and self._viewer.check_viewer_closed():
             return True
         return False

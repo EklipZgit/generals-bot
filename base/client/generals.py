@@ -229,6 +229,8 @@ class GeneralsClient(object):
         self._send(["ping_tile", tIndex])
 
     def get_updates(self) -> typing.Generator[typing.Tuple[str, dict], typing.Any, typing.Any]:
+        idleTimeout = 300
+        startTime = time.perf_counter()
         while True:
             try:
                 msg = self._ws.recv()
@@ -253,6 +255,8 @@ class GeneralsClient(object):
             if msg in {"2", "3", "40", "41"}:
                 # 41 means abort...?
                 logging.info("2, 3 40, 41 ignored, " + json.dumps(msg))
+                if not self._seen_update and time.perf_counter() - startTime > idleTimeout:
+                    raise ValueError('Reconnecting, idle for too long...')
                 continue
 
             # remove numeric prefix

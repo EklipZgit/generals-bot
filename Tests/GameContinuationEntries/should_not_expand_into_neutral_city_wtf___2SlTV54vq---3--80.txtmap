@@ -1,0 +1,109 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+               a2   a2   a2   a2                       M         M    M
+                    M              a2   a2   a2   a2   a2                       M    M    M
+M                        d1   C50                      a2   M    M    M                   M
+               d1   d1   d1   dG10 d1                  a2             M                             M
+               M    M    M    d1                                 M    M                   M
+          M         M         d1   d1   d1   d1   d1   a1   a1                  M                        M
+                              d1        M                   M
+                    c1        d1   M         M    M    M              M         M         M
+     c1   c1        c1        d1   d1   M              M                   M
+     M    c1   c1   cG4  c1   c1   d1   d1   M                             M                   M
+c1   c1   c1   c1   M    M    c1   c1   d1   d1   d1   d1   C50  M    M                   M         M    M
+c1   c7   c1   M         M    M    c1        d1   M              M         M                   M
+M         M    M    M              c1        d1   d1   M         M              M    M                   M
+                                   c1   c1   c1   d1        M    M                   M
+     M                   M    M         M    c1   d1   C40       b2        b1   b1   b1   b1
+                                             c1   d1   d1   d47  b2   b1   b1   M    M    M              M
+               M         M                        M    b1   C45       b1   M         M         M    M
+     M    M              M         b1   b1   b1   b1   b1   b1   b1   b1   b2   b2   b2                  M
+M                        M    b1   b1                  M                        M    b2        M
+     M         M              b1   M                                  M         M
+          M         M    M         M                   M
+                         M                   M         M    M    M         M         M              M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=80
+player_index=3
+teams=1,1,2,2
+mode=team
+targetPlayerExpectedGeneralLocation=14,17
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_target_player=1
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=31
+aScore=69
+aStandingArmy=38
+aStars=41
+aCityCount=1
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=23
+aDelta25Score=53
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=60
+bUsername=Exe.human
+bTiles=20
+bScore=49
+bStandingArmy=29
+bStars=41
+bCityCount=1
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=14
+bDelta25Score=33
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=77
+cUsername=peacemaker 2
+cTiles=25
+cScore=34
+cStandingArmy=9
+cStars=38
+cCityCount=1
+cGeneral=4,9
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=15
+cDelta25Score=18
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=80
+dUsername=Teammate.exe
+dTiles=30
+dScore=85
+dStandingArmy=55
+dStars=38
+dCityCount=1
+dGeneral=6,3
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+dDelta25Tiles=22
+dDelta25Score=69
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=80

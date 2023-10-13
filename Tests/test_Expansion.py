@@ -92,6 +92,41 @@ class ExpansionTests(TestBase):
         if len(failures) > 0:
             self.fail("Path captures didn't match expected:\r\n  " + "\r\n  ".join(failures))
 
+    def assertMinTilesCaptured(
+            self,
+            searchingPlayer: int,
+            firstPath: Path,
+            otherPaths: typing.List[Path],
+            enemyAmount: int,
+            neutralAmount: int = 0,
+            assertNoDuplicates: bool = True):
+        allPaths = [firstPath]
+        allPaths.extend(otherPaths)
+        visited = set()
+        failures = []
+        enemyCapped = 0
+        neutralCapped = 0
+        for path in allPaths:
+            for tile in path.tileList:
+                if tile in visited:
+                    if assertNoDuplicates:
+                        failures.append(f'tile path {str(path.start.tile)} had duplicate from other path {str(tile)}')
+                    continue
+                visited.add(tile)
+                if tile.player != searchingPlayer:
+                    if tile.isNeutral:
+                        neutralCapped += 1
+                    else:
+                        enemyCapped += 1
+
+        if neutralCapped > neutralAmount:
+            failures.append(f'Expected at least {neutralAmount} neutral capped, instead found {neutralCapped}')
+        if enemyCapped > enemyAmount:
+            failures.append(f'Expected at least {enemyAmount} enemy capped, instead found {enemyCapped}')
+
+        if len(failures) > 0:
+            self.fail("Path captures didn't match expected:\r\n  " + "\r\n  ".join(failures))
+
     def test__first_25_reroute__2_moves__should_find_2_tile_move(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = f'ExpandUtilsTestMaps/did_not_find_2_move_cap__turn34'
@@ -201,7 +236,7 @@ bot_target_player=1
         # gen has 13 army so then 12 more in 12 moves for 16 in 17 moves
 
         remainingTurns = 17
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         map, general, enemyGeneral = self.load_map_and_generals_from_string(rawMapData, 400 - remainingTurns, fill_out_tiles=False)
 
         path, otherPaths = self.run_expansion(
@@ -213,12 +248,16 @@ bot_target_player=1
             mapVision=map,
             debugMode=debugMode)
 
-        self.assertIsNotNone(path)
+        with self.subTest(careLess=False):
 
-        self.assertTilesCaptured(general.player, path, otherPaths, enemyAmount=4, neutralAmount=12)
+            self.assertIsNotNone(path)
+            self.assertMinTilesCaptured(general.player, path, otherPaths, enemyAmount=4, neutralAmount=11)
 
-        # should not move the general first
-        self.assertNotEqual(general, path.start.tile)
+            # should not move the general first
+            self.assertNotEqual(general, path.start.tile)
+
+        with self.subTest(careLess=True):
+            self.assertTilesCaptured(general.player, path, otherPaths, enemyAmount=4, neutralAmount=12)
 
     def test_should_not_launch_attack_at_suboptimal_time(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -457,3 +496,24 @@ bot_target_player=1
         self.assertPlayerTileCountLess(simHost, enemyGeneral.player, 44)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 58)
+    
+    def test_should_not_expand_into_neutral_city_wtf(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_expand_into_neutral_city_wtf___2SlTV54vq---3--80.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 80, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=80)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        self.assertIsNone(winner)
+
+        # TODO add asserts for should_not_expand_into_neutral_city_wtf

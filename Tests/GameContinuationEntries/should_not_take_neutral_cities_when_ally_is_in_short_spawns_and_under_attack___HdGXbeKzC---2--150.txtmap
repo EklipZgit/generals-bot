@@ -1,0 +1,111 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+M    M    a2   a2   a2   a2   a2   a2             M              M
+M    a2   aG4D M    a2   a2   M                                                 M              M
+c2   a2   a2D  M         a2D  b2D  MD   MD                            M    M         M
+a2   a2   MD   D    C47D bG4D b2D  b2D  MD
+a2   a2   a2   a2D  b2D  b2D  b2D  b2D  b2D  M                                            M    M
+a2   c2   a2   a2D  b2D  a2D  b2D  b2D  MD   D    D              d2
+a2   c2   M         MD   MD   a2D  b2D  b2D  b2D  b2D  b2   d2   d2   d2
+C48  c2   c2   M    C44  M    a2D  b2D  MD   MD             d2   d2   d2   d2   M
+     a3   c2   c2   c2        C45D b2D  D         b2   d2   d2   d2   d2   d2   c2        M
+     a2   a2   a2   c2   M    D    b2D  D    M    b2        d2   dG4  d2   d2   c2
+     a2        a2   c2             b3        M         M    d2   d2        c2   c2        M
+                    c2   c2   c2   b2   c2   c2   M    M         C48  M    c2
+                    M    M         c2        c2             M    c3   c2   c2   c2        M    M
+     M    M              M    c2   c2   c2   c2   M         M    c2   c2   M    c2   c2
+M    M                        M    M         c2        M    M    c2   c2   c3   c2   C46  c2
+                              M              c2   c2   c2   c2   cG19 c2   c2   c3   c2   c2
+          M                   M                   M         M    c2   M    c2   M    c2        M
+M    M                                  M         M    M         M         M              C48  M
+               M              M         M                                       M    M
+M              M                                            M
+                                   M    M    M                             M                   M
+          M              M              M                        M    M    M                   M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=150
+player_index=2
+teams=1,1,2,2
+mode=team
+targetPlayerExpectedGeneralLocation=5,3
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_target_player=1
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=32
+aScore=67
+aStandingArmy=35
+aStars=42
+aCityCount=1
+aGeneral=2,1
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=25
+aDelta25Tiles=0
+aDelta25Score=-14
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=150
+bUsername=Exe.human
+bTiles=25
+bScore=57
+bStandingArmy=32
+bStars=42
+bCityCount=1
+bGeneral=5,3
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=123
+bDelta25Tiles=14
+bDelta25Score=25
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=150
+cUsername=Teammate.exe
+cTiles=53
+cScore=126
+cStandingArmy=73
+cStars=39
+cCityCount=1
+cGeneral=13,15
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=13
+cDelta25Score=37
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=150
+dUsername=peacemaker 2
+dTiles=19
+dScore=40
+dStandingArmy=21
+dStars=39
+dCityCount=1
+dGeneral=13,9
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=5
+dDelta25Tiles=-4
+dDelta25Score=-11
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=149

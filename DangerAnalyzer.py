@@ -67,13 +67,17 @@ class DangerAnalyzer(object):
         self.map: MapBase = map
         self.fastestVisionThreat: ThreatObj | None = None
         self.fastestThreat: ThreatObj | None = None
+        self.fastestPotentialThreat: ThreatObj | None = None
+        """A threat that could reach our general if we move our army off the general."""
+
         self.fastestAllyThreat: ThreatObj | None = None
         self.highestThreat: ThreatObj | None = None
         self.playerTiles = None
 
         self.alliedGenerals: typing.List[Tile] = [self.map.generals[self.map.player_index]]
         for teammate in self.map.teammates:
-            self.alliedGenerals.append(self.map.generals[teammate])
+            if not self.map.players[teammate].dead:
+                self.alliedGenerals.append(self.map.generals[teammate])
 
         self.anyThreat = False
 
@@ -95,6 +99,7 @@ class DangerAnalyzer(object):
         self.scan(general)
 
         self.fastestThreat = self.getFastestThreat(depth, armies, self.map.player_index)
+        self.fastestPotentialThreat = self.getFastestThreat(depth, armies, self.map.player_index, pretendGenArmyLeft=True)
         if self.map.is_2v2:
             for teammate in self.map.teammates:
                 self.fastestAllyThreat = self.getFastestThreat(depth, armies, teammate)
@@ -159,7 +164,7 @@ class DangerAnalyzer(object):
         logging.info(f"VISION threat analyzer took {time.time() - startTime:.3f}")
         return threatObj
 
-    def getFastestThreat(self, depth: int, armies: typing.Dict[Tile, Army], againstPlayer: int) -> ThreatObj | None:
+    def getFastestThreat(self, depth: int, armies: typing.Dict[Tile, Army], againstPlayer: int, pretendGenArmyLeft: bool = False) -> ThreatObj | None:
         startTime = time.time()
         logging.info(f"------  fastest threat analyzer: depth {depth}")
         curThreat = None
@@ -174,6 +179,9 @@ class DangerAnalyzer(object):
         general = self.map.generals[againstPlayer]
 
         searchArmyAmount = 0.5
+        if pretendGenArmyLeft:
+            searchArmyAmount -= general.army - 1
+
         defendableFromPlayers = set()
         for player in self.map.players:
             if player.dead:

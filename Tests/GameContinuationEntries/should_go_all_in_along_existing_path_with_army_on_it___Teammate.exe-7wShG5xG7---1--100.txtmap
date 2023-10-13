@@ -1,0 +1,111 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M              M    M              M         M         M                             M                        M
+               M              M         M         b2
+M                                       M    M    b2   C47                           M         M         M
+     M         M              b2        b2   b2   b2        M    M         b2   b2   b2   b2
+     M              b2   b2   b2   b2   b2   b2   b2   b2   b2   b2   b2   b2        M         C43
+                    b2        M    b14  bG5  b2        C44  M    d2             M              M
+                    b2             M    M    b2   M              d2   d2   d2   d2
+                    b2   M    M         M    b2        M    M              M    d2        M              M    M
+                    b2   b2             M         M                   MD   D    d2D  D         M
+M    M         M         b2   C48       M         M    D    C46D MD   MD   d2D  d2D  D                        M
+     M                   b2   b2             M         MD   d2D  dC5D d2D  d2D  MD   MD        M              M
+                              b2   b2             MD   D    d2D  MD   d2D  MD   D                   M    M    M
+          M              M    M    b2        M    D    d2D  d2D  d2D  d2D  c2D  D    D    M                   M
+                    M    M         b2             D    D    MD   d2D  d2D  c2D  c2D  c2D  c2
+          M    M         M         b2        M    d2D  D    d3D  d2D  d2D  MD   D    C47D c2        M
+M    M    M                        b2             d2D  d2D  d2D  d2D  d2D  D         c2   c2
+                              M    b2   b2   M    d2   N1D  MD   D    D    D    c2   c2
+M         M    M    M         M         b2   b2   d2        D         M    c2   c2   M
+          M         M         M              b2   b15  d2        c2   c2   c2   M         M
+                    M         M         M         dG18 d2   M    c2        M    M    M
+          M              M         M         M                             M         M                             M
+                              M              M              M    d2   M    M                        M
+M                                  M              d2   M         d2   d2   M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=100
+player_index=1
+teams=1,1,2,2
+mode=team
+targetPlayerExpectedGeneralLocation=10,19
+bot_all_in_counter=18
+bot_all_in=True
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=1
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_target_player=3
+bot_cur_path=None
+aUsername=peacemaker 2
+aTiles=0
+aScore=0
+aStandingArmy=0
+aStars=32
+aCityCount=1
+aGeneral=13,10
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=True
+aLeftGame=True
+aLeftGameTurn=83
+aAggressionFactor=0
+aDelta25Tiles=-12
+aDelta25Score=-18
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=78
+bUsername=Teammate.exe
+bTiles=47
+bScore=122
+bStandingArmy=75
+bStars=32
+bCityCount=1
+bGeneral=8,5
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=22
+bDelta25Score=71
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=100
+cUsername=Fekete
+cTiles=25
+cScore=70
+cStandingArmy=45
+cStars=34
+cCityCount=2
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=25
+cDelta25Tiles=3
+cDelta25Score=24
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=76
+dUsername=Stilicho
+dTiles=39
+dScore=102
+dStandingArmy=63
+dStars=34
+dCityCount=1
+dGeneral=10,19
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=105
+dDelta25Tiles=22
+dDelta25Score=64
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=95

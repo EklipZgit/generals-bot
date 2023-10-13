@@ -1447,7 +1447,7 @@ class ArmyTracker(object):
 
         army.update()
 
-    def get_or_create_army_at(self, tile: Tile) -> Army:
+    def get_or_create_army_at(self, tile: Tile, skip_expected_path: bool = False) -> Army:
         army = self.armies.get(tile, None)
         if army is None:
             army = Army(tile)
@@ -1455,8 +1455,9 @@ class ArmyTracker(object):
             if not tile.visible:
                 army.value = tile.army - 1
 
-            army.expectedPath = self.get_army_expected_path(army)
-            logging.info(f'set army {str(army)} expected path to {str(army.expectedPath)}')
+            if not skip_expected_path:
+                army.expectedPath = self.get_army_expected_path(army)
+                logging.info(f'set army {str(army)} expected path to {str(army.expectedPath)}')
 
             self.armies[tile] = army
 
@@ -1756,8 +1757,8 @@ class ArmyTracker(object):
                 logging.info(f'reducing player {player.index} over-tiles')
                 # strip extra tiles
                 tilesAsEncountered = PriorityQueue()
-                for tile in self.map.get_all_tiles():
-                    if tile.player == player.index and not tile.discovered:
+                for tile in player.tiles:
+                    if not tile.discovered:
                         dist = self.genDistances[tile.x][tile.y]
                         emergenceBonus = max(0, self.emergenceLocationMap[player.index][tile.x][tile.y])
                         tilesAsEncountered.put((0 - dist + emergenceBonus, tile))
@@ -1785,10 +1786,10 @@ class ArmyTracker(object):
                 mapScore += tile.army
 
             if actualScore < mapScore:
-                logging.info(f'reducing player {player.index} over-score')
+                logging.info(f'reducing player {player.index} over-score, actual {actualScore} vs map {mapScore}')
                 # strip extra tiles
                 tilesAsEncountered = PriorityQueue()
-                for tile in self.map.get_all_tiles():
+                for tile in player.tiles:
                     genCityDePriority = 0
 
                     if tile.isGeneral or tile.isCity:
@@ -1797,11 +1798,12 @@ class ArmyTracker(object):
                     if tile in self.armies:
                         genCityDePriority += 10
 
-                    if tile.player == player.index and not tile.visible:
+                    if not tile.visible:
                         dist = self.genDistances[tile.x][tile.y]
-                        tilesAsEncountered.put((0 - tile.lastSeen + genCityDePriority - dist / 10, tile))
+                        emergenceBonus = max(0, self.emergenceLocationMap[player.index][tile.x][tile.y])
+                        tilesAsEncountered.put((emergenceBonus - tile.lastSeen + genCityDePriority - dist / 10, tile))
 
-                while mapTileCount > actualTileCount and not tilesAsEncountered.empty():
+                while mapScore > actualScore and not tilesAsEncountered.empty():
                     toReduce: Tile
                     score, toReduce = tilesAsEncountered.get()
                     reduceTo = 1
@@ -1809,10 +1811,10 @@ class ArmyTracker(object):
                         reduceTo = 2
 
                     reduceBy = toReduce.army - reduceTo
-                    if mapTileCount - reduceBy < actualTileCount:
-                        reduceBy = actualTileCount - mapTileCount
+                    if mapScore - reduceBy < actualScore:
+                        reduceBy = mapScore - actualScore
 
-                    logging.info(f'dropped player {player.index} over-tile tile {str(toReduce)}')
+                    logging.info(f'reducing player {player.index} over-score tile {str(toReduce)} by {reduceBy}')
 
                     toReduce.army = toReduce.army - reduceBy
                     mapTileCount -= reduceBy

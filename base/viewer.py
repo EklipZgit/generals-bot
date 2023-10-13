@@ -152,7 +152,7 @@ class GeneralsViewer(object):
             no_log: bool = False,
     ):
         self._killed = False
-        self._update_queue: "Queue[typing.Tuple[ViewInfo | None, MapBase | None, bool]]" = update_queue
+        self._inbound_update_queue: "Queue[typing.Tuple[ViewInfo | None, MapBase | None, bool]]" = update_queue
         self._event_queue: "Queue[bool]" = pygame_event_queue
         self._scores: typing.List[Score] = []
         self._map: MapBase = None
@@ -171,6 +171,7 @@ class GeneralsViewer(object):
 
         self.infoLineHeight = 0
         self.infoRowHeight = 0
+        self.last_render_time: float = time.perf_counter()
 
         self.plusDepth = 9
         self.offset1080Above1440p = 276  # 320 was too far right...?
@@ -308,7 +309,7 @@ class GeneralsViewer(object):
         #     BotLogging.set_up_logger(logging.INFO)
         while not self._receivedUpdate:  # Wait for first update
             try:
-                viewInfo, map, isComplete = self._update_queue.get(block=True, timeout=15.0)
+                viewInfo, map, isComplete = self._inbound_update_queue.get(block=True, timeout=15.0)
                 if viewInfo is not None:
                     self._receivedUpdate = True
                     self.updateGrid(viewInfo, map)
@@ -322,7 +323,8 @@ class GeneralsViewer(object):
                 if elapsed > termSec:
                     logging.info(f'GeneralsViewer zombied with no game start, self-terminating after {termSec} seconds')
                     time.sleep(1.0)
-                    # self.send_killed_event()  # this causes the bot itself to die when it finally starts a game after being in queue for a long time.
+
+                    self.send_closed_event(killedByUserClose=False)  # this causes the bot itself to die when it finally starts a game after being in queue for a long time.
                     self._killed = True
                     self._receivedUpdate = True
                     time.sleep(1.0)
@@ -339,6 +341,13 @@ class GeneralsViewer(object):
         map: MapBase | None = None
         isComplete: bool = False
 
+        renderIntervalAvgWindow = 20
+        rollingUpdateWindow = queue.Queue()
+        for i in range(renderIntervalAvgWindow):
+            rollingUpdateWindow.put(0.15)
+        lastWindowUpdateSum = 0.15 * renderIntervalAvgWindow
+        self.last_render_time = time.perf_counter() - 0.5
+
         while not done:
             if self._killed:
                 done = True  # Flag done
@@ -348,22 +357,41 @@ class GeneralsViewer(object):
             try:
                 if not self.noLog:
                     logging.info("GeneralsViewer waiting for queue event:")
-                viewInfo, map, isComplete = self._update_queue.get(block=True, timeout=1.0)
+                viewInfo, map, isComplete = self._inbound_update_queue.get(block=True, timeout=1.0)
                 self._map = map
-                self.last_update_received = time.perf_counter()
+                thisUpdateTime = time.perf_counter()
+                diff = thisUpdateTime - self.last_update_received
+                medianUpdateTime = lastWindowUpdateSum / renderIntervalAvgWindow
+
+                expectedRenderTime = self.last_render_time + medianUpdateTime
+
+                self.last_update_received = thisUpdateTime
+
+
                 if isComplete:
                     logging.info("GeneralsViewer received done event!")
                     done = True
 
                 if not self.noLog:
-                    logging.info("GeneralsViewer received an event! Updating grid")
+                    logging.info(f"GeneralsViewer received an event after {diff:.3f}! Updating grid")
+
+                if diff < medianUpdateTime * 4:
+                    # ignore massively delayed updates
+                    lastWindowUpdateSum = lastWindowUpdateSum + diff - rollingUpdateWindow.get()
+                    rollingUpdateWindow.put(diff)
 
                 self.updateGrid(viewInfo, map)
+
+                sleepFor = expectedRenderTime - thisUpdateTime - 0.05
+                if sleepFor > 0:
+                    logging.info(f"GeneralsViewer sleeping for {sleepFor:.3f} calculated expected render {expectedRenderTime:.3f} from medianUpdateTime {medianUpdateTime:.3f} based on lastWindowUpdateSum {lastWindowUpdateSum:.3f}")
+                    time.sleep(sleepFor)
 
                 start = time.perf_counter()
                 if not self.noLog:
                     logging.info("GeneralsViewer drawing grid:")
                 self._drawGrid()
+                self.last_render_time = time.perf_counter()
                 if not self.noLog:
                     logging.info(f"GeneralsViewer drawing grid took {time.perf_counter() - start:.3f}")
 
@@ -380,7 +408,8 @@ class GeneralsViewer(object):
                 if elapsed > 180.0:
                     logging.info(f'GeneralsViewer zombied, self-terminating after 10 seconds')
                     done = True
-                    self.send_killed_event()
+
+                    self.send_closed_event(killedByUserClose=False)
                 pass
             except EOFError:
                 logging.info('GeneralsViewer pipe died (EOFError)')
@@ -406,9 +435,9 @@ class GeneralsViewer(object):
                     print("Click ", pos, "Grid coordinates: ", row, column)
 
         logging.info(f'Pygame closed in GeneralsViewer, sending closedByUser {closedByUser} | map.complete {map.complete} back to main threads')
-
-        if map.complete:
-            closedByUser = True
+        #
+        # if map.complete:
+        #     closedByUser = True
 
         self.send_closed_event(closedByUser)
         logging.info('GeneralsViewer, exiting pygame w/ pygame.quit() in 1 second:')
@@ -1188,9 +1217,6 @@ class GeneralsViewer(object):
             pygame.image.save(self._screen, f"{self.logDirectory}\\{self._map.turn}.png")
         except:
             logging.error(traceback.format_exc())
-
-    def send_killed_event(self):
-        self.send_closed_event(killedByUserClose=False)
 
     def send_closed_event(self, killedByUserClose: bool):
         try:

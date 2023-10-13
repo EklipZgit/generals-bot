@@ -4,7 +4,8 @@ import typing
 import SearchUtils
 from BoardAnalyzer import BoardAnalyzer
 from SearchUtils import Counter
-from base.client.map import MapBase, Tile
+from base.client.map import MapBase, Tile, Player
+
 
 class CityScoreData(object):
     def __init__(self, tile: Tile):
@@ -95,6 +96,14 @@ class CityAnalyzer(object):
         self.owned_contested_cities: typing.Set[Tile] = set()
         self.enemy_contested_cities: typing.Set[Tile] = set()
 
+        allyDistMap = None
+        teammate = None
+
+        if self.map.is_2v2:
+            teammate = self.map.players[[t for t in self.map.teammates][0]]
+            if not teammate.dead:
+                allyDistMap = SearchUtils.build_distance_map(self.map, [teammate.general])
+
         for tile in self.map.reachableTiles:
             # TODO calculate predicted enemy city locations in fog and explore mountains more in places we would WANT cities to be
             tileMightBeUndiscCity = not tile.discovered and tile.isObstacle and tile in self.map.reachableTiles
@@ -109,6 +118,8 @@ class CityAnalyzer(object):
             self._calculate_relevance_score(tile, board_analysis, score)
             self._calculate_danger_score(tile, board_analysis, score)
             self._calculate_expandability_score(tile, board_analysis, score)
+            if allyDistMap is not None:
+                self._calculate_2v2_score(tile, board_analysis, allyDistMap, teammate, score)
 
             if tile.isCity:
                 if tile.isNeutral:
@@ -246,6 +257,33 @@ class CityAnalyzer(object):
         self.foreach_around_city(tile, board_analysis, maxDist, scoreNearbyExpandabilityFunc)
 
         score.city_expandability_score = expCounter.value
+
+    def _calculate_2v2_score(
+            self,
+            tile: Tile,
+            board_analysis: BoardAnalyzer,
+            ally_dist_map: typing.List[typing.List[int]],
+            teammate: Player,
+            score: CityScoreData):
+
+        usDistFromCity = board_analysis.intergeneral_analysis.aMap[tile.x][tile.y]
+        allyDistFromUs = board_analysis.intergeneral_analysis.aMap[teammate.general.x][teammate.general.y]
+        allyDistFromCity = ally_dist_map[tile.x][tile.y]
+
+        cityDistSum = usDistFromCity + allyDistFromCity
+        logging.info(f'2v2 ally city calc, {str(tile)} - cityDistSum {cityDistSum} = usDistFromCity {usDistFromCity} + allyDistFromCity {allyDistFromCity}, vs allyDistFromUs {allyDistFromUs}')
+        if cityDistSum < allyDistFromUs:
+            oldExpScore = score.city_expandability_score
+            oldRelScore = score.city_relevance_score
+            score.city_expandability_score += 100
+            score.city_relevance_score *= 2
+            score.city_defensability_score *= 2
+            score.city_general_defense_score *= 2
+            logging.info(
+                f'2v2 CHOKE city, {str(tile)} - exp {oldExpScore} -> {score.city_expandability_score},  rel {oldRelScore} -> {score.city_relevance_score}')
+        #
+        # if allyDistFromCity < usDistFromCity:
+        #     score.city_expandability_score += 0.05
 
     def foreach_around_city(self, tile: Tile, board_analysis: BoardAnalyzer, maxDist: int, foreachFunc: typing.Callable[[Tile, int], None]):
         SearchUtils.breadth_first_foreach_dist(

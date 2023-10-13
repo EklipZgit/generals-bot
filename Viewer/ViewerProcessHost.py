@@ -37,6 +37,7 @@ class ViewerHost(object):
         from base.viewer import GeneralsViewer
         logging.info("newing up GeneralsViewer")
         self._viewer = GeneralsViewer(self._update_queue, self._viewer_event_queue, window_title, cell_width=cell_width, cell_height=cell_height, no_log=noLog)
+        self._closed_by_user: bool | None = None
         logging.info("newing up viewer process")
         self.process: BaseProcess = self.ctx.Process(target=self._viewer.run_main_viewer_loop, args=(alignTop, alignLeft))
         self.no_log: bool = noLog
@@ -68,18 +69,29 @@ class ViewerHost(object):
         if self._viewer is None:
             return True
 
+        if self._closed_by_user is not None:
+            return True
+
         # if not self.process.is_alive():
         #     return True
 
         try:
-            completedSuccessfully = self._viewer_event_queue.get(block=False)
-            # if not completedSuccessfully:
+            closedByUser = self._viewer_event_queue.get(block=False)
+            self._closed_by_user = closedByUser
+            # if not closedByUser:
             #     raise AssertionError('pygame viewer indicated it was NOT closed by the user themselves and closed due to failure')
             return True
         except queue.Empty:
             return False
         except BrokenPipeError:
             return True
+
+    def check_viewer_closed_by_user(self) -> bool:
+        if self.check_viewer_closed():
+            if self._closed_by_user:
+                return True
+
+        return False
 
 
     def send_update_to_viewer(self, viewInfo: ViewInfo, map: MapBase, isComplete: bool = False):

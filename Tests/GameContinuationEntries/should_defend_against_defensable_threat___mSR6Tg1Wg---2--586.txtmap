@@ -1,0 +1,109 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          M         D    D    D    M              MD   D         c2   c4   c4   c5
+          M    bC30 b2D  b2D  b2D  b2   M    D    MD   b2D  b2   c2   M    c8   c4        M    M    M
+M    b2        b2   MD   b5D  MD   bC30DMD   C44D b2D  b2D  M    c2   c1   M    c6   C48  M    D
+     b2   b2   b2   MD   b5D  b4D  b2D  b2D  b2D  b2   M    b2   c3   c1   c6   c4   c6   b5   MD
+M    b2D  b2D  b6D  b6D  MD   b4D  b4D  b3D  b4D  b1   c2   c70  c1   c2   M    c5   c6   M    M    M
+b2   b2D  b5D  b2D  MD   bC21Db1D  b4D  b3D  MD   b4   c5   b2   C41  b2   c6   c5   c5   c5   c5
+b2   MD   b2D  b2D  b2D  b2D  bC15Db3D  b3D  MD   b4   c3   b2   b2   b2   c3   c5   c5   c3   c3   M
+b2   b2D  b2D  N3D  b1D  MD   b1D  b1D  C44D MD   C50  M    c3   c3   c3   c1   c1   c1   c1   M    c6
+M    b4D  MD   b2D  b1D  b1D  b1D  b1D  b1D  M              M    b1   c0   c1   c2   M    cC12 c4   c6
+M    b2   b2   b2D  b1D  b1D  b1D  MD   b1D  M    c4   M    c3   b3   c2   c1   M    M    c5   c4   M
+b2   b2   M    MD   bC2D MD   b1D  b1D  b1D  b426 c1   c2   c2   c2   c2   c50  b1   b1   M    M
+M    b2   b2   MD   D    MD   b2D  b2D  MD   M    c1   c3   M    c4   M    M    M    c296 b1   b1
+b2   b2   M         M         b5   M    M         c3   M    c8   c4   cC14 c1   c1   c1   c2
+b2   M              M         b5   b4        c3   c3   M    c3   c4   M    c2   c2   cC2  M    c5
+b2   M                   b2   b2   M    M    M    c3   C49  c3   M         M    c1   c1   cG14 c2   c2
+b2   b2   b2   b2   b2   b2        M    M    C47  c2   c5   c3   c3        M    c1   M    c1        M
+          M         M                        c5   c3   c3   c3   c3   cC5  c1   c1   c1   c5
+M    M    M    M              M              b3   b3   M         M    c1   c1   c2        c8
+M                   M    M                        c6   c3   c1   c1   c1   M    c2        c8        M
+     M    M                                            c1   c1   c2   c2   c2   c2   c8   c8        M
+M                                                      M    cC8  c2                            M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=586
+player_index=2
+teams=1,1,2,2
+mode=team
+targetPlayerExpectedGeneralLocation=2,9
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=40
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_target_player=1
+bot_cur_path=None
+aUsername=Exe.human
+aTiles=0
+aScore=0
+aStandingArmy=0
+aStars=42
+aCityCount=0
+aGeneral=5,5
+aKnowsKingLocation=True
+aKnowsAllyKingLocation=False
+aDead=True
+aLeftGame=True
+aLeftGameTurn=238
+aAggressionFactor=1
+aDelta25Tiles=-33
+aDelta25Score=-50
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=207
+bUsername=Human.exe
+bTiles=112
+bScore=784
+bStandingArmy=672
+bStars=42
+bCityCount=6
+bKnowsKingLocation=True
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=574
+bDelta25Tiles=7
+bDelta25Score=160
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=586
+cUsername=Teammate.exe
+cTiles=123
+cScore=822
+cStandingArmy=699
+cStars=0
+cCityCount=6
+cGeneral=18,14
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=-4
+cDelta25Score=175
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=586
+dUsername=chiggus
+dTiles=0
+dScore=0
+dStandingArmy=0
+dStars=0
+dCityCount=1
+dGeneral=18,8
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=True
+dLeftGame=True
+dLeftGameTurn=208
+dAggressionFactor=9
+dDelta25Tiles=-30
+dDelta25Score=-91
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=203

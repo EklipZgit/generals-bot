@@ -996,6 +996,9 @@ def get_optimal_expansion(
                 if move_can_cap_more(leafMove):
                     continue
 
+                if leafMove.dest.isCity and leafMove.dest.isNeutral:
+                    continue
+
                 logging.info(f"adding leafMove {str(leafMove)} to knapsack input")
                 path = Path(leafMove.source.army - leafMove.dest.army - 1)
                 path.add_next(leafMove.source)
@@ -1268,6 +1271,9 @@ def get_optimal_expansion(
 
                 if not move_can_cap_more(leafMove) and useLeafMovesFirst:
                     continue  # already added first
+
+                if leafMove.dest.isCity and leafMove.dest.isNeutral:
+                    continue
 
                 logging.info(f"adding leafMove {str(leafMove)} to knapsack input")
                 path = Path(leafMove.source.army - leafMove.dest.army - 1)

@@ -435,7 +435,7 @@ bTiles=20
     """
     def test_engine__validate_all_tile_types__test_one_off__one_deep(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        turn = 100
+        turn = 149
 
         map, general, allyGen, enemyGen, enemyAllyGen = self.load_map_and_generals_2v2_from_string(SIM_VS_ENGINE_ALL_TILE_TYPES_TEST_MAP, turn)
         # give them COMPLETELY separate maps so they can't possibly affect each other during the diff
@@ -443,11 +443,13 @@ bTiles=20
 
         boardAnalysis = BoardAnalyzer(map, general)
         boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
+        frMove = None
+        enMove = None
 
-        frMove = Move(map.GetTile(0, 4), map.GetTile(0, 5), move_half=True)
-        enMove = Move(map.GetTile(1, 4), map.GetTile(0, 4), move_half=False)
+        frMove = Move(map.GetTile(4, 12), map.GetTile(4, 13), move_half=False)
+        enMove = Move(map.GetTile(3, 6), map.GetTile(4, 6), move_half=False)
         # frMove = Move(map.GetTile(1, 7), map.GetTile(2, 7), move_half=True)
-        # enMove = Move(map.GetTile(3, 6), map.GetTile(2, 6), move_half=True)
+        # enMove = Move(map.GetTile(3, 8), map.GetTile(2, 8), move_half=False)
         includeAllAsArmies = True
 
         self.begin_capturing_logging()
@@ -2655,10 +2657,10 @@ bTiles=20
             noClone=False)
 
         sim.execute_turn(dont_require_all_players_to_move=True)
-        if debug:
-            self.render_map(sim.sim_map)
-            self.render_map(fMap)
-            self.render_map(eMap)
+        # if debug:
+        #     self.render_map(sim.sim_map)
+        #     self.render_map(fMap)
+        #     self.render_map(eMap)
 
         self.assertBoardStateMatchesGameEngine(sim, move2BoardState, frPlayer=general.player, enPlayer=enemyGen.player)
 

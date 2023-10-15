@@ -1516,7 +1516,10 @@ class MapBase(object):
                     f'MOVE {str(last_player_index_submitted_move)} was capped WITHOUT priority..? Adding unexplained diff {srcUnexpectedDelta} based on actualSrcDelta {actualSrcDelta} - expectedSourceDelta {expectedSourceDelta}. Continuing with dest diff calc')
                 # self.unaccounted_tile_diffs[source] = srcUnexpectedDelta  # negative number
 
-                source.delta.unexplainedDelta = srcUnexpectedDelta - actualDestDelta + expectedDestDelta
+                source.delta.unexplainedDelta = srcUnexpectedDelta
+                if dest.visible:
+                    source.delta.unexplainedDelta -= actualDestDelta - expectedDestDelta
+
                 source.delta.armyMovedHere = True
                 # TODO this is wrong...? Need to account for the amount of dest delta we think made it...?
                 # dest.delta.destUnexpectedDelta = 0
@@ -2260,13 +2263,19 @@ class MapBase(object):
                         continue
                     if potentialSource.delta.oldOwner in skipPlayers:
                         continue
+                    if potentialSource.was_visible_last_turn() and potentialSource.delta.oldOwner == -1:
+                        continue
                     if potentialSource.delta.armyDelta > 0 and not potentialSource.delta.gainedSight:
                         logging.info(
                             f'ATTK DELTA SCAN{fogFlag} DEST {repr(destTile)}: SRC {repr(potentialSource)} SKIPPED BECAUSE GATHERED TO, NOT ATTACKED. potentialSource.delta.armyDelta > 0')
                         # then this was DEFINITELY gathered to, which would make this not a potential source. 2v2 violates this
                         continue
                     wasFriendlyMove = self._teams[potentialSource.delta.oldOwner] == self._teams[potentialSource.delta.newOwner] and potentialSource.delta.oldOwner != potentialSource.delta.newOwner
-                    sourceWasAttackedNonLethalOrVacated = (potentialSource.delta.unexplainedDelta <= 0 and not wasFriendlyMove) or potentialSource.delta.lostSight or (not potentialSource.visible and allowFogSource)
+                    sourceWasAttackedNonLethalOrVacated = (
+                            (potentialSource.delta.unexplainedDelta <= 0 and not wasFriendlyMove)
+                            or potentialSource.delta.lostSight
+                            or (not potentialSource.visible and allowFogSource)
+                    )
                     # sourceWasAttackedNonLethalOrVacated = potentialSource.delta.armyDelta < 0 or potentialSource.delta.lostSight or (not potentialSource.visible and allowFogSource)
                     # if  sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
                     if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
@@ -2316,8 +2325,20 @@ class MapBase(object):
                     #         byPlayer=destTile.delta.oldOwner)
                     # else:
                     byPlayer = exclusiveSrc.delta.oldOwner
-                    if self.was_captured_this_turn(destTile):
-                        byPlayer = destTile.player
+                    # if self.was_captured_this_turn(destTile) and byPlayer == -1:
+                    #     byPlayer = destTile.player
+                    if byPlayer == -1:
+                        # we can get here if they attacked a neutral city from fog
+                        for adj in exclusiveSrc.movable:
+                            if adj.visible and self.is_tile_enemy(adj):
+                                byPlayer = adj.player
+                                break
+                    if byPlayer == -1:
+                        # we can get here if they attacked a neutral city from fog
+                        for adj in exclusiveSrc.movable:
+                            if self.is_tile_enemy(adj):
+                                byPlayer = adj.player
+                                break
                     if byPlayer == -1 or self.players[byPlayer].last_move is not None:
                         byPlayer = self.players[destTile.delta.oldOwner].fighting_with_player
                     if byPlayer == -1:

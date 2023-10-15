@@ -339,12 +339,13 @@ class ArmyEngine(object):
         if nextBoardState.turn == self.next_cycle_turn:
             updated = []
             for tile, simTile in nextBoardState.sim_tiles.items():
-                newSimTile = SimTile(simTile.source_tile, simTile.army + 1, simTile.player)
+                if simTile.player >= 0:
+                    newSimTile = SimTile(simTile.source_tile, simTile.army + 1, simTile.player)
 
-                if tile.isCity or tile.isGeneral:
-                    newSimTile.army += 1
+                    if tile.isCity or tile.isGeneral:
+                        newSimTile.army += 1
 
-                updated.append(newSimTile)
+                    updated.append(newSimTile)
 
             for simTile in updated:
                 nextBoardState.sim_tiles[simTile.source_tile] = simTile

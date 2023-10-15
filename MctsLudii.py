@@ -79,6 +79,9 @@ class MctsDUCT(object):
         self._trials_performed: int = 0
         self._backprop_iter: int = 0
         self._nodes_explored: int = 0
+        self.last_summary: MctsEngineSummary | None = None
+        """The stats about the last search that was run"""
+
         self.eval_params: ArmySimEvaluationParams = ArmySimEvaluationParams()
 
         self.should_log = logStuff
@@ -91,7 +94,7 @@ class MctsDUCT(object):
 
         # 4 outperformed 6 in 52-37 games, but might've been the flipped a-b
         # after fixing a-b and other tuning, 6 beat 4 28-21
-        self.total_playout_move_count: int = 8
+        self.rollout_depth: int = 8
         self.min_random_playout_moves_initial: int = 1
         self.allow_random_repetitions: bool = True
         self.allow_random_no_ops: bool = True
@@ -99,7 +102,7 @@ class MctsDUCT(object):
         self.final_playout_estimation_depth: int = 0
 
         self.exploit_factor: float = 1.0
-        self.explore_factor: float = 1.05
+        self.explore_factor: float = 0.5  # 1.05 was old, 2.0 was the original from the code I copied lol
         self.utility_compression_ratio: float = 0.004
 
         # dropped, this performed horrible on False so algo is definitely implemented correct.
@@ -176,7 +179,7 @@ class MctsDUCT(object):
                     maxNumBiasedActions=self.biased_playouts_allowed_per_trial,
                     biasedMoveRatio=self.biased_move_ratio_while_available,
                     # maxNumPlayoutActions=-1,  # -1 forces it to run until an actual game end state, infinite depth...?
-                    maxNumPlayoutActions=self.total_playout_move_count,  # -1 forces it to run until an actual game end state, infinite depth...?
+                    maxNumPlayoutActions=self.rollout_depth,  # -1 forces it to run until an actual game end state, infinite depth...?
                     minRandomInitialMoves=self.min_random_playout_moves_initial,
                 )
                 if self.logAll:
@@ -219,6 +222,8 @@ class MctsDUCT(object):
         summary.nodes_explored = self._nodes_explored
         summary.rollout_expansions = root.context.game._rollout_expansions
         summary.biased_rollout_expansions = root.context.game._biased_rollout_expansions
+
+        self.last_summary = summary
 
         return summary
 
@@ -442,6 +447,8 @@ class MctsDUCT(object):
         playerScores: typing.List[float] = []
         playerVisitCounts: typing.List[int] = []
 
+        logs = []
+
         for p, pMoves in enumerate(node.legalMovesPerPlayer):
             bestMove: BoardMoves | None = None
             bestVisitCount: int = -1
@@ -455,7 +462,7 @@ class MctsDUCT(object):
                 if visitCount != 0:
                     avgScore = sumScores / visitCount
 
-                logging.info(f'p{p} t{node.context.turn} move {str(move)} visits {visitCount} score {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f})')
+                logs.append(f'p{p} t{node.context.turn} move {str(move)} visits {visitCount} score {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f})')
 
             for i, move in enumerate(pMoves):
                 sumScores: float = node.scoreSums[p][i]
@@ -465,7 +472,7 @@ class MctsDUCT(object):
                     avgScore = sumScores / visitCount
 
                 if avgScore > bestAvgScore:
-                    logging.info(f'p{p} t{node.context.turn} visit tie - new best move {str(move)} had \r\n'
+                    logs.append(f'p{p} t{node.context.turn} visit tie - new best move {str(move)} had \r\n'
                                  f'   avgScore {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f}) vs bestAvgScore {bestAvgScore:.3f} ({self.decompress_player_utility(bestAvgScore) / 10:.1f}), \r\n'
                                  f'   visitCount {visitCount} > bestVisitCount {bestVisitCount}, \r\n'
                                  f'   new bestMove {str(move)} > old bestMove {str(bestMove)}, \r\n'
@@ -477,19 +484,19 @@ class MctsDUCT(object):
                 elif avgScore == bestAvgScore:
                     numBestFound += 1
 
-                    logging.info(f'p{p} t{node.context.turn} TIEBREAK move {str(move)} had \r\n'
+                    logs.append(f'p{p} t{node.context.turn} TIEBREAK move {str(move)} had \r\n'
                                  f'   avgScore {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f}) vs bestAvgScore {bestAvgScore:.3f} ({self.decompress_player_utility(bestAvgScore) / 10:.1f}), \r\n'
                                  f'   visitCount {visitCount} == bestVisitCount {bestVisitCount}, \r\n'
                                  f'   move {str(move)} vs bestMove {str(bestMove)}, \r\n'
                                  f'   state {str(node.context.board_state)}')
                     if self.get_rand_int() % numBestFound == 0:
-                        logging.info('  (won tie break)')
+                        logs.append('  (won tie break)')
                         # this case implements random tie-breaking
                         bestMove = move
                         bestAvgScore = avgScore
                     else:
-                        logging.info('  (lost tie break)')
-            logging.info(f'p{p} t{node.context.turn} best move {str(bestMove)} had \r\n'
+                        logs.append('  (lost tie break)')
+            logs.append(f'p{p} t{node.context.turn} best move {str(bestMove)} had \r\n'
                          f'   visitCount {bestVisitCount}, \r\n'
                          f'   bestAvgScore {bestAvgScore:.3f} ({self.decompress_player_utility(bestAvgScore) / 10:.1f})')
             playerMoves.append(bestMove)
@@ -498,9 +505,12 @@ class MctsDUCT(object):
 
         boardMove = BoardMoves(playerMoves)
 
-        logging.info(f't{node.context.turn} COMBINED move {str(boardMove)} had \r\n'
+        logs.append(f't{node.context.turn} COMBINED move {str(boardMove)} had \r\n'
                      f'   visitCounts {str(playerVisitCounts)}, \r\n'
                      f'   bestAvgScores {str([f"{s:.3f} ({self.decompress_player_utility(s) / 10:.1f})" for s in playerScores])}')
+
+        logging.info('\n'.join(logs))
+
         return playerScores[0], boardMove
 
     def get_rand_int(self):
@@ -619,6 +629,8 @@ class MctsEngineSummary(object):
         score, bestMoves = selectionFunc(rootNode)
         self.expected_score: float = score
 
+        logs = []
+
         nextScore = score
 
         curNode = rootNode
@@ -667,9 +679,9 @@ class MctsEngineSummary(object):
             trialCtx = Context(finalContext)
             if finalPlayoutEstimationDepth > 0 and not trialCtx.trial.over():
                 simTilePrefix = "\r\n    "
-                logging.info(f'beginning final estimation playout from {str(finalContext.board_state)}.')
-                logging.info(f'Moves so far: \r\n    {simTilePrefix.join([str(boardMove) for boardMove in self.best_moves])}\r\n')
-                logging.info(
+                logs.append(f'beginning final estimation playout from {str(finalContext.board_state)}.')
+                logs.append(f'Moves so far: \r\n    {simTilePrefix.join([str(boardMove) for boardMove in self.best_moves])}\r\n')
+                logs.append(
                     f'simTiles so far:\r\n    {simTilePrefix.join([str(simTile) for simTile in finalContext.board_state.sim_tiles.values()])}\r\n')
 
                 game.playout(
@@ -684,9 +696,9 @@ class MctsEngineSummary(object):
                 lastContext = finalContext
                 for boardMove in trialCtx.trial.moves:
                     finalContext = Context(finalContext)
-                    logging.info(f'Move: {str(boardMove)}')
+                    logs.append(f'Move: {str(boardMove)}')
                     game.apply(finalContext, boardMove)
-                    logging.info(f'simTiles:\r\n    {simTilePrefix.join([str(simTile) for simTile in finalContext.board_state.sim_tiles.values()])}\r\nboard state {str(finalContext.board_state)}\r\n')
+                    logs.append(f'simTiles:\r\n    {simTilePrefix.join([str(simTile) for simTile in finalContext.board_state.sim_tiles.values()])}\r\nboard state {str(finalContext.board_state)}\r\n')
                     if finalContext.board_state.captures_enemy or finalContext.board_state.captured_by_enemy:
                         break
                     self.best_states.append(finalContext.board_state)
@@ -695,6 +707,8 @@ class MctsEngineSummary(object):
                 finalContext = lastContext
         finally:
             game._disablePositionalWinDetectionInRollouts = oldDisablePosition
+
+        logging.info('\n'.join(logs))
 
         self.best_result_state: ArmySimState = finalContext.board_state
         """Includes the speculative final expansion board state."""
@@ -903,7 +917,7 @@ class Game(object):
                 # logging.info(f'playouting {str(trial.context.board_state)} at t{trial.context.turn}')
                 if (
                     trial.over()
-                    or 0 <= maxNumPlayoutActions <= trial.numMoves() - numStartMoves
+                    or maxNumPlayoutActions <= trial.numMoves() - numStartMoves
                 ):
                     break
 
@@ -918,10 +932,10 @@ class Game(object):
                 else:
                     trial = self.playout_random_move(trial)
                 iter += 1
-                if iter > 70:
+                if iter > maxNumPlayoutActions + 1:
                     logging.info(f'inf looping? {str(trial.context.board_state)}')
-                if iter > 80:
-                    raise AssertionError('wtf, infinite looped?')
+                    if iter > maxNumPlayoutActions * 2:
+                        raise AssertionError('wtf, infinite looped?')
 
             self._rollout_expansions += iter
 
@@ -932,11 +946,12 @@ class Game(object):
 
         return trial
 
-    def apply(self, context: Context, combinedMove: BoardMoves):
+    def apply(self, context: Context, combinedMove: BoardMoves, noClone: bool = False):
         """
         Applies moves to a context, updating its turn and current board state.
         @param context:
         @param combinedMove:
+        @param noClone: if True, the moves will modify the board directly instead of cloning it and returning a new board.
         @return:
         """
         # nextTurn = context.turn + 1
@@ -944,7 +959,8 @@ class Game(object):
             context.turn + 1,
             context.board_state,
             frMove=combinedMove.playerMoves[0],
-            enMove=combinedMove.playerMoves[1])
+            enMove=combinedMove.playerMoves[1],
+            noClone=noClone)
         context.turn += 1
 
     def playout_random_move(self, trial: Trial) -> Trial:
@@ -967,7 +983,7 @@ class Game(object):
         chosenEn = random.choice(enMoves) if len(enMoves) > 0 else None
 
         chosen = BoardMoves([chosenFr, chosenEn])
-        self.apply(trial.context, chosen)
+        self.apply(trial.context, chosen, noClone=True)
         trial.moves.append(chosen)
         return trial
 
@@ -1027,7 +1043,7 @@ class Game(object):
         #     raise AssertionError("?")
 
         chosen = BoardMoves([bestFrMove, bestEnMove])
-        self.apply(trial.context, chosen)
+        self.apply(trial.context, chosen, noClone=True)
         trial.moves.append(chosen)
 
         self._biased_rollout_expansions += 1

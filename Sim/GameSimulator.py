@@ -318,11 +318,13 @@ class GameSimulator(object):
             for mapTile in row:
                 if mapTile.player == captured.index:
                     mapTile.player = capturer.index
-                    mapTile.army = mapTile.army // 2
+                    mapTile.army -= mapTile.army // 2
                     self.tiles_updated_this_cycle.add(mapTile)
                     self._stage_tile_captured_events(mapTile, capturer, captured)
 
         captured.set_captured(capturer.index)
+        for player in self.players:
+            player.map.handle_player_capture(capturer.index, captured.index)
 
     def _update_map_values(self):
         if self.sim_map.turn != self.turn:
@@ -561,7 +563,7 @@ class GameSimulatorHost(object):
                 turnsRun += 1
             if not self.sim.is_game_over():
                 for idx, botHost in enumerate(self.bot_hosts):
-                    if botHost is not None:
+                    if botHost is not None and not self.sim.players[idx].dead:
                         # perform the final 'bot' turn without actual executing the move or getting the next
                         # server update. Allows things like the army tracker etc and the map viewer to update with the
                         # bots final calculated map state and everything.

@@ -20,7 +20,7 @@ class BoardAnalyzer:
         startTime = time.time()
         self.map: MapBase = map
         self.general: Tile = general
-        self.should_rescan = False
+        self.should_rescan = True
 
         # TODO probably calc these chokes for the enemy, too?
         self.innerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]

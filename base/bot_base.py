@@ -258,7 +258,7 @@ class GeneralsClientHost(object):
             # NOTE player captures happen BEFORE the map update that shows you the updated tiles comes through.
             # TODO change this to PREPARE the map for a player capture, let it use the map update, and
             #  THEN perform this player captures stuff that's being triggered in here afterwards?
-            self._map.handle_player_capture(update["text"])
+            self._map.handle_player_capture_text(update["text"])
             return False
         elif updateType == "chat_message":
             self._handleChatMessage(update)

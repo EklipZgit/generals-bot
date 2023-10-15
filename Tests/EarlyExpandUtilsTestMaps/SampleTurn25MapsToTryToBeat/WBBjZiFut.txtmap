@@ -1,0 +1,111 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M                                  M         M                                       M
+               M         M              M                                  M              M    M
+     M                                  M         M         M                                            M
+     M              M    M                                            M    M              M
+                         M                                                           M         M
+M         M                             M                   M         M    M                   M
+     M    M                             M    M                             M         M    M
+     M                                                 M                                                 M
+     M              M                   M                             M              M
+                                                                      M                   M
+M                   M                        M         M    M    M    M              M              M
+                                                  M         M                                  M
+     M              M              M                             M                             M
+          M                             M    M                             b2        M
+M              M                             b2   M         C50            b2   b2   b2                  C40
+                              M         M    b2   b2   b2             M              b2   M    M    a3
+                    M    M                        M    b2   b2   b2   b2   M         b2   b2   M    a2   b2
+                    M                                            M    b2   b2   b2   b2   bG5  b2   b2   b2
+M    M         M         M              M    M         a2   a2   a2   a2   a2   a2   a2   a2   a2   a2   M
+M                   M         M         M                        M    M    a2   a2   M    M    a2   a2
+M         M    M    M                        M              a2   a2   a2   a2   aG3  a2
+                    M                                       M    C50            M    a2             M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=50
+player_index=1
+teams=1,1,2,2
+mode=team
+bot_target_player=-1
+targetPlayerExpectedGeneralLocation=6,6
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=Exe.human
+aTiles=23
+aScore=48
+aStandingArmy=25
+aStars=54
+aCityCount=1
+aGeneral=16,20
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=22
+aDelta25Score=47
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=50
+a_bot_general_approx=16,20
+bUsername=Human.exe
+bTiles=24
+bScore=51
+bStandingArmy=27
+bStars=54
+bCityCount=1
+bGeneral=18,17
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=23
+bDelta25Score=50
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=49
+b_bot_general_approx=18,17
+cUsername=18841971
+cTiles=27
+cScore=57
+cStandingArmy=30
+cStars=29
+cCityCount=1
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=26
+cDelta25Score=56
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=0
+dUsername=1234hjkl
+dTiles=19
+dScore=41
+dStandingArmy=22
+dStars=29
+dCityCount=1
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+dDelta25Tiles=18
+dDelta25Score=40
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=0

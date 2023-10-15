@@ -1,6 +1,7 @@
 import logging
 import typing
 
+import DebugHelper
 import SearchUtils
 from BoardAnalyzer import BoardAnalyzer
 from SearchUtils import Counter
@@ -271,7 +272,8 @@ class CityAnalyzer(object):
         allyDistFromCity = ally_dist_map[tile.x][tile.y]
 
         cityDistSum = usDistFromCity + allyDistFromCity
-        logging.info(f'2v2 ally city calc, {str(tile)} - cityDistSum {cityDistSum} = usDistFromCity {usDistFromCity} + allyDistFromCity {allyDistFromCity}, vs allyDistFromUs {allyDistFromUs}')
+        if DebugHelper.IS_DEBUGGING:
+            logging.info(f'2v2 ally city calc, {str(tile)} - cityDistSum {cityDistSum} = usDistFromCity {usDistFromCity} + allyDistFromCity {allyDistFromCity}, vs allyDistFromUs {allyDistFromUs}')
         if cityDistSum < allyDistFromUs:
             oldExpScore = score.city_expandability_score
             oldRelScore = score.city_relevance_score
@@ -279,8 +281,9 @@ class CityAnalyzer(object):
             score.city_relevance_score *= 2
             score.city_defensability_score *= 2
             score.city_general_defense_score *= 2
-            logging.info(
-                f'2v2 CHOKE city, {str(tile)} - exp {oldExpScore} -> {score.city_expandability_score},  rel {oldRelScore} -> {score.city_relevance_score}')
+            if DebugHelper.IS_DEBUGGING:
+                logging.info(
+                    f'2v2 CHOKE city, {str(tile)} - exp {oldExpScore} -> {score.city_expandability_score},  rel {oldRelScore} -> {score.city_relevance_score}')
         #
         # if allyDistFromCity < usDistFromCity:
         #     score.city_expandability_score += 0.05
@@ -292,6 +295,7 @@ class CityAnalyzer(object):
             maxDist,
             foreachFunc,
             skipFunc=lambda t: t != tile and t.isObstacle,
+            noLog=True,
             bypassDefaultSkip=True)
 
     def get_sorted_neutral_scores(self) -> typing.List[typing.Tuple[Tile, CityScoreData]]:
@@ -319,6 +323,7 @@ class CityAnalyzer(object):
             self.map,
             [city],
             maxDepth=5,
+            noLog=True,
             foreachFunc=counterFunc,
         )
 

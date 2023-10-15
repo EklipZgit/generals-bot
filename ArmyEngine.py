@@ -105,9 +105,9 @@ class ArmyEngine(object):
         self.repetition_threshold: int = 5
         """How many repeated tiles in a row constitute a repetition."""
 
-        if len(friendlyArmies) == 1 and len(enemyArmies) == 1:
-            # Cool, we can inter-analyze armies
-            self.inter_army_analysis = ArmyAnalyzer(map, friendlyArmies[0], enemyArmies[0])
+        # if len(friendlyArmies) == 1 and len(enemyArmies) == 1:
+        #     # Cool, we can inter-analyze armies
+        #     self.inter_army_analysis = ArmyAnalyzer(map, friendlyArmies[0], enemyArmies[0])
 
         self._friendly_move_filter: typing.Callable[[Tile, Tile, ArmySimState], bool] | None = None
 
@@ -164,9 +164,6 @@ class ArmyEngine(object):
             self._enemy_move_filter = lambda source, dest, board: self.force_enemy_towards_or_parallel_to[source] < self.force_enemy_towards_or_parallel_to[dest]
 
         baseBoardState = self.get_base_board_state()
-        self.base_city_differential = baseBoardState.city_differential
-        remainingCycleTurns = 50 - (self.map.turn % 50)
-        self.next_cycle_turn = self.map.turn + remainingCycleTurns
 
         if turns == 0:
             res = ArmySimResult(baseBoardState)
@@ -297,160 +294,19 @@ class ArmyEngine(object):
 
         return self.get_comparison_based_expected_result_state(boardState.depth, frEqMoves, enEqMoves, payoffs)
 
-    def simulate_recursive_alpha_beta(
-            self,
-            boardState: ArmySimState,
-            currentTurn: int,
-            maxTurn: int,
-            maxTime: float = 0.02
-    ) -> ArmySimResult:
-        """
-
-
-        Taken from https://gist.github.com/kartikkukreja/e58a77d6380f1af9b1f3
-
-        @param currentTurn: the current turn (in the sim, or starting turn that the current map is at)
-        @param maxTurn: how far to execute the sim until
-        @param boardState: the state of the board at this position
-        @return: a tuple of (the min-maxed best sim state down the tree,
-        with the list of moves (and their actual board states) up the tree,
-        the depth evaluated)
-        """
-
-        self.iterations += 1
-
-        startTime = time.perf_counter()
-        MaxUtility = 10000
-
-
-        def alphaBetaSearch(state: ArmySimState, alpha, beta, depth):
-            def maxValue(state: ArmySimState, alpha: int, beta: int, depth: int) -> int:
-                val = -MaxUtility
-                for successor in state.getSuccessors():
-                    val = max(val, alphaBetaSearch(successor, alpha, beta, depth))
-                    if val >= beta:
-                        return val
-                    alpha = max(alpha, val)
-                return val
-
-            def minValue(state: ArmySimState, alpha: int, beta: int, depth: int) -> int:
-                val = MaxUtility
-                for successor in state.getSuccessors():
-                    val = min(val, alphaBetaSearch(successor, alpha, beta, depth - 1))
-                    if val <= alpha:
-                        return val
-                    beta = min(beta, val)
-                return val
-
-            if state.isTerminalState():
-                return state.getTerminalUtility()
-            if depth <= 0 or (self.iterations & 512 == 0 and time.perf_counter() - startTime > maxTime):
-                return state.calculate_value_int()
-            if state.blackToMove == IsPlayerBlack:
-                return maxValue(state, alpha, beta, depth)
-            else:
-                return minValue(state, alpha, beta, depth)
-
-        bestMove = None
-        for depth in range(1, MaxDepth):
-            if time() - startTime > MaxAllowedTimeInSeconds: break
-            val = -MaxUtility
-            for successor in boardState.getSuccessors():
-                score = alphaBetaSearch(successor, -MaxUtility, MaxUtility, depth)
-                if score > val:
-                    val, bestMove = score, successor.moves
-        return bestMove
-
-        # if currentTurn == stopTurn or (boardState.kills_all_enemy_armies and boardState.kills_all_friendly_armies):
-        #     self.set_final_board_state_depth_estimation(boardState)
-        #
-        # if (currentTurn == stopTurn
-        #         or (boardState.kills_all_friendly_armies and boardState.kills_all_enemy_armies)
-        #         or boardState.captures_enemy
-        #         or boardState.captured_by_enemy
-        #         or boardState.can_enemy_force_repetition
-        #         or boardState.can_force_repetition):
-        #     res = ArmySimResult()
-        #     res.best_result_state = boardState
-        #     # res.expected_best_moves = [(boardState.friendly_move, boardState.enemy_move)]
-        #     res.best_result_state_depth = stopTurn - currentTurn
-        #     return res
-        #
-        # nextTurn = currentTurn + 1
-        #
-        # frMoves: typing.List[Move | None] = self.generate_friendly_moves(boardState)
-        #
-        # enMoves: typing.List[Move | None] = self.generate_enemy_moves(boardState)
-        #
-        # payoffs: typing.List[typing.List[None | ArmySimResult]] = [[None for e in enMoves] for f in frMoves]
-        #
-        # nashPayoffs: typing.List[typing.List[int]] = [[0 for e in enMoves] for f in frMoves]
-        #
-        # for frIdx, frMove in enumerate(frMoves):
-        #     for enIdx, enMove in enumerate(enMoves):
-        #         if (1 == 1
-        #                 and frMove is not None
-        #                 and frMove.dest.x == 3
-        #                 and frMove.dest.y == 4
-        #                 # and frMove.source.x == 0
-        #                 # and frMove.source.y == 9
-        #                 and enMove is not None
-        #                 and enMove.dest.x == 3
-        #                 and enMove.dest.y == 3
-        #                 and enMove.source.x == 3
-        #                 and enMove.source.y == 4
-        #                 and boardState.depth < 2
-        #         ):
-        #             logging.info('gotcha')
-        #         nextBoardState = self.get_next_board_state(nextTurn, boardState, frMove, enMove)
-        #         nextResult = self.simulate_recursive_brute_force(
-        #             nextBoardState,
-        #             nextTurn,
-        #             stopTurn
-        #         )
-        #
-        #         payoffs[frIdx][enIdx] = nextResult
-        #         nashPayoffs[frIdx][enIdx] = nextResult.best_result_state.calculate_value_int()
-        #
-        #         # frMoves[frMove].append(nextResult)
-        #         # enMoves[enMove].append(nextResult)
-        #
-        # frEqMoves = [e for e in enumerate(frMoves)]
-        # enEqMoves = [e for e in enumerate(enMoves)]
-        # if boardState.depth < 2:
-        #     nashStart = time.perf_counter()
-        #     nashA = numpy.array(nashPayoffs)
-        #     nashB = -nashA
-        #     game = nashpy.Game(nashA, nashB)
-        #     self.time_in_nash += time.perf_counter() - nashStart
-        #     if boardState.depth >= 0:
-        #         frEqMoves, enEqMoves = self.get_nash_moves_based_on_lemke_howson(
-        #             boardState,
-        #             game,
-        #             frEqMoves,
-        #             enEqMoves,
-        #             payoffs)
-        #     else:
-        #         frEqMoves, enEqMoves = self.get_nash_moves_based_on_support_enumeration(
-        #             boardState,
-        #             game,
-        #             frEqMoves,
-        #             enEqMoves,
-        #             payoffs)
-        #
-        # if self.log_everything or boardState.depth < self.log_payoff_depth:
-        #     self.render_payoffs(boardState, frMoves, enMoves, payoffs)
-        #
-        # return self.get_comparison_based_expected_result_state(boardState.depth, frEqMoves, enEqMoves, payoffs)
-
     def get_next_board_state(
             self,
             turn: int,
             boardState: ArmySimState,
             frMove: Move | None,
-            enMove: Move | None
+            enMove: Move | None,
+            noClone: bool = False
     ) -> ArmySimState:
-        nextBoardState = boardState.get_child_board()
+        nextBoardState = boardState
+        if noClone:
+            nextBoardState.prep_next_move()
+        else:
+            nextBoardState = boardState.get_child_board()
         nextBoardState.friendly_move = frMove
         nextBoardState.enemy_move = enMove
 
@@ -518,6 +374,15 @@ class ArmyEngine(object):
                     if st:
                         nextBoardState.enemy_living_armies[simTile.source_tile] = simTile
 
+            # if nextBoardState.turn % 50 == 0:
+            #     for simTile in list(nextBoardState.sim_tiles.values()):
+            #         if simTile.player >= 0:
+            #             nextBoardState.sim_tiles[simTile.source_tile] = SimTile(simTile.source_tile, simTile.army + 1, simTile.player)
+                # for simTile in nextBoardState.friendly_living_armies.values():
+                #     simTile.army += 1
+                # for simTile in nextBoardState.enemy_living_armies.values():
+                #     simTile.army += 1
+
         return nextBoardState
 
     def execute(self, nextBoardState: ArmySimState, move: Move | None, movingPlayer: int, otherPlayer: int):
@@ -526,16 +391,19 @@ class ArmyEngine(object):
 
         tileDif = 0
         cityDif = 0
-        resultDest: SimTile | None = None
+        resultDest: SimTile
         capsGeneral = False
-        capsCity = False
+        # capsCity = False
 
         destTile = move.dest
         sourceTile = move.source
 
         source = nextBoardState.sim_tiles[sourceTile]
+        movingArmy = source.army - 1
+        if move.move_half:
+            movingArmy = source.army // 2
 
-        if source.player != movingPlayer or source.army < 2:
+        if source.player != movingPlayer or movingArmy <= 0:
             # tile was captured by the other player before the move was executed
             # TODO, do we need to clear any armies here or anything weird?
             return
@@ -543,13 +411,16 @@ class ArmyEngine(object):
         dest = nextBoardState.sim_tiles.get(destTile)
         if not dest:
             dest = SimTile(destTile)
-            if destTile.isCity and destTile.player >= 0 or destTile.isGeneral:
-                dest.army += (nextBoardState.depth + ((nextBoardState.turn - 1) & 1)) // 2
-                nextBoardState.incrementing.add(destTile)
-                # nextBoardState.sim_tiles[destTile] = dest
+            if destTile.isCity or destTile.isGeneral:
+                if destTile.player >= 0:
+                    # dest.army += (nextBoardState.depth + ((nextBoardState.turn - 1) & 1)) // 2
+                    dest.army += (nextBoardState.depth - ((nextBoardState.turn - 1) & 1)) // 2
+                    nextBoardState.incrementing.add(destTile)
+                elif destTile.army < movingArmy:
+                    nextBoardState.incrementing.add(destTile)
 
         if not self.is_on_same_team(movingPlayer, dest.player):
-            resultArmy = dest.army - source.army + 1
+            resultArmy = dest.army - movingArmy
             if resultArmy < 0:
                 # captured tile
                 resultArmy = 0 - resultArmy
@@ -567,14 +438,13 @@ class ArmyEngine(object):
             else:
                 resultDest = SimTile(dest.source_tile, resultArmy, dest.player)
         else:
-            resultArmy = dest.army + source.army - 1  # no gathering in sim :V
-            # TODO it SHOULD be the above instead of dest.army - 1 below, but shit is trying to waste moves gathering with scrim armies ffs
-            # resultArmy = dest.army - 1
+            # on the same team, tile becomes ours if it isn't already UNLESS its the allied general.
+            resultArmy = dest.army + movingArmy
             resultDest = SimTile(dest.source_tile, resultArmy, movingPlayer)
             if resultDest.source_tile.isGeneral:
                 resultDest.player = resultDest.source_tile.player
 
-        nextBoardState.sim_tiles[source.source_tile] = SimTile(source.source_tile, 1, movingPlayer)
+        nextBoardState.sim_tiles[source.source_tile] = SimTile(source.source_tile, source.army - movingArmy, movingPlayer)
         nextBoardState.sim_tiles[dest.source_tile] = resultDest
 
         movingPlayerArmies = nextBoardState.friendly_living_armies
@@ -585,10 +455,16 @@ class ArmyEngine(object):
             tileDif = 0 - tileDif
             cityDif = 0 - cityDif
             if capsGeneral:
-                nextBoardState.captured_by_enemy = True
+                if destTile.player != self.friendly_player:
+                    self.execute_player_capture(nextBoardState, destTile.player, movingPlayer, friendly=True)
+                else:
+                    nextBoardState.captured_by_enemy = True
         else:
             if capsGeneral:
-                nextBoardState.captures_enemy = True
+                if destTile.player != self.enemy_player:
+                    self.execute_player_capture(nextBoardState, destTile.player, movingPlayer, friendly=False)
+                else:
+                    nextBoardState.captures_enemy = True
 
         movingArmy = movingPlayerArmies.pop(source.source_tile, None)
         # if movingArmy is None:
@@ -622,26 +498,30 @@ class ArmyEngine(object):
         baseBoardState = ArmySimState(turn=self.map.turn, evaluationParams=self.eval_params)
 
         for friendlyArmy in self.friendly_armies:
-            if friendlyArmy.value > 0:
-                st = SimTile(friendlyArmy.tile, friendlyArmy.value + 1, friendlyArmy.player)
-                baseBoardState.friendly_living_armies[friendlyArmy.tile] = st
-                baseBoardState.sim_tiles[friendlyArmy.tile] = st
-                if friendlyArmy.tile.isCity or friendlyArmy.tile.isGeneral:
-                    baseBoardState.incrementing.add(friendlyArmy.tile)
+            # if friendlyArmy.value > 0:
+            st = SimTile(friendlyArmy.tile, friendlyArmy.value + 1, friendlyArmy.player)
+            baseBoardState.friendly_living_armies[friendlyArmy.tile] = st
+            baseBoardState.sim_tiles[friendlyArmy.tile] = st
+            if friendlyArmy.tile.isCity or friendlyArmy.tile.isGeneral:
+                baseBoardState.incrementing.add(friendlyArmy.tile)
 
         for enemyArmy in self.enemy_armies:
-            if enemyArmy.value > 0:
-                st = SimTile(enemyArmy.tile, enemyArmy.value + 1, self.enemy_player)
-                baseBoardState.enemy_living_armies[enemyArmy.tile] = st
-                baseBoardState.sim_tiles[enemyArmy.tile] = st
-                if enemyArmy.tile.isCity or enemyArmy.tile.isGeneral:
-                    baseBoardState.incrementing.add(enemyArmy.tile)
+            # if enemyArmy.value > 0:
+            st = SimTile(enemyArmy.tile, enemyArmy.value + 1, self.enemy_player)
+            baseBoardState.enemy_living_armies[enemyArmy.tile] = st
+            baseBoardState.sim_tiles[enemyArmy.tile] = st
+            if enemyArmy.tile.isCity or enemyArmy.tile.isGeneral:
+                baseBoardState.incrementing.add(enemyArmy.tile)
 
         baseBoardState.tile_differential = self.map.players[self.friendly_player].tileCount - self.map.players[self.enemy_player].tileCount
         baseBoardState.city_differential = self.map.players[self.friendly_player].cityCount - self.map.players[self.enemy_player].cityCount
         baseBoardState.friendly_move_generator = self.generate_friendly_moves
         baseBoardState.enemy_move_generator = self.generate_enemy_moves
         baseBoardState.initial_differential = baseBoardState.tile_differential + baseBoardState.city_differential * 25
+
+        self.base_city_differential = baseBoardState.city_differential
+        remainingCycleTurns = 50 - (self.map.turn % 50)
+        self.next_cycle_turn = self.map.turn + remainingCycleTurns
 
         return baseBoardState
 
@@ -1111,7 +991,7 @@ class ArmyEngine(object):
         decompressedExpectedScore = self.mcts_runner.decompress_player_utility(mctsSummary.expected_score)
         decompressedExpandedExpectedScore = self.mcts_runner.decompress_player_utility(mctsSummary.expanded_expected_score)
 
-        logging.info(f'MCTS e{decompressedExpectedScore/10:.1f} : ee{decompressedExpandedExpectedScore/10:.1f} iter {mctsSummary.iterations}, nodesExplored {mctsSummary.nodes_explored}, rollouts {mctsSummary.trials_performed}, backprops {mctsSummary.backprop_iter}, rolloutExpansions {mctsSummary.rollout_expansions}, biasedRolloutExpansions {mctsSummary.biased_rollout_expansions}')
+        logging.info(f'MCTS e{decompressedExpectedScore/10:.1f}({mctsSummary.expected_score:.4f}) : ee{decompressedExpandedExpectedScore/10:.1f}({mctsSummary.expanded_expected_score:.4f}) iter {mctsSummary.iterations}, nodesExplored {mctsSummary.nodes_explored}, rollouts {mctsSummary.trials_performed}, backprops {mctsSummary.backprop_iter}, rolloutExpansions {mctsSummary.rollout_expansions}, biasedRolloutExpansions {mctsSummary.biased_rollout_expansions}')
 
         if self.honor_mcts_expected_score:
             result.net_economy_differential = decompressedExpectedScore / 10
@@ -1120,3 +1000,18 @@ class ArmyEngine(object):
 
         return result, mctsSummary
 
+    def execute_player_capture(self, nextBoardState: ArmySimState, player: int, byPlayer: int, friendly: bool):
+        # todo should we include ALL of the players tiles in the sim tiles as captured...? Maybe???
+        econDelta = 0
+        for simTile in list(nextBoardState.sim_tiles.values()):
+            if simTile.source_tile.isGeneral or simTile.player != player:
+                continue
+            armyGained = simTile.army - simTile.army // 2
+            nextBoardState.sim_tiles[simTile.source_tile] = SimTile(simTile.source_tile, armyGained, byPlayer)
+            econDelta += armyGained
+            econDelta += 1  # for the tile itselves econ.
+
+        if friendly:  # ally captured
+            nextBoardState.tile_differential -= econDelta
+        else:
+            nextBoardState.tile_differential += econDelta

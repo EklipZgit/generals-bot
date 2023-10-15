@@ -1,4 +1,4 @@
-<#
+
 
 #>
 function Copy-Turn25StartResultsToUnitTest {
@@ -182,6 +182,8 @@ function Create-TestContinuingGameFrom {
 
     $turn = $map.BaseName
 
+
+    $is2v2 = $false
     $player = 'unk'
     $content = $map | Get-Content
     foreach ($line in $content)
@@ -189,6 +191,11 @@ function Create-TestContinuingGameFrom {
         if ($line -like '*player_index*')
         {
             $player = $line.Split('=')[1].Trim()
+        }
+
+        if ($line -like '*mode=team*')
+        {
+            $is2v2 = $true
         }
     }
 
@@ -203,7 +210,7 @@ function Create-TestContinuingGameFrom {
     $map | Copy-Item -Destination "$DestFolder\$newName" -ErrorAction Stop
 
     $testFile = "$DestFolderRoot\test_$TestCategory.py"
-    $testFileContent = Get-Content $testFile -ErrorAction Stop
+    $testFileContent = Get-Content $testFile -Raw -ErrorAction Stop
 
     $countsByPlayer = @{
         ([char]'a') = 0;
@@ -216,12 +223,20 @@ function Create-TestContinuingGameFrom {
         ([char]'h') = 0;
     }
 
+    $mapLoader = "map, general, enemyGeneral = self.load_map_and_generals(mapFile, $turn, fill_out_tiles=True)"
+    $baseAssert = "self.assertIsNone(winner)"
+
+    if ($is2v2) {
+        $mapLoader = "map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, $turn, fill_out_tiles=True)"
+        $baseAssert = "self.assertNoFriendliesKilled(map, general, allyGen)"
+    }
+
     $testFileContent += @"
     
     def test_$TestName(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/$newName'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, $turn, fill_out_tiles=True)
+        $mapLoader
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=$turn)
         
@@ -235,9 +250,9 @@ function Create-TestContinuingGameFrom {
 
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
-        self.assertIsNone(winner)
+        $baseAssert
 
-        # TODO add asserts for $TestName
+        self.fail("TODO add asserts for $TestName")
 "@
 
     $testFileContent | Set-Content $testFile -Encoding utf8

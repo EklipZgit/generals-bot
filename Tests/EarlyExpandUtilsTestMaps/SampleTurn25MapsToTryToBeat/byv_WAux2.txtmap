@@ -1,0 +1,114 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                    M                             M         M                             M
+               M                                                           M                   M         M
+                              M         M                                  M                   M
+                                                                      b2   b2   b2   M
+                                   M              M                        M    b2   b2   b2        M
+     M                                  M    M    M         M                   M         b2             M
+     M              M                   M                   M    M    M                   b2   M    M
+                    M         M         M         M         M              M              b2   C49       C42
+     M                        M                                            M              b2   M    b2   b2
+M    M                                       M                        C48       a9   a2   a19  bG4  b2   b2
+M              M         M                   M    M    M         M    M    aG5  a2             M    b2
+          M              M    M                                  M              M                   b2   M
+          M         M    M         M                             M                                  b2
+     M         M         M         M         M         M    M    M         M              M
+                                   M                             M
+                                        M    M                   M              M         M    M
+M                                       M              M    M         M                             M
+                         M         M         M         M                        M    M         M
+M                                                 M    M         M
+M                                                 M         M         M    M
+     M                             M         M    M    M              M              M                   M
+                                        M    M                                  M              M         M
+                    M                        M    M                                       M         M
+     M              M                                                                                    M
+     M                             M                                                                M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=50
+player_index=1
+teams=1,1,2,2
+mode=team
+bot_target_player=-1
+targetPlayerExpectedGeneralLocation=6,6
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=TLZJH
+aTiles=5
+aScore=37
+aStandingArmy=32
+aStars=0
+aCityCount=1
+aGeneral=15,10
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=4
+aDelta25Score=36
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=47
+a_bot_general_approx=15,10
+bUsername=Teammate.exe
+bTiles=18
+bScore=38
+bStandingArmy=20
+bStars=0
+bCityCount=1
+bGeneral=19,9
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=17
+bDelta25Score=37
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=50
+b_bot_general_approx=19,9
+cUsername=Mr poopoo
+cTiles=12
+cScore=36
+cStandingArmy=24
+cStars=0
+cCityCount=1
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=11
+cDelta25Score=35
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=0
+dUsername=sg,degjheghf
+dTiles=25
+dScore=53
+dStandingArmy=28
+dStars=0
+dCityCount=1
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+dDelta25Tiles=24
+dDelta25Score=52
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=0

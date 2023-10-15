@@ -5,6 +5,7 @@ import typing
 import GatherUtils
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
+from base.client.map import TILE_EMPTY
 
 
 class GatherTests(TestBase):
@@ -373,14 +374,22 @@ class GatherTests(TestBase):
 
                 # Grant the general the same fog vision they had at the turn the map was exported
                 rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=527)
+                botEnGen = rawMap.GetTile(enemyGeneral.x, enemyGeneral.y)
+                botEnGen.army = 0
+                botEnGen.player = -1
+                botEnGen.tile = TILE_EMPTY
+                botEnGen.isGeneral = False
+                rawMap.generals[enemyGeneral.player] = None
+                rawMap.players[enemyGeneral.player].general = None
 
-                self.begin_capturing_logging()
                 simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-                simHost.reveal_player_general(enemyGeneral.player, general.player, hidden=True)
+                self.set_general_emergence_around(17, 5, simHost, general.player, enemyGeneral.player, 20)
+                self.set_general_emergence_around(16, 7, simHost, general.player, enemyGeneral.player, 30)
 
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.010, turns=80)
-                self.assertEqual(map.player_index, winner)
-                cappedTile = map.GetTile(18, 5)
+                # self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=80)
+                self.assertEqual(general.player, enemyGeneral.player, "should have captured enemy general")
+
                 # this assert no longer relevant now that all in gathers are max-value-per-turn
                 # self.assertGreater(cappedTile.army, 440, "should not have dropped the cities at the leaves during the gather phase.")
                 self.assertNoRepetition(simHost, minForRepetition=1,
@@ -1037,3 +1046,24 @@ player_index=0
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
         self.assertIsNone(winner)
+    
+    def test_should_not_divide_by_zero(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_divide_by_zero___wpQIlrcjn---1--201.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 201, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=201)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=16)
+        self.assertIsNone(winner)
+        city = playerMap.GetTile(21, 1)
+        self.assertEqual(general.player, city.player)

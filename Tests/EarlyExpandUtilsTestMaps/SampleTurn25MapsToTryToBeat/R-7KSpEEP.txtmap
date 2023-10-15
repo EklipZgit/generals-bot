@@ -1,0 +1,112 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+               M                                       M
+                              M                   M              M    M         M              M
+     c2   c5                  M                                            M
+     c2   M    M    M                        b2                            M         M
+M    c2   c2   c4   M    M    D    M    c2   b2                                                M
+cG4  c2   c2   C42       b2   b2   b2   b3   b2   b4
+M    c2   c2   c2   c2   c2   c2   c2   M    bG5D M         M         M    M         M
+M         d2        M    M                        M    M         M
+     M    d2   M                                  M         M                                  M
+M    d2   d2   C47                                     M    M    M                             M
+dG8  d2   d2   d2   M                   M         M    M    M              M         M
+d2   d2   d2   d2   d2   d2   M    M    M    M         M         M    M    M
+M    d2   C49  a2   a2   d2   d2             M    M                        M
+M    d2   M    a2   M         a2   a2                                      M         M         M
+     C46                 M         M                        M              M         M
+M                   M                                                 M                   M
+          M    M                                                 M    M              M
+M              M              M              M         M    M              M
+M              M    M                   M
+     M                                       M         M                   M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=50
+player_index=2
+teams=1,1,2,2
+mode=team
+bot_target_player=1
+targetPlayerExpectedGeneralLocation=9,6
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=23
+aScore=47
+aStandingArmy=24
+aStars=54
+aCityCount=1
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=22
+aDelta25Score=46
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=33
+a_bot_general_approx=6,14
+bUsername=Exe.human
+bTiles=19
+bScore=43
+bStandingArmy=24
+bStars=54
+bCityCount=1
+bGeneral=9,6
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=30
+bDelta25Tiles=18
+bDelta25Score=42
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=47
+b_bot_general_approx=9,6
+cUsername=Teammate.exe
+cTiles=17
+cScore=41
+cStandingArmy=24
+cStars=25
+cCityCount=1
+cGeneral=0,5
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=16
+cDelta25Score=40
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=50
+c_bot_general_approx=0,5
+dUsername=Mr poopoo
+dTiles=18
+dScore=42
+dStandingArmy=24
+dStars=25
+dCityCount=1
+dGeneral=0,10
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+dDelta25Tiles=17
+dDelta25Score=41
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=48
+d_bot_general_approx=0,10

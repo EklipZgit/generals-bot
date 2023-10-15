@@ -1092,6 +1092,7 @@ C5
                                     # 181
                                     # 133
                                     # 181
+                                    # 0
                                     self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bArmyAdjacent=bArmyAdjacent)
 
     def test_run_one_off_fog_island_border_capture_test(self):
@@ -1121,6 +1122,7 @@ C5
                                     # 425
                                     # 521
                                     # 161 after fixing move determinism assert detection
+                                    # 0
                                     self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bHasNearbyVision=bHasNearbyVision)
 
     def test_run_one_off_fog_island_full_capture_test(self):
@@ -1166,6 +1168,7 @@ C5
                                 # 91
                                 # 163
                                 # 73  after fixing move determinism assert detection
+                                # 0
                                 self.run_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_adj_test(self):
@@ -1213,3 +1216,24 @@ C5
         simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=2)
         self.assertIsNone(winner)
+    
+    def test_should_handle_fog_island_capture_in_2v2(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_handle_fog_island_capture_in_2v2___F6_mInEvD---0--264.txtmap'
+        map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 264, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=264)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        self.assertNoFriendliesKilled(map, general, allyGen)
+
+        self.fail("TODO add asserts for should_handle_fog_island_capture_in_2v2")

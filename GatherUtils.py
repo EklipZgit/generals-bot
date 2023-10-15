@@ -15,6 +15,18 @@ from base.client.map import Tile, MapBase
 USE_DEBUG_ASSERTS = False
 
 
+T = typing.TypeVar('T')
+
+class TreeBuilder(typing.Generic[T]):
+    def __init__(self):
+        self.tree_builder_prioritizer: typing.Callable[[Tile, T], T | None] = None
+        self.tree_builder_valuator: typing.Callable[[Tile, T], typing.Any | None] = None
+        """The value function when finding path extensions to the spanning tree"""
+
+        self.tree_knapsacker_valuator: typing.Callable[[Path], int] = None
+        """For getting the values of tree nodes to shove in the knapsack to build the subtree iteration"""
+
+
 def knapsack_gather_iteration(
         turns: int,
         valuePerTurnPathPerTile: typing.Dict[Tile, typing.List[Path]],
@@ -44,15 +56,18 @@ def knapsack_gather_iteration(
     if len(paths) == 0:
         return 0, []
 
+    toLog = []
     # if shouldLog:
-    logging.info(f"Feeding solve_multiple_choice_knapsack {len(paths)} paths turns {turns}:")
+    toLog.append(f"Feeding solve_multiple_choice_knapsack {len(paths)} paths turns {turns}:")
     if shouldLog:
         for i, path in enumerate(paths):
-            logging.info(
+            toLog.append(
                 f"{i}:  group[{str(path.start.tile)}] value {path.value} length {path.length} path {path.toString()}")
 
     totalValue, maxKnapsackedPaths = KnapsackUtils.solve_multiple_choice_knapsack(paths, turns, weights, values, groups)
-    logging.info(f"maxKnapsackedPaths value {totalValue} length {len(maxKnapsackedPaths)},")
+    toLog.append(f"maxKnapsackedPaths value {totalValue} length {len(maxKnapsackedPaths)},")
+
+    logging.info('\n'.join(toLog))
     return totalValue, maxKnapsackedPaths
 
 
@@ -347,8 +362,8 @@ def build_next_level_start_dict(
             nextPrioObj = baseCaseFunc(node.tile, newDist)
             startTilesDict[node.tile] = (nextPrioObj, newDist)
             # negativeTiles.add(node.tile)
-            logging.info(
-                f"Including tile {node.tile.x},{node.tile.y} in startTilesDict at newDist {newDist}  (distance {distance} addlDist {addlDist})")
+            # logging.info(
+            #     f"Including tile {node.tile.x},{node.tile.y} in startTilesDict at newDist {newDist}  (distance {distance} addlDist {addlDist})")
             # if viewInfo:
 
             addlDist += 1
@@ -647,7 +662,7 @@ def _knapsack_levels_gather_iterative_prune(
     gatherTreeNodeLookup: typing.Dict[Tile, GatherTreeNode] = {}
     for tile, data in startTilesDict.items():
         (_, dist) = data
-        gatherTreeNodeLookup[tile] = GatherTreeNode(tile, fromTile=None, turn=dist)
+        gatherTreeNodeLookup[tile] = GatherTreeNode(tile, fromTile=None, stateObj=dist)
 
     prevBest = 0
 
@@ -990,9 +1005,12 @@ def knapsack_levels_backpack_gather_with_value(
         else:
             searchingPlayer = startTiles[0].player
 
-    logging.info(f"Trying knapsack-bfs-gather. Turns {turns}. Searching player {searchingPlayer}")
+    if shouldLog:
+        logging.info(f"Trying knapsack-bfs-gather. Turns {turns}. Searching player {searchingPlayer}")
     if valueFunc is None:
-        logging.info("Using default valueFunc")
+
+        if shouldLog:
+            logging.info("Using default valueFunc")
 
         def default_value_func_max_gathered_per_turn(
                 currentTile,
@@ -1032,7 +1050,8 @@ def knapsack_levels_backpack_gather_with_value(
         valueFunc = default_value_func_max_gathered_per_turn
 
     if priorityFunc is None:
-        logging.info("Using default priorityFunc")
+        if shouldLog:
+            logging.info("Using default priorityFunc")
 
         def default_priority_func(nextTile, currentPriorityObject):
             (
@@ -1087,7 +1106,8 @@ def knapsack_levels_backpack_gather_with_value(
         priorityFunc = default_priority_func
 
     if baseCaseFunc is None:
-        logging.info("Using default baseCaseFunc")
+        if shouldLog:
+            logging.info("Using default baseCaseFunc")
 
         def default_base_case_func(tile, startingDist):
             startArmy = 0
@@ -1978,6 +1998,147 @@ def prune_mst_to_army(
 
     return rootNodes
 
+#
+# def prune_mst_to_max_army_per_turn_with_values(
+#         rootNodes: typing.List[GatherTreeNode],
+#         minArmy: int,
+#         searchingPlayer: int,
+#         teams: typing.List[int],
+#         viewInfo: ViewInfo | None = None,
+#         noLog: bool = True,
+#         gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
+#         invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
+#         allowBranchPrune: bool = True,
+# ) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
+#     """
+#     Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
+#     O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
+#
+#     @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
+#     @param minArmy: The minimum army amount to prune the MST down to
+#     @param searchingPlayer:
+#     @param viewInfo:
+#     @param noLog:
+#     @param gatherTreeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
+#     @param invalidMoveFunc: func(GatherTreeNode) -> bool, return true if you want a leaf GatherTreeNode to always be prune. For example, pruning gather nodes that begin at an enemy tile or that are 1's.
+#     @param allowBranchPrune: Optionally, pass false to disable pruning whole branches. Allowing branch prunes produces lower value per turn trees but also smaller trees.
+#
+#     @return: (totalCount, totalValue, The list same list of rootnodes passed in, modified)
+#     """
+#     turn = 0  # TODO parameterize
+#     turnIncFactor = (1 + turn) & 1
+#
+#     cityCounter = SearchUtils.Counter(0)
+#     cityGatherDepthCounter = SearchUtils.Counter(0)
+#     citySkipTiles = set()
+#     totalValue = 0
+#     totalTurns = 0
+#     for n in rootNodes:
+#         if (n.tile.isCity or n.tile.isGeneral) and not n.tile.isNeutral:
+#             if teams[n.tile.player] == teams[searchingPlayer]:
+#                 citySkipTiles.add(n.tile)
+#
+#         totalTurns += n.gatherTurns
+#         totalValue += n.value
+#
+#     if totalTurns == 0:
+#         if viewInfo:
+#             viewInfo.addAdditionalInfoLine(f'zero turns gather prune, value {totalValue}')
+#         return 0, 0, rootNodes
+#
+#
+#     def cityCounterFunc(node: GatherTreeNode):
+#         if (node.tile.isGeneral or node.tile.isCity) and not node.tile.isNeutral and node.tile not in citySkipTiles:
+#             if teams[node.tile.player] == teams[searchingPlayer]:
+#                 cityCounter.add(1)
+#                 # each time we add one of these we must gather all the other cities in the tree first too so we lose that many increment turns + that
+#                 cityGatherDepthCounter.add(node.trunkDistance)
+#             else:
+#                 cityCounter.add(-1)
+#
+#         for child in node.children:
+#             cityCounterFunc(child)
+#
+#     for n in rootNodes:
+#         cityCounterFunc(n)
+#
+#     def setCountersToPruneCitiesRecurse(node: GatherTreeNode):
+#         for child in node.children:
+#             setCountersToPruneCitiesRecurse(child)
+#
+#         if teams[node.tile.player] == teams[searchingPlayer] and (node.tile.isCity or node.tile.isGeneral):
+#             cityGatherDepthCounter.add(0 - node.trunkDistance)
+#             cityCounter.add(-1)
+#
+#     if invalidMoveFunc is None:
+#         def invalid_move_func(node: GatherTreeNode):
+#             if node.value <= 0:
+#                 return True
+#             if node.tile.player != searchingPlayer:
+#                 return True
+#         invalidMoveFunc = invalid_move_func
+#
+#     def getCurrentCityIncAmount(gatherTurnsLeft: int) -> int:
+#         cityIncrementAmount = (cityCounter.value * (gatherTurnsLeft - turnIncFactor)) // 2  # +1 here definitely causes it to under-gather
+#         cityIncrementAmount -= cityGatherDepthCounter.value // 2
+#         return cityIncrementAmount
+#
+#     totalValue += getCurrentCityIncAmount(totalTurns)
+#     curValuePerTurn = SearchUtils.Counter(totalValue / totalTurns)
+#
+#     def untilFunc(node: GatherTreeNode, _, turnsLeft: int, curValue: int):
+#         turnsLeftIfPruned = turnsLeft - node.gatherTurns
+#
+#         # act as though we're pruning the city so we can calculate the gather value without it
+#         setCountersToPruneCitiesRecurse(node)
+#
+#         cityIncrementAmount = getCurrentCityIncAmount(turnsLeftIfPruned)
+#         armyLeftIfPruned = curValue - node.value + cityIncrementAmount
+#         if turnsLeftIfPruned == 0:
+#             cityCounterFunc(node)
+#             return True
+#
+#         pruneValPerTurn = armyLeftIfPruned / turnsLeftIfPruned
+#
+#         if pruneValPerTurn < curValuePerTurn.value or armyLeftIfPruned < minArmy:
+#             # not pruning here, put the city increments back
+#             cityCounterFunc(node)
+#             return True
+#
+#         curValuePerTurn.value = pruneValPerTurn
+#         return False
+#
+#     def pruneOrderFunc(node: GatherTreeNode, curObj):
+#         if node.gatherTurns == 0 or node.trunkDistance == 0:
+#             msg = f'ERR PRUNE node {repr(node)} had trunkDist {node.trunkDistance} or gatherTurns {node.gatherTurns} of 0...?'
+#             # if USE_DEBUG_ASSERTS:
+#             if viewInfo:
+#                 viewInfo.addAdditionalInfoLine(msg)
+#             return -1, -1, -1
+#         return (node.value / node.gatherTurns), node.trunkValue / node.trunkDistance, node.trunkDistance
+#
+#     # def pruneFunc(node: GatherTreeNode, curObj) -> typing.Tuple:
+#     #     trunkValuePerTurn = node.trunkValue / node.trunkDistance if node.trunkDistance > 0 else 0
+#     #     return node.value / node.gatherTurns, trunkValuePerTurn, node.trunkDistance
+#
+#     prunedTurns, noCityCalcGathValue, nodes = prune_mst_until(
+#         rootNodes,
+#         untilFunc=untilFunc,
+#         # if we dont include trunkVal/node.trunkDistance we end up keeping shitty branches just because they have a far, large tile on the end.
+#         pruneOrderFunc=pruneOrderFunc,
+#         # pruneOrderFunc=lambda node, curObj: (node.value, node.trunkValue / node.trunkDistance, node.trunkDistance),
+#         # pruneOrderFunc=lambda node, curObj: (node.value / node.gatherTurns, node.trunkValue / node.trunkDistance, node.trunkDistance),
+#         invalidMoveFunc=invalidMoveFunc,
+#         viewInfo=viewInfo,
+#         noLog=noLog,
+#         gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
+#         pruneBranches=False
+#     )
+#
+#     finalIncValue = getCurrentCityIncAmount(prunedTurns)
+#     gathValue = noCityCalcGathValue + finalIncValue
+#
+#     return prunedTurns, gathValue, nodes
 
 def prune_mst_to_max_army_per_turn_with_values(
         rootNodes: typing.List[GatherTreeNode],
@@ -2083,7 +2244,6 @@ def prune_mst_to_max_army_per_turn_with_values(
         pruneBranches=allowBranchPrune
     )
 
-
 def prune_mst_to_max_army_per_turn(
         rootNodes: typing.List[GatherTreeNode],
         minArmy: int,
@@ -2162,7 +2322,6 @@ def prune_mst_until(
 
     nodeMap: typing.Dict[Tile, GatherTreeNode] = {}
     pruneHeap = PriorityQueue()
-
 
     def nodeInitializer(current: GatherTreeNode):
         nodeMap[current.tile] = current
@@ -2307,3 +2466,26 @@ def iterate_tree_nodes(
         forEachFunc(cur)
         for c in cur.children:
             q.append(c)
+
+
+def get_tree_leaves(gathers: typing.List[GatherTreeNode]) -> typing.List[GatherTreeNode]:
+    # fuck it, do it recursively i'm too tired for this
+    combined = []
+    for gather in gathers:
+        if len(gather.children) == 0:
+            if gather.fromTile is not None:
+                combined.append(gather)
+        else:
+            combined.extend(get_tree_leaves(gather.children))
+
+    return combined
+
+
+def get_tree_leaves_further_than_distance(
+        gatherNodes: typing.List[GatherTreeNode],
+        distMap: typing.List[typing.List[int]],
+        dist: int
+) -> typing.List[GatherTreeNode]:
+    leaves = get_tree_leaves(gatherNodes)
+    leavesGreaterThanDistance = SearchUtils.where(leaves, lambda g: distMap[g.tile.x][g.tile.y] >= dist)
+    return leavesGreaterThanDistance

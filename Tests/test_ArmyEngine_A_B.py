@@ -164,12 +164,14 @@ class ArmyEngineABTests(TestBase):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         def configure_b(bBot: EklipZBot):
-            bBot.behavior_max_allowed_quick_expand = 5
+            # bBot.behavior_max_allowed_quick_expand = 5
             pass
 
         def configure_a(aBot: EklipZBot):
             # 163-190...? AGAIN
-            aBot.behavior_max_allowed_quick_expand = 7  # b 5
+            # 246-220, AGAIN
+            # 207-174
+            # aBot.behavior_max_allowed_quick_expand = 7  # b 5
 
             # 143-119, AGAIN but codifying in the meantime
             # 218-241, AGAIN
@@ -360,8 +362,12 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
+            # killed 189-189, wtf...? Trying again
+            # 180-197
+            aBot.mcts_engine.explore_factor = 0.2  # current = 1.05
+
             # killed 184-175
-            aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 30  # b 15
+            # aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 30  # b 15
 
             #196-160, AGAIN but pre-codifying
             # 237-229
@@ -512,12 +518,26 @@ class ArmyEngineABTests(TestBase):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         def configure_b(bBot: EklipZBot):
-            # bBot.mcts_engine.biased_move_ratio_while_available = 0.47
+            # bBot.mcts_engine.explore_factor = 1.05  # current = 1.05
+            # # bBot.mcts_engine.biased_move_ratio_while_available = 0.47
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.mcts_engine.explore_factor = 0.5  # current = 1.05
-            aBot.mcts_engine.utility_compression_ratio = 0.015  # current 0.004
+            aBot.mcts_engine.explore_factor = 0.5  # current = 0.5
+            aBot.mcts_engine.utility_compression_ratio = 0.002  # current 0.004
+
+            # 169-210
+            # 173-215
+            # aBot.mcts_engine.explore_factor = 0.1  # current = 1.05
+            # aBot.mcts_engine.utility_compression_ratio = 0.01  # current 0.004
+
+            # 201-202
+            # aBot.mcts_engine.explore_factor = 0.5  # current = 1.05
+            # aBot.mcts_engine.utility_compression_ratio = 0.01  # current 0.004
+
+            # killed 185-185
+            # aBot.mcts_engine.explore_factor = 0.5  # current = 1.05
+            # aBot.mcts_engine.utility_compression_ratio = 0.015  # current 0.004
 
             # 180-190
             # aBot.behavior_max_allowed_quick_expand = 6  # b 7
@@ -671,7 +691,10 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 25  # b 15
+            aBot.mcts_engine.explore_factor = 0.15  # current = 1.05
+
+            # 231-237
+            # aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 25  # b 15
 
             # 189-191
             # aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 25  # b 20
@@ -796,12 +819,18 @@ class ArmyEngineABTests(TestBase):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         def configure_b(bBot: EklipZBot):
-            bBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.RobustChild)
+            # bBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.RobustChild)
             # bBot.mcts_engine.min_expanded_visit_count_to_count_for_moves = 1
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.MaxAverageValue)
+            # pre-codifying but current is True
+            #213-183
+            aBot.behavior_allow_defense_army_scrim = False
+
+            # 233-242 AGAIN
+            # 201-180, killed
+            # aBot.mcts_engine.set_node_selection_function(MoveSelectionFunction.MaxAverageValue)
 
             # 181-185
             # aBot.mcts_engine.min_expanded_visit_count_to_count_for_moves = 15  # b 1, should do NOTHING

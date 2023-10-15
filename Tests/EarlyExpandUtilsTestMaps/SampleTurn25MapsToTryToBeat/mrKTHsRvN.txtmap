@@ -1,0 +1,115 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     C47                 M    M         M    M                   M
+          b2   b2   b2   b2   b2   b2   b2   C48                 M
+          b2                            b2        M    M                        M              M
+M    M    b2   a2   a2   a2   a2        M         M
+b2   b3   b2   a2   aG3  a2   a2   M         M         M         M              M              M
+M    bG4  C47  M    a2        a2   M    M                             M
+b2   b2   b2   a2   a2        a2             D    MD   D                             M    M
+b2   M    b2   a2   M    M    a2        M    C47  c2   c2D  cG7D      M
+b2   b4   M    a2   a2   a2   a2   a2   a2   a1   c2   d4D  d2D                                M
+M    M                   M                   M    M    MD   c2D            M
+M              M              M         M              M                                  M    M
+                                   M         M    M                                  M    M
+                         M    M              M         M              M                        M
+                    M              M                             M              M              M
+                    M                                                           M    M         M
+M    M                                       M                        M                   M
+M         M              M                                       M    M         M
+     M    M                        M                   M                        M              M
+          M                                                      M    M                        M
+                              M                                                                M
+M         M              M                   M              M                   M    M
+     M         M                                                                M              M
+     M                        M         M                   M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=50
+player_index=0
+teams=1,1,2,2
+mode=team
+bot_target_player=2
+targetPlayerExpectedGeneralLocation=12,7
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=Teammate.exe
+aTiles=22
+aScore=44
+aStandingArmy=22
+aStars=41
+aCityCount=1
+aGeneral=4,4
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=21
+aDelta25Score=43
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=50
+a_bot_general_approx=4,4
+bUsername=sg,degjheghf
+bTiles=21
+bScore=47
+bStandingArmy=26
+bStars=41
+bCityCount=1
+bGeneral=1,5
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=20
+bDelta25Score=46
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=50
+b_bot_general_approx=1,5
+cUsername=sensi.never
+cTiles=15
+cScore=32
+cStandingArmy=17
+cStars=0
+cCityCount=1
+cGeneral=12,7
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=45
+cDelta25Tiles=14
+cDelta25Score=31
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=42
+c_bot_general_approx=12,7
+dUsername=874965
+dTiles=25
+dScore=56
+dStandingArmy=31
+dStars=0
+dCityCount=1
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+dDelta25Tiles=24
+dDelta25Score=55
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=40
+d_bot_general_approx=14,8

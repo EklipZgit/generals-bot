@@ -13,7 +13,8 @@ class ArmyTrackerTests(TestBase):
             simHost: GameSimulatorHost,
             player: int = -1,
             excludeEntangledFog: bool = True,
-            excludeFogMoves: bool = False
+            excludeFogMoves: bool = False,
+            aroundTile: Tile | None = None
     ):
         realMap = simHost.sim.sim_map
 
@@ -29,7 +30,11 @@ class ArmyTrackerTests(TestBase):
             if playerBot.armyTracker.lastTurn != realMap.turn:
                 playerBot.init_turn()
 
-            for tile in realMap.get_all_tiles():
+            tilesToCheck = realMap.get_all_tiles()
+            if aroundTile is not None:
+                tilesToCheck = realMap.GetTile(aroundTile.x, aroundTile.y).adjacents
+
+            for tile in tilesToCheck:
                 playerTile = playerMap.GetTile(tile.x, tile.y)
                 if not playerTile.visible:
                     # TODO FIX THIS
@@ -1379,3 +1384,23 @@ a1   b1   b1   bG1
         badTile = playerMap.GetTile(12, 11)
         self.assertLess(badTile.army, 30)
 
+    
+    def test_should_not_vanish_or_decrease_entangled_fog_army(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_vanish_or_decrease_entangled_fog_army___FzaOG3k1f---0--410.txtmap'
+        map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 410, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=410)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '9,1->9,0->8,0->7,0->6,0->5,0->4,0->3,0->3,1->3,2->3,3->3,4->3,5->3,6->3,7->3,8->4,8->4,9')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, aroundTile=map.GetTile(9, 1)))
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        self.assertNoFriendliesKilled(map, general, allyGen)

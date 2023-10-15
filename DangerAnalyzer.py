@@ -51,13 +51,13 @@ class ThreatObj(object):
                 # need to gather to general 1 turn earlier than otherwise necessary
                 dict[tile] = dist + 1
             elif not allowNonChoke and tile not in self.armyAnalysis.pathChokes and not self.path.start.next.tile in tile.movable:
-                pathWay = self.armyAnalysis.pathWayLookupMatrix[tile]
-                neighbors = where(pathWay.tiles, lambda t: t != tile and self.armyAnalysis.aMap[t.x][t.y] == self.armyAnalysis.aMap[tile.x][tile.y] and self.armyAnalysis.bMap[t.x][t.y] == self.armyAnalysis.bMap[tile.x][tile.y])
-                newDist = dist + 1
+                # pathWay = self.armyAnalysis.pathWayLookupMatrix[tile]
+                # neighbors = where(pathWay.tiles, lambda t: t != tile and self.armyAnalysis.aMap[t.x][t.y] == self.armyAnalysis.aMap[tile.x][tile.y] and self.armyAnalysis.bMap[t.x][t.y] == self.armyAnalysis.bMap[tile.x][tile.y])
+                # newDist = dist + 1
                 del dict[tile]  # necessary for 'test_should_not_make_move_away_from_threat' to pass.
-                logging.info(f'Threat path tile {str(tile)} increased to dist {newDist} based on neighbors {neighbors}')
-            else:
-                logging.info(f'Threat path tile {str(tile)} left at dist {dist}')
+                # logging.info(f'Threat path tile {str(tile)} increased to dist {newDist} based on neighbors {neighbors}')
+            # else:
+            #     logging.info(f'Threat path tile {str(tile)} left at dist {dist}')
 
         return dict
 

@@ -69,8 +69,16 @@ def get_player_army_amount_on_path(path, player, startIdx=0, endIdx=1000):
     return value
 
 
-class GatherTreeNode(object):
-    def __init__(self, tile: Tile, fromTile: Tile | None, turn: int):
+T = typing.TypeVar('T')
+
+
+class GatherTreeNode(typing.Generic[T]):
+    def __init__(
+            self,
+            tile: Tile,
+            fromTile: Tile | None,
+            stateObj: T = None
+    ):
         self.tile: Tile = tile
         self.fromTile: Tile | None = fromTile
         self.value: int = 0
@@ -86,9 +94,10 @@ class GatherTreeNode(object):
         the actual tree search was weighted with.
         """
 
-        self.turn: int = turn
+        self.stateObj: T = stateObj
+
         self.gatherTurns: int = 0
-        self.neutrals: int = 0
+
         self.children: typing.List[GatherTreeNode] = []
         """Child gather tree nodes"""
         self.pruned: typing.List[GatherTreeNode] = []
@@ -105,16 +114,15 @@ class GatherTreeNode(object):
         return self.value < other.value
 
     def __eq__(self, other):
-        if None == other:
+        if other is None:
             return False
         return self.tile == other.tile
 
     def deep_clone(self):
-        newNode = GatherTreeNode(self.tile, self.fromTile, self.turn)
+        newNode = GatherTreeNode(self.tile, self.fromTile, self.stateObj)
         newNode.value = self.value
         newNode.trunkValue = self.trunkValue
         newNode.gatherTurns = self.gatherTurns
-        newNode.neutrals = self.neutrals
         newNode.children = [node.deep_clone() for node in self.children]
         newNode.pruned = [node.deep_clone() for node in self.pruned]
         return newNode

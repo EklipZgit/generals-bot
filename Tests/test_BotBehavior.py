@@ -1548,3 +1548,211 @@ class BotBehaviorTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=2)
         self.assertIsNotNone(winner)
+    
+    def test_should_attack_with_army_not_hold_on_general(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_attack_with_army_not_hold_on_general___xL_qj5JaU---0--231.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 231, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=231)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=19)
+        self.begin_capturing_logging()
+        self.assertIsNone(winner)
+        self.assertNoRepetition(simHost)
+        self.assertPlayerTileCountGreater(simHost, general.player, 73)
+    
+    def test_should_attack_with_army_not_hold_on_general_v2(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_attack_with_army_not_hold_on_general_v2___xL_qj5JaU---0--272.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 272, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=272)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=20)
+        self.assertIsNone(winner)
+
+        self.assertNoRepetition(simHost, minForRepetition=3)
+        self.assertPlayerTileCountGreater(simHost, general.player, 80)
+    
+    def test_should_not_loop_in_front_of_unmoving_smallish_armies(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_loop_in_front_of_unmoving_smallish_armies___wIG-a2l63---0--344.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 344, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=344)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=3.0, turns=10)
+        self.assertIsNone(winner)
+        self.assertNoRepetition(simHost)
+
+        self.fail("TODO add asserts for should_not_loop_in_front_of_unmoving_smallish_armies")
+    
+    def test_should_not_actively_attack_52_army_but_lock_the_68_for_dealing_with_it_instead(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_actively_attack_52_army_but_lock_the_68_for_dealing_with_it_instead___wIG-a2l63---0--300.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 300, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=300)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        self.assertIsNone(winner)
+
+        self.fail("TODO add asserts for should_not_actively_attack_52_army_but_lock_the_68_for_dealing_with_it_instead")
+    
+    def test_should_not_expand_up_into_main_attack_paths_with_tiles_along_them_main_attack_paths(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+
+        """
+        though I'll have to rework some stuff, I do know thats a mistake but haven't really been thinking of it as one of the major mistakes the bot is making
+so in particular the thing that makes it a mistake is that that is the path that the pushes rally down eventually, and thus these moves are wasted when you come rallying down it and the bot has no response pushing up there
+trying to think of how to codify that logically
+like, if it were capturing those tiles out near the fringes, it would be fine, right?
+in particular out near the fringes where you have less high value tiles nearby
+so the data points here are: 
+On or near the likely attack path
+The army it is using are tiles that are central to the board (where, if the 15 was up above and attacking downwards, that would also be fine, its really just because its pushing the 15 up out of its territory that is going to be on the attack path rather than down from territory that is uncontested / out of play that makes it bad)
+
+and in particular, it is attacking parallel to the generals on that path (in this case towards you, but would also be bad if towards own gen) 
+rather than perpendicular, which is a weirdly specific thing to note but I think is actually super relevant. The 15 moving up is fine until the exact moment it starts pushing down towards your gen
+
+Ethryn:
+no, it's the fact that pushing the 15 up means that later on, when you're moving troops in that area, you're walking over land that you've already been on*
+*i know you go a different route, but imo you'd prefer a bigger attack than taking two routes of land through that area
+
+"""
+        mapFile = 'GameContinuationEntries/should_not_expand_up_into_main_attack_paths_with_tiles_along_them_main_attack_paths___wIG-a2l63---0--304.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 304, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=304)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        self.assertIsNone(winner)
+
+        self.fail("TODO add asserts for should_not_expand_up_into_main_attack_paths_with_tiles_along_them_main_attack_paths")
+    
+    def test_should_launch_attack_before_spreading_leaf_moves(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_launch_attack_before_spreading_leaf_moves___wIG-a2l63---0--61.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 61, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=61)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        self.assertIsNone(winner)
+
+        self.fail("TODO add asserts for should_launch_attack_before_spreading_leaf_moves")
+    
+    def test_should_prep_attack_through_longest_enemy_tile_path_so_long_as_safe_on_shortest__move_gen_prediction_to_top(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        """
+Peacemaker II — Today at 12:27 PM
+I go all in @ closest location usually
+
+EklipZ — Today at 12:28 PM
+closest as in closest enemy tiles, or closest as in what you assume to be shortest path to enemy gen?
+like here, top is technically closest, but bottom is by far closest enemy set of tiles
+and bot should probably know top is closest here, too
+if I improve the prediction algo
+
+Peacemaker II — Today at 12:30 PM
+closest enemy tiles
+you don't want to attack close to enemy general ideally, because they have a shorter route to "get rid" of the armies in your general
+
+getting ahead in armies 100% correlates to the amount of extra troops lying on your land/general
+
+whoever has less extra troops will always get ahead
+(this is @ the end of a round btw)
+"""
+        mapFile = 'GameContinuationEntries/should_prep_attack_through_longest_enemy_tile_path_so_long_as_safe_on_shortest__move_gen_prediction_to_top___wIG-a2l63---0--50.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 50, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=50)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        self.assertIsNone(winner)
+
+        self.fail("TODO add asserts for should_prep_attack_through_longest_enemy_tile_path_so_long_as_safe_on_shortest__move_gen_prediction_to_top")
+    
+    def test_should_not_loop(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_loop___y8deg9yKB---0--122.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 122, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=122)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        self.assertIsNone(winner)
+
+        self.fail("TODO add asserts for should_not_loop")

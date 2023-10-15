@@ -1,0 +1,68 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                                   M         M                                       M         M
+               M    M    M              M         M         M                                       M
+                                        M         M                             M         M    M
+M              M         M                        M    M    M         M              M
+               M              M                                                                M
+     M                                                                M         M    M
+                                                            M                   a2   M         a2
+               M                                                           M    a2   a2   a2   aG3  C42
+     M         M                                  C40            M    a2   a2   a2   a2   a2   a2   a2
+M    M                             M              a2   a2   a2   a2   a2                       a2   a2
+          M                        M    M    M         M                   M    M    M         a2
+                    M              M    M    M                   M                   M    M    a2
+                                                                                     a2   a2   a2
+     M    M    M                   M                                  M
+     M              M         M         M                   M                   M    M
+M                                                                M                             M
+                         M                        M    M    M    M                        M
+M                                                                M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=50
+player_index=0
+mode=1v1
+bot_target_player=1
+targetPlayerExpectedGeneralLocation=6,10
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=25
+aScore=51
+aStandingArmy=26
+aStars=72
+aCityCount=1
+aGeneral=19,7
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=24
+aDelta25Score=50
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=50
+a_bot_general_approx=19,7
+bUsername=Russian Invasion
+bTiles=22
+bScore=48
+bStandingArmy=26
+bStars=57
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=21
+bDelta25Score=47
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=0

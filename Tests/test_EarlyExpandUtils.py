@@ -205,7 +205,7 @@ class EarlyExpandUtilsTests(TestBase):
         self.assertEqual(1, SearchUtils.count(paths, lambda path: path is not None))
 
     def test_does_something_near_end_of_turn_43(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         # test both odd and even turns
         turn = 43
         board = [[Tile(x, y, tile=TILE_EMPTY, army=0, player=-1) for x in range(2)] for y in range(3)]
@@ -263,7 +263,7 @@ class EarlyExpandUtilsTests(TestBase):
         self.assertEqual(2, len(paths))
 
     def test_does_something_near_end_of_turn_47(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         # test both odd and even turns
         turn = 47
         board = [[Tile(x, y, tile=TILE_EMPTY, army=0, player=-1) for x in range(2)] for y in range(3)]
@@ -288,7 +288,7 @@ class EarlyExpandUtilsTests(TestBase):
         self.assertEqual(1, SearchUtils.count(paths, lambda path: path is not None))
 
     def test_does_something_near_end_of_turn_48(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         # test both odd and even turns
 
         turn = 48
@@ -406,7 +406,7 @@ class EarlyExpandUtilsTests(TestBase):
         self.assertEqual(25, value)
 
     def test_finds_optimal__empty_board__corner__forced_corner_combo__force_11_launch(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         turn = 20
         board = TextMapLoader.load_map_from_file("EarlyExpandUtilsTestMaps/forced_corner_combo")
         general = board[0][0]
@@ -530,7 +530,7 @@ class EarlyExpandUtilsTests(TestBase):
 
 
     def test_finds_optimal__suboptimal_cramped_spawn(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         map, general = self.load_turn_1_map_and_general("EarlyExpandUtilsTestMaps/suboptimal_cramped_spawn")
         # Ginger: off the top of my head I would go 11 straight left, then move the 6 units 5 tiles and go down, then 6 units 3 tiles down then whatever is left
         weightMap = self.get_opposite_general_distance_map(map, general)
@@ -549,7 +549,7 @@ class EarlyExpandUtilsTests(TestBase):
         self.assertGreater(value, 22)
 
     def test_does_not_find__expansion_plan_longer_than_50_turns(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         map, general = self.load_turn_1_map_and_general("EarlyExpandUtilsTestMaps/expansion_plan_longer_than_50_turns")
 
         weightMap = self.get_opposite_general_distance_map(map, general)
@@ -621,7 +621,7 @@ class EarlyExpandUtilsTests(TestBase):
         self.assertEqual(plan.tile_captures, 25)
 
     def test__only_got_24_when_seems_easy_25__V2__turn50(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         map, plan = self.check_does_not_produce_invalid_plan('EarlyExpandUtilsTestMaps/only_got_24_when_seems_easy_25__V2__turn50')
         if debugMode:
             self.render_expansion_plan(map, plan)
@@ -679,13 +679,15 @@ class EarlyExpandUtilsTests(TestBase):
                 timeStart = time.perf_counter()
                 plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True)
                 timeSpent = time.perf_counter() - timeStart
+                if debugMode:
+                    self.render_expansion_plan(map, plan)
                 self.assertLessEqual(timeSpent, 3.0, 'took longer than we consider safe for finding starts')
                 self.assertGreaterEqual(plan.tile_captures, playerTilesToMatchOrExceed)
                 if plan.tile_captures > playerTilesToMatchOrExceed:
                     self.skipTest(f"Produced a BETTER plan than original, {plan.tile_captures} vs {playerTilesToMatchOrExceed}")
     #
     # def test_check_forced_variations_against_historical_bests(self):
-    debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+    # debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
     #     projRoot = pathlib.Path(__file__).parent
     #     folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
     #     files = os.listdir(folderWithHistoricals)
@@ -720,6 +722,32 @@ class EarlyExpandUtilsTests(TestBase):
             self.render_expansion_plan(map, plan)
         if plan.tile_captures > playerTilesToMatchOrExceed:
             self.skipTest(f"Produced a BETTER plan than original, {plan.tile_captures} vs {playerTilesToMatchOrExceed}")
+
+    def test__st418_map_1(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        file = 'cramped_from_St418__1.txtmap'
+        map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/{file}', turn=1)
+        playerTilesToMatchOrExceed = 20  # st418 finds, 8
+
+        weightMap = self.get_opposite_general_distance_map(map, general)
+        plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True)
+        if debugMode:
+            self.render_expansion_plan(map, plan)
+        self.assertGreaterEqual(plan.tile_captures, playerTilesToMatchOrExceed)
+        if plan.tile_captures > playerTilesToMatchOrExceed:
+            self.skipTest(f"Produced a BETTER plan than original, {plan.tile_captures} vs {playerTilesToMatchOrExceed}")
+
+    def test__st418_map_2(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        file = 'cramped_from_St418__2.txtmap'
+        map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/{file}', turn=50)
+        playerTilesToMatchOrExceed = self.get_tiles_capped_on_50_count_and_reset_map(map, general)
+
+        weightMap = self.get_opposite_general_distance_map(map, general)
+        plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True)
+        if debugMode:
+            self.render_expansion_plan(map, plan)
+        self.assertGreaterEqual(plan.tile_captures, playerTilesToMatchOrExceed)
 
     def test_shouldnt_hang_13_seconds(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True

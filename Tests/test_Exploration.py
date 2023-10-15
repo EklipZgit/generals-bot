@@ -64,3 +64,24 @@ class ExplorationTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=30)
         self.assertNoRepetition(simHost, minForRepetition=1)
         self.assertEqual(4, winner)
+    
+    def test_should_not_explore_when_nothing_to_search_for(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_explore_when_nothing_to_search_for___58Kyitswi---1--245.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 245, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=245)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        self.assertEqual(general.player, winner)
+
+

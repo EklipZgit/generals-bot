@@ -1,0 +1,112 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M         M                             M
+                              M    M    M         M         M         M    M    M              M
+M                                  C40       M              M                             M                        M
+     M                             cC27                     M                             M
+          M                   M                   M    M                             M    M              M
+          M                   M                                  M                                  M         M
+               M                   M    M                                                                          M
+M    M                        M         M         M         C40            M    M         M                   M    M
+M    M                                  M              M    c2   c2                            M                   M
+M              M         M                        M    M    c2   M         a2   a2        M                   M
+     M                        M         M              M    c2   M    M    M    a2
+     M    M              M                   M    a3   a2   a2             M    a2                            M
+          M         M              M    M    M         M    c2   c2   a2        a2
+               M              c2   c2   cG3  c2   c2   c2   c2   c2   M              M         M    M
+                                   c2   c2   c2   c2   c2   c2             M    M         M                   M
+          M                        c2   C47                           M              M    M         M
+                    M                                            M                   M         M
+          M                   M         M                   M    M    M         M         M         M              M
+     M                   M    M                   M                   M         M    M              M
+               M              M         M              M    M
+                              M    M                                       M    M                   M    M
+                              M                        M         M                                            M    M
+                                                  M    M                                  M              M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=50
+player_index=2
+teams=1,1,2,2
+mode=team
+bot_target_player=0
+targetPlayerExpectedGeneralLocation=19,12
+bot_all_in_counter=1
+bot_all_in=True
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=Exe.human
+aTiles=21
+aScore=43
+aStandingArmy=22
+aStars=55
+aCityCount=1
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=30
+aDelta25Tiles=20
+aDelta25Score=42
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=33
+a_bot_general_approx=16,10
+bUsername=Human.exe
+bTiles=25
+bScore=51
+bStandingArmy=26
+bStars=55
+bCityCount=1
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=24
+bDelta25Score=50
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=0
+cUsername=Teammate.exe
+cTiles=22
+cScore=70
+cStandingArmy=48
+cStars=0
+cCityCount=2
+cGeneral=8,13
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=21
+cDelta25Score=69
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=50
+c_bot_general_approx=8,13
+dUsername=ImSoil
+dTiles=0
+dScore=0
+dStandingArmy=0
+dStars=0
+dCityCount=1
+dGeneral=7,3
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=True
+dLeftGame=True
+dLeftGameTurn=1
+dAggressionFactor=0
+dDelta25Tiles=-1
+dDelta25Score=-1
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=0

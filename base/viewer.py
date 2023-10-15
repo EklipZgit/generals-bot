@@ -195,7 +195,10 @@ class GeneralsViewer(object):
             #             row.append(Tile(x, y, TILE_MOUNTAIN, 0))
             #     self._map.cols = 11
             self._map.init_grid_movable()
-            self._scores = sorted(map.scores, key=lambda score: score.total, reverse=True)  # Sort Scores
+            if self._map.is_2v2:
+                self._scores = map.scores
+            else:
+                self._scores = sorted(map.scores, key=lambda score: score.total, reverse=True)  # Sort Scores
 
     def get_line_arrow(self, r, g, b, width=3):
         s = pygame.Surface((self.cellWidth + 2 * CELL_MARGIN, self.cellHeight + 2 * CELL_MARGIN))

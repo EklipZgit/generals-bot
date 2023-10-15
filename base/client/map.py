@@ -615,6 +615,7 @@ class MapBase(object):
 
         self.usernames: typing.List[str] = user_names  # List of String Usernames
         self.players: typing.List[Player] = [Player(x) for x in range(len(self.usernames))]
+        self._teams = MapBase.get_teams_array(self)
         self.pathableTiles: typing.Set[Tile] = set()
         """Tiles PATHABLE from the general spawn on the map, including neutral cities but not including mountains/undiscovered obstacles"""
 
@@ -803,27 +804,30 @@ class MapBase(object):
                         player.cityCount = cityCounts[i]
                         player.cityLostTurn = self.turn
 
-    def handle_player_capture(self, text):
+    def handle_player_capture_text(self, text):
         capturer, capturee = text.split(" captured ")
         capturee = capturee[:-1]
 
         capturerIdx = self.get_id_from_username(capturer)
         captureeIdx = self.get_id_from_username(capturee)
 
+        self.handle_player_capture(capturerIdx, captureeIdx)
+
+    def handle_player_capture(self, capturerIdx: int, captureeIdx: int):
         if captureeIdx == self.player_index:
             logging.info(
-                f"\n\n    ~~~~~~~~~\nWE WERE CAPTURED BY {capturer}, IGNORING CAPTURE: {capturee} ({captureeIdx}) by {capturer} ({capturerIdx})\n    ~~~~~~~~~\n")
+                f"\n\n    ~~~~~~~~~\nWE WERE CAPTURED BY {self.usernames[capturerIdx]}, IGNORING CAPTURE: {self.usernames[captureeIdx]} ({captureeIdx}) by {self.usernames[capturerIdx]} ({capturerIdx})\n    ~~~~~~~~~\n")
             return
 
         if self.player_index == capturerIdx or capturerIdx in self.teammates:
             logging.info(
-                f"\n\n    ~~~~~~~~~\nWE CAPTURED {captureeIdx}, NUKING UNDISCOVEREDS: {capturee} ({captureeIdx}) by {capturer} ({capturerIdx})\n    ~~~~~~~~~\n")
+                f"\n\n    ~~~~~~~~~\nWE CAPTURED {captureeIdx}, NUKING UNDISCOVEREDS: {self.usernames[captureeIdx]} ({captureeIdx}) by {self.usernames[capturerIdx]} ({capturerIdx})\n    ~~~~~~~~~\n")
             for tile in self.get_all_tiles():
                 if tile.player == captureeIdx and not tile.visible:
                     tile.reset_wrong_undiscovered_fog_guess()
 
         logging.info(
-            f"\n\n    ~~~~~~~~~\nPlayer captured: {capturee} ({captureeIdx}) by {capturer} ({capturerIdx})\n    ~~~~~~~~~\n")
+            f"\n\n    ~~~~~~~~~\nPlayer captured: {self.usernames[captureeIdx]} ({captureeIdx}) by {self.usernames[capturerIdx]} ({capturerIdx})\n    ~~~~~~~~~\n")
 
         if captureeIdx < 0:
             raise AssertionError(f'what? Player captured was {captureeIdx}')
@@ -847,20 +851,18 @@ class MapBase(object):
                 continue
 
             if not tile.discovered:
-                if tile.isCity:
-                    tile.reset_wrong_undiscovered_fog_guess()
-
-                tile.army = 0
-                tile.tile = TILE_FOG
-                tile.player = -1
-                tile.isGeneral = False
+                # if tile.isCity:
+                tile.reset_wrong_undiscovered_fog_guess()
+                #
+                # tile.army = 0
+                # tile.tile = TILE_FOG
+                # tile.player = -1
+                # tile.isGeneral = False
                 continue
 
             tile.discoveredAsNeutral = True
             # DONT use this, this sets deltas :s
             # tile.update(self, tile.tile, tile.army // 2, overridePlayer=capturerIdx)
-
-            tile.army = (tile.army + 1) // 2
             tile.tile = capturerIdx
             tile.player = capturerIdx
             if tile.isGeneral:
@@ -870,10 +872,14 @@ class MapBase(object):
                 # TODO not safe to call all these delta methods, pretty sure...
                 for eventHandler in self.notify_city_found:
                     eventHandler(tile)
+            else:
+                tile.army = tile.army - tile.army // 2
+
             for eventHandler in self.notify_tile_deltas:
                 eventHandler(tile)
             if tile.isCity and not tile in capturingPlayer.cities:
                 capturingPlayer.cities.append(tile)
+                capturingPlayer.cityCount += 1
             for eventHandler in self.notify_tile_captures:
                 eventHandler(tile)
 
@@ -896,7 +902,7 @@ class MapBase(object):
         self.scores = scores
 
     def is_tile_friendly(self, tile: Tile) -> bool:
-        if tile.player == self.player_index or tile.player in self.teammates:
+        if self._teams[self.player_index] == self._teams[tile.player]:
             return True
         return False
 
@@ -1340,6 +1346,7 @@ class MapBase(object):
     def _get_expected_delta_amount_toward(self, source: Tile, dest: Tile, moveHalf: bool = False) -> int:
         sourceDelta = source.delta.unexplainedDelta
         sameOwnerMove = source.delta.oldOwner == dest.delta.oldOwner and source.delta.oldOwner != -1
+        teamMateMove = source.delta.oldOwner != dest.delta.oldOwner and self._teams[source.delta.oldOwner] == self._teams[dest.delta.oldOwner]
         if not source.visible:
             if not source.delta.lostSight:
                 sourceDelta = dest.delta.unexplainedDelta
@@ -1365,6 +1372,11 @@ class MapBase(object):
             raise AssertionError(f'cannot provide moveHalf directive for visible tile {str(source)}, visible tiles exclusively use tile deltas.')
         if sameOwnerMove:
             return 0 - sourceDelta
+        if teamMateMove:
+            if not dest.isGeneral:
+                return 2 * dest.delta.oldArmy + sourceDelta
+            else:
+                return 0 - sourceDelta
         return sourceDelta
 
     def _apply_last_player_move(self, last_player_index_submitted_move: typing.Tuple[Tile, Tile, bool]) -> typing.Tuple[Tile, Tile] | None:
@@ -1398,6 +1410,8 @@ class MapBase(object):
 
         if dest.delta.oldOwner != self.player_index and dest.delta.oldOwner not in self.teammates:
             expectedDestDelta = 0 - expectedDestDelta
+        elif dest.delta.oldOwner in self.teammates and not dest.isGeneral:
+            expectedDestDelta = 0 - (dest.delta.oldArmy * 2 + expectedDestDelta)
 
         sourceWouldHaveCappedDest = dest.delta.oldOwner == self.player_index or (dest.delta.oldOwner in self.teammates and not dest.isGeneral) or dest.delta.oldArmy + expectedSourceDelta < 0
 
@@ -1664,6 +1678,10 @@ class MapBase(object):
         for player in self.players:
             player.last_move = None
 
+        if self.generals[self.player_index] is None or self.generals[self.player_index].player != self.player_index:
+            # we are dead
+            return
+
         # TODO for debugging only
         tilesWithDiffsPreOwn = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
         tilesWithMovedHerePreOwn = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
@@ -1697,8 +1715,6 @@ class MapBase(object):
 
         self.run_positive_delta_movement_scan(skipPlayers, possibleMovesDict, allowFogSource=True)
 
-        self.run_attacked_tile_movement_scan(skipPlayers, possibleMovesDict, allowFogSource=True)
-
         # TODO for debugging only
         tilesWithDiffsPreFog = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
         tilesWithMovedHerePreFog = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
@@ -1718,7 +1734,7 @@ class MapBase(object):
                     continue
                 if sourceTile.delta.oldOwner in self.teammates:
                     continue
-                if sourceTile.delta.oldOwner in skipPlayers:
+                if sourceTile.delta.oldOwner == -1 or sourceTile.delta.oldOwner in skipPlayers:
                     continue
 
                 potentialDests = []
@@ -1759,6 +1775,18 @@ class MapBase(object):
                         byPlayer = sourceTile.player
                     if byPlayer == -1:
                         byPlayer = exclusiveDest.player
+                    if byPlayer == -1:
+                        # we can get here if they attacked a neutral city from fog
+                        for adj in sourceTile.movable:
+                            if adj.visible and self.is_tile_enemy(adj):
+                                byPlayer = adj.player
+                                break
+                    if byPlayer == -1:
+                        # we can get here if they attacked a neutral city from fog
+                        for adj in sourceTile.movable:
+                            if self.is_tile_enemy(adj):
+                                byPlayer = adj.player
+                                break
 
                     logging.info(
                         f'FOG SOURCE SCAN DEST {repr(exclusiveDest)} SRC {repr(sourceTile)} WAS EXCLUSIVE DEST, EXACT MATCH {exactMatch} INCLUDING IN MOVES, CALCED PLAYER {byPlayer}')
@@ -1773,6 +1801,8 @@ class MapBase(object):
                     if len(potentialDests) > 0:
                         logging.info(f'FOG SOURCE SCAN SRC {repr(sourceTile)} RESULTED IN MULTIPLE DESTS {repr([repr(s) for s in potentialDests])}, UNHANDLED FOR NOW')
                     possibleMovesDict[sourceTile] = potentialDests
+
+        self.run_attacked_tile_movement_scan(skipPlayers, possibleMovesDict, allowFogSource=True)
 
         # TODO for debugging only
         tilesWithDiffsPreIsland = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
@@ -1790,9 +1820,7 @@ class MapBase(object):
                     continue
                 if not destTile.delta.lostSight:
                     continue
-                if not destTile.delta.oldOwner == self.player_index:
-                    continue
-                if not destTile.delta.oldOwner in self.teammates:
+                if destTile.delta.oldOwner != self.player_index and destTile.delta.oldOwner not in self.teammates:
                     continue
 
                 potentialSources = []
@@ -1893,6 +1921,8 @@ class MapBase(object):
         teamDict = {}
 
         for pIndex, teamIndex in enumerate(teams):
+            if teamIndex == -1:
+                continue
             teamList = teamDict.get(teamIndex, [])
             if len(teamList) == 0:
                 teamDict[teamIndex] = teamList
@@ -2119,7 +2149,9 @@ class MapBase(object):
                     continue
 
                 potentialSources = []
-                destWasAttackedNonLethalOrVacatedOrUnmoved = destTile.delta.unexplainedDelta <= 0 #and destTile.delta.oldOwner == destTile.delta.newOwner
+                # destWasAttackedNonLethalOrVacatedOrUnmoved = destTile.delta.unexplainedDelta <= 0 and self._teams[destTile.delta.oldOwner] != self._teams[destTile.delta.newOwner]
+                wasFriendlyMove = self._teams[destTile.delta.oldOwner] == self._teams[destTile.delta.newOwner] and destTile.delta.oldOwner != destTile.delta.newOwner
+                destWasAttackedNonLethalOrVacatedOrUnmoved = destTile.delta.unexplainedDelta <= 0 and not wasFriendlyMove
                 if destWasAttackedNonLethalOrVacatedOrUnmoved:
                     logging.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} SKIPPED BECAUSE destWasAttackedNonLethalOrVacatedOrUnmoved {destWasAttackedNonLethalOrVacatedOrUnmoved}')
                     continue
@@ -2132,7 +2164,7 @@ class MapBase(object):
                         continue
                     if potentialSource.delta.oldOwner in skipPlayers:
                         continue
-                    if potentialSource.was_visible_last_turn() and potentialSource.delta.oldOwner != destTile.delta.oldOwner:
+                    if potentialSource.was_visible_last_turn() and self._teams[potentialSource.delta.oldOwner] != self._teams[destTile.delta.oldOwner]:
                         # only the player who owns the resulting tile can move one of their own tiles into it. TODO 2v2...?
                         logging.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)}: SRC {repr(potentialSource)} SKIPPED BECAUSE potentialSource.was_visible_last_turn() and potentialSource.delta.oldOwner != destTile.player')
                         continue
@@ -2216,7 +2248,8 @@ class MapBase(object):
                     continue
 
                 potentialSources = []
-                destWasAttackedNonLethalOrVacated = destTile.delta.armyDelta < 0  and destTile.delta.oldOwner == destTile.delta.newOwner
+                wasFriendlyMove = self._teams[destTile.delta.oldOwner] == self._teams[destTile.delta.newOwner] # and destTile.delta.oldOwner != destTile.delta.newOwner
+                destWasAttackedNonLethalOrVacated = destTile.delta.armyDelta < 0 and wasFriendlyMove
                 # destWasAttackedNonLethalOrVacated = True
                 # destWasAttackedNonLethalOrVacated = destTile.delta.oldArmy + destTile.delta.armyDelta < destTile.delta.oldArmy
                 for potentialSource in destTile.movable:
@@ -2232,10 +2265,11 @@ class MapBase(object):
                             f'ATTK DELTA SCAN{fogFlag} DEST {repr(destTile)}: SRC {repr(potentialSource)} SKIPPED BECAUSE GATHERED TO, NOT ATTACKED. potentialSource.delta.armyDelta > 0')
                         # then this was DEFINITELY gathered to, which would make this not a potential source. 2v2 violates this
                         continue
-                    sourceWasAttackedNonLethalOrVacated = potentialSource.delta.armyDelta < 0 or potentialSource.delta.lostSight or (not potentialSource.visible and allowFogSource)
+                    wasFriendlyMove = self._teams[potentialSource.delta.oldOwner] == self._teams[potentialSource.delta.newOwner] and potentialSource.delta.oldOwner != potentialSource.delta.newOwner
+                    sourceWasAttackedNonLethalOrVacated = (potentialSource.delta.unexplainedDelta <= 0 and not wasFriendlyMove) or potentialSource.delta.lostSight or (not potentialSource.visible and allowFogSource)
+                    # sourceWasAttackedNonLethalOrVacated = potentialSource.delta.armyDelta < 0 or potentialSource.delta.lostSight or (not potentialSource.visible and allowFogSource)
                     # if  sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
-                    if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource,
-                                                                                                        destTile):
+                    if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
                         potentialSources = [potentialSource]
                         logging.info(
                             f'ATTK DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(potentialSource)} FORCE-SELECTED DUE TO EXACT MATCH, BREAKING EARLY')
@@ -2272,6 +2306,15 @@ class MapBase(object):
                             and self._is_exact_army_movement_delta_match(exclusiveSrc, destTile)
                     )
 
+                    # if False and not exclusiveSrc.visible and destTile.delta.unexplainedDelta < 0 and not destTile.delta.gainedSight:
+                    #     # then they moved into fog idiot, way more likely than being attacked on the edge of your vision by a player that isn't you...
+                    #     self.set_tile_moved(
+                    #         toTile=exclusiveSrc,
+                    #         fromTile=destTile,
+                    #         fullFromDiffCovered=exactMatch,
+                    #         fullToDiffCovered=exactMatch,
+                    #         byPlayer=destTile.delta.oldOwner)
+                    # else:
                     byPlayer = exclusiveSrc.delta.oldOwner
                     if self.was_captured_this_turn(destTile):
                         byPlayer = destTile.player
@@ -2328,6 +2371,9 @@ class MapBase(object):
         teams = map.teams
         if teams is None:
             teams = [i for i in range(len(map.players))]
+
+        teams.append(-1)  # put -1 at the end so that if -1 gets passed as the array index, the team is -1 for -1.
+
         return teams
 
 

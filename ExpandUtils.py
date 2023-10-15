@@ -742,11 +742,11 @@ def get_optimal_expansion(
 
             #only reward closeness to enemy up to a point then penalize it
             cutoffEnemyDist = abs(enemyDistMap[nextTile.x][nextTile.y] - enemyDistPenaltyPoint)
-            addedPriority = 0 - cutoffEnemyDist ** 0.25 + 1
+            addedPriority = 3 * (0 - cutoffEnemyDist ** 0.5 + 1)
 
             # reward away from our general but not THAT far away
             cutoffGenDist = abs(generalDistMap[nextTile.x][nextTile.y])
-            addedPriority += cutoffGenDist ** 0.25 - 1
+            addedPriority += 3 * (cutoffGenDist ** 0.5 - 1)
 
             # negTileCapturePoints += cutoffEnemyDist / 100
             # negTileCapturePoints -= cutoffGenDist / 100

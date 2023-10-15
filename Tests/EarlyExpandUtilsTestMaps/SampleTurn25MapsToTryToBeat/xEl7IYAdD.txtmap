@@ -1,0 +1,69 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M    M    M         a2                  M         M                        M
+M              M         a2   a2   a2                       M    M              M
+     M    M                   a2   a2   a2                            M                   M
+                    M         a2   a2   a2   M         M                   M
+          M         M    M    a2   a2   aG4  M         M    M                        M
+               M              a2   M    C44                 M                        M
+                              a2   M         M         M    M                        M
+     M         M    M         a2   a2                  M                             M
+     M         M              M    a2        M                             M              M
+M                   M              a2                  M
+                                   a2        M              M    M    M
+               M                   a1   C40       M    M    M         M    M
+                    M         M    b2   b2   b2                                           M
+                              D    D    D              M
+          M                   M                   M         M    M
+                                                                      M         M
+                    M    M                   M    M         M              M              M
+               M    M                   M    M                             M              M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=50
+player_index=0
+mode=1v1
+bot_target_player=1
+targetPlayerExpectedGeneralLocation=9,15
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=21
+aScore=43
+aStandingArmy=22
+aStars=72
+aCityCount=1
+aGeneral=8,4
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=20
+aDelta25Score=42
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=50
+a_bot_general_approx=8,4
+bUsername=HunteR
+bTiles=20
+bScore=42
+bStandingArmy=22
+bStars=27
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=15
+bDelta25Tiles=19
+bDelta25Score=41
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=38
+b_bot_general_approx=9,13

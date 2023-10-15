@@ -205,29 +205,21 @@ class CityAnalyzerTests(TestBase):
         self.assertGreater(enemyCityToContest.turn_captured, 520, 'should have tried to contest the city, if not own it outright')
     
     def test_should_choose_the_city_between_players(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_choose_the_city_between_players___0Z_4Pw4rv---1--151.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 151, fill_out_tiles=True)
+        map, general, allyGen, enemyGeneral, enAllyGen = self.load_map_and_generals_2v2(mapFile, 151, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=151)
         
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-        for player in simHost.sim.players:
-            player.dead = False
-            player.leftGame = False
-            player.leftGameTurn = -1
-            for simPlayer in player.map.players:
-                simPlayer.dead = False
-                simPlayer.leftGame = False
-                simPlayer.leftGameTurn = -1
-        for player in simHost.sim.sim_map.players:
-            player.dead = False
-            player.leftGame = False
-            player.leftGameTurn = -1
-        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+
         bot = simHost.get_bot(general.player)
         scores = bot.cityAnalyzer.get_sorted_neutral_scores()
         topCity, topScore = scores[0]
+
+        if debugMode:
+            simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=30)
+
         self.assertEqual(topCity, simHost.get_player_map(general.player).GetTile(21, 9))
 

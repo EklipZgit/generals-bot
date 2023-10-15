@@ -1,0 +1,116 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          M    M         M                                  M         M                   M
+                                                                                     M
+     M                             M                                                      M
+               M                                                 M         M                   M
+          M    M                        a2   a2   a2             M         M
+                              M         a2   aG7  a2             M         M    M
+               a2   a2   a2   a2   a2   a2   a2   a2             M                             M
+M    M         b4   b2   b2   b2   a2   a2   a2   d2   d2
+     M    C48  bG3  b2   M              M              M                             M         M
+M    b2   b2   b2   b2        M                        M
+b2   b2   b2   b2   M              M         M                        M         M         M
+b2   M         b2   b2   M    M                   M    M    M    M                   M         M
+          M    M    b2                                                M                   M    M
+               M    b2                                                     M
+               b2   b2        M    M    M    M    M    M    M              M
+               b2        M                                                           M
+M              b2   C49                                               M
+M    M         b2                  M    M         M         M
+               M              M                                  M
+          M         M                                       M              M              M    M
+M                        M    M                             M    M              M
+               M                                                                M              M
+M         M                                       M    M                        M         M
+                    M    M                             M    M    M    M                   M    M
+                                             M              M    M
+                    M    M         M              M    M                   M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=50
+player_index=1
+teams=1,1,2,2
+mode=team
+bot_target_player=3
+targetPlayerExpectedGeneralLocation=16,7
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=Mr poopoo
+aTiles=17
+aScore=39
+aStandingArmy=22
+aStars=19
+aCityCount=1
+aGeneral=9,5
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=16
+aDelta25Score=38
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=49
+a_bot_general_approx=9,5
+bUsername=Teammate.exe
+bTiles=24
+bScore=51
+bStandingArmy=27
+bStars=19
+bCityCount=1
+bGeneral=3,8
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=23
+bDelta25Score=50
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=49
+b_bot_general_approx=3,8
+cUsername=Exe.human
+cTiles=25
+cScore=51
+cStandingArmy=26
+cStars=55
+cCityCount=1
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=24
+cDelta25Score=50
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=0
+dUsername=Human.exe
+dTiles=22
+dScore=45
+dStandingArmy=23
+dStars=55
+dCityCount=1
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+dDelta25Tiles=21
+dDelta25Score=44
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=30
+d_bot_general_approx=13,7

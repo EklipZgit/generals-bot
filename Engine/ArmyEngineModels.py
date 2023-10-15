@@ -191,6 +191,13 @@ class ArmySimState(object):
 
         return copy
 
+    def prep_next_move(self):
+        self.prev_friendly_move = self.friendly_move
+        self.prev_enemy_move = self.enemy_move
+
+        self.depth += 1
+        self.turn += 1
+
     def clone(self) -> ArmySimState:
         copy = ArmySimState(
             self.turn,

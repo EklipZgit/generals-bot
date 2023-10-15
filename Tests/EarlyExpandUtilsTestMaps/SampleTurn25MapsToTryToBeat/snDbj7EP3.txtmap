@@ -1,0 +1,114 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M                                       M    M         M                        M
+                                             M                                       M
+                              M    M         M                                       M
+     M                   M         M                             M    M              M
+                         M              M                   M    M                   M    M
+                         M              M         M    M         M         M
+                                        M    c2   C44                                          M
+M              M                   M    C48  c2   c2   M    C43
+M              M                   M         M    cG3  c2   M    M    M                   M
+M              M         c2   c2   c2   c2   c2   c2   M                   M    M         M
+     M         M    M    c2             c2   c2   c2        M              d2   d2   d2   d2
+                    c2   c2        M    M    c2   c2   M                   d2   d2   d2   dG3  M
+          M         c2   M    C42       c2   c2   c2   M         M         d2   d2   d2   d2
+          M         c2                  M         c2                       d2   d2   M    M
+          M         M                             M              M         d2   d2   M    M
+          M                                       d1   d2   d2   d2   d2   d2   d2             M
+                              M    M    M         b2        M                   d2   M
+          M                   M              M    b2                       M    d2        M
+                    M                   b2   b2   b2             M         M         M         M
+                                   M    b2                  M    M         M    M
+     M    M              M         M    b2   M    M         M                        M
+M                   M         b2   b2   b2   M    M                   M              M         M
+               M         M    b2   M    M              M                             M
+                    M    b2   b2   M                                  M    M    M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=50
+player_index=3
+teams=1,1,2,2
+mode=team
+bot_target_player=1
+targetPlayerExpectedGeneralLocation=8,19
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=TaizhouNo1
+aTiles=17
+aScore=43
+aStandingArmy=26
+aStars=13
+aCityCount=1
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=16
+aDelta25Score=42
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=0
+bUsername=sensi.never
+bTiles=22
+bScore=47
+bStandingArmy=25
+bStars=13
+bCityCount=1
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=21
+bDelta25Score=46
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=48
+b_bot_general_approx=7,21
+cUsername=Exe.human
+cTiles=25
+cScore=51
+cStandingArmy=26
+cStars=55
+cCityCount=1
+cGeneral=10,8
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=24
+cDelta25Score=50
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=50
+c_bot_general_approx=10,8
+dUsername=Human.exe
+dTiles=25
+dScore=50
+dStandingArmy=25
+dStars=55
+dCityCount=1
+dGeneral=18,11
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+dDelta25Tiles=24
+dDelta25Score=49
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=50
+d_bot_general_approx=18,11

@@ -1,0 +1,115 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                              M                                                 M              M
+               M    M              M                   M                   M
+M    M                                  M         M         M    M    M    M                   M
+          M                   M         M                                       M         M
+                         M                        M                   M
+M              M         M                                  M              M    M
+               M                             M    M              M                   M         M
+                                             M              M                                  M
+     M                             M                   M    M              M         M
+M                                                                M
+          M         M              M              M
+     M                   c2                            M    M
+                         c2   M              M    M                   M         M
+M              M    b2   c2   M    M    c2             M                        M
+     M              b2   c2   M    c2   c2        M    M                                       M
+               b2   b2   c2   c2        M         M    M         M    M         M
+M    M    C43  c2        c2   c2                       M         M              M              M
+          M    c3   c2   N1   c2                                 M
+               b2                            M    M    M         M                   M    M
+M    b2   b2   b2        b2             M    M                   M         M
+b2   b2             M    b2                       M    C45  M              M    M
+b2   b2   M    b2   b2   b2        C49  a2   a2   a2   a2   a5
+b2   bG3  b2   b2        M    a2   aG7  M    a2   a2   a2   C46  M              M              M
+b2   b2                       a2   a2   a2   a2   M    a2        M         M    M    M
+     M         M              M    a2   a2   a2   M                             M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=50
+player_index=1
+teams=1,1,2,2
+mode=team
+bot_target_player=2
+targetPlayerExpectedGeneralLocation=8,13
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=iawebyrv
+aTiles=18
+aScore=44
+aStandingArmy=26
+aStars=7
+aCityCount=1
+aGeneral=7,22
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=17
+aDelta25Score=43
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=50
+a_bot_general_approx=7,22
+bUsername=Teammate.exe
+bTiles=23
+bScore=47
+bStandingArmy=24
+bStars=7
+bCityCount=1
+bGeneral=1,22
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=22
+bDelta25Score=46
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=50
+b_bot_general_approx=1,22
+cUsername=453ftu
+cTiles=15
+cScore=39
+cStandingArmy=24
+cStars=0
+cCityCount=1
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=30
+cDelta25Tiles=14
+cDelta25Score=38
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=50
+c_bot_general_approx=7,14
+dUsername=tony7998798
+dTiles=12
+dScore=37
+dStandingArmy=25
+dStars=0
+dCityCount=1
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+dDelta25Tiles=11
+dDelta25Score=36
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=47

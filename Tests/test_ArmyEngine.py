@@ -1,4 +1,5 @@
 import logging
+import random
 import time
 import traceback
 import typing
@@ -15,6 +16,33 @@ from Sim.GameSimulator import GameSimulatorHost, GameSimulator
 from TestBase import TestBase
 from base.client.map import Tile, MapBase
 from bot_ek0x45 import EklipZBot
+
+SIM_VS_ENGINE_ALL_TILE_TYPES_TEST_MAP = """
+|    |    |    |    |    
+          b60
+b20  cG3  aG55 c2          
+          c0
+d3   d3             
+a5   b5                    
+c3   c3
+               b1     
+     a55  C45  bC5  b1      
+     aC5       b55     
+     a1        a0       
+                    
+          d0          
+     d2   bG55 dG3  a20
+          a60       
+|    |    |    |    |    
+player_index=0
+teams=0,1,0,1
+mode=team
+bot_target_player=1
+aTiles=20
+bTiles=20
+cTiles=2
+dTiles=2
+"""
 
 
 class ArmyEngineTests(TestBase):
@@ -64,6 +92,54 @@ class ArmyEngineTests(TestBase):
             else:
                 # this is the last thing we do before we return
                 self.render_sim_analysis(map, result)
+
+    def assertBoardStateMatchesGameEngine(self, sim: GameSimulator, boardState: ArmySimState, frPlayer: int, enPlayer: int):
+        self.assertEqual(sim.turn, boardState.turn)
+        failures = []
+        simGen = sim.sim_map.generals[frPlayer]
+        simEn = sim.sim_map.generals[enPlayer]
+
+        # note if the engine does not register a player capture then the Game Sim will have tiles different than those in the engine sim and the else asserts will fail, so no need to explicitly check that case.
+        if boardState.captures_enemy:
+            self.assertEqual(frPlayer, simGen.player)
+            self.assertEqual(frPlayer, simEn.player, "Engine claimed player captured enemy general.")
+            # after the capture in the engine we don't really worry about all the tile diff execution stuff, but maybe we should since 2v2...?
+        elif boardState.captured_by_enemy:
+            self.assertEqual(enPlayer, simEn.player)
+            self.assertEqual(enPlayer, simGen.player, "Engine claimed player general was captured by enemy.")
+            # after the capture in the engine we don't really worry about all the tile diff execution stuff, but maybe we should since 2v2...?
+        else:
+            for tile, engineSimTile in boardState.friendly_living_armies.items():
+                realTile = sim.sim_map.GetTile(tile.x, tile.y)
+
+                if realTile.army != engineSimTile.army:
+                    failures.append(f'friendly army {tile} - realTile.army {realTile.army} != engineSimTile.army {engineSimTile.army}')
+                if realTile.player != engineSimTile.player:
+                    failures.append(f'friendly army {tile} - realTile.player {realTile.player} != engineSimTile.player {engineSimTile.player}')
+                if frPlayer != realTile.player:
+                    failures.append(f'friendly army {tile} - frPlayer {frPlayer} != realTile.player {realTile.player}')
+
+            for tile, engineSimTile in boardState.enemy_living_armies.items():
+                realTile = sim.sim_map.GetTile(tile.x, tile.y)
+
+                if realTile.army != engineSimTile.army:
+                    failures.append(f'enemy army {tile} - realTile.army {realTile.army} != engineSimTile.army {engineSimTile.army}')
+                if realTile.player != engineSimTile.player:
+                    failures.append(f'enemy army {tile} - realTile.player {realTile.player} != engineSimTile.player {engineSimTile.player}')
+                if enPlayer != realTile.player:
+                    failures.append(f'enemy army {tile} - enPlayer {enPlayer} != realTile.player {realTile.player}')
+
+            for tile, engineSimTile in boardState.sim_tiles.items():
+                realTile = sim.sim_map.GetTile(tile.x, tile.y)
+
+                if realTile.army != engineSimTile.army:
+                    failures.append(f'simTile {tile} - realTile.army {realTile.army} != engineSimTile.army {engineSimTile.army}')
+                if realTile.player != engineSimTile.player:
+                    failures.append(f'simTile {tile} - realTile.player {realTile.player} != engineSimTile.player {engineSimTile.player}')
+
+        if len(failures) > 0:
+            newLine = "\n"
+            self.fail(f'\n{newLine.join(failures)}')
 
     def test_engine__armies_suicide(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -124,6 +200,418 @@ bTiles=20
 
                 self.assertEqual(0, result.best_result_state.city_differential)
                 self.assertGreater(len(result.expected_best_moves), 1)
+
+    """
+    (turn=100, frMove=1,7 -z&gt; 2,7, enMove=3,6 -z&gt; 2,6, includeAllAsArmies=True)"
+    (turn=101, frMove=0,3 -&gt; 1,3, enMove=2,10 -z&gt; 2,9, includeAllAsArmies=False)"
+    (turn=101, frMove=0,3 -&gt; 1,3, enMove=0,1 -z&gt; 1,1, includeAllAsArmies=False)"
+    (turn=149, frMove=1,5 -z&gt; 1,6, enMove=0,1 -&gt; 0,2, includeAllAsArmies=False)"
+    (turn=149, frMove=1,5 -z&gt; 2,5, enMove=0,1 -&gt; 0,2, includeAllAsArmies=True)"
+    (turn=100, frMove=1,7 -z&gt; 1,6, enMove=3,6 -z&gt; 3,5, includeAllAsArmies=True)"
+    (turn=100, frMove=3,7 -z&gt; 2,7, enMove=3,6 -&gt; 2,6, includeAllAsArmies=False)"
+    (turn=149, frMove=1,6 -&gt; 0,6, enMove=2,10 -z&gt; 1,10, includeAllAsArmies=True)"
+    (turn=149, frMove=2,1 -&gt; 2,0, enMove=0,1 -&gt; 1,1, includeAllAsArmies=True)"
+    (turn=101, frMove=1,7 -&gt; 2,7, enMove=None, includeAllAsArmies=False)"
+    (turn=101, frMove=3,7 -z&gt; 4,7, enMove=3,5 -&gt; 4,5, includeAllAsArmies=True)"
+    (turn=101, frMove=1,7 -z&gt; 1,6, enMove=2,10 -&gt; 2,9, includeAllAsArmies=False)"
+    (turn=100, frMove=1,7 -z&gt; 1,6, enMove=2,0 -z&gt; 3,0, includeAllAsArmies=True)"
+    (turn=149, frMove=1,7 -z&gt; 1,6, enMove=2,0 -z&gt; 1,0, includeAllAsArmies=True)"
+    (turn=101, frMove=3,7 -&gt; 2,7, enMove=4,5 -z&gt; 3,5, includeAllAsArmies=True)"
+    (turn=100, frMove=1,7 -&gt; 2,7, enMove=0,1 -&gt; 1,1, includeAllAsArmies=False)"
+    (turn=101, frMove=1,5 -z&gt; 2,5, enMove=3,5 -&gt; 2,5, includeAllAsArmies=False)"
+    (turn=101, frMove=3,7 -&gt; 3,6, enMove=3,5 -&gt; 4,5, includeAllAsArmies=True)"
+    (turn=149, frMove=1,7 -&gt; 1,8, enMove=3,5 -z&gt; 3,4, includeAllAsArmies=True)"
+    (turn=100, frMove=1,5 -&gt; 2,5, enMove=3,5 -&gt; 2,5, includeAllAsArmies=True)"
+    (turn=100, frMove=2,11 -z&gt; 3,11, enMove=2,10 -&gt; 2,11, includeAllAsArmies=False)"
+    (turn=101, frMove=1,7 -z&gt; 0,7, enMove=3,6 -&gt; 3,7, includeAllAsArmies=True)"
+    (turn=101, frMove=2,1 -z&gt; 2,2, enMove=4,5 -z&gt; 4,4, includeAllAsArmies=False)"
+    (turn=100, frMove=2,11 -&gt; 1,11, enMove=2,10 -z&gt; 2,11, includeAllAsArmies=False)"
+    (turn=100, frMove=3,7 -&gt; 3,6, enMove=0,1 -&gt; 0,0, includeAllAsArmies=True)"
+    (turn=149, frMove=1,7 -&gt; 2,7, enMove=3,4 -z&gt; 4,4, includeAllAsArmies=False)"
+    (turn=101, frMove=4,10 -&gt; 3,10, enMove=4,5 -&gt; 3,5, includeAllAsArmies=True)"
+    (turn=101, frMove=0,3 -&gt; 0,2, enMove=3,4 -z&gt; 4,4, includeAllAsArmies=False)"
+    (turn=101, frMove=1,5 -&gt; 1,6, enMove=0,1 -z&gt; 0,0, includeAllAsArmies=False)"
+    (turn=101, frMove=1,7 -&gt; 0,7, enMove=3,4 -&gt; 4,4, includeAllAsArmies=True)"
+    (turn=100, frMove=3,7 -z&gt; 3,8, enMove=2,10 -z&gt; 3,10, includeAllAsArmies=False)"
+    (turn=100, frMove=3,7 -z&gt; 2,7, enMove=0,1 -z&gt; 0,0, includeAllAsArmies=True)"
+    (turn=100, frMove=1,7 -z&gt; 1,8, enMove=3,5 -&gt; 3,4, includeAllAsArmies=False)"
+    (turn=101, frMove=1,6 -&gt; 1,7, enMove=3,4 -z&gt; 4,4, includeAllAsArmies=False)"
+    (turn=100, frMove=3,7 -&gt; 4,7, enMove=0,1 -z&gt; 0,0, includeAllAsArmies=True)"
+    (turn=149, frMove=None, enMove=2,0 -&gt; 3,0, includeAllAsArmies=True)"
+    (turn=149, frMove=0,3 -z&gt; 1,3, enMove=4,5 -&gt; 3,5, includeAllAsArmies=False)"
+    (turn=149, frMove=0,3 -z&gt; 0,2, enMove=4,5 -z&gt; 4,6, includeAllAsArmies=False)"
+    (turn=101, frMove=2,11 -z&gt; 2,10, enMove=1,3 -&gt; 1,4, includeAllAsArmies=False)"
+    (turn=101, frMove=1,7 -&gt; 1,6, enMove=0,1 -&gt; 0,0, includeAllAsArmies=True)"
+    (turn=149, frMove=2,11 -&gt; 1,11, enMove=3,5 -z&gt; 4,5, includeAllAsArmies=True)"
+    (turn=149, frMove=0,3 -z&gt; 0,4, enMove=3,6 -z&gt; 3,7, includeAllAsArmies=True)"
+    (turn=101, frMove=3,7 -&gt; 4,7, enMove=1,3 -&gt; 1,4, includeAllAsArmies=True)"
+    (turn=149, frMove=1,7 -&gt; 0,7, enMove=0,1 -z&gt; 1,1, includeAllAsArmies=True)"
+    (turn=100, frMove=4,10 -z&gt; 3,10, enMove=2,10 -&gt; 2,9, includeAllAsArmies=False)"
+    (turn=100, frMove=3,7 -z&gt; 4,7, enMove=0,1 -&gt; 1,1, includeAllAsArmies=True)"
+    (turn=149, frMove=1,7 -&gt; 1,6, enMove=2,0 -z&gt; 2,1, includeAllAsArmies=False)"
+    (turn=100, frMove=0,3 -z&gt; 0,2, enMove=3,4 -&gt; 3,3, includeAllAsArmies=True)"
+    (turn=101, frMove=2,1 -&gt; 2,2, enMove=2,10 -z&gt; 3,10, includeAllAsArmies=False)"
+    (turn=101, frMove=1,7 -&gt; 0,7, enMove=2,0 -&gt; 1,0, includeAllAsArmies=True)"
+    (turn=149, frMove=4,10 -&gt; 4,9, enMove=2,0 -z&gt; 2,1, includeAllAsArmies=True)"
+    (turn=149, frMove=1,7 -z&gt; 1,6, enMove=3,5 -&gt; 4,5, includeAllAsArmies=True)"
+    (turn=149, frMove=1,7 -z&gt; 2,7, enMove=2,0 -&gt; 1,0, includeAllAsArmies=True)"
+    (turn=101, frMove=3,7 -z&gt; 4,7, enMove=3,4 -&gt; 4,4, includeAllAsArmies=False)"
+    (turn=149, frMove=4,10 -z&gt; 4,11, enMove=3,5 -z&gt; 3,6, includeAllAsArmies=False)"
+    (turn=101, frMove=1,7 -&gt; 1,8, enMove=3,6 -&gt; 3,7, includeAllAsArmies=False)"
+    (turn=101, frMove=0,3 -&gt; 0,4, enMove=0,1 -z&gt; 1,1, includeAllAsArmies=False)"
+    (turn=149, frMove=4,10 -&gt; 4,11, enMove=3,5 -&gt; 2,5, includeAllAsArmies=True)"
+    (turn=100, frMove=2,11 -z&gt; 3,11, enMove=3,4 -z&gt; 4,4, includeAllAsArmies=False)"
+    (turn=100, frMove=1,6 -&gt; 2,6, enMove=3,4 -z&gt; 2,4, includeAllAsArmies=False)"
+    (turn=100, frMove=2,1 -&gt; 2,2, enMove=4,5 -z&gt; 4,4, includeAllAsArmies=False)"
+    (turn=101, frMove=3,7 -z&gt; 4,7, enMove=3,6 -z&gt; 3,5, includeAllAsArmies=False)"
+    (turn=149, frMove=2,1 -z&gt; 3,1, enMove=1,3 -&gt; 0,3, includeAllAsArmies=False)"
+    (turn=100, frMove=2,11 -&gt; 3,11, enMove=3,4 -&gt; 3,5, includeAllAsArmies=True)"
+    (turn=100, frMove=4,10 -z&gt; 4,11, enMove=4,5 -z&gt; 3,5, includeAllAsArmies=False)"
+    (turn=149, frMove=0,3 -z&gt; 0,2, enMove=0,1 -&gt; 0,2, includeAllAsArmies=False)"
+    (turn=101, frMove=1,6 -z&gt; 0,6, enMove=3,6 -z&gt; 3,5, includeAllAsArmies=True)"
+    (turn=101, frMove=4,10 -z&gt; 3,10, enMove=2,10 -z&gt; 3,10, includeAllAsArmies=True)"
+    (turn=149, frMove=2,11 -z&gt; 1,11, enMove=3,6 -z&gt; 3,7, includeAllAsArmies=True)"
+    (turn=101, frMove=4,10 -z&gt; 4,11, enMove=4,5 -z&gt; 4,4, includeAllAsArmies=True)"
+    (turn=149, frMove=1,7 -&gt; 0,7, enMove=2,10 -&gt; 2,9, includeAllAsArmies=True)"
+    (turn=149, frMove=1,6 -z&gt; 1,5, enMove=3,4 -&gt; 3,5, includeAllAsArmies=False)"
+    (turn=100, frMove=4,10 -&gt; 3,10, enMove=3,5 -&gt; 3,4, includeAllAsArmies=True)"
+    (turn=149, frMove=2,11 -z&gt; 1,11, enMove=3,5 -z&gt; 2,5, includeAllAsArmies=True)"
+    (turn=149, frMove=4,10 -&gt; 4,11, enMove=2,0 -z&gt; 2,1, includeAllAsArmies=True)"
+    (turn=149, frMove=1,5 -&gt; 2,5, enMove=0,1 -z&gt; 0,2, includeAllAsArmies=True)"
+    (turn=101, frMove=1,6 -z&gt; 2,6, enMove=4,5 -z&gt; 4,4, includeAllAsArmies=True)"
+    (turn=100, frMove=3,7 -z&gt; 4,7, enMove=2,10 -z&gt; 1,10, includeAllAsArmies=True)"
+    (turn=100, frMove=3,7 -z&gt; 4,7, enMove=3,5 -z&gt; 3,4, includeAllAsArmies=True)"
+    (turn=101, frMove=1,7 -z&gt; 1,8, enMove=1,3 -z&gt; 0,3, includeAllAsArmies=False)"
+    (turn=149, frMove=1,7 -z&gt; 1,8, enMove=3,6 -&gt; 3,5, includeAllAsArmies=False)"
+    (turn=100, frMove=2,1 -&gt; 2,0, enMove=4,5 -&gt; 4,4, includeAllAsArmies=False)"
+    (turn=149, frMove=2,11 -z&gt; 3,11, enMove=3,4 -z&gt; 2,4, includeAllAsArmies=True)"
+    (turn=101, frMove=2,1 -z&gt; 2,2, enMove=3,4 -z&gt; 3,5, includeAllAsArmies=False)"
+    (turn=101, frMove=3,7 -&gt; 3,6, enMove=2,10 -z&gt; 1,10, includeAllAsArmies=True)"
+    (turn=149, frMove=2,1 -z&gt; 2,0, enMove=0,1 -z&gt; 1,1, includeAllAsArmies=False)"
+    (turn=149, frMove=3,7 -z&gt; 2,7, enMove=3,6 -&gt; 2,6, includeAllAsArmies=False)"
+    (turn=149, frMove=1,5 -&gt; 1,4, enMove=0,1 -z&gt; 0,2, includeAllAsArmies=False)"
+    (turn=149, frMove=3,7 -&gt; 3,8, enMove=3,5 -&gt; 4,5, includeAllAsArmies=False)"
+    (turn=100, frMove=2,1 -z&gt; 1,1, enMove=4,5 -&gt; 4,4, includeAllAsArmies=True)"
+    (turn=149, frMove=2,1 -&gt; 1,1, enMove=3,4 -z&gt; 2,4, includeAllAsArmies=True)"
+    (turn=101, frMove=2,1 -z&gt; 1,1, enMove=3,5 -z&gt; 3,6, includeAllAsArmies=True)"
+    (turn=101, frMove=1,6 -&gt; 1,5, enMove=2,10 -z&gt; 3,10, includeAllAsArmies=False)"
+    (turn=100, frMove=1,7 -z&gt; 1,8, enMove=3,5 -z&gt; 3,4, includeAllAsArmies=True)"
+    (turn=101, frMove=3,7 -z&gt; 3,6, enMove=None, includeAllAsArmies=True)"
+    (turn=149, frMove=1,7 -z&gt; 2,7, enMove=1,3 -z&gt; 2,3, includeAllAsArmies=True)"
+    (turn=100, frMove=4,10 -&gt; 3,10, enMove=2,10 -z&gt; 2,9, includeAllAsArmies=False)"
+    (turn=149, frMove=0,3 -z&gt; 1,3, enMove=2,0 -z&gt; 1,0, includeAllAsArmies=True)"
+    (turn=100, frMove=0,3 -z&gt; 0,4, enMove=0,1 -z&gt; 1,1, includeAllAsArmies=True)"
+    (turn=100, frMove=3,7 -&gt; 3,8, enMove=3,4 -z&gt; 2,4, includeAllAsArmies=True)"
+    (turn=149, frMove=4,10 -z&gt; 3,10, enMove=3,4 -z&gt; 2,4, includeAllAsArmies=False)"
+    (turn=100, frMove=1,5 -&gt; 1,4, enMove=4,5 -z&gt; 4,4, includeAllAsArmies=True)"
+    (turn=149, frMove=0,3 -z&gt; 1,3, enMove=2,10 -z&gt; 2,11, includeAllAsArmies=True)"
+    (turn=100, frMove=1,5 -z&gt; 1,4, enMove=4,5 -z&gt; 3,5, includeAllAsArmies=False)"
+    (turn=149, frMove=2,1 -&gt; 2,0, enMove=2,10 -&gt; 2,11, includeAllAsArmies=True)"
+    (turn=149, frMove=1,5 -&gt; 2,5, enMove=3,5 -z&gt; 3,4, includeAllAsArmies=False)"
+    (turn=149, frMove=2,1 -&gt; 2,2, enMove=3,6 -&gt; 4,6, includeAllAsArmies=False)"
+    (turn=149, frMove=1,5 -z&gt; 0,5, enMove=0,1 -z&gt; 0,0, includeAllAsArmies=True)"
+    (turn=101, frMove=3,7 -&gt; 3,8, enMove=3,6 -z&gt; 4,6, includeAllAsArmies=False)"
+    (turn=149, frMove=1,6 -&gt; 1,7, enMove=3,4 -&gt; 4,4, includeAllAsArmies=True)"
+    (turn=100, frMove=2,1 -z&gt; 1,1, enMove=4,5 -z&gt; 4,6, includeAllAsArmies=False)"
+    (turn=149, frMove=4,10 -z&gt; 4,11, enMove=3,5 -z&gt; 2,5, includeAllAsArmies=False)"
+    (turn=100, frMove=1,7 -&gt; 0,7, enMove=3,5 -&gt; 3,6, includeAllAsArmies=False)"
+    (turn=100, frMove=1,5 -z&gt; 0,5, enMove=3,4 -&gt; 3,5, includeAllAsArmies=True)"
+    (turn=149, frMove=1,6 -z&gt; 1,5, enMove=3,6 -z&gt; 3,5, includeAllAsArmies=True)"
+    (turn=101, frMove=3,7 -&gt; 3,8, enMove=3,5 -z&gt; 3,6, includeAllAsArmies=False)"
+    (turn=149, frMove=None, enMove=2,10 -z&gt; 2,11, includeAllAsArmies=True)"
+    (turn=101, frMove=2,1 -&gt; 1,1, enMove=3,6 -z&gt; 3,7, includeAllAsArmies=False)"
+    (turn=101, frMove=3,7 -&gt; 4,7, enMove=3,6 -z&gt; 4,6, includeAllAsArmies=True)"
+    (turn=149, frMove=1,7 -z&gt; 2,7, enMove=2,10 -z&gt; 2,11, includeAllAsArmies=True)"
+    (turn=149, frMove=1,7 -z&gt; 1,6, enMove=1,3 -&gt; 1,2, includeAllAsArmies=False)"
+    (turn=101, frMove=1,5 -&gt; 2,5, enMove=2,10 -&gt; 2,9, includeAllAsArmies=True)"
+    (turn=101, frMove=3,7 -z&gt; 3,6, enMove=1,3 -&gt; 1,4, includeAllAsArmies=False)"
+    (turn=149, frMove=4,10 -z&gt; 3,10, enMove=3,6 -z&gt; 4,6, includeAllAsArmies=False)"
+    (turn=101, frMove=1,7 -&gt; 2,7, enMove=3,6 -z&gt; 3,5, includeAllAsArmies=True)"
+    (turn=149, frMove=1,5 -&gt; 1,6, enMove=2,0 -z&gt; 3,0, includeAllAsArmies=True)"
+    (turn=101, frMove=2,11 -z&gt; 2,10, enMove=3,4 -&gt; 3,5, includeAllAsArmies=True)"
+    (turn=101, frMove=1,7 -&gt; 1,6, enMove=2,10 -z&gt; 1,10, includeAllAsArmies=False)"
+    (turn=100, frMove=2,1 -&gt; 3,1, enMove=0,1 -z&gt; 1,1, includeAllAsArmies=False)"
+    (turn=149, frMove=4,10 -z&gt; 4,9, enMove=2,0 -z&gt; 2,1, includeAllAsArmies=True)"
+    (turn=101, frMove=3,7 -z&gt; 3,8, enMove=2,10 -z&gt; 2,11, includeAllAsArmies=True)"
+    (turn=149, frMove=3,7 -z&gt; 3,6, enMove=2,10 -z&gt; 2,11, includeAllAsArmies=True)"
+    (turn=100, frMove=0,3 -z&gt; 1,3, enMove=4,5 -&gt; 4,6, includeAllAsArmies=False)"
+    (turn=100, frMove=2,1 -z&gt; 1,1, enMove=3,4 -z&gt; 2,4, includeAllAsArmies=True)"
+    (turn=149, frMove=4,10 -&gt; 4,9, enMove=3,5 -&gt; 3,6, includeAllAsArmies=False)"
+    (turn=149, frMove=2,11 -&gt; 3,11, enMove=3,5 -z&gt; 3,4, includeAllAsArmies=False)"
+    (turn=149, frMove=2,1 -&gt; 2,0, enMove=3,4 -z&gt; 2,4, includeAllAsArmies=True)"
+    (turn=100, frMove=3,7 -z&gt; 4,7, enMove=3,4 -&gt; 4,4, includeAllAsArmies=True)"
+    (turn=149, frMove=2,1 -&gt; 1,1, enMove=3,6 -z&gt; 2,6, includeAllAsArmies=False)"
+    (turn=149, frMove=0,3 -z&gt; 1,3, enMove=0,1 -z&gt; 1,1, includeAllAsArmies=True)"
+    (turn=101, frMove=1,5 -&gt; 2,5, enMove=3,5 -z&gt; 4,5, includeAllAsArmies=False)"
+    (turn=100, frMove=2,11 -&gt; 3,11, enMove=3,6 -z&gt; 3,5, includeAllAsArmies=False)"
+    (turn=100, frMove=1,7 -&gt; 1,6, enMove=2,10 -z&gt; 1,10, includeAllAsArmies=False)"
+    (turn=101, frMove=2,1 -z&gt; 2,2, enMove=3,4 -&gt; 3,5, includeAllAsArmies=False)"
+    (turn=101, frMove=1,6 -&gt; 2,6, enMove=3,4 -&gt; 4,4, includeAllAsArmies=True)"
+    (turn=149, frMove=3,7 -z&gt; 3,8, enMove=2,0 -z&gt; 1,0, includeAllAsArmies=False)"
+    (turn=149, frMove=4,10 -&gt; 3,10, enMove=2,10 -&gt; 2,11, includeAllAsArmies=True)"
+    (turn=149, frMove=3,7 -z&gt; 4,7, enMove=3,6 -&gt; 2,6, includeAllAsArmies=False)"
+    (turn=149, frMove=3,7 -z&gt; 3,8, enMove=0,1 -&gt; 0,0, includeAllAsArmies=False)"
+    (turn=100, frMove=1,7 -&gt; 1,6, enMove=1,3 -&gt; 0,3, includeAllAsArmies=False)"
+    (turn=149, frMove=0,3 -z&gt; 1,3, enMove=3,6 -z&gt; 4,6, includeAllAsArmies=True)"
+    (turn=100, frMove=0,3 -z&gt; 1,3, enMove=3,4 -z&gt; 3,5, includeAllAsArmies=True)"
+    (turn=149, frMove=2,1 -&gt; 2,0, enMove=3,6 -z&gt; 3,5, includeAllAsArmies=True)"
+    (turn=100, frMove=3,7 -&gt; 2,7, enMove=2,0 -z&gt; 3,0, includeAllAsArmies=True)"
+    (turn=149, frMove=1,7 -&gt; 0,7, enMove=3,5 -&gt; 3,4, includeAllAsArmies=True)"
+    (turn=149, frMove=2,11 -&gt; 1,11, enMove=3,6 -z&gt; 4,6, includeAllAsArmies=False)"
+    (turn=101, frMove=2,11 -z&gt; 2,10, enMove=2,0 -&gt; 1,0, includeAllAsArmies=False)"
+    (turn=149, frMove=2,1 -z&gt; 1,1, enMove=2,10 -z&gt; 1,10, includeAllAsArmies=False)"
+    (turn=149, frMove=4,10 -z&gt; 3,10, enMove=4,5 -&gt; 3,5, includeAllAsArmies=False)"
+    (turn=149, frMove=2,11 -&gt; 3,11, enMove=2,10 -z&gt; 2,9, includeAllAsArmies=False)"
+    (turn=101, frMove=2,1 -&gt; 1,1, enMove=3,6 -&gt; 3,5, includeAllAsArmies=True)"
+    (turn=149, frMove=3,7 -z&gt; 2,7, enMove=2,10 -&gt; 3,10, includeAllAsArmies=True)"
+    (turn=101, frMove=2,1 -z&gt; 1,1, enMove=2,10 -&gt; 2,9, includeAllAsArmies=True)"
+    (turn=149, frMove=3,7 -z&gt; 3,6, enMove=2,10 -&gt; 1,10, includeAllAsArmies=False)"
+    (turn=100, frMove=1,7 -&gt; 2,7, enMove=3,6 -&gt; 3,7, includeAllAsArmies=True)"
+    (turn=101, frMove=3,7 -z&gt; 3,8, enMove=4,5 -z&gt; 3,5, includeAllAsArmies=True)"
+    (turn=100, frMove=1,7 -&gt; 0,7, enMove=2,0 -z&gt; 1,0, includeAllAsArmies=True)"
+    (turn=100, frMove=3,7 -&gt; 2,7, enMove=4,5 -&gt; 4,4, includeAllAsArmies=False)"
+    (turn=149, frMove=1,7 -&gt; 0,7, enMove=0,1 -&gt; 0,2, includeAllAsArmies=False)"
+    (turn=149, frMove=1,5 -&gt; 2,5, enMove=2,0 -&gt; 3,0, includeAllAsArmies=False)"
+    (turn=101, frMove=2,11 -&gt; 3,11, enMove=4,5 -&gt; 4,4, includeAllAsArmies=True)"
+    (turn=100, frMove=3,7 -z&gt; 3,6, enMove=3,6 -z&gt; 2,6, includeAllAsArmies=True)"
+    (turn=100, frMove=1,7 -&gt; 1,8, enMove=3,5 -&gt; 4,5, includeAllAsArmies=True)"
+    (turn=101, frMove=1,7 -z&gt; 2,7, enMove=3,6 -&gt; 3,5, includeAllAsArmies=False)"
+    (turn=149, frMove=1,6 -z&gt; 1,5, enMove=3,6 -&gt; 4,6, includeAllAsArmies=False)"
+    (turn=101, frMove=2,11 -&gt; 1,11, enMove=3,6 -z&gt; 3,5, includeAllAsArmies=True)"
+    (turn=100, frMove=3,7 -z&gt; 3,6, enMove=4,5 -&gt; 4,4, includeAllAsArmies=True)"
+    (turn=101, frMove=3,7 -&gt; 3,8, enMove=3,6 -z&gt; 4,6, includeAllAsArmies=True)"
+    (turn=149, frMove=2,11 -z&gt; 3,11, enMove=3,5 -z&gt; 3,4, includeAllAsArmies=False)"
+    (turn=149, frMove=1,6 -z&gt; 0,6, enMove=2,0 -&gt; 3,0, includeAllAsArmies=False)"
+    (turn=100, frMove=3,7 -z&gt; 2,7, enMove=3,5 -z&gt; 4,5, includeAllAsArmies=False)"
+    (turn=101, frMove=1,7 -&gt; 0,7, enMove=3,4 -z&gt; 3,3, includeAllAsArmies=True)"
+    (turn=100, frMove=3,7 -&gt; 3,8, enMove=4,5 -&gt; 3,5, includeAllAsArmies=False)"
+    (turn=149, frMove=2,1 -&gt; 1,1, enMove=2,10 -z&gt; 2,11, includeAllAsArmies=False)"
+    (turn=101, frMove=3,7 -&gt; 3,6, enMove=3,4 -z&gt; 2,4, includeAllAsArmies=False)"
+    (turn=100, frMove=3,7 -&gt; 4,7, enMove=4,5 -z&gt; 4,6, includeAllAsArmies=True)"
+    (turn=100, frMove=3,7 -&gt; 3,6, enMove=3,6 -&gt; 3,5, includeAllAsArmies=False)"
+    (turn=149, frMove=1,7 -&gt; 0,7, enMove=3,6 -z&gt; 2,6, includeAllAsArmies=True)"
+    (turn=149, frMove=3,7 -&gt; 4,7, enMove=4,5 -z&gt; 4,4, includeAllAsArmies=False)"
+    (turn=149, frMove=3,7 -z&gt; 4,7, enMove=3,4 -&gt; 3,3, includeAllAsArmies=False)"
+    (turn=101, frMove=1,5 -&gt; 2,5, enMove=4,5 -&gt; 4,6, includeAllAsArmies=True)"
+    (turn=101, frMove=2,11 -&gt; 1,11, enMove=3,4 -z&gt; 4,4, includeAllAsArmies=True)"
+    (turn=100, frMove=3,7 -z&gt; 3,6, enMove=1,3 -z&gt; 1,4, includeAllAsArmies=False)"
+    (turn=100, frMove=1,7 -z&gt; 1,6, enMove=3,5 -z&gt; 4,5, includeAllAsArmies=False)"
+    (turn=149, frMove=1,5 -&gt; 1,4, enMove=4,5 -&gt; 3,5, includeAllAsArmies=False)"
+    (turn=149, frMove=1,5 -z&gt; 0,5, enMove=1,3 -z&gt; 2,3, includeAllAsArmies=False)"
+    (turn=100, frMove=1,6 -z&gt; 1,5, enMove=4,5 -&gt; 3,5, includeAllAsArmies=True)"
+    (turn=149, frMove=1,6 -z&gt; 1,7, enMove=3,5 -&gt; 2,5, includeAllAsArmies=False)"
+    (turn=100, frMove=3,7 -&gt; 2,7, enMove=3,5 -&gt; 4,5, includeAllAsArmies=True)"
+    (turn=101, frMove=1,7 -&gt; 1,6, enMove=2,10 -z&gt; 1,10, includeAllAsArmies=True)"
+    (turn=149, frMove=2,11 -z&gt; 1,11, enMove=3,5 -z&gt; 4,5, includeAllAsArmies=False)"
+    (turn=101, frMove=4,10 -z&gt; 4,9, enMove=4,5 -&gt; 4,6, includeAllAsArmies=False)"
+    (turn=149, frMove=2,11 -&gt; 2,10, enMove=3,4 -&gt; 4,4, includeAllAsArmies=False)"
+    (turn=101, frMove=3,7 -&gt; 2,7, enMove=2,10 -&gt; 1,10, includeAllAsArmies=False)"
+    (turn=149, frMove=1,7 -&gt; 0,7, enMove=3,6 -&gt; 3,7, includeAllAsArmies=True)"
+    (turn=101, frMove=4,10 -z&gt; 3,10, enMove=3,4 -z&gt; 3,5, includeAllAsArmies=False)"
+    (turn=101, frMove=3,7 -z&gt; 3,8, enMove=4,5 -z&gt; 3,5, includeAllAsArmies=False)"
+    (turn=149, frMove=2,1 -&gt; 1,1, enMove=2,10 -z&gt; 3,10, includeAllAsArmies=True)"
+    (turn=101, frMove=3,7 -&gt; 3,6, enMove=2,10 -z&gt; 3,10, includeAllAsArmies=True)"
+    (turn=100, frMove=1,7 -z&gt; 2,7, enMove=3,4 -&gt; 3,5, includeAllAsArmies=True)"
+    (turn=101, frMove=1,6 -&gt; 2,6, enMove=2,10 -&gt; 3,10, includeAllAsArmies=True)"
+    (turn=149, frMove=0,3 -&gt; 0,2, enMove=4,5 -z&gt; 3,5, includeAllAsArmies=True)"
+    (turn=149, frMove=0,3 -z&gt; 0,2, enMove=4,5 -&gt; 4,4, includeAllAsArmies=True)"
+    (turn=149, frMove=2,1 -z&gt; 2,2, enMove=3,6 -z&gt; 2,6, includeAllAsArmies=False)"
+    (turn=100, frMove=1,7 -&gt; 2,7, enMove=3,5 -&gt; 4,5, includeAllAsArmies=False)"
+    (turn=100, frMove=0,3 -z&gt; 1,3, enMove=4,5 -&gt; 3,5, includeAllAsArmies=True)"
+    (turn=149, frMove=1,6 -&gt; 1,5, enMove=3,6 -z&gt; 3,7, includeAllAsArmies=False)"
+    (turn=101, frMove=1,6 -z&gt; 1,5, enMove=3,4 -&gt; 3,3, includeAllAsArmies=True)"
+    (turn=100, frMove=1,5 -&gt; 1,6, enMove=4,5 -z&gt; 4,6, includeAllAsArmies=True)"
+    (turn=100, frMove=1,7 -z&gt; 1,8, enMove=4,5 -z&gt; 4,6, includeAllAsArmies=True)"
+    (turn=149, frMove=1,5 -&gt; 1,4, enMove=3,5 -&gt; 3,4, includeAllAsArmies=True)"
+    (turn=149, frMove=2,11 -&gt; 2,10, enMove=3,4 -&gt; 3,3, includeAllAsArmies=False)"
+    (turn=101, frMove=1,5 -&gt; 2,5, enMove=2,10 -&gt; 2,9, includeAllAsArmies=False)"
+    (turn=101, frMove=1,5 -z&gt; 1,4, enMove=4,5 -z&gt; 4,6, includeAllAsArmies=True)"
+    (turn=149, frMove=1,5 -&gt; 1,4, enMove=3,5 -z&gt; 3,4, includeAllAsArmies=False)"
+    (turn=101, frMove=3,7 -&gt; 2,7, enMove=0,1 -&gt; 0,2, includeAllAsArmies=True)"
+    (turn=100, frMove=1,7 -&gt; 2,7, enMove=3,5 -&gt; 3,6, includeAllAsArmies=False)"
+    (turn=101, frMove=1,7 -z&gt; 0,7, enMove=3,6 -z&gt; 3,7, includeAllAsArmies=True)"
+    (turn=101, frMove=1,5 -z&gt; 0,5, enMove=3,4 -&gt; 3,5, includeAllAsArmies=True)"
+    (turn=149, frMove=1,5 -z&gt; 0,5, enMove=1,3 -&gt; 1,2, includeAllAsArmies=True)"
+    """
+    def test_engine__validate_all_tile_types__test_one_off__one_deep(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        turn = 100
+
+        map, general, allyGen, enemyGen, enemyAllyGen = self.load_map_and_generals_2v2_from_string(SIM_VS_ENGINE_ALL_TILE_TYPES_TEST_MAP, turn)
+        # give them COMPLETELY separate maps so they can't possibly affect each other during the diff
+        engineMap, _, _, _, _ = self.load_map_and_generals_2v2_from_string(SIM_VS_ENGINE_ALL_TILE_TYPES_TEST_MAP, turn)
+
+        boardAnalysis = BoardAnalyzer(map, general)
+        boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
+
+        frMove = Move(map.GetTile(0, 4), map.GetTile(0, 5), move_half=True)
+        enMove = Move(map.GetTile(1, 4), map.GetTile(0, 4), move_half=False)
+        # frMove = Move(map.GetTile(1, 7), map.GetTile(2, 7), move_half=True)
+        # enMove = Move(map.GetTile(3, 6), map.GetTile(2, 6), move_half=True)
+        includeAllAsArmies = True
+
+        self.begin_capturing_logging()
+        self.run_simulator_vs_engine_move_diff_test(
+            map=map,
+            engineMap=engineMap,
+            general=general,
+            enemyGen=enemyGen,
+            frMove1=frMove,
+            frMove2=None,
+            enMove1=enMove,
+            enMove2=None,
+            includeAllAsArmies=includeAllAsArmies,
+            boardAnalysis=boardAnalysis,
+            debug=debugMode
+        )
+
+    def test_engine__validate_all_tile_types__brute_force_moves__validate_sim_state__one_deep(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        outerMap, general, allyGen, enemyGen, enemyAllyGen = self.load_map_and_generals_2v2_from_string(SIM_VS_ENGINE_ALL_TILE_TYPES_TEST_MAP, 0)
+
+        frTiles = outerMap.players[general.player].tiles
+        enTiles = outerMap.players[enemyGen.player].tiles
+
+        boardAnalysis = BoardAnalyzer(outerMap, general)
+        boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
+
+        allFrMoves = []
+        allEnMoves = []
+
+        for tile in frTiles:
+            for movable in tile.movable:
+                allFrMoves.append(Move(tile, movable, move_half=False))
+                allFrMoves.append(Move(tile, movable, move_half=True))
+        for tile in enTiles:
+            for movable in tile.movable:
+                allEnMoves.append(Move(tile, movable, move_half=False))
+                allEnMoves.append(Move(tile, movable, move_half=True))
+
+        allFrMoves.append(None)
+        allEnMoves.append(None)
+
+        for turn in [100, 101, 149]:
+            for frMove in allFrMoves:
+                for enMove in allEnMoves:
+                    for includeAllAsArmies in [True, False]:
+                        with self.subTest(turn=turn, frMove=frMove, enMove=enMove, includeAllAsArmies=includeAllAsArmies):
+                            # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
+                            # Both should have half the board if this gens correctly..
+                            map, general, allyGen, enemyGen, enemyAllyGen = self.load_map_and_generals_2v2_from_string(SIM_VS_ENGINE_ALL_TILE_TYPES_TEST_MAP, turn)
+
+                            # give them COMPLETELY separate maps so they can't possibly affect each other during the diff
+                            engineMap, _, _, _, _ = self.load_map_and_generals_2v2_from_string(SIM_VS_ENGINE_ALL_TILE_TYPES_TEST_MAP, turn)
+
+                            self.run_simulator_vs_engine_move_diff_test(
+                                map=map,
+                                engineMap=engineMap,
+                                general=general,
+                                enemyGen=enemyGen,
+                                frMove1=frMove,
+                                frMove2=None,
+                                enMove1=enMove,
+                                enMove2=None,
+                                includeAllAsArmies=includeAllAsArmies,
+                                boardAnalysis=boardAnalysis,
+                                debug=debugMode
+                            )
+
+    def test_engine__validate_all_tile_types__test_one_off__two_deep(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        turn = 100
+
+        map, general, allyGen, enemyGen, enemyAllyGen = self.load_map_and_generals_2v2_from_string(SIM_VS_ENGINE_ALL_TILE_TYPES_TEST_MAP, turn)
+        # give them COMPLETELY separate maps so they can't possibly affect each other during the diff
+        engineMap, _, _, _, _ = self.load_map_and_generals_2v2_from_string(SIM_VS_ENGINE_ALL_TILE_TYPES_TEST_MAP, turn)
+
+        boardAnalysis = BoardAnalyzer(map, general)
+        boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
+
+        frMove = Move(map.GetTile(2, 1), map.GetTile(2, 0), move_half=False)
+        secondFrMove = Move(map.GetTile(2, 1), map.GetTile(2, 2), move_half=False)
+        enMove = Move(map.GetTile(2, 0), map.GetTile(1, 0), move_half=False)
+        secondEnMove = Move(map.GetTile(0, 1), map.GetTile(1, 1), move_half=False)
+        includeAllAsArmies = True
+
+        self.run_simulator_vs_engine_move_diff_test(
+            map=map,
+            engineMap=engineMap,
+            general=general,
+            enemyGen=enemyGen,
+            frMove1=frMove,
+            frMove2=secondFrMove,
+            enMove1=enMove,
+            enMove2=secondEnMove,
+            includeAllAsArmies=includeAllAsArmies,
+            boardAnalysis=boardAnalysis,
+            debug=debugMode
+        )
+
+    def test_engine__validate_all_tile_types__brute_force_moves__validate_sim_state__two_deep(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        outerMap, general, allyGen, enemyGen, enemyAllyGen = self.load_map_and_generals_2v2_from_string(SIM_VS_ENGINE_ALL_TILE_TYPES_TEST_MAP, 0)
+
+        frTiles = outerMap.players[general.player].tiles
+        enTiles = outerMap.players[enemyGen.player].tiles
+
+        boardAnalysis = BoardAnalyzer(outerMap, general)
+        boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
+
+        allFrMoves = []
+        allEnMoves = []
+
+        for tile in frTiles:
+            for movable in tile.movable:
+                allFrMoves.append(Move(tile, movable, move_half=False))
+                allFrMoves.append(Move(tile, movable, move_half=True))
+        for tile in enTiles:
+            for movable in tile.movable:
+                allEnMoves.append(Move(tile, movable, move_half=False))
+                allEnMoves.append(Move(tile, movable, move_half=True))
+
+        allFrMoves.append(None)
+        allEnMoves.append(None)
+
+        for turn in [100, 101, 149]:
+            for frMove in allFrMoves:
+                for enMove in allEnMoves:
+                    newFrMoves = list(allFrMoves)
+                    if frMove is not None:
+                        for movable in frMove.dest.movable:
+                            newFrMoves.append(Move(frMove.dest, movable, move_half=False))
+                            newFrMoves.append(Move(frMove.dest, movable, move_half=True))
+                    newEnMoves = list(allEnMoves)
+                    if enMove is not None:
+                        for movable in enMove.dest.movable:
+                            newEnMoves.append(Move(enMove.dest, movable, move_half=False))
+                            newEnMoves.append(Move(enMove.dest, movable, move_half=True))
+
+                    for secondFrMove in newFrMoves:
+                        for secondEnMove in newEnMoves:
+                            for includeAllAsArmies in [True, False]:
+                                with self.subTest(turn=turn, frMove=frMove, secondFrMove=secondFrMove, enMove=enMove, secondEnMove=secondEnMove, includeAllAsArmies=includeAllAsArmies):
+                                    # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
+                                    # Both should have half the board if this gens correctly..
+                                    map, general, allyGen, enemyGen, enemyAllyGen = self.load_map_and_generals_2v2_from_string(SIM_VS_ENGINE_ALL_TILE_TYPES_TEST_MAP, turn)
+
+                                    # give them COMPLETELY separate maps so they can't possibly affect each other during the diff
+                                    engineMap, _, _, _, _ = self.load_map_and_generals_2v2_from_string(SIM_VS_ENGINE_ALL_TILE_TYPES_TEST_MAP, turn)
+
+                                    self.run_simulator_vs_engine_move_diff_test(
+                                        map=map,
+                                        engineMap=engineMap,
+                                        general=general,
+                                        enemyGen=enemyGen,
+                                        frMove1=frMove,
+                                        frMove2=secondFrMove,
+                                        enMove1=enMove,
+                                        enMove2=secondEnMove,
+                                        includeAllAsArmies=includeAllAsArmies,
+                                        boardAnalysis=boardAnalysis,
+                                        debug=debugMode
+                                    )
 
     def test_engine__recognizes_general_race_winner__by_priority(self):
         rawMap = """
@@ -2032,6 +2520,10 @@ bTiles=20
         self.assertEqual(general.player, tgTile.player)
 
     def test_should_not_take_more_than_expected_final_scrim_time__point303_tried__used_point_370(self):
+        # perf benching changes
+        # PRE ANY OPTIMIZATIONS
+        # MCTS e3.5 : ee5.5 iter 1008, nodesExplored 1008, rollouts 1008, backprops 2785, rolloutExpansions 8064, biasedRolloutExpansions 2879
+        #
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_take_more_than_expected_final_scrim_time__point303_tried__used_point_370___Teammate.exe-1Yd71gW48---2--204.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 204, fill_out_tiles=True)
@@ -2054,7 +2546,7 @@ bTiles=20
         # bot.init_turn()
         # bot.viewInfo.turnInc()
         # bot.viewInfo.armyTracker = bot.armyTracker
-        # bot.mcts_engine.explore_factor = 0.1
+        bot.mcts_engine.explore_factor = 0.1
         bot.find_end_of_turn_scrim_move(None, None)
         duration = time.perf_counter() - start
         if debugMode:
@@ -2062,3 +2554,128 @@ bTiles=20
             self.render_view_info(bot._map, bot.viewInfo)
         self.assertGreater(0.4, duration, 'should not have used way too much time making an end of turn scrim move.')
         self.assertLess(0.1, duration, 'should still have used a lot of time, though')
+
+    def run_simulator_vs_engine_move_diff_test(
+            self,
+            map: MapBase,
+            engineMap: MapBase,
+            general: Tile,
+            enemyGen: Tile,
+            frMove1: Move | None,
+            frMove2: Move | None,
+            enMove1: Move | None,
+            enMove2: Move | None,
+            includeAllAsArmies: bool,
+            boardAnalysis: BoardAnalyzer,
+            debug: bool = False,
+    ):
+        sim = GameSimulator(map, ignore_illegal_moves=True)
+
+        # self.begin_capturing_logging()
+        frArmies: typing.List[Army]
+        enArmies: typing.List[Army]
+        if includeAllAsArmies:
+            frArmies = [Army(t) for t in engineMap.players[general.player].tiles]
+            enArmies = [Army(t) for t in engineMap.players[enemyGen.player].tiles]
+        else:
+            frArmies = []
+            enArmies = []
+            if frMove1 is not None:
+                frArmies.append(Army(frMove1.source))
+            if frMove2 is not None and (frMove1 is None or frMove1.dest != frMove2.source):
+                frArmies.append(Army(frMove2.source))
+            if enMove1 is not None:
+                enArmies.append(Army(enMove1.source))
+            if enMove2 is not None and (enMove1 is None or enMove1.dest != enMove2.source):
+                enArmies.append(Army(enMove2.source))
+
+            if len(frArmies) == 0:
+                frArmies.append(Army(general))
+            if len(enArmies) == 0:
+                enArmies.append(Army(enemyGen))
+
+        sim.send_update_to_player_maps(noDeltas=True)
+
+        mcts: MctsDUCT = MctsDUCT()
+        armyEngine = ArmyEngine(engineMap, frArmies, enArmies, boardAnalysis, mctsRunner=mcts)
+        armyEngine.time_limit = 100000000000000.0
+        armyEngine.iteration_limit = 1000
+        armyEngine.friendly_has_kill_threat = False
+        armyEngine.enemy_has_kill_threat = False
+        armyEngine.allow_friendly_no_op = True
+        armyEngine.allow_enemy_no_op = True
+
+        initialBoardState = armyEngine.get_base_board_state()
+        self.assertBoardStateMatchesGameEngine(sim, initialBoardState, frPlayer=general.player, enPlayer=enemyGen.player)
+
+        fMap = sim.players[general.player].map
+        eMap = sim.players[enemyGen.player].map
+
+        # if debug:
+        #     self.render_map(sim.sim_map)
+        #     self.render_map(fMap)
+        #     self.render_map(eMap)
+
+        sim.make_move(general.player, frMove1)
+        sim.make_move(enemyGen.player, enMove1)
+        fMap.last_player_index_submitted_move = None if frMove1 is None else (fMap.GetTile(frMove1.source.x, frMove1.source.y), fMap.GetTile(frMove1.dest.x, frMove1.dest.y), frMove1.move_half)
+        eMap.last_player_index_submitted_move = None if enMove1 is None else (eMap.GetTile(enMove1.source.x, enMove1.source.y), eMap.GetTile(enMove1.dest.x, enMove1.dest.y), enMove1.move_half)
+
+        move1BoardState = armyEngine.get_next_board_state(
+            map.turn + 1,
+            initialBoardState,
+            frMove=frMove1,
+            enMove=enMove1,
+            noClone=False)
+
+        sim.execute_turn(dont_require_all_players_to_move=True)
+        if debug:
+            self.render_map(sim.sim_map)
+            self.render_map(fMap)
+            self.render_map(eMap)
+
+        self.assertBoardStateMatchesGameEngine(sim, move1BoardState, frPlayer=general.player, enPlayer=enemyGen.player)
+
+        sim.make_move(general.player, frMove2)
+        sim.make_move(enemyGen.player, enMove2)
+        fMap.last_player_index_submitted_move = None if frMove2 is None else (fMap.GetTile(frMove2.source.x, frMove2.source.y), fMap.GetTile(frMove2.dest.x, frMove2.dest.y), frMove2.move_half)
+        eMap.last_player_index_submitted_move = None if enMove2 is None else (eMap.GetTile(enMove2.source.x, enMove2.source.y), eMap.GetTile(enMove2.dest.x, enMove2.dest.y), enMove2.move_half)
+
+        # captured in transit move 1 second moves wont work, perform none instead for this for the engine or else the engine blows up. If this is actually a missing sim tile, then
+        if frMove2 is not None and frMove2.source not in move1BoardState.sim_tiles:
+            frMove2 = None
+        if enMove2 is not None and enMove2.source not in move1BoardState.sim_tiles:
+            enMove2 = None
+
+        move2BoardState = armyEngine.get_next_board_state(
+            map.turn + 2,
+            move1BoardState,
+            frMove=frMove2,
+            enMove=enMove2,
+            noClone=False)
+
+        sim.execute_turn(dont_require_all_players_to_move=True)
+        if debug:
+            self.render_map(sim.sim_map)
+            self.render_map(fMap)
+            self.render_map(eMap)
+
+        self.assertBoardStateMatchesGameEngine(sim, move2BoardState, frPlayer=general.player, enPlayer=enemyGen.player)
+
+        #
+        # result = armyEngine.scan(4, mcts=True)
+        # if debugMode:
+        #     sim = GameSimulator(map_raw=map, ignore_illegal_moves=True)
+        #     sim.players[general.player].set_map_vision(map)
+        #     # self.render_sim_analysis(map, result)
+        #     self.render_step_engine_analysis(armyEngine, sim, result, aArmy, bArmy)
+        #
+        # # this should be +2 / -2 if we're considering no-op moves to be worth 1 economy, otherwise this is +1 -1
+        # #  as priority player goes towards other end of board capping tile towards king and other player must chase sideways
+        # if MapBase.player_has_priority_over_other(general.player, enemyGen.player, turn):
+        #     self.assertEqual(-1, result.best_result_state.tile_differential)
+        # else:
+        #     self.assertEqual(1, result.best_result_state.tile_differential)
+        #
+        # self.assertEqual(0, result.best_result_state.city_differential)
+        # self.assertGreater(len(result.expected_best_moves), 1)

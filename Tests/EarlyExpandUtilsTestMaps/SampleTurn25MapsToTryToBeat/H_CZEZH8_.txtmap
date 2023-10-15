@@ -1,0 +1,109 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                                        C42  d2   d2   dG3  d2   d2        M                   M
+                         M    M    M    d2   d2   C48  d2   M         M    M    d2
+          M    M                                  M    d2   d2   d2   d2   d2   d2   C45  M
+                              M              d2   d2   d2   c2             C45
+                                             d2        c2   cG4  c2   c2   c2   c2
+          M                   M              d2   M    c4   M    C45  c2        c2   C49
+                    M    d2   d2   d2   d2   d2        M    M         c2        c2   c2   M    M
+M    M         M              C49       M         C47                 c2        M    c2
+     M    M    M    M                   M    M    M    M    M         c2                  M
+          M                        M    M         M         M         c2   C42  M              M
+          M         M                        M                   C50  c2   M
+                                   M    M                        M    c2        M    M    M
+          M                   M         M                   M    c2   c2   M
+                         M                                  M    c2             M         M
+                    M                                       M                             M
+M         M                                            M                   M         M         M
+                    M              M              M                                       M    M
+          M              M                                            M                        M
+                                        M              M    M         M                        M
+M         M         M                   M                                            M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=50
+player_index=3
+teams=1,1,2,2
+mode=team
+bot_target_player=-1
+targetPlayerExpectedGeneralLocation=6,15
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=sensi.never
+aTiles=24
+aScore=50
+aStandingArmy=26
+aStars=0
+aCityCount=1
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=23
+aDelta25Score=49
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=0
+bUsername=Mr poopoo
+bTiles=17
+bScore=43
+bStandingArmy=26
+bStars=0
+bCityCount=1
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=16
+bDelta25Score=42
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=0
+cUsername=Wrm Mobile
+cTiles=22
+cScore=48
+cStandingArmy=26
+cStars=57
+cCityCount=1
+cGeneral=12,4
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=21
+cDelta25Score=47
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=48
+c_bot_general_approx=12,4
+dUsername=Teammate.exe
+dTiles=25
+dScore=51
+dStandingArmy=26
+dStars=57
+dCityCount=1
+dGeneral=11,0
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+dDelta25Tiles=24
+dDelta25Score=50
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=50
+d_bot_general_approx=11,0

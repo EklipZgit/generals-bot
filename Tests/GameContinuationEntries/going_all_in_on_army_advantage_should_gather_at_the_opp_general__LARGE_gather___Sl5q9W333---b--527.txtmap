@@ -1,13 +1,13 @@
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
-          M    d2   M    d1   d2   d3   d2   d2   M    d1   d6   M         M    M
+          M    d2   M    cG300d2   d3   d2   d2   M    d1   d6   M         M    M
 b2   b2   b12  d2   M    dC11 d2   d2   d2   d2   d2   d4   M         d13  dC2  M    d2   M
 b2   M    d2   d1   b11  d8   M    M    d3   d2   d3   b1   b1   M    M    d25  d1   d1   d1
 b2   b6   M    d1   M    d3   d3   d1   d3   M    d5   d1   d1   b1   b1   b1   b1   d1   d1
 b2   b5   M         M    d4   d3   dC1  d3   M    d3   d3   M    d2   d7   d10  d3   M    d2
 b5   b5   b5   M    d1   d1   d1   d8   d4   b5   d6   d2   M    d3   b2   b2   d2   d2   dG300M
 b4   b4   b4   b4   d8   M    b4   d5   b4   b4   M    M    d2   d1   M    d8   d2   M
-b5   M    bC36 b2   b4   M         M    b4   b4   C45  d1   d1   d1   d1   d-1  d-1  d-1  M
-b5   M    M    bC35 M    b2   b5   M    C49  b4   d2   d2   d2   d1   d8   d-1  d-1  d-1  M
+b5   M    bC36 b2   b4   M         M    b4   b4   C45  d1   d1   d1   d1   d1D  d1   d1   M
+b5   M    M    bC35 M    b2   b5   M    C49  b4   d2   d2   d2   d1   d8   d1D  d1   d1   M
 M    M    b3   b2   b2   b2   b2   b2   b2   b2   b2   b2   M    d3   d4   M    M    M    M    M
      b3   b3   b3   M    b2   b3   b5   b3   b4   b4   b4   b4   d4   d5   b4   d4   M    M
 M    b3   b3   b3   b3   b3   b3   M    b3   b5   b4   b4   M    M    d4   d3   M
@@ -49,14 +49,14 @@ bKnowsKingLocation=False
 bDead=False
 bLeftGame=False
 bLeftGameTurn=-1
-cTiles=0
-cScore=0
+cTiles=1
+cScore=300
 cStandingArmy=0
 cStars=162
 cCityCount=1
 cGeneral=4,24
 cKnowsKingLocation=False
-cDead=True
+cDead=False
 cLeftGame=True
 cLeftGameTurn=299
 dTiles=101

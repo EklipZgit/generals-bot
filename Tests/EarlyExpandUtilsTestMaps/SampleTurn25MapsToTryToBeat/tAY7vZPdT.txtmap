@@ -1,0 +1,114 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+               M    M                                       M    a2   a2   a2   a2   a2   a2   a2
+M                        M              b2   b2   b2                            a2   C48  a2   a2
+     M         M    M              b2   b2   b2   bG3  b2                       a2        M    a2
+M         M         M         M    b2   C42       b2   b2   M              M    a2   M    a2   a2
+          M    M                   b2   b2   b2   b2   M         M         a2   a2   M    aG9
+M    M    M                        b2   b2        M    C40  M              a2   C43       M    M
+M    M    M    M                   b2   b2                       M
+               M         b2   b2   d2   M    C41                 d2   d2   d2
+                         b2        d2   d2D  d2   M    d2   d2   d2   M                   M
+     M              M    b2   M    M              M    d2   M    M
+     M                   b2   d2   d2   d2   d2   d2   d2   M                   M         M
+                              d2   M         M              M                        M
+          M    M              d2   M    M         M    M                             M         M
+     M         M    M                                            M    M    M    M    M         M
+                                        M                        M    M                        M
+                                                                      M    M
+          M                             M                        M                        M
+          M         M              M         M         M    M              M    M
+M                        M                   M                        M
+          M              M         M              M    M                                  M
+          M                        M              M         M    M                   M
+               M         M                        M         M              M         M    M    M
+M         M              M              M         M                        M                   M
+M                   M    M    M              M                                       M    M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=50
+player_index=1
+teams=1,1,2,2
+mode=team
+bot_target_player=3
+targetPlayerExpectedGeneralLocation=11,11
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=Anonymous
+aTiles=19
+aScore=45
+aStandingArmy=26
+aStars=0
+aCityCount=1
+aGeneral=18,4
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=18
+aDelta25Score=44
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=50
+a_bot_general_approx=18,4
+bUsername=Teammate.exe
+bTiles=24
+bScore=49
+bStandingArmy=25
+bStars=0
+bCityCount=1
+bGeneral=10,2
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=23
+bDelta25Score=48
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=50
+b_bot_general_approx=10,2
+cUsername=maxing
+cTiles=16
+cScore=42
+cStandingArmy=26
+cStars=0
+cCityCount=1
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=15
+cDelta25Score=41
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=0
+dUsername=sg,degjheghf
+dTiles=22
+dScore=47
+dStandingArmy=25
+dStars=0
+dCityCount=1
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=15
+dDelta25Tiles=21
+dDelta25Score=46
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=46
+d_bot_general_approx=11,10

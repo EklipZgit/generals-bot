@@ -13,6 +13,7 @@ import base
 from ArmyEngine import ArmySimResult
 from ArmyTracker import Army
 from DataModels import Move
+from MapMatrix import MapMatrix
 from Path import Path
 from Sim.GameSimulator import GameSimulator, GameSimulatorHost
 from Sim.TextMapLoader import TextMapLoader
@@ -32,6 +33,8 @@ class TestBase(unittest.TestCase):
         self._initialized: bool = False
 
     def begin_capturing_logging(self, logLevel: int = logging.INFO):
+        if TestBase.GLOBAL_BYPASS_REAL_TIME_TEST:
+            return
         # without force=True, the first time a logging.log* is called earlier in the code, the config gets set to
         # default: WARN and basicConfig after that point has no effect without force=True
         logging.basicConfig(format='%(message)s', level=logLevel, force=True)
@@ -102,6 +105,52 @@ class TestBase(unittest.TestCase):
         rawData = TextMapLoader.get_map_raw_string_from_file(mapFilePath)
         return self.load_map_and_generals_from_string(rawData, turn, player_index, fill_out_tiles, respect_player_vision)
 
+    def load_map_and_generals_2v2(
+            self,
+            mapFilePath: str,
+            turn: int,
+            player_index: int = -1,
+            fill_out_tiles: bool = False,
+            respect_player_vision: bool = False
+    ) -> typing.Tuple[MapBase, Tile, Tile | None, Tile, Tile | None]:
+        rawData = TextMapLoader.get_map_raw_string_from_file(mapFilePath)
+        return self.load_map_and_generals_2v2_from_string(rawData, turn, player_index, fill_out_tiles, respect_player_vision)
+
+    def load_map_and_generals_2v2_from_string(
+            self,
+            rawMapStr: str,
+            turn: int,
+            player_index: int = -1,
+            fill_out_tiles=False,
+            respect_player_vision: bool = False
+    ) -> typing.Tuple[MapBase, Tile, Tile | None, Tile, Tile | None]:
+        map, gen, enemyGen = self.load_map_and_generals_from_string(
+            rawMapStr=rawMapStr,
+            turn=turn,
+            player_index=player_index,
+            fill_out_tiles=fill_out_tiles,
+            respect_player_vision=respect_player_vision,
+        )
+        if not map.is_2v2:
+            raise AssertionError('something went wrong, not 2v2')
+        allyGen = None
+        if len(map.teammates) == 0:
+            raise AssertionError('something went wrong, no teammates?')
+        for teammate in map.teammates:
+            allyGen = map.generals[teammate]
+
+        enAllyGen = None
+        for player in map.players:
+            if player.index == gen.player:
+                continue
+            if player.index in map.teammates:
+                continue
+            if player.index == enemyGen.player:
+                continue
+            enAllyGen = map.generals[player.index]
+
+        return map, gen, allyGen, enemyGen, enAllyGen
+
     def load_map_and_generals_from_string(
             self,
             rawMapStr: str,
@@ -120,29 +169,12 @@ class TestBase(unittest.TestCase):
         if 'bot_target_player' in gameData:
             botTargetPlayer = int(gameData['bot_target_player'])
 
-        enemyGen: Tile = None
-        if botTargetPlayer is not None and map.generals[botTargetPlayer] is not None:
-            enemyGen = map.generals[botTargetPlayer]
-        elif 'targetPlayerExpectedGeneralLocation' in gameData:
-            x, y = gameData['targetPlayerExpectedGeneralLocation'].split(',')
-            enemyGen = map.GetTile(int(x), int(y))
-            if not enemyGen.isGeneral:
-                enemyGen.isGeneral = True
-                enemyGen.player = botTargetPlayer
-                if enemyGen.army == 0:
-                    enemyGen.army = 10
-            map.generals[enemyGen.player] = enemyGen
-            map.players[enemyGen.player].general = enemyGen
-        elif any(filter(lambda gen: gen is not None and gen != general, map.generals)):
-            enemyGen = next(filter(lambda gen: gen is not None and gen != general, map.generals))
-            map.generals[enemyGen.player] = enemyGen
-            map.players[enemyGen.player].general = enemyGen
-        else:
-            raise AssertionError("Unable to produce an enemy general from given map data file...")
+        chars = TextMapLoader.get_player_char_index_map()
+
+        enemyGen = self._generate_enemy_gen(map, gameData, botTargetPlayer, isTargetPlayer=True)
 
         for i, player in enumerate(map.players):
             if i != general.player and i != enemyGen.player:
-                chars = TextMapLoader.get_player_char_index_map()
                 enemyChar, _ = chars[i]
                 # player.dead = True
 
@@ -167,30 +199,41 @@ class TestBase(unittest.TestCase):
                 if f'{enemyChar}AggressionFactor' in gameData:
                     player.aggression_factor = int(gameData[f'{enemyChar}AggressionFactor'])
 
+                if enemyGen.player != i and general.player != i and not player.dead:
+                    self._generate_enemy_gen(map, gameData, i, isTargetPlayer=False)
+
         if fill_out_tiles:
             chars = TextMapLoader.get_player_char_index_map()
-            enemyChar, _ = chars[enemyGen.player]
 
-            enemyScore = None
-            enemyTiles = None
-            enemyCities = 1
+            for player in map.players:
+                if player.dead:
+                    continue
+                if player.index == general.player:
+                    continue
 
-            if f'{enemyChar}Score' in gameData:
-                enemyScore = int(gameData[f'{enemyChar}Score'])
-            if f'{enemyChar}Tiles' in gameData:
-                enemyTiles = int(gameData[f'{enemyChar}Tiles'])
-            if f'{enemyChar}CityCount' in gameData:
-                enemyCities = int(gameData[f'{enemyChar}CityCount'])
+                enemyScore = None
+                enemyTiles = None
+                enemyCities = 1
 
-            playerChar, _ = chars[general.player]
-            playerScore = None
-            playerTiles = None
-            if f'{playerChar}Score' in gameData:
-                playerScore = int(gameData[f'{playerChar}Score'])
-            if f'{playerChar}Tiles' in gameData:
-                playerTiles = int(gameData[f'{playerChar}Tiles'])
+                gen = player.general
+                enemyChar, _ = chars[player.index]
 
-            self.ensure_player_tiles_and_scores(map, general, playerTiles, playerScore, enemyGen, enemyTiles, enemyScore, enemyCities, respect_player_vision)
+                if f'{enemyChar}Score' in gameData:
+                    enemyScore = int(gameData[f'{enemyChar}Score'])
+                if f'{enemyChar}Tiles' in gameData:
+                    enemyTiles = int(gameData[f'{enemyChar}Tiles'])
+                if f'{enemyChar}CityCount' in gameData:
+                    enemyCities = int(gameData[f'{enemyChar}CityCount'])
+
+                playerChar, _ = chars[general.player]
+                playerScore = None
+                playerTiles = None
+                if f'{playerChar}Score' in gameData:
+                    playerScore = int(gameData[f'{playerChar}Score'])
+                if f'{playerChar}Tiles' in gameData:
+                    playerTiles = int(gameData[f'{playerChar}Tiles'])
+
+                self.ensure_player_tiles_and_scores(map, general, playerTiles, playerScore, gen, enemyTiles, enemyScore, enemyCities, respect_player_vision)
 
         for player in map.players:
             player.score = 0
@@ -198,7 +241,7 @@ class TestBase(unittest.TestCase):
             player.cityCount = 0
             player.cities = []
             player.tiles = []
-            player.general = []
+            player.general = None
         for tile in map.get_all_tiles():
             tile.lastSeen = 0
             if tile.player >= 0:
@@ -212,6 +255,8 @@ class TestBase(unittest.TestCase):
                     tilePlayer.cityCount += 1
                     tilePlayer.cities.append(tile)
                 tilePlayer.tiles.append(tile)
+
+        map.scores = [Score(p.index, p.score, p.tileCount, p.dead) for p in map.players]
 
         return map, general, enemyGen
 
@@ -651,6 +696,13 @@ class TestBase(unittest.TestCase):
         self.assertEqual(mapTile.isMountain, playerTile.isMountain, f'tile {x},{y} isMountain mismatched for p{player_index}')
         self.assertEqual(mapTile.isGeneral, playerTile.isGeneral, f'tile {x},{y} isGeneral mismatched for p{player_index}')
 
+    def assertNoFriendliesKilled(self, map: MapBase, general: Tile, allyGen: Tile | None):
+        """If the ally was alive at sim start (their general is not None) then assert they still own their general and that our general wasnt captured either."""
+        if allyGen is not None:
+            self.assertTrue(allyGen.isGeneral, "ally was killed")
+            self.assertTrue(allyGen.player in map.teammates, "ally was killed")
+        self.assertEqual(map.player_index, general.player, "bot was killed")
+
     def assertPlayerTileNotVisible(self, x: int, y: int, sim: GameSimulator, player_index: int) -> Tile:
         playerTile = self.get_player_tile(x, y, sim, player_index)
         self.assertFalse(playerTile.visible)
@@ -791,7 +843,7 @@ class TestBase(unittest.TestCase):
             generalTargetScore = map.players[general.player].score
 
         def generateTilesFunc(tile: Tile, dist: int):
-            if tile == general or tile == enemyGeneral:
+            if tile.isGeneral:
                 return
 
             tileToGen = genDistMap[tile.x][tile.y]
@@ -857,7 +909,7 @@ class TestBase(unittest.TestCase):
                     countScoreGeneral.add(1)
                     tile.army += 1
 
-        scores: typing.List[Score] = [Score(idx, 0, 0, True) for idx, p in enumerate(map.players)]
+        scores = map.scores
         scores[general.player] = Score(general.player, countScoreGeneral.value, countTilesGeneral.value, dead=False)
         scores[enemyGeneral.player] = Score(enemyGeneral.player, countScoreEnemy.value, countTilesEnemy.value, dead=False)
 
@@ -1017,3 +1069,53 @@ class TestBase(unittest.TestCase):
         logging.info(msg)
 
         self.assertGreater(aWins, bWins, msg)
+
+    def _generate_enemy_gen(self, map: MapBase, gameData: typing.Dict[str, str], player: int | None, isTargetPlayer: bool = False):
+        chars = TextMapLoader.get_player_char_index_map()
+
+        enemyGen: Tile = None
+        if player is not None:
+            if map.generals[player] is not None:
+                enemyGen = map.generals[player]
+            elif isTargetPlayer and 'targetPlayerExpectedGeneralLocation' in gameData:
+                x, y = gameData['targetPlayerExpectedGeneralLocation'].split(',')
+                enemyGen = map.GetTile(int(x), int(y))
+            elif f'{chars[player]}_bot_general_approx' in gameData:
+                x, y = gameData[f'{chars[player]}_bot_general_approx'].split(',')
+                enemyGen = map.GetTile(int(x), int(y))
+
+        if enemyGen is None:
+            enemyGens = list(filter(lambda gen: gen is not None and (gen.player == player or player is None), map.generals))
+            if len(enemyGens) > 0:
+                enemyGen = enemyGens[0]
+
+        if enemyGen is None and player is not None:
+            tileProx = MapMatrix(map, 0)
+            for tile in map.get_all_tiles():
+                if tile.player == player:
+                    def incrementer(t, dist):
+                        tileProx[t] += 1
+                    SearchUtils.breadth_first_foreach_dist(map, [tile], 4, incrementer)
+            maxTile = None
+            for tile in map.get_all_tiles():
+                if tile.player != player and tile.player != -1:
+                    continue
+                if SearchUtils.any_where(tile.adjacents, lambda t: map.is_tile_friendly(t)):
+                    continue
+                if maxTile is None or tileProx[maxTile] < tileProx[tile]:
+                    maxTile = tile
+            enemyGen = maxTile
+
+        if enemyGen is None:
+            raise AssertionError("Unable to produce an enemy general from given map data file...")
+
+        if not enemyGen.isGeneral:
+            enemyGen.isGeneral = True
+            enemyGen.player = player
+            if enemyGen.army == 0:
+                enemyGen.army = 1
+
+        map.generals[enemyGen.player] = enemyGen
+        map.players[enemyGen.player].general = enemyGen
+
+        return enemyGen

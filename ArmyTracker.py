@@ -1668,6 +1668,10 @@ class ArmyTracker(object):
         Returns an army the army resolved to be, if one is found.
         DOES NOT create an army if a source fog army is not found.
         """
+
+        if tile.delta.discovered and not tile.army > self.track_threshold:
+            return None
+
         sourceFogArmyPath = self.find_fog_source(player, tile, unaccountedForDelta)
         if sourceFogArmyPath is not None:
             self.use_fog_source_path(tile, sourceFogArmyPath, unaccountedForDelta)

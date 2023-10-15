@@ -198,8 +198,9 @@ def optimize_first_25(
         (13, 24, 2),  # most likely to find high value paths first
         (11, 20, 6),
         (14, 26, 0),
-        (10, 20, 8),
+        # (10, 20, 8),
         (12, 22, 4),
+        (13, 24, 8),
     ]
     # 12-6-5-4-1
 
@@ -447,7 +448,10 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
         return []
 
     minWastedMovesThisLaunch = max(0, allow_wasted_moves // 2 - 2)
-    for force_wasted_moves in range(minWastedMovesThisLaunch, allow_wasted_moves + 1):
+
+    # wastedAllowed = [i for i in range(allow_wasted_moves + 2, minWastedMovesThisLaunch)]
+
+    for force_wasted_moves in range(minWastedMovesThisLaunch, allow_wasted_moves + 4):
         bestCaseResult = len(visited_set) + turnsLeft - force_wasted_moves
         if bestCaseResult < prune_below:
             if not no_log:

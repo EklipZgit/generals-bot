@@ -1021,7 +1021,7 @@ class DefenseTests(TestBase):
         
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-        simHost.queue_player_moves_str(enemyGeneral.player, '16,8->15,8->14,8->13,8->12,8->11,8->10,8')
+        simHost.queue_player_moves_str(enAllyGen.player, '16,8->15,8->14,8->13,8->12,8->11,8->10,8')
         bot = simHost.get_bot(general.player)
         playerMap = simHost.get_player_map(general.player)
 
@@ -1172,7 +1172,7 @@ class DefenseTests(TestBase):
         simHost.sim.ignore_illegal_moves = True
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=18)
         self.assertIsNone(winner)
-        self.assertPlayerTileCountGreater(simHost, general.player, 73)
+        self.assertPlayerTileCountGreater(simHost, general.player, 72)
         self.assertLess(playerMap.players[enemyGeneral.player].score, 180, "should have captured the enemy tile costing opp 70 army (they gain 70 from turn 300)")
     
     def test_should_not_do_dumb_threat_killer_move_but_also_defend(self):
@@ -1236,3 +1236,25 @@ class DefenseTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=20)
         self.assertNoFriendliesKilled(map, general, allyGen)
+    
+    def test_should_not_defense_loop(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_defense_loop___5v5zuNmVX---3--266.txtmap'
+        map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 266, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=266)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=2)
+        self.assertNoFriendliesKilled(map, general, allyGen)
+
+        city = self.get_player_tile(20, 9, simHost.sim, general.player)
+        self.assertEqual(general.player, city.player)

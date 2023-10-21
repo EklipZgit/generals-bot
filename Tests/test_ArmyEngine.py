@@ -435,7 +435,7 @@ bTiles=20
     """
     def test_engine__validate_all_tile_types__test_one_off__one_deep(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        turn = 149
+        turn = 101
 
         map, general, allyGen, enemyGen, enemyAllyGen = self.load_map_and_generals_2v2_from_string(SIM_VS_ENGINE_ALL_TILE_TYPES_TEST_MAP, turn)
         # give them COMPLETELY separate maps so they can't possibly affect each other during the diff
@@ -446,8 +446,8 @@ bTiles=20
         frMove = None
         enMove = None
 
-        frMove = Move(map.GetTile(4, 12), map.GetTile(4, 13), move_half=False)
-        enMove = Move(map.GetTile(3, 6), map.GetTile(4, 6), move_half=False)
+        frMove = Move(map.GetTile(2, 1), map.GetTile(3, 1), move_half=True)
+        enMove = Move(map.GetTile(0, 1), map.GetTile(1, 1), move_half=True)
         # frMove = Move(map.GetTile(1, 7), map.GetTile(2, 7), move_half=True)
         # enMove = Move(map.GetTile(3, 8), map.GetTile(2, 8), move_half=False)
         includeAllAsArmies = True

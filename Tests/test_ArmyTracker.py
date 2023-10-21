@@ -1404,3 +1404,27 @@ a1   b1   b1   bG1
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, aroundTile=map.GetTile(9, 1)))
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
         self.assertNoFriendliesKilled(map, general, allyGen)
+    
+    def test_should_not_create_phantom_visible_army(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_create_phantom_visible_army___1sM7IUnt5---3--133.txtmap'
+        map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 133, fill_out_tiles=False)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=133)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
+        simHost.queue_player_moves_str(enemyGeneral.player,
+                                       '16,16->15,16->15,17->15,18->15,19->14,19->13,19->12,19->11,19->10,19->9,19->8,19->8,20')
+        simHost.queue_player_moves_str(general.player, '15,16->15,15')
+        #
+        # bot = simHost.get_bot(general.player)
+        # playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=True))
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=5)
+        self.assertNoFriendliesKilled(map, general, allyGen)
+

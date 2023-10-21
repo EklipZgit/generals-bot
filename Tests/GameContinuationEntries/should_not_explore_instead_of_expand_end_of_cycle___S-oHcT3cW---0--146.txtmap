@@ -1,0 +1,69 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+M              M              M                        M              M         M
+                              b1             M         M
+          M         M    M    b1   M                        M                   M
+M                        M    b1   b1   b1   b1   b1   M                             M
+          M                        M              b1   M         M                   M    M
+          M                        M    M         b1        M              M    b1
+     M                        b1   b1   b1   M    b1        M                   b1   b1   M
+                    M    b2   b2   b2   b1D  b1D  b1D  M    M    M    M    M    b1   b1
+M                        M    a1   M    b2   b2   b1D  b1   M              M    b1   M    M
+               M    a1   a1   a1   a2   a1   M    b1D  b1   b1   b1   b1   b1   b1
+          M              M    a2   a1   a1        MD   MD   b1D  C48D      b1        M
+                              a1   a1   a1   b1   b1D  b1D  b1D  D    M    b1   M
+                         M    a1   a1   a1   b5   b1   b1   C46  b1   b1   b1   M    M    M
+M                             M    a1   a1   M    M    a1   a1                  M
+                         M    a1   a1   a1   a1   a1   a10  M    M
+     M                   C44  a1   M    a1   a1   a2   a1             M                   M
+          M    M         M    a1   a1   a1   a1   M    a1   M                   M
+M                   M    aG6  a1   a1   a1   a1   a1   a1   M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=146
+player_index=0
+mode=1v1
+bot_target_player=1
+targetPlayerExpectedGeneralLocation=10,6
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=True
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=42
+aScore=59
+aStandingArmy=17
+aStars=72
+aCityCount=1
+aGeneral=5,17
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=10
+aDelta25Score=8
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=146
+a_bot_general_approx=5,17
+bUsername=Joyleon
+bTiles=49
+bScore=63
+bStandingArmy=14
+bStars=76
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=397
+bDelta25Tiles=7
+bDelta25Score=12
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=146
+b_bot_general_approx=13,6

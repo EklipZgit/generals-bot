@@ -579,14 +579,15 @@ class ArmyTracker(object):
                 army.scrapped = True
                 return
 
-        if fogTargetTile.player == army.player:
-            fogTargetTile.army += army.value
-        else:
-            fogTargetTile.army -= army.value
-            if fogTargetTile.army < 0:
-                fogTargetTile.army = 0 - fogTargetTile.army
-                # if not fogTargetTile.discovered and len(army.entangledArmies) == 0:
-                fogTargetTile.player = army.player
+        if not fogTargetTile.visible:
+            if fogTargetTile.player == army.player:
+                fogTargetTile.army += army.value
+            else:
+                fogTargetTile.army -= army.value
+                if fogTargetTile.army < 0:
+                    fogTargetTile.army = 0 - fogTargetTile.army
+                    # if not fogTargetTile.discovered and len(army.entangledArmies) == 0:
+                    fogTargetTile.player = army.player
         logging.info(f"      fogTargetTile {fogTargetTile.toString()} updated army to {fogTargetTile.army}")
         # breaks stuff real bad. Don't really want to do this anyway.
         # Rather track the army through fog with no consideration of owning the tiles it crosses
@@ -1184,109 +1185,113 @@ class ArmyTracker(object):
         return False
 
     def try_track_own_move(self, army: Army, skip: typing.Set[Tile], trackingArmies: typing.Dict[Tile, Army]):
-        playerMoveDest = self.lastMove.dest
-        playerMoveSrc = self.lastMove.source
-        logging.info(
-            f"    Army (lastMove) probably moved from {str(army)} to {playerMoveDest.toString()}")
-        expectedDestDelta = army.value
-        if self.lastMove.move_half:
-            expectedDestDelta = (army.value + 1) // 2
-        expectedSourceDelta = 0 - expectedDestDelta  # these should always match if no other army interferes.
-        if not self.is_friendly_team(playerMoveDest.delta.oldOwner, self.map.player_index):
-            expectedDestDelta = 0 - expectedDestDelta
+        # playerMoveDest = self.lastMove.dest
+        # playerMoveSrc = self.lastMove.source
+        # logging.info(
+        #     f"    Army (lastMove) probably moved from {str(army)} to {playerMoveDest.toString()}")
+        # expectedDestDelta = army.value
+        # if self.lastMove.move_half:
+        #     expectedDestDelta = (army.value + 1) // 2
+        # expectedSourceDelta = 0 - expectedDestDelta  # these should always match if no other army interferes.
+        # if not self.is_friendly_team(playerMoveDest.delta.oldOwner, self.map.player_index):
+        #     expectedDestDelta = 0 - expectedDestDelta
+        #
+        # likelyDroppedMove = False
+        # if playerMoveSrc.delta.armyDelta == 0 and playerMoveSrc.visible:
+        #     likelyDroppedMove = True
+        #     if playerMoveDest.delta.armyDelta == 0:
+        #         logging.error(
+        #             f'Army tracker determined player DEFINITELY dropped move {str(self.lastMove)}. Setting last move to none...')
+        #         self.lastMove = None
+        #         return
+        #     else:
+        #         logging.error(
+        #             f'Army tracker determined player PROBABLY dropped move {str(self.lastMove)}, but the dest DID have an army delta, double check on this... Continuing in case this is 2v2 BS or something.')
+        #
+        # # ok, then probably we didn't drop a move.
+        #
+        # actualSrcDelta = playerMoveSrc.delta.armyDelta
+        # actualDestDelta = playerMoveDest.delta.armyDelta
+        #
+        # sourceDeltaMismatch = expectedSourceDelta != actualSrcDelta
+        # destDeltaMismatch = expectedDestDelta != actualDestDelta
+        #
+        # # works in 1v1, but 50/50 wrong in FFA, TODO do we care...?
+        # fakeOtherPlayer = (self.map.player_index + 1) & 1
+        #
+        # sourceWasAttackedWithPriority = False
+        # sourceWasCaptured = False
+        # if sourceDeltaMismatch or self.lastMove.source.player != self.map.player_index:
+        #     amountAttacked = actualSrcDelta - expectedSourceDelta
+        #     if self.lastMove.source.player != self.map.player_index:
+        #         sourceWasCaptured = True
+        #         if MapBase.player_had_priority_over_other(self.lastMove.source.player, self.map.player_index, self.map.turn):
+        #             sourceWasAttackedWithPriority = True
+        #             logging.info(
+        #                 f'MOVE {str(self.lastMove)} seems to have been captured with priority. Nuking our army and having no unexplained diffs (to let the main army tracker just calculate this capture).')
+        #             if destDeltaMismatch:
+        #                 logging.error(
+        #                     f'  ^ {str(self.lastMove)} IS QUESTIONABLE THOUGH BECAUSE DEST DID HAVE AN UNEXPLAINED DIFF. NUKING ANYWAY.')
+        #             self.scrap_army(army)
+        #             # self.unaccounted_tile_diffs[self.lastMove.source] = amountAttacked  # negative number
+        #             self.lastMove = None
+        #             return
+        #         else:
+        #             logging.info(
+        #                 f'MOVE {str(self.lastMove)} was capped WITHOUT priority..? Adding unexplained diff {amountAttacked} based on actualSrcDelta {actualSrcDelta} - expectedSourceDelta {expectedSourceDelta}. Continuing with dest diff calc')
+        #             self.unaccounted_tile_diffs[self.lastMove.source] = amountAttacked  # negative number
+        #     else:
+        #         # we can get here if the source tile was attacked with priority but not for full damage, OR if it was attacked without priority for non full damage...
+        #         destArmyInterferedToo = False
+        #         if not destDeltaMismatch:
+        #             # then we almost certainly didn't have source attacked with priority.
+        #             logging.warning(
+        #                 f'MOVE {str(self.lastMove)} ? src attacked for amountAttacked {amountAttacked} WITHOUT priority based on actualSrcDelta {actualSrcDelta} vs expectedSourceDelta {expectedSourceDelta}')
+        #         elif not MapBase.player_had_priority_over_other(self.map.player_index, fakeOtherPlayer, self.map.turn):
+        #             # if we DIDNT have priority (this is hit or miss in FFA, tho).
+        #             armyMadeItToDest = playerMoveDest.delta.armyDelta
+        #             amountAttacked = expectedDestDelta - armyMadeItToDest
+        #             if playerMoveSrc.army == 0:
+        #                 amountAttacked -= 1  # enemy can attack us down to 0 without flipping the tile, special case this
+        #
+        #             logging.warning(
+        #                 f'MOVE {str(self.lastMove)} ? src attacked for amountAttacked {amountAttacked} based on destDelta {playerMoveDest.delta.armyDelta} vs expectedDestDelta {expectedDestDelta}')
+        #         else:
+        #             destArmyInterferedToo = True
+        #             # TODO what to do here?
+        #             logging.warning(
+        #                 f'???MOVE {str(self.lastMove)} ? player had priority but we still had a dest delta as well as source delta...?')
+        #
+        #         self.unaccounted_tile_diffs[self.lastMove.source] = amountAttacked  # negative number
+        #         if not destArmyInterferedToo:
+        #             # intentionally do nothing about the dest tile diff if we found a source tile diff, as it is really unlikely that both source and dest get interfered with on same turn.
+        #             self.army_moved(army, playerMoveDest, trackingArmies)
+        #             return
+        # else:
+        #     # nothing happened, we moved the expected army off of source. Not unexplained.
+        #     self.unaccounted_tile_diffs.pop(playerMoveSrc, 0)
+        #
+        # if destDeltaMismatch:
+        #     unexplainedDelta = expectedDestDelta - actualDestDelta
+        #     if playerMoveDest.delta.oldOwner == playerMoveDest.delta.newOwner:
+        #         unexplainedDelta = 0 - unexplainedDelta
+        #
+        #     if not MapBase.player_had_priority_over_other(self.map.player_index, fakeOtherPlayer, self.map.turn):  # the source tile could have been attacked for non-lethal damage BEFORE the move was made to target.
+        #         self.unaccounted_tile_diffs[self.lastMove.source] = unexplainedDelta
+        #     self.unaccounted_tile_diffs[self.lastMove.dest] = unexplainedDelta
+        #     logging.info(
+        #         f'MOVE {str(self.lastMove)} with expectedDestDelta {expectedDestDelta} likely collided with unexplainedDelta {unexplainedDelta} at dest based on actualDestDelta {actualDestDelta}.')
+        # else:
+        #     logging.info(
+        #         f'!MOVE {str(self.lastMove)} made it to dest with no issues, moving army.\r\n    expectedDestDelta {expectedDestDelta}, expectedSourceDelta {expectedSourceDelta}, actualSrcDelta {actualSrcDelta}, actualDestDelta {actualDestDelta}, sourceWasAttackedWithPriority {sourceWasAttackedWithPriority}, sourceWasCaptured {sourceWasCaptured}')
+        #     self.unaccounted_tile_diffs.pop(playerMoveDest, 0)
+        #     # if playerMoveDest.player != self.map.player_index:
+        #     skip.add(playerMoveDest)  # might not need this at alll.....?
+        if self.map.last_player_index_submitted_move is not None:
+            # then map determined it did something and wasn't dropped. Execute it.
+            src, dest, move_half = self.map.last_player_index_submitted_move
 
-        likelyDroppedMove = False
-        if playerMoveSrc.delta.armyDelta == 0 and playerMoveSrc.visible:
-            likelyDroppedMove = True
-            if playerMoveDest.delta.armyDelta == 0:
-                logging.error(
-                    f'Army tracker determined player DEFINITELY dropped move {str(self.lastMove)}. Setting last move to none...')
-                self.lastMove = None
-                return
-            else:
-                logging.error(
-                    f'Army tracker determined player PROBABLY dropped move {str(self.lastMove)}, but the dest DID have an army delta, double check on this... Continuing in case this is 2v2 BS or something.')
-
-        # ok, then probably we didn't drop a move.
-
-        actualSrcDelta = playerMoveSrc.delta.armyDelta
-        actualDestDelta = playerMoveDest.delta.armyDelta
-
-        sourceDeltaMismatch = expectedSourceDelta != actualSrcDelta
-        destDeltaMismatch = expectedDestDelta != actualDestDelta
-
-        # works in 1v1, but 50/50 wrong in FFA, TODO do we care...?
-        fakeOtherPlayer = (self.map.player_index + 1) & 1
-
-        sourceWasAttackedWithPriority = False
-        sourceWasCaptured = False
-        if sourceDeltaMismatch or self.lastMove.source.player != self.map.player_index:
-            amountAttacked = actualSrcDelta - expectedSourceDelta
-            if self.lastMove.source.player != self.map.player_index:
-                sourceWasCaptured = True
-                if MapBase.player_had_priority_over_other(self.lastMove.source.player, self.map.player_index, self.map.turn):
-                    sourceWasAttackedWithPriority = True
-                    logging.info(
-                        f'MOVE {str(self.lastMove)} seems to have been captured with priority. Nuking our army and having no unexplained diffs (to let the main army tracker just calculate this capture).')
-                    if destDeltaMismatch:
-                        logging.error(
-                            f'  ^ {str(self.lastMove)} IS QUESTIONABLE THOUGH BECAUSE DEST DID HAVE AN UNEXPLAINED DIFF. NUKING ANYWAY.')
-                    self.scrap_army(army)
-                    # self.unaccounted_tile_diffs[self.lastMove.source] = amountAttacked  # negative number
-                    self.lastMove = None
-                    return
-                else:
-                    logging.info(
-                        f'MOVE {str(self.lastMove)} was capped WITHOUT priority..? Adding unexplained diff {amountAttacked} based on actualSrcDelta {actualSrcDelta} - expectedSourceDelta {expectedSourceDelta}. Continuing with dest diff calc')
-                    self.unaccounted_tile_diffs[self.lastMove.source] = amountAttacked  # negative number
-            else:
-                # we can get here if the source tile was attacked with priority but not for full damage, OR if it was attacked without priority for non full damage...
-                destArmyInterferedToo = False
-                if not destDeltaMismatch:
-                    # then we almost certainly didn't have source attacked with priority.
-                    logging.warning(
-                        f'MOVE {str(self.lastMove)} ? src attacked for amountAttacked {amountAttacked} WITHOUT priority based on actualSrcDelta {actualSrcDelta} vs expectedSourceDelta {expectedSourceDelta}')
-                elif not MapBase.player_had_priority_over_other(self.map.player_index, fakeOtherPlayer, self.map.turn):
-                    # if we DIDNT have priority (this is hit or miss in FFA, tho).
-                    armyMadeItToDest = playerMoveDest.delta.armyDelta
-                    amountAttacked = expectedDestDelta - armyMadeItToDest
-                    if playerMoveSrc.army == 0:
-                        amountAttacked -= 1  # enemy can attack us down to 0 without flipping the tile, special case this
-
-                    logging.warning(
-                        f'MOVE {str(self.lastMove)} ? src attacked for amountAttacked {amountAttacked} based on destDelta {playerMoveDest.delta.armyDelta} vs expectedDestDelta {expectedDestDelta}')
-                else:
-                    destArmyInterferedToo = True
-                    # TODO what to do here?
-                    logging.warning(
-                        f'???MOVE {str(self.lastMove)} ? player had priority but we still had a dest delta as well as source delta...?')
-
-                self.unaccounted_tile_diffs[self.lastMove.source] = amountAttacked  # negative number
-                if not destArmyInterferedToo:
-                    # intentionally do nothing about the dest tile diff if we found a source tile diff, as it is really unlikely that both source and dest get interfered with on same turn.
-                    self.army_moved(army, playerMoveDest, trackingArmies)
-                    return
-        else:
-            # nothing happened, we moved the expected army off of source. Not unexplained.
-            self.unaccounted_tile_diffs.pop(playerMoveSrc, 0)
-
-        if destDeltaMismatch:
-            unexplainedDelta = expectedDestDelta - actualDestDelta
-            if playerMoveDest.delta.oldOwner == playerMoveDest.delta.newOwner:
-                unexplainedDelta = 0 - unexplainedDelta
-
-            if not MapBase.player_had_priority_over_other(self.map.player_index, fakeOtherPlayer, self.map.turn):  # the source tile could have been attacked for non-lethal damage BEFORE the move was made to target.
-                self.unaccounted_tile_diffs[self.lastMove.source] = unexplainedDelta
-            self.unaccounted_tile_diffs[self.lastMove.dest] = unexplainedDelta
-            logging.info(
-                f'MOVE {str(self.lastMove)} with expectedDestDelta {expectedDestDelta} likely collided with unexplainedDelta {unexplainedDelta} at dest based on actualDestDelta {actualDestDelta}.')
-        else:
-            logging.info(
-                f'!MOVE {str(self.lastMove)} made it to dest with no issues, moving army.\r\n    expectedDestDelta {expectedDestDelta}, expectedSourceDelta {expectedSourceDelta}, actualSrcDelta {actualSrcDelta}, actualDestDelta {actualDestDelta}, sourceWasAttackedWithPriority {sourceWasAttackedWithPriority}, sourceWasCaptured {sourceWasCaptured}')
-            self.unaccounted_tile_diffs.pop(playerMoveDest, 0)
-            # if playerMoveDest.player != self.map.player_index:
-            skip.add(playerMoveDest)  # might not need this at alll.....?
-        self.army_moved(army, playerMoveDest, trackingArmies)
+            self.army_moved(army, dest, trackingArmies)
 
     def try_track_army(
             self,
@@ -1310,6 +1315,9 @@ class ArmyTracker(object):
         if army.tile != armyTile:
             raise Exception(
                 f"bitch, army key {armyTile.toString()} didn't match army tile {str(army)}")
+
+        # if army.tile.was_visible_last_turn() and army.tile.delta.unexplainedDelta == 0:
+        #
 
         armyRealTileDelta = 0 - army.tile.delta.armyDelta
         # armyUnexplainedDelta = self.unaccounted_tile_diffs.get(adjacent, adjacent.delta.armyDelta)
@@ -1420,14 +1428,18 @@ class ArmyTracker(object):
                     army.tile.was_visible_last_turn()):  # prevent entangling and moving fogged cities and stuff that we stopped incrementing
                 fogArmies = []
                 if len(fogBois) == 1:
+                    fogTarget = fogBois[0]
+                    if fogTarget.visible and not fogTarget.army > 5:
+                        self.scrap_army(army)
+                        return
                     foundLocation = True
                     logging.info(f"    WHOO! Army {str(army)} moved into fog at {fogBois[0].toString()}!?")
-                    self.move_fogged_army(army, fogBois[0])
+                    self.move_fogged_army(army, fogTarget)
                     if fogCount == 1:
                         logging.info("closestFog and fogCount was 1, converting fogTile to be owned by player")
-                        fogBois[0].player = army.player
+                        fogTarget.player = army.player
                     self.unaccounted_tile_diffs.pop(army.tile, None)
-                    self.army_moved(army, fogBois[0], trackingArmies, dontUpdateOldFogArmyTile=True)
+                    self.army_moved(army, fogTarget, trackingArmies, dontUpdateOldFogArmyTile=True)
 
                 else:
                     foundLocation = True

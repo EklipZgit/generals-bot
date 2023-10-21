@@ -410,6 +410,12 @@ function Start-WindowsTerminalHistoricalBots {
 
     <#
     MCTS based army engine.
+    2v2
+    fog / movement detection rework
+    way too much stuff to list
+    broken 1v1 in some ways due to 2v2 changes
+    defense gather forward instead of back
+    found-no-move mcts (need to tune back for historical bots I think)
     #>
 }
 

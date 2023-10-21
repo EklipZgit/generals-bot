@@ -201,7 +201,9 @@ class GameSimulator(object):
         self.turn = self.turn + 1
         self.moves_history.append(self.moves)
         self.moves = [None for _ in self.moves]
-        self._update_map_values()
+        # intentionally do this before increments so we dont need to deal with expected deltas
+        self._update_tile_deltas()
+        self._update_map_values_for_any_increments()
         self._update_scores()
         logging.info(f'END SIM MAP TURN {self.turn}, UPDATING PLAYER MAPS')
 
@@ -256,14 +258,8 @@ class GameSimulator(object):
             armyBeingMoved = sourceTile.army // 2
 
         sourceTile.army = sourceTile.army - armyBeingMoved
-        sourceTile.delta.armyDelta -= armyBeingMoved
 
         isAlliedGeneralDest = (destTile.isGeneral and self.teams[destTile.player] == self.teams[player_index])
-
-        if destTile.delta.oldOwner == player_index or isAlliedGeneralDest:
-            destTile.delta.armyDelta += armyBeingMoved
-        else:
-            destTile.delta.armyDelta -= armyBeingMoved
 
         if not destTile.isNeutral and self.teams[destTile.player] == self.teams[player_index]:
             destTile.army += armyBeingMoved
@@ -272,8 +268,6 @@ class GameSimulator(object):
                 # captured teammates tile
                 destPlayer = self.players[destTile.player]
                 destTile.player = player_index
-                destTile.delta.newOwner = player_index
-                destTile.delta.armyDelta = 0 - (destTile.delta.oldArmy + destTile.army)
                 self._stage_tile_captured_events(destTile, player, destPlayer)
 
         else:
@@ -297,7 +291,7 @@ class GameSimulator(object):
                     destTile.isGeneral = False
 
                 destTile.player = player_index
-                destTile.delta.newOwner = player_index
+                # destTile.delta.newOwner = player_index
 
         sourceTile.delta.toTile = destTile
         destTile.delta.fromTile = sourceTile
@@ -326,7 +320,7 @@ class GameSimulator(object):
         for player in self.players:
             player.map.handle_player_capture(capturer.index, captured.index)
 
-    def _update_map_values(self):
+    def _update_map_values_for_any_increments(self):
         if self.sim_map.turn != self.turn:
             raise AssertionError(f'Something desynced, sim_map.turn + 1 was {self.sim_map.turn} while sim turn was {self.turn}')
 
@@ -440,6 +434,15 @@ class GameSimulator(object):
         for player in self.players:
             player.map.clear_deltas_and_score_history()
 
+    def _update_tile_deltas(self):
+        for tile in self.tiles_updated_this_cycle:
+            if tile.player != tile.delta.oldOwner:
+                tile.delta.armyDelta = 0 - tile.army - tile.delta.oldArmy
+                tile.delta.newOwner = tile.player
+
+            elif tile.army != tile.delta.oldArmy:
+                tile.delta.armyDelta = tile.army - tile.delta.oldArmy
+
 
 class GameSimulatorHost(object):
     def __init__(
@@ -449,6 +452,7 @@ class GameSimulatorHost(object):
             playerMapVision: MapBase | None = None,
             afkPlayers: None | typing.List[int] = None,
             allAfkExceptMapPlayer: bool = False,
+            teammateNotAfk: bool = False,
             respectTurnTimeLimitToDropMoves: bool = False):
         """
 
@@ -476,6 +480,10 @@ class GameSimulatorHost(object):
 
         if allAfkExceptMapPlayer:
             self.forced_afk_players = [i for i in where(range(len(map.players)), lambda p: p != map.player_index)]
+
+        if teammateNotAfk:
+            for teammate in map.teammates:
+                self.forced_afk_players.remove(teammate)
 
         self.player_with_viewer: int = player_with_viewer
 

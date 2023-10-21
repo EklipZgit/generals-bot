@@ -1,0 +1,114 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M         M              M                             d1   d1   d1   d1   d2        b1   M    b1   b1
+          M                        M                   M         d2   d2   d2   d2   b1   b1   b1   b1   b1
+M                        M                             M    b1   b1   b2   M    d2   d2   b1   b1   C45  bG2
+                              M         M         d1   a1   a1   a2   a1   a1   a1   b2   b1   b1   b10  b1
+                              M         d1   d1   d1   M    d1   d3   M    d2   a1   M    b2   b1   M    M
+                                        d1   d1   MD   d1   d1   b1   b1   M    a1   M    b1   c1   b2   M
+     M    M         M    M    M              d1   d4D  d1   b2   b1   M    c1   c1   c1   c4   c1   b1   d2
+                    M                   M    d1        C45       M    c1   cG13 b15  c1   M    a1   b1   d2
+                                        M    d1        M    a1   a1   c1   b9   b1   c1   M    a1
+                    M         M         M    d1   c1   c1   c1   M    C45  c1   a1   M    M    a12  M
+M         M                                  d1   M    c1   c1   M    b2   b2   a2   M    a1   a1   a1   C43
+     M                                       d1   d1   d1   c1   b1   b1   M    a1   a1   a2   C42  a1   a1
+     M    M                                       M    d1   d61  c1   a1        a1   a1   a1   M    a1   aG3
+               M         M    M                        M    a1   a1   a1   M    a1   M    M    a2   a2   M
+                                             M         d2   a1   a1   a2   a3   a1   a2   a2   a2   a2   a2
+M         M                        M         M                        M    a1   a3   a1   a2   a2   a2   a2
+                    M                        M                        M    a2   M    a1   a2   a2   a1   a1
+               M                             M    M              M         M         a1   a1   a1   a1
+                         M                                       M                        M    M         M
+                    M                             M                                                 M    M
+     M                             M                                       M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=191
+player_index=0
+teams=1,1,2,2
+mode=team
+bot_target_player=3
+targetPlayerExpectedGeneralLocation=7,5
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=True
+bot_finishing_exploration=False
+bot_targeting_army=12,12
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=62
+aScore=117
+aStandingArmy=55
+aStars=54
+aCityCount=1
+aGeneral=21,12
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=23
+aDelta25Score=38
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=191
+a_bot_general_approx=21,12
+bUsername=Exe.human
+bTiles=36
+bScore=61
+bStandingArmy=25
+bStars=54
+bCityCount=1
+bGeneral=21,2
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=5
+bDelta25Score=9
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=191
+b_bot_general_approx=21,2
+cUsername=Tom Bombadil
+cTiles=21
+cScore=44
+cStandingArmy=23
+cStars=14
+cCityCount=1
+cGeneral=15,7
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=183
+cDelta25Tiles=4
+cDelta25Score=-9
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=191
+c_bot_general_approx=15,7
+dUsername=Teammate.exe
+dTiles=56
+dScore=138
+dStandingArmy=82
+dStars=14
+dCityCount=1
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=107
+dDelta25Tiles=1
+dDelta25Score=59
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=191
+d_bot_general_approx=7,4

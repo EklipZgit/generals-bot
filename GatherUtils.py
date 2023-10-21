@@ -98,7 +98,7 @@ def get_sub_knapsack_gather(
             map,
             startTilesDict,
             valueFunc,
-            0.1,
+            1000000,
             remainingTurns,
             maxDepth=fullTurns,
             noNeutralCities=True,
@@ -123,7 +123,7 @@ def get_sub_knapsack_gather(
         map,
         startTilesDict,
         valueFunc,
-        0.1,
+        10000000,
         remainingTurns,
         maxDepth=fullTurns,
         noNeutralCities=True,
@@ -679,7 +679,7 @@ def _knapsack_levels_gather_iterative_prune(
             newStartTilesDict,
             valueFunc,
             baseCaseFunc,
-            0.1,
+            1000,
             remainingTurns=turnsToGather,
             fullTurns=fullTurns,
             noNeutralCities=True,
@@ -974,6 +974,7 @@ def knapsack_levels_backpack_gather_with_value(
      Use useTrueValueGathered to make sure the gatherValue returned by the gather matches the actual amount of army you will have on the gather target tiles at the end of the gather execution.
     @return:
     """
+    shouldLog = False
     startTime = time.time()
     negativeTilesOrig = negativeTiles
     if negativeTiles is not None:
@@ -1017,8 +1018,8 @@ def knapsack_levels_backpack_gather_with_value(
                 priorityObject
         ):
             (
+                threatDist,
                 depthDist,
-                dist,
                 realDist,
                 negPrioTilesPerTurn,
                 negGatheredSum,
@@ -1034,8 +1035,11 @@ def knapsack_levels_backpack_gather_with_value(
                 return None
 
             value = 0 - negGatheredSum
-            prioObj = (value,  # most army per turn
-                       depthDist,
+            vt = 0
+            if realDist > 0:
+                vt = value / realDist
+            prioObj = (vt,  # most army per turn
+                       0 - threatDist,
                        # then by the furthest 'distance' (which when gathering to a path, weights short paths to the top of the path higher which is important)
                        0 - negGatheredSum,  # then by maximum amount gathered...?
                        0 - depthDist,  # furthest distance traveled
@@ -1055,8 +1059,8 @@ def knapsack_levels_backpack_gather_with_value(
 
         def default_priority_func(nextTile, currentPriorityObject):
             (
+                threatDist,
                 depthDist,
-                dist,
                 realDist,
                 negPrioTilesPerTurn,
                 negGatheredSum,
@@ -1088,8 +1092,8 @@ def knapsack_levels_backpack_gather_with_value(
             realDist += 1
             depthDist += 1
             prioObj = (
+                threatDist + 1,
                 depthDist,
-                dist + 1,
                 realDist,
                 numPrioTiles / max(1, depthDist),
                 negGatheredSum,
@@ -1122,8 +1126,8 @@ def knapsack_levels_backpack_gather_with_value(
             if distPriorityMap is not None:
                 initialDistance = distPriorityMap[tile.x][tile.y]
             prioObj = (
-                startingDist,
                 0 - initialDistance,
+                startingDist,
                 0,
                 0,
                 0,

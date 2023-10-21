@@ -17,7 +17,8 @@ class MapTests(TestBase):
             simHost: GameSimulatorHost,
             player: int = -1,
             excludeFogMoves: bool = False,
-            minTurn = -1
+            minTurn = -1,
+            includeAllPlayers: bool = False
     ):
         realMap = simHost.sim.sim_map
         if realMap.turn <= minTurn:
@@ -36,6 +37,8 @@ class MapTests(TestBase):
 
         killedOrIndeterminateMoves: typing.Set[Move] = set()
         for player in players:
+            if not includeAllPlayers and player > 1:
+                continue
 
             playerMap = simHost.get_player_map(player)
             # playerBot = simHost.get_bot(player)
@@ -43,6 +46,8 @@ class MapTests(TestBase):
             #     playerBot.init_turn()
 
             for playerMapPlayer in playerMap.players:
+                if not includeAllPlayers and playerMapPlayer.index > 1:
+                    continue
                 if len(simHost.sim.moves_history) > 0:
                     simPlayerMove = simHost.sim.moves_history[-1][playerMapPlayer.index]
 
@@ -100,6 +105,8 @@ class MapTests(TestBase):
 
         for player in players:
             playerMap = simHost.get_player_map(player)
+            if not includeAllPlayers and player > 1:
+                continue
 
             for tile in realMap.get_all_tiles():
                 playerTile = playerMap.GetTile(tile.x, tile.y)
@@ -209,7 +216,7 @@ class MapTests(TestBase):
         aTile.army = aArmy
         bTile.army = bArmy
 
-        simHost = GameSimulatorHost(map, player_with_viewer=-2, afkPlayers=[0, 1])
+        simHost = GameSimulatorHost(map, player_with_viewer=-2, afkPlayers=[i for i in range(len(map.players))])
         if debugMode:
             startTurn = map.turn + 1
 
@@ -291,6 +298,45 @@ a1   b1   b1   bG1
         aTile = map.GetTile(1, 1)
         bTile = map.GetTile(2, 2)
         self.run_map_delta_test(map, aTile, bTile, general, enemyGeneral, debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove)
+
+    def run_team_adj_test(self, debugMode, aArmy, bArmy, aMove, bMove, targetTileFriendly, turn):
+        # 4x4 map, with all fog scenarios covered. Each player has enough information to unequivocably determine which tile moved to where.
+        data = """
+|    |    |    |
+aG1  a1   a1   b1
+cG1  a1   b1   b1
+a1   a1   b1   dG1
+a1   b1   b1   bG1
+|    |    |    |
+mode=team
+teams=1,1,2,2
+player_index=0
+bot_target_player=2
+aUsername=[Bot] Sora_ai_ek
+aTiles=32
+bUsername=[Bot] Sora_ai_2
+bTiles=27
+cUsername=Bot EklipZ_ai_2
+cTiles=25
+dUsername=EklipZ_0x45
+dTiles=27
+"""
+        map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2_from_string(
+            data,
+            turn,
+            fill_out_tiles=True,
+            player_index=0)
+
+        tgTile = map.GetTile(1, 2)
+        tgTile2 = map.GetTile(2, 1)
+
+        if not targetTileFriendly:
+            tgTile.player = 2
+            tgTile2.player = 2
+
+        aTile = map.GetTile(1, 1)
+        bTile = map.GetTile(2, 2)
+        self.run_map_delta_test(map, aTile, bTile, general, allyGen, debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove)
 
     def run_adj_test(self, debugMode, aArmy, bArmy, aMove, bMove, turn):
         # 4x4 map, with all fog scenarios covered.
@@ -1193,6 +1239,25 @@ C5
     def test_run_one_off_diag_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         self.run_diag_test(debugMode=debugMode, aArmy=5, bArmy=15, aMove=(0, 1), bMove=(1, 0), turn=96)
+
+    def test_generate_all_team_adjacent_army_scenarios(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        moveOpts = [None, (1, 0), (-1, 0), (0, 1), (0, -1)]
+
+        for aMove in moveOpts:
+            for bMove in moveOpts:
+                for aArmy in [10, 11, 12, 15, 20, 2, 5, 8, 9]:
+                    for bArmy in [10, 11, 12, 15, 20, 2, 5, 8, 9]:
+                        for targetTileFriendly in [False, True]:
+                            for turn in [96, 97]:
+                                with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, targetTileFriendly=targetTileFriendly, turn=turn):
+                                    # 0
+                                    self.run_team_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, targetTileFriendly=targetTileFriendly, turn=turn)
+
+    def test_run_one_off_team_adj_test(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        self.run_team_adj_test(debugMode=debugMode, aArmy=5, bArmy=15, aMove=(0, 1), bMove=(-1, 0), targetTileFriendly=True, turn=96)
     
     def test_should_not_think_2v2_move_is_from_neut_city(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True

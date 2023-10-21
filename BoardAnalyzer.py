@@ -16,10 +16,11 @@ from Path import Path
 
 
 class BoardAnalyzer:
-    def __init__(self, map: MapBase, general: Tile):
+    def __init__(self, map: MapBase, general: Tile, teammateGeneral: Tile | None = None):
         startTime = time.time()
         self.map: MapBase = map
         self.general: Tile = general
+        self.teammate_general: Tile | None = teammateGeneral
         self.should_rescan = True
 
         # TODO probably calc these chokes for the enemy, too?
@@ -36,6 +37,10 @@ class BoardAnalyzer:
         self.extended_play_area_matrix: MapMatrix[bool] = None
 
         self.flank_danger_play_area_matrix: MapMatrix[bool] = None
+
+        self.general_distances: typing.List[typing.List[int]] = []
+        self.friendly_distances: typing.List[typing.List[int]] = []
+        self.teammate_distances: typing.List[typing.List[int]] = []
 
         self.inter_general_distance: int = 0
         """The (possibly estimated) distance between our gen and target player gen."""
@@ -71,12 +76,18 @@ class BoardAnalyzer:
 
         self.outerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
 
-        self.genDistMap = build_distance_map(self.map, [self.general])
+        self.general_distances = build_distance_map(self.map, [self.general])
+        if self.teammate_general is not None and self.teammate_general.player in self.map.teammates:
+            self.teammate_distances = build_distance_map(self.map, [self.teammate_general])
+            self.friendly_distances = build_distance_map(self.map, [self.teammate_general, self.general])
+        else:
+            self.friendly_distances = self.general_distances
+
         for tile in self.map.pathableTiles:
             # logging.info("Rescanning chokes for {}".format(tile.toString()))
-            tileDist = self.genDistMap[tile.x][tile.y]
-            movableInnerCount = count(tile.movable, lambda adj: tileDist == self.genDistMap[adj.x][adj.y] - 1)
-            movableOuterCount = count(tile.movable, lambda adj: tileDist == self.genDistMap[adj.x][adj.y] + 1)
+            tileDist = self.friendly_distances[tile.x][tile.y]
+            movableInnerCount = count(tile.movable, lambda adj: tileDist == self.friendly_distances[adj.x][adj.y] - 1)
+            movableOuterCount = count(tile.movable, lambda adj: tileDist == self.friendly_distances[adj.x][adj.y] + 1)
             if movableInnerCount == 1:
                 self.outerChokes[tile.x][tile.y] = True
             # checking movableInner to avoid considering dead ends 'chokes'
@@ -130,10 +141,6 @@ class BoardAnalyzer:
             ):
                 self.flank_danger_play_area_matrix[tile] = True
 
-    def get_tile_usefulness_score(self, x: int, y: int):
-        # score a tile based on how far out of the play area it is and whether it is on a good flank path
-        return 100
-
     def get_flank_pathways(
             self,
             filter_out_players: typing.List[int] | None = None,
@@ -176,7 +183,7 @@ class BoardAnalyzer:
 
                         reasonablyCloseToTheirGeneral = self.intergeneral_analysis.bMap[move.dest.x][move.dest.y] < cutoffDist + self.intergeneral_analysis.aMap[self.intergeneral_analysis.tileB.x][self.intergeneral_analysis.tileB.y]
 
-                        if (gettingFurtherFromOurGen and reasonablyCloseToTheirGeneral):
+                        if gettingFurtherFromOurGen and reasonablyCloseToTheirGeneral:
                             includedPathways.add(pathwaySource)
                             goodLeaves.append(move)
                     else:

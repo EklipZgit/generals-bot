@@ -225,10 +225,13 @@ function Create-TestContinuingGameFrom {
 
     $mapLoader = "map, general, enemyGeneral = self.load_map_and_generals(mapFile, $turn, fill_out_tiles=True)"
     $baseAssert = "self.assertIsNone(winner)"
+    $simHostBuilder = 'simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)'
+
 
     if ($is2v2) {
         $mapLoader = "map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, $turn, fill_out_tiles=True)"
         $baseAssert = "self.assertNoFriendliesKilled(map, general, allyGen)"
+        $simHostBuilder = "simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)"
     }
 
     $testFileContent += @"
@@ -241,7 +244,7 @@ function Create-TestContinuingGameFrom {
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=$turn)
         
         self.enable_search_time_limits_and_disable_debug_asserts()
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        $simHostBuilder
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         bot = simHost.get_bot(general.player)
         playerMap = simHost.get_player_map(general.player)

@@ -280,6 +280,7 @@ class TestBase(unittest.TestCase):
 
         bot.armyTracker.emergenceLocationMap[emergencePlayer][x][y] += emergenceAmt
         bot.timing_cycle_ended()
+        bot.target_player_gather_path = None
 
     def get_test_map(self, tiles: typing.List[typing.List[Tile]], turn: int = 1, player_index: int = 0, dont_set_seen_visible_discovered: bool = False, num_players: int = -1) -> MapBase:
         self._initialize()
@@ -893,7 +894,7 @@ class TestBase(unittest.TestCase):
             enemyGeneral.army = 1
 
         if enemyGeneralTargetScore is not None and countScoreEnemy.value > enemyGeneralTargetScore:
-            raise AssertionError(f"countScoreEnemy.value {countScoreEnemy.value} > enemyGeneralTargetScore {enemyGeneralTargetScore}. Have to implement reducing the army on non-visible tiles from the snapshot here")
+            raise AssertionError(f"Enemy General {enemyGeneral.player} countScoreEnemy.value {countScoreEnemy.value} > enemyGeneralTargetScore {enemyGeneralTargetScore}. Have to implement reducing the army on non-visible tiles from the snapshot here")
 
         iter = 0
         while enemyGeneralTargetScore is not None and countScoreEnemy.value < enemyGeneralTargetScore and iter < 100:

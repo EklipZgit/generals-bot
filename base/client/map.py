@@ -1374,7 +1374,11 @@ class MapBase(object):
             return 0 - sourceDelta
         if teamMateMove:
             if not dest.isGeneral:
-                return 2 * dest.delta.oldArmy + sourceDelta
+                if dest.delta.fromTile is not None and dest.delta.fromTile.delta.oldOwner == dest.player and source.player != dest.player:
+                    # then ally moved at this tile with priority with us, and the other one won. Delta is purely 0-sourceDelta in that case.
+                    return 0-sourceDelta
+                # otherwise, the ally flipped the tile in their favor
+                return 0 - (2 * dest.delta.oldArmy - sourceDelta)
             else:
                 return 0 - sourceDelta
         return sourceDelta
@@ -1878,6 +1882,7 @@ class MapBase(object):
                 continue
 
             self.army_emergences[t] = (t.delta.unexplainedDelta, t.player)
+            logging.info(f'unexplained emergence {repr(t)} of {t.delta.unexplainedDelta}')
 
         return
 
@@ -2212,6 +2217,8 @@ class MapBase(object):
                     byPlayer = destTile.delta.oldOwner
                     if byPlayer == -1:
                         byPlayer = destTile.player
+                    if exclusiveSrc.was_visible_last_turn():
+                        byPlayer = exclusiveSrc.delta.oldOwner
 
                     self.set_tile_moved(
                         destTile,
@@ -2387,11 +2394,23 @@ class MapBase(object):
         if killer >= 0:
             self.players[self.player_index].capturedBy = killer
 
+    def get_tile_index(self, tile: Tile) -> int:
+        return tile.y * self.cols + tile.x
+
+    def get_tile_by_tile_index(self, tileIndex: int) -> Tile:
+        x, y = self.convert_tile_server_index_to_x_y(tileIndex)
+        return self.GetTile(x, y)
+
+    def convert_tile_server_index_to_x_y(self, tileIndex: int) -> typing.Tuple[int, int]:
+        y = tileIndex // self.cols
+        x = tileIndex % self.cols
+        return x, y
+
     @staticmethod
     def get_teams_array(map: MapBase) -> typing.List[int]:
-        teams = map.teams
-        if teams is None:
-            teams = [i for i in range(len(map.players))]
+        teams = [i for i in range(len(map.players))]
+        if map.teams is not None:
+            teams = [t for t in map.teams]
 
         teams.append(-1)  # put -1 at the end so that if -1 gets passed as the array index, the team is -1 for -1.
 
@@ -2496,11 +2515,6 @@ class Map(MapBase):
         # Update Visible Generals
         self._visible_generals = [(-1, -1) if g == -1 else (g // self.cols, g % self.cols) for g in
                                   data['generals']]  # returns [(y,x)]
-
-    def convert_tile_server_index_to_x_y(self, tileIndex: int) -> typing.Tuple[int, int]:
-        y = tileIndex // self.cols
-        x = tileIndex % self.cols
-        return x, y
 
 
 def new_map_grid(map, initialValueXYFunc):

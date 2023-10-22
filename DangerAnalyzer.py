@@ -50,14 +50,25 @@ class ThreatObj(object):
             if tile.isGeneral:
                 # need to gather to general 1 turn earlier than otherwise necessary
                 dict[tile] = dist + 1
+            elif tile in self.armyAnalysis.pathChokes:
+                dict[tile] -= 1
+                # pathWay = self.armyAnalysis.pathWayLookupMatrix[tile]
+                # neighbors = where(pathWay.tiles, lambda t: t != tile and self.armyAnalysis.aMap[t.x][t.y] == self.armyAnalysis.aMap[tile.x][tile.y] and self.armyAnalysis.bMap[t.x][t.y] == self.armyAnalysis.bMap[tile.x][tile.y])
+                # newDist = dist + 1
+                # del dict[tile]  # necessary for 'test_should_not_make_move_away_from_threat' to pass.
+                # logging.info(f'Threat path tile {str(tile)} increased to dist {newDist} based on neighbors {neighbors}')
+                pass
             elif not allowNonChoke and tile not in self.armyAnalysis.pathChokes and not self.path.start.next.tile in tile.movable:
                 # pathWay = self.armyAnalysis.pathWayLookupMatrix[tile]
                 # neighbors = where(pathWay.tiles, lambda t: t != tile and self.armyAnalysis.aMap[t.x][t.y] == self.armyAnalysis.aMap[tile.x][tile.y] and self.armyAnalysis.bMap[t.x][t.y] == self.armyAnalysis.bMap[tile.x][tile.y])
                 # newDist = dist + 1
-                del dict[tile]  # necessary for 'test_should_not_make_move_away_from_threat' to pass.
+                # del dict[tile]  # necessary for 'test_should_not_make_move_away_from_threat' to pass.
                 # logging.info(f'Threat path tile {str(tile)} increased to dist {newDist} based on neighbors {neighbors}')
+                pass
             # else:
             #     logging.info(f'Threat path tile {str(tile)} left at dist {dist}')
+
+        dict[self.path.start.tile] -= 1
 
         return dict
 
@@ -99,7 +110,10 @@ class DangerAnalyzer(object):
         self.scan(general)
 
         self.fastestThreat = self.getFastestThreat(depth, armies, self.map.player_index)
-        self.fastestPotentialThreat = self.getFastestThreat(depth, armies, self.map.player_index, pretendGenArmyLeft=True)
+        negTiles = set()
+        if self.fastestThreat is not None:
+            negTiles.update(self.fastestThreat.path.tileSet)
+        self.fastestPotentialThreat = self.getFastestThreat(depth, armies, self.map.player_index, pretendGenArmyLeft=True, negTiles=negTiles)
         if self.map.is_2v2:
             for teammate in self.map.teammates:
                 self.fastestAllyThreat = self.getFastestThreat(depth, armies, teammate)
@@ -164,7 +178,7 @@ class DangerAnalyzer(object):
         logging.info(f"VISION threat analyzer took {time.time() - startTime:.3f}")
         return threatObj
 
-    def getFastestThreat(self, depth: int, armies: typing.Dict[Tile, Army], againstPlayer: int, pretendGenArmyLeft: bool = False) -> ThreatObj | None:
+    def getFastestThreat(self, depth: int, armies: typing.Dict[Tile, Army], againstPlayer: int, pretendGenArmyLeft: bool = False, negTiles: typing.Set[Tile] | None = None) -> ThreatObj | None:
         startTime = time.time()
         logging.info(f"------  fastest threat analyzer: depth {depth}")
         curThreat = None
@@ -207,7 +221,7 @@ class DangerAnalyzer(object):
                 targetArmy=searchArmyAmount,
                 maxTime=0.05,
                 maxDepth=depth,
-                negativeTiles=None,
+                negativeTiles=negTiles,
                 searchingPlayer=player.index,
                 dontEvacCities=False,
                 dupeThreshold=3,

@@ -1756,3 +1756,30 @@ whoever has less extra troops will always get ahead
         self.assertIsNone(winner)
 
         self.fail("TODO add asserts for should_not_loop")
+    
+    def test_should_not_loop_intercepting_entangled_armies(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_loop_intercepting_entangled_armies___HlMEz2Wzp---1--223.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 223, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=223)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        armyA = bot.get_army_at_x_y(4, 9)
+        armyB = bot.get_army_at_x_y(3, 8)
+        armyA.entangledArmies.append(armyB)
+        armyB.entangledArmies.append(armyA)
+        armyB.entangledValue = 25
+        armyA.entangledValue = 25
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=15)
+        self.assertIsNone(winner)
+
+        self.assertNoRepetition(simHost, minForRepetition=2)

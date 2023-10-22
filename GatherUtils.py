@@ -1858,6 +1858,7 @@ def prune_mst_to_army_with_values(
         noLog: bool = True,
         gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
         invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
+        pruneLargeTilesFirst: bool = True,
 ) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
     """
     Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
@@ -1866,11 +1867,13 @@ def prune_mst_to_army_with_values(
     @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
     @param army: The army amount to prune the MST down to
     @param searchingPlayer:
+    @param teams: the teams array.
     @param turn: the current map turn, used to calculate city increment values.
     @param viewInfo:
     @param noLog:
     @param gatherTreeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
     @param invalidMoveFunc: func(GatherTreeNode) -> bool, return true if you want a leaf GatherTreeNode to always be prune. For example, pruning gather nodes that begin at an enemy tile or that are 1's.
+    @param pruneLargeTilesFirst: if True (default), then largest tiles will be pruned first allowing this prune to be used to maximize leaving tiles for offense if possible.
 
     @return: gatherTurns, gatherValue, rootNodes
     """
@@ -1938,15 +1941,23 @@ def prune_mst_to_army_with_values(
 
         return False
 
-    def pruneFunc(node: GatherTreeNode, curObj) -> typing.Tuple:
+    def pruneLargeTilesFirstFunc(node: GatherTreeNode, curObj) -> typing.Tuple:
+        trunkValuePerTurn = node.trunkValue / node.trunkDistance if node.trunkDistance > 0 else 0
+        return 0 - node.value, trunkValuePerTurn, node.trunkDistance
+
+    def pruneWorstValuePerTurnFunc(node: GatherTreeNode, curObj) -> typing.Tuple:
         trunkValuePerTurn = node.trunkValue / node.trunkDistance if node.trunkDistance > 0 else 0
         return node.value / node.gatherTurns, trunkValuePerTurn, node.trunkDistance
+
+    prioFunc = pruneLargeTilesFirstFunc
+    if not pruneLargeTilesFirst:
+        prioFunc = pruneWorstValuePerTurnFunc
 
     prunedTurns, noCityCalcGathValue, nodes = prune_mst_until(
         rootNodes,
         untilFunc=untilFunc,
         # if we dont include trunkVal/node.trunkDistance we end up keeping shitty branches just because they have a far, large tile on the end.
-        pruneOrderFunc=pruneFunc,
+        pruneOrderFunc=prioFunc,
         # pruneOrderFunc=lambda node, curObj: (node.value, node.trunkValue / node.trunkDistance, node.trunkDistance),
         # pruneOrderFunc=lambda node, curObj: (node.value / node.gatherTurns, node.trunkValue / node.trunkDistance, node.trunkDistance),
         invalidMoveFunc=invalidMoveFunc,
@@ -2334,12 +2345,14 @@ def prune_mst_until(
             # value = current.trunkValue / max(1, current.trunkDistance)
             value = current.value
             validMove = True
-            if invalidMoveFunc(current):
+            if invalidMoveFunc(current) and len(current.children) == 0:
                 if not noLog:
-                    logging.info("tile {} will be eliminated due to invalid move, army {}".format(current.tile.toString(), current.tile.army))
+                    logging.info(
+                        f"tile {current.tile.toString()} will be eliminated due to invalid move, army {current.tile.army}")
                 validMove = False
             if not noLog:
-                logging.info("  tile {} had value {:.1f}, trunkDistance {}".format(current.tile.toString(), value, current.trunkDistance))
+                logging.info(
+                    f"  tile {current.tile.toString()} had value {value:.1f}, trunkDistance {current.trunkDistance}")
             pruneHeap.put((validMove, pruneOrderFunc(current, None), current))
 
     iterate_tree_nodes(rootNodes, nodeInitializer)

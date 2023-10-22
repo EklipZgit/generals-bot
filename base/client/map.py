@@ -912,6 +912,12 @@ class MapBase(object):
 
         return False
 
+    def is_tile_on_team_with(self, tile: Tile, player: int) -> bool:
+        if self._teams[player] == self._teams[tile.player]:
+            return True
+
+        return False
+
     # Emulates a tile update event from the server. Changes player tile ownership, or mountain to city, etc, and fires events
     def update_visible_tile(
             self,
@@ -1976,72 +1982,71 @@ class MapBase(object):
                     continue
 
             newCityCount = teamCityCount
-            if self.is_city_bonus_turn:
-                if self.remainingPlayers == 2 or self.is_2v2:
-                    # if NOT 1v1 we use the outer, dumber city count calculation that works reliably for FFA.
-                    # in a 1v1, if we lost army, then opponent also lost equal army (unless we just took a neutral tile)
-                    # this means we can still calculate city counts, even when fights are ongoing and both players are losing army
-                    # so we get the amount of unexpected delta on our player, and add that to actual opponent delta, and get the opponents city count
+            if self.remainingPlayers == 2 or self.is_2v2:
+                # if NOT 1v1 we use the outer, dumber city count calculation that works reliably for FFA.
+                # in a 1v1, if we lost army, then opponent also lost equal army (unless we just took a neutral tile)
+                # this means we can still calculate city counts, even when fights are ongoing and both players are losing army
+                # so we get the amount of unexpected delta on our player, and add that to actual opponent delta, and get the opponents city count
 
-                    realEnemyCities = teamCityCount + actualEnemyTeamDelta + friendlyFightDelta - expectedEnemyTeamDelta
+                realEnemyCities = teamCityCount + actualEnemyTeamDelta + friendlyFightDelta - expectedEnemyTeamDelta
 
-                    # if teamPlayer.
+                # if teamPlayer.
 
-                    if realEnemyCities <= -30:
-                        # then opp just took a neutral city
-                        newCityCount += 1
-                        logging.info(f"set team {teamIndex} cityCount += 1 to {newCityCount} because it appears they just took a city based on realEnemyCities {realEnemyCities}.")
-                    elif realEnemyCities >= 30:
-                        # then our player just took a neutral city, noop
-                        logging.info(
-                            "myPlayer just took a city? (or fighting in ffa) ignoring realEnemyCities this turn, realEnemyCities >= 38 and actualMeDelta < -30")
-                    else:
-                        newCityCount = realEnemyCities
-                        logging.info(
-                            f"want to set team {teamIndex} cityCount to {newCityCount}. "
-                            f"\nexpectedFriendlyDelta {expectedFriendlyDelta}, actualFriendlyDelta {actualFriendlyDelta},"
-                            f"\nexpectedEnemyTeamDelta {expectedEnemyTeamDelta}, actualEnemyTeamDelta {actualEnemyTeamDelta},"
-                            f"\nfrFightDelta {friendlyFightDelta} results in realEnemyCities {realEnemyCities} vs teamCurrentCities {teamCurrentCities}")
+                if realEnemyCities <= -30:
+                    # then opp just took a neutral city
+                    newCityCount += 1
+                    logging.info(f"set team {teamIndex} cityCount += 1 to {newCityCount} because it appears they just took a city based on realEnemyCities {realEnemyCities}.")
+                elif realEnemyCities >= 30:
+                    # then our player just took a neutral city, noop
+                    logging.info(
+                        "myPlayer just took a city? (or fighting in ffa) ignoring realEnemyCities this turn, realEnemyCities >= 38 and actualMeDelta < -30")
+                elif self.is_city_bonus_turn:
+                    newCityCount = realEnemyCities
+                    logging.info(
+                        f"want to set team {teamIndex} cityCount to {newCityCount}. "
+                        f"\nexpectedFriendlyDelta {expectedFriendlyDelta}, actualFriendlyDelta {actualFriendlyDelta},"
+                        f"\nexpectedEnemyTeamDelta {expectedEnemyTeamDelta}, actualEnemyTeamDelta {actualEnemyTeamDelta},"
+                        f"\nfrFightDelta {friendlyFightDelta} results in realEnemyCities {realEnemyCities} vs teamCurrentCities {teamCurrentCities}")
 
-                logging.info(f'cities for team {teamIndex}, as {newCityCount} vs current {teamCurrentCities}?')
+            logging.info(f'cities for team {teamIndex}, as {newCityCount} vs current {teamCurrentCities}?')
 
-                if self.player_index in teamList:
-                    # we have perfect info of our own cities
+            if self.player_index in teamList:
+                # we have perfect info of our own cities
+                continue
+
+            if self.remainingPlayers > 2 and self.is_2v2 and newCityCount - teamCurrentCities > 5 and teamCurrentCities > 1:
+                logging.info(f'miscounting cities for team {teamIndex}, as {newCityCount} vs current {teamCurrentCities}? ignoring')
+                continue
+            # if friendlyFightDelta == 0 or self.remainingPlayers == 2:
+            logging.info(f'Trying to make cities for team {teamIndex} match {newCityCount} vs current {teamCurrentCities}?')
+            sum = 0
+            for playerIndex in teamList:
+                teamPlayer = self.players[playerIndex]
+                if teamPlayer.dead:
                     continue
+                sum += teamPlayer.cityCount
 
-                if self.remainingPlayers > 2 and self.is_2v2 and newCityCount - teamCurrentCities > 5 and teamCurrentCities > 1:
-                    logging.info(f'miscounting cities for team {teamIndex}, as {newCityCount} vs current {teamCurrentCities}? ignoring')
-                    continue
-                if friendlyFightDelta == 0:
-                    logging.info(f'Trying to make cities for team {teamIndex} match {newCityCount} vs current {teamCurrentCities}?')
-                    sum = 0
-                    for playerIndex in teamList:
-                        teamPlayer = self.players[playerIndex]
-                        if teamPlayer.dead:
-                            continue
-                        sum += teamPlayer.cityCount
+            while sum < newCityCount:
+                for playerIndex in teamList:
+                    teamPlayer = self.players[playerIndex]
+                    if teamPlayer.dead:
+                        continue
+                    teamPlayer.cityCount += 1
+                    logging.info(f'Incrementing p{playerIndex} cities by 1 from {teamPlayer.cityCount - 1} to {teamPlayer.cityCount}')
+                    sum += 1
+                    if sum >= newCityCount:
+                        break
 
-                    while sum < newCityCount:
-                        for playerIndex in teamList:
-                            teamPlayer = self.players[playerIndex]
-                            if teamPlayer.dead:
-                                continue
-                            teamPlayer.cityCount += 1
-                            logging.info(f'Incrementing p{playerIndex} cities by 1 from {teamPlayer.cityCount - 1} to {teamPlayer.cityCount}')
-                            sum += 1
-                            if sum >= newCityCount:
-                                break
-
-                    while sum > newCityCount:
-                        for playerIndex in teamList:
-                            teamPlayer = self.players[playerIndex]
-                            if teamPlayer.dead:
-                                continue
-                            teamPlayer.cityCount -= 1
-                            logging.info(f'Decrementing p{playerIndex} cities by 1 from {teamPlayer.cityCount + 1} to {teamPlayer.cityCount}')
-                            sum -= 1
-                            if sum <= newCityCount:
-                                break
+            while sum > newCityCount:
+                for playerIndex in teamList:
+                    teamPlayer = self.players[playerIndex]
+                    if teamPlayer.dead:
+                        continue
+                    teamPlayer.cityCount -= 1
+                    logging.info(f'Decrementing p{playerIndex} cities by 1 from {teamPlayer.cityCount + 1} to {teamPlayer.cityCount}')
+                    sum -= 1
+                    if sum <= newCityCount:
+                        break
 
         for player in self.players:
             playerDeltaDiff = player.actualScoreDelta - player.expectedScoreDelta

@@ -53,8 +53,11 @@ class CoordinatedDefense(object):
             tileCompressor: TileCompressor,
             teammateTileDistanceMap: typing.List[typing.List[int]],
             charsLeft: int = CommunicationConstants.TEAM_CHAT_CHARACTER_LIMIT
-    ) -> TeammateCommunication:
+    ) -> TeammateCommunication | None:
         """Compress the defense as much as possible, dropping tiles that are furthest from ally tiles as they are least likely to interact with those"""
+
+        if len(self.defenses) == 0:
+            return None
 
         # !D = Defense plan,
         # F = From tile (so they can make sure they're defending same threats)

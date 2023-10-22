@@ -90,22 +90,26 @@ class TeammateCommunicator(object):
         return False
 
     def begin_next_turn(self):
-        if self.coordinated_defense is not None and self.is_defense_lead:
-            self.coordinated_defense.last_blocked_tiles = self.coordinated_defense.blocked_tiles
-            # we'll re-block all the tiles this turn, as the lead
+        if self.coordinated_defense is not None:
+            if self.is_defense_lead:
+                self.coordinated_defense.last_blocked_tiles = self.coordinated_defense.blocked_tiles
+                # we'll re-block all the tiles this turn, as the lead
+
             self.coordinated_defense.blocked_tiles = set()
-        for plan in list(self.coordinated_defense.defenses):
-            plan.not_updated_since += 1
-            if plan.not_updated_since > 5:
-                self.coordinated_defense.defenses.remove(plan)
 
-    def get_teammate_communications(self) -> typing.List[TeammateCommunication]:
+            # for plan in list(self.coordinated_defense.defenses):
+            #     plan.not_updated_since += 1
+            #     if plan.not_updated_since > 5:
+            #         self.coordinated_defense.defenses.remove(plan)
+            self.coordinated_defense.defenses.clear()
+
+    def produce_teammate_communications(self) -> typing.List[TeammateCommunication]:
         if self.is_teammate_coordinated_bot:
-            return self.get_bot_communications()
+            return self.produce_bot_communications()
         else:
-            return self.get_human_communications()
+            return self.produce_human_communications()
 
-    def get_bot_communications(self) -> typing.List[TeammateCommunication]:
+    def produce_bot_communications(self) -> typing.List[TeammateCommunication]:
         messages = []
         curMessage: TeammateCommunication | None = None
         if self.coordinated_defense is not None and self.is_teammate_coordinated_bot:
@@ -121,7 +125,7 @@ class TeammateCommunicator(object):
 
         return messages
 
-    def get_human_communications(self) -> typing.List[TeammateCommunication]:
+    def produce_human_communications(self) -> typing.List[TeammateCommunication]:
         messages = []
 
         return messages
@@ -139,7 +143,7 @@ class TeammateCommunicator(object):
         self.coordinated_defense.include_defense_plan(threatTarget, threatTile, threatTurns, requiredArmy, gatherTiles, markLivePlan=True)
 
     @staticmethod
-    def _try_combine_messages(messages: typing.List[TeammateCommunication], curMessage: TeammateCommunication | None, nextMessage: TeammateCommunication) -> TeammateCommunication:
+    def _try_combine_messages(messages: typing.List[TeammateCommunication], curMessage: TeammateCommunication | None, nextMessage: TeammateCommunication | None) -> TeammateCommunication:
         """
         If the combined message length is shorter than the message char limit, combines them. Otherwise, appends the previous message to the list and starts a new one.
         @param messages:
@@ -150,6 +154,9 @@ class TeammateCommunicator(object):
 
         if curMessage is None:
             return nextMessage
+
+        if nextMessage is None:
+            return curMessage
 
         if len(curMessage.message) + len(nextMessage.message) < CommunicationConstants.TEAM_CHAT_CHARACTER_LIMIT:
             curMessage.message += nextMessage.message

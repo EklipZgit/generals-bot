@@ -1067,3 +1067,25 @@ player_index=0
         self.assertIsNone(winner)
         city = playerMap.GetTile(21, 1)
         self.assertEqual(general.player, city.player)
+    
+    def test_should_not_prune_to_less_than_threat(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_prune_to_less_than_threat___hjwxdn1qF---1--90.txtmap'
+        map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 90, fill_out_tiles=True)
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 13, 19)
+        enemyAllyGen = self.move_enemy_general(map, enemyAllyGen, 10, 23)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=90)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        self.assertNoFriendliesKilled(map, general, allyGen)
+        self.assertNoRepetition(simHost, minForRepetition=3)

@@ -1,7 +1,7 @@
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
-from base.client.map import TILE_MOUNTAIN
+from base.client.map import TILE_MOUNTAIN, TILE_EMPTY
 
 
 class DefenseTests(TestBase):
@@ -963,18 +963,18 @@ class DefenseTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=11.0, turns=11)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=11)
         self.assertIsNone(winner)
     
     def test_should_lock_tiles_that_intercept_threat_early_because_moving_them_will_still_result_in_death(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_lock_tiles_that_intercept_threat_early_because_moving_them_will_still_result_in_death___k6dXS2cLO---unk--89.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 89, fill_out_tiles=True)
+        map, general, allyGen, enemyGeneral, enAllyGen = self.load_map_and_generals_2v2(mapFile, 132, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=89)
         
         self.enable_search_time_limits_and_disable_debug_asserts()
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         bot = simHost.get_bot(general.player)
         playerMap = simHost.get_player_map(general.player)
@@ -989,27 +989,44 @@ class DefenseTests(TestBase):
     
     def test_should_defend_self_against_threat_closer_to_teammate(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/should_defend_self_against_threat_closer_to_teammate___eAI-LARB8---3--140.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 140, fill_out_tiles=True)
 
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=140)
-        
-        self.enable_search_time_limits_and_disable_debug_asserts()
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
-        playerMap = simHost.get_player_map(general.player)
+        for threatAttacksSelf in [False, True]:
+            for mountainOn11_15 in [True, False]:
+                with self.subTest(threatAttacksSelf=threatAttacksSelf, mountainOn11_15=mountainOn11_15):
+                    mapFile = 'GameContinuationEntries/should_defend_self_against_threat_closer_to_teammate___eAI-LARB8---3--140.txtmap'
+                    map, general, allyGen, enemyGeneral, enAllyGen = self.load_map_and_generals_2v2(mapFile, 132, fill_out_tiles=True)
 
-        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+                    rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=140)
 
-        self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
-        self.assertIsNone(winner)
+                    if not mountainOn11_15:
+                        m = map.GetTile(11, 15)
+                        m2 = rawMap.GetTile(11, 15)
+                        m.isMountain = False
+                        m2.isMountain = False
+                        m.tile = TILE_EMPTY
+                        m2.tile = TILE_EMPTY
 
-        self.fail("TODO add asserts for should_defend_self_against_threat_closer_to_teammate")
+                    self.enable_search_time_limits_and_disable_debug_asserts()
+                    simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                    if threatAttacksSelf:
+                        if mountainOn11_15:
+                            simHost.queue_player_moves_str(enemyGeneral.player, '13,12->12,12->11,12->11,13->11,14->12,14->12,15->12,16->11,16->11,17->10,17')
+                        else:
+                            simHost.queue_player_moves_str(enemyGeneral.player, '13,12->12,12->11,12->11,13->11,14->11,15->11,16->11,17->10,17')
+                    else:
+                        simHost.queue_player_moves_str(enemyGeneral.player, '13,12->12,12->11,12->11,13->10,13->9,13->8,13')
+                    bot = simHost.get_bot(general.player)
+                    bot.no_file_logging = False
+                    playerMap = simHost.get_player_map(general.player)
+
+                    # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+                    self.begin_capturing_logging()
+                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+                    self.assertNoFriendliesKilled(map, general, allyGen=allyGen)
     
     def test_should_defend_ally_in_2v2(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_defend_ally_in_2v2___brs1WYHiG---0--132.txtmap'
         map, general, allyGen, enemyGeneral, enAllyGen = self.load_map_and_generals_2v2(mapFile, 132, fill_out_tiles=True)
 
@@ -1253,9 +1270,10 @@ class DefenseTests(TestBase):
         self.assertNoFriendliesKilled(map, general, allyGen)
 
         city = self.get_player_tile(20, 9, simHost.sim, general.player)
-        self.assertEqual(general.player, city.player)    
+        self.assertEqual(general.player, city.player)
+
     def test_should_not_gather_city_too_early(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_gather_city_too_early___Bq7qaO0OI---0--437.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 437, fill_out_tiles=True)
 
@@ -1270,11 +1288,11 @@ class DefenseTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=10)
         self.assertIsNone(winner)
 
     def test_should_abandon_defense_when_opp_knows_king_location(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_abandon_defense_when_opp_knows_king_location___Bq7qaO0OI---0--432.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 432, fill_out_tiles=True)
 
@@ -1290,7 +1308,7 @@ class DefenseTests(TestBase):
 
         self.begin_capturing_logging()
         genPlayer = general.player
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=10)
         self.assertEqual(genPlayer, winner)
 
     def test_should_not_loop_defense_gather_just_capture_city(self):
@@ -1338,3 +1356,43 @@ class DefenseTests(TestBase):
         self.assertIsNone(winner)
 
         self.assertNoRepetition(simHost)
+    
+    def test_should_not_loop_defense_vs_city_capture(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_loop_defense_vs_city_capture___8nlMn9w_f---0--408.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 408, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=408)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.50, turns=10)
+        self.assertIsNone(winner)
+
+        self.assertNoRepetition(simHost)
+    
+    def test_should_not_wait_to_defend_and_attack_with_late_tiles(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_wait_to_defend_and_attack_with_late_tiles___rTXxWmNy0---1--177.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 177, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=177)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '14,8->13,8->12,8->11,8->10,8->9,8->8,8->7,8->6,8->5,8')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=10)
+        self.assertIsNone(winner)

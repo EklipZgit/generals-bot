@@ -96,7 +96,7 @@ class CityGatherTests(TestBase):
 
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=40)
-        self.assertEqual(general.player, winner)
+        self.assertEqual(map.player_index, winner)
         self.assertNoRepetition(simHost)
         city1 = self.get_player_tile(16, 14, simHost.sim, general.player)
         city2 = self.get_player_tile(16, 15, simHost.sim, general.player)
@@ -120,7 +120,7 @@ class CityGatherTests(TestBase):
 
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=40)
-        self.assertEqual(general.player, winner)
+        self.assertEqual(map.player_index, winner)
         self.assertNoRepetition(simHost)
         city1 = self.get_player_tile(16, 14, simHost.sim, general.player)
         city2 = self.get_player_tile(16, 15, simHost.sim, general.player)
@@ -146,7 +146,7 @@ class CityGatherTests(TestBase):
 
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=40)
-        self.assertEqual(general.player, winner)
+        self.assertEqual(map.player_index, winner)
         self.assertNoRepetition(simHost)
         city1 = self.get_player_tile(16, 14, simHost.sim, general.player)
         city2 = self.get_player_tile(16, 15, simHost.sim, general.player)

@@ -608,7 +608,7 @@ class MapBase(object):
                 uniqueTeams.add(team)
                 if team == teams[self.player_index] and player != self.player_index:
                     self.teammates.add(player)
-            if len(uniqueTeams) == 2:
+            if len(uniqueTeams) == 2 and len(teams) == 4:
                 self.is_2v2 = True
 
         self.teams: typing.List[int] | None = teams
@@ -914,6 +914,12 @@ class MapBase(object):
 
     def is_tile_on_team_with(self, tile: Tile, player: int) -> bool:
         if self._teams[player] == self._teams[tile.player]:
+            return True
+
+        return False
+
+    def is_player_on_team_with(self, player1: int, player2: int) -> bool:
+        if self._teams[player1] == self._teams[player2]:
             return True
 
         return False
@@ -1947,6 +1953,7 @@ class MapBase(object):
             actualEnemyTeamDelta = 0
             expectedEnemyTeamDelta = 0
             teamCityCount = 0
+            teamAlive = False
             for playerIndex in teamList:
                 teamPlayer = self.players[playerIndex]
 
@@ -1954,7 +1961,14 @@ class MapBase(object):
                     teamPlayer.expectedScoreDelta = 0
                     teamPlayer.actualScoreDelta = 0
                     teamPlayer.cityCount = 0
+                    teamPlayer.fighting_with_player = -1
+                    teamPlayer.unexplainedTileDelta = 0
                     continue
+
+                teamAlive = True
+
+                if self.player_index == playerIndex:
+                    teamPlayer.cityCount = len(teamPlayer.cities) + 1
 
                 expectedEnemyDelta = 0
                 if self.is_army_bonus_turn:
@@ -1976,10 +1990,8 @@ class MapBase(object):
                 teamCurrentCities += teamPlayer.cityCount
                 teamCityCount += teamPlayer.cityCount
 
-                # nothing past here runs for us
-                if self.player_index in teamList:
-                    teamPlayer.cityCount = len(teamPlayer.cities) + 1
-                    continue
+            if not teamAlive:
+                continue
 
             newCityCount = teamCityCount
             if self.remainingPlayers == 2 or self.is_2v2:
@@ -2025,8 +2037,9 @@ class MapBase(object):
                 if teamPlayer.dead:
                     continue
                 sum += teamPlayer.cityCount
-
-            while sum < newCityCount:
+            iter = 0
+            while sum < newCityCount and iter < 100:
+                iter += 1
                 for playerIndex in teamList:
                     teamPlayer = self.players[playerIndex]
                     if teamPlayer.dead:
@@ -2037,7 +2050,8 @@ class MapBase(object):
                     if sum >= newCityCount:
                         break
 
-            while sum > newCityCount:
+            while sum > newCityCount and iter < 100:
+                iter += 1
                 for playerIndex in teamList:
                     teamPlayer = self.players[playerIndex]
                     if teamPlayer.dead:
@@ -2047,6 +2061,10 @@ class MapBase(object):
                     sum -= 1
                     if sum <= newCityCount:
                         break
+
+            if iter > 98:
+                logging.error('INFINITE LOOPED IN TEAM CITY HANDLER')
+                raise AssertionError('INFINITE LOOPED IN TEAM CITY HANDLER')
 
         for player in self.players:
             playerDeltaDiff = player.actualScoreDelta - player.expectedScoreDelta

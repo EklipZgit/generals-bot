@@ -1,0 +1,70 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          M         M    M                             M    M    M         M
+     M    M                   M    M         M    M                        M    M    M
+     M    M              M                                  M    M
+                                                  M    M    M         M    M    M    M
+                    b5   b2   M    b2                  M         M
+               M    b2   b2   b2   b2   b2   b2        b2   b2   b2   b2        M    M
+               b2   b2   C42  b2   b3   b2   b3   b3   b2   b2   b3   M
+                    M    C45  b3   b3   b2   b2   b3   b3   M    b2   b2
+M                   a2        M    b2   b3   b2   M    M    b2   b3   M         b2   b2
+          M    a2   a2   b2   a2   b2   b3   b2   M    b2   b2   b3   b3   C46  M    b3
+a1   M    a1   b2   b2   b2   M    b3   b3   b2   b2   b1   bG14 b2   b2   b3   b3   b4
+a1   a1   a1   M    M    b1   b2   b2   b2   b2   b2   b1   M    M    b2   b2   b3   M
+     a1   b1   b1   b1   b1   b1   b1   b1   b1   b1   b1        b2   b2   b2   M    M
+     b1   b1   C42  b1   b1   b1   M    a2   a2   b2   M    M    b2   b2        M
+M    a1   b1   b1   b1   M    b1   b1   b2   b2   M    M                   M    M
+a1   M    b24  b1   a2   M    a2   a2   a54  C50       M         M    M    M         M
+a1   a1   a1   a1   a1   a1D  a1D  a1D  a1D  a1D  M
+a1   a1   MD   a1D  a1D  MD   a1D  a1D  a1D  a1D  a1   a1                  M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=433
+player_index=1
+mode=1v1
+bot_target_player=0
+targetPlayerExpectedGeneralLocation=1,17
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=True
+bot_all_in_army_advantage_counter=37
+bot_all_in_army_advantage_cycle=75
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=True
+bot_targeting_army=8,15
+bot_cur_path=None
+aUsername=zzd_bot release
+aTiles=41
+aScore=110
+aStandingArmy=69
+aStars=69
+aCityCount=1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=130
+aDelta25Tiles=-5
+aDelta25Score=44
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=433
+a_bot_general_approx=0,15
+bUsername=Human.exe
+bTiles=101
+bScore=236
+bStandingArmy=135
+bStars=71
+bCityCount=1
+bGeneral=12,10
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=12
+bDelta25Tiles=19
+bDelta25Score=86
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=433
+b_bot_general_approx=12,10

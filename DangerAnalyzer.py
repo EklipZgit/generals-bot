@@ -50,7 +50,7 @@ class ThreatObj(object):
             if tile.isGeneral:
                 # need to gather to general 1 turn earlier than otherwise necessary
                 dict[tile] = dist + 1
-            elif tile in self.armyAnalysis.pathChokes:
+            elif tile in self.armyAnalysis.pathChokes and not self.path.start.tile == tile:
                 dict[tile] -= 1
                 # pathWay = self.armyAnalysis.pathWayLookupMatrix[tile]
                 # neighbors = where(pathWay.tiles, lambda t: t != tile and self.armyAnalysis.aMap[t.x][t.y] == self.armyAnalysis.aMap[tile.x][tile.y] and self.armyAnalysis.bMap[t.x][t.y] == self.armyAnalysis.bMap[tile.x][tile.y])
@@ -68,7 +68,7 @@ class ThreatObj(object):
             # else:
             #     logging.info(f'Threat path tile {str(tile)} left at dist {dist}')
 
-        dict[self.path.start.tile] -= 1
+        # dict[self.path.start.tile] -= 1
 
         return dict
 
@@ -113,14 +113,14 @@ class DangerAnalyzer(object):
         negTiles = set()
         if self.fastestThreat is not None:
             negTiles.update(self.fastestThreat.path.tileSet)
-        self.fastestPotentialThreat = self.getFastestThreat(depth, armies, self.map.player_index, pretendGenArmyLeft=True, negTiles=negTiles)
+        self.fastestPotentialThreat = self.getFastestThreat(depth + 2, armies, self.map.player_index, pretendGenArmyLeft=True, negTiles=negTiles)
         if self.map.is_2v2:
             for teammate in self.map.teammates:
                 self.fastestAllyThreat = self.getFastestThreat(depth, armies, teammate)
         self.highestThreat = self.getHighestThreat(general, depth, armies)
         self.fastestVisionThreat = self.getVisionThreat(9, armies)
 
-        self.anyThreat = self.fastestThreat is not None or self.fastestVisionThreat is not None or self.highestThreat is not None
+        self.anyThreat = self.fastestThreat is not None or self.fastestVisionThreat is not None or self.fastestAllyThreat is not None or self.highestThreat is not None
 
     def getVisionThreat(self, depth: int, armies: typing.Dict[Tile, Army]) -> ThreatObj | None:
         startTime = time.time()

@@ -7,6 +7,7 @@ from queue import PriorityQueue
 import KnapsackUtils
 import SearchUtils
 from DataModels import Move, GatherTreeNode
+from MapMatrix import MapMatrix
 from Path import Path
 from SearchUtils import where
 from ViewInfo import ViewInfo
@@ -937,7 +938,8 @@ def knapsack_levels_backpack_gather_with_value(
         useTrueValueGathered=False,
         includeGatherTreeNodesThatGatherNegative=False,
         shouldLog=False,
-        useRecurse=False
+        useRecurse=False,
+        priorityMatrix: MapMatrix[float] | None = None
 ) -> typing.Tuple[int, typing.List[GatherTreeNode]]:
     """
     Does black magic and shits out a spiderweb with numbers in it, sometimes the numbers are even right
@@ -1035,9 +1037,11 @@ def knapsack_levels_backpack_gather_with_value(
                 return None
 
             value = 0 - negGatheredSum
+
             vt = 0
             if realDist > 0:
                 vt = value / realDist
+
             prioObj = (vt,  # most army per turn
                        0 - threatDist,
                        # then by the furthest 'distance' (which when gathering to a path, weights short paths to the top of the path higher which is important)
@@ -1072,7 +1076,7 @@ def knapsack_levels_backpack_gather_with_value(
             negArmySum += 1
             negGatheredSum += 1
             if nextTile not in negativeTiles:
-                if searchingPlayer == nextTile.player:
+                if teams[searchingPlayer] == teams[nextTile.player]:
                     negArmySum -= nextTile.army
                     negGatheredSum -= nextTile.army
                 # # this broke gather approximation, couldn't predict actual gather values based on this
@@ -1082,6 +1086,10 @@ def knapsack_levels_backpack_gather_with_value(
                     negArmySum += nextTile.army
                     if useTrueValueGathered:
                         negGatheredSum += nextTile.army
+
+            if priorityMatrix:
+                negGatheredSum += priorityMatrix[nextTile]
+
             # if nextTile.player != searchingPlayer and not (nextTile.player == -1 and nextTile.isCity):
             #	negDistanceSum -= 1
             # hacks us prioritizing further away tiles

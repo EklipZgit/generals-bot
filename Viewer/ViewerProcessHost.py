@@ -9,7 +9,7 @@ from multiprocessing.managers import SyncManager
 from multiprocessing.process import BaseProcess
 
 from ViewInfo import ViewInfo
-from base.client.map import MapBase
+from base.client.map import MapBase, Tile
 
 
 class ViewerHost(object):
@@ -21,18 +21,20 @@ class ViewerHost(object):
             alignTop: bool = True,
             alignLeft: bool = True,
             ctx: BaseContext | None = None,
+            onClick: typing.Callable[[Tile, bool], None] | None = None,
             noLog: bool = False
     ):
         if ctx is None:
             logging.info("getting spawn context")
             ctx = mp.get_context('spawn')
 
+        self.on_click: typing.Callable[[Tile, bool], None] | None = onClick
         self.ctx: BaseContext = ctx
         logging.info("getting mp manager")
         self.mgr: SyncManager = ctx.Manager()
         logging.info("getting mgr queues")
         self._update_queue: "Queue[typing.Tuple[ViewInfo | None, MapBase | None, bool]]" = self.mgr.Queue()
-        self._viewer_event_queue: "Queue[bool]" = self.mgr.Queue()
+        self._viewer_event_queue: "Queue[typing.Tuple[str, typing.Any]]" = self.mgr.Queue()
         logging.info("importing GeneralsViewer")
         from base.viewer import GeneralsViewer
         logging.info("newing up GeneralsViewer")
@@ -75,15 +77,10 @@ class ViewerHost(object):
         # if not self.process.is_alive():
         #     return True
 
-        try:
-            closedByUser = self._viewer_event_queue.get(block=False)
-            self._closed_by_user = closedByUser
+        self.handle_viewer_events()
+        if self._closed_by_user is not None:
             # if not closedByUser:
             #     raise AssertionError('pygame viewer indicated it was NOT closed by the user themselves and closed due to failure')
-            return True
-        except queue.Empty:
-            return False
-        except BrokenPipeError:
             return True
 
     def check_viewer_closed_by_user(self) -> bool:
@@ -92,7 +89,6 @@ class ViewerHost(object):
                 return True
 
         return False
-
 
     def send_update_to_viewer(self, viewInfo: ViewInfo, map: MapBase, isComplete: bool = False):
         try:
@@ -123,3 +119,22 @@ class ViewerHost(object):
         except:
             logging.info(f'outer update publish catch, error: ')
             logging.info(traceback.format_exc())
+
+    def handle_viewer_events(self):
+        try:
+            while True:
+                eventType, eventValue = self._viewer_event_queue.get(block=False)
+                if eventType == 'CLOSED':
+                    closedByUser = eventValue
+                    self._closed_by_user = closedByUser
+
+                if self.on_click is not None:
+                    if eventType == 'LEFT_CLICK':
+                        self.on_click(eventValue, False)
+                    elif eventType == 'RIGHT_CLICK':
+                        self.on_click(eventValue, True)
+        except queue.Empty:
+            pass
+        except BrokenPipeError:
+            if self._closed_by_user is None:
+                self._closed_by_user = False

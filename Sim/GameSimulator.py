@@ -2,6 +2,7 @@ import logging
 import time
 import traceback
 import typing
+from queue import Queue
 
 import DebugHelper
 from BotHost import BotHostBase
@@ -463,6 +464,8 @@ class GameSimulatorHost(object):
         @param allAfkExceptMapPlayer:
         @param respectTurnTimeLimitToDropMoves: Note that if capturing logging in pycharm unit tests, the logging makes the program REALLY slow so moves will drop like flies...
         """
+        self.queued_tile_pings: "Queue[typing.Tuple[int, Tile]]" = Queue()
+        self.queued_chat_messages: "Queue[typing.Tuple[int, str, bool]]" = Queue()
         self.move_queue: typing.List[typing.List[Move | None]] = [[] for player in map.players]
         self.sim = GameSimulator(map, ignore_illegal_moves=False)
 
@@ -488,6 +491,8 @@ class GameSimulatorHost(object):
         self.player_with_viewer: int = player_with_viewer
 
         self.respect_turn_time_limit: bool = respectTurnTimeLimitToDropMoves
+        self.paused: bool = False
+        self.skip_frame: bool = False
 
         charMap = [c for c, idx in TextMapLoader.get_player_char_index_map()]
 
@@ -501,8 +506,8 @@ class GameSimulatorHost(object):
             # i=i captures the current value of i in the lambda, otherwise all players lambdas would send the last players player index...
             hasUi = i == player_with_viewer or player_with_viewer == -2
             botMover = lambda source, dest, moveHalf, i=i: self.sim.make_move(player_index=i, move=Move(source, dest, moveHalf))
-            botPinger = lambda tile, i=i: self.notify_teammates_tile_ping(player=i, tile=tile)
-            botChatter = lambda message, teamChat, i=i: self.notify_chat_message(player=i, message=message, teamChat=teamChat)
+            botPinger = lambda tile, i=i: self.enqueue_teammates_tile_ping(player=i, tile=tile)
+            botChatter = lambda message, teamChat, i=i: self.enqueue_chat_message(player=i, message=message, teamChat=teamChat)
             botHost = BotHostBase(char, botMover, botPinger, botChatter, 'test', noUi=not hasUi, alignBottom=True, throw=True)
 
             self.bot_hosts[i] = botHost
@@ -528,6 +533,13 @@ class GameSimulatorHost(object):
             # botHost.eklipz_bot.init_turn()
             botHost.make_move(player.map)
 
+            botHost.eklipz_bot.expand_plan = None
+            botHost.eklipz_bot.timings = None
+            botHost.eklipz_bot.curPath = None
+            if botHost.eklipz_bot.teammate_communicator is not None:
+                botHost.eklipz_bot.teammate_communicator.begin_next_turn()
+                botHost.eklipz_bot.teammate_communicator.begin_next_turn()
+
         # throw the initialized moves away
         self.sim.moves = [None for move in self.sim.moves]
         self.sim.reset_player_map_deltas()
@@ -544,16 +556,13 @@ class GameSimulatorHost(object):
         self.give_players_perfect_initial_city_information()
         self.dropped_move_counts_by_player = [0 for player in self.sim.players]
 
+        botHost: BotHostBase
         for playerIndex, botHost in enumerate(self.bot_hosts):
             if botHost is None:
                 continue
 
-            botHost.eklipz_bot.expand_plan = None
-            botHost.eklipz_bot.timings = None
-            botHost.eklipz_bot.curPath = None
-
             if botHost.has_viewer and run_real_time:
-                botHost.initialize_viewer(botHost.eklipz_bot.no_file_logging)
+                botHost.initialize_viewer(botHost.eklipz_bot.no_file_logging, onClick=self.on_click)
                 botHost._viewer.send_update_to_viewer(botHost.eklipz_bot.viewInfo, botHost.eklipz_bot._map)
                 botHost.run_viewer_loop()
 
@@ -605,6 +614,15 @@ class GameSimulatorHost(object):
         if winner == -1:
             winner = None
         return winner
+
+    def on_click(self, tile: Tile, isRightClick: bool):
+        if isRightClick:
+            if self.paused:
+                self.paused = False
+            else:
+                self.paused = True
+        else:
+            self.skip_frame = True
 
     def make_player_afk(self, player: int):
         self.forced_afk_players.append(player)
@@ -711,7 +729,7 @@ class GameSimulatorHost(object):
                         if move.move_half:
                             move.army_moved = fullArmy // 2
 
-                    self.bot_hosts[playerIndex].eklipz_bot.armyTracker.last_player_index_submitted_move = move
+                    self.bot_hosts[playerIndex].eklipz_bot.armyTracker.lastMove = move
                     self.bot_hosts[playerIndex].eklipz_bot.history.move_history[self.sim.turn] = [move]
 
                 player = self.sim.players[playerIndex]
@@ -722,10 +740,24 @@ class GameSimulatorHost(object):
         for func in self._between_turns_funcs:
             self._run_between_turns_func(run_real_time, func)
 
+        # these should normally come BEFORE the next map update but AFTER the bots pick their moves
+        self.notify_chat_messages()
+        self.notify_teammates_tile_pings()
+
         if run_real_time:
+            self.check_for_viewer_events()
+            self.any_bot_has_viewer_running()
             elapsed = time.perf_counter() - start
-            if elapsed < turn_time:
-                time.sleep(turn_time - elapsed)
+            while elapsed < turn_time and not self.skip_frame:
+                time.sleep(min(turn_time - elapsed, 0.25))
+                self.check_for_viewer_events()
+                elapsed = time.perf_counter() - start
+
+            while self.paused and not self.skip_frame:
+                time.sleep(0.1)
+                self.check_for_viewer_events()
+
+            self.skip_frame = False
 
         self.sim.execute_turn(dont_require_all_players_to_move=True)
 
@@ -817,24 +849,34 @@ class GameSimulatorHost(object):
                 self.wait_until_viewer_closed_or_time_elapses(600)
             raise
 
-    def notify_teammates_tile_ping(self, player: int, tile: Tile):
-        bot: BotHostBase
-        for p, bot in enumerate(self.bot_hosts):
-            if p == player or bot is None or bot.eklipz_bot is None:
-                continue
-            if self.sim.sim_map.teams[player] == self.sim.sim_map.teams[p]:
-                logging.info(f'SIM NOTIFYING TILE PING {str(tile)} FROM p{player} TO p{p}')
-                bot.eklipz_bot.notify_tile_ping(tile)
+    def enqueue_teammates_tile_ping(self, player: int, tile: Tile):
+        self.queued_tile_pings.put((player, tile))
 
-    def notify_chat_message(self, player: int, message: str, teamChat: bool):
+    def enqueue_chat_message(self, player: int, message: str, teamChat: bool):
+        self.queued_chat_messages.put((player, message, teamChat))
+
+    def notify_teammates_tile_pings(self):
         bot: BotHostBase
-        for p, bot in enumerate(self.bot_hosts):
-            if p == player or bot is None or bot.eklipz_bot is None:
-                continue
-            if not teamChat or self.sim.sim_map.teams[player] == self.sim.sim_map.teams[p]:
-                chatUpdate = ChatUpdate(self.sim.sim_map.usernames[player], teamChat, message)
-                logging.info(f'SIM NOTIFYING CHAT {str(chatUpdate)} FROM p{player} TO p{p}')
-                bot.eklipz_bot.notify_chat_message(chatUpdate)
+        while not self.queued_tile_pings.empty():
+            player, tile = self.queued_tile_pings.get()
+            for p, bot in enumerate(self.bot_hosts):
+                if p == player or bot is None or bot.eklipz_bot is None:
+                    continue
+                if self.sim.sim_map.teams[player] == self.sim.sim_map.teams[p]:
+                    logging.info(f'SIM NOTIFYING TILE PING {str(tile)} FROM p{player} TO p{p}')
+                    bot.eklipz_bot.notify_tile_ping(tile)
+
+    def notify_chat_messages(self):
+        bot: BotHostBase
+        while not self.queued_chat_messages.empty():
+            player, message, teamChat = self.queued_chat_messages.get()
+            for p, bot in enumerate(self.bot_hosts):
+                if p == player or bot is None or bot.eklipz_bot is None:
+                    continue
+                if not teamChat or self.sim.sim_map.teams[player] == self.sim.sim_map.teams[p]:
+                    chatUpdate = ChatUpdate(self.sim.sim_map.usernames[player], teamChat, message)
+                    logging.info(f'SIM NOTIFYING CHAT {str(chatUpdate)} FROM p{player} TO p{p}')
+                    bot.eklipz_bot.notify_chat_message(chatUpdate)
 
     def any_bot_has_viewer_running(self) -> bool:
         for bot in self.bot_hosts:
@@ -842,6 +884,11 @@ class GameSimulatorHost(object):
                 return True
 
         return False
+
+    def check_for_viewer_events(self):
+        for bot in self.bot_hosts:
+            if bot is not None and bot.has_viewer:
+                bot.check_for_viewer_events()
 
     def wait_until_viewer_closed_or_time_elapses(self, max_seconds_to_wait: float):
         if not self.any_bot_has_viewer_running():

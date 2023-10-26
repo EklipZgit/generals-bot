@@ -2,13 +2,41 @@ import time
 import typing
 
 import EarlyExpandUtils
+import SearchUtils
+from BoardAnalyzer import BoardAnalyzer
 from BotHost import BotHostBase
 from DataModels import Move
-from Sim.GameSimulator import GameSimulator, GameSimulatorHost
+from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
-from ViewInfo import ViewInfo
 from base.client.map import MapBase, Tile, TILE_FOG, TILE_OBSTACLE, TILE_MOUNTAIN, Score
-from bot_ek0x45 import EklipZBot
+
+
+ALL_SCENARIOS_TEAM_MAP = data = """
+|    |    |    |    |    
+          b60
+b20  cG3  aG55 c2          
+          c0
+d3   d3             
+a5   b5                    
+c3   c3
+               b1     
+     a55  C45  bC5  b1      
+     aC5       b55     
+     a1        a0       
+                    
+          d0          
+     d2   bG55 dG3  a20
+          a60       
+|    |    |    |    |    
+player_index=0
+teams=0,1,0,1
+mode=team
+bot_target_player=1
+aTiles=7
+bTiles=8
+cTiles=5
+dTiles=5
+"""
 
 
 class MapTests(TestBase):
@@ -209,12 +237,15 @@ class MapTests(TestBase):
             debugMode: bool,
             aArmy: int,
             bArmy: int,
-            aMove: typing.Tuple[int, int],
-            bMove: typing.Tuple[int, int],
+            aMove: typing.Tuple[int, int] | None,
+            bMove: typing.Tuple[int, int] | None,
             seenFog: bool = True,
+            includeAllPlayerMaps: bool = False,
     ):
-        aTile.army = aArmy
-        bTile.army = bArmy
+        if aTile is not None:
+            aTile.army = aArmy
+        if bTile is not None:
+            bTile.army = bArmy
 
         simHost = GameSimulatorHost(map, player_with_viewer=-2, afkPlayers=[i for i in range(len(map.players))])
         if debugMode:
@@ -249,11 +280,11 @@ class MapTests(TestBase):
 
             simHost.run_between_turns(mapRenderer)
 
-        simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
+        simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost, includeAllPlayers=includeAllPlayerMaps))
 
         if seenFog:
-            simHost.apply_map_vision(player=0, rawMap=map)
-            simHost.apply_map_vision(player=1, rawMap=map)
+            for player in map.players:
+                simHost.apply_map_vision(player=player.index, rawMap=map)
 
         # simHost.sim.sim_map.USE_OLD_MOVEMENT_DETECTION = False
         # simHost.get_player_map(0).USE_OLD_MOVEMENT_DETECTION = False
@@ -337,6 +368,37 @@ dTiles=27
         aTile = map.GetTile(1, 1)
         bTile = map.GetTile(2, 2)
         self.run_map_delta_test(map, aTile, bTile, general, allyGen, debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove)
+
+    def run_all_scenarios_team_test(self, debugMode, aMove, bMove, turn):
+        # 4x4 map, with all fog scenarios covered. Each player has enough information to unequivocably determine which tile moved to where.
+
+        map, general, allyGen, enemyGen, enemyAllyGen = self.load_map_and_generals_2v2_from_string(ALL_SCENARIOS_TEAM_MAP, turn)
+        # give them COMPLETELY separate maps so they can't possibly affect each other during the diff
+        engineMap, _, _, _, _ = self.load_map_and_generals_2v2_from_string(ALL_SCENARIOS_TEAM_MAP, turn)
+
+        aMovement = None
+        aTile = None
+        aArmy = 0
+        if aMove is not None:
+            aFromTileXY, aToTileXY, aMoveHalf = aMove
+            aX, aY = aFromTileXY
+            aDX, aDY = aToTileXY
+            aTile = map.GetTile(aX, aY)
+            aMovement = (aDX - aX, aDY - aY)
+            aArmy = aTile.army
+
+        bMovement = None
+        bTile = None
+        bArmy = 0
+        if bMove is not None:
+            bFromTileXY, bToTileXY, bMoveHalf = bMove
+            bX, bY = bFromTileXY
+            bDX, bDY = bToTileXY
+            bTile = map.GetTile(bX, bY)
+            bMovement = (bDX - bX, bDY - bY)
+            bArmy = bTile.army
+
+        self.run_map_delta_test(map, aTile, bTile, general, allyGen, debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMovement, bMove=bMovement, includeAllPlayerMaps=True)
 
     def run_adj_test(self, debugMode, aArmy, bArmy, aMove, bMove, turn):
         # 4x4 map, with all fog scenarios covered.
@@ -1003,8 +1065,6 @@ C5
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         # DONT CHANGE THIS ONE, IT WAS FAILING AND BYPASSING THE COLLISION ASSERTS...
         self.run_adj_test(debugMode=debugMode, aArmy=20, bArmy=5, aMove=(1, 0), bMove=(-1, -0), turn=96)
-
-# TODO missing test for army collision deltas? Actually I think that test exists, somewhere
     
     def test_small_gather_adj_to_fog_should_not_double_gather_from_fog(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1252,12 +1312,57 @@ C5
                         for targetTileFriendly in [False, True]:
                             for turn in [96, 97]:
                                 with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, targetTileFriendly=targetTileFriendly, turn=turn):
-                                    # 0
+                                    # 1667
                                     self.run_team_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, targetTileFriendly=targetTileFriendly, turn=turn)
 
     def test_run_one_off_team_adj_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        self.run_team_adj_test(debugMode=debugMode, aArmy=5, bArmy=15, aMove=(0, 1), bMove=(-1, 0), targetTileFriendly=True, turn=96)
+        self.run_team_adj_test(debugMode=debugMode, aArmy=12, bArmy=2, aMove=(-1, 0), bMove=None, targetTileFriendly=False, turn=97)
+
+    def test_generate_all_all_scenarios_team_playground_scenarios(self):
+        outerMap, general, allyGen, enemyGen, enemyAllyGen = self.load_map_and_generals_2v2_from_string(ALL_SCENARIOS_TEAM_MAP, 0)
+
+        frTiles = SearchUtils.where(outerMap.players[general.player].tiles, lambda t: t.army > 1)
+
+        enTiles = []
+
+        enTiles.extend(SearchUtils.where(outerMap.players[allyGen.player].tiles, lambda t: t.army > 1))
+        enTiles.extend(SearchUtils.where(outerMap.players[enemyAllyGen.player].tiles, lambda t: t.army > 1))
+        # enTiles.extend(SearchUtils.where(outerMap.players[enemyGen.player].tiles, lambda t: t.army > 1))
+
+        allFrMoves = []
+        allEnMoves = []
+
+        for tile in frTiles:
+            for movable in tile.movable:
+                allFrMoves.append(Move(tile, movable, move_half=False))
+                # allFrMoves.append(Move(tile, movable, move_half=True))
+        for tile in enTiles:
+            for movable in tile.movable:
+                allEnMoves.append(Move(tile, movable, move_half=False))
+                # allEnMoves.append(Move(tile, movable, move_half=True))
+
+        allFrMoves.append(None)
+        allEnMoves.append(None)
+
+        # for turn in [148, 149, 150]:
+        for turn in [120]:
+            for playerMove in allFrMoves:
+                for otherMove in allEnMoves:
+                    with self.subTest(turn=turn, playerMove=playerMove, otherMove=otherMove):
+                        aMove = None
+                        bMove = None
+                        if playerMove:
+                            aMove = ((playerMove.source.x, playerMove.source.y), (playerMove.dest.x, playerMove.dest.y), playerMove.move_half)
+                        if otherMove:
+                            bMove = ((otherMove.source.x, otherMove.source.y), (otherMove.dest.x, otherMove.dest.y), otherMove.move_half)
+                        self.run_all_scenarios_team_test(debugMode=False, aMove=aMove, bMove=bMove, turn=turn)
+
+    def test_run_one_off__all_scenarios_team_playground(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+
+        self.begin_capturing_logging()
+        self.run_all_scenarios_team_test(debugMode=debugMode, aMove=((2, 1), (3, 1), True), bMove=((0, 1), (1, 1), True), turn=96)
     
     def test_should_not_think_2v2_move_is_from_neut_city(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1291,14 +1396,13 @@ C5
         
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        simHost.queue_player_moves_str(enemyGeneral.player, '11,14->11,15->11,16')
         bot = simHost.get_bot(general.player)
         playerMap = simHost.get_player_map(general.player)
 
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=3)
         self.assertNoFriendliesKilled(map, general, allyGen)
-
-        self.fail("TODO add asserts for should_handle_fog_island_capture_in_2v2")

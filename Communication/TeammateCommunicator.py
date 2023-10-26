@@ -62,14 +62,33 @@ class TeammateCommunicator(object):
 
         self.board_analysis: BoardAnalyzer = boardAnalysis
 
+    def __str__(self) -> str:
+        dataPoints = []
+        if self.coordinated_defense is not None:
+            blocked = '|'.join([str(t) for t in self.coordinated_defense.blocked_tiles])
+            dataPoints.append(f'blocked_tiles: {blocked}')
+
+            blockedByUs = '|'.join([str(t) for t in self.coordinated_defense.blocked_tiles_by_us])
+            dataPoints.append(f'blocked_tiles_by_us: {blockedByUs}')
+
+            lastBlockedByUs = '|'.join([str(t) for t in self.coordinated_defense.last_blocked_tiles_by_us])
+            dataPoints.append(f'last_blocked_tiles_by_us: {lastBlockedByUs}')
+
+        for m in self.produce_teammate_communications():
+            dataPoints.append(f'outbound_comm: {m.message}')
+
+        return '{\n  ' + "\n  ".join(dataPoints) + '\n}'
+
+    def __repr__(self) -> str:
+        return str(self)
+
     def handle_coordination_update(self, chatUpdate: ChatUpdate):
         communicationTypes = chatUpdate.message.split('&')
         for comm in communicationTypes:
             if comm.startswith('!D'):
                 # defense comm
                 self.coordinated_defense.read_coordination_message(comm, self.tile_compressor)
-                if self.coordinated_defense.is_defense_lead:
-                    self.is_defense_lead = True
+                self.is_defense_lead = self.coordinated_defense.is_defense_lead
 
     def _is_teammate_known_coordinated_bot_username(self, teammate: int):
         username = self.map.usernames[teammate]
@@ -91,16 +110,14 @@ class TeammateCommunicator(object):
 
     def begin_next_turn(self):
         if self.coordinated_defense is not None:
-            if self.is_defense_lead:
-                self.coordinated_defense.last_blocked_tiles = self.coordinated_defense.blocked_tiles
-                # we'll re-block all the tiles this turn, as the lead
+            # if self.is_defense_lead:
+            #     # we'll re-block all the tiles this turn, as the lead
+            self.coordinated_defense.last_blocked_tiles_by_us = self.coordinated_defense.blocked_tiles_by_us
 
             self.coordinated_defense.blocked_tiles = set()
 
-            # for plan in list(self.coordinated_defense.defenses):
-            #     plan.not_updated_since += 1
-            #     if plan.not_updated_since > 5:
-            #         self.coordinated_defense.defenses.remove(plan)
+            self.coordinated_defense.blocked_tiles_by_us = set()
+
             self.coordinated_defense.defenses.clear()
 
     def produce_teammate_communications(self) -> typing.List[TeammateCommunication]:
@@ -116,9 +133,6 @@ class TeammateCommunicator(object):
             teammateTileDistMap = SearchUtils.build_distance_map(self.map, self.teammate_player.tiles)
             nextMessage = self.coordinated_defense.get_as_bot_communication(self.map, self.tile_compressor, teammateTileDistMap)
             curMessage = self._try_combine_messages(messages, curMessage, nextMessage)
-
-        # if self.coordinated_launch is not None:
-        #     curMessage = self.coordinated_defense.get_as_bot_communication(self.map, self.tile_compressor)
 
         if curMessage is not None:
             messages.append(curMessage)
@@ -137,8 +151,13 @@ class TeammateCommunicator(object):
         requiredArmy = threat.threatValue - valueGathered
 
         gatherTiles = []
+
+        def gatherTileAdder(n: GatherTreeNode):
+            if n.tile not in threat.path.tileSet:
+                gatherTiles.append(n.tile)
+
         if self.is_defense_lead and defensePlanGatherNodes is not None:
-            GatherUtils.iterate_tree_nodes(defensePlanGatherNodes, lambda n: gatherTiles.append(n.tile))
+            GatherUtils.iterate_tree_nodes(defensePlanGatherNodes, gatherTileAdder)
 
         self.coordinated_defense.include_defense_plan(threatTarget, threatTile, threatTurns, requiredArmy, gatherTiles, markLivePlan=True)
 
@@ -171,10 +190,20 @@ class TeammateCommunicator(object):
             return threat.threatValue, set()
 
         threatTile = threat.path.start.tile
+        targetTile = threat.path.tail.tile
+
+        logMsg = [f'p{self.map.player_index} DEF LEAD {self.is_defense_lead}: COORDINATED BLOCKED TILES']
+        for t in sorted(self.coordinated_defense.blocked_tiles, key=lambda t: (t.x, t.y)):
+            logMsg.append(f'   {str(t)}')
+        logging.info('\n'.join(logMsg))
+
         for defense in self.coordinated_defense.defenses:
-            if threatTile == defense.threat_tile or threatTile in defense.threat_tile.movable:
+            isThreatTileMatch = threatTile == defense.threat_tile or threatTile in defense.threat_tile.movable
+            isTargetTileMatch = targetTile == defense.tile
+
+            if isThreatTileMatch and isTargetTileMatch:
                 if self.is_defense_lead:  # defense leads are responsible for the main defense of the threat and should tell the offensive player when to help out, so try to defend the full threat.
-                    return threat.threatValue, set()
+                    return threat.threatValue, self.coordinated_defense.blocked_tiles
                 else:
                     return defense.required_army, self.coordinated_defense.blocked_tiles
 

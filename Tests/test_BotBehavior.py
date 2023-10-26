@@ -6,7 +6,7 @@ from Path import Path
 from SearchUtils import Counter
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
-from base.client.map import Tile, MapBase
+from base.client.map import Tile, MapBase, TILE_FOG
 
 
 class BotBehaviorTests(TestBase):
@@ -541,7 +541,7 @@ class BotBehaviorTests(TestBase):
 
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=2)
-        self.assertEqual(general.player, winner)
+        self.assertEqual(map.player_index, winner)
     
     def test_should_defend_attack_and_then_gather_faraway_army_to_defend_king_instead_of_explore(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -825,7 +825,7 @@ class BotBehaviorTests(TestBase):
 
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
-        self.assertEqual(general.player, winner)
+        self.assertEqual(map.player_index, winner)
 
     def test_should_not_dodge_off_general_and_die(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1783,3 +1783,60 @@ whoever has less extra troops will always get ahead
         self.assertIsNone(winner)
 
         self.assertNoRepetition(simHost, minForRepetition=2)
+    
+    def test_should_all_in_gen_trade_when_almost_certain_of_general_location(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_all_in_gen_trade_when_almost_certain_of_general_location___Qn0ivuj37---1--433.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 433, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=433)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '8,15->8,14->8,13->9,13->9,12->10,12->11,12->11,11->11,10->12,10')
+        bot = simHost.get_bot(general.player)
+        self.set_general_emergence_around(0, 16, simHost, general.player, enemyGeneral.player, 50)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        self.assertEqual(map.player_index, winner)
+    
+    def test_should_not_run_past_enemy_threat_with_small_army_when_cant_defend(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_run_past_enemy_threat_with_small_army_when_cant_defend___mWHfpzgKj---1--129.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 129, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=129)
+        enVisionGen = rawMap.GetTile(enemyGeneral.x, enemyGeneral.y)
+        enVisionGen.tile = TILE_FOG
+        enVisionGen.army = 0
+        enVisionGen.player = -1
+        enVisionGen.isGeneral = False
+
+        rawMap.generals[enemyGeneral.player] = None
+        rawMap.players[enemyGeneral.player].general = None
+
+        enVisionTile = rawMap.GetTile(16, 7)
+        enVisionTile.tile = TILE_FOG
+        enVisionTile.army = 0
+        enVisionTile.player = -1
+        enVisionTile.isGeneral = False
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '16,7->16,6->15,6->14,6->13,6->13,5->13,4->12,4->11,4->11,3->10,3->9,3->8,3->7,3->7,2->7,1->6,1')
+        bot = simHost.get_bot(general.player)
+        bot.next_scrimming_army_tile = bot._map.GetTile(15, 5)
+        self.set_general_emergence_around(20, 7, simHost, general.player, enemyGeneral.player, 5)
+        # self.set_general_emergence_around(17, 9, simHost, general.player, enemyGeneral.player, 4)
+        # self.set_general_emergence_around(16, 7, simHost, general.player, enemyGeneral.player, 8)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=15)
+        self.assertIsNone(winner)

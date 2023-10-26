@@ -145,7 +145,7 @@ class GeneralsViewer(object):
     def __init__(
             self,
             update_queue: "Queue[typing.Tuple[ViewInfo | None, MapBase | None, bool]]",
-            pygame_event_queue: "Queue[bool]",
+            pygame_event_queue: "Queue[typing.Tuple[str, typing.Any]]",
             name=None,
             cell_width: int | None = None,
             cell_height: int | None = None,
@@ -153,7 +153,7 @@ class GeneralsViewer(object):
     ):
         self._killed = False
         self._inbound_update_queue: "Queue[typing.Tuple[ViewInfo | None, MapBase | None, bool]]" = update_queue
-        self._event_queue: "Queue[bool]" = pygame_event_queue
+        self._event_queue: "Queue[typing.Tuple[str, typing.Any]]" = pygame_event_queue
         self._scores: typing.List[Score] = []
         self._map: MapBase = None
         self._real_width = 0
@@ -430,12 +430,25 @@ class GeneralsViewer(object):
 
                 elif event.type == pygame.MOUSEBUTTONDOWN:  # Mouse Click
                     pos = pygame.mouse.get_pos()
-
                     # Convert screen to grid coordinates
                     column = pos[0] // (self.cellWidth + CELL_MARGIN)
                     row = pos[1] // (self.cellHeight + CELL_MARGIN)
 
-                    print("Click ", pos, "Grid coordinates: ", row, column)
+                    print(f"CLICK {column},{row}")
+
+                    clickedTile = self._map.GetTile(column, row)
+                    if event.button == 1:
+                        self._event_queue.put(('LEFT_CLICK', clickedTile))
+                    elif event.button == 2:
+                        self._event_queue.put(('MIDDLE_CLICK', clickedTile))
+                    elif event.button == 3:
+                        self._event_queue.put(('RIGHT_CLICK', clickedTile))
+                    elif event.button == 4:
+                        self._event_queue.put(('SCROLL_UP', clickedTile))
+                    elif event.button == 5:
+                        self._event_queue.put(('SCROLL_DOWN', clickedTile))
+                    else:
+                        self._event_queue.put(('UNKNOWN', clickedTile))
 
         logging.info(f'Pygame closed in GeneralsViewer, sending closedByUser {closedByUser} | map.complete {map.complete} back to main threads')
         #
@@ -561,7 +574,7 @@ class GeneralsViewer(object):
                 self.draw_square(self._viewInfo.targetingArmy.tile, 2, 25, 25, 25, 200, self.square_inner_3)
 
             if self._viewInfo.redGatherNodes is not None:
-                self.drawGathers(self._viewInfo.redGatherNodes, self.redLineArrow, self.redLineArrow)
+                self.drawGathers(self._viewInfo.redGatherNodes, self.redLineArrow, self.redLineArrow, alpha=150, pruneAlpha=150)
             if self._viewInfo.gatherNodes is not None:
                 self.drawGathers(self._viewInfo.gatherNodes, self.lineArrow, self.redLineArrow)
 
@@ -1044,7 +1057,7 @@ class GeneralsViewer(object):
 
         return s
 
-    def drawGathers(self, nodes, shape, prunedShape):
+    def drawGathers(self, nodes, shape, prunedShape, alpha=255, pruneAlpha=150):
         # pruneArrow = self.get_line_arrow(190, 30, 0)
         q = deque()
         for node in nodes:
@@ -1058,9 +1071,9 @@ class GeneralsViewer(object):
 
             if node.fromTile is not None:
                 if unpruned:
-                    self.draw_between_tiles(shape, node.fromTile, node.tile)
+                    self.draw_between_tiles(shape, node.fromTile, node.tile, alpha)
                 else:
-                    self.draw_between_tiles(prunedShape, node.fromTile, node.tile)
+                    self.draw_between_tiles(prunedShape, node.fromTile, node.tile, pruneAlpha)
 
     def draw_between_tiles(self, shape: DirectionalShape, sourceTile, destTile, alpha=255):
         xDiff = destTile.x - sourceTile.x
@@ -1223,7 +1236,7 @@ class GeneralsViewer(object):
 
     def send_closed_event(self, killedByUserClose: bool):
         try:
-            self._event_queue.put(killedByUserClose)
+            self._event_queue.put(('CLOSED', killedByUserClose))
         except EOFError:
             pass
         except BrokenPipeError:

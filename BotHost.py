@@ -53,7 +53,7 @@ class BotHostBase(object):
 
         self.send_chat_func: typing.Callable[[str, bool], None] = sendChatFunc
 
-        self.eklipz_bot = EklipZBot()
+        self.eklipz_bot: EklipZBot = EklipZBot()
         self.has_viewer: bool = not FORCE_NO_VIEWER and not noUi
 
         self.align_bottom: bool = alignBottom
@@ -191,9 +191,9 @@ class BotHostBase(object):
         except:
             logging.error(traceback.format_exc())
 
-    def initialize_viewer(self, skip_file_logging: bool = False):
+    def initialize_viewer(self, skip_file_logging: bool = False, onClick: typing.Callable[[Tile, bool], None] | None = None):
         window_title = "%s (%s)" % (self._name.split('_')[-1], self._game_type)
-        self._viewer = ViewerHost(window_title, alignTop=not self.align_bottom, alignLeft=not self.align_right, noLog=skip_file_logging)
+        self._viewer = ViewerHost(window_title, alignTop=not self.align_bottom, alignLeft=not self.align_right, noLog=skip_file_logging, onClick=onClick)
 
     def is_viewer_closed_by_user(self) -> bool:
         if self.has_viewer and self._viewer is not None and self._viewer.check_viewer_closed_by_user():
@@ -204,6 +204,10 @@ class BotHostBase(object):
         if self.has_viewer and self._viewer is not None and self._viewer.check_viewer_closed():
             return True
         return False
+
+    def check_for_viewer_events(self):
+        if self.has_viewer and self._viewer is not None and self._viewer.check_viewer_closed():
+            self._viewer.handle_viewer_events()
 
     def notify_game_over(self):
         self.eklipz_bot._map.complete = True

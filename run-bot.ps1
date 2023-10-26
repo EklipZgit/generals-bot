@@ -417,6 +417,21 @@ function Start-WindowsTerminalHistoricalBots {
     defense gather forward instead of back
     found-no-move mcts (need to tune back for historical bots I think)
     #>
+    wt -w HistBots new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'run-bot -game 1v1, ffa, ffa, 1v1, ffa, 1v1, 1v1 -name "EklipZ_ai_06" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-10-23\BotHost.py'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    <#
+    fixing stuff?
+    #>
 }
 
 
@@ -458,6 +473,7 @@ function Start-WindowsTerminalLiveBots {
             Start-Sleep -Seconds 1
         }
     }
+
     # <#
     # 1v1 ffa cycler
     # #>
@@ -496,6 +512,7 @@ function Start-WindowsTerminalLiveBots {
             Start-Sleep -Seconds 1
         }
     }
+
     <#
     Human 1v1
     #>
@@ -510,6 +527,7 @@ function Start-WindowsTerminalLiveBots {
             Start-Sleep -Seconds 1
         }
     }
+
     <#
     Human ffa
     #>
@@ -524,6 +542,7 @@ function Start-WindowsTerminalLiveBots {
             Start-Sleep -Seconds 1
         }
     }
+
     <#
     private live
     #>
@@ -531,6 +550,43 @@ function Start-WindowsTerminalLiveBots {
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
         $command = 'run-bot -game 1v1 -name "EklipZ_ai" -left -privateGame testing'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    <#
+    Human 2v2 partners
+    #>
+    wt -w LiveBots new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-Human -game team -sleepMax 5'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+    wt -w LiveBots new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-HumanTeammate -game team -sleepMax 5'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+    wt -w LiveBots new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-Teammate -sleepMax 25 -left'
         try {
             Invoke-Expression $command
         } finally {
@@ -640,7 +696,8 @@ function Run-Human {
         $game = @('1v1', 'ffa', '1v1'),
         $sleepMax = 3,
         $roomID = 'getRekt',
-        [switch] $left
+        [switch] $left,
+        [switch] $private
     )
     $splat = @{
         noui = $false
@@ -650,7 +707,7 @@ function Run-Human {
     {
         foreach ($g in $game)
         {
-            Run-BotOnce -game $g -name "Human.exe" -roomID $roomID -public @splat
+            Run-BotOnce -game $g -name "Human.exe" -roomID $roomID -public @splat -privateGame:$private
             $sleepTimeA = (Get-Random -Min 0 -Max $sleepMax)
             $sleepTime = $sleepTimeA
 

@@ -22,30 +22,30 @@ class DefensePlan(object):
         self.threat_tile: Tile = threatTile
         self.remaining_turns: int = remainingTurns
         self.required_army: int = teammateRequiredArmy
-        self.not_updated_since: int = 0
+        self.is_live_and_managed_by_us: bool = False
 
 
 class CoordinatedDefense(object):
     """This object should have the same data in both bots, in the team lead this is the communicated requirements, in the supporter this is the requirements it will try to meet."""
     def __init__(
             self,
-            defendingTile: Tile | None = None,
-            threatTile: Tile | None = None,
-            remainingTurns: int | None = None,
-            teammateRequiredArmy: int | None = None,
             isDefenseLead: bool = False
     ):
         self.defenses: typing.List[DefensePlan] = []
-        if defendingTile is not None:
-            self.defenses.append(DefensePlan(defendingTile, threatTile, remainingTurns, teammateRequiredArmy))
 
         self.is_defense_lead: bool = isDefenseLead
 
         self.blocked_tiles: typing.Set[Tile] = set()
-        """The tiles blocked as negative by our ally as they will already use them."""
+        """The tiles blocked by allies defense."""
 
-        self.last_blocked_tiles: typing.Set[Tile] = set()
-        """This is what our ally things the blocked tiles still are."""
+        # self.blocked_tiles_by_ally: typing.Set[Tile] = set()
+        # """The tiles blocked as negative by our ally as they will already use them."""
+
+        self.blocked_tiles_by_us: typing.Set[Tile] = set()
+        """The tiles blocked as negative by us to tell our ally not to use."""
+
+        self.last_blocked_tiles_by_us: typing.Set[Tile] = set()
+        """This is what our ally thinks the blocked tiles still are."""
 
     def get_as_bot_communication(
             self,
@@ -56,9 +56,6 @@ class CoordinatedDefense(object):
     ) -> TeammateCommunication | None:
         """Compress the defense as much as possible, dropping tiles that are furthest from ally tiles as they are least likely to interact with those"""
 
-        if len(self.defenses) == 0:
-            return None
-
         # !D = Defense plan,
         # F = From tile (so they can make sure they're defending same threats)
         # I = in turns,
@@ -67,12 +64,16 @@ class CoordinatedDefense(object):
         builtMsg = []
 
         for defense in self.defenses:
-            defenseBotChatDeclaration = self._compress_threat_defense_message(defense.tile, defense.threat_tile, defense.remaining_turns, defense.required_army, self.is_defense_lead, tileCompressor)
+            if defense.is_live_and_managed_by_us:
+                defenseBotChatDeclaration = self._compress_threat_defense_message(defense.tile, defense.threat_tile, defense.remaining_turns, defense.required_army, self.is_defense_lead, tileCompressor)
 
-            charsLeft -= len(defenseBotChatDeclaration)
-            builtMsg.append(defenseBotChatDeclaration)
+                charsLeft -= len(defenseBotChatDeclaration)
+                builtMsg.append(defenseBotChatDeclaration)
 
-        negativeTilesOrderedByDist = list(sorted(self.blocked_tiles, key=lambda t: teammateTileDistanceMap[t.x][t.y]))
+        if len(builtMsg) == 0:
+            return None
+
+        negativeTilesOrderedByDist = list(sorted(self.blocked_tiles_by_us, key=lambda t: teammateTileDistanceMap[t.x][t.y]))
 
         builtMsg.append('N')
         charsLeft -= 1
@@ -131,10 +132,12 @@ class CoordinatedDefense(object):
 
         foundMatch = False
         for defPlan in self.defenses:
-            if threatTile == defPlan.threat_tile or threatTile in defPlan.threat_tile.movable:
+            matchesThreatTile = threatTile == defPlan.threat_tile or threatTile in defPlan.threat_tile.movable
+            matchesDefTile = threatTarget == defPlan.tile
+            if matchesThreatTile and matchesDefTile:
                 foundMatch = True
                 # then we're updating defense plan A
-                if threatTurns == defPlan.remaining_turns - 1:
+                if threatTurns == defPlan.remaining_turns:
                     # then this is the same defense we already have planned :)
                     logging.info(f'Threat {str(threatTile)}->{str(threatTarget)} behaving as expected')
                     pass
@@ -149,18 +152,21 @@ class CoordinatedDefense(object):
                 defPlan.remaining_turns = threatTurns
                 defPlan.required_army = requiredArmy
                 if markLivePlan:
-                    defPlan.not_updated_since = 0
+                    defPlan.is_live_and_managed_by_us = True
 
         if not foundMatch:
             # new threat, tack it on!
-            self.defenses.append(
-                DefensePlan(
-                    threatTarget,
-                    threatTile,
-                    threatTurns,  # intentionally not -1 so we can use the path below for 'already handled threat...?'
-                    requiredArmy
-                )
+            plan = DefensePlan(
+                threatTarget,
+                threatTile,
+                threatTurns,  # intentionally not -1 so we can use the path below for 'already handled threat...?'
+                requiredArmy
             )
+            plan.is_live_and_managed_by_us = markLivePlan
+            self.defenses.append(plan)
 
         if defensePlanGatherNodes is not None:
-            self.blocked_tiles.update(defensePlanGatherNodes)
+            if markLivePlan:
+                self.blocked_tiles_by_us.update(defensePlanGatherNodes)
+            else:
+                self.blocked_tiles.update(defensePlanGatherNodes)

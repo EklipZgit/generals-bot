@@ -221,7 +221,7 @@ class GatherTests(TestBase):
         self.assertEqual(valueGathered, sumVal)
         self.assertEqual(turnsUsed, sumTurns)
 
-        postPruneNodes = GatherUtils.prune_mst_to_turns(gatherNodes, turnsUsed, general.player, ekBot.viewInfo, noLog=False)
+        postPruneNodes = GatherUtils.prune_mst_to_turns(gatherNodes, turnsUsed, general.player, viewInfo=ekBot.viewInfo, noLog=False)
 
         sumVal = 0
         sumTurns = 0
@@ -284,7 +284,7 @@ class GatherTests(TestBase):
         self.assertEqual(valueGathered, sumVal)
         self.assertEqual(turnsUsed, sumTurns)
 
-        postPruneNodes = GatherUtils.prune_mst_to_turns(gatherNodes, turnsUsed - 1, general.player, ekBot.viewInfo, noLog=False)
+        postPruneNodes = GatherUtils.prune_mst_to_turns(gatherNodes, turnsUsed - 1, general.player, viewInfo=ekBot.viewInfo, noLog=False)
 
         sumVal = 0
         sumTurns = 0
@@ -338,7 +338,7 @@ class GatherTests(TestBase):
         for pruneNearZeroMovesCase in pruneNearZeroMovesCases:
             with self.subTest(pruneNearZeroMovesCase=pruneNearZeroMovesCase):
                 toPrune = [node.deep_clone() for node in gatherNodes]
-                postPruneNodes = GatherUtils.prune_mst_to_turns(toPrune, pruneNearZeroMovesCase, general.player, ekBot.viewInfo, noLog=False)
+                postPruneNodes = GatherUtils.prune_mst_to_turns(toPrune, pruneNearZeroMovesCase, general.player, viewInfo=ekBot.viewInfo, noLog=False)
                 sumVal = 0
                 for node in postPruneNodes:
                     sumVal += node.value

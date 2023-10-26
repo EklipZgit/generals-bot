@@ -41,6 +41,7 @@ class Army(object):
         self.entangledValue = None
         self.scrapped = False
         self.last_moved_turn: int = 0
+        self.last_seen_turn: int = 0
 
     def update_tile(self, tile):
         self.path.add_next(tile)
@@ -197,6 +198,10 @@ class ArmyTracker(object):
             self.move_fogged_army_paths()
 
         self.verify_player_tile_and_army_counts_valid()
+
+        for army in self.armies.values():
+            if army.tile.visible:
+                army.last_seen_turn = self.map.turn
 
     def move_fogged_army_paths(self):
         for army in list(self.armies.values()):

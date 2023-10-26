@@ -61,11 +61,15 @@ def dest_breadth_first_target(
         noNeutralCities=True,
         skipTiles=None,
         ignoreGoalArmy=False,
-        noLog=True
+        noLog=True,
+        additionalIncrement: float = 0.0
 ) -> typing.Union[None, Path]:
     """
     Gets a path that results in {targetArmy} army on one of the goalList tiles.
     GoalList can be a dict that maps from start tile to (startDist, goalTargetArmy)
+
+    additionalIncrement can be set if for example capturing one of two nearby cities and you want to kill with enough to kill both.
+    Positive means gather EXTRA, negative means gather LESS.
     """
     if searchingPlayer == -2:
         searchingPlayer = map.player_index
@@ -78,7 +82,7 @@ def dest_breadth_first_target(
                 # logging.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
                 continue
 
-            goalInc = goalIncModifier
+            goalInc = goalIncModifier + additionalIncrement
             startArmy = goalIncModifier
 
             # THE goalIncs below might be wrong, unit test.
@@ -105,7 +109,7 @@ def dest_breadth_first_target(
                 # logging.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
                 continue
 
-            goalInc = 0
+            goalInc = additionalIncrement
 
             # fixes the off-by-one error because we immediately decrement army, but the target shouldn't decrement
             startArmy = 1

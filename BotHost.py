@@ -15,7 +15,7 @@ from base.client.generals import ChatUpdate
 from base.client.map import MapBase, Tile
 from bot_ek0x45 import EklipZBot
 
-FORCE_NO_VIEWER = False
+FORCE_NO_VIEWER = True
 FORCE_PRIVATE = False
 
 

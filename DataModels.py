@@ -57,18 +57,6 @@ def reverse_path(path):
     return newPath
 
 
-def get_player_army_amount_on_path(path, player, startIdx=0, endIdx=1000):
-    value = 0
-    idx = 0
-    pathNode = path.start
-    while pathNode is not None:
-        if pathNode.tile.player == player and idx >= startIdx and idx <= endIdx:
-            value += (pathNode.tile.army - 1)
-        pathNode = pathNode.next
-        idx += 1
-    return value
-
-
 T = typing.TypeVar('T')
 
 

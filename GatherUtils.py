@@ -1862,11 +1862,12 @@ def prune_mst_to_army_with_values(
         searchingPlayer: int,
         teams: typing.List[int],
         turn: int,
+        additionalIncrement: int = 0,
         viewInfo: ViewInfo | None = None,
         noLog: bool = True,
         gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
         invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
-        pruneLargeTilesFirst: bool = True,
+        pruneLargeTilesFirst: bool = False,
 ) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
     """
     Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
@@ -1876,6 +1877,7 @@ def prune_mst_to_army_with_values(
     @param army: The army amount to prune the MST down to
     @param searchingPlayer:
     @param teams: the teams array.
+    @param additionalIncrement: if need to gather extra army due to incrementing, include the POSITIVE enemy city increment or NEGATIVE allied increment value here.
     @param turn: the current map turn, used to calculate city increment values.
     @param viewInfo:
     @param noLog:
@@ -1889,7 +1891,7 @@ def prune_mst_to_army_with_values(
 
     turnIncFactor = (1 + turn) & 1
 
-    cityCounter = SearchUtils.Counter(0)
+    cityCounter = SearchUtils.Counter(0 - additionalIncrement)
     cityGatherDepthCounter = SearchUtils.Counter(0)
     citySkipTiles = set()
     for n in rootNodes:
@@ -1991,6 +1993,7 @@ def prune_mst_to_army(
         noLog: bool = True,
         gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
         invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
+        pruneLargeTilesFirst: bool = False,
 ) -> typing.List[GatherTreeNode]:
     """
     Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
@@ -2003,6 +2006,8 @@ def prune_mst_to_army(
     @param noLog:
     @param gatherTreeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
     @param invalidMoveFunc: func(GatherTreeNode) -> bool, return true if you want a leaf GatherTreeNode to always be prune. For example, pruning gather nodes that begin at an enemy tile or that are 1's.
+    @param pruneLargeTilesFirst: if True, will try to prune the largest tiles out first instead of lowest value per turn.
+    Useful when pruning a defense to the minimal army set needed for example while leaving large tiles available for other things.
 
     @return: gatherTurns, gatherValue, rootNodes
     """
@@ -2017,6 +2022,7 @@ def prune_mst_to_army(
         noLog=noLog,
         gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
         invalidMoveFunc=invalidMoveFunc,
+        pruneLargeTilesFirst=pruneLargeTilesFirst,
     )
 
     return rootNodes
@@ -2163,11 +2169,13 @@ def prune_mst_to_army(
 #
 #     return prunedTurns, gathValue, nodes
 
+
 def prune_mst_to_max_army_per_turn_with_values(
         rootNodes: typing.List[GatherTreeNode],
         minArmy: int,
         searchingPlayer: int,
         teams: typing.List[int],
+        additionalIncrement: int = 0,
         viewInfo: ViewInfo | None = None,
         noLog: bool = True,
         gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
@@ -2181,6 +2189,8 @@ def prune_mst_to_max_army_per_turn_with_values(
     @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
     @param minArmy: The minimum army amount to prune the MST down to
     @param searchingPlayer:
+    @param teams: the teams array to use when calculating whether a gathered tile adds or subtracts army.
+    @param additionalIncrement: if need to gather extra army due to incrementing, include the POSITIVE enemy city increment or NEGATIVE allied increment value here.
     @param viewInfo:
     @param noLog:
     @param gatherTreeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
@@ -2190,7 +2200,7 @@ def prune_mst_to_max_army_per_turn_with_values(
     @return: (totalCount, totalValue, The list same list of rootnodes passed in, modified)
     """
 
-    cityCounter = SearchUtils.Counter(0)
+    cityCounter = SearchUtils.Counter(0 - additionalIncrement)
     cityGatherDepthCounter = SearchUtils.Counter(0)
     citySkipTiles = set()
     totalValue = 0
@@ -2266,6 +2276,7 @@ def prune_mst_to_max_army_per_turn_with_values(
         gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
         pruneBranches=allowBranchPrune
     )
+
 
 def prune_mst_to_max_army_per_turn(
         rootNodes: typing.List[GatherTreeNode],
@@ -2375,97 +2386,114 @@ def prune_mst_until(
 
     childRecurseQueue: typing.Deque[GatherTreeNode] = deque()
 
-    # now we have all the leaves, smallest value first
-    while not pruneHeap.empty():
-        validMove, prioObj, current = pruneHeap.get()
-        if current.fromTile is None:
-            continue
-            
-        if current.tile not in nodeMap:
-            # already pruned
-            continue
-        # have to recheck now that we're pruning mid branches
-        validMove = not invalidMoveFunc(current)
-        if validMove or len(current.children) > 0:
-            if untilFunc(current, prioObj, count, curValue):
-                # Then this was a valid move, and we've pruned enough leaves out.
-                # Thus we should break. Otherwise if validMove == 0, we want to keep popping invalid moves off until they're valid again.
+    try:
+        # now we have all the leaves, smallest value first
+        while not pruneHeap.empty():
+            validMove, prioObj, current = pruneHeap.get()
+            if current.fromTile is None:
                 continue
-        else:
-            logging.info(f'pruning extra invalid tree node despite untilFunc == True: {str(current)}')
 
-        if not noLog:
-            logging.info(f'pruning tree node {str(current)}')
+            if current.tile not in nodeMap:
+                # already pruned
+                continue
+            # have to recheck now that we're pruning mid branches
+            validMove = not invalidMoveFunc(current)
+            if validMove or len(current.children) > 0:
+                if untilFunc(current, prioObj, count, curValue):
+                    # Then this was a valid move, and we've pruned enough leaves out.
+                    # Thus we should break. Otherwise if validMove == 0, we want to keep popping invalid moves off until they're valid again.
+                    continue
+            else:
+                logging.info(f'pruning extra invalid tree node despite untilFunc == True: {str(current)}')
 
-        if pruneOverrideFunc is not None and pruneOverrideFunc(current, prioObj, count, curValue):
             if not noLog:
-                logging.info(f'SKIPPING pruning tree node {str(current)} due to pruneOverrideFunc')
-            continue
+                logging.info(f'pruning tree node {str(current)}')
 
-        # make sure the value of this prune didn't go down, if it did, shuffle it back into the heap with new priority.
-        if validMove:
-            doubleCheckPrioObj = pruneOrderFunc(current, prioObj)
-            if doubleCheckPrioObj > prioObj:
-                pruneHeap.put((validMove, doubleCheckPrioObj, current))
+            if pruneOverrideFunc is not None and pruneOverrideFunc(current, prioObj, count, curValue):
                 if not noLog:
-                    logging.info(f'requeued {str(current)} (prio went from {str(prioObj)} to {str(doubleCheckPrioObj)})')
+                    logging.info(f'SKIPPING pruning tree node {str(current)} due to pruneOverrideFunc')
                 continue
 
-        # now remove this leaf from its parent and bubble the value change all the way up
-        parent = None
-        curValue -= current.value
-        parent = nodeMap[current.fromTile]
-        realParent = parent
+            # make sure the value of this prune didn't go down, if it did, shuffle it back into the heap with new priority.
+            if validMove:
+                doubleCheckPrioObj = pruneOrderFunc(current, prioObj)
+                if doubleCheckPrioObj > prioObj:
+                    pruneHeap.put((validMove, doubleCheckPrioObj, current))
+                    if not noLog:
+                        logging.info(
+                            f'requeued {str(current)} (prio went from {str(prioObj)} to {str(doubleCheckPrioObj)})')
+                    continue
 
-        if parent is not None:
-            try:
-                parent.children.remove(current)
-            except ValueError:
-                pass
-            parent.pruned.append(current)
+            # now remove this leaf from its parent and bubble the value change all the way up
+            parent = None
+            curValue -= current.value
+            parent = nodeMap[current.fromTile]
+            realParent = parent
 
-        while True:
-            parent.value -= current.value
-            parent.gatherTurns -= current.gatherTurns
-            if parent.fromTile is None:
-                break
-            parent = nodeMap[parent.fromTile]
+            if parent is not None:
+                try:
+                    parent.children.remove(current)
+                except ValueError:
+                    pass
+                parent.pruned.append(current)
 
-        childRecurseQueue.append(current)
-        while len(childRecurseQueue) > 0:
-            toDropFromLookup = childRecurseQueue.popleft()
+            while True:
+                parent.value -= current.value
+                parent.gatherTurns -= current.gatherTurns
+                if parent.fromTile is None:
+                    break
+                parent = nodeMap[parent.fromTile]
 
-            if gatherTreeNodeLookupToPrune is not None:
-                gatherTreeNodeLookupToPrune.pop(toDropFromLookup.tile, None)
-            if tileDictToPrune is not None:
-                tileDictToPrune.pop(toDropFromLookup.tile, None)
-            nodeMap.pop(toDropFromLookup.tile, None)
-            count -= 1
-            if not noLog:
-                logging.info(
-                    f"    popped/pruned BRANCH CHILD {toDropFromLookup.tile.toString()} value {toDropFromLookup.value:.1f} count {count}")
-            for child in toDropFromLookup.children:
-                childRecurseQueue.append(child)
+            childRecurseQueue.append(current)
+            while len(childRecurseQueue) > 0:
+                toDropFromLookup = childRecurseQueue.popleft()
 
-        if not noLog:
-            logging.info(f"    popped/pruned {current.tile.toString()} value {current.value:.1f} count {count}")
-
-        if realParent is not None and len(realParent.children) == 0 and realParent.fromTile is not None:
-            #(value, length) = self.get_prune_point(nodeMap, realParent)
-            # value = realParent.trunkValue / max(1, realParent.trunkDistance)
-            value = realParent.value
-            parentValidMove = True
-            if invalidMoveFunc(realParent):
-                logging.info(
-                    f"parent {realParent.tile.toString()} will be eliminated due to invalid move, army {realParent.tile.army}")
-                parentValidMove = False
+                if gatherTreeNodeLookupToPrune is not None:
+                    gatherTreeNodeLookupToPrune.pop(toDropFromLookup.tile, None)
+                if tileDictToPrune is not None:
+                    tileDictToPrune.pop(toDropFromLookup.tile, None)
+                nodeMap.pop(toDropFromLookup.tile, None)
+                count -= 1
+                if not noLog:
+                    logging.info(
+                        f"    popped/pruned BRANCH CHILD {toDropFromLookup.tile.toString()} value {toDropFromLookup.value:.1f} count {count}")
+                for child in toDropFromLookup.children:
+                    childRecurseQueue.append(child)
 
             if not noLog:
-                logging.info(
-                    f"  Appending parent {realParent.tile.toString()} (valid {parentValidMove}) had value {value:.1f}, trunkDistance {realParent.trunkDistance}")
+                logging.info(f"    popped/pruned {current.tile.toString()} value {current.value:.1f} count {count}")
 
-            nextPrioObj = pruneOrderFunc(realParent, prioObj)
-            pruneHeap.put((parentValidMove, nextPrioObj, realParent))
+            if realParent is not None and len(realParent.children) == 0 and realParent.fromTile is not None:
+                # (value, length) = self.get_prune_point(nodeMap, realParent)
+                # value = realParent.trunkValue / max(1, realParent.trunkDistance)
+                value = realParent.value
+                parentValidMove = True
+                if invalidMoveFunc(realParent):
+                    logging.info(
+                        f"parent {realParent.tile.toString()} will be eliminated due to invalid move, army {realParent.tile.army}")
+                    parentValidMove = False
+
+                if not noLog:
+                    logging.info(
+                        f"  Appending parent {realParent.tile.toString()} (valid {parentValidMove}) had value {value:.1f}, trunkDistance {realParent.trunkDistance}")
+
+                nextPrioObj = pruneOrderFunc(realParent, prioObj)
+                pruneHeap.put((parentValidMove, nextPrioObj, realParent))
+
+    except Exception as ex:
+        logging.error('prune got an error, dumping state:')
+
+        logging.error(f'rootNodes: {repr(rootNodes)}')
+        # logging.error(f'untilFunc: {repr(untilFunc)}')
+        # logging.error(f'pruneOrderFunc: {repr(pruneOrderFunc)}')
+        # logging.error(f'invalidMoveFunc: {repr(invalidMoveFunc)}')
+        logging.error(f'pruneBranches: {repr(pruneBranches)}')
+        # logging.error(f'pruneOverrideFunc: {repr(pruneOverrideFunc)}')
+        # logging.error(f'viewInfo: {repr(viewInfo)}')
+        # logging.error(f'noLog: {repr(noLog)}')
+        logging.error(f'gatherTreeNodeLookupToPrune: {repr(gatherTreeNodeLookupToPrune)}')
+        logging.error(f'tileDictToPrune: {repr(tileDictToPrune)}')
+        raise
 
     #while not leaves.empty():
     totalValue = 0

@@ -1,0 +1,70 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                                                                 M                        M
+          M         M    a2   a2   a2   a2   a2        M    b3        a3                            M
+                    a2   a2   M    a2   a2   a2   a2   b3   b3   M    a2   M              M         M
+     M              a2   M         M              M    b3   b3   b3   b3   a3   M              M
+M              M    a2   M    M         M    a4        b3   M    a2   b3   a3   b3   b3   b3   b3
+                    a2   a2   a2   a3   b3   b3   b3   b3   a2   a2   M    M    a4   a2   a3   b3
+                    M    a2   a2   M    M    a3   a3   a2   a2   M    b2   M    b4   b3   M    b3        M
+               M         M    a2   a3   a3   a3   a3   a11  M    b4   b2   b2   b4   b3        b3   M    b3
+M              M    a3   a2   a2   a2   M    M    a3D  D    M    b3   b4   b18  b2   b2   b4   b3   b3   b3
+M         M    a2   a2   a2   M    a2   a2   a2   a2D  a2D  a2   M    b4   b4   b4   b4   b4   M    b3   b4
+     M         M    M    a3   a3   a3             MD   a3D  a2D  a2   b4   b4   b4   b4   M    b3   b3   b4
+     M    M              M    a3   M         M    D    a3D  a3   a8   a2   a4   b4   M    b2   b2   b3   b4
+M                             a3   M    M    M    MD   D    M    b4   a2   a2   a2   b2   b2   M    b3   M
+M              M                        M                   M    b2   b2   b2   b2   b2   b2   b2   bG31 b2
+          M              M              M              C46  M    b2   a2   b2   M    b2   bC11 b2   b2   C40
+                                                  M         b3   b2   b2   b2   b2   b2   b3   b2   b2
+               M              M                        b3   b3   M    b3   C41  M    b2   b2   b2   b4
+M         M              M    M         M         M         M         M    M    b2   b2   b2   b2   b3   b4
+M         M                   M                             M                   M    b2   M    b2   b4
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=350
+player_index=1
+mode=1v1
+bot_target_player=0
+targetPlayerExpectedGeneralLocation=7,7
+bot_all_in_counter=11
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=zzd_bot release
+aTiles=83
+aScore=277
+aStandingArmy=194
+aStars=70
+aCityCount=3
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=222
+aDelta25Tiles=8
+aDelta25Score=55
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=350
+a_bot_general_approx=5,5
+bUsername=Human.exe
+bTiles=101
+bScore=338
+bStandingArmy=237
+bStars=73
+bCityCount=2
+bGeneral=20,13
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=0
+bDelta25Score=52
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=350
+b_bot_general_approx=20,13

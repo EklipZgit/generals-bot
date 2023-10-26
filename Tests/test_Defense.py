@@ -1022,7 +1022,7 @@ class DefenseTests(TestBase):
                     # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
                     self.begin_capturing_logging()
-                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=10)
                     self.assertNoFriendliesKilled(map, general, allyGen=allyGen)
     
     def test_should_defend_ally_in_2v2(self):

@@ -517,3 +517,45 @@ bot_target_player=1
         self.assertIsNone(winner)
 
         # TODO add asserts for should_not_expand_into_neutral_city_wtf
+    
+    def test_should_just_fucking_capture_tiles_not_dance_back_and_forth_wasting_moves(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_just_fucking_capture_tiles_not_dance_back_and_forth_wasting_moves___KyRTYaDCf---2--87.txtmap'
+        map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 87, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=87)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '7,6->7,5')
+        simHost.queue_player_moves_str(enemyAllyGen.player, '7,6->7,5')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=13)
+        self.assertNoFriendliesKilled(map, general, allyGen)
+
+    
+    def test_should_not_run_down_into_non_enemy_territory_with_kill_threat_army(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_run_down_into_non_enemy_territory_with_kill_threat_army___m31icdCyc---1--344.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 344, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=344)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        self.assertIsNone(winner)
+
+        self.fail("TODO add asserts for should_not_run_down_into_non_enemy_territory_with_kill_threat_army")

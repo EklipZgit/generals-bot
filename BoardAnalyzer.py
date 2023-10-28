@@ -17,7 +17,7 @@ from Path import Path
 
 class BoardAnalyzer:
     def __init__(self, map: MapBase, general: Tile, teammateGeneral: Tile | None = None):
-        startTime = time.time()
+        startTime = time.perf_counter()
         self.map: MapBase = map
         self.general: Tile = general
         self.teammate_general: Tile | None = teammateGeneral
@@ -55,8 +55,6 @@ class BoardAnalyzer:
         """The cutoff point where we draw red borders as the flank danger surface area."""
 
         self.rescan_chokes()
-
-        logging.info("BoardAnalyzer completed in {:.3f}".format(time.time() - startTime))
 
     def __getstate__(self):
         state = self.__dict__.copy()

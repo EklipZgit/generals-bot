@@ -31,8 +31,16 @@ _REPLAY_URLS = {
 }
 
 
+class TeamStats(object):
+    def __init__(self, tileCount: int, score: int, standingArmy: int, cityCount: int):
+        self.tileCount: int = tileCount
+        self.score: int = score
+        self.standingArmy: int = standingArmy
+        self.cityCount: int = cityCount
+
+
 class Player(object):
-    def __init__(self, player_index):
+    def __init__(self, player_index: int):
         self.cities: typing.List[Tile] = []
         self.general: Tile | None = None
         self.index: int = player_index
@@ -900,6 +908,21 @@ class MapBase(object):
     def update_scores(self, scores: typing.List[Score]):
         """ONLY call this when simulating the game"""
         self.scores = scores
+
+    def get_team_stats(self, teamPlayer: int) -> TeamStats:
+        tileCount = 0
+        score = 0
+        standingArmy = 0
+        cities = 0
+
+        for player in self.players:
+            if self.is_player_on_team_with(player.index, teamPlayer):
+                tileCount += player.tileCount
+                score += player.score
+                standingArmy += player.standingArmy
+                cities += player.cityCount
+
+        return TeamStats(tileCount=tileCount, score=score, standingArmy=standingArmy, cityCount=cities)
 
     def is_tile_friendly(self, tile: Tile) -> bool:
         if self._teams[self.player_index] == self._teams[tile.player]:

@@ -123,7 +123,7 @@ class DangerAnalyzer(object):
         self.anyThreat = self.fastestThreat is not None or self.fastestVisionThreat is not None or self.fastestAllyThreat is not None or self.highestThreat is not None
 
     def getVisionThreat(self, depth: int, armies: typing.Dict[Tile, Army]) -> ThreatObj | None:
-        startTime = time.time()
+        startTime = time.perf_counter()
         logging.info("------  VISION threat analyzer: depth {}".format(depth))
         curThreat = None
 
@@ -175,11 +175,11 @@ class DangerAnalyzer(object):
                 army = armies[army]
             analysis = ArmyAnalyzer(self.map, threatenedGen, army)
             threatObj = ThreatObj(curThreat.length - 1, curThreat.value, curThreat, ThreatType.Vision, None, analysis)
-        logging.info(f"VISION threat analyzer took {time.time() - startTime:.3f}")
+        logging.info(f"VISION threat analyzer took {time.perf_counter() - startTime:.3f}")
         return threatObj
 
     def getFastestThreat(self, depth: int, armies: typing.Dict[Tile, Army], againstPlayer: int, pretendGenArmyLeft: bool = False, negTiles: typing.Set[Tile] | None = None) -> ThreatObj | None:
-        startTime = time.time()
+        startTime = time.perf_counter()
         logging.info(f"------  fastest threat analyzer: depth {depth}")
         curThreat = None
         saveTile = None
@@ -299,7 +299,7 @@ class DangerAnalyzer(object):
             threatObj = ThreatObj(curThreat.length - 1, curThreat.value, curThreat, ThreatType.Kill, saveTile, analysis)
         else:
             logging.info("no fastest threat found")
-        logging.info(f"fastest threat analyzer took {time.time() - startTime:.3f}")
+        logging.info(f"fastest threat analyzer took {time.perf_counter() - startTime:.3f}")
         return threatObj
 
     def getHighestThreat(self, general: Tile, depth: int, armies: typing.Dict[Tile, Army]):

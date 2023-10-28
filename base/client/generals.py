@@ -74,7 +74,7 @@ class GeneralsClient(object):
         self.result = False
         self._gio_session_id = None
         self.public_server = public_server
-        self.lastCommunicationTime = time.time()
+        self.lastCommunicationTime = time.time_ns() / (10 ** 9)
 
         self.bot_key = "sd09fjd203i0ejwi_changeme"
         self._lock = threading.RLock()
@@ -236,7 +236,7 @@ class GeneralsClient(object):
                 msg = self._ws.recv()
 
                 logging.info(f"{self._get_log_time()} - WS recv: {json.dumps(msg)}")
-                self.lastCommunicationTime = time.time()
+                self.lastCommunicationTime = time.time_ns() / (10 ** 9)
             except WebSocketConnectionClosedException as ex:
                 logging.info("socket closed")
                 exc_type, exc_value, exc_traceback = sys.exc_info()
@@ -324,13 +324,14 @@ class GeneralsClient(object):
 
                     recordMessage = True
                     if fromUsername != self.server_username:
-                        recordMessage = self.handle_chat_message(fromUsername, message)
+                        if self.is_allowed_to_reply_to(fromUsername):
+                            recordMessage = self.handle_chat_message(fromUsername, message)
 
-                    fromTeam = 'team_chat_room' in self._start_data and self._start_data['team_chat_room'] == chat_room
+                        fromTeam = 'team_chat_room' in self._start_data and self._start_data['team_chat_room'] == chat_room
 
-                    chatUpdate = ChatUpdate(fromUsername, fromTeam, message)
+                        chatUpdate = ChatUpdate(fromUsername, fromTeam, message)
 
-                    yield "chat_message", chatUpdate
+                        yield "chat_message", chatUpdate
 
                     if self.writingFile or recordMessage:
                         self.writingFile = True
@@ -395,7 +396,7 @@ class GeneralsClient(object):
                     myfile.write("\nClosed WebSocket")
 
     def _start_killswitch_timer(self):
-        while time.time() - self.lastCommunicationTime < 60:
+        while time.time_ns() / (10 ** 9) - self.lastCommunicationTime < 60:
             time.sleep(10)
         logging.info('killswitch elapsed on no communication')
         if self.map is not None:
@@ -495,7 +496,7 @@ class GeneralsClient(object):
     def is_not_ffa(self) -> bool:
         return self.mode != "ffa" or (self.map is not None and self.map.remainingPlayers <= 2)
 
-    def talking_to_bot(self, message: str) -> bool:
+    def is_message_talking_to_us(self, message: str) -> bool:
         return "human" in message.lower() or " bot" in message.lower() or message.lower().startswith("bot ")
 
     def send_chat_broken_up_by_sentence(self, message: str):
@@ -517,7 +518,7 @@ class GeneralsClient(object):
         """
 
         isHumanMessage = "bot" not in fromUsername or self.public_server
-        if self.talking_to_bot(message) or self.is_not_ffa():
+        if self.is_message_talking_to_us(message) or self.is_not_ffa():
             if message.lower().find("kill human") != -1:
                 if self.map.turn < 50:
                     self.send_chat_broken_up_by_sentence(
@@ -564,7 +565,7 @@ class GeneralsClient(object):
                         and not self.already_good_lucked
                 )
                 or (
-                        (self.talking_to_bot(message) or self.is_not_ffa())
+                        (self.is_message_talking_to_us(message) or self.is_not_ffa())
                         and (
                                 message.lower().startswith("hello")
                                 or message.lower().startswith("hey")
@@ -697,6 +698,24 @@ class GeneralsClient(object):
             self.already_good_lucked = True
 
         return isHumanMessage
+
+    def is_allowed_to_reply_to(self, fromUsername: str) -> bool:
+        if fromUsername.lower().startswith('teammate.exe'):
+            return False
+        if fromUsername.lower().startswith('[bot]'):
+            return False
+        if fromUsername.lower().startswith('bot '):
+            return False
+        if fromUsername.lower().startswith('human.exe'):
+            return False
+        if fromUsername.lower().startswith('exe.human'):
+            return False
+        if 'eklipz_ai' in fromUsername.lower():
+            return False
+        if 'eklipz ai' in fromUsername.lower():
+            return False
+
+        return True
 
 def _spawn(f):
     t = threading.Thread(target=f)

@@ -83,7 +83,7 @@ class ExplorationTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
         self.assertEqual(general.player, winner, "should have just killed opp")
 
     def test_should_not_explore_instead_of_expand_end_of_cycle(self):
@@ -103,7 +103,7 @@ class ExplorationTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=4)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCount(simHost, general.player, 45, "should have capped tiles not explored")

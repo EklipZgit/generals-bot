@@ -977,7 +977,7 @@ def knapsack_levels_backpack_gather_with_value(
     @return:
     """
     shouldLog = False
-    startTime = time.time()
+    startTime = time.perf_counter()
     negativeTilesOrig = negativeTiles
     if negativeTiles is not None:
         negativeTiles = negativeTiles.copy()
@@ -1250,7 +1250,7 @@ def knapsack_levels_backpack_gather_with_value(
             shouldAssert=True)
 
     logging.info(
-        f"Concluded knapsack_levels_backpack_gather with {itr.value} path segments, value {totalValue}. Duration: {time.time() - startTime:.3f}")
+        f"Concluded knapsack_levels_backpack_gather with {itr.value} path segments, value {totalValue}. Duration: {time.perf_counter() - startTime:.3f}")
     return totalValue, rootNodes
 
 
@@ -1364,7 +1364,7 @@ def greedy_backpack_gather_values(
      Use useTrueValueGathered to make sure the gatherValue returned by the gather matches the actual amount of army you will have on the gather target tiles at the end of the gather execution.
     @return:
     """
-    startTime = time.time()
+    startTime = time.perf_counter()
     negativeTilesOrig = negativeTiles
     if negativeTiles is not None:
         negativeTiles = negativeTiles.copy()
@@ -1571,7 +1571,7 @@ def greedy_backpack_gather_values(
         viewInfo=viewInfo)
 
     logging.info(
-        f"Concluded greedy-bfs-gather with {itr} path segments, value {totalValue}. Duration: {time.time() - startTime:.3f}")
+        f"Concluded greedy-bfs-gather with {itr} path segments, value {totalValue}. Duration: {time.perf_counter() - startTime:.3f}")
     return totalValue, turnsUsed, rootNodes
 
 

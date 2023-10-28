@@ -2161,7 +2161,7 @@ bTiles=20
         # # alert enemy of the player general
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
         #
-        # winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
+        # winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
         # self.assertIsNone(winner)
 
         m = simHost.sim.players[general.player].map
@@ -2229,7 +2229,7 @@ bTiles=20
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
         self.assertIsNone(winner)
 
         # TODO add asserts for should_not_generate_idkQQ_error_in_scrim_8_11__7_12
@@ -2252,7 +2252,7 @@ bTiles=20
                 simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=3)
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=3)
                 self.assertIsNone(winner)
     
     def test_should_not_lock_up_mcts_2(self):
@@ -2274,7 +2274,7 @@ bTiles=20
                 simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=3)
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=3)
                 self.assertIsNone(winner)
     
     def test_should_not_die_scrimming_general_at_threat(self):
@@ -2292,7 +2292,7 @@ bTiles=20
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=3)
         self.assertIsNone(winner)
     
     def test_should_not_dance_around_armies_standing_still(self):
@@ -2348,7 +2348,7 @@ bTiles=20
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=5)
         self.assertIsNone(winner)
         shouldNotBeCapped = self.get_player_tile(2, 13, simHost.sim, general.player)
         self.assertEqual(general.player, shouldNotBeCapped.player)
@@ -2385,7 +2385,7 @@ bTiles=20
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
         self.assertNoRepetition(simHost, minForRepetition=2)
 
@@ -2405,7 +2405,7 @@ bTiles=20
 
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=8)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=8)
         self.assertIsNone(winner)
         self.assertNoRepetition(simHost, minForRepetition=2)
 
@@ -2516,7 +2516,7 @@ bTiles=20
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
         self.assertIsNone(winner)
         tgTile = self.get_player_tile(15, 19, simHost.sim, general.player)
         self.assertEqual(general.player, tgTile.player)

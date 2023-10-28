@@ -19,7 +19,11 @@ M                        M    c1   c1                                 M         
 M                   M    M    M    c1        M    M         M         M         M    M         M
                                              M                   M    M    M                        M
                     M         M                   M         M         M                                  M
-|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    turn=89player_index=0teams=1,1,2,2mode=team
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=89
+player_index=0
+teams=1,1,2,2
+mode=team
 targetPlayerExpectedGeneralLocation=3,12
 bot_all_in_counter=0
 bot_all_in=False

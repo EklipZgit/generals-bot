@@ -156,7 +156,7 @@ class CityAnalyzerTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGen.player)
 
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=20)
+        simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=20)
     
     def test_should_not_take_city_in_middle_of_map_right_in_front_of_enemy_army_lol(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -173,7 +173,7 @@ class CityAnalyzerTests(TestBase):
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
         city = self.get_player_tile(11, 12, simHost.sim, general.player)
         self.assertTrue(city.isNeutral)

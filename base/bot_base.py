@@ -43,7 +43,7 @@ class GeneralsClientHost(object):
 
         self._map: Map | None = None
 
-        self._server_updates_queue: "queue.Queue[typing.Tuple[str, typing.Any]]" = queue.Queue()
+        self._server_updates_queue: "queue.Queue[typing.Tuple[str, typing.Any, float]]" = queue.Queue()
         """Used to pass server updates from the websocket thread to the bot move thread."""
 
         self._name = name
@@ -123,7 +123,8 @@ class GeneralsClientHost(object):
     def _set_update(self, updateTuple: typing.Tuple[str, typing.Any]) -> bool:
         """Returns True if the game is over, False otherwise."""
         updateType, update = updateTuple
-        self._server_updates_queue.put((updateType, update), block=True, timeout=5.0)
+        timeAccurate = time.time_ns() / (10 ** 9)
+        self._server_updates_queue.put((updateType, update, timeAccurate), block=True, timeout=5.0)
 
         over = False
         if updateType == "game_won":
@@ -161,11 +162,13 @@ class GeneralsClientHost(object):
                 self._running = False
                 logging.info(f'bot gave up :(')
                 break
+
             try:
-                updateType, update = self._server_updates_queue.get(block=True, timeout=1.0)
+                updateType, update, updateReceivedTime = self._server_updates_queue.get(block=True, timeout=1.0)
                 gameUpdateReceived = False
                 botShouldMakeMove = False
                 countsForMakeMove = False
+                mapUpdateTime = updateReceivedTime
 
                 try:
                     while True:
@@ -174,15 +177,19 @@ class GeneralsClientHost(object):
                             botShouldMakeMove = True
                             self._updates_received += 1
                             gameUpdateReceived = True
-                        updateType, update = self._server_updates_queue.get(block=False, timeout=0.0)
+                        updateType, update, updateReceivedTime = self._server_updates_queue.get(block=False, timeout=0.0)
                         if gameUpdateReceived and updateType == "game_update":
+                            if self._map is None:
+                                raise AssertionError('_map was none... but missed update?')
+
                             logging.info(f'UH OH, MULTIPLE SERVER UPDATES RECEIVED IN A ROW, TURN {self._map.turn} MISSED MOVE CHANCE')
-                            self._notify_bot_of_missed_update(self._map)
+                            mapUpdateTime = updateReceivedTime
+                            self._notify_bot_of_missed_update(self._map, updateReceivedTime)
                 except queue.Empty:
                     pass  # this is what we expect to happen 99.9% of the time unless the server is laggy or the bot takes too long making a previous move and queues up server updates...
 
                 if botShouldMakeMove:
-                    self._ask_bot_for_move(self._map)
+                    self._ask_bot_for_move(self._map, mapUpdateTime)
 
                     self._moves_realized += 1
             except queue.Empty:
@@ -218,11 +225,11 @@ class GeneralsClientHost(object):
 
         self.result = result
 
-    def _ask_bot_for_move(self, update):
-        self._updateMethod(update)
+    def _ask_bot_for_move(self, update, updateReceivedTime):
+        self._updateMethod(update, updateReceivedTime)
 
-    def _notify_bot_of_missed_update(self, update):
-        self._handleUpdateNoMove(update)
+    def _notify_bot_of_missed_update(self, update, updateReceivedTime: float):
+        self._handleUpdateNoMove(update, updateReceivedTime)
 
     def place_move(self, source, dest, move_half=False):
         self._game.move(source.y, source.x, dest.y, dest.x, self._map.cols, move_half)

@@ -8,6 +8,7 @@ import DebugHelper
 from BotHost import BotHostBase
 from DataModels import Move
 from Path import Path
+from PerformanceTimer import NS_CONVERTER
 from SearchUtils import count, where
 from Sim.TextMapLoader import TextMapLoader
 from base.bot_base import create_thread
@@ -492,7 +493,7 @@ class GameSimulatorHost(object):
 
         self.respect_turn_time_limit: bool = respectTurnTimeLimitToDropMoves
         self.paused: bool = False
-        self.skip_frame: bool = False
+        self.frame_skips_queued: int = 0
 
         charMap = [c for c, idx in TextMapLoader.get_player_char_index_map()]
 
@@ -531,7 +532,7 @@ class GameSimulatorHost(object):
             # botHost.eklipz_bot.targetPlayer = (botHost.eklipz_bot.general.player + 1) % 2
             # botHost.eklipz_bot.targetPlayerObj = botHost.eklipz_bot._map.players[botHost.eklipz_bot.targetPlayer]
             # botHost.eklipz_bot.init_turn()
-            botHost.make_move(player.map)
+            botHost.make_move(player.map, time.time_ns() / NS_CONVERTER)
 
             botHost.eklipz_bot.expand_plan = None
             botHost.eklipz_bot.timings = None
@@ -584,7 +585,7 @@ class GameSimulatorHost(object):
                         # perform the final 'bot' turn without actual executing the move or getting the next
                         # server update. Allows things like the army tracker etc and the map viewer to update with the
                         # bots final calculated map state and everything.
-                        botHost.make_move(self.sim.players[idx].map)
+                        botHost.make_move(self.sim.players[idx].map, time.time_ns() / NS_CONVERTER)
         except:
             try:
                 self.sim.end_game()
@@ -603,7 +604,7 @@ class GameSimulatorHost(object):
             raise
 
         if run_real_time:
-            self.wait_until_viewer_closed_or_time_elapses(max(3.0, turn_time * 4))
+            self.wait_until_viewer_closed_or_time_elapses(min(5.0, max(1.5, turn_time * 4)))
 
         self.sim.end_game()
         for botHost in self.bot_hosts:
@@ -622,7 +623,10 @@ class GameSimulatorHost(object):
             else:
                 self.paused = True
         else:
-            self.skip_frame = True
+            self.skip_frame()
+
+    def skip_frame(self):
+        self.frame_skips_queued += 1
 
     def make_player_afk(self, player: int):
         self.forced_afk_players.append(player)
@@ -705,7 +709,7 @@ class GameSimulatorHost(object):
             if not player.dead and not player.index in self.forced_afk_players:
                 moveStart = time.perf_counter()
                 try:
-                    botHost.make_move(player.map)
+                    botHost.make_move(player.map, updateReceivedTime=time.time_ns() / NS_CONVERTER)
                 except:
                     raise AssertionError(f'{traceback.format_exc()}\r\n\r\nIMPORT TEST FILES FOR TURN {self.sim.turn} FROM @ {botHost.eklipz_bot.logDirectory}')
 
@@ -748,16 +752,20 @@ class GameSimulatorHost(object):
             self.check_for_viewer_events()
             self.any_bot_has_viewer_running()
             elapsed = time.perf_counter() - start
-            while elapsed < turn_time and not self.skip_frame:
-                time.sleep(min(turn_time - elapsed, 0.25))
+            if len(self.sim.moves_history) == 0:
+                time.sleep(0.5)  # give a brief moment at the first move to allow a right click pause etc.
+            self.check_for_viewer_events()
+            while elapsed < turn_time and self.frame_skips_queued == 0:
+                time.sleep(min(turn_time - elapsed, 0.05))
                 self.check_for_viewer_events()
                 elapsed = time.perf_counter() - start
 
-            while self.paused and not self.skip_frame:
-                time.sleep(0.1)
+            while self.paused and self.frame_skips_queued == 0:
+                time.sleep(0.05)
                 self.check_for_viewer_events()
 
-            self.skip_frame = False
+            if self.frame_skips_queued > 0:
+                self.frame_skips_queued -= 1
 
         self.sim.execute_turn(dont_require_all_players_to_move=True)
 
@@ -895,6 +903,8 @@ class GameSimulatorHost(object):
             return
 
         start = time.perf_counter()
+
         logging.info(f'(WAITING UNTIL YOU CLOSE THE VIEWER OR {max_seconds_to_wait} SECONDS ELAPSES....)')
-        while self.any_bot_has_viewer_running() and time.perf_counter() - start < max_seconds_to_wait:
-            time.sleep(1)
+        while self.frame_skips_queued == 0 and ((self.any_bot_has_viewer_running() and time.perf_counter() - start < max_seconds_to_wait) or self.paused):
+            self.check_for_viewer_events()
+            time.sleep(0.5)

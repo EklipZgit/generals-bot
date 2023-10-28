@@ -62,7 +62,8 @@ def dest_breadth_first_target(
         skipTiles=None,
         ignoreGoalArmy=False,
         noLog=True,
-        additionalIncrement: float = 0.0
+        additionalIncrement: float = 0.0,
+        preferCapture: bool = False
 ) -> typing.Union[None, Path]:
     """
     Gets a path that results in {targetArmy} army on one of the goalList tiles.
@@ -100,7 +101,7 @@ def dest_breadth_first_target(
                     if negativeTiles is None or goal not in negativeTiles:
                         startArmy += goal.army
 
-            startVal = (startDist, 0 - startArmy)
+            startVal = (startDist, 0, 0 - startArmy)
             frontier.put((startVal, goal, startDist, startArmy, goalInc, None))
     else:
         for goalRaw in goalList:
@@ -120,7 +121,7 @@ def dest_breadth_first_target(
                 else:
                     startArmy += goal.army
 
-            startVal = (0, 0 - startArmy)
+            startVal = (0, 0, 0 - startArmy)
             frontier.put((startVal, goal, 0, startArmy, goalInc, None))
     start = time.perf_counter()
     iter = 0
@@ -146,7 +147,12 @@ def dest_breadth_first_target(
                 f"PopSkipped Mountain, neutCity or Obstacle current {current.toString()}")
             continue
 
+        _, negCaptures, prioArmy = prioVals
+
         nextArmy = army - 1 - goalInc
+
+        if preferCapture and not map.is_player_on_team_with(searchingPlayer, current.player):
+            negCaptures -= 1
 
         # nextArmy is effectively "you must bring this much army to the tile next to me for this to kill"
         if (current.isCity and current.player != -1) or current.isGeneral:
@@ -187,7 +193,7 @@ def dest_breadth_first_target(
                 f"Popped current {current.toString()}, army {nextArmy}, goalInc {goalInc}, targetArmy {targetArmy}, processing")
         if newDist <= maxDepth and not foundGoal:
             for next in current.movable:  # new spots to try
-                frontier.put(((newDist, 0 - nextArmy), next, newDist, nextArmy, goalInc, current))
+                frontier.put(((newDist, negCaptures, 0 - nextArmy), next, newDist, nextArmy, goalInc, current))
     if not noLog:
         logging.info(
             f"BFS DEST SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}, FOUNDDIST: {foundDist}")

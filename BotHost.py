@@ -7,7 +7,7 @@ import traceback
 import typing
 
 from DataModels import Move
-from PerformanceTimer import PerformanceTimer
+from PerformanceTimer import PerformanceTimer, NS_CONVERTER
 from Sim.TextMapLoader import TextMapLoader
 from Viewer.ViewerProcessHost import ViewerHost
 from base import bot_base
@@ -15,7 +15,7 @@ from base.client.generals import ChatUpdate
 from base.client.map import MapBase, Tile
 from bot_ek0x45 import EklipZBot
 
-FORCE_NO_VIEWER = True
+FORCE_NO_VIEWER = False
 FORCE_PRIVATE = False
 
 
@@ -67,16 +67,15 @@ class BotHostBase(object):
         logging.info("attempting to start viewer loop")
         self._viewer.start()
 
-    def make_move(self, currentMap: MapBase):
+    def make_move(self, currentMap: MapBase, updateReceivedTime: float):
         # todo most of this logic / timing / whatever should move into EklipZbot...
         timer: PerformanceTimer = self.eklipz_bot.perf_timer
-        timer.record_update(currentMap.turn)
+        timer.record_update(currentMap.turn, updateReceivedTime)
 
         if not self.eklipz_bot.isInitialized:
             self.eklipz_bot.initialize_map_for_first_time(currentMap)
         self.eklipz_bot._map = currentMap
 
-        startTime = time.perf_counter()
         with timer.begin_move(currentMap.turn) as moveTimer:
             move: Move | None = None
             try:
@@ -89,7 +88,7 @@ class BotHostBase(object):
                 if self.rethrow:
                     raise
 
-            duration = time.perf_counter() - startTime
+            duration = timer.get_elapsed_since_update(currentMap.turn)
             self.eklipz_bot.viewInfo.lastMoveDuration = duration
             if move is not None:
                 if move.source.army == 1 or move.source.army == 0 or move.source.player != self.eklipz_bot.general.player:
@@ -124,15 +123,14 @@ class BotHostBase(object):
 
         return
 
-    def receive_update_no_move(self, currentMap: MapBase):
+    def receive_update_no_move(self, currentMap: MapBase, updateReceivedTime: float):
         timer: PerformanceTimer = self.eklipz_bot.perf_timer
-        timer.record_update(currentMap.turn)
+        timer.record_update(currentMap.turn, updateReceivedTime)
 
         if not self.eklipz_bot.isInitialized:
             self.eklipz_bot.initialize_map_for_first_time(currentMap)
         self.eklipz_bot._map = currentMap
 
-        startTime = time.perf_counter()
         with timer.begin_move(currentMap.turn) as moveTimer:
             try:
                 with moveTimer.begin_event(f'Init turn {currentMap.turn} - no move chance / dropped move'):
@@ -145,7 +143,7 @@ class BotHostBase(object):
                 if self.rethrow:
                     raise
 
-            duration = time.perf_counter() - startTime
+            duration = timer.get_elapsed_since_update(currentMap.turn)
             self.eklipz_bot.viewInfo.lastMoveDuration = duration
             self.eklipz_bot.viewInfo.addAdditionalInfoLine(f'Missed move chance turn {currentMap.turn}')
 

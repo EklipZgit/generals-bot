@@ -129,10 +129,28 @@ class MctsDUCT(object):
             context: Context,
             maxTime: float,
             maxIterations: int,
+            forcedPreExpansions: typing.List[typing.List[Move | None]] | None = None,
             # maxDepth: int,  # he didn't use this
     ) -> MctsEngineSummary:
         # Start out by creating a new root node (no tree reuse in this example)
         root: MctsNode = MctsNode(None, context)
+
+        preExpansionExplorations = []
+        if forcedPreExpansions is not None:
+            preExpansionExplorations = [0 for _ in forcedPreExpansions]
+
+        # preExpansionsFr = []
+        # preExpansionsEn = []
+        # for forcedPreExpansion in forcedPreExpansions:
+        #     for move in forcedPreExpansion:
+        #         if move is None:
+        #             continue
+        #
+        #         if move.source.player == self.player:
+        #             preExpansionsFr.append(forcedPreExpansion)
+        #         else:
+        #             preExpansionsEn.append(forcedPreExpansion)
+        #         break
 
         # We'll respect any limitations on max seconds and max iterations (don't care about max depth)
         startTime = time.perf_counter()

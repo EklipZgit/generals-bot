@@ -38,7 +38,7 @@ SENTINAL = "~"
 
 class ArmyAnalyzer:
 	def __init__(self, map, armyA: Tile | Army, armyB: Tile | Army, maxDist = 1000):
-		startTime = time.time()
+		startTime = time.perf_counter()
 		self.map = map
 		if type(armyA) is Army:
 			self.tileA = armyA.tile
@@ -72,7 +72,6 @@ class ArmyAnalyzer:
 		# logging.info("set bMap({}) to {}".format(self.tileA.toString(), self.bMap[self.tileA.x][self.tileA.y]))
 
 		self.scan()
-		logging.info("ArmyAnalyzer completed for tiles {} and {} in {:.3f}".format(self.tileA.toString(), self.tileB.toString(), time.time() - startTime))
 
 	def __getstate__(self):
 		state = self.__dict__.copy()

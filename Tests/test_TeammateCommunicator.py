@@ -54,7 +54,7 @@ class TeamCommunicatorTests(TestBase):
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertCoordinatedDefenseMatches(simHost))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=8)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=8)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
         shouldCapWith60_1 = self.get_player_tile(7, 9, simHost.sim, general.player)
@@ -113,7 +113,7 @@ class TeamCommunicatorTests(TestBase):
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertCoordinatedDefenseMatches(simHost))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=8)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=8)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
         shouldCapWith60_1 = self.get_player_tile(7, 9, simHost.sim, general.player)
@@ -222,7 +222,7 @@ class TeamCommunicatorTests(TestBase):
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertCoordinatedDefenseMatches(simHost))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
     
@@ -242,7 +242,7 @@ class TeamCommunicatorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
         self.assertNoFriendliesKilled(map, general, allyGen)
     
     def test_should_not_pull_back_army_when_cannot_defend_teammate__all_in_attacker_instead(self):

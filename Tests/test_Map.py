@@ -1384,7 +1384,7 @@ C5
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
         self.assertIsNone(winner)
     
     def test_should_handle_fog_island_capture_in_2v2(self):
@@ -1404,5 +1404,5 @@ C5
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=3)
         self.assertNoFriendliesKilled(map, general, allyGen)

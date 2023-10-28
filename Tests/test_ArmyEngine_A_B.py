@@ -964,9 +964,14 @@ class ArmyEngineABTests(TestBase):
         def configure_b(bBot: EklipZBot):
             # bBot.expansion_length_weight_offset = -0.3
             # bBot.behavior_launch_timing_offset = +4
+            bBot.expansion_always_include_non_terminating_leafmoves_in_iteration = False
+
             pass
 
         def configure_a(aBot: EklipZBot):
+            # only in stage 2
+            aBot.expansion_always_include_non_terminating_leafmoves_in_iteration = True
+
             # 189-179, killed
             # aBot.mcts_engine.min_expanded_visit_count_to_count_for_moves = 10  # b is 5
             # aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 5  # b is 10
@@ -1043,11 +1048,17 @@ class ArmyEngineABTests(TestBase):
         self.begin_capturing_logging()
 
         def configure_b(bBot: EklipZBot):
+            bBot.expansion_always_include_non_terminating_leafmoves_in_iteration = False
+            bBot.expansion_allow_gather_plan_extension = False
             pass
 
         def configure_a(aBot: EklipZBot):
+            # 283-213
+            aBot.expansion_always_include_non_terminating_leafmoves_in_iteration = True
+            aBot.expansion_allow_gather_plan_extension = True
+
             # pre-codified at 14-10 but UNDONE
-            aBot.expansion_length_weight_offset = 0.8  # b is 0.5
+            # aBot.expansion_length_weight_offset = 0.8  # b is 0.5
 
             # 127-96, codified, trying 0.8
             # aBot.expansion_length_weight_offset = 0.5  # b is 0.3
@@ -1117,13 +1128,17 @@ class ArmyEngineABTests(TestBase):
         self.begin_capturing_logging()
 
         def configure_b(bBot: EklipZBot):
-            bBot.expansion_length_weight_offset = -0.3
+            # bBot.expansion_length_weight_offset = -0.3
+            bBot.expansion_allow_gather_plan_extension = False
             pass
 
         def configure_a(aBot: EklipZBot):
+            # 257-237
+            aBot.expansion_allow_gather_plan_extension = True
+
             # 194-198, b -0.3, AGAIN
             # 191-180, not significant
-            aBot.expansion_length_weight_offset = 0.0
+            # aBot.expansion_length_weight_offset = 0.0
             # 82-96, ok thats enough of these to convince me this is bad.
             # aBot.engine_mcts_move_estimation_net_differential_cutoff = 3
 
@@ -1155,7 +1170,11 @@ class ArmyEngineABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 50  # v 20
+            # in stage 1 and 2
+            # 261-234
+            aBot.expansion_always_include_non_terminating_leafmoves_in_iteration = True
+
+            # aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 50  # v 20
 
             # pre codified at 19-10
             # killed 192-173

@@ -56,7 +56,7 @@ class TerritoryClassifier():
 	def scan(self):
 		logging.info("Scanning map for territories, aww geez")
 		counts = new_map_grid(self.map, lambda x, y: [0 for n in range(len(self.map.players) + 1)])
-		startTime = time.time()
+		startTime = time.perf_counter()
 		undiscoveredCounterDepth = 5
 		# count the number of tiles for each player within range 3 to determine whose territory this is
 		neutralNewIndex = len(self.map.players)
@@ -122,7 +122,7 @@ class TerritoryClassifier():
 		startTiles = list(self.needToUpdateAroundTiles)
 		logging.info("  Scanning territory around {}".format(" - ".join([tile.toString() for tile in startTiles])))
 		breadth_first_foreach(self.map, startTiles, undiscoveredCounterDepth, foreach_near_updated_tiles, None, lambda tile: tile.isMountain, None, self.map.player_index)
-		duration = time.time() - startTime
+		duration = time.perf_counter() - startTime
 			
 		logging.info("Completed scanning territories in {:.3f}".format(duration))
 		self.needToUpdateAroundTiles = set()

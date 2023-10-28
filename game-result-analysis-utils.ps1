@@ -249,10 +249,8 @@ function Create-TestContinuingGameFrom {
         bot = simHost.get_bot(general.player)
         playerMap = simHost.get_player_map(general.player)
 
-        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
-
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
         $baseAssert
 
         self.fail("TODO add asserts for $TestName")

@@ -170,7 +170,7 @@ def solve_knapsack(
         if not isinstance(value, int):
             raise AssertionError('values are all required to be ints or this algo will not function')
 
-    timeStart = time.time()
+    timeStart = time.perf_counter()
     n = len(items)
     K = [[0 for w in range(capacity + 1)]
          for i in range(n + 1)]
@@ -221,6 +221,6 @@ def solve_knapsack(
         w = w - weights[i - 1]
 
     logging.info(
-        f"knapsack completed on {n} items for capacity {capacity} finding value {K[n][capacity]} in Duration {time.time() - timeStart:.3f}")
+        f"knapsack completed on {n} items for capacity {capacity} finding value {K[n][capacity]} in Duration {time.perf_counter() - timeStart:.3f}")
     return K[n][capacity], includedItems
 

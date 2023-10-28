@@ -1,0 +1,70 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M    M                        M    M                             M                   M    M
+M              M         M                        M         M                                       M
+M         M    M    M                                                           M         M
+               M    M                                       M         M         M         M
+M              M                        a1             M         M                   M                   M
+M                        C47  a1   a2   a1   M    D    D    D    D                   M         M    M    M
+M    M              a1   a1   a1   a1   M              b1D  b1D  b1D
+M                   a1   a1   M    a1   a1   a1        M    b1D  b1D  b2D       M
+          a1   a1   a1   a1   a1   a1   a1   a1   a1        b1   b1   b2D  M    M                   M    M
+     M    a1   M         M    a1             b2   a1   a1   a49  b1   b1D  M    M         M
+     M    a1        M         M    M    M         M    M    b2   b45  MD   M         M
+          a1   a1   a2   a2   a2   a2   M    M    M    a2   C41  b1D  b1D  M                        M
+               a1   a1   a1   a1   aG11 a1   a2   a2   a2   C44  b1   b1        M         M    M    M
+          M              M    M    a1   a1   a2   a2        M                        M
+M              M         a1   a1   aC12 a1                  M                                       M
+     a7        M         M    a2   a2   a1        M         M
+M    a2   a2   a2   M    C40  a2                  M    M         M                             M    M    M
+          a1   a1   a2   a2   a2        M         M              M
+M                                                                M    M                        M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=190
+player_index=0
+mode=1v1
+bot_target_player=1
+targetPlayerExpectedGeneralLocation=13,12
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=65
+aScore=160
+aStandingArmy=95
+aStars=72
+aCityCount=2
+aGeneral=7,12
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=15
+aDelta25Score=80
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=190
+a_bot_general_approx=7,12
+bUsername=primitive
+bTiles=54
+bScore=161
+bStandingArmy=107
+bStars=72
+bCityCount=2
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=102
+bDelta25Tiles=2
+bDelta25Score=80
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=190
+b_bot_general_approx=16,10

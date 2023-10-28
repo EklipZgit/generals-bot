@@ -194,7 +194,7 @@ class CityGatherTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=4)
         self.assertIsNone(winner)
         city = self.get_player_tile(6, 7, simHost.sim, general.player)
         self.assertTrue(city.isNeutral)
@@ -246,7 +246,7 @@ class CityGatherTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=9)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=9)
         self.assertIsNone(winner)
 
         city = self.get_player_tile(14, 19, simHost.sim, general.player)
@@ -286,7 +286,7 @@ class CityGatherTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
         city = self.get_player_tile(19, 13, simHost.sim, general.player)
@@ -345,7 +345,7 @@ class CityGatherTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=4)
         self.assertIsNone(winner)
 
         misAttackedCity = self.get_player_tile(3, 12, simHost.sim, general.player)
@@ -416,7 +416,7 @@ class CityGatherTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
         self.assertIsNone(winner)
 
         self.assertEqual(playerMap.GetTile(general.x, general.y), bot.locked_launch_point)
@@ -437,7 +437,7 @@ class CityGatherTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
         self.fail("TODO add asserts for should_not_take_city_when_infinitely_ahead_and_also_opp_all_in_and_also_80_army_barreling_towards_gen")
@@ -458,7 +458,7 @@ class CityGatherTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
         self.fail("TODO add asserts for should_not_take_neutral_cities_when_ally_is_in_short_spawns_and_under_attack")
@@ -479,7 +479,7 @@ class CityGatherTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
         self.fail("TODO add asserts for should_not_take_city_with_incoming_threat_and_not_enough_defense")
@@ -500,14 +500,14 @@ class CityGatherTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=6)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=6)
         self.assertIsNone(winner)
 
         neutCity = self.get_player_tile(21, 14, simHost.sim, general.player)
         self.assertEqual(general.player, neutCity.player, "should capture the city in just 5 moves, the threat is not real.")
     
     def test_should_build_consistent_plan_when_other_en_cities_near_target_city(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_build_consistent_plan_when_other_en_cities_near_target_city___WaeMrE9dh---7--190.txtmap'
 
         for turn in [199, 190]:
@@ -525,9 +525,60 @@ class CityGatherTests(TestBase):
                 # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=20)
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=20)
                 self.assertIsNone(winner)
                 neutCity = self.get_player_tile(25, 6, simHost.sim, general.player)
                 neutCity2 = self.get_player_tile(25, 7, simHost.sim, general.player)
                 self.assertEqual(general.player, neutCity.player, "should capture the city with a reasonable plan.")
                 self.assertEqual(general.player, neutCity2.player, "should capture the city with a reasonable plan.")
+    
+    def test_should_capture_neutrals_as_part_of_neutral_city_capture(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_capture_neutrals_as_part_of_neutral_city_capture___089dxyou6---0--128.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 128, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=128)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=8)
+        self.assertIsNone(winner)
+
+        city = self.get_player_tile(7, 14, simHost.sim, general.player)
+        self.assertEqual(general.player, city.player)
+        self.assertPlayerTileCountGreater(simHost, general.player, 52)
+    
+    def test_should_find_neutral_city_plan_in_2v2(self):
+        for includeThreat in [True, False]:
+            with self.subTest(includeThreat=includeThreat):
+                debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+                mapFile = 'GameContinuationEntries/should_find_neutral_city_plan_in_2v2___vNT0pIjQh---1--152.txtmap'
+                map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 152, fill_out_tiles=True)
+                if not includeThreat:
+                    map.GetTile(7, 9).army = 3
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=152)
+                if not includeThreat:
+                    rawMap.GetTile(7, 9).army = 3
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=False)
+                simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+                bot = simHost.get_bot(general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=16)
+                self.assertNoFriendliesKilled(map, general, allyGen)
+
+                city = self.get_player_tile(0, 17, simHost.sim, general.player)
+                self.assertEqual(general.player, city.player)

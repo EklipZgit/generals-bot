@@ -1,0 +1,70 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+          M    M    M         M         M              M                             M
+                                             M              M                             a1        M
+          M              M                   M              M         M                   a1   M    M
+                                   M                        M    a1   a1   a1   a1   a1   a1   M
+                              M         M         M         a1   a1             M    M    a1   M         M
+                              M         b2   M         C49  a1   a1        M    M    a1   a1   M    M
+     M              M    M              b2   b2   b2   a1   a1        M              a1   a2             M    M
+                                   M    b2   a1   a1   a1   a1D       M    a2   a2   a1   a2             M
+     M    M              M         b2   b1   a1   b1   a1   a1D  a2   a2   a2   M    a1   M              M
+     M              M         M    b1   b1   b1   b1   M    M                   M                   M         M
+M    M                        b1   b1   b1   M    M    b1   b1   M              M
+     M                        b1   b1   b1   b1   b1   b1   b1   b1   b1   M                   M              M
+          M         M    M         M    b1   b1   b1   b1   M    M         M    M              M
+          M         b1                  M    bG6  b1   b1   b1   M    M    M    M
+               b1   b1   b1   b1   b1   b1   b1   b1   b1   b1   M         M         M    M         M         M
+     M              M              M         b1   M                   M    M                   M
+                                   M         b1   b1   b1        M              M                        M
+                         M                   C47  M         M                        M         M    M
+M    M                                                           M         M    M    M                        M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=144
+player_index=1
+mode=1v1
+bot_target_player=0
+targetPlayerExpectedGeneralLocation=13,2
+bot_is_all_in_losing=False
+bot_all_in_losing_counter=0
+bot_is_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=[2 len 4] 9,13 -> 9,14 -> 8,14 -> 8,15 -> 8,16
+aUsername=zzd_bot release
+aTiles=43
+aScore=56
+aStandingArmy=13
+aStars=74
+aCityCount=1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=270
+aDelta25Tiles=10
+aDelta25Score=14
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=140
+a_bot_general_approx=15,4
+bUsername=Human.exe
+bTiles=49
+bScore=60
+bStandingArmy=11
+bStars=71
+bCityCount=1
+bGeneral=9,13
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=12
+bDelta25Score=17
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=144
+b_bot_general_approx=9,13

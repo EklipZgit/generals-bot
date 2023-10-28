@@ -1,0 +1,114 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+M         M    d1   d1   d1   d1   d1   c2D  cG10DMD             M
+     M         M              M    dC9  d1D  d1D  c2D  M                        M    M
+          d2   d2   d2   d2             MD   d1D  c2D       M              M
+     M    d2                            MD   d1D  MD                  M
+M    M         M    M                   MD   d1D  c2D  MD   MD   cC10                     M    M
+d19  d2   M         M    M         M    D    d1D  d1D  d1D  MD   c2D  cC10      D    D    D
+     M    a2   a2   a2        M    M    c3   d2   M    d1D  c2D  c2D  c2D  M    MD   d5D  D
+d3   d2   M    M    a2   a8   a1   a1   a1   a1   M    d1D  d1D  d1D  MD   MD   MD   d4D  D
+     M         b4        a3   a2   M    a1   d1        M    c3   d1D  d1D  d1D  d1D  d4D  D
+M         b5   b4   d5   a3   M    M    a2   d2   M    a4   c3   c2   d4D  d4D  d1D  MD   M    M
+M         M    M    d6        M         M    b2   b2   M    a2   c2   MD   C45D d1D  d1D  d1   a1
+     M    M         b2   b2        M    M    b2   b1   b1   M    c2   c2D  c2D  d1D  d1   d1   M
+C41            M    b2   b2   b2   b2   b2   b2   b2   b1   M    M    C42  d55  d1D  M    b29  a3
+b2   M    b1   b3   b3   b3   b2        c5   M    b2   b1   b63  C46  a2   d1   d1   M    b1   aG3
+b1   b1   b1   M    b3   b2   M    b2   M    b2   b2   M    b1   b1   b1   b101 a1   a1   a1   a1
+          b3        M    b2   b3   b2   b2   b2   bG18 a2   a8   a2   a2   a2   c2   c1   M    a1
+          b3   C48       b2   b2   b2   b2   b2   b2   M    a2        M    M    c2   c2   a3   a1
+               M    b2   b2   M         b2        b2        a2   M         D    M    a3   M    a1
+          b2   b2   b2                  b2                  a2   M         M              M    a1
+          M    M    b3   M    b2   b2   b2   C44  M         M    M         M    M    M    a1   a1
+     M    M              M    M    M    b3   C45       M              M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=319
+player_index=1
+teams=1,1,2,2
+mode=team
+bot_target_player=2
+targetPlayerExpectedGeneralLocation=9,0
+bot_all_in_counter=0
+bot_all_in=False
+bot_all_in_army_advantage=True
+bot_all_in_army_advantage_counter=46
+bot_all_in_army_advantage_cycle=50
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=True
+bot_finishing_exploration=False
+bot_targeting_army=15,12
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=40
+aScore=84
+aStandingArmy=44
+aStars=54
+aCityCount=1
+aGeneral=19,13
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=-24
+aDelta25Score=-136
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=318
+a_bot_general_approx=19,13
+bUsername=Exe.human
+bTiles=68
+bScore=343
+bStandingArmy=275
+bStars=54
+bCityCount=1
+bGeneral=10,15
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=9
+bDelta25Score=200
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=319
+b_bot_general_approx=10,15
+cUsername=Alguy
+cTiles=30
+cScore=86
+cStandingArmy=56
+cStars=55
+cCityCount=4
+cGeneral=9,0
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=341
+cDelta25Tiles=-7
+cDelta25Score=-10
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=304
+c_bot_general_approx=9,0
+dUsername=EklipZ
+dTiles=77
+dScore=316
+dStandingArmy=239
+dStars=55
+dCityCount=1
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=329
+dDelta25Tiles=26
+dDelta25Score=135
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=319
+d_bot_general_approx=3,0

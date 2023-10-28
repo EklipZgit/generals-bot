@@ -6,10 +6,13 @@ import time
 import typing
 
 
+NS_CONVERTER = (10 ** 9)
+
+
 class MoveEvent(object):
     def __init__(self, event_name: str, parent: MoveEvent | None):
         self.event_name = event_name
-        self.event_start_time: float = time.perf_counter()
+        self.event_start_time: float = time.time_ns() / NS_CONVERTER
         self.event_end_time: typing.Union[None, float] = None
         self.parent: MoveEvent | None = parent
 
@@ -17,20 +20,20 @@ class MoveEvent(object):
         return self
 
     def __exit__(self, *args, **kwargs):
-        self.event_end_time = time.perf_counter()
+        self.event_end_time = time.time_ns() / NS_CONVERTER
         logging.info(f'--------------------\nComplete: {self.event_name} ({self.event_end_time - self.event_start_time:.3f})\n^^^--------------^^^')
 
     def get_duration(self):
         endTime = self.event_end_time
         if endTime is None:
-            endTime = time.perf_counter()
+            endTime = time.time_ns() / NS_CONVERTER
         return endTime - self.event_start_time
 
 
 class MoveTimer(object):
     def __init__(self, turn: int):
         self.turn: int = turn
-        self.move_beginning_time: float = time.perf_counter()
+        self.move_beginning_time: float = time.time_ns() / NS_CONVERTER
         self.event_list: typing.List[MoveEvent] = []
         self.move_sent_time: typing.Union[None, float] = None
         self._event_stack: "queue.LifoQueue[MoveEvent | None]" = queue.LifoQueue()
@@ -40,7 +43,7 @@ class MoveTimer(object):
         return self
 
     def __exit__(self, *args, **kwargs):
-        self.move_sent_time = time.perf_counter()
+        self.move_sent_time = time.time_ns() / NS_CONVERTER
         logging.info(f'\nMOVE Complete: {self.turn} ({self.move_sent_time - self.move_beginning_time:.3f} in, at game {self.move_sent_time:.3f})\n^^^~~~~~~~~~~~~~~^^^')
 
     def begin_event(self, event_description: str) -> MoveEvent:
@@ -57,9 +60,6 @@ class MoveTimer(object):
         self._event_stack.put(event)
         logging.info(f'vvv--------------vvv\nBeginning: {event_description} ({event.event_start_time - self.move_beginning_time:.3f} in)\n')
         return event
-
-    def get_time_elapsed(self):
-        return time.perf_counter() - self.move_beginning_time
 
     def get_events_organized_longest_to_shortest(self, limit: int = 15, indentSize: int = 3) -> typing.List[str]:
         largest15 = list(sorted(self.event_list, key=lambda e: e.get_duration(), reverse=True))[0:limit]
@@ -106,12 +106,13 @@ class MoveTimer(object):
 class PerformanceTimer(object):
     def __init__(self):
         self.move_history: typing.List[MoveTimer] = []
+        self.update_received_history: typing.List[float] = []
         self.current_move: MoveTimer = None
         self.last_turn = 0
-        self.last_update_received_time: float = time.perf_counter()
-        self.last_move_sent_time: float = time.perf_counter()
+        self.last_update_received_time: float = time.time_ns() / NS_CONVERTER
+        self.last_move_sent_time: float = time.time_ns() / NS_CONVERTER
 
-    def record_update(self, turn: int):
+    def record_update(self, turn: int, timeOfUpdate: float):
         if self.current_move is not None:
             if turn != self.current_move.turn + 1:
                 logging.info(f'UPDATE FOR {turn} RECEIVED BEFORE PREVIOUS MOVE {self.current_move.turn} WAS COMPLETE')
@@ -119,7 +120,12 @@ class PerformanceTimer(object):
                 logging.info(f'UPDATE FOR {turn} RECEIVED while previous move {self.current_move.turn} is still incomplete...? Previous move timer data:')
                 logging.info(str(self.current_move))
 
-        self.last_update_received_time = time.perf_counter()
+        while len(self.update_received_history) <= turn:
+            self.update_received_history.append(0.0)
+
+        self.last_update_received_time = timeOfUpdate
+
+        self.update_received_history[turn] = timeOfUpdate
 
     def begin_move(self, turn: int) -> MoveTimer:
         newMove = MoveTimer(turn)
@@ -135,6 +141,8 @@ class PerformanceTimer(object):
         self.move_history.append(self.current_move)
         self.current_move = newMove
         self.last_turn = turn
+        with self.begin_move_event('UPDATE - MOVE START GAP') as moveEvent:
+            moveEvent.event_start_time = self.last_update_received_time + 0.00001
         return self.current_move
 
     def begin_move_event(self, event_description: str) -> MoveEvent:
@@ -144,4 +152,8 @@ class PerformanceTimer(object):
         @return:
         """
         return self.current_move.begin_event(event_description)
+
+    def get_elapsed_since_update(self, turn: int) -> float:
+        elapsed = time.time_ns() / NS_CONVERTER - self.update_received_history[turn]
+        return elapsed
 

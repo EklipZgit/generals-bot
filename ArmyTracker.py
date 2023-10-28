@@ -521,6 +521,9 @@ class ArmyTracker(object):
             if oldTile.isCity or oldTile.isGeneral and self.map.is_city_bonus_turn:
                 oldTile.army += 1
 
+        # if not toTile.visible:
+        #     toTile.player = army.player
+
         if army.scrapped:
             army.expectedPath = None
         else:
@@ -584,13 +587,25 @@ class ArmyTracker(object):
                 army.scrapped = True
                 return
 
+        movingPlayer = self.map.players[army.player]
+
         if not fogTargetTile.visible:
-            if fogTargetTile.player == army.player:
+            if self.map.is_player_on_team_with(fogTargetTile.player, army.player):
                 fogTargetTile.army += army.value
+                if not fogTargetTile.isGeneral:
+                    oldPlayer = self.map.players[fogTargetTile.player]
+                    if fogTargetTile in oldPlayer.tiles:
+                        oldPlayer.tiles.remove(fogTargetTile)
+                    fogTargetTile.player = army.player
+                    movingPlayer.tiles.append(fogTargetTile)
             else:
                 fogTargetTile.army -= army.value
                 if fogTargetTile.army < 0:
                     fogTargetTile.army = 0 - fogTargetTile.army
+                    oldPlayer = self.map.players[fogTargetTile.player]
+                    if fogTargetTile in oldPlayer.tiles:
+                        oldPlayer.tiles.remove(fogTargetTile)
+                    movingPlayer.tiles.append(fogTargetTile)
                     # if not fogTargetTile.discovered and len(army.entangledArmies) == 0:
                     fogTargetTile.player = army.player
         logging.info(f"      fogTargetTile {fogTargetTile.toString()} updated army to {fogTargetTile.army}")
@@ -1404,6 +1419,19 @@ class ArmyTracker(object):
                 if not adjacent.was_visible_last_turn() and self.army_could_capture(army, adjacent) and legalFogMove:
                     # if (closestFog == None or self.distMap[adjacent.x][adjacent.y] < self.distMap[closestFog.x][closestFog.y]):
                     #    closestFog = adjacent
+                    expected = army.value
+                    expectCaptured = False
+                    if self.map.is_player_on_team_with(adjacent.delta.oldOwner, army.player):
+                        expected += adjacent.delta.oldArmy
+                        expectCaptured = True
+                    else:
+                        expected -= adjacent.delta.oldArmy
+                        if expected < 0:
+                            expectCaptured = True
+
+                    if adjacent.visible and ((not expected * 0.7 < adjacent.army < expected * 1.3) or (expectCaptured and adjacent.player != army.player)):
+                        continue
+
                     fogBois.append(adjacent)
                     fogCount += 1
 
@@ -1447,6 +1475,9 @@ class ArmyTracker(object):
                     self.army_moved(army, fogTarget, trackingArmies, dontUpdateOldFogArmyTile=True)
 
                 else:
+                    # validFogDests = []
+                    # for fogBoi in fogBois:
+                    #
                     foundLocation = True
                     logging.info(f"    Army {str(army)} IS BEING ENTANGLED! WHOO! EXCITING!")
                     entangledArmies = army.get_split_for_fog(fogBois)
@@ -1846,5 +1877,8 @@ class ArmyTracker(object):
                         if army.value == 0:
                             self.scrap_army(army)
 
+    def get_tile_emergence_for_player(self, tile: Tile, player: int) -> int:
+        if player == -1:
+            return 0
 
-
+        return self.emergenceLocationMap[player][tile.x][tile.y]

@@ -15,6 +15,7 @@ from BoardAnalyzer import BoardAnalyzer
 from DataModels import Move
 from Engine.ArmyEngineModels import ArmySimState, ArmySimResult, SimTile, ArmySimEvaluationParams
 from MctsLudii import MctsDUCT, Game, Context, MctsEngineSummary
+from Path import Path
 from base.client.map import MapBase, Tile
 from MapMatrix import MapMatrix
 
@@ -53,6 +54,15 @@ class ArmyEngine(object):
         self.nash_eq_iterations: int = 0
         self.time_in_nash_eq: float = 0.0
         self.time_in_nash: float = 0.0
+
+        self.forced_pre_expansions: typing.List[typing.List[Move | None]] | None = None
+        """
+        Feed lists of moves into this (where the moving player is determined by the owner of the first source tile in the move list)
+        and MCTS will be forced to pre-expand these nodes against random moves from the opponent out to full as one of the first orders of business
+        so that it can properly evaluate positions AROUND pre-computed threats/defenses/gathers/expansions.
+        PUT THESE IN THE ORDER OF DANGER / RESPONSE, so threats first, then expected threat response next, 
+        as they will be evaluated in that order and you want to make sure the threat expansion understands it is a threat sequence, etc.
+        """
 
         self.mcts_runner: MctsDUCT | None = mctsRunner
         self.eval_params: ArmySimEvaluationParams = ArmySimEvaluationParams()
@@ -982,7 +992,7 @@ class ArmyEngine(object):
         ctx: Context = Context()
         ctx.set_initial_board_state(self, baseBoardState, game, self.map.turn)
 
-        mctsSummary = self.mcts_runner.select_action(game, ctx, self.time_limit, self.iteration_limit)
+        mctsSummary = self.mcts_runner.select_action(game, ctx, self.time_limit, self.iteration_limit, forcedPreExpansions=self.forced_pre_expansions)
         result = ArmySimResult(mctsSummary.best_result_state)
         result.expected_best_moves = [(bm.playerMoves[0], bm.playerMoves[1]) for bm in mctsSummary.best_moves]
 

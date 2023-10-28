@@ -21,7 +21,11 @@ a3   a3   a3   a3   b3   b3   a3   b2   b2   M    b3   bC19 M    b2   b2   a3   
      M    M              b3   b3   b3   b3   M    M    M    b2   M    a3   a3   a3                  M
 M    M                   b3   b3   b3   b4   b2   b2   b4   b2   M    b2   M    a3        M    M
      M                   M         b3   b3   b2   M    b1   b2   b2   b2   M    C41  M
-|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    turn=309player_index=0teams=1,1,2,2mode=team
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=309
+player_index=0
+teams=1,1,2,2
+mode=team
 targetPlayerExpectedGeneralLocation=0,7
 bot_all_in_counter=0
 bot_all_in=False

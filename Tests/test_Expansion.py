@@ -128,7 +128,7 @@ class ExpansionTests(TestBase):
             self.fail("Path captures didn't match expected:\r\n  " + "\r\n  ".join(failures))
 
     def test__first_25_reroute__2_moves__should_find_2_tile_move(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = f'ExpandUtilsTestMaps/did_not_find_2_move_cap__turn34'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, turn=34, fill_out_tiles=True)
 
@@ -271,6 +271,7 @@ bot_target_player=1
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap,
                                     allAfkExceptMapPlayer=True)
         bot = simHost.get_bot(general.player)
+        bot.timings = bot.get_timings()
         bot.timings.quickExpandTurns = 0
         bot.timings.launchTiming = 25
         bot.timings.splitTurns = 13
@@ -295,6 +296,7 @@ bot_target_player=1
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap,
                                     allAfkExceptMapPlayer=True)
         bot = simHost.get_bot(general.player)
+        bot.timings = bot.get_timings()
         bot.timings.quickExpandTurns = 0
         bot.timings.launchTiming = 25
         bot.timings.splitTurns = 13
@@ -332,6 +334,7 @@ bot_target_player=1
         # achieves 14 diff
         # simHost.queue_player_moves_str(general.player, '5,12->5,13->5,14  17,12->17,11  18,12->18,11  12,12->12,11->13,11->14,11')
 
+        bot.timings = bot.get_timings()
         bot.timings.launchTiming = 30
         bot.timings.splitTurns = 30
 
@@ -345,7 +348,7 @@ bot_target_player=1
         # alternatively
         # 3 in 4 by pushing out the 6,12 2+3, thats 70@10t
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=14)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=14)
         self.assertIsNone(winner)
         pMap = simHost.get_player_map(general.player)
         genPlayer = pMap.players[general.player]
@@ -388,12 +391,13 @@ bot_target_player=1
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         self.set_general_emergence_around(6, 13, simHost, general.player, enemyGeneral.player, emergenceAmt=20)
         bot = simHost.get_bot(general.player)
+        # bot.expansion_length_weight_offset = 0.0
         playerMap = simHost.get_player_map(general.player)
 
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=11)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=11)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 39)
@@ -417,7 +421,7 @@ bot_target_player=1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=20)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=20)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 48)
@@ -438,7 +442,7 @@ bot_target_player=1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.0, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=4)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 44)
@@ -513,7 +517,7 @@ bot_target_player=1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
         # TODO add asserts for should_not_expand_into_neutral_city_wtf
@@ -535,7 +539,7 @@ bot_target_player=1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=13)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=13)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
     
@@ -555,7 +559,29 @@ bot_target_player=1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.0, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
         self.fail("TODO add asserts for should_not_run_down_into_non_enemy_territory_with_kill_threat_army")
+    
+    def test_should_make_6_moves_with_2s_rather_than_gen_expansion__long_term_expansion_fix(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_make_6_moves_with_2s_rather_than_gen_expansion__long_term_expansion_fix___egm4K-VWp---1--144.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 144, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=144)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        bot.expansion_allow_gather_plan_extension = True
+        bot.expansion_always_include_non_terminating_leafmoves_in_iteration = True
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
+        self.assertIsNone(winner)
+
+        self.assertPlayerTileCount(simHost, general.player, 53, "should capture 2 blue tiles and 2 neutrals")
+        self.assertPlayerTileCount(simHost, enemyGeneral.player, 41, "should have captured 2 blue tiles")

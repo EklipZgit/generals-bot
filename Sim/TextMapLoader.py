@@ -17,9 +17,7 @@ import pathlib
 import typing
 
 from SearchUtils import count
-from base.client.map import Tile, TILE_EMPTY, TILE_MOUNTAIN, MapBase
-
-
+from base.client.map import Tile, TILE_EMPTY, TILE_MOUNTAIN, MapBase, PLAYER_CHAR_INDEX_PAIRS
 
 
 class TextMapLoader(object):
@@ -72,6 +70,8 @@ class TextMapLoader(object):
 
         for i in range(lastMapRow + 1, len(rows)):
             kvpStr = rows[i]
+            if not kvpStr:
+                continue
             key, value = kvpStr.split('=')
             if key in mapData:
                 raise AssertionError(f'key {key} in file twice')
@@ -147,6 +147,8 @@ class TextMapLoader(object):
                 tile.tile = TILE_MOUNTAIN
                 tile.player = -1
                 tile.isMountain = True
+                if 'D' in text_tile:
+                    tile.discovered = True
                 return
             case 'a':
                 player = 0
@@ -220,24 +222,7 @@ class TextMapLoader(object):
 
     @staticmethod
     def get_player_char_index_map():
-        return [
-            ('a', 0),
-            ('b', 1),
-            ('c', 2),
-            ('d', 3),
-            ('e', 4),
-            ('f', 5),
-            ('g', 6),
-            ('h', 7),
-            ('i', 8),
-            ('j', 9),
-            ('k', 10),
-            ('l', 11),
-            ('m', 12),
-            ('n', 13),
-            ('o', 14),
-            ('p', 15),
-        ]
+        return PLAYER_CHAR_INDEX_PAIRS
 
     @staticmethod
     def load_map_data_into_map(map: MapBase, data: typing.Dict[str, str]):

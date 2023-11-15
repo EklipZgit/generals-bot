@@ -30,7 +30,7 @@ class PathTests(TestBase):
                 path.add_next(board[1][0])
                 path.add_next(general)
 
-                val = path.calculate_value(forPlayer=1)
+                val = path.calculate_value(forPlayer=1, teams=map._teams)
                 self.assertEquals(1, val)
                 self.assertEquals(1, path.value)
 
@@ -54,7 +54,7 @@ class PathTests(TestBase):
                 for i in range(10):
                     path.add_next(board[9 - i][0])
 
-                val = path.calculate_value(forPlayer=1)
+                val = path.calculate_value(forPlayer=1, teams=map._teams)
                 self.assertEquals(1, val)
                 self.assertEquals(1, path.value)
 
@@ -77,7 +77,7 @@ class PathTests(TestBase):
                 path.add_next(board[1][0])
                 path.add_next(target)
 
-                val = path.calculate_value(forPlayer=1)
+                val = path.calculate_value(forPlayer=1, teams=map._teams)
                 self.assertEquals(1, val)
                 self.assertEquals(1, path.value)
 
@@ -98,7 +98,7 @@ class PathTests(TestBase):
                 path.add_next(threatTile)
                 path.add_next(target, move_half=True)
 
-                val = path.calculate_value(forPlayer=0)
+                val = path.calculate_value(forPlayer=0, teams=map._teams)
                 self.assertEquals(expectedVal, val)
                 self.assertEquals(expectedVal, path.value)
 
@@ -121,7 +121,7 @@ class PathTests(TestBase):
                 for i in range(10):
                     path.add_next(board[9 - i][0])
 
-                val = path.calculate_value(forPlayer=1)
+                val = path.calculate_value(forPlayer=1, teams=map._teams)
                 self.assertEquals(1, val)
                 self.assertEquals(1, path.value)
 
@@ -272,6 +272,6 @@ class PathTests(TestBase):
                 path.add_next(threatTile)
                 path.add_next(target)
 
-                val = path.calculate_value(forPlayer=0)
+                val = path.calculate_value(forPlayer=0, teams=map._teams)
                 self.assertEquals(1, val)
                 self.assertEquals(1, path.value)

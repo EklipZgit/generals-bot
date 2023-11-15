@@ -79,6 +79,7 @@ class TestBase(unittest.TestCase):
         general = next(t for t in map.pathableTiles if t.isGeneral and (t.player == player_index or player_index == -1))
         map.player_index = general.player
         map.generals[general.player] = general
+        map.resume_data = data
 
         return map, general
 
@@ -299,7 +300,7 @@ class TestBase(unittest.TestCase):
                 if figureOutPlayerCount:
                     num_players = max(num_players, tile.player + 1)
 
-        fakeScores = [Score(n, 100, 100, False) for n in range(0, num_players)]
+        fakeScores = [Score(n, 1, 1, False) for n in range(0, num_players)]
 
         usernames = [c for c, idx in TextMapLoader.get_player_char_index_map()]
 
@@ -574,20 +575,6 @@ class TestBase(unittest.TestCase):
 
         return enemyGeneral
 
-    def get_tile_differential(self, simHost: GameSimulatorHost, player: int) -> int:
-        """
-        Returns the current tile differential, positive means player has more, negative means opp has more. Only works for 2 player games (not FFA with only 2 players left).
-
-        @param simHost:
-        @param player:
-        @return:
-        """
-        pMap = simHost.get_player_map(player)
-        pTiles = pMap.players[player].tileCount
-        enTiles = pMap.players[player - 1].tileCount
-
-        return pTiles - enTiles
-
     def get_renderable_view_info(self, map: MapBase) -> ViewInfo:
         viewInfo = ViewInfo(1, map.cols, map.rows)
         viewInfo.playerTargetScores = [0 for p in map.players]
@@ -597,7 +584,7 @@ class TestBase(unittest.TestCase):
         titleString = infoString
         if titleString is None:
             titleString = self._testMethodName
-        viewer = ViewerHost(titleString, cell_width=None, cell_height=None, alignTop=False, alignLeft=False, noLog=True)
+        viewer = ViewerHost(titleString, cell_width=50, cell_height=50, alignTop=False, alignLeft=False, noLog=True)
         viewer.noLog = True
         if infoString is not None:
             viewInfo.infoText = infoString
@@ -926,6 +913,34 @@ class TestBase(unittest.TestCase):
         map.generals[furthestTile.player] = furthestTile
         enemyGen = furthestTile
         return enemyGen
+
+    def get_tile_differential(self, simHost: GameSimulatorHost, player: int = -1, otherPlayer: int = -1) -> int:
+        """
+        Returns the current tile differential, positive means player has more, negative means opp has more. Only works for 2 player games (not FFA with only 2 players left).
+
+        @param simHost:
+        @param player:
+        @param otherPlayer:
+        @return:
+        """
+        if player == -1:
+            player = simHost.sim.sim_map.player_index
+
+        if otherPlayer == -1:
+            if simHost.sim.sim_map.remainingPlayers > 2:
+                raise AssertionError("Must explicitly pass otherPlayer when remainingPlayers > 2")
+
+            for playerObj in simHost.sim.sim_map.players:
+                if playerObj.index == player:
+                    continue
+                if not playerObj.dead:
+                    otherPlayer = playerObj.index
+
+        pMap = simHost.get_player_map(player)
+        pTiles = pMap.players[player].tileCount
+        enTiles = pMap.players[player - 1].tileCount
+
+        return pTiles - enTiles
 
     def move_enemy_general(
             self,

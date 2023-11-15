@@ -433,6 +433,11 @@ class GeneralsClient(object):
         with self._lock:
             self._send(["clear_moves"])
 
+    def send_surrender(self):
+        logging.info("\n\nSending surrender")
+        with self._lock:
+            self._send(["surrender"])
+
     def _send_forcestart(self):
         time.sleep(1.5)  # was 2, if custom games break?
         while 'replay_id' not in self._start_data:
@@ -476,7 +481,7 @@ class GeneralsClient(object):
             if len(self.chatQueued) > 0:
                 message = self.chatQueued.pop(0)
                 self._send_chat_immediate(message)
-            time.sleep(3)
+            time.sleep(1)
 
     def _send(self, msg):
         try:

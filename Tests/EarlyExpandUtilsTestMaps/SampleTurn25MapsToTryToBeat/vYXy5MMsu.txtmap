@@ -1,0 +1,70 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M         M                   M                             M    M
+               M    M              M                             M    M                             M    M
+                                        M                        M                   M    M    M    M
+M                                                           M                   M         b2   b2   b3
+M    M    M    M    M         M              M    M              M    M    M         M    b2   M
+                                             M                        M         M    b2   bG4  M    M
+M                        M    M                   b2   b2   b2   b2   b2   b2   b2   b2   M              M
+M                        M                   M    b2                  b2   b2   C45       M         M
+                         M    M    M         M    b2        M    C45  b2   M         M         M
+M                   M    M                   M    b2        b2   b2   b2                  M
+M    M    M    M    M         M                                       C40  M    M              M
+M                                            M                                                 M
+               M              M              M                             M         M
+                         M         M         M    M
+                                             M    M                        M         M    M
+M              M                                       M    M    M
+                         M              M    M                        M         M
+     M    M                        M                                  M    M                             M
+               M    M                        M         M         M              M
+     M                                            M    M                   M    M    M    M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=50
+player_index=1
+mode=1v1
+bot_target_player=0
+targetPlayerExpectedGeneralLocation=8,11
+bot_is_all_in_losing=False
+bot_all_in_losing_counter=0
+bot_is_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=598755125686445127
+aTiles=23
+aScore=49
+aStandingArmy=26
+aStars=72
+aCityCount=1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=22
+aDelta25Score=48
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=0
+bUsername=Human.exe
+bTiles=23
+bScore=49
+bStandingArmy=26
+bStars=70
+bCityCount=1
+bGeneral=18,5
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=22
+bDelta25Score=48
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=50
+b_bot_general_approx=18,5

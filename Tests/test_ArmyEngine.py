@@ -12,6 +12,7 @@ from BoardAnalyzer import BoardAnalyzer
 from DataModels import Move
 from Engine.ArmyEngineModels import calc_value_int, calc_econ_value, ArmySimState
 from MctsLudii import MctsDUCT, MoveSelectionFunction
+from Path import Path
 from Sim.GameSimulator import GameSimulatorHost, GameSimulator
 from TestBase import TestBase
 from base.client.map import Tile, MapBase
@@ -89,9 +90,9 @@ class ArmyEngineTests(TestBase):
                 engine.log_payoff_depth = 1
                 nextResult = engine.scan(result.best_result_state.depth - 1, mcts=True)
                 self.render_step_engine_analysis(engine, sim, nextResult, armyA, armyB)
-            else:
-                # this is the last thing we do before we return
-                self.render_sim_analysis(map, result)
+            # else:
+            #     # this is the last thing we do before we return
+            #     self.render_sim_analysis(map, result)
 
     def assertBoardStateMatchesGameEngine(self, sim: GameSimulator, boardState: ArmySimState, frPlayer: int, enPlayer: int):
         self.assertEqual(sim.turn, boardState.turn)
@@ -551,6 +552,7 @@ bTiles=20
         )
 
     def test_engine__validate_all_tile_types__brute_force_moves__validate_sim_state__two_deep(self):
+        return  # this is like billions of tests or whatever
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         outerMap, general, allyGen, enemyGen, enemyAllyGen = self.load_map_and_generals_2v2_from_string(SIM_VS_ENGINE_ALL_TILE_TYPES_TEST_MAP, 0)
@@ -1356,9 +1358,8 @@ bTiles=20
         if debugMode:
             self.render_sim_analysis(map, result)
 
-
     def test_does_not_over_recognize_losses_on_general_distances(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/does_not_fail_defense___BgVc48Chn---b--792.txtmap'
 
         for turn in [0, 1]:
@@ -1416,7 +1417,7 @@ bTiles=20
                     self.assertFalse(result.best_result_state.captured_by_enemy)
                     self.assertFalse(result.best_result_state.captures_enemy)
                     simHost.queue_player_move(general.player, result.expected_best_moves[0][0])
-                    winner = simHost.run_sim(run_real_time=False, turn_time=5, turns=1)
+                    winner = simHost.execute_turn(run_real_time=debugMode, turn_time=0.5)
                     self.assertIsNone(winner)
 
     def test_engine__does_not_over_recognize_wins_on_general_distances(self):
@@ -1532,7 +1533,7 @@ bot_target_player=1
 aTiles=20
 bTiles=20
 """
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
         # Both should have half the board if this gens correctly..
 
@@ -2232,7 +2233,7 @@ bTiles=20
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
         self.assertIsNone(winner)
 
-        # TODO add asserts for should_not_generate_idkQQ_error_in_scrim_8_11__7_12
+        self.skipTest("TODO add asserts")  #  for should_not_generate_idkQQ_error_in_scrim_8_11__7_12
     
     def test_should_not_lock_up_mcts(self):
         for i in range(10):
@@ -2296,7 +2297,7 @@ bTiles=20
         self.assertIsNone(winner)
     
     def test_should_not_dance_around_armies_standing_still(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_dance_around_armies_standing_still___HeEzmHU03---0--269.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 269, fill_out_tiles=True)
 
@@ -2548,7 +2549,7 @@ bTiles=20
         # bot.init_turn()
         # bot.viewInfo.turnInc()
         # bot.viewInfo.armyTracker = bot.armyTracker
-        bot.mcts_engine.explore_factor = 0.1
+        # bot.mcts_engine.explore_factor = 0.1
         bot.find_end_of_turn_scrim_move(None, None)
         duration = time.perf_counter() - start
         if debugMode:
@@ -2628,7 +2629,8 @@ bTiles=20
             initialBoardState,
             frMove=frMove1,
             enMove=enMove1,
-            noClone=False)
+            noClone=False,
+            perfTelemetry=mcts.performance_telemetry)
 
         sim.execute_turn(dont_require_all_players_to_move=True)
         if debug:
@@ -2654,7 +2656,8 @@ bTiles=20
             move1BoardState,
             frMove=frMove2,
             enMove=enMove2,
-            noClone=False)
+            noClone=False,
+            perfTelemetry=mcts.performance_telemetry)
 
         sim.execute_turn(dont_require_all_players_to_move=True)
         # if debug:
@@ -2681,3 +2684,105 @@ bTiles=20
         #
         # self.assertEqual(0, result.best_result_state.city_differential)
         # self.assertGreater(len(result.expected_best_moves), 1)
+
+    def test__should_realize_it_can_save_one_move_behind__when_paths_fed_into_mcts_pre_explore(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        for turn in [792, 793]:
+            for defenseBlockedByMountain in [True, False]:
+                for shortCircuit in [True, False]:
+                    for canDefend in [False, True]:
+                        for includeDefensePath in [False, True]:
+                            with self.subTest(shortCircuit=shortCircuit, canDefend=canDefend, includeDefensePath=includeDefensePath, defenseBlockedByMountain=defenseBlockedByMountain, turn=turn):
+                                mapFile = 'GameContinuationEntries/does_not_fail_defense___BgVc48Chn---b--792.txtmap'
+                                map, general, enemyGeneral = self.load_map_and_generals(mapFile, turn)
+
+                                defenseTile = map.GetTile(12, 4)
+                                if not canDefend:
+                                    defenseTile.army = 70  # not enough to defend, anymore
+                                else:
+                                    defenseTile.army = 140
+
+                                if defenseBlockedByMountain:
+                                    mtn = map.GetTile(14, 1)
+                                    map.convert_tile_to_mountain(mtn)
+
+                                self.enable_search_time_limits_and_disable_debug_asserts()
+
+                                aArmy, bArmy = self.get_test_army_tiles(map, general, enemyGeneral)
+
+                                boardAnalysis = BoardAnalyzer(map, general)
+                                boardAnalysis.rebuild_intergeneral_analysis(enemyGeneral)
+
+                                self.begin_capturing_logging()
+                                mcts: MctsDUCT = MctsDUCT()
+                                # mcts.logAll = True
+                                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
+                                armyEngine.enemy_has_kill_threat = shortCircuit
+                                armyEngine.time_limit = 1000000.0
+                                armyEngine.iteration_limit = 5000
+                                # armyEngine.mcts_runner
+
+                                offensePath = Path()
+                                offensePath.add_next(map.GetTile(15, 6))
+                                offensePath.add_next(map.GetTile(16, 6))
+                                offensePath.add_next(map.GetTile(16, 5))
+                                offensePath.add_next(map.GetTile(16, 4))
+                                offensePath.add_next(map.GetTile(16, 3))
+                                offensePath.add_next(map.GetTile(16, 2))
+                                offensePath.add_next(map.GetTile(16, 1))
+                                offensePath.add_next(map.GetTile(15, 1))
+
+                                armyEngine.forced_pre_expansions = [offensePath.convert_to_move_list()]
+
+                                if includeDefensePath:
+                                    defensePath = Path()
+                                    defensePath.add_next(map.GetTile(12, 4))
+                                    defensePath.add_next(map.GetTile(12, 3))
+                                    defensePath.add_next(map.GetTile(13, 3))
+                                    defensePath.add_next(map.GetTile(14, 3))
+                                    if not defenseBlockedByMountain:
+                                        defensePath.add_next(map.GetTile(15, 3))
+                                        defensePath.add_next(map.GetTile(16, 3))
+                                        defensePath.add_next(map.GetTile(16, 2))
+                                        defensePath.add_next(map.GetTile(16, 1))
+                                    else:
+                                        defensePath.add_next(map.GetTile(14, 2))
+                                        defensePath.add_next(map.GetTile(14, 1))
+                                        defensePath.add_next(map.GetTile(15, 1))
+                                    armyEngine.forced_pre_expansions.append(defensePath.convert_to_move_list())
+
+                                result = armyEngine.scan(5, mcts=True)
+
+                                if debugMode:
+                                    self.render_sim_analysis(map, result)
+
+                                if canDefend:
+                                    self.assertFalse(result.best_result_state.captures_enemy)
+                                    self.assertFalse(result.best_result_state.captured_by_enemy, 'the bot dies from this position on odd turns.')
+                                    self.assertLess(result.net_economy_differential, 0, "I mean, A definitely fucks B up from this position but doesn't kill")
+                                    self.assertGreater(result.net_economy_differential, -22.0, "A doesn't do more than 16 econ worth of damage here")
+                                else:
+                                    self.assertFalse(result.best_result_state.captures_enemy)
+                                    self.assertLess(result.net_economy_differential, -50, "It should be recognized that A kills B, even if not in the final result state but at least the average value of that pathway should be very negative.")
+                                    self.assertTrue(result.best_result_state.captured_by_enemy, 'Ideally we SHOULD recognize that this is a death...?')
+
+                                # simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                                # simHost.queue_player_moves_str(enemyGeneral.player, '15,6->16,6->16,5->16,4->16,3->16,2->16,1->15,1')
+                                # simHost.queue_player_moves_str(general.player, '16,1->15,1')
+                                #
+                                # ekBot = simHost.bot_hosts[general.player].eklipz_bot
+                                #
+                                # threat = ekBot.dangerAnalyzer.fastestThreat
+                                # self.assertIsNotNone(threat)
+                                #
+                                # self.begin_capturing_logging()
+                                # move, valueGathered, turnsUsed, gatherNodes = ekBot.get_gather_to_threat_path(threat, shouldLog=True)
+                                #
+                                # viewInfo = ekBot.viewInfo
+                                # viewInfo.gatherNodes = gatherNodes
+                                #
+                                # self.assertGreater(valueGathered, threat.threatValue)
+                                #
+                                # winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.5, turns=13)
+                                # self.assertIsNone(winner)

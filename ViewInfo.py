@@ -7,13 +7,8 @@
 
 import logging
 import typing
-from copy import deepcopy
-import time
-import json
 from collections import deque
 from enum import Enum
-from queue import PriorityQueue
-from pprint import pprint,pformat
 
 from ArmyTracker import Army, ArmyTracker
 from BoardAnalyzer import BoardAnalyzer
@@ -21,6 +16,7 @@ from DangerAnalyzer import DangerAnalyzer
 from DataModels import GatherTreeNode
 from Directives import Timings
 from Path import Path
+from StrategyModels import CycleStatsData
 from Territory import TerritoryClassifier
 from base.client.map import Tile
 from MapMatrix import MapMatrix
@@ -68,6 +64,9 @@ class ViewInfo(object):
         self.timings: Timings | None = None
         self.allInCounter: int = 0
         self.targetPlayer: int = -1
+        self.team_cycle_stats: typing.Dict[int, CycleStatsData] = {}
+        self.team_last_cycle_stats: typing.Dict[int, CycleStatsData] = {}
+        self.player_fog_tile_counts: typing.Dict[int, typing.Dict[int, int]] = {}
         self.generalApproximations: typing.List[typing.Tuple[float, float, int, Tile | None]] = []
         """
         List of general location approximation data as averaged by enemy tiles bordering undiscovered and euclid averaged.

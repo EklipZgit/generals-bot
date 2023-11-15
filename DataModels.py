@@ -1,8 +1,8 @@
 """
-	@ Travis Drake (EklipZ) eklipz.io - tdrake0x45 at gmail)
-	April 2017
-	Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
-	EklipZ bot - Tries to play generals lol
+    @ Travis Drake (EklipZ) eklipz.io - tdrake0x45 at gmail)
+    April 2017
+    Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
+    EklipZ bot - Tries to play generals lol
 """
 
 import typing
@@ -148,25 +148,26 @@ class Move(object):
         return self.source.army - self.dest.army < other.source.army - other.dest.army
 
     def __str__(self):
-        return self.toString()
+        moveHalfString = ""
+        if self.move_half:
+            moveHalfString = 'z'
+        return f"{self.source.x},{self.source.y} -{moveHalfString}> {self.dest.x},{self.dest.y}"
 
     def __repr__(self):
-        return self.toString()
+        return str(self)
 
     def __hash__(self):
         return hash((self.source.x, self.source.y, self.dest.x, self.dest.y, self.move_half))
 
     def __eq__(self, other):
         if isinstance(other, Move):
-            return self.source.x == other.source.x and self.source.y == other.source.y and self.dest.x == other.dest.x and self.dest.y and self.move_half == other.move_half
+            return self.source.x == other.source.x and self.source.y == other.source.y and self.dest.x == other.dest.x and self.dest.y == other.dest.y and self.move_half == other.move_half
 
         return False
 
-    def toString(self):
-        moveHalfString = ""
-        if self.move_half:
-            moveHalfString = 'z'
-        return "{},{} -{}> {},{}".format(self.source.x, self.source.y, moveHalfString, self.dest.x, self.dest.y)
+    def toString(self) -> str:
+        return str(self)
+
 
 class ContestData(object):
     def __init__(self, tile: Tile):

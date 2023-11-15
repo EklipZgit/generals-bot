@@ -27,16 +27,16 @@ class ArmySimEvaluationParams(object):
         self.friendly_move_penalty_10_fraction = 4
         self.enemy_move_penalty_10_fraction = -4
 
-        self.kills_friendly_armies_10_fraction = -10
+        self.kills_friendly_armies_10_fraction = 0  # -8
         """This is added to the score if all friendly armies are killed."""
 
-        self.kills_enemy_armies_10_fraction = 10
+        self.kills_enemy_armies_10_fraction = 0  # 10
         """This is added to the score if all enemy armies are killed."""
 
-        self.friendly_move_no_op_scale_10_fraction = 8
+        self.friendly_move_no_op_scale_10_fraction = 0  # 4
         """zero or positive. The econ value scale 10 that friendly gets from a no-op, in addition to no move penalty they already get from no-op."""
 
-        self.enemy_move_no_op_scale_10_fraction = -8
+        self.enemy_move_no_op_scale_10_fraction = 0  # -4
         """zero or negative. The econ value scale 10 that enemy gets from a no-op, in addition to no move penalty they already get from no-op."""
 
         self.always_reward_dead_army_no_ops: bool = True

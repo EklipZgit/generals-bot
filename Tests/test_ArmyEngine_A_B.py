@@ -1048,14 +1048,15 @@ class ArmyEngineABTests(TestBase):
         self.begin_capturing_logging()
 
         def configure_b(bBot: EklipZBot):
-            bBot.expansion_always_include_non_terminating_leafmoves_in_iteration = False
-            bBot.expansion_allow_gather_plan_extension = False
+            bBot.behavior_max_allowed_quick_expand = 7
             pass
 
         def configure_a(aBot: EklipZBot):
+            aBot.behavior_max_allowed_quick_expand = 0
+
             # 283-213
-            aBot.expansion_always_include_non_terminating_leafmoves_in_iteration = True
-            aBot.expansion_allow_gather_plan_extension = True
+            # aBot.expansion_always_include_non_terminating_leafmoves_in_iteration = True
+            # aBot.expansion_allow_gather_plan_extension = True
 
             # pre-codified at 14-10 but UNDONE
             # aBot.expansion_length_weight_offset = 0.8  # b is 0.5
@@ -1124,17 +1125,19 @@ class ArmyEngineABTests(TestBase):
 
     def test_A_B__OTHER__3(self):
         numRuns = 500
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         self.begin_capturing_logging()
 
         def configure_b(bBot: EklipZBot):
+            bBot.behavior_max_allowed_quick_expand = 7
             # bBot.expansion_length_weight_offset = -0.3
-            bBot.expansion_allow_gather_plan_extension = False
+            # bBot.expansion_allow_gather_plan_extension = False
             pass
 
         def configure_a(aBot: EklipZBot):
+            aBot.behavior_max_allowed_quick_expand = 0
             # 257-237
-            aBot.expansion_allow_gather_plan_extension = True
+            # aBot.expansion_allow_gather_plan_extension = True
 
             # 194-198, b -0.3, AGAIN
             # 191-180, not significant
@@ -1154,7 +1157,7 @@ class ArmyEngineABTests(TestBase):
             configureA=configure_a,
             configureB=configure_b,
             debugMode=debugMode,
-            debugModeTurnTime=0.001,
+            debugModeTurnTime=0.5,
             debugModeRenderAllPlayers=False,
             noCities=None,
         )
@@ -1165,14 +1168,18 @@ class ArmyEngineABTests(TestBase):
         self.begin_capturing_logging()
 
         def configure_b(bBot: EklipZBot):
+            bBot.engine_include_path_pre_expansion = False
+
             # bBot.expansion_length_weight_offset = -0.3
             # bBot.behavior_launch_timing_offset = +4
             pass
 
         def configure_a(aBot: EklipZBot):
+            aBot.engine_include_path_pre_expansion = True
+
             # in stage 1 and 2
             # 261-234
-            aBot.expansion_always_include_non_terminating_leafmoves_in_iteration = True
+            # aBot.expansion_always_include_non_terminating_leafmoves_in_iteration = True
 
             # aBot.mcts_engine.min_expanded_visit_count_to_count_for_score = 50  # v 20
 

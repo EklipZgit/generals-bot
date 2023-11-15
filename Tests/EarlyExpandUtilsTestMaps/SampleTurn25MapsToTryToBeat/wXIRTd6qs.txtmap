@@ -1,0 +1,174 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M    M    M         M                        M              M                             M              M    M
+     M                             M    M                                                                M
+     M    M                   M                                                 M                                       M
+                    M         M    M                                       M                   M    M         M
+                                                                                                              M    M
+                              M              M                             M         M    M                   M    M    M    M
+                         M              M    M    M    M         M                                  M    M                   M
+          M         M    M                                                 M              M         M                   M
+                                                       M              M              M                        M
+               M    M         M    M    M                        M    M                        M         M         M    M
+                                   M                        M              M         M                                            M
+     M    M    M         M                   M    M                        M    M              M                        M         M
+                                                       M    M              M              M    M              M                   M
+     M    M    M                                                      M    M    M                        M    M
+M         M              M                                                 M    M         M
+     M    M                                                                                              M
+M    M    M         M              M                   M                   M                                       M
+          a2                                                          M    M         M                             M    M
+M         a2             M    M         M    M                                  M                   M
+          a2             M         M         M
+          a2                                 M                   M    M                             M         M
+          a2                       M              M         M    M         M              M    M                                  M
+a2   a2   aG8  a2   a2   a2   a2   a2   a2   a2   M    M         M                                            M         M    M
+a2        M         M                        a2   a2                                      M                        M
+     C41       M    M              M         M    a2             M                   M    M
+M    M                   M                   C48  a2   M                   M                                                 M
+                                                                                               M         M
+               M    M                             M    M    M         M         M    M              M              M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=50
+player_index=0
+mode=ffa
+bot_target_player=-1
+targetPlayerExpectedGeneralLocation=20,16
+bot_is_all_in_losing=False
+bot_all_in_losing_counter=0
+bot_is_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=20
+aScore=46
+aStandingArmy=26
+aStars=72
+aCityCount=1
+aGeneral=2,22
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=19
+aDelta25Score=45
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=50
+a_bot_general_approx=2,22
+bUsername=laijulang
+bTiles=15
+bScore=41
+bStandingArmy=26
+bStars=67
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=14
+bDelta25Score=40
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=0
+cUsername=16555551
+cTiles=23
+cScore=49
+cStandingArmy=26
+cStars=68
+cCityCount=1
+cKnowsKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=22
+cDelta25Score=48
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=0
+dUsername=45645aa
+dTiles=21
+dScore=47
+dStandingArmy=26
+dStars=70
+dCityCount=1
+dKnowsKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+dDelta25Tiles=20
+dDelta25Score=46
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=0
+eUsername=milosnikolic
+eTiles=25
+eScore=51
+eStandingArmy=26
+eStars=73
+eCityCount=1
+eKnowsKingLocation=False
+eDead=False
+eLeftGame=False
+eLeftGameTurn=-1
+eAggressionFactor=0
+eDelta25Tiles=24
+eDelta25Score=50
+eCityGainedTurn=0
+eCityLostTurn=0
+eLastSeenMoveTurn=0
+fUsername=swagner2
+fTiles=17
+fScore=36
+fStandingArmy=19
+fStars=73
+fCityCount=1
+fKnowsKingLocation=False
+fDead=False
+fLeftGame=False
+fLeftGameTurn=-1
+fAggressionFactor=0
+fDelta25Tiles=16
+fDelta25Score=35
+fCityGainedTurn=0
+fCityLostTurn=0
+fLastSeenMoveTurn=0
+gUsername=Bithmus
+gTiles=19
+gScore=45
+gStandingArmy=26
+gStars=69
+gCityCount=1
+gKnowsKingLocation=False
+gDead=False
+gLeftGame=False
+gLeftGameTurn=-1
+gAggressionFactor=0
+gDelta25Tiles=18
+gDelta25Score=44
+gCityGainedTurn=0
+gCityLostTurn=0
+gLastSeenMoveTurn=0
+hUsername=yurtlujohn.
+hTiles=15
+hScore=34
+hStandingArmy=19
+hStars=73
+hCityCount=1
+hKnowsKingLocation=False
+hDead=False
+hLeftGame=False
+hLeftGameTurn=-1
+hAggressionFactor=0
+hDelta25Tiles=14
+hDelta25Score=33
+hCityGainedTurn=0
+hCityLostTurn=0
+hLastSeenMoveTurn=0

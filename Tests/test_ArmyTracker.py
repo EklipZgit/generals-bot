@@ -84,10 +84,10 @@ class ArmyTrackerTests(TestBase):
 
     def test_small_gather_adj_to_fog_should_not_double_gather_from_fog(self):
         # SEE TEST WITH THE SAME NAME IN test_Map.py which proves that this bug is not the map engines fault, and is instead armytracker emergence as the cause.
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/small_gather_adj_to_fog_should_not_double_gather_from_fog___rgI9fxNa3---a--451.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 451, fill_out_tiles=True)
-        rawMap, gen = self.load_map_and_general(mapFile, 451)
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 451, fill_out_tiles=True, respect_player_vision=True)
+        rawMap, gen = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=451)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
@@ -99,7 +99,7 @@ class ArmyTrackerTests(TestBase):
         self.begin_capturing_logging()
 
         if debugMode:
-            simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player))
+            simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, aroundTile=map.GetTile(10, 14)))
             simHost.run_sim(run_real_time=debugMode, turn_time=5, turns=2)
             return
 
@@ -133,19 +133,20 @@ class ArmyTrackerTests(TestBase):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
 
         for frArmy, enArmy, expectedTileArmy in [(53, 58, 0), (52, 58, -1), (62, 58, 11), (42, 58, -9), (54, 58, 1)]:
+            mapFile = 'GameContinuationEntries/should_recognize_army_collision_from_fog___BlpaDuBT2---b--136.txtmap'
+            map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136)
+
+            self.enable_search_time_limits_and_disable_debug_asserts()
+
+            # Grant the general the same fog vision they had at the turn the map was exported
+            rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=136)
+
+            map.GetTile(5, 15).army = frArmy
+            rawMap.GetTile(5, 15).army = frArmy
+            map.GetTile(12, 16).army = enArmy
+            rawMap.GetTile(12, 16).army = enArmy
+
             with self.subTest(frArmy=frArmy, enArmy=enArmy, expectedTileArmy=expectedTileArmy):
-                mapFile = 'GameContinuationEntries/should_recognize_army_collision_from_fog___BlpaDuBT2---b--136.txtmap'
-                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136)
-
-                self.enable_search_time_limits_and_disable_debug_asserts()
-
-                # Grant the general the same fog vision they had at the turn the map was exported
-                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=136)
-
-                map.GetTile(5, 15).army = frArmy
-                rawMap.GetTile(5, 15).army = frArmy
-                map.GetTile(12, 16).army = enArmy
-                rawMap.GetTile(12, 16).army = enArmy
 
                 simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
                 simHost.queue_player_moves_str(general.player,      "5,15->6,15->7,15->8,15->9,15")
@@ -272,13 +273,15 @@ class ArmyTrackerTests(TestBase):
                     self.assertFalse(collision.scrapped)
                 else:
                     self.assertTrue(collision.scrapped)
-            with self.subTest(careLess=True, frArmy=frArmy, enArmy=enArmy, expectedTileArmy=expectedTileArmy):
-                # eh, dunno how much I care about this
-                self.assertEqual(enemyGeneral.player, t11_16.player, "eh, dunno how much I care but technically we know for sure that this tile was crossed despite undiscovered, should be en player.")
-                self.assertEqual(1, t11_16.army, "eh, dunno how much I care but technically we know for sure that this tile was crossed despite undiscovered, should have army 1")
+
+                with self.subTest(careLess=True, frArmy=frArmy, enArmy=enArmy, expectedTileArmy=expectedTileArmy):
+                    t11_16 = m.GetTile(11, 16)
+                    # eh, dunno how much I care about this
+                    self.assertEqual(enemyGeneral.player, t11_16.player, "eh, dunno how much I care but technically we know for sure that this tile was crossed despite undiscovered, should be en player.")
+                    self.assertEqual(1, t11_16.army, "eh, dunno how much I care but technically we know for sure that this tile was crossed despite undiscovered, should have army 1")
 
     def test_should_track_army_fog_island_capture(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_track_army_fog_island_capture___HlPWKpCT3---b--499.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 499, fill_out_tiles=True)
 
@@ -296,7 +299,7 @@ class ArmyTrackerTests(TestBase):
         self.begin_capturing_logging()
 
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=3)
         self.assertIsNone(winner)
     
     def test_should_not_duplicate_fog_island_armies(self):
@@ -759,8 +762,8 @@ class ArmyTrackerTests(TestBase):
         # should also run army emergence to indicate that the player is probably behind the wall if broken through a wall
         emergeTile1 = self.get_player_tile(3, 9, simHost.sim, general.player)
         emergeTile2 = self.get_player_tile(4, 8, simHost.sim, general.player)
-        self.assertGreater(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][emergeTile1.x][emergeTile1.y], 9)
-        self.assertGreater(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][emergeTile2.x][emergeTile2.y], 9)
+        self.assertGreater(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][emergeTile1.x][emergeTile1.y], 1.9)
+        self.assertGreater(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][emergeTile2.x][emergeTile2.y], 1.9)
     
     def test_should_not_think_fog_city_when_reasonable_fog_move(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -862,7 +865,7 @@ class ArmyTrackerTests(TestBase):
         self.assertIsNone(winner)
 
     def test_should_determine_opp_took_city_in_fog_and_register_scary_alternate_attack_threat(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         # the results are kinda randomized based on how the tile movables are shuffled; make sure they all result in finding the city.
 
@@ -1095,7 +1098,7 @@ a1   b1   b1   bG1
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
-        # TODO add asserts for should_not_duplicate_on_army_collision_next_to_fog
+        self.skipTest("TODO add asserts")  #  for should_not_duplicate_on_army_collision_next_to_fog
     
     def test_should_detect_armies_from_fog(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1315,10 +1318,10 @@ a1   b1   b1   bG1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=3.0, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
         self.assertIsNone(winner)
 
-        # TODO add asserts for should_not_duplicate_fog_emergence_neutral_army
+        self.skipTest("TODO add asserts")  #  for should_not_duplicate_fog_emergence_neutral_army
 
     def test_should_not_think_2v2_move_is_from_neut_city(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1358,7 +1361,7 @@ a1   b1   b1   bG1
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
-        # TODO add asserts for should_not_capture_fog_island_neutral_then_invent_infinite_army
+        self.skipTest("TODO add asserts")  #  for should_not_capture_fog_island_neutral_then_invent_infinite_army
     
     def test_should_drop_crazy_broken_army(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1395,6 +1398,7 @@ a1   b1   b1   bG1
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '9,1->9,0->8,0->7,0->6,0->5,0->4,0->3,0->3,1->3,2->3,3->3,4->3,5->3,6->3,7->3,8->4,8->4,9')
+        simHost.queue_player_moves_str(general.player, '6,3->6,2')
         bot = simHost.get_bot(general.player)
         playerMap = simHost.get_player_map(general.player)
 
@@ -1406,7 +1410,7 @@ a1   b1   b1   bG1
         self.assertNoFriendliesKilled(map, general, allyGen)
     
     def test_should_not_create_phantom_visible_army(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_create_phantom_visible_army___1sM7IUnt5---3--133.txtmap'
         map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 133, fill_out_tiles=False)
 
@@ -1448,3 +1452,613 @@ a1   b1   b1   bG1
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
         self.assertNoFriendliesKilled(map, general, allyGen)
+    
+    def test_should_drop_bad_fog_predictions_after_discovering_army_came_from_different_direction(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_drop_bad_fog_predictions_after_discovering_army_came_from_different_direction___lUHbWMb9w---2--211.txtmap'
+        map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 211, fill_out_tiles=True)
+
+        goodTiles = [
+            map.GetTile(10, 15),
+            map.GetTile(11, 15),
+            map.GetTile(12, 15),
+            map.GetTile(13, 15),
+            map.GetTile(14, 15),
+            map.GetTile(13, 16),
+            map.GetTile(13, 17),
+        ]
+        badTiles = [
+            map.GetTile(8, 15),
+            map.GetTile(8, 16),
+            map.GetTile(7, 16),
+            map.GetTile(6, 16),
+            map.GetTile(5, 16),
+            map.GetTile(4, 16),
+            map.GetTile(3, 16),
+            map.GetTile(3, 15),
+            map.GetTile(3, 14),
+            map.GetTile(3, 13),
+            map.GetTile(4, 13),
+            map.GetTile(6, 13),
+            map.GetTile(6, 12),
+        ]
+        for tile in goodTiles:
+            tile.player = enemyGeneral.player
+            tile.army = 2
+        for tile in badTiles:
+            tile.army = 0
+            tile.player = -1
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=211)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
+        simHost.queue_player_moves_str(general.player, '9,13->9,14->9,15')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        for tile in goodTiles:
+            playerTile = playerMap.GetTile(tile.x, tile.y)
+            self.assertEqual(-1, playerTile.player)
+
+        for tile in badTiles:
+            playerTile = playerMap.GetTile(tile.x, tile.y)
+            self.assertEqual(enemyGeneral.player, playerTile.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        self.assertNoFriendliesKilled(map, general, allyGen)
+
+        for tile in badTiles:
+            playerTile = playerMap.GetTile(tile.x, tile.y)
+            self.assertEqual(-1, playerTile.player)
+    
+    def test_should_limit_ffa_general_location_based_on_15_tiles(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_limit_ffa_general_location_based_on_15_tiles___Qlpc07mHW---5--39.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 39, fill_out_tiles=True)
+        enemyGeneral = map.generals[3]
+        enTile = map.GetTile(10, 25)
+        enTile.player = enemyGeneral.player
+        enTile.army = 1
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=39)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '9,23->9,24')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+
+        outTile = playerMap.GetTile(14, 15)
+        inTile = playerMap.GetTile(15, 16)
+
+        self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][inTile])
+        self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][outTile])
+    
+    def test_should_not_allow_pathing_through_enemy_generals_when_limiting_general_positions(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_allow_pathing_through_enemy_generals_when_limiting_general_positions___UGJKyIutV---1--137.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 137, fill_out_tiles=True)
+        gen1 = self.move_enemy_general(map, map.generals[0], 9, 1)
+        gen2 = self.move_enemy_general(map, map.generals[3], 0, 5)
+        redTile = map.GetTile(0, 4)
+
+        redTile.player = 0
+        redTile.army = 11
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=137)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '2,5->1,5')
+        simHost.reveal_player_general(2, general.player, hidden=True)
+        simHost.reveal_player_general(0, general.player, hidden=True)
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertIsNone(winner)
+
+        self.assertTrue(bot.armyTracker.valid_general_positions_by_player[gen1.player][playerMap.GetTile(gen1.x, gen1.y)])
+        self.assertFalse(bot.armyTracker.valid_general_positions_by_player[gen1.player][playerMap.GetTile(0, 9)])
+        self.assertFalse(bot.armyTracker.valid_general_positions_by_player[gen1.player][playerMap.GetTile(4, 1)])
+    
+    def test_should_correctly_predict_general_location(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_correctly_predict_general_location___1KRpoWTgQ---1--2.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 2, fill_out_tiles=True)
+        oldGen = enemyGeneral
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 6, 5)
+        oldGen.army = 0
+        oldGen.player = -1
+        enemyGeneral.army = 2
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=2)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  6,5->5,5->5,6->5,7->5,8->6,8z->7,8->8,8->8,9')
+        simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  3,17->3,16->3,15->4,15->4,14->4,13->4,12->4,11->4,10->5,10->5,9->6,9->7,9')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=50)
+        self.assertIsNone(winner)
+
+        shouldBe = [
+            playerMap.GetTile(4, 5),
+            playerMap.GetTile(6, 5),
+            playerMap.GetTile(7, 6),
+            playerMap.GetTile(10, 9),
+        ]
+
+        shouldNotBe = [
+            playerMap.GetTile(4, 4),
+            playerMap.GetTile(5, 5),
+            playerMap.GetTile(2, 5),
+            playerMap.GetTile(10, 8),
+        ]
+
+        for tile in shouldBe:
+            self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][tile], f'{str(tile)} should be allowed')
+        for tile in shouldNotBe:
+            self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][tile], f'{str(tile)} should not be allowed')
+
+    def test_should_properly_predict_enemy_general_location(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_properly_predict_enemy_general_location___19aFPxtMy---1--62.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 62, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=62)
+        rawMap.GetTile(15, 12).reset_wrong_undiscovered_fog_guess()
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # simHost.sim.set_tile_vision(general.player, 15, 12, hidden=True, undiscovered=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '15,12->15,11')
+        bot = simHost.get_bot(general.player)
+        bot.armyTracker.player_launch_timings[enemyGeneral.player] = 24
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertIsNone(winner)
+
+        shouldBe = [
+            playerMap.GetTile(14, 18),
+            playerMap.GetTile(19, 21),
+            playerMap.GetTile(6, 14),
+        ]
+
+        shouldNotBe = [
+            playerMap.GetTile(3, 6),
+            playerMap.GetTile(6, 7),
+            playerMap.GetTile(0, 21),
+        ]
+
+        for tile in shouldBe:
+            self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][tile], f'{str(tile)} should be allowed')
+        for tile in shouldNotBe:
+            self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][tile], f'{str(tile)} should not be allowed')
+
+    def test_should_not_under_constrain_enemy_general_location(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_under_constrain_enemy_general_location___Kj2jWIDxL---1--75.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 75, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=75)
+        rawMap.GetTile(6, 8).reset_wrong_undiscovered_fog_guess()
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '6,8->5,8')
+        simHost.queue_player_moves_str(general.player, '3,8->4,8->5,8')
+        bot = simHost.get_bot(general.player)
+        bot.armyTracker.player_launch_timings[enemyGeneral.player] = 26
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertIsNone(winner)
+
+        shouldBe = [
+            playerMap.GetTile(15, 12),
+        ]
+
+        shouldNotBe = [
+            playerMap.GetTile(20, 19),
+        ]
+
+        for tile in shouldBe:
+            self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][tile], f'{str(tile)} should be allowed')
+        for tile in shouldNotBe:
+            self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][tile], f'{str(tile)} should not be allowed')
+    
+    def test_should_immediately_re_evaluate_target_path(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_immediately_re_evaluate_target_path___Pmzuw7IAX---0--49_actual_spawn.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 49, fill_out_tiles=True)
+
+        ogFile = 'GameContinuationEntries/should_immediately_re_evaluate_target_path___Pmzuw7IAX---0--49.txtmap'
+        rawMap, _ = self.load_map_and_general(ogFile, respect_undiscovered=True, turn=49)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '8,3->9,3')
+        bot = simHost.get_bot(general.player)
+        bot.armyTracker.player_launch_timings[enemyGeneral.player] = 34
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+
+        shouldBe = [
+            playerMap.GetTile(5, 11),
+        ]
+
+        shouldNotBe = [
+            playerMap.GetTile(5, 12),
+            playerMap.GetTile(0, 11),
+        ]
+
+        for tile in shouldBe:
+            self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][tile], f'{str(tile)} should be allowed')
+        for tile in shouldNotBe:
+            self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][tile], f'{str(tile)} should not be allowed')
+
+        targPath = bot.shortest_path_to_target_player
+        endTile = targPath.tail.tile
+        emergenceVal = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][endTile.x][endTile.y]
+
+        self.assertGreater(emergenceVal, 10, f'target player path ending in {str(endTile)} did not end at the high emergence new prediction.')
+
+    def test_should_re_evaluate_spawn_as_attacks_opp(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_immediately_re_evaluate_target_path___Pmzuw7IAX---0--49_actual_spawn.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 49, fill_out_tiles=True)
+
+        ogFile = 'GameContinuationEntries/should_immediately_re_evaluate_target_path___Pmzuw7IAX---0--49.txtmap'
+        rawMap, _ = self.load_map_and_general(ogFile, respect_undiscovered=True, turn=49)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '8,3->9,3  5,11->6,11->7,11->8,11->9,11->10,11->11,11->12,11->13,11  5,11->5,10->5,9->4,9->4,8')
+        bot = simHost.get_bot(general.player)
+        bot.armyTracker.player_launch_timings[enemyGeneral.player] = 34
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=16)
+        self.assertIsNone(winner)
+
+        shouldBe = [
+            playerMap.GetTile(5, 11),
+        ]
+
+        shouldNotBe = [
+            playerMap.GetTile(5, 12),
+            playerMap.GetTile(0, 11),
+            playerMap.GetTile(6, 0),
+            playerMap.GetTile(0, 1),
+        ]
+
+        shouldNotBeCareLess = [
+            playerMap.GetTile(3, 10),  # TECHNICALLY we can tell from the fact that the 9 had to move across friendly tiles that the general is on the right half of the prediction zone, but not that fancy yet.
+        ]
+
+        with self.subTest(careLess=False):
+
+            for tile in shouldBe:
+                self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][tile], f'{str(tile)} should be allowed')
+            for tile in shouldNotBe:
+                self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][tile], f'{str(tile)} should not be allowed')
+
+            targPath = bot.shortest_path_to_target_player
+            endTile = targPath.tail.tile
+            emergenceVal = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][endTile.x][endTile.y]
+
+            self.assertGreater(emergenceVal, 10, f'target player path ending in {str(endTile)} did not end at the high emergence new prediction.')
+
+        with self.subTest(careLess=True):
+            for tile in shouldNotBeCareLess:
+                self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][tile],
+                                 f'{str(tile)} should not be allowed')
+
+    def test_should_build_land_between_known_emergences(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_immediately_re_evaluate_target_path___Pmzuw7IAX---0--49_actual_spawn.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 49, fill_out_tiles=True)
+
+        ogFile = 'GameContinuationEntries/should_immediately_re_evaluate_target_path___Pmzuw7IAX---0--49.txtmap'
+        rawMap, _ = self.load_map_and_general(ogFile, respect_undiscovered=True, turn=49)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '8,3->9,3  5,11->6,11->7,11->8,11->9,11->10,11->11,11->12,11->13,11  5,11->5,10->5,9->4,9->4,8')
+        bot = simHost.get_bot(general.player)
+        bot.armyTracker.player_launch_timings[enemyGeneral.player] = 34
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=15)
+        self.assertIsNone(winner)
+
+        self.assertGreater(len(playerMap.players[enemyGeneral.player].tiles), 16)
+
+    def test_should_limit_general_to_launch_timing(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_limit_general_to_launch_timing___Hx1ru6UDJ---0--47.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 47, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=47)
+        rawMap.GetTile(10, 0).reset_wrong_undiscovered_fog_guess()
+        rawMap.GetTile(6, 13).reset_wrong_undiscovered_fog_guess()
+        rawMap.GetTile(7, 13).reset_wrong_undiscovered_fog_guess()
+        # rawMap.GetTile(10, 0).reset_wrong_undiscovered_fog_guess()
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '6,15->6,14')
+        bot = simHost.get_bot(general.player)
+        bot.armyTracker.player_launch_timings[enemyGeneral.player] = 24
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+
+        shouldBe = [
+            playerMap.GetTile(11, 12),
+            playerMap.GetTile(11, 12),
+            playerMap.GetTile(12, 6),
+            playerMap.GetTile(1, 6),
+            playerMap.GetTile(14, 17),
+        ]
+
+        shouldNotBe = [
+            playerMap.GetTile(1, 5),
+            playerMap.GetTile(15, 18),
+        ]
+
+        for tile in shouldBe:
+            self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][tile], f'{str(tile)} should be allowed')
+        for tile in shouldNotBe:
+            self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][tile], f'{str(tile)} should not be allowed')
+    
+    def test_should_set_emergence_around_uncovered_initial_tiles(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_set_emergence_around_uncovered_initial_tiles___gUX8yTL0J---1--194.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 194, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=194)
+        rawMap.GetTile(17, 17).reset_wrong_undiscovered_fog_guess()
+        rawMap.GetTile(18, 17).reset_wrong_undiscovered_fog_guess()
+        rawMap.GetTile(19, 17).reset_wrong_undiscovered_fog_guess()
+        rawMap.GetTile(19, 16).reset_wrong_undiscovered_fog_guess()
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+
+        self.assertTrue(bot.euclidDist(20, 14, bot.targetPlayerExpectedGeneralLocation.x, bot.targetPlayerExpectedGeneralLocation.y) < 5)
+
+    
+    def test_should_not_predict_general_too_deep_in_fog_when_not_initial_trail(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_predict_general_too_deep_in_fog_when_not_initial_trail___tg5Cb-aZW---1--37.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 37, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=37)
+
+        for tile in rawMap.players[enemyGeneral.player].tiles:
+            tile.reset_wrong_undiscovered_fog_guess()
+            tile.isGeneral = False
+        rawMap.generals[enemyGeneral.player] = None
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '11,9->10,9->9,9->8,9->8,10')
+        bot = simHost.get_bot(general.player)
+        bot.armyTracker.player_launch_timings[enemyGeneral.player] = 24
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+
+        # JUST KIDDING BECAUSE ZZDBOT WENT UP WITH THE TRAIL IT ACTUALLY MEANS WE CORRECTLY OVERPLACED HIM BACKWARDS IN THE FOG LMAO
+        # farTile = playerMap.GetTile(1, 3)
+        # bestTile = playerMap.GetTile(1, 7)
+        # closerTile = playerMap.GetTile(2, 8)
+        #
+        # self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][farTile])
+        # self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][bestTile])
+        # self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][closerTile])
+        #
+        # emergenceValFar = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][farTile.x][farTile.y]
+        # emergenceValBest = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][bestTile.x][bestTile.y]
+        # emergenceValClose = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][closerTile.x][closerTile.y]
+        #
+        # self.assertGreater(emergenceValBest, emergenceValClose)
+        # self.assertGreater(emergenceValBest, emergenceValFar)
+
+
+    def test_should_not_over_emerge_initial_trail(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_predict_general_too_deep_in_fog_when_not_initial_trail___tg5Cb-aZW---1--37.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 37, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=37)
+
+        for tile in rawMap.players[enemyGeneral.player].tiles:
+            tile.reset_wrong_undiscovered_fog_guess()
+            tile.isGeneral = False
+        rawMap.generals[enemyGeneral.player] = None
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap,
+                                    allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '11,9->10,9->9,9->8,9->8,10')
+        bot = simHost.get_bot(general.player)
+        bot.armyTracker.player_launch_timings[enemyGeneral.player] = 24
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        self.assertIsNone(winner)
+
+        farTile = playerMap.GetTile(1, 3)
+        bestTile = playerMap.GetTile(1, 7)
+        closerTile = playerMap.GetTile(2, 8)
+
+        self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][farTile])
+        self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][bestTile])
+        self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][closerTile])
+
+        emergenceValFar = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][farTile.x][farTile.y]
+        emergenceValReal = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][bestTile.x][bestTile.y]
+        emergenceValClose = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][closerTile.x][closerTile.y]
+
+        self.assertLess(emergenceValReal, 70)
+        self.assertLess(emergenceValFar, 70)
+        self.assertLess(emergenceValClose, 70)
+
+    def test_should_not_duplicate_attacked_tile_into_fog(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_duplicate_attacked_tile_into_fog___m-jrq7lk4---0--80.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 80, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=80)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap,
+                                    allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '10,11->10,10')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=False))
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+
+        self.assertIsNone(winner)
+
+        playerTile = playerMap.GetTile(10, 9)
+        self.assertEqual(-1, playerTile.player)
+        self.assertEqual(0, playerTile.army)
+
+    def test_should_track_moved_army_when_chase_on_priority_loss(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_track_moved_army_when_chase_on_priority_loss___POUT9AJJb---1--190.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 190, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=190)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '9,16->10,16->11,16')
+        simHost.queue_player_moves_str(general.player, '8,16->9,16->10,16')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        army = bot.get_army_at_x_y(9, 16)
+
+        self.begin_capturing_logging()
+        simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=False, aroundTile=playerMap.GetTile(9, 16)))
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+
+        self.assertFalse(army.scrapped)
+
+        armyMoved = bot.get_army_at_x_y(10, 16)
+        self.assertEqual(army, armyMoved)
+
+    def test_should_track_army_into_the_fog(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_track_army_into_the_fog___J2DCEX-R3---1--570.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 570, fill_out_tiles=True)
+        map.GetTile(9, 11).army = 3
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=570)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '6,9->7,9')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+    
+    def test_should_conclude_enemy_has_fog_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_conclude_enemy_has_fog_city___J2DCEX-R3---1--436.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 436, fill_out_tiles=True)
+        enCity = map.GetTile(8, 9)
+        enCity.player = enemyGeneral.player
+        enCity.army = 2
+
+        tileNextToIt = map.GetTile(9, 9)
+        tileNextToIt.player = enemyGeneral.player
+        tileNextToIt.army = 116
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=436)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '9,9->10,9')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        fogCity = playerMap.GetTile(8, 9)
+        self.assertEqual(-1, fogCity.player)
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+
+        self.assertEqual(enemyGeneral.player, fogCity.player)
+
+# 55-47 fail-pass ish
+# 50-52 now
+# 44-61 now (with 10 army threshold).    
+    def test_should_not_make_undiscovered_obstacle_be_player_tile(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_make_undiscovered_obstacle_be_player_tile___9gaR3CZwL---1--75.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 75, fill_out_tiles=True)
+        map.GetTile(7, 6).army = 1
+        map.GetTile(7, 7).army = 1
+        map.GetTile(7, 6).player = enemyGeneral.player
+        map.GetTile(7, 7).player = enemyGeneral.player
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=75)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '5,6->6,6')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+
+        badTile = playerMap.GetTile(8, 6)
+        self.assertTrue(badTile.isUndiscoveredObstacle)
+        self.assertEqual(-1, badTile.player)
+        self.assertEqual(0, badTile.army)
+

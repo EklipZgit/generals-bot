@@ -125,7 +125,7 @@ class CityAnalyzer(object):
             if tile.isCity:
                 if tile.isNeutral:
                     self.city_scores[tile] = score
-                elif tile.player == board_analysis.general.player:
+                elif self.map.is_player_on_team_with(tile.player, board_analysis.general.player):
                     self.player_city_scores[tile] = score
                     if self.is_contested(tile):
                         self.owned_contested_cities.add(tile)
@@ -173,7 +173,7 @@ class CityAnalyzer(object):
         if self.map.turn > 200 or not tile.isNeutral:
             scaleOffset = 10
         else:
-            scaleOffset = tile.army - 34
+            scaleOffset = max(0, tile.army - 34)
 
         score.city_general_defense_score = 0.3 + 1.0 / max(1, score.distance_from_player_general + scaleOffset) / max(0.2, score.general_distances_ratio)
 
@@ -183,7 +183,7 @@ class CityAnalyzer(object):
             if curTile.isNeutral or curTile.isObstacle:
                 return
 
-            if curTile.player == board_analysis.general.player:
+            if self.map.is_player_on_team_with(curTile.player, board_analysis.general.player):
                 tilesNearbyFriendlyCounter.add(1)
             else:
                 tilesNearbyEnemyCounter.add(1)
@@ -194,17 +194,15 @@ class CityAnalyzer(object):
         score.city_defensability_score = (score.friendly_city_nearby_score + tilesNearbyFriendlyCounter.value // 2) / score.general_distances_ratio_squared_capped / tilesNearbyEnemyCounter.value
 
 
-
     def _calculate_nearby_city_scores(self, tile: Tile, board_analysis: BoardAnalyzer, score: CityScoreData):
         nearbyFriendlyCityScore = Counter(0)
         nearbyEnemyCityScore = Counter(0)
         nearbyNeutralCityScore = Counter(0)
         maxDist = board_analysis.intergeneral_analysis.shortestPathWay.distance // 3
 
-
         def scoreNearbyCitiesFunc(curTile: Tile, distance: int):
             if curTile.isCity or curTile.isGeneral:
-                if curTile.player == board_analysis.general.player:
+                if self.map.is_player_on_team_with(curTile.player, board_analysis.general.player):
                     nearbyFriendlyCityScore.add(maxDist - distance)
                 elif curTile.player == -1:
                     nearbyNeutralCityScore.add(maxDist - distance)
@@ -314,7 +312,7 @@ class CityAnalyzer(object):
         countEnemyNear = SearchUtils.Counter(0)
 
         def counterFunc(tile: Tile, dist: int):
-            if tile.player == city.player:
+            if self.map.is_player_on_team_with(tile.player, city.player):
                 countFriendlyNear.add(1)
             elif tile.player >= 0:
                 countEnemyNear.add(1)

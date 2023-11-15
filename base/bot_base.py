@@ -131,6 +131,9 @@ class GeneralsClientHost(object):
             over = True
         elif updateType == "game_lost":
             over = True
+        elif updateType == "game_update" and update is not None and 'turn' in update:
+            if update['turn'] > 3000:
+                self._game.send_surrender()
 
         if over:
             logging.info(f"!!!! Game Complete. Result = {updateType} !!!!")
@@ -157,7 +160,7 @@ class GeneralsClientHost(object):
         self._moves_realized = 0
         self._updates_received = 0
         while self._running:
-            if self._map is not None and self._map.complete:
+            if self._map is not None and self._map.complete and self._map.remainingPlayers > 1 and not self._map.players[self._map.player_index].dead:
                 # bot gave up, terminate
                 self._running = False
                 logging.info(f'bot gave up :(')

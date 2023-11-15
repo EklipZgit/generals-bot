@@ -1,0 +1,108 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+M                   M                        M                                                           b2
+d1                            M              aG50                M              M         M    M         b2
+d1             M                        M    M                                                           b2
+     C46  M    M                             M              M         M    M         M                   b2   M
+     M    b1   b1   M    b2   b1   C41                 M              M              M         C42  C44  b2
+     d1   b10  b1   M    b2   b1   M    M                        M                   M              b2   b2   M
+     d2   bC1  M    b1   b1   b1   M    M                   M    M                                  b2   M    M
+          b1   b1   b1   M    b1   b1   b1   b1   b1   b1        M         M                        b2
+     M    M                   M              M         b1   b1   b1   b1             M    b2   M    b1        M
+                                   M                             M    b1   b1   b1   b1   b1   bG7  b1   b1   b1
+               M                                  M    M         M    bC23                b2   b2   M    C49  b2
+     M    M         M                                       M                             b2   b2   b2        b2
+M                        M              M                   M         M         M         b2             M    b2
+                              M    M    M                                                 M
+               M    M    M         M         M    M         M         M                                       M
+                    M                                  M         M                        M    M    M
+M                                                 M    M         M    M                        M
+                                             M    M              M                   M              M    M
+     M    M    M                        M         M         M              M         M                   M
+                                   M                                  M         M
+M         M         M                   M                        M                        M
+               M                   M                   M    cG6  M    M              M    M         M
+                                                  M    M    M    M                                  M    M
+M                                  M    M    M                   M                                            M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=137
+player_index=1
+mode=ffa
+bot_target_player=3
+targetPlayerExpectedGeneralLocation=0,3
+bot_is_all_in_losing=False
+bot_all_in_losing_counter=0
+bot_is_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=True
+bot_cur_path=None
+aUsername=zxcvbnmskw
+aTiles=15
+aScore=97
+aStandingArmy=82
+aStars=68
+aCityCount=1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=0
+aDelta25Score=39
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=0
+bUsername=Human.exe
+bTiles=55
+bScore=113
+bStandingArmy=58
+bStars=73
+bCityCount=3
+bGeneral=19,9
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=18
+bDelta25Score=43
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=137
+b_bot_general_approx=19,9
+cUsername=NANWY
+cTiles=53
+cScore=134
+cStandingArmy=81
+cStars=67
+cCityCount=1
+cKnowsKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=13
+cDelta25Score=67
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=0
+c_bot_general_approx=12,19
+dUsername=xjyzlq
+dTiles=4
+dScore=28
+dStandingArmy=24
+dStars=67
+dCityCount=1
+dKnowsKingLocation=False
+dDead=False
+dLeftGame=True
+dLeftGameTurn=133
+dAggressionFactor=0
+dDelta25Tiles=-1
+dDelta25Score=21
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=0
+d_bot_general_approx=0,2

@@ -1,4 +1,5 @@
 import logging
+import time
 import typing
 
 import SearchUtils
@@ -11,7 +12,8 @@ DEBUG_ASSERTS = False
 
 
 class ExpansionPlan(object):
-    def __init__(self, tile_captures: int, plan_paths: typing.List[typing.Union[None, Path]], launch_turn: int):
+    def __init__(self, tile_captures: int, plan_paths: typing.List[typing.Union[None, Path]], launch_turn: int, core_tile: Tile):
+        self.core_tile: Tile = core_tile
         self.tile_captures: int = tile_captures
         self.launch_turn: int = launch_turn
         self.plan_paths: typing.List[typing.Union[None, Path]] = plan_paths
@@ -34,6 +36,7 @@ def get_start_expand_value(
     if visitedSet is not None:
         tilesCapped = visitedSet.copy()
     tilesCapped.add(general)
+    enCapped = set()
 
     genArmy = generalArmy
     pathIdx = 0
@@ -59,15 +62,17 @@ def get_start_expand_value(
                 movingArmy = genArmy
                 movingGen = True
 
-            next = move.next.tile
-            if next in tilesCapped or next.player == general.player:
+            nextTile = move.next.tile
+            if nextTile in tilesCapped or map.is_player_on_team_with(nextTile.player, general.player):
                 if not noLog:
-                    logging.info(f'{turn} ({genArmy}) - {str(next)} (a{movingArmy}) already capped')
+                    logging.info(f'{turn} ({genArmy}) - {str(nextTile)} (a{movingArmy}) already capped')
             else:
                 movingArmy -= 1
-                tilesCapped.add(move.next.tile)
+                tilesCapped.add(nextTile)
+                if nextTile.player >= 0:
+                    enCapped.add(nextTile)
                 if not noLog:
-                    logging.info(f'{turn} ({genArmy}) - {str(next)} (a{movingArmy}) ({len(tilesCapped)})')
+                    logging.info(f'{turn} ({genArmy}) - {str(nextTile)} (a{movingArmy}) ({len(tilesCapped)})')
                 if movingArmy <= 0 and DEBUG_ASSERTS:
                     raise AssertionError(f'illegal plan, moved army from 1 tile, see last log above')
             if curPath.length == 0:
@@ -77,7 +82,7 @@ def get_start_expand_value(
                 pathComplete = True
                 if movingArmy > 1 and turn < 50:
                     if not noLog:
-                        logging.info(f"Army not fully used. {movingArmy} army ended at {str(next)}, turn {turn}. Should almost never see this in a final result...")
+                        logging.info(f"Army not fully used. {movingArmy} army ended at {str(nextTile)}, turn {turn}. Should almost never see this in a final result...")
 
         if pathComplete:
             curPath = expandPaths[pathIdx]
@@ -101,7 +106,7 @@ def get_start_expand_value(
         logging.info(
             f'result of curTurn {curTurn}: capped {len(tilesCapped)}, final genArmy {genArmy}')
 
-    return len(tilesCapped)
+    return len(tilesCapped) + len(enCapped)
 
 def __evaluate_plan_value(
         map: MapBase,
@@ -144,13 +149,46 @@ def __evaluate_plan_value(
     return pathValue, adjAvailable.value, 0-tileWeightSum, genDistSum
 
 
+def max_plan(plan1: ExpansionPlan, plan2: ExpansionPlan, map: MapBase, distToGenMap, tile_weight_map, visited) -> ExpansionPlan:
+    launchVal1 = __evaluate_plan_value(
+        map,
+        plan1.core_tile,
+        plan1.core_tile.army,
+        map.turn,
+        plan1.plan_paths,
+        dist_to_gen_map=distToGenMap,
+        tile_weight_map=tile_weight_map,
+        already_visited=visited,
+        no_log=False)
+
+    launchVal2 = __evaluate_plan_value(
+        map,
+        plan2.core_tile,
+        plan2.core_tile.army,
+        map.turn,
+        plan2.plan_paths,
+        dist_to_gen_map=distToGenMap,
+        tile_weight_map=tile_weight_map,
+        already_visited=visited,
+        no_log=False)
+
+    if launchVal1 >= launchVal2:
+        return plan1
+
+    return plan2
+
+
 def optimize_first_25(
         map: MapBase,
         general: Tile,
         tile_weight_map: typing.List[typing.List[int]],
         debug_view_info: typing.Union[None, ViewInfo] = None,
         no_recurse: bool = False,
-        no_log=not DEBUG_ASSERTS) -> ExpansionPlan:
+        skipTiles: typing.Set[Tile] | None = None,
+        no_log=not DEBUG_ASSERTS,
+        cutoff_time: float | None = None,
+        prune_cutoff: int = 14,
+) -> ExpansionPlan:
     """
 
     @param map:
@@ -158,6 +196,7 @@ def optimize_first_25(
     @param tile_weight_map: lower numbers = better
     @param debug_view_info: the viewInfo to write debug data to (mainly for unit testing).
     @param no_recurse: Used to prevent infinite recursion when optimizing with alt tile weights
+    @param skipTiles: Tiles that will be not counted for expansion
     @param no_log: skip logging everything except the final result
     @return:
     """
@@ -167,9 +206,18 @@ def optimize_first_25(
         debug_view_info.bottomLeftGridText = distToGenMap
 
     visited: typing.Set[Tile] = set()
-    player = map.players[general.player]
-    for tile in player.tiles:
-        visited.add(tile)
+    #
+    # if skipTiles is not None:
+    #     visited = skipTiles.copy()
+
+    for player in map.players:
+        if map.is_player_on_team_with(player.index, general.player):
+            player = map.players[general.player]
+            for tile in player.tiles:
+                visited.add(tile)
+
+    if cutoff_time is None:
+        cutoff_time = time.perf_counter() + 4.0
 
     mapTurnAtStart = map.turn
     genArmyAtStart = general.army
@@ -184,14 +232,16 @@ def optimize_first_25(
             tile_weight_map,
             turn=turnInCycle,
             visited_set=visited,
-            prune_below=0,
-            allow_wasted_moves=turnInCycle // 4,
+            prune_below=prune_cutoff,
+            allow_wasted_moves=2,
             dont_force_first=True,
             debug_view_info=debug_view_info,
+            skip_tiles=skipTiles,
+            cutoff_time=cutoff_time,
             no_log=no_log)
         val = get_start_expand_value(map, general, genArmyAtStart, turnInCycle, result, visitedSet=visited, noLog=False)
 
-        return ExpansionPlan(val, result, mapTurnAtStart)
+        return ExpansionPlan(val, result, mapTurnAtStart, general)
 
     # genArmy, turn, optimalMaxWasteMoves
     combinationsWithMaxOptimal = [
@@ -206,13 +256,27 @@ def optimize_first_25(
 
     maxResult = None
     maxVal = None
-    maxTiles = 0
+    maxTiles = prune_cutoff
+    startTime = time.perf_counter()
 
     for (genArmy, launchTurn, optimalWastedMoves) in combinationsWithMaxOptimal:
         if mapTurnAtStart > launchTurn:
             continue
 
-        launchResult = _sub_optimize_remaining_cycle_expand_from_cities(map, general, genArmy, distToGenMap, tile_weight_map, turn=launchTurn, allow_wasted_moves=optimalWastedMoves + 3, debug_view_info=debug_view_info, prune_below=maxTiles, no_log=no_log)
+        launchResult = _sub_optimize_remaining_cycle_expand_from_cities(
+            map,
+            general,
+            genArmy,
+            distToGenMap,
+            tile_weight_map,
+            turn=launchTurn,
+            allow_wasted_moves=optimalWastedMoves + 3,
+            debug_view_info=debug_view_info,
+            visited_set=visited,
+            prune_below=maxTiles,
+            skip_tiles=skipTiles,
+            cutoff_time=cutoff_time,
+            no_log=no_log)
         for _ in range(mapTurnAtStart, launchTurn):
             launchResult.insert(0, None)
         launchVal = __evaluate_plan_value(map, general, genArmyAtStart, map.turn, launchResult, dist_to_gen_map=distToGenMap, tile_weight_map=tile_weight_map, already_visited=visited, no_log=no_log)
@@ -232,7 +296,7 @@ def optimize_first_25(
     get_start_expand_value(map, general, general.army, mapTurnAtStart, maxResult, visitedSet=visited, noLog=False)
     logging.info(f'max launch result {maxVal}, turn {launchTurn} ^')
 
-    return ExpansionPlan(maxVal[0], maxResult, launchTurn)
+    return ExpansionPlan(maxVal[0], maxResult, launchTurn, general)
 
 
 def _sub_optimize_first_25_specific_wasted(
@@ -246,6 +310,8 @@ def _sub_optimize_first_25_specific_wasted(
         allow_wasted_moves: int,
         prune_below: int,
         visited_set: typing.Set[Tile],
+        cutoff_time: float,
+        skip_tiles: typing.Set[Tile] = None,
         dont_force_first: bool = False,
         debug_view_info: typing.Union[None, ViewInfo] = None,
         no_log: bool = not DEBUG_ASSERTS
@@ -272,6 +338,9 @@ def _sub_optimize_first_25_specific_wasted(
         curTurn = turn
         capped = (0, 0, 0, 0)
 
+        if time.perf_counter() > cutoff_time:
+            return capped, pathList
+
         visited_set = visited_set.copy()
 
         if not dont_force_first:
@@ -288,6 +357,7 @@ def _sub_optimize_first_25_specific_wasted(
                 force_wasted_moves=force_wasted_moves,
                 tile_weight_map=tile_weight_map,
                 visited_set=visited_set,
+                skip_tiles=skip_tiles,
                 debug_view_info=debug_view_info,
                 no_log=no_log)
 
@@ -341,7 +411,9 @@ def _sub_optimize_first_25_specific_wasted(
             curTurn,
             allow_wasted_moves,
             prune_below=prune_below,
+            cutoff_time=cutoff_time,
             visited_set=visited_set,
+            skip_tiles=skip_tiles,
             debug_view_info=debug_view_info,
             no_log=no_log)
         maxValue = __evaluate_plan_value(map, general, curAttemptGenArmy, curTurn, maxOptimized, dist_to_gen_map=dist_to_gen_map, tile_weight_map=tile_weight_map, already_visited=visited_set, no_log=no_log)
@@ -366,8 +438,10 @@ def _sub_optimize_first_25_specific_wasted(
                 tile_weight_map,
                 curTurn,
                 allow_wasted_moves,
+                cutoff_time=cutoff_time,
                 prune_below=max(maxValue[0], prune_below),
                 visited_set=visited_set,
+                skip_tiles=skip_tiles,
                 debug_view_info=debug_view_info,
                 no_log=no_log)
             oneWaitVal = __evaluate_plan_value(map, general, curAttemptGenArmy, curTurn, withOneWait, dist_to_gen_map=dist_to_gen_map, tile_weight_map=tile_weight_map, already_visited=visited_set, no_log=no_log)
@@ -400,10 +474,12 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
         turn: int,
         allow_wasted_moves: int,
         prune_below: int,
+        cutoff_time: float,
         visited_set: typing.Set[Tile] = None,
+        skip_tiles: typing.Set[Tile] = None,
         dont_force_first: bool = False,
         debug_view_info: typing.Union[None, ViewInfo] = None,
-        no_log: bool = not DEBUG_ASSERTS
+        no_log: bool = not DEBUG_ASSERTS,
     ) -> typing.List[typing.Union[None, Path]]:
     """
     recursively optimize first 25
@@ -458,6 +534,9 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
                 logging.info(f'pruning due to bestCaseResult {bestCaseResult} compared to prune_below {prune_below}')
             break
 
+        if time.perf_counter() > cutoff_time:
+            break
+
         value, pathList = _sub_optimize_first_25_specific_wasted(
             map=map,
             general=general,
@@ -469,8 +548,10 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
             allow_wasted_moves=allow_wasted_moves,
             prune_below=prune_below,
             visited_set=visited_set,
+            skip_tiles=skip_tiles,
             dont_force_first=dont_force_first,
             debug_view_info=debug_view_info,
+            cutoff_time=cutoff_time,
             no_log=no_log
         )
 
@@ -495,6 +576,7 @@ def _optimize_25_launch_segment(
         force_wasted_moves: int,
         tile_weight_map: typing.List[typing.List[int]],
         visited_set: typing.Set[Tile],
+        skip_tiles: typing.Set[Tile] = None,
         debug_view_info: typing.Union[None, ViewInfo] = None,
         no_log: bool = not DEBUG_ASSERTS
     ) -> typing.Union[None, Path]:
@@ -539,6 +621,8 @@ def _optimize_25_launch_segment(
         visited = nextTile in visited_set
         if not visited:
             pathCappedNeg -= 1
+            if nextTile.player != -1:
+                pathCappedNeg -= 1
         else:
             repeats += 1
 
@@ -598,6 +682,9 @@ def _optimize_25_launch_segment(
             pathList: typing.List[Tile]):
         _, genDist, _, pathCappedNeg, _, repeats, cappedAdj, maxGenDist = currentPriorityObject
         remainingArmy = pathCappedNeg + gen_army
+
+        if skip_tiles is not None and nextTile in skip_tiles:
+            return True
 
         if repeats - force_wasted_moves > 0:
             return True

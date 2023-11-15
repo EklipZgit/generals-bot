@@ -66,7 +66,7 @@ class ArmyEngineGameTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=15)
         self.assertIsNone(winner)
 
-        # TODO add asserts for army_scrim_defense_should_not_avoid_kill_threat
+        self.skipTest("TODO add asserts")  #  for army_scrim_defense_should_not_avoid_kill_threat
 
 
     def test_army_scrim_defense_should_still_save_out_of_range(self):
@@ -110,7 +110,7 @@ class ArmyEngineGameTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
-        # TODO add asserts for should_intercept_correctly
+        self.skipTest("TODO add asserts")  #  for should_intercept_correctly
     
     def test_should_not_cycle_sideways(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -132,7 +132,7 @@ class ArmyEngineGameTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
-        # TODO add asserts for should_not_cycle_sideways
+        self.skipTest("TODO add asserts")  #  for should_not_cycle_sideways
     
     def test_should_not_let_general_die_scrim_path(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True

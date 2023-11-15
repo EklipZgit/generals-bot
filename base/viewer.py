@@ -30,7 +30,7 @@ GRAY_DARK = (52, 52, 52)
 UNDISCOVERED_GRAY = (110, 110, 110)
 NEUT_CITY_GRAY = (90, 90, 90)
 GRAY = (160, 160, 160)
-LIGHT_GRAY = (220, 220, 210)
+LIGHT_GRAY = (200, 195, 190)
 WHITE = (255, 255, 255)
 RED = (200, 40, 40)
 ORANGE = (220, 110, 40)
@@ -96,7 +96,7 @@ black arrows
 red arrows 
     -> considered gather lines that were trimmed
 green chevrons
-    -> the AI's current army movement path (used when launching timing attacks or attacks against cities etc).
+    -> the AI'p current army movement path (used when launching timing attacks or attacks against cities etc).
 yellow chevrons
     -> indicate a calculated kill-path against an enemy general that was found during other operations and took priority.
 pink chevrons 
@@ -220,7 +220,7 @@ class GeneralsViewer(object):
         # setting this color as colorkey, so the surface is empty
         s.fill(WHITE)
         s.set_colorkey(WHITE)
-        # pygame.draw.line(s, (r, g, b), ((CELL_MARGIN + self.cellWidth) // 2, 0), ((CELL_MARGIN + self.cellWidth) // 2, self.cellHeight + 1), width)
+        # pygame.draw.line(p, (r, g, b), ((CELL_MARGIN + self.cellWidth) // 2, 0), ((CELL_MARGIN + self.cellWidth) // 2, self.cellHeight + 1), width)
         pygame.draw.line(s, (r, g, b), (self.cellWidth // 2 + CELL_MARGIN, 0),
                          (self.cellWidth // 2 + CELL_MARGIN, self.cellHeight), width)
         return s
@@ -234,7 +234,7 @@ class GeneralsViewer(object):
             self.cellHeight = max(29, self.cellHeight)
             self.cellWidth = self.cellHeight
 
-        self.scoreRowHeight = int((self.cellHeight + 2) * 1.5)
+        self.scoreRowHeight = int((self.cellHeight + 2) * 3.5)
 
         self.tile_surface = pygame.Surface((self.cellWidth, self.cellHeight))
         self.player_fight_indicator_width = 2 * self.cellWidth
@@ -366,10 +366,11 @@ class GeneralsViewer(object):
                 diff = thisUpdateTime - self.last_update_received
                 medianUpdateTime = lastWindowUpdateSum / renderIntervalAvgWindow
 
+                medianUpdateTime = min(0.5, medianUpdateTime)
+
                 expectedRenderTime = self.last_render_time + medianUpdateTime
 
                 self.last_update_received = thisUpdateTime
-
 
                 if isComplete:
                     logging.info("GeneralsViewer received done event!")
@@ -394,7 +395,8 @@ class GeneralsViewer(object):
                 if not self.noLog:
                     logging.info("GeneralsViewer drawing grid:")
                 self._drawGrid()
-                self.last_render_time = time.perf_counter()
+                self.last_render_time = start
+
                 if not self.noLog:
                     logging.info(f"GeneralsViewer drawing grid took {time.perf_counter() - start:.3f}")
 
@@ -449,8 +451,10 @@ class GeneralsViewer(object):
                         self._event_queue.put(('SCROLL_DOWN', clickedTile))
                     else:
                         self._event_queue.put(('UNKNOWN', clickedTile))
-
-        logging.info(f'Pygame closed in GeneralsViewer, sending closedByUser {closedByUser} | map.complete {map.complete} back to main threads')
+        mapComplete = None
+        if map is not None:
+            mapComplete = map.complete
+        logging.info(f'Pygame closed in GeneralsViewer, sending closedByUser {closedByUser} | map.complete {mapComplete} back to main threads')
         #
         # if map.complete:
         #     closedByUser = True
@@ -462,6 +466,8 @@ class GeneralsViewer(object):
 
     def _drawGrid(self):
         try:
+            self.include_viable_general_spawns()
+
             self._screen.fill(BLACK)  # Set BG Color
             self._transparent.fill((0, 0, 0, 0))  # transparent
             allInText = " "
@@ -593,7 +599,7 @@ class GeneralsViewer(object):
             # self.draw_between_tiles(self.green_line, leftDown, down)
             # self.draw_between_tiles(self.green_line, down, gen)
 
-            # s(self._map.grid[1][1],
+            # p(self._map.grid[1][1],
 
             while len(self._viewInfo.paths) > 0:
                 pColorer = self._viewInfo.paths.pop()
@@ -730,9 +736,11 @@ class GeneralsViewer(object):
                             textVal = clean_up_possible_float(text)
                             if text == -1000000:  # then was skipped
                                 textVal = "x"
-                            self._screen.blit(self.small_font(textVal, color_small_font),
-                                              (pos_left + self.cellWidth - self.get_text_offset_from_right(textVal),
-                                               pos_top - 2))
+                            text = self.small_font(textVal, color_small_font)
+                            r = text.get_rect()
+                            r.right = pos_left + self.cellWidth - 1
+                            r.top = pos_top - 2
+                            self._screen.blit(text, r)
 
                     if self._viewInfo.midRightGridText is not None:
                         text = self._viewInfo.midRightGridText[column][row]
@@ -740,9 +748,11 @@ class GeneralsViewer(object):
                             textVal = clean_up_possible_float(text)
                             if text == -1000000:  # then was skipped
                                 textVal = "x"
-                            self._screen.blit(self.small_font(textVal, color_small_font),
-                                              (pos_left + self.cellWidth - self.get_text_offset_from_right(textVal),
-                                               pos_top + self.cellHeight / 3))
+                            text = self.small_font(textVal, color_small_font)
+                            r = text.get_rect()
+                            r.right = pos_left + self.cellWidth - 1
+                            r.top = pos_top + self.cellHeight / 3
+                            self._screen.blit(text, r)
 
                     if self._viewInfo.bottomMidRightGridText is not None:
                         text = self._viewInfo.bottomMidRightGridText[column][row]
@@ -750,9 +760,11 @@ class GeneralsViewer(object):
                             textVal = clean_up_possible_float(text)
                             if text == -1000000:  # then was skipped
                                 textVal = "x"
-                            self._screen.blit(self.small_font(textVal, color_small_font),
-                                              (pos_left + self.cellWidth - self.get_text_offset_from_right(textVal),
-                                               pos_top + 1.6 * self.cellHeight / 3))
+                            text = self.small_font(textVal, color_small_font)
+                            r = text.get_rect()
+                            r.right = pos_left + self.cellWidth - 1
+                            r.top = pos_top + 1.6 * self.cellHeight / 3
+                            self._screen.blit(text, r)
 
                     if self._viewInfo.bottomRightGridText is not None:
                         text = self._viewInfo.bottomRightGridText[column][row]
@@ -760,9 +772,11 @@ class GeneralsViewer(object):
                             textVal = clean_up_possible_float(text)
                             if text == -1000000:  # then was skipped
                                 textVal = "x"
-                            self._screen.blit(self.small_font(textVal, color_small_font),
-                                              (pos_left + self.cellWidth - self.get_text_offset_from_right(textVal),
-                                               pos_top + 2.2 * self.cellHeight / 3))
+                            text = self.small_font(textVal, color_small_font)
+                            r = text.get_rect()
+                            r.right = pos_left + self.cellWidth - 1
+                            r.top = pos_top + 2.2 * self.cellHeight / 3
+                            self._screen.blit(text, r)
 
                     if self._viewInfo.bottomLeftGridText is not None:
                         text = self._viewInfo.bottomLeftGridText[column][row]
@@ -861,12 +875,39 @@ class GeneralsViewer(object):
         self._screen.blit(self._medFont.render(army.name, True, WHITE), (pos_left + self.cellWidth - 10, pos_top))
 
     def draw_armies(self):
-        if self._viewInfo.armyTracker is not None:
-            for army in list(self._viewInfo.armyTracker.armies.values()):
-                if army.scrapped:
-                    self.draw_army(army, 200, 200, 200, 80)
-                else:
-                    self.draw_army(army, 255, 255, 255, 150)
+        if self._viewInfo.armyTracker is None:
+            return
+
+        for army in list(self._viewInfo.armyTracker.armies.values()):
+            if army.scrapped:
+                self.draw_army(army, 200, 200, 200, 80)
+            else:
+                self.draw_army(army, 255, 255, 255, 150)
+
+    def include_viable_general_spawns(self):
+        if self._viewInfo.armyTracker is None:
+            return
+
+        for player in self._map.players:
+            if self._map.is_player_on_team_with(self._map.player_index, player.index):
+                continue
+            if player.dead:
+                continue
+
+            if len(player.tiles) == 0 and self._map.remainingPlayers > 4:
+                continue
+
+            self._viewInfo.add_map_division(self._viewInfo.armyTracker.valid_general_positions_by_player[player.index], PLAYER_COLORS[player.index], alpha=150)
+
+            whitenedPlayerColor = rescale_color(
+                valToScale=0.3,
+                valueMin=0.0,
+                valueMax=1.0,
+                colorMin=PLAYER_COLORS[player.index],
+                colorMax=GRAY,
+            )
+
+            self._viewInfo.add_map_zone(self._viewInfo.armyTracker.valid_general_positions_by_player[player.index], whitenedPlayerColor, alpha=60)
 
     def draw_emergences(self):
         alphaMin = 100
@@ -1262,60 +1303,115 @@ class GeneralsViewer(object):
         alive_score_width = 2 * self._window_size[0] / totalCapacity
         dead_score_width = self._window_size[0] / totalCapacity
 
-
         # Sort Scores by score then by the turn they left the game if they are dead.
-        playersByScore = sorted(self._map.players, key=lambda player: (player.score, player.leftGameTurn), reverse=True)
+
+        statsSorted = []
+        for team in self._viewInfo.team_cycle_stats.keys():
+            statsSorted.append((self._map.get_team_stats_by_team_id(team), self._viewInfo.team_cycle_stats[team]))
+
+        statsSorted = sorted(statsSorted, key=lambda s: (s[0].score, self._map.players[s[1].players[0]].leftGameTurn if s[1] is not None else False), reverse=True)
 
         pos_left = 0
 
-        for i, player in enumerate(playersByScore):
-            if player is None:
+        for teamScore, teamCycleData in statsSorted:
+            if teamCycleData is None:
                 continue
+            players = []
 
-            score_color = PLAYER_COLORS[player.index]
-            if player.leftGame:
-                # make them 70% black after leaving game
-                score_color = rescale_color(0.6, 0, 1.0, score_color, GRAY)
+            for p in teamCycleData.players:
+                player = self._map.players[p]
+                players.append(player)
 
-            curScoreWidth = alive_score_width
-            if player.dead:
-                score_color = GRAY_DARK
-                curScoreWidth = dead_score_width
+            team_pos_left = pos_left
 
-            pygame.draw.rect(self._screen, score_color, [pos_left, pos_top, curScoreWidth, self.scoreRowHeight])
+            players = sorted(players, key=lambda p: (p.score, p.leftGameTurn), reverse=True)
+            for i, player in enumerate(players):
+                if player is None:
+                    continue
 
-            if player.fighting_with_player >= 0:
-                otherPlayerColor = PLAYER_COLORS[player.fighting_with_player]
-                desiredHeight = self.cellHeight // 5
-                pygame.draw.rect(self._screen, otherPlayerColor,[pos_left, pos_top + self.scoreRowHeight - desiredHeight, curScoreWidth, desiredHeight])
+                score_color = PLAYER_COLORS[player.index]
+                if player.leftGame:
+                    # make them 70% black after leaving game
+                    score_color = rescale_color(0.6, 0, 1.0, score_color, GRAY)
 
-            if self._viewInfo.targetPlayer == player.index:
-                pygame.draw.rect(self._screen, GRAY,
-                                 [pos_left, pos_top, curScoreWidth, self.scoreRowHeight], 1)
-            userName = self._map.usernames[player.index]
-            userString = f"({player.stars}) {userName}"
-            try:
-                self._screen.blit(self._medFont.render(userString, True, WHITE),
-                                  (pos_left + 3, pos_top + 1))
-            except:
-                userString = f"({player.stars}) INVALID_NAME"
-                self._screen.blit(self._medFont.render(userString, True, WHITE),
-                                  (pos_left + 3, pos_top + 1))
+                curScoreWidth = alive_score_width
+                if player.dead:
+                    score_color = GRAY_DARK
+                    curScoreWidth = dead_score_width
 
-            playerSubtext = f"{player.score} {player.tileCount}t {player.cityCount}c ({player.tileCount + player.cityCount * 25})"
-            if player.index != self._map.player_index and len(self._viewInfo.playerTargetScores) > 0:
-                playerSubtext += f"   {player.aggression_factor}a"
-            if self._map.remainingPlayers > 2 and player.index != self._map.player_index and len(
-                    self._viewInfo.playerTargetScores) > 0:
-                playerSubtext += f" {int(self._viewInfo.playerTargetScores[player.index])}ts"
-            self._screen.blit(self._medFont.render(playerSubtext, True, WHITE),
-                              (pos_left + 3, pos_top + 1 + self._medFont.get_height()))
+                pygame.draw.rect(self._screen, score_color, [pos_left, pos_top, curScoreWidth, self.scoreRowHeight])
 
-            playerSubSubtext = f"{player.expectedScoreDelta:+4d}ed {player.actualScoreDelta:+4d}a - {player.delta25score:+4d}dc {player.delta25tiles:+4d}tc"
-            self._screen.blit(self._medFont.render(playerSubSubtext, True, WHITE),
-                              (pos_left + 3, pos_top + 2 + 2 * self._medFont.get_height()))
+                if player.fighting_with_player >= 0:
+                    otherPlayerColor = PLAYER_COLORS[player.fighting_with_player]
+                    desiredHeight = self.cellHeight // 5
+                    pygame.draw.rect(self._screen, otherPlayerColor,[pos_left, pos_top + self.scoreRowHeight - desiredHeight, curScoreWidth, desiredHeight])
 
-            pos_left = pos_left + curScoreWidth
+                if self._viewInfo.targetPlayer == player.index:
+                    pygame.draw.rect(self._screen, GRAY,
+                                     [pos_left, pos_top, curScoreWidth, self.scoreRowHeight], 1)
+                userName = self._map.usernames[player.index]
+                userString = f"({player.stars}) {userName}"
+                try:
+                    self._screen.blit(self._medFont.render(userString, True, WHITE),
+                                      (pos_left + 3, pos_top + 1))
+                except:
+                    userString = f"({player.stars}) INVALID_NAME"
+                    self._screen.blit(self._medFont.render(userString, True, WHITE),
+                                      (pos_left + 3, pos_top + 1))
+
+                playerSubtext = f"{player.score} {player.tileCount}t {player.cityCount}c ({player.tileCount + player.cityCount * 25})"
+                if player.index != self._map.player_index and len(self._viewInfo.playerTargetScores) > 0:
+                    playerSubtext += f"   {player.aggression_factor}a"
+                if self._map.remainingPlayers > 2 and player.index != self._map.player_index and len(
+                        self._viewInfo.playerTargetScores) > 0:
+                    playerSubtext += f" {int(self._viewInfo.playerTargetScores[player.index])}ts"
+                self._screen.blit(self._medFont.render(playerSubtext, True, WHITE),
+                                  (pos_left + 3, pos_top + 1 + self._medFont.get_height()))
+
+                if not self._map.is_player_on_team_with(player.index, self._map.player_index):
+                    playerFogTiles = self._viewInfo.player_fog_tile_counts.get(player.index, None)
+                    if playerFogTiles is not None:
+                        playerFogSubtext = " | ".join([f'{n}x{tileSize}s'.ljust(5) for tileSize, n in sorted(playerFogTiles.items(), reverse=True)])
+                        self._screen.blit(self._medFont.render(playerFogSubtext, True, WHITE),
+                                          (pos_left + 3, pos_top + 2 + 2 * self._medFont.get_height()))
+
+                playerSubSubtext = f"eΔ{player.expectedScoreDelta:+d}".ljust(8) + f"Δ{player.actualScoreDelta:+d}"
+                self._screen.blit(self._medFont.render(playerSubSubtext, True, WHITE),
+                                  (pos_left + 3, pos_top + 2 + 3 * self._medFont.get_height()))
+
+                pos_left = pos_left + curScoreWidth
+
+            for i, player in enumerate(players):
+                if player is None:
+                    continue
+
+                if i == 0:
+                    approxArmy = teamCycleData.approximate_fog_city_army + teamCycleData.approximate_fog_army_available_total
+                    gathMoves = teamCycleData.moves_spent_gathering_fog_tiles + teamCycleData.moves_spent_gathering_visible_tiles
+                    capMoves = teamCycleData.moves_spent_capturing_fog_tiles + teamCycleData.moves_spent_capturing_visible_tiles
+
+                    # only draw team score data once
+                    playerCycleSubtext = f"{str(approxArmy).ljust(3)}  g:{teamCycleData.approximate_army_gathered_this_cycle:3d}  Δt:{teamCycleData.tiles_gained:2d}  Δc:{teamCycleData.cities_gained:d}   a:{teamCycleData.approximate_fog_army_available_total:3d}/c:{teamCycleData.approximate_fog_city_army:2d}"
+                    self._screen.blit(self._medFont.render(playerCycleSubtext, True, WHITE),
+                                      (team_pos_left + 3, pos_top + 2 + 3.9 * self._medFont.get_height()))
+                    playerCycleSubtext = f"MV: g{gathMoves}/c{capMoves}  fcap:{teamCycleData.moves_spent_capturing_fog_tiles:2d}  vcap:{teamCycleData.moves_spent_capturing_visible_tiles:2d}  fg:{teamCycleData.moves_spent_gathering_fog_tiles:2d}  vg:{teamCycleData.moves_spent_gathering_visible_tiles:2d}"
+                    self._screen.blit(self._medFont.render(playerCycleSubtext, True, WHITE),
+                                      (team_pos_left + 3, pos_top + 2 + 4.8 * self._medFont.get_height()))
+
+                    teamLastCycleData = self._viewInfo.team_last_cycle_stats[teamCycleData.team]
+
+                    if teamLastCycleData is not None:
+                        approxArmy = teamLastCycleData.approximate_fog_city_army + teamLastCycleData.approximate_fog_army_available_total
+                        gathMoves = teamLastCycleData.moves_spent_gathering_fog_tiles + teamLastCycleData.moves_spent_gathering_visible_tiles
+                        capMoves = teamLastCycleData.moves_spent_capturing_fog_tiles + teamLastCycleData.moves_spent_capturing_visible_tiles
+                        # only draw team score data once
+                        playerCycleSubtext = f"LAST {str(approxArmy).ljust(3)}  g:{teamLastCycleData.approximate_army_gathered_this_cycle:3d}  Δt:{teamLastCycleData.tiles_gained:2d}  Δc:{teamLastCycleData.cities_gained:d}   a:{teamLastCycleData.approximate_fog_army_available_total:3d}/c:{teamLastCycleData.approximate_fog_city_army:2d}"
+                        self._screen.blit(self._medFont.render(playerCycleSubtext, True, WHITE),
+                                          (team_pos_left + 3, pos_top + 2 + 5.7 * self._medFont.get_height()))
+
+                        playerCycleSubtext = f"LAST MV: g{gathMoves}/c{capMoves}  fcap:{teamLastCycleData.moves_spent_capturing_fog_tiles:2d}  vcap:{teamLastCycleData.moves_spent_capturing_visible_tiles:2d}  fg:{teamLastCycleData.moves_spent_gathering_fog_tiles:2d}  vg:{teamLastCycleData.moves_spent_gathering_visible_tiles:2d}"
+                        self._screen.blit(self._medFont.render(playerCycleSubtext, True, WHITE),
+                                          (team_pos_left + 3, pos_top + 2 + 6.6 * self._medFont.get_height()))
 
 
 

@@ -16,6 +16,7 @@ from DataModels import Move
 from Engine.ArmyEngineModels import ArmySimState, ArmySimResult, SimTile, ArmySimEvaluationParams
 from MctsLudii import MctsDUCT, Game, Context, MctsEngineSummary
 from Path import Path
+from PerformanceTelemetry import PerformanceTelemetry
 from base.client.map import MapBase, Tile
 from MapMatrix import MapMatrix
 
@@ -139,7 +140,7 @@ class ArmyEngine(object):
         """The turn to simulate up to."""
 
         if DebugHelper.IS_DEBUGGING:
-            self.iteration_limit = 1000
+            self.iteration_limit = 150
             self.time_limit = 10000000000.0
 
     def scan(
@@ -310,89 +311,92 @@ class ArmyEngine(object):
             boardState: ArmySimState,
             frMove: Move | None,
             enMove: Move | None,
-            noClone: bool = False
+            noClone: bool = False,
+            perfTelemetry: PerformanceTelemetry = PerformanceTelemetry(),
     ) -> ArmySimState:
         nextBoardState = boardState
         if noClone:
-            nextBoardState.prep_next_move()
+            with perfTelemetry.monitor_telemetry('prep_next_move'):
+                nextBoardState.prep_next_move()
         else:
-            nextBoardState = boardState.get_child_board()
+            with perfTelemetry.monitor_telemetry('get_child_board'):
+                nextBoardState = boardState.get_child_board()
         nextBoardState.friendly_move = frMove
         nextBoardState.enemy_move = enMove
 
-        if MapBase.player_had_priority_over_other(self.friendly_player, self.enemy_player, nextBoardState.turn):
-            self.execute(nextBoardState, frMove, self.friendly_player, self.enemy_player)
-            if not nextBoardState.captures_enemy:
-                self.execute(nextBoardState, enMove, self.enemy_player, self.friendly_player)
-        else:
-            self.execute(nextBoardState, enMove, self.enemy_player, self.friendly_player)
-            if not nextBoardState.captured_by_enemy:
+        with perfTelemetry.monitor_telemetry('next board execution'):
+            if MapBase.player_had_priority_over_other(self.friendly_player, self.enemy_player, nextBoardState.turn):
                 self.execute(nextBoardState, frMove, self.friendly_player, self.enemy_player)
+                if not nextBoardState.captures_enemy:
+                    self.execute(nextBoardState, enMove, self.enemy_player, self.friendly_player)
+            else:
+                self.execute(nextBoardState, enMove, self.enemy_player, self.friendly_player)
+                if not nextBoardState.captured_by_enemy:
+                    self.execute(nextBoardState, frMove, self.friendly_player, self.enemy_player)
 
-        if frMove is None:
-            nextBoardState.friendly_skipped_move_count += 1
-        if enMove is None:
-            nextBoardState.enemy_skipped_move_count += 1
+        with perfTelemetry.monitor_telemetry('next board check army positions'):
+            if frMove is None:
+                nextBoardState.friendly_skipped_move_count += 1
+            if enMove is None:
+                nextBoardState.enemy_skipped_move_count += 1
 
-        self.check_army_positions(nextBoardState)
+            self.check_army_positions(nextBoardState)
 
-        if len(nextBoardState.friendly_living_armies) == 0:
-            nextBoardState.kills_all_friendly_armies = True
-        if len(nextBoardState.enemy_living_armies) == 0:
-            nextBoardState.kills_all_enemy_armies = True
+        with perfTelemetry.monitor_telemetry('next board kills armies check'):
+            if len(nextBoardState.friendly_living_armies) == 0:
+                nextBoardState.kills_all_friendly_armies = True
+            if len(nextBoardState.enemy_living_armies) == 0:
+                nextBoardState.kills_all_enemy_armies = True
 
-        if turn & 1 == 0:
-            nextBoardState.controlled_city_turn_differential += nextBoardState.city_differential - self.base_city_differential
+        with perfTelemetry.monitor_telemetry('next board rep detection'):
+            self.detect_repetition(boardState, nextBoardState)
 
-        self.detect_repetition(boardState, nextBoardState)
+        if nextBoardState.turn == self.next_cycle_turn:  # TODO this can only go 50 moves deep for now, after that we stop incrementing army bonuses.
+            with perfTelemetry.monitor_telemetry('next board army bonus'):
+                nextBoardState.controlled_city_turn_differential += nextBoardState.city_differential - self.base_city_differential
+                for tile, simTile in nextBoardState.sim_tiles.items():
+                    if simTile.player >= 0:
+                        newSimTile = SimTile(simTile.source_tile, simTile.army + 1, simTile.player)
 
-        if nextBoardState.turn == self.next_cycle_turn:
-            updated = []
-            for tile, simTile in nextBoardState.sim_tiles.items():
-                if simTile.player >= 0:
-                    newSimTile = SimTile(simTile.source_tile, simTile.army + 1, simTile.player)
+                        if tile.isCity or tile.isGeneral:
+                            newSimTile.army += 1
 
-                    if tile.isCity or tile.isGeneral:
-                        newSimTile.army += 1
-
-                    updated.append(newSimTile)
-
-            for simTile in updated:
-                nextBoardState.sim_tiles[simTile.source_tile] = simTile
-                if simTile.player == self.friendly_player:
-                    st = nextBoardState.friendly_living_armies.pop(simTile.source_tile, None)
-                    if st:
-                        nextBoardState.friendly_living_armies[simTile.source_tile] = simTile
-                else:
-                    st = nextBoardState.enemy_living_armies.pop(simTile.source_tile, None)
-                    if st:
-                        nextBoardState.enemy_living_armies[simTile.source_tile] = simTile
+                        nextBoardState.sim_tiles[tile] = newSimTile
+                        if newSimTile.player == self.friendly_player:
+                            st = nextBoardState.friendly_living_armies.pop(tile, None)
+                            if st:
+                                nextBoardState.friendly_living_armies[tile] = newSimTile
+                        else:
+                            st = nextBoardState.enemy_living_armies.pop(tile, None)
+                            if st:
+                                nextBoardState.enemy_living_armies[tile] = newSimTile
 
         elif nextBoardState.turn & 1 == 0:
-            updated = []
-            for tile in nextBoardState.incrementing:
-                simTile = nextBoardState.sim_tiles[tile]
-                newSimTile = SimTile(simTile.source_tile, simTile.army + 1, simTile.player)
-                updated.append(newSimTile)
-            for simTile in updated:
-                nextBoardState.sim_tiles[simTile.source_tile] = simTile
-                if simTile.player == self.friendly_player:
-                    st = nextBoardState.friendly_living_armies.pop(simTile.source_tile, None)
-                    if st:
-                        nextBoardState.friendly_living_armies[simTile.source_tile] = simTile
-                else:
-                    st = nextBoardState.enemy_living_armies.pop(simTile.source_tile, None)
-                    if st:
-                        nextBoardState.enemy_living_armies[simTile.source_tile] = simTile
+            with perfTelemetry.monitor_telemetry('next board city bonus'):
+                nextBoardState.controlled_city_turn_differential += nextBoardState.city_differential - self.base_city_differential
 
-            # if nextBoardState.turn % 50 == 0:
-            #     for simTile in list(nextBoardState.sim_tiles.values()):
-            #         if simTile.player >= 0:
-            #             nextBoardState.sim_tiles[simTile.source_tile] = SimTile(simTile.source_tile, simTile.army + 1, simTile.player)
-                # for simTile in nextBoardState.friendly_living_armies.values():
-                #     simTile.army += 1
-                # for simTile in nextBoardState.enemy_living_armies.values():
-                #     simTile.army += 1
+                for tile in nextBoardState.incrementing:
+                    simTile = nextBoardState.sim_tiles[tile]
+                    newSimTile = SimTile(simTile.source_tile, simTile.army + 1, simTile.player)
+
+                    nextBoardState.sim_tiles[tile] = newSimTile
+                    if newSimTile.player == self.friendly_player:
+                        st = nextBoardState.friendly_living_armies.pop(tile, None)
+                        if st is not None:
+                            nextBoardState.friendly_living_armies[tile] = newSimTile
+                    else:
+                        st = nextBoardState.enemy_living_armies.pop(tile, None)
+                        if st is not None:
+                            nextBoardState.enemy_living_armies[tile] = newSimTile
+
+                # if nextBoardState.turn % 50 == 0:
+                #     for simTile in list(nextBoardState.sim_tiles.values()):
+                #         if simTile.player >= 0:
+                #             nextBoardState.sim_tiles[simTile.source_tile] = SimTile(simTile.source_tile, simTile.army + 1, simTile.player)
+                    # for simTile in nextBoardState.friendly_living_armies.values():
+                    #     simTile.army += 1
+                    # for simTile in nextBoardState.enemy_living_armies.values():
+                    #     simTile.army += 1
 
         return nextBoardState
 
@@ -575,20 +579,20 @@ class ArmyEngine(object):
                     closestEnThreatTile = tile
 
         if (self.enemy_has_kill_threat
-                and closestFrSave > closestEnThreat # + 1
+                and closestFrSave > closestEnThreat + 1
                 and (not self.friendly_has_kill_threat or closestFrThreat >= closestEnThreat)
         ):
             boardState.captured_by_enemy = True
-            if self.are_tiles_adjacent(closestFrSaveTile, closestEnThreatTile):
-                boardState.captured_by_enemy = False
+            # if self.are_tiles_adjacent(closestFrSaveTile, closestEnThreatTile):
+            #     boardState.captured_by_enemy = False
 
         if (self.friendly_has_kill_threat
-                and closestEnSave > closestFrThreat # + 1
+                and closestEnSave > closestFrThreat + 1
                 and (not self.enemy_has_kill_threat or closestEnThreat >= closestFrThreat)
         ):
             boardState.captures_enemy = True
-            if self.are_tiles_adjacent(closestEnSaveTile, closestFrThreatTile):
-                boardState.captures_enemy = False
+            # if self.are_tiles_adjacent(closestEnSaveTile, closestFrThreatTile):
+            #     boardState.captures_enemy = False
 
         if boardState.captured_by_enemy and boardState.captures_enemy:
             # see who wins the race
@@ -596,6 +600,7 @@ class ArmyEngine(object):
                 boardState.captured_by_enemy = False
             else:
                 boardState.captures_enemy = False
+        return
 
     def detect_repetition(self, prevBoardState, currentBoardState):
         # TODO this needs to probably track each players repetition count separately, so one rep for A followed by one rep for B doesn't trigger a rep thresh of 2, for example.
@@ -988,7 +993,8 @@ class ArmyEngine(object):
             teams=teams,
             allowRandomRepetitions=self.mcts_runner.allow_random_repetitions,
             allowRandomNoOps=self.mcts_runner.allow_random_no_ops,
-            disablePositionalWinDetectionInRollouts=self.mcts_runner.disable_positional_win_detection_in_rollouts)
+            disablePositionalWinDetectionInRollouts=self.mcts_runner.disable_positional_win_detection_in_rollouts,
+            performanceTelemetry=self.mcts_runner.performance_telemetry)
         ctx: Context = Context()
         ctx.set_initial_board_state(self, baseBoardState, game, self.map.turn)
 

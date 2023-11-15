@@ -10,6 +10,7 @@ class MapMatrix(Generic[T]):
     def __init__(self, map: MapBase, initVal: T = None):
         self.init_val: T = initVal
         self.grid: typing.List[typing.List[T]] = new_value_grid(map, initVal)
+        self.map: MapBase = map
 
     def add(self, item: Tile, value: T):
         self.grid[item.x][item.y] = value
@@ -28,6 +29,14 @@ class MapMatrix(Generic[T]):
                 if item != self.init_val:
                     allValues.append(item)
         return allValues
+
+    def keys(self) -> typing.List[Tile]:
+        allKeys: typing.List[Tile] = []
+        for y, row in enumerate(self.grid):
+            for x, item in enumerate(row):
+                if item != self.init_val:
+                    allKeys.append(self.map.GetTile(x, y))
+        return allKeys
 
     def __delitem__(self, key: Tile):
         self.grid[key.x][key.y] = self.init_val

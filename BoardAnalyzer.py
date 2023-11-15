@@ -101,7 +101,7 @@ class BoardAnalyzer:
                     logging.info(
                         f"  outer choke change: tile {tile.toString()}, old {oldOuter[tile.x][tile.y]}, new {self.outerChokes[tile.x][tile.y]}")
 
-    def rebuild_intergeneral_analysis(self, opponentGeneral):
+    def rebuild_intergeneral_analysis(self, opponentGeneral: Tile):
         self.intergeneral_analysis = ArmyAnalyzer(self.map, self.general, opponentGeneral)
 
         enemyDistMap = self.intergeneral_analysis.bMap

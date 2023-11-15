@@ -1,8 +1,8 @@
 """
-	@ Travis Drake (EklipZ) eklipz.io - tdrake0x45 at gmail)
-	April 2017
-	Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
-	EklipZ bot - Tries to play generals lol
+    @ Travis Drake (EklipZ) eklipz.io - tdrake0x45 at gmail)
+    April 2017
+    Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
+    EklipZ bot - Tries to play generals lol
 """
 
 from __future__ import annotations
@@ -37,13 +37,13 @@ class PathMove(object):
         val = "(prev:{} me:{} next:{})".format(prevVal, myVal, nextVal)
         return val
     #def __gt__(self, other):
-    #	if (other == None):
-    #		return True
-    #	return self.turn > other.turn
+    #    if (other == None):
+    #        return True
+    #    return self.turn > other.turn
     #def __lt__(self, other):
-    #	if (other == None):
-    #		return True
-    #	return self.turn < other.turn
+    #    if (other == None):
+    #        return True
+    #    return self.turn < other.turn
 
     def __str__(self) -> str:
         return self.toString()
@@ -156,6 +156,7 @@ class Path(object):
     def calculate_value(
             self,
             forPlayer: int,
+            teams: typing.List[int],
             negativeTiles: None | typing.Set[Tile] | typing.Dict[Tile, typing.Any] = None,
             ignoreNonPlayerArmy: bool = False,
             ignoreIncrement: bool = False,
@@ -168,7 +169,7 @@ class Path(object):
         while node is not None:
             tile = node.tile
             if negativeTiles is None or tile not in negativeTiles:
-                if tile.player == forPlayer:
+                if tile.player != -1 and teams[tile.player] == teams[forPlayer]:
                     val += tile.army
                     if (tile.isCity or tile.isGeneral) and not ignoreIncrement:
                         incVal = (i - 1)
@@ -279,3 +280,12 @@ class Path(object):
             newCopyEnd = newCopyEnd.get_subsegment(newCopyEnd.length - 1, end=True)
 
         return segments
+
+    def convert_to_move_list(self) -> typing.List[Move]:
+        moves = []
+        node = self.start
+        while node.next is not None:
+            moves.append(Move(node.tile, node.next.tile, node.move_half))
+            node = node.next
+
+        return moves

@@ -1,0 +1,74 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+a2             M         M         M                             M
+a2                            M    M                   M              M
+a3   M                                                 M              M
+a3        M    M    M    M         a2   a2                  M                                       M
+a2   a2   a2   a2   a2        M    a2   a2        M         M              M    M
+a2   a2   M    a3   a2   a2   a2   a2   M    M         M         M
+a25  aG1  a2   M    a2   a2   a2   a3   a1   a1   a2   a2   a3   M    a2             M              M
+a2   M    M    aC31 a2   a2   M    a2   a3   a1   a2   a2   a3   a3   a2   M
+a2        M    a2   a3   M    M    M    C44  M    a3   a3   M    a3   a2   a2
+a2   M         a2   M    a3   a2   a2   a2   a3   a3   a3   a1   a1   M
+a2   a2   a2   a23  a1   a1   a1   a1   a1   a1   a1   a1   a1   M    M              M         M
+a2   a37  a1   a1   a1   a2   a2   M    a3   a4   C48  M    a2
+aC13 a2   a2   a4   a1   a10  a1   a1   a3   b4   M    M    a2   M    M                             M
+a2   M         M    a1   a1   M    M    M    b3   C45D b3   M         M                   M
+M         M         a2   a1        M         b3             M    M    M    M              M         M
+     M         b2   M    b2   b2   M         M    M                             M
+                              M                        M              M    M                   M
+     M         M                                       M         M         M                        M
+                              M                        M
+               M                                                                M    M    M
+               M              M    M         M                                  M
+     M    M                   M              M                                  M         M         M
+          M              M         M                   M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=221
+player_index=0
+mode=1v1
+bot_target_player=1
+targetPlayerExpectedGeneralLocation=8,16
+bot_is_all_in_losing=False
+bot_all_in_losing_counter=1
+bot_is_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=102
+aScore=329
+aStandingArmy=227
+aStars=70
+aCityCount=3
+aGeneral=1,6
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=22
+aDelta25Score=118
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=221
+a_bot_general_approx=1,6
+bUsername=Sliper
+bTiles=113
+bScore=320
+bStandingArmy=207
+bStars=55
+bCityCount=4
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=7
+bDelta25Tiles=29
+bDelta25Score=139
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=142
+b_bot_general_approx=7,16

@@ -515,6 +515,7 @@ class GameSimulatorHost(object):
 
         if playerMapVision is not None:
             self.apply_map_vision(playerMapVision.player_index, rawMap=playerMapVision)
+
         self.sim._update_scores()
         self.sim.send_update_to_player_maps(noDeltas=True)
         # # clear all the tile deltas and stuff.
@@ -534,16 +535,24 @@ class GameSimulatorHost(object):
             # botHost.eklipz_bot.init_turn()
             botHost.make_move(player.map, time.time_ns() / NS_CONVERTER)
 
-            botHost.eklipz_bot.expand_plan = None
+            botHost.eklipz_bot.city_expand_plan = None
             botHost.eklipz_bot.timings = None
             botHost.eklipz_bot.curPath = None
+            botHost.eklipz_bot.cached_scrims.clear()
+            botHost.eklipz_bot.targetingArmy = None
+            botHost.last_init_turn = map.turn - 1
             if botHost.eklipz_bot.teammate_communicator is not None:
                 botHost.eklipz_bot.teammate_communicator.begin_next_turn()
                 botHost.eklipz_bot.teammate_communicator.begin_next_turn()
+            botHost.eklipz_bot.viewInfo.turnInc()
+
+            if playerIndex == playerMapVision.player_index:
+                botHost.eklipz_bot.load_resume_data(playerMapVision.resume_data)
 
         # throw the initialized moves away
         self.sim.moves = [None for move in self.sim.moves]
         self.sim.reset_player_map_deltas()
+        self.give_players_perfect_initial_city_information()
 
     def run_sim(self, run_real_time: bool = True, turn_time: float = 0.5, turns: int = 10000) -> int | None:
         """
@@ -564,6 +573,7 @@ class GameSimulatorHost(object):
 
             if botHost.has_viewer and run_real_time:
                 botHost.initialize_viewer(botHost.eklipz_bot.no_file_logging, onClick=self.on_click)
+                botHost._viewer.send_update_to_viewer(botHost.eklipz_bot.viewInfo, botHost.eklipz_bot._map)
                 botHost._viewer.send_update_to_viewer(botHost.eklipz_bot.viewInfo, botHost.eklipz_bot._map)
                 botHost.run_viewer_loop()
 
@@ -586,6 +596,10 @@ class GameSimulatorHost(object):
                         # server update. Allows things like the army tracker etc and the map viewer to update with the
                         # bots final calculated map state and everything.
                         botHost.make_move(self.sim.players[idx].map, time.time_ns() / NS_CONVERTER)
+
+                # run these one last time
+                for func in self._between_turns_funcs:
+                    self._run_between_turns_func(run_real_time, func)
         except:
             try:
                 self.sim.end_game()
@@ -604,7 +618,7 @@ class GameSimulatorHost(object):
             raise
 
         if run_real_time:
-            self.wait_until_viewer_closed_or_time_elapses(min(5.0, max(1.5, turn_time * 4)))
+            self.wait_until_viewer_closed_or_time_elapses(min(3.0, max(1.5, turn_time * 4)))
 
         self.sim.end_game()
         for botHost in self.bot_hosts:
@@ -680,10 +694,30 @@ class GameSimulatorHost(object):
             moves = path_str.split('->')
             prevTile: Tile | None = None
             for move_str in moves:
-                (currentTile, moveHalf) = self.get_player_tile_from_move_str(player, move_str)
-                if prevTile is not None:
+                (nextTile, moveHalf) = self.get_player_tile_from_move_str(player, move_str)
+                if prevTile is None:
+                    prevTile = nextTile
+                    continue
+
+                if prevTile.x != nextTile.x and prevTile.y != nextTile.y:
+                    raise AssertionError(f'Cannot jump diagnoally between {str(prevTile)} and {str(nextTile)}')
+
+                xInc = nextTile.x - prevTile.x
+                if xInc < 0:
+                    xInc = -1
+                elif xInc > 0:
+                    xInc = 1
+
+                yInc = nextTile.y - prevTile.y
+                if yInc < 0:
+                    yInc = -1
+                elif yInc > 0:
+                    yInc = 1
+
+                while prevTile.x != nextTile.x or prevTile.y != nextTile.y:
+                    currentTile = self.sim.players[player].map.GetTile(prevTile.x + xInc, prevTile.y + yInc)
                     self.move_queue[player].append(Move(prevTile, currentTile, moveHalf))
-                prevTile = currentTile
+                    prevTile = currentTile
 
     def queue_player_move(self, player: int, move: Move | None):
         playerObj = self.sim.players[player]
@@ -854,7 +888,7 @@ class GameSimulatorHost(object):
             logging.error(f'assertion failure while running live, turn {self.sim.turn}')
             logging.error(traceback.format_exc())
             if run_real_time:
-                self.wait_until_viewer_closed_or_time_elapses(600)
+                self.wait_until_viewer_closed_or_time_elapses(3)
             raise
 
     def enqueue_teammates_tile_ping(self, player: int, tile: Tile):

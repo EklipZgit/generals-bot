@@ -9,18 +9,18 @@ class GameSimulatorTests(TestBase):
     def test_simulates_a_game_from_turn_1(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/243.txtmap', 243, player_index=1)
-        fakeEnemyGen = map.GetTile(2, 16)
-        fakeEnemyGen.isGeneral = True
-        fakeEnemyGen.player = 0
-        fakeEnemyGen.army = 7
+        # fakeEnemyGen = map.GetTile(2, 16)
+        # fakeEnemyGen.isGeneral = True
+        # fakeEnemyGen.player = 0
+        # fakeEnemyGen.army = 7
 
+        self.begin_capturing_logging()
         self.reset_map_to_just_generals(map, turn=16)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player)
 
-        self.begin_capturing_logging()
         simHost.run_sim(run_real_time=debugMode, turn_time=0.0001)
 
     def test_loads_map_data_correctly_per_player(self):

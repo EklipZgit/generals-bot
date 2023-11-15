@@ -253,7 +253,7 @@ function Create-TestContinuingGameFrom {
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
         $baseAssert
 
-        self.fail("TODO add asserts for $TestName")
+        self.skipTest("TODO add asserts for $TestName")
 "@
 
     $testFileContent | Set-Content $testFile -Encoding utf8

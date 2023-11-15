@@ -25,6 +25,64 @@ TILE_MOUNTAIN = -2
 TILE_FOG = -3
 TILE_OBSTACLE = -4
 
+PLAYER_CHAR_INDEX_PAIRS: typing.List[typing.Tuple[str, int]] = [
+    ('a', 0),
+    ('b', 1),
+    ('c', 2),
+    ('d', 3),
+    ('e', 4),
+    ('f', 5),
+    ('g', 6),
+    ('h', 7),
+    ('i', 8),
+    ('j', 9),
+    ('k', 10),
+    ('l', 11),
+    ('m', 12),
+    ('n', 13),
+    ('o', 14),
+    ('p', 15),
+]
+
+PLAYER_INDEX_BY_CHAR: typing.Dict[str, int] = {
+    'a': 0,
+    'b': 1,
+    'c': 2,
+    'd': 3,
+    'e': 4,
+    'f': 5,
+    'g': 6,
+    'h': 7,
+    'i': 8,
+    'j': 9,
+    'k': 10,
+    'l': 11,
+    'm': 12,
+    'n': 13,
+    'o': 14,
+    'p': 15,
+}
+
+PLAYER_CHAR_BY_INDEX: typing.List[str] = [
+    'a',
+    'b',
+    'c',
+    'd',
+    'e',
+    'f',
+    'g',
+    'h',
+    'i',
+    'j',
+    'k',
+    'l',
+    'm',
+    'n',
+    'o',
+    'p',
+]
+
+
 _REPLAY_URLS = {
     'na': "http://generals.io/replays/",
     'eu': "http://eu.generals.io/replays/",
@@ -32,11 +90,13 @@ _REPLAY_URLS = {
 
 
 class TeamStats(object):
-    def __init__(self, tileCount: int, score: int, standingArmy: int, cityCount: int):
+    def __init__(self, tileCount: int, score: int, standingArmy: int, cityCount: int, fightingDiff: int, unexplainedTileDelta: int):
         self.tileCount: int = tileCount
         self.score: int = score
         self.standingArmy: int = standingArmy
         self.cityCount: int = cityCount
+        self.fightingDiff: int = fightingDiff
+        self.unexplainedTileDelta: int = unexplainedTileDelta
 
 
 class Player(object):
@@ -60,6 +120,7 @@ class Player(object):
         self.tileCount: int = 0
         self.standingArmy: int = 0
         self.cityCount: int = 1
+        self.lastCityCount: int = 1
         self.cityLostTurn: int = 0
         self.cityGainedTurn: int = 0
         self.delta25tiles: int = 0
@@ -510,7 +571,6 @@ class Tile(object):
             self.isGeneral = True
             # TODO remove, this should NOT happen here
             map.generals[tile] = self
-            self._general_index = self.tile
 
         if self.delta.oldOwner != self.delta.newOwner:
             # TODO  and not self.delta.gainedSight ?
@@ -608,7 +668,7 @@ class MapBase(object):
         self.player_index: int = player_index  # Integer Player Index
         # TODO TEAMMATE
         self.is_2v2: bool = False
-        self.teammates = set()
+        self.teammates: typing.Set[int] = set()
 
         uniqueTeams = set()
         if teams is not None:
@@ -637,7 +697,7 @@ class MapBase(object):
         self.notify_tile_deltas = []
         self.notify_city_found = []
         self.notify_tile_discovered = []
-        self.notify_tile_revealed = []
+        self.notify_tile_vision_changed = []
         self.notify_general_revealed = []
         self.notify_player_captures = []
 
@@ -676,10 +736,13 @@ class MapBase(object):
         self.result: bool = False
         """Game Result (True = Won)"""
 
-        self.scoreHistory: typing.List[typing.Union[None, typing.List[Score]]] = [None for i in range(50)]
+        self.scoreHistory: typing.List[typing.List[Score] | None] = [None for i in range(50)]
         """Last 50 turns worth of score histories, by player."""
 
         self.remainingPlayers = 0
+
+        self.resume_data: typing.Dict[str, str] = {}
+        """Data for resuming a game in unit test. Unused in normal games."""
 
     def __repr__(self):
         return str(self)
@@ -716,8 +779,8 @@ class MapBase(object):
             del state['notify_city_found']
         if 'notify_tile_discovered' in state:
             del state['notify_tile_discovered']
-        if 'notify_tile_revealed' in state:
-            del state['notify_tile_revealed']
+        if 'notify_tile_vision_changed' in state:
+            del state['notify_tile_vision_changed']
         if 'notify_general_revealed' in state:
             del state['notify_general_revealed']
         if 'notify_player_captures' in state:
@@ -731,7 +794,7 @@ class MapBase(object):
         self.notify_tile_deltas = []
         self.notify_city_found = []
         self.notify_tile_discovered = []
-        self.notify_tile_revealed = []
+        self.notify_tile_vision_changed = []
         self.notify_general_revealed = []
         self.notify_player_captures = []
 
@@ -909,11 +972,22 @@ class MapBase(object):
         """ONLY call this when simulating the game"""
         self.scores = scores
 
+    def get_team_stats_by_team_id(self, teamId: int) -> TeamStats:
+        examplePlayer = -1
+        for pIdx, currentTeamId in enumerate(self._teams):
+            if currentTeamId == teamId:
+                examplePlayer = pIdx
+                break
+
+        return self.get_team_stats(examplePlayer)
+
     def get_team_stats(self, teamPlayer: int) -> TeamStats:
         tileCount = 0
         score = 0
         standingArmy = 0
         cities = 0
+        fightingDiff = 0
+        unexplainedTileDelta = 0
 
         for player in self.players:
             if self.is_player_on_team_with(player.index, teamPlayer):
@@ -921,8 +995,10 @@ class MapBase(object):
                 score += player.score
                 standingArmy += player.standingArmy
                 cities += player.cityCount
+                fightingDiff += player.actualScoreDelta - player.expectedScoreDelta
+                unexplainedTileDelta += player.unexplainedTileDelta
 
-        return TeamStats(tileCount=tileCount, score=score, standingArmy=standingArmy, cityCount=cities)
+        return TeamStats(tileCount=tileCount, score=score, standingArmy=standingArmy, cityCount=cities, fightingDiff=fightingDiff, unexplainedTileDelta=unexplainedTileDelta)
 
     def is_tile_friendly(self, tile: Tile) -> bool:
         if self._teams[self.player_index] == self._teams[tile.player]:
@@ -997,7 +1073,7 @@ class MapBase(object):
             for eventHandler in self.notify_tile_discovered:
                 eventHandler(curTile)
         if wasVisible != curTile.visible:
-            for eventHandler in self.notify_tile_revealed:
+            for eventHandler in self.notify_tile_vision_changed:
                 eventHandler(curTile)
         if wasGeneral != curTile.isGeneral:
             for eventHandler in self.notify_general_revealed:
@@ -1020,10 +1096,9 @@ class MapBase(object):
 
         @param bypassDeltas: If passes, fog-city-and-army-increments will not be applied this turn, and tile-movement deltas will not be tracked.
         """
+
         for player in self.players:
-            if player is not None:
-                player.cities = []
-                player.tiles = []
+            player.lastCityCount = player.cityCount
 
         if self.complete and not self.result and self.remainingPlayers > 2:  # Game Over - Ignore Empty Board Updates in FFA
             return self
@@ -1033,6 +1108,11 @@ class MapBase(object):
         self.scoreHistory[0] = self.scores
 
         self._update_player_information()
+
+        for player in self.players:
+            if player is not None:
+                player.cities = []
+                player.tiles = []
 
         # right now all tile deltas are completely raw, as applied by the raw server update, with the exception of lost-vision-fog.
 
@@ -1173,6 +1253,7 @@ class MapBase(object):
 
     def clear_deltas_and_score_history(self):
         self.scoreHistory = [None for i in range(50)]
+        self.scoreHistory[0] = list(self.scores)
         self.clear_deltas()
 
     def clear_deltas(self):
@@ -1272,7 +1353,15 @@ class MapBase(object):
             toTile.delta.fromTile = fromTile
 
         if fullFromDiffCovered:
-            fromTile.delta.unexplainedDelta = 0
+            if fromTile.delta.gainedSight:
+                if fromTile.delta.oldOwner == fromTile.player:
+                    fromTile.delta.unexplainedDelta = fromTile.delta.unexplainedDelta - toTile.delta.unexplainedDelta
+                else:
+                    fromTile.delta.unexplainedDelta = fromTile.delta.unexplainedDelta - toTile.delta.unexplainedDelta
+                self.set_fog_emergence(fromTile, armyEmerged=fromTile.delta.unexplainedDelta, byPlayer=fromTile.player)
+            else:
+                fromTile.delta.unexplainedDelta = 0
+
         if fullToDiffCovered:
             toTile.delta.unexplainedDelta = 0
 
@@ -1931,6 +2020,12 @@ class MapBase(object):
 
         expectedFriendlyDelta = 0
 
+        for city in myPlayer.cities:
+            if city.player != myPlayer.index:
+                myPlayer.cityCount -= 1
+
+                self.players[city.player].cityCount = self.players[city.player].lastCityCount + 1
+
         if self.is_army_bonus_turn:
             expectedFriendlyDelta += myPlayer.tileCount
         if self.is_city_bonus_turn:
@@ -1945,6 +2040,12 @@ class MapBase(object):
                 if teammatePlayer.dead:
                     continue
 
+                for city in teammatePlayer.cities:
+                    if city.player != teammatePlayer.index:
+                        teammatePlayer.cityCount -= 1
+
+                        self.players[city.player].cityCount = self.players[city.player].lastCityCount + 1
+
                 if self.is_army_bonus_turn:
                     expectedFriendlyDelta += teammatePlayer.tileCount
                 if self.is_city_bonus_turn:
@@ -1954,7 +2055,7 @@ class MapBase(object):
 
         friendlyFightDelta = expectedFriendlyDelta - actualFriendlyDelta
 
-        logging.info(f"myPlayer score {myPlayer.score}, lastScores myPlayer total {lastScores[myPlayer.index].total}, friendlyFightDelta {friendlyFightDelta}")
+        logging.info(f"myPlayer score {myPlayer.score}, lastScores myPlayer total {lastScores[myPlayer.index].total}, friendlyFightDelta {friendlyFightDelta} based on expectedFriendlyDelta {expectedFriendlyDelta} actualFriendlyDelta {actualFriendlyDelta}")
 
         teams = [i for i in range(len(self.players))]
 
@@ -1971,8 +2072,8 @@ class MapBase(object):
                 teamDict[teamIndex] = teamList
             teamList.append(pIndex)
 
-        teamCurrentCities = 0
         for teamIndex, teamList in teamDict.items():
+            teamCurrentCities = 0
             actualEnemyTeamDelta = 0
             expectedEnemyTeamDelta = 0
             teamCityCount = 0
@@ -1990,7 +2091,7 @@ class MapBase(object):
 
                 teamAlive = True
 
-                if self.player_index == playerIndex:
+                if self.is_player_on_team_with(self.player_index, playerIndex):
                     teamPlayer.cityCount = len(teamPlayer.cities) + 1
 
                 expectedEnemyDelta = 0
@@ -2023,19 +2124,20 @@ class MapBase(object):
                 # this means we can still calculate city counts, even when fights are ongoing and both players are losing army
                 # so we get the amount of unexpected delta on our player, and add that to actual opponent delta, and get the opponents city count
 
-                realEnemyCities = teamCityCount + actualEnemyTeamDelta + friendlyFightDelta - expectedEnemyTeamDelta
+                realEnemyCities = actualEnemyTeamDelta + friendlyFightDelta - expectedEnemyTeamDelta + teamCurrentCities
+                cityDifference = realEnemyCities - teamCurrentCities
 
-                # if teamPlayer.
+                logging.info(f'team{teamIndex} realEnemyCities {realEnemyCities} based on actualEnemyTeamDelta {actualEnemyTeamDelta}, friendlyFightDelta {friendlyFightDelta} (teamCurrentCities {teamCurrentCities}, expectedEnemyTeamDelta {expectedEnemyTeamDelta}, cityDifference {cityDifference})')
 
-                if realEnemyCities <= -30:
+                if cityDifference <= -30:
                     # then opp just took a neutral city
                     newCityCount += 1
                     logging.info(f"set team {teamIndex} cityCount += 1 to {newCityCount} because it appears they just took a city based on realEnemyCities {realEnemyCities}.")
-                elif realEnemyCities >= 30:
+                elif cityDifference >= 30:
                     # then our player just took a neutral city, noop
                     logging.info(
-                        "myPlayer just took a city? (or fighting in ffa) ignoring realEnemyCities this turn, realEnemyCities >= 38 and actualMeDelta < -30")
-                elif self.is_city_bonus_turn:
+                        f"WE just took a city? enemy team cityDifference {cityDifference} > 30 should only happen when we just took a city because of the effect on tiledelta. Ignoring realEnemyCities {realEnemyCities} this turn, realEnemyCities {realEnemyCities} >= 30 and actualEnemyTeamDelta {actualEnemyTeamDelta} < -30")
+                elif self.is_city_bonus_turn and realEnemyCities != teamCurrentCities:
                     newCityCount = realEnemyCities
                     logging.info(
                         f"want to set team {teamIndex} cityCount to {newCityCount}. "
@@ -2121,6 +2223,8 @@ class MapBase(object):
         knowSourceOwner = source.was_visible_last_turn() or (self.remainingPlayers == 2 and source.discovered and source.player >= 0)
         if knowSourceOwner:
             sourceOwner = self.players[source.delta.oldOwner]
+            if source.delta.gainedSight:
+                sourceOwner = self.players[source.player]
             knowDestOwner = dest.was_visible_last_turn() or (self.remainingPlayers == 2 and dest.discovered and dest.delta.oldOwner >= 0)
             if knowDestOwner:
                 destOwner = None

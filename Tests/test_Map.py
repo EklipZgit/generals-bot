@@ -1406,3 +1406,5 @@ C5
         simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=3)
         self.assertNoFriendliesKilled(map, general, allyGen)
+
+    # 58 failed, 52 passed

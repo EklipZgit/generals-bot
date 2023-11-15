@@ -154,6 +154,9 @@ class PerformanceTimer(object):
         return self.current_move.begin_event(event_description)
 
     def get_elapsed_since_update(self, turn: int) -> float:
-        elapsed = time.time_ns() / NS_CONVERTER - self.update_received_history[turn]
-        return elapsed
+        if turn < len(self.update_received_history):
+            elapsed = time.time_ns() / NS_CONVERTER - self.update_received_history[turn]
+            return elapsed
+
+        return 0.0
 

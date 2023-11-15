@@ -58,12 +58,15 @@ class ThreatObj(object):
                 # del dict[tile]  # necessary for 'test_should_not_make_move_away_from_threat' to pass.
                 # logging.info(f'Threat path tile {str(tile)} increased to dist {newDist} based on neighbors {neighbors}')
                 pass
-            elif not allowNonChoke and tile not in self.armyAnalysis.pathChokes and not self.path.start.next.tile in tile.movable:
+            # elif not allowNonChoke and tile not in self.armyAnalysis.pathChokes and not self.path.start.next.tile in tile.movable:
+            elif not allowNonChoke and tile not in self.armyAnalysis.pathChokes:# and not self.path.start.next.tile in tile.movable:
                 # pathWay = self.armyAnalysis.pathWayLookupMatrix[tile]
                 # neighbors = where(pathWay.tiles, lambda t: t != tile and self.armyAnalysis.aMap[t.x][t.y] == self.armyAnalysis.aMap[tile.x][tile.y] and self.armyAnalysis.bMap[t.x][t.y] == self.armyAnalysis.bMap[tile.x][tile.y])
-                # newDist = dist + 1
+                newDist = dist + self.armyAnalysis.chokeWidths[tile] - 2
+                logging.info(f'Threat path tile {str(tile)} increased to dist {newDist} from {dist} based on not being a choke')
+                dict[tile] = newDist
+                # logging.info(f'stripping threat defense tile {str(tile)} bc not in path chokes')
                 # del dict[tile]  # necessary for 'test_should_not_make_move_away_from_threat' to pass.
-                # logging.info(f'Threat path tile {str(tile)} increased to dist {newDist} based on neighbors {neighbors}')
                 pass
             # else:
             #     logging.info(f'Threat path tile {str(tile)} left at dist {dist}')
@@ -113,7 +116,7 @@ class DangerAnalyzer(object):
         negTiles = set()
         if self.fastestThreat is not None:
             negTiles.update(self.fastestThreat.path.tileSet)
-        self.fastestPotentialThreat = self.getFastestThreat(depth + 2, armies, self.map.player_index, pretendGenArmyLeft=True, negTiles=negTiles)
+        self.fastestPotentialThreat = self.getFastestThreat(depth + 2, armies, self.map.player_index, pretendTilesVacated=True, negTiles=negTiles)
         if self.map.is_2v2:
             for teammate in self.map.teammates:
                 self.fastestAllyThreat = self.getFastestThreat(depth, armies, teammate)
@@ -178,7 +181,7 @@ class DangerAnalyzer(object):
         logging.info(f"VISION threat analyzer took {time.perf_counter() - startTime:.3f}")
         return threatObj
 
-    def getFastestThreat(self, depth: int, armies: typing.Dict[Tile, Army], againstPlayer: int, pretendGenArmyLeft: bool = False, negTiles: typing.Set[Tile] | None = None) -> ThreatObj | None:
+    def getFastestThreat(self, depth: int, armies: typing.Dict[Tile, Army], againstPlayer: int, pretendTilesVacated: bool = False, negTiles: typing.Set[Tile] | None = None) -> ThreatObj | None:
         startTime = time.perf_counter()
         logging.info(f"------  fastest threat analyzer: depth {depth}")
         curThreat = None
@@ -192,8 +195,18 @@ class DangerAnalyzer(object):
             return None
         general = self.map.generals[againstPlayer]
 
+        if negTiles is None:
+            negTiles = set()
+
+        negativeTilesToUse = negTiles.copy()
+
+        if pretendTilesVacated:
+            for tile in self.map.players[againstPlayer].tiles:
+                if not tile.isGeneral and tile.army > 7:
+                    negativeTilesToUse.add(tile)
+
         searchArmyAmount = 0.5
-        if pretendGenArmyLeft:
+        if pretendTilesVacated:
             searchArmyAmount -= general.army - 1
 
         defendableFromPlayers = set()
@@ -215,13 +228,17 @@ class DangerAnalyzer(object):
 
             defendableFromPlayers.add(player.index)
 
+            curNegs = negativeTilesToUse.copy()
+            if player.general is not None:
+                curNegs.add(player.general)
+
             path = dest_breadth_first_target(
                 map=self.map,
                 goalList=[general],
                 targetArmy=searchArmyAmount,
                 maxTime=0.05,
                 maxDepth=depth,
-                negativeTiles=negTiles,
+                negativeTiles=curNegs,
                 searchingPlayer=player.index,
                 dontEvacCities=False,
                 dupeThreshold=3,
@@ -239,7 +256,7 @@ class DangerAnalyzer(object):
                     targetArmy=searchArmyAmount,
                     maxTime=0.05,
                     maxDepth=path.length + 5,
-                    negativeTiles=None,
+                    negativeTiles=curNegs,
                     searchingPlayer=player.index,
                     dontEvacCities=False,
                     dupeThreshold=5,

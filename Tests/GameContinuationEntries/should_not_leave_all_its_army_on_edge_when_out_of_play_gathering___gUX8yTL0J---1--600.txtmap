@@ -1,0 +1,130 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M              M    M                        M         M                                       M
+                                        M
+a2                                                                    M    M              M
+a2   a2   a2   a2        M                        M                        M    M    M    M
+a6   M    M    a2   a2   a7             M    a4   a4   a3   a3   a3   a3        M         M    a4
+a6             M    a2   a7   M    a2   a2   a2   a2   a2   a2   M    a3   a3   a3   a3   a4   a4   a4
+a6   a6   M    M    a2   a2   a2   a2        M         a6   M              M         a3        M    b14
+     a6   M    a6   a2   a2   M    M    a8   a8   M    a7   a6        M              a3   M         b4
+     a6   a6   a6   a2D  a2   M    a8   a7   b6   b6   M                   M         a3        a9   b4
+     a6   M    M    D    a13  b2   b2   b2   b6   b6             M    M              a3   M    a9   b4
+M                   D    a6        M    b2   b2   b6                  M    M         a3        a10  b4
+     M              M    a6             M    b2   b2   b8        M         a4   M    a3        a10  b4
+               b6   b6   b6   M    b2   M    bC11 b3   b3             M    a9   aM4  a3   a3   a3   a3
+                    b2   b5   M    b2        M         b3             bC55 M         M    M    a7D  a3D
+               b2   b2   bC56 b2   b2   b2   M    M    a2   a2   a2   b8   b3   M    M         MD   a3D
+          M    b2   a2   b5   b3   b3   b2   M    a2   a2   M    a2   b6   b6   b6   b6   M    M    a3
+M         M    b2   b12  a2   a2   a2   M    M    a2   b3   b3   a2   b3   a8   a8   b6   M    b5   a3
+     M    b2   M    b2   b3   M    a2   a2   a2   a2   b3   b3   a2   M    M    b6   a5   a5   b5   a3
+M    b9   bC18 b2   b2   b2   M    b5   b5   M    b3   M    M    a2   a5D  a5   a3   a3   a3   a3   a3
+b2   b2   b4   b4   M    b2   b3   b3   a5   b4   M    a5   a5   a3   a5   M    a3   b5   b9   M    MD
+b2   bG87 b21  b2   M    b2   b2   b3   b2   b2   b2   b2   b2   b2   b248 b123 a3   M    M
+M    b2   M    b2   b2   b2   b2   b2   b2   b5   b5   a5   M    bC30 M    b61  a3   MD   MD
+M    b2   b3   b3   b3   a5   a5   a5   a5   a5   a5   a5   b6   M    bC39 b30  a3   a3D  D    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=600
+player_index=1
+mode=1v1
+bot_target_player=0
+targetPlayerExpectedGeneralLocation=5,7
+bot_is_all_in_losing=False
+bot_all_in_losing_counter=0
+bot_is_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=True
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=togonozomi
+aTiles=167
+aScore=1180
+aStandingArmy=1013
+aStars=1
+aCityCount=3
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=513
+aDelta25Tiles=7
+aDelta25Score=57
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=598
+a_bot_general_approx=10,4
+bUsername=Human.exe
+bTiles=113
+bScore=1151
+bStandingArmy=1038
+bStars=57
+bCityCount=7
+bGeneral=1,20
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=2
+bDelta25Tiles=-6
+bDelta25Score=95
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=600
+b_bot_general_approx=1,20
+ot_0_c_550_tileCount=159
+ot_0_c_550_score=1130
+ot_0_c_550_standingArmy=971
+ot_0_c_550_cityCount=4
+ot_0_c_550_fightingDiff=-2
+ot_0_c_550_unexplainedTileDelta=0
+ot_1_c_550_tileCount=120
+ot_1_c_550_score=1063
+ot_1_c_550_standingArmy=943
+ot_1_c_550_cityCount=6
+ot_1_c_550_fightingDiff=-2
+ot_1_c_550_unexplainedTileDelta=0
+ot_0_c_500_tileCount=139
+ot_0_c_500_score=1015
+ot_0_c_500_standingArmy=876
+ot_0_c_500_cityCount=3
+ot_0_c_500_fightingDiff=0
+ot_0_c_500_unexplainedTileDelta=0
+ot_1_c_500_tileCount=138
+ot_1_c_500_score=965
+ot_1_c_500_standingArmy=827
+ot_1_c_500_cityCount=6
+ot_1_c_500_fightingDiff=0
+ot_1_c_500_unexplainedTileDelta=0
+ot_0_c_450_tileCount=148
+ot_0_c_450_score=921
+ot_0_c_450_standingArmy=773
+ot_0_c_450_cityCount=3
+ot_0_c_450_fightingDiff=-8
+ot_0_c_450_unexplainedTileDelta=0
+ot_1_c_450_tileCount=128
+ot_1_c_450_score=870
+ot_1_c_450_standingArmy=742
+ot_1_c_450_cityCount=5
+ot_1_c_450_fightingDiff=-8
+ot_1_c_450_unexplainedTileDelta=0
+ot_0_stats_moves_spent_capturing_fog_tiles=0
+ot_0_stats_moves_spent_capturing_visible_tiles=0
+ot_0_stats_moves_spent_gathering_fog_tiles=0
+ot_0_stats_moves_spent_gathering_visible_tiles=0
+ot_0_stats_approximate_army_gathered_this_cycle=0
+ot_0_stats_army_annihilated_visible=0
+ot_0_stats_army_annihilated_fog=0
+ot_0_stats_army_annihilated_total=0
+ot_0_stats_approximate_fog_army_available_total=1608
+ot_0_stats_approximate_fog_city_army=678
+ot_1_stats_moves_spent_capturing_fog_tiles=0
+ot_1_stats_moves_spent_capturing_visible_tiles=0
+ot_1_stats_moves_spent_gathering_fog_tiles=0
+ot_1_stats_moves_spent_gathering_visible_tiles=0
+ot_1_stats_approximate_army_gathered_this_cycle=0
+ot_1_stats_army_annihilated_visible=0
+ot_1_stats_army_annihilated_fog=0
+ot_1_stats_army_annihilated_total=0
+ot_1_stats_approximate_fog_army_available_total=14
+ot_1_stats_approximate_fog_city_army=0

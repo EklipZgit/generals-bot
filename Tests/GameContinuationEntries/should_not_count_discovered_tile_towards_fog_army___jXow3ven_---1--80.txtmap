@@ -1,0 +1,114 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+               M                        M                                  M                   M
+                                             M                             M    M    M              M
+                                   M              M    M              M         b1   b1   b1   M
+M         M    M                        M         D    M         M              b1   M    M         M
+M                                       b2   a1   a1   M    M              M    b1   b1             M
+     M    M         M    a1   a2        M    b1   b1   b1   b1   b1   b1   b1   b1   b1   M         M
+M                   M    a1   a1   a1   b14  b1   a1   M    b1                  M    b1   bG7  M         M
+                              M                                  C46       C50  b1   b1   b1   M    M
+     M              M                             M         M              M    b1   b1   M         M
+                    M         M                                  M         b1   b1   M    M         M
+                                                       M                             M
+                    M              M    M         M    M                                            M
+     M    M    M    M    M    M                                  M    M              M    M              M
+          M    M                        M         M                        M                        M
+          M    M                                  M                             M         M         M
+                    M                   M              M         M    M
+               M                        M              M         M                                  M
+          M              M              M                                            M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=80
+player_index=1
+mode=1v1
+bot_target_player=0
+targetPlayerExpectedGeneralLocation=0,2
+bot_is_all_in_losing=False
+bot_all_in_losing_counter=0
+bot_is_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=grapefruits
+aTiles=29
+aScore=47
+aStandingArmy=18
+aStars=39
+aCityCount=1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=150
+aDelta25Tiles=21
+aDelta25Score=31
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=76
+a_bot_general_approx=5,6
+bUsername=Human.exe
+bTiles=28
+bScore=48
+bStandingArmy=20
+bStars=64
+bCityCount=1
+bGeneral=18,6
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=20
+bDelta25Score=32
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=80
+b_bot_general_approx=18,6
+ot_0_c_50_tileCount=23
+ot_0_c_50_score=49
+ot_0_c_50_standingArmy=26
+ot_0_c_50_cityCount=1
+ot_0_c_50_fightingDiff=0
+ot_0_c_50_unexplainedTileDelta=1
+ot_1_c_50_tileCount=24
+ot_1_c_50_score=50
+ot_1_c_50_standingArmy=26
+ot_1_c_50_cityCount=1
+ot_1_c_50_fightingDiff=0
+ot_1_c_50_unexplainedTileDelta=0
+ot_0_c_0_tileCount=1
+ot_0_c_0_score=1
+ot_0_c_0_standingArmy=1
+ot_0_c_0_cityCount=1
+ot_0_c_0_fightingDiff=0
+ot_0_c_0_unexplainedTileDelta=0
+ot_1_c_0_tileCount=1
+ot_1_c_0_score=1
+ot_1_c_0_standingArmy=1
+ot_1_c_0_cityCount=1
+ot_1_c_0_fightingDiff=0
+ot_1_c_0_unexplainedTileDelta=0
+ot_0_stats_moves_spent_capturing_fog_tiles=4
+ot_0_stats_moves_spent_capturing_visible_tiles=6
+ot_0_stats_moves_spent_gathering_fog_tiles=18
+ot_0_stats_moves_spent_gathering_visible_tiles=2
+ot_0_stats_approximate_army_gathered_this_cycle=14
+ot_0_stats_army_annihilated_visible=6
+ot_0_stats_army_annihilated_fog=0
+ot_0_stats_army_annihilated_total=0
+ot_0_stats_approximate_fog_army_available_total=4
+ot_0_stats_approximate_fog_city_army=12
+ot_1_stats_moves_spent_capturing_fog_tiles=0
+ot_1_stats_moves_spent_capturing_visible_tiles=9
+ot_1_stats_moves_spent_gathering_fog_tiles=0
+ot_1_stats_moves_spent_gathering_visible_tiles=21
+ot_1_stats_approximate_army_gathered_this_cycle=0
+ot_1_stats_army_annihilated_visible=11
+ot_1_stats_army_annihilated_fog=0
+ot_1_stats_army_annihilated_total=0
+ot_1_stats_approximate_fog_army_available_total=0
+ot_1_stats_approximate_fog_city_army=0
+ot_a_tcs=4x2|21x1

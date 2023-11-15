@@ -1,0 +1,170 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+M    h1   h1   h2   h1   h1             M    M                             M                             M    M
+     M    hG7  h2   h2   M                                                      M    M    M              M                        M              M
+C43  h2   h2   h2   h2   h2   M                        M              M    M                                  M         M              M    M
+     C40  h2   M    M    h2   h2   C45                                M                   M         M              M
+     h2   h2        M    a2   a2   a2   a2   M                   M                                                                M              M
+     h2   C47       M    MD   MD   a2D                 M         M    M         M                                  M
+     h2             M              a2                       M                                                           M
+     h2        M              M                                                                          M              M                   M    M
+h2   h2   C44  M                                            M                   M                        M    M         M    M
+h2        M                                                                     M    M              M                        M    M
+h1        M    M                   M    M                                                 M    M    M                             M         M
+h1   M         M    M         M    M    M    M         M    M    M                        M                                       M         M
+               M              M                   M              M              M              M         M         M                   M         M
+     M                                                 M         M                                       M    M         M    M         M
+          M         M    M    M         M                        M         M         M                   M         M    M    M                   M
+M                   M         M         M                                  M         M                   M    M              M              M    M
+     M    M                                                 M                   M                                  M              M    M
+M              M              M                   M    M              M         M                                  M              M
+                    M              M    M         M         M         M    M                                            M                        M    M
+                                   M         M         M         M         M                                            M              M    M
+     M    M    M                   M    M              M         M         M                   M                                       M    M
+M              M                   M    M    M                                  M         M         M                        M                        M
+M    M    M                                       M                   M         M         M                                  M              M         M
+     M    M              M                        M    M                        M                        M                        M         M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=54
+player_index=7
+mode=ffa
+bot_target_player=-1
+bot_is_all_in_losing=False
+bot_all_in_losing_counter=0
+bot_is_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=beef12
+aTiles=20
+aScore=47
+aStandingArmy=27
+aStars=71
+aCityCount=1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=15
+aDelta25Tiles=19
+aDelta25Score=44
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=49
+a_bot_general_approx=8,6
+bUsername=mountain man
+bTiles=12
+bScore=31
+bStandingArmy=19
+bStars=73
+bCityCount=1
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=11
+bDelta25Score=28
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=0
+cUsername=milosnikolic
+cTiles=26
+cScore=52
+cStandingArmy=26
+cStars=76
+cCityCount=1
+cKnowsKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=25
+cDelta25Score=49
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=0
+dUsername=Bud1
+dTiles=21
+dScore=48
+dStandingArmy=27
+dStars=72
+dCityCount=1
+dKnowsKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+dDelta25Tiles=20
+dDelta25Score=45
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=0
+eUsername=urban2
+eTiles=11
+eScore=37
+eStandingArmy=26
+eStars=71
+eCityCount=1
+eKnowsKingLocation=False
+eDead=False
+eLeftGame=False
+eLeftGameTurn=-1
+eAggressionFactor=0
+eDelta25Tiles=10
+eDelta25Score=34
+eCityGainedTurn=0
+eCityLostTurn=0
+eLastSeenMoveTurn=0
+fUsername=Anonymous
+fTiles=22
+fScore=50
+fStandingArmy=28
+fStars=63
+fCityCount=1
+fKnowsKingLocation=False
+fDead=False
+fLeftGame=False
+fLeftGameTurn=-1
+fAggressionFactor=0
+fDelta25Tiles=21
+fDelta25Score=47
+fCityGainedTurn=0
+fCityLostTurn=0
+fLastSeenMoveTurn=0
+gUsername=ILOSTMYACCOUNT5
+gTiles=17
+gScore=38
+gStandingArmy=21
+gStars=74
+gCityCount=1
+gKnowsKingLocation=False
+gDead=False
+gLeftGame=False
+gLeftGameTurn=-1
+gAggressionFactor=0
+gDelta25Tiles=16
+gDelta25Score=35
+gCityGainedTurn=0
+gCityLostTurn=0
+gLastSeenMoveTurn=0
+hUsername=Human.exe
+hTiles=26
+hScore=51
+hStandingArmy=25
+hStars=75
+hCityCount=1
+hGeneral=2,1
+hKnowsKingLocation=False
+hDead=False
+hLeftGame=False
+hLeftGameTurn=-1
+hAggressionFactor=0
+hDelta25Tiles=25
+hDelta25Score=48
+hCityGainedTurn=0
+hCityLostTurn=0
+hLastSeenMoveTurn=54
+h_bot_general_approx=2,1

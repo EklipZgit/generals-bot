@@ -1,0 +1,111 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                    M                        d2   d2   d1   d1   M    d3   d3   d5   d1   M    d3   d3   M    M    d3   d2   d2
+                         c2   c3   M         d2   d2   M    d1   d1   d1   d2   d2   d2   d2   d2   d2   M    d2   d2   d3   M
+M                        c2                  c3   M    d2   M    M    dC3  d2   d2   d2   d2   d2   C50  b4   C42  d3   d2   M
+                         c2   C42  c3   c3   c2   c2   d2   d2   d2   d1   d22  d2   M    d1   d1   d2   d2   b4   b4   d2   d2
+     M    M              c2   c3   c2   d5   c2   M    c2   d2   d2   M    M    d23  dG3  d7   M    d2   d2   C46  d2   d3   d2
+               M         M    c3   d3   d2   M    d2   d2   d2   d2   d2        M    d2   d2   M    d3   d3   M    d2   M
+                         M         c2   d2   d2   d2   c2   M    d3   c3   M         M    M    C47  b3   b4             M
+     M                   M    c2   c2   M    c3   c2   c2   c2   cG15 c3   M              M    b3   b3   b4
+               M    c1   M    c2   M    a2   M    c2   c2   M    M    c3   C40  a3D            b3   d3   b4
+     M         M    c1   c1   c1   c1   c2   c2   c2   c2   c3   M    b3   b2   a2   a2   d2   d2   d2   b4                  M
+M              C48            c1   c1   c1   c2        c2   c3        c2   c2   M    M    a2   b3   M    b4   M              M
+                         M         M    c1   c2   a2   c2   c2   c2   c2   c2   c2   c2   a2                  M    M    M    M
+                    M         a1        c1   M    a2   c2   c3                       c2   C45  b2
+               a1   a1   a1   a1        c1   c26  M         C43  M    a3        M    c2   M    b2   b2        M              M
+               a1   M         M         M    a1        M    M         M              c2   c2   b2   M         M    M    M
+          M    a1        M         M    a1   a1                            M    M    b2   c2   b2   b2   b2   b2   b2   M
+          M    a1   a1   a1   a1   a1   a1             M              M              a2   M    M         M    M    M
+M              M    M                   M         M         M                   M    b3   b3                  M
+M              M                                                                M         M                             M
+               M    M                                                      M                        M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=211
+player_index=2
+teams=1,1,2,2
+mode=team
+bot_target_player=0
+targetPlayerExpectedGeneralLocation=21,13
+bot_is_all_in_losing=False
+bot_all_in_losing_counter=0
+bot_is_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=True
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=UchihaSasuke
+aTiles=34
+aScore=85
+aStandingArmy=51
+aStars=2
+aCityCount=2
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=156
+aDelta25Tiles=3
+aDelta25Score=-9
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=203
+a_bot_general_approx=6,15
+bUsername=Anonymous
+bTiles=53
+bScore=191
+bStandingArmy=138
+bStars=2
+bCityCount=1
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=88
+bDelta25Tiles=-3
+bDelta25Score=65
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=161
+b_bot_general_approx=21,14
+cUsername=Exe.human
+cTiles=67
+cScore=173
+cStandingArmy=106
+cStars=57
+cCityCount=1
+cGeneral=13,7
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=22
+cDelta25Score=51
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=211
+c_bot_general_approx=13,7
+dUsername=Human.exe
+dTiles=79
+dScore=216
+dStandingArmy=137
+dStars=57
+dCityCount=2
+dGeneral=17,4
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=3
+dDelta25Tiles=22
+dDelta25Score=76
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=211
+d_bot_general_approx=17,4

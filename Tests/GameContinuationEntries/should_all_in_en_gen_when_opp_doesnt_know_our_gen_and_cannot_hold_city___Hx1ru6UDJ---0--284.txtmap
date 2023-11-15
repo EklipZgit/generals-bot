@@ -1,0 +1,96 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+               M    M                                            M    M         M
+M                             M         M    M                             M    M
+          M
+M                        M    M                        M              M
+          M         M              M         M              M    M         M         M
+               M    M         M         M    M         M                   M
+M         M         b2   b2   MD   b2D  b2D  b3D  M              M              M
+a2        a2   a2   M    b2D  b1D  b1D  b1D  bG10Db3   b3   M
+a2   M    a4   a2   b2   b1D  b1D  b1D  MD   b1D  M    b3                  M
+a3   a4   a1   a3   b2   b1D  b1D  MD   MD   b1   b1             M    M    M
+a2   a2   C44  M    C46  b1D  b1D  b1D  b1D  M    b1             M              M    M
+a2   a2   a2   M    M    b1   b1   b1   b1        b1   b2   M         M    M
+a2   a3   M    M    a1   b1   a47  a1   M    M    b2D  b2   b2                       M
+a2   a3   a1   a1   b1   b1   a1   a1   a2   b2   MD   b2   b2   M    M         M
+a2   a2   a2   a1   bC72 M    a1   M    a2   b2        M    a2        M
+a2   M    M    a1   M    a1   a1   a1   a1   b2   a2   a2   a2        M
+a2   a1   a1   M    a1   a1   M    M    a1   M    a2   a2                  M
+a1   a6   M    M    a1   a1   M         a1                                      M
+a1   a1   a1   a1   aG7  a1   a1   M    a1   M                   M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=284
+player_index=0
+mode=1v1
+bot_target_player=1
+targetPlayerExpectedGeneralLocation=9,7
+bot_is_all_in_losing=False
+bot_all_in_losing_counter=23
+bot_is_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=True
+bot_finishing_exploration=False
+bot_targeting_army=4,14
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=64
+aScore=160
+aStandingArmy=96
+aStars=57
+aCityCount=1
+aGeneral=4,18
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=3
+aDelta25Score=60
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=284
+a_bot_general_approx=4,18
+bUsername=Daddy000
+bTiles=70
+bScore=210
+bStandingArmy=140
+bStars=24
+bCityCount=2
+bGeneral=9,7
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=545
+bDelta25Tiles=1
+bDelta25Score=63
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=276
+b_bot_general_approx=9,7
+ot_0_c_200_tileCount=57
+ot_0_c_200_score=134
+ot_0_c_200_standingArmy=77
+ot_0_c_200_cityCount=1
+ot_0_c_200_fightingDiff=0
+ot_0_c_200_unexplainedTileDelta=0
+ot_1_c_200_tileCount=59
+ot_1_c_200_score=140
+ot_1_c_200_standingArmy=81
+ot_1_c_200_cityCount=1
+ot_1_c_200_fightingDiff=0
+ot_1_c_200_unexplainedTileDelta=0
+ot_0_c_150_tileCount=47
+ot_0_c_150_score=108
+ot_0_c_150_standingArmy=61
+ot_0_c_150_cityCount=1
+ot_0_c_150_fightingDiff=-2
+ot_0_c_150_unexplainedTileDelta=0
+ot_1_c_150_tileCount=50
+ot_1_c_150_score=112
+ot_1_c_150_standingArmy=62
+ot_1_c_150_cityCount=1
+ot_1_c_150_fightingDiff=-2
+ot_1_c_150_unexplainedTileDelta=0

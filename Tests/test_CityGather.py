@@ -915,3 +915,22 @@ class CityGatherTests(TestBase):
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_take_into_account_ALL_nearby_increments_when_recapturing")
+    
+    def test_should_take_cities___why_didnt_it(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_take_cities___why_didnt_it___z3syA4nz7---0--356.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 356, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=356)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        self.assertIsNone(winner)
+
+        self.assertEqual(2, playerMap.players[general.player].cityCount)

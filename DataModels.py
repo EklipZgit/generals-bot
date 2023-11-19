@@ -73,7 +73,7 @@ class GatherTreeNode(typing.Generic[T]):
         self.trunkValue: int = 0
         """
         trunkValue is the value of the branch up to and including this node, 
-        so it starts at 0 at the gather targets and goes up as you move out along the tree.
+        so it starts at 0 at the gather tiles and goes up as you move out along the tree.
         """
 
         self.trunkDistance: int = 0

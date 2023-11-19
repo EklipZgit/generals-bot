@@ -506,7 +506,8 @@ class GeneralsClient(object):
 
     def send_chat_broken_up_by_sentence(self, message: str):
         for msgSplit in message.split('. '):
-            self.chatQueued.append(msgSplit)
+            for msgSplitByQuestion in msgSplit.split('? '):
+                self.chatQueued.append(msgSplitByQuestion)
 
     def _get_log_time(self) -> str:
         return datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')

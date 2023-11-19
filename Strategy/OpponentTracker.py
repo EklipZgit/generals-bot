@@ -39,7 +39,7 @@ class OpponentTracker(object):
         self._players_lookup_by_team: typing.Dict[int, typing.List[int]] = {}
 
         self._gather_queues_by_player: typing.Dict[int, deque[int]] = {}
-        self._emergences: typing.List[typing.Tuple[Army, int]] = []
+        self._emergences: typing.List[typing.Tuple[Tile, int, int]] = []
         self._revealed: typing.Set[Tile] = set()
         self._moves_into_fog: typing.List[Army] = []
         self._vision_losses: typing.Set[Tile] = set()
@@ -153,15 +153,16 @@ class OpponentTracker(object):
 
         return turn
 
-    def notify_emerged_army(self, army: Army, emergenceAmount: int):
+    def notify_emerged_army(self, tile: Tile, emergingPlayer: int, emergenceAmount: int):
         """
         Call this when an army emerges so that we can reduce the tracked expected fog gather amounts.
 
-        @param army:
+        @param tile:
+        @param emergingPlayer:
         @param emergenceAmount:
         @return:
         """
-        em = (army, emergenceAmount)
+        em = (tile, emergingPlayer, emergenceAmount)
         logging.info(f'OppTrack EM: queued {repr(em)}')
         self._emergences.append(em)
 
@@ -589,14 +590,14 @@ class OpponentTracker(object):
         return nextStats
 
     def _handle_emergences(self, currentCycleStats: CycleStatsData):
-        for army, emergence in self._emergences:
-            if army.tile.delta.gainedSight:
+        for tile, emergingPlayer, emergence in self._emergences:
+            if tile.delta.gainedSight:
                 continue  # handled by revealed handler
             if emergence < 0:
                 emergence = abs(emergence) - 1
 
-            if army.player in currentCycleStats.players:
-                self._execute_emergence(currentCycleStats, army.tile, emergence, army.player)
+            if emergingPlayer in currentCycleStats.players:
+                self._execute_emergence(currentCycleStats, tile, emergence, emergingPlayer)
 
     def _handle_moves_into_fog(self, currentCycleStats: CycleStatsData):
         used = set()

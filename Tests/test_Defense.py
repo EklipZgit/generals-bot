@@ -1441,3 +1441,37 @@ class DefenseTests(TestBase):
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_defend_critical_cities")
+    
+    def test_should_not_wait_to_pull_backward_army_on_defense(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_wait_to_pull_backward_army_on_defense___Bggjt8HEa---1--484.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 484, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=484)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '16,10->16,13->15,13->15,17->13,17')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=16)
+        self.assertIsNone(winner)
+    
+    def test_should_not_die_after_planning_impossible_gather_sequence(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_die_after_planning_impossible_gather_sequence___Sl4jmdHEp---1--236.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 236, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=236)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '11,7->11,3->7,3->7,2->6,2->6,1')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=12)
+        self.assertIsNone(winner)

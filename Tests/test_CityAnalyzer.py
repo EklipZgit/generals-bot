@@ -223,3 +223,25 @@ class CityAnalyzerTests(TestBase):
 
         self.assertEqual(topCity, simHost.get_player_map(general.player).GetTile(21, 9))
 
+    def test_should_prefer_low_cost_cities(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_prefer_low_cost_cities___Sl4jmdHEp---1--168.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 168, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=168)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+
+        scores = bot.cityAnalyzer.get_sorted_neutral_scores()
+        topCity, topScore = scores[0]
+
+        self.assertEqual(topCity, simHost.get_player_map(general.player).GetTile(5, 1))
+
+        if debugMode:
+            simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=30)

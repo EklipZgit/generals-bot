@@ -410,9 +410,10 @@ def add_tree_nodes_to_start_tiles_dict_recurse(
 
     for node in rootNode.children:
         added += add_tree_nodes_to_start_tiles_dict_recurse(node, startTilesDict, searchingPlayer, remainingTurns, baseCaseFunc, dist=dist + 1)
-
+    #
     # if startTilesEntry is not None:
     #     (prioObj, oldDist) = startTilesEntry
+    #     logging.info(f'shifting {str(rootNode.tile)} from {oldDist} to {oldDist + added}')
     #     startTilesDict[rootNode.tile] = (prioObj, oldDist + added)
 
     return added
@@ -733,6 +734,19 @@ def _knapsack_levels_gather_iterative_prune(
             shouldLog=shouldLog
         )
 
+        # for path in newPaths:
+        #     rootNode = gatherTreeNodeLookup.get(path.start.tile, None)
+        #     if rootNode is not None:
+        #         (startPriorityObject, distance) = newStartTilesDict[rootNode.tile]
+        #         add_tree_nodes_to_start_tiles_dict_recurse(
+        #             rootNode,
+        #             newStartTilesDict,
+        #             searchingPlayer,
+        #             calculatedLeftOverTurns,
+        #             baseCaseFunc,
+        #             dist=distance
+        #         )
+
         rootNodes = [gatherTreeNodeLookup[tile] for tile in origStartTilesDict]
 
         if USE_DEBUG_ASSERTS:
@@ -839,6 +853,7 @@ def _start_tiles_prune_helper(
 
     if prioDistTuple is not None:
         prios, oldDist = prioDistTuple
+        logging.info(f'pruning {str(parentTile)} from {oldDist} to {oldDist - gatherNodeBeingPruned.gatherTurns} (pruned {str(gatherNodeBeingPruned.tile)} gatherTurns {gatherNodeBeingPruned.gatherTurns})')
         startTilesDict[parentTile] = (prios, oldDist - gatherNodeBeingPruned.gatherTurns)
 
 

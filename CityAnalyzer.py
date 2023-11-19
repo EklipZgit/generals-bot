@@ -233,7 +233,7 @@ class CityAnalyzer(object):
     def _calculate_expandability_score(self, tile: Tile, board_analysis: BoardAnalyzer, score: CityScoreData):
         initExpValue = 40
         if tile.isNeutral:
-            initExpValue = tile.army * 2 - 50
+            initExpValue = max(1, 60 - tile.army)
         expCounter = Counter(initExpValue)
         cityDist = score.distance_from_player_general
         # when the tiles were previously unreachable, or on the other side of a long wall, caps how much value they are worth

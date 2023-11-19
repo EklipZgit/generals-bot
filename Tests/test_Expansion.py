@@ -658,7 +658,7 @@ bot_target_player=1
     #     playerMap = simHost.get_player_map(general.player)
 
     def test_should_use_short_expansion_time_limit_when_told_to__low_tile_count(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_make_6_moves_with_2s_rather_than_gen_expansion__long_term_expansion_fix___egm4K-VWp---1--144.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 100, fill_out_tiles=True)
 
@@ -687,13 +687,13 @@ bot_target_player=1
         self.assertMinTilesCaptured(general.player, path, otherPaths, 1, 7)
 
     def test_should_use_short_expansion_time_limit_when_told_to__high_tile_count(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_expand_into_neutral_city_wtf___2SlTV54vq---3--80.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 80, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=80)
 
-        self.enable_search_time_limits_and_disable_debug_asserts()
+        # self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap,
                                     allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')

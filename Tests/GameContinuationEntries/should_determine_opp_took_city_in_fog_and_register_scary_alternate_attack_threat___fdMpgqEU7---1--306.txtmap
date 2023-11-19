@@ -16,9 +16,9 @@ M    M    a4   a4   b4   b4   a5   a5        M    b2   b7   b2   M    M    bC21 
      M                        M              M    M         M    bC8  bG26 M    M    M
 M         M              M    M              M         b2   b2   b2   M              M
                     M    M         M    M         M                             M
-               M    M    M    M                   M                                  M
-     M              M    M    M              M                             M    M
-                                        M                             M    M
+               M    M    M    M    a1   a1   a1   M                                  M
+     M              M    M    M    a1   a1   M                             M    M
+                              a1   a1   M                             M    M
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
 targetPlayerExpectedGeneralLocation=3,15
 turn=306

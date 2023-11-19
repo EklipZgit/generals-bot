@@ -931,7 +931,7 @@ player_index=0
                         expectedGather,
                         inclNegative,
                         useTrueVal=useTrueVal,
-                        targetsAreEnemy=targetsAreEnemy, # whether targets are friendly or enemy should not matter to the amount gathered
+                        targetsAreEnemy=targetsAreEnemy, # whether tiles are friendly or enemy should not matter to the amount gathered
                         testTiming=False,
                         debugMode=debugMode,
                     )

@@ -46,8 +46,12 @@ class Army(object):
         self.last_seen_turn: int = 0
 
     def update_tile(self, tile):
-        self.path.add_next(tile)
-        self.tile = tile
+        if self.path.tail is None or self.path.tail.tile != tile:
+            self.path.add_next(tile)
+
+        if self.tile != tile:
+            self.tile = tile
+
         self.update()
 
     def update(self):
@@ -364,12 +368,12 @@ class ArmyTracker(object):
 
         playerMoves: typing.Dict[Tile, typing.Set[int]] = {}
         for player in self.map.players:
-            if player == self.map.player_index:
+            if player.index == self.map.player_index:
                 continue
             if player.last_move is not None:
                 src: Tile
                 dest: Tile
-                src, dest = player.last_move
+                src, dest, movedHalf = player.last_move
                 if src is not None:
                     l = playerMoves.get(src, set())
                     l.add(player.index)
@@ -385,7 +389,8 @@ class ArmyTracker(object):
                 if armyAtSrc is not None:
                     if armyAtSrc.player == player.index:
                         logging.info(f'RESPECTING MAP DETERMINED PLAYER MOVE {str(src)}->{str(dest)} BY p{player.index} FOR ARMY {str(armyAtSrc)}')
-                        self.army_moved(armyAtSrc, dest, trackingArmies)
+                        self.army_moved(armyAtSrc, dest, trackingArmies, dontUpdateOldFogArmyTile=True)  # map already took care of this for us
+                        skip.add(src)
                     else:
                         logging.info(f'ARMY {str(armyAtSrc)} AT SOURCE OF PLAYER {player.index} MOVE {str(src)}->{str(dest)} DID NOT MATCH THE PLAYER THE MAP DETECTED AS MOVER, SCRAPPING ARMY...')
                         self.scrap_army(armyAtSrc)
@@ -717,7 +722,7 @@ class ArmyTracker(object):
             if player.last_move is not None:
                 src: Tile
                 dest: Tile
-                src, dest = player.last_move
+                src, dest, movedHalf = player.last_move
                 if src is not None:
                     l = playerMoves.get(src, set())
                     l.add(player.index)
@@ -1049,6 +1054,9 @@ class ArmyTracker(object):
 
             (distWeighted, dist, negArmy, turnsNegative, citiesConverted, negBonusScore, consecutiveUndiscovered, meetsCriteria) = prioObject
             if citiesConverted > missingCities:
+                return True
+
+            if nextTile.isGeneral and not nextTile.player == armyPlayer:
                 return True
 
             # logging.info("nextTile {}: negArmy {}".format(nextTile.toString(), negArmy))
@@ -1435,6 +1443,7 @@ class ArmyTracker(object):
         if self.map.last_player_index_submitted_move is not None:
             # then map determined it did something and wasn't dropped. Execute it.
             src, dest, move_half = self.map.last_player_index_submitted_move
+            logging.info(f'executing OUR move {str(self.map.last_player_index_submitted_move)}')
 
             self.army_moved(army, dest, trackingArmies)
 
@@ -1743,11 +1752,12 @@ class ArmyTracker(object):
             if tile.isUndiscoveredObstacle or isVisionLessNeutCity:
                 self.convert_fog_city_to_player_owned(tile, player)
                 convertedCity = True
-            dist += 1
 
             if convertedCity:
-                increase = sourceFogArmyPath.length - dist
+                increase = 1 + sourceFogArmyPath.length - dist
                 self.emergenceLocationMap[player][tile.x][tile.y] += increase
+
+            dist += 1
 
         fogPath = sourceFogArmyPath.get_reversed()
         emergenceValueCovered = sourceFogArmyPath.value - armyTile.army

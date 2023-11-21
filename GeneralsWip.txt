@@ -1,7 +1,14 @@
+BE WELL PHARMACY - 
+1973 Foothill pkway, suite 106 Corona
+951-407-9355
+
 Generals
 human, (sponsor) user id for EklipZ
 
-REFACTOR QUEUE TO DO NEXT COMMIT:
+
+
+THEORY:
+pushing 2's is more efficient than gather-attack during 3rd cycle, almost certainly for sure. Attacking with army gathered from 2's is bad because if you push over enemy territory that they didn't expand, it costs you two-2-gather-moves for every enemy tile you take
 
 
 

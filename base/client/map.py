@@ -139,7 +139,7 @@ class Player(object):
         they were already fighting with.
         """
 
-        self.last_move: typing.Tuple[Tile | None, Tile | None] | None = None
+        self.last_move: typing.Tuple[Tile | None, Tile | None, bool] | None = None
         """Populated by the map based on tile and player deltas IF the map can determine FOR SURE what move the player made. (source, dest). One or the other may be null if one can be determined but the other can't."""
 
         self.dead = False
@@ -1286,7 +1286,7 @@ class MapBase(object):
         tile.isMountain = True
         tile.isGeneral = False
 
-    def set_tile_probably_moved(self, toTile: Tile, fromTile: Tile, fullFromDiffCovered = True, fullToDiffCovered = True, byPlayer = -1):
+    def set_tile_probably_moved(self, toTile: Tile, fromTile: Tile, fullFromDiffCovered = True, fullToDiffCovered = True, byPlayer = -1) -> bool:
         """
         Sets the tiles delta.armyMoveHeres appropriately based on the *DiffCovered params.
         Updates the delta.fromTile and delta.toTile.
@@ -1302,17 +1302,27 @@ class MapBase(object):
         if byPlayer == -1:
             byPlayer = fromTile.delta.oldOwner
 
+        isMoveHalf = False
+
         logging.info(f'MOVE {repr(fromTile)} -> {repr(toTile)} (fullFromDiffCovered {fullFromDiffCovered}, fullToDiffCovered {fullToDiffCovered})')
         self.army_moved_grid[fromTile.y][fromTile.x] = self.army_moved_grid[fromTile.y][fromTile.x] and not fullFromDiffCovered
         # if not self.USE_OLD_MOVEMENT_DETECTION:
         fromTile.delta.armyMovedHere = fromTile.delta.armyMovedHere and not fullFromDiffCovered
 
         expectedDelta = self._get_expected_delta_amount_toward(fromTile, toTile)
+
+        if expectedDelta == 0 - fromTile.delta.oldArmy:
+            isMoveHalf = True
+
         # used to be if value greater than 75 or something
         if not fromTile.visible:
+            if expectedDelta != toTile.delta.unexplainedDelta and toTile.visible:
+                halfDelta = self._get_expected_delta_amount_toward(fromTile, toTile, moveHalf=True)
+                if abs(toTile.delta.unexplainedDelta - expectedDelta) > abs(toTile.delta.unexplainedDelta - halfDelta):
+                    expectedDelta = halfDelta
+                    isMoveHalf = True
+
             fromDelta = expectedDelta
-            # if fromTile.player != byPlayer:
-            #     fromDelta = 0 - expectedDelta
 
             fromTile.army += fromDelta
             fromTile.delta.armyDelta = fromDelta
@@ -1364,9 +1374,15 @@ class MapBase(object):
 
         if fullToDiffCovered:
             toTile.delta.unexplainedDelta = 0
+        else:
+            toTile.delta.unexplainedDelta -= expectedDelta
+            if toTile.delta.unexplainedDelta == 0:
+                toTile.delta.armyMovedHere = False
 
         fromTile.delta.toTile = toTile
-        logging.info(f'  done: {repr(fromTile)} -> {repr(toTile)}')
+        logging.info(f'  done: {repr(fromTile)} -> {repr(toTile)}{"z" if isMoveHalf else ""}')
+
+        return isMoveHalf
 
     def set_tile_moved(self, toTile: Tile, fromTile: Tile, fullFromDiffCovered = True, fullToDiffCovered = True, byPlayer=-1):
         """
@@ -1390,7 +1406,7 @@ class MapBase(object):
         if byPlayer == -1:
             raise AssertionError(f'must supply a player for moves from fog with unknown ownership when setting definitely-moved. fromTile was neutral. fromTile {repr(fromTile)} -> toTile {repr(toTile)}')
 
-        self.set_tile_probably_moved(
+        isMoveHalf = self.set_tile_probably_moved(
             toTile,
             fromTile,
             fullFromDiffCovered,
@@ -1409,7 +1425,7 @@ class MapBase(object):
                     attackedPlayer.unexplainedTileDelta += 1
                     logging.info(f'   captured a tile, dropping the player tileDelta from unexplained for capturee p{attackedPlayer.index} ({attackedPlayer.unexplainedTileDelta - 1}->{attackedPlayer.unexplainedTileDelta}).')
 
-            movingPlayer.last_move = (fromTile, toTile)
+            movingPlayer.last_move = (fromTile, toTile, isMoveHalf)
 
             # if not self.USE_OLD_MOVEMENT_DETECTION and not fromTile.visible:
             #     movementAmount = fromTile.delta.oldArmy - 1
@@ -1507,7 +1523,7 @@ class MapBase(object):
                 return 0 - sourceDelta
         return sourceDelta
 
-    def _apply_last_player_move(self, last_player_index_submitted_move: typing.Tuple[Tile, Tile, bool]) -> typing.Tuple[Tile, Tile] | None:
+    def _apply_last_player_move(self, last_player_index_submitted_move: typing.Tuple[Tile, Tile, bool]) -> typing.Tuple[Tile, Tile, bool] | None:
         """
         Returns None if the player move was determined to have been dropped or completely killed with priority at the source tile before executing.
         Updates the source and dest tiles unexplained deltas, if both are zero then the move should have executed cleanly with no interferences.
@@ -1681,7 +1697,7 @@ class MapBase(object):
                     # TODO could be wrong
                     dest.delta.unexplainedDelta = 0
                     self.last_player_index_submitted_move = last_player_index_submitted_move
-                    return source, dest
+                    return source, dest, move_half
         else:
             # nothing happened, we moved the expected army off of source. Not unexplained.
             # self.unaccounted_tile_diffs.pop(source, 0)
@@ -1735,7 +1751,7 @@ class MapBase(object):
             return None
         
         self.last_player_index_submitted_move = last_player_index_submitted_move
-        return source, dest
+        return source, dest, move_half
 
     # def is_exact_fog_move(self, tile: Tile, candidateTile: Tile) -> bool:
     #     # print(str(tile.army) + " : " + str(candidateTile.army))

@@ -386,7 +386,7 @@ def knapsack_multi_paths(
         viewInfo: ViewInfo | None,
 ) -> typing.Tuple[Path | None, typing.List[Path], int, float]:
     """
-    Returns firstPath, otherPaths, totalTurns, totalValue
+    Returns firstPath, allPaths, totalTurns, totalValue
 
     @param map:
     @param searchingPlayer:
@@ -478,7 +478,7 @@ def knapsack_multi_paths_no_crossover(
         viewInfo: ViewInfo | None,
 ) -> typing.Tuple[Path | None, typing.List[Path], int, float]:
     """
-    Returns firstPath, otherPaths, totalTurns, totalValue
+    Returns firstPath, allPaths, totalTurns, totalValue
 
     @param map:
     @param searchingPlayer:

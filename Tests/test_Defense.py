@@ -1475,3 +1475,23 @@ class DefenseTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=12)
         self.assertIsNone(winner)
+    
+    def test_should_defend_city_and_intercept_army_not_expand(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_defend_city_and_intercept_army_not_expand___5h3DK65bX---1--330.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 330, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=330)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '2,13->1,13->1,11->2,11->2,8->3,8->3,7')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=9)
+        self.assertIsNone(winner)
+
+        city = playerMap.GetTile(3, 7)
+        self.assertEqual(general.player, city.player)

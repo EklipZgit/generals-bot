@@ -221,6 +221,12 @@ class OpponentTracker(object):
         return '\n'.join(data)
 
     def load_from_map_data(self, data: typing.Dict[str, str]):
+        # self._team_indexes = []
+        #
+        # for i in range(20):
+        #     if f'ot_{i}_stats_moves_spent_capturing_fog_tiles' in data:
+        #         self._team_indexes.append(i)
+
         for i in range(5):
             cycleTurn = self.get_last_cycle_end_turn_raw(cyclesToGoBack=i)
             if cycleTurn is None:
@@ -386,7 +392,7 @@ class OpponentTracker(object):
     def _check_visible_move(self, player: Player, currentCycleStats: CycleStatsData):
         source: Tile
         dest: Tile
-        source, dest = player.last_move
+        source, dest, movedHalf = player.last_move
         if self.map.is_player_on_team_with(player.index, dest.delta.oldOwner):
             if dest.visible:
                 if dest.delta.oldArmy > 1 or not dest.delta.gainedSight:

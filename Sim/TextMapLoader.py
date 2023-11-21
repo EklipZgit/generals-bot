@@ -120,7 +120,7 @@ class TextMapLoader(object):
             else:
                 gameType = 'ffa'
 
-            if 'team' in gameType:
+            if map.teams is not None:
                 teams = ','.join([str(t) for t in map.teams])
                 lines.append(f'teams={teams}')
 

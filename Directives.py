@@ -35,6 +35,10 @@ class Timings():
 
     def in_launch_split(self, turn):
         adjustedTurn = self.get_turn_in_cycle(turn)
+        return adjustedTurn >= self.launchTiming
+
+    def in_launch_timing(self, turn):
+        adjustedTurn = self.get_turn_in_cycle(turn)
         return adjustedTurn >= self.launchTiming and adjustedTurn - self.launchTiming < 5
 
     def get_turn_in_cycle(self, turn):

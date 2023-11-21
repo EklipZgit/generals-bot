@@ -2108,9 +2108,34 @@ a1   b1   b1   bG1
         badTile = playerMap.GetTile(1, 18)
         self.assertEqual(1, badTile.army)
 
+    def test_should_not_ever_change_general_owner(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_ever_change_general_owner___hyu3Xe18V---0--155.txtmap'
+        map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 155, fill_out_tiles=True)
+        map.GetTile(8, 3).player = 3
+        map.GetTile(8, 3).army = 2
+        map.GetTile(7, 3).player = 3
+        map.GetTile(7, 3).army = 2
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=155)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=False)
+        simHost.queue_player_moves_str(general.player, '8,5->8,4')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general, allyGen)
+
+        genTile = playerMap.GetTile(8, 2)
+        self.assertEqual(2, genTile.player)
+
 # 55-47 fail-pass ish
 # 50-52 now
 # 44-61 now (with 10 army threshold).
 # 57-51 now (with push-back-into-fog fix)
 # 47-61 now
 # 36-72 now after fixing 1-deep map emergence
+# 39-69 after fixing test opponenttracker load and army tracker fog dupe emergence on move-halfs

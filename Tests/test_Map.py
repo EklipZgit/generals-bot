@@ -121,12 +121,13 @@ class MapTests(TestBase):
                             failures.append(
                                 f'(pMap {player} had incorrect last move for player {playerMapPlayer.index}. Expected {str(simPlayerMove)}, found None')
                         else:
-                            pSource, pDest = playerMapPlayer.last_move
+                            pSource, pDest, movedHalf = playerMapPlayer.last_move
                             if (
                                     simPlayerMove.source.x != pSource.x
                                     or simPlayerMove.source.y != pSource.y
                                     or simPlayerMove.dest.x != pDest.x
                                     or simPlayerMove.dest.y != pDest.y
+                                    or simPlayerMove.move_half != movedHalf
                             ):
                                 failures.append(
                                     f'(pMap {player} had incorrect last move for player {playerMapPlayer.index}. Expected {str(simPlayerMove)}, found {str(playerMapPlayer.last_move)}')
@@ -266,17 +267,17 @@ class MapTests(TestBase):
                     if map.turn > startTurn:
                         # self.render_sim_map_from_all_perspectives(simHost.sim)
                         if renderP0:
-                            self.render_map(simHost.get_player_map(0), includeTileDiffs=True)
+                            self.render_map(simHost.get_player_map(0), includeTileDiffs=True, infoString='p0')
                         if renderP1:
-                            self.render_map(simHost.get_player_map(1), includeTileDiffs=True)
+                            self.render_map(simHost.get_player_map(1), includeTileDiffs=True, infoString='p1')
                     else:
                         if renderTurnBeforeSim:
                             self.render_map(simHost.sim.sim_map, includeTileDiffs=True)
                         if renderTurnBeforePlayers:
                             if renderP0:
-                                self.render_map(simHost.get_player_map(0), includeTileDiffs=True)
+                                self.render_map(simHost.get_player_map(0), includeTileDiffs=True, infoString='p0')
                             if renderP1:
-                                self.render_map(simHost.get_player_map(1), includeTileDiffs=True)
+                                self.render_map(simHost.get_player_map(1), includeTileDiffs=True, infoString='p1')
 
             simHost.run_between_turns(mapRenderer)
 
@@ -1317,7 +1318,7 @@ C5
 
     def test_run_one_off_team_adj_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        self.run_team_adj_test(debugMode=debugMode, aArmy=12, bArmy=2, aMove=(-1, 0), bMove=None, targetTileFriendly=False, turn=97)
+        self.run_team_adj_test(debugMode=debugMode, aArmy=9, bArmy=12, aMove=(1, 0), bMove=(1, 0), targetTileFriendly=False, turn=97)
 
     def test_generate_all_all_scenarios_team_playground_scenarios(self):
         outerMap, general, allyGen, enemyGen, enemyAllyGen = self.load_map_and_generals_2v2_from_string(ALL_SCENARIOS_TEAM_MAP, 0)
@@ -1407,4 +1408,4 @@ C5
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=3)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
-    # 58 failed, 52 passed
+    # 4590 failed, 23,663 passed

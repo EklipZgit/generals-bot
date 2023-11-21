@@ -8,6 +8,8 @@
 import logging
 import time
 import json
+
+import SearchUtils
 from SearchUtils import *
 from test.test_float import INF
 
@@ -22,6 +24,7 @@ class TerritoryClassifier():
         self.lastCalculatedTurn = -1
         self.territoryMap = new_value_grid(self.map, -1)
         self.needToUpdateAroundTiles = set()
+        self.territoryDistances: typing.List[MapMatrix[int]] = [MapMatrix(map, 1000) for p in map.players]
         for tile in self.map.pathableTiles:
             self.needToUpdateAroundTiles.add(tile)
 
@@ -126,3 +129,14 @@ class TerritoryClassifier():
             
         logging.info("Completed scanning territories in {:.3f}".format(duration))
         self.needToUpdateAroundTiles = set()
+
+        for player in self.map.players:
+            if player.dead:
+                continue
+
+            startTiles = []
+            for tile in self.map.get_all_tiles():
+                if self.territoryMap[tile.x][tile.y] == player.index:
+                    startTiles.append(tile)
+
+            self.territoryDistances[player.index] = SearchUtils.build_distance_map_matrix(self.map, startTiles)

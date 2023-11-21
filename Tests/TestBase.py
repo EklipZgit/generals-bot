@@ -24,7 +24,7 @@ from bot_ek0x45 import EklipZBot
 
 
 class TestBase(unittest.TestCase):
-    GLOBAL_BYPASS_REAL_TIME_TEST = True
+    GLOBAL_BYPASS_REAL_TIME_TEST = False
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -809,9 +809,22 @@ class TestBase(unittest.TestCase):
             enemyGeneralTileCount = generalTileCount
 
         enemyMap = self.get_from_general_weight_map(map, enemyGeneral)
+        countCitiesEnemy = SearchUtils.Counter(SearchUtils.count(map.pathableTiles, lambda tile: tile.player == enemyGeneral.player and (tile.isGeneral or tile.isCity)))
+
+        if not respectPlayerVision:
+            iter = 0
+            while countCitiesEnemy.value > enemyCityCount:
+                for tile in map.get_all_tiles():
+                    if tile.player == enemyGeneral.player and tile.isCity and not SearchUtils.any_where(tile.adjacents, lambda adj: map.is_tile_friendly(adj)):
+                        countCitiesEnemy.add(-1)
+                        tile.reset_wrong_undiscovered_fog_guess()
+                        break
+                iter += 1
+                if iter > 10:
+                    raise AssertionError('infinite looped trying to reduce enemy real fog cities')
+
         countTilesEnemy = SearchUtils.Counter(SearchUtils.count(map.pathableTiles, lambda tile: tile.player == enemyGeneral.player))
         countScoreEnemy = SearchUtils.Counter(enemyGeneral.army)
-        countCitiesEnemy = SearchUtils.Counter(SearchUtils.count(map.pathableTiles, lambda tile: tile.player == enemyGeneral.player and (tile.isGeneral or tile.isCity)))
 
         newTiles = set()
 
@@ -890,6 +903,18 @@ class TestBase(unittest.TestCase):
                     countScoreEnemy.add(1)
                     tile.army += 1
             iter += 1
+
+        while generalTargetScore is not None and countScoreGeneral.value < generalTargetScore:
+            for tile in map.get_all_tiles():
+                if tile.player == general.player and countScoreGeneral.value < generalTargetScore:
+                    countScoreGeneral.add(1)
+                    tile.army += 1
+
+        while generalTargetScore is not None and countScoreGeneral.value < generalTargetScore:
+            for tile in map.get_all_tiles():
+                if tile.player == general.player and countScoreGeneral.value < generalTargetScore:
+                    countScoreGeneral.add(1)
+                    tile.army += 1
 
         while generalTargetScore is not None and countScoreGeneral.value < generalTargetScore:
             for tile in map.get_all_tiles():

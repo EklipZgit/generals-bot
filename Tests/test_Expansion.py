@@ -795,3 +795,24 @@ bot_target_player=1
 
         self.assertGreater(playerMap.GetTile(general.x, general.y).army, 32, 'should not have launched from general yet.')
         self.assertPlayerTileCountGreater(simHost, general.player, 44, "should have captured neutrals, though")
+    
+    def test_should_launch_attack_when_attack_path_captures_more_than_expansion_plan(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_launch_attack_when_attack_path_captures_more_than_expansion_plan___HKJztNNqg---0--74.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 74, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=74)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=26)
+        self.assertIsNone(winner)
+
+        self.assertGreater(playerMap.players[general.player].tileCount, 43, "should have launched off general for more tiles than expansion plan")
+
+    # 11f-14p with cycleTurns not launchDist turns

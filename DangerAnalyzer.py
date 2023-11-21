@@ -78,6 +78,7 @@ class ThreatObj(object):
 
 class DangerAnalyzer(object):
     def __init__(self, map):
+        self.targets: typing.List[Tile] = []
         self.map: MapBase = map
         self.fastestVisionThreat: ThreatObj | None = None
         self.fastestThreat: ThreatObj | None = None
@@ -109,9 +110,11 @@ class DangerAnalyzer(object):
         self.__dict__.update(state)
         self.map = None
 
-    def analyze(self, general: Tile, depth: int, armies: typing.Dict[Tile, Army]):
+    def analyze(self, defenseTiles: typing.List[Tile], depth: int, armies: typing.Dict[Tile, Army]):
+        general = self.map.generals[self.map.player_index]
         self.scan(general)
 
+        self.targets = defenseTiles
         self.fastestThreat = self.getFastestThreat(depth, armies, self.map.player_index)
         negTiles = set()
         if self.fastestThreat is not None:
@@ -193,7 +196,10 @@ class DangerAnalyzer(object):
         genPlayer = self.map.players[againstPlayer]
         if genPlayer.dead:
             return None
-        general = self.map.generals[againstPlayer]
+
+        general = self.map.generals[self.map.player_index]
+
+        threatObj = None
 
         if negTiles is None:
             negTiles = set()
@@ -218,9 +224,7 @@ class DangerAnalyzer(object):
             if len(self.playerTiles[player.index]) == 0 or player.tileCount <= 2:
                 continue
 
-            # for general in self.alliedGenerals:
-
-            if player.index == general.player or player.index in self.map.teammates:
+            if self.map.is_player_on_team_with(self.map.player_index, player.index):
                 continue
 
             if player.score > genPlayer.score * 1.5 and isFfaMode:
@@ -234,7 +238,7 @@ class DangerAnalyzer(object):
 
             path = dest_breadth_first_target(
                 map=self.map,
-                goalList=[general],
+                goalList=self.targets,
                 targetArmy=searchArmyAmount,
                 maxTime=0.05,
                 maxDepth=depth,
@@ -247,12 +251,12 @@ class DangerAnalyzer(object):
                     and (curThreat is None
                          or path.length < curThreat.length
                          or (path.length == curThreat.length and path.value > curThreat.value))):
-                # If there is NOT another path to our general that doesn't hit the same tile next to our general,
+                # If there is NOT another path to our target that doesn't hit the same tile next to our target,
                 # then we can use one extra turn on defense gathering to that 'saveTile'.
                 lastTile = path.tail.prev.tile
                 altPath = dest_breadth_first_target(
                     map=self.map,
-                    goalList=[general],
+                    goalList=[path.tail.tile],
                     targetArmy=searchArmyAmount,
                     maxTime=0.05,
                     maxDepth=path.length + 5,
@@ -264,12 +268,12 @@ class DangerAnalyzer(object):
                 if altPath is None or altPath.length > path.length:
                     saveTile = lastTile
                     logging.info(f"saveTile blocks path to our king: {saveTile.x},{saveTile.y}")
-                logging.info(f"dest BFS found KILL against our general:\n{str(path)}")
+                logging.info(f"dest BFS found KILL against our target:\n{str(path)}")
                 curThreat = path
 
         for armyTile, army in armies.items():
             # if this is an army in the fog that isn't on a tile owned by that player, lets see if we need to path it.
-            # if army.player != general.player:
+            # if army.player != target.player:
             if armyTile.visible:
                 continue
 
@@ -290,7 +294,7 @@ class DangerAnalyzer(object):
 
             startTiles = {}
             startTiles[armyTile] = ((0, 0, 0, 0 - army.value - 1, armyTile.x, armyTile.y, 0.5), 0)
-            goalFunc = lambda tile, prio: tile == general
+            goalFunc = lambda tile, prio: tile in self.targets
             path = breadth_first_dynamic(
                 self.map,
                 startTiles,
@@ -307,16 +311,15 @@ class DangerAnalyzer(object):
                     curThreat = path
                 army.expectedPath = path
 
-        threatObj = None
         if curThreat is not None:
             army = curThreat.start.tile
             if curThreat.start.tile in armies:
                 army = armies[army]
             analysis = ArmyAnalyzer(self.map, curThreat.tail.tile, army)
             threatObj = ThreatObj(curThreat.length - 1, curThreat.value, curThreat, ThreatType.Kill, saveTile, analysis)
+            return threatObj
         else:
             logging.info("no fastest threat found")
-        logging.info(f"fastest threat analyzer took {time.perf_counter() - startTime:.3f}")
         return threatObj
 
     def getHighestThreat(self, general: Tile, depth: int, armies: typing.Dict[Tile, Army]):

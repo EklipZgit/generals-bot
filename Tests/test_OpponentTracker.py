@@ -231,3 +231,28 @@ class OpponentTrackerTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
+    
+    def test_should_not_over_reduce_fog_army_on_move_half_chase(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_over_reduce_fog_army_on_move_half_chase___reD-mBF46---1--181.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 181, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=181)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '8,4->8,5z  8,4->8,5->8,6')
+        simHost.queue_player_moves_str(general.player, '8,5->8,6->8,7->7,7')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertIsNone(winner)
+
+        enStats = bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player)
+        sumFogStuff = enStats.approximate_fog_army_available_total + enStats.approximate_fog_city_army
+
+        self.assertGreater(sumFogStuff, 12)
+
+        self.assertLess(sumFogStuff, 16)

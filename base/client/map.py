@@ -341,12 +341,16 @@ class Tile(object):
         return self._player
 
     @player.setter
-    def player(self, value):
+    def player(self, value: int):
+        if self.isGeneral and self._player != value and self._player != -1:
+            raise AssertionError(f'trying to set general tile {str(self)} player from {self._player} to {value}')
+
         # TODO why is any of this tile setter shit here at all?
         if value >= 0 and self.visible:
             self.tile = value
         elif value == -1 and self.army == 0 and not self.isNotPathable and not self.isCity and not self.isMountain:
             self.tile = TILE_EMPTY # this whole thing seems wrong, needs to be updated carefully with tests as the delta logic seems to rely on it...
+
         self._player = value
 
     # @property
@@ -934,13 +938,13 @@ class MapBase(object):
             tile.discoveredAsNeutral = True
             # DONT use this, this sets deltas :s
             # tile.update(self, tile.tile, tile.army // 2, overridePlayer=capturerIdx)
+            wasGeneral = tile.isGeneral
+            tile.isGeneral = False
             tile.tile = capturerIdx
             tile.player = capturerIdx
-            if tile.isGeneral:
-                tile.isGeneral = False
+            if wasGeneral:
                 tile.isCity = True
 
-                # TODO not safe to call all these delta methods, pretty sure...
                 for eventHandler in self.notify_city_found:
                     eventHandler(tile)
             else:
@@ -948,9 +952,11 @@ class MapBase(object):
 
             for eventHandler in self.notify_tile_deltas:
                 eventHandler(tile)
-            if tile.isCity and not tile in capturingPlayer.cities:
+
+            if tile.isCity and tile not in capturingPlayer.cities:
                 capturingPlayer.cities.append(tile)
                 capturingPlayer.cityCount += 1
+
             for eventHandler in self.notify_tile_captures:
                 eventHandler(tile)
 
@@ -1282,9 +1288,9 @@ class MapBase(object):
         tile.tile = TILE_MOUNTAIN
         tile.isCity = False
         tile.army = 0
+        tile.isGeneral = False
         tile.player = -1
         tile.isMountain = True
-        tile.isGeneral = False
 
     def set_tile_probably_moved(self, toTile: Tile, fromTile: Tile, fullFromDiffCovered = True, fullToDiffCovered = True, byPlayer = -1) -> bool:
         """
@@ -2380,11 +2386,13 @@ class MapBase(object):
 
                     logging.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(exclusiveSrc)} WAS EXCLUSIVE SOURCE, EXACT MATCH {exactMatch} INCLUDING IN MOVES')
 
-                    byPlayer = destTile.delta.oldOwner
+                    byPlayer = -1
+                    if destTile.was_visible_last_turn() and destTile.delta.oldOwner == destTile.player:
+                        byPlayer = destTile.player
+                    if byPlayer == -1 and exclusiveSrc.was_visible_last_turn():
+                        byPlayer = exclusiveSrc.delta.oldOwner
                     if byPlayer == -1:
                         byPlayer = destTile.player
-                    if exclusiveSrc.was_visible_last_turn():
-                        byPlayer = exclusiveSrc.delta.oldOwner
 
                     self.set_tile_moved(
                         destTile,

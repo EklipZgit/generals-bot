@@ -157,8 +157,8 @@ class MctsDUCT(object):
         forcingPreExpands = False
 
         if forcedPreExpansions is not None and len(forcedPreExpansions) > 0:
-            preExpansionExplorationCounts = [0 for _ in forcedPreExpansions]
             remainingPreExpansionExplores = [indexPlusMovesTuple for indexPlusMovesTuple in enumerate(forcedPreExpansions)]
+            preExpansionExplorationCounts = [0 for _ in remainingPreExpansionExplores]
             forcingPreExpands = True
 
         # We'll respect any limitations on max seconds and max iterations (don't care about max depth)
@@ -187,7 +187,7 @@ class MctsDUCT(object):
                 forcingSequenceIndex = -1
                 if forcingPreExpands:
                     forcingSequenceIndex, forcedMoves = remainingPreExpansionExplores[0]
-                    forcingPlayer = 0 if forcedMoves[0].source.player == context.game.friendly_player else 1
+                    forcingPlayer = 0 if len(forcedMoves) > 0 and forcedMoves[0].source.player == context.game.friendly_player else 1
 
             forcedCurrentMoveIndex = 0
 

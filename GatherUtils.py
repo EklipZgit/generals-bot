@@ -901,6 +901,7 @@ def knapsack_levels_backpack_gather(
         distPriorityMap=None,
         useTrueValueGathered=False,
         includeGatherTreeNodesThatGatherNegative=False,
+        priorityMatrix: MapMatrix[float] | None = None,
         shouldLog=False
 ) -> typing.List[GatherTreeNode]:
     """
@@ -936,6 +937,8 @@ def knapsack_levels_backpack_gather(
      to tiles without killing them. Use this for defense for example, when you dont need to fully kill the threat tile with each gather move.
      Use includeGatherTreeNodesThatGatherNegative to allow a gather to return gather nodes in the final result that fail to flip an enemy node in the path to friendly.
      Use useTrueValueGathered to make sure the gatherValue returned by the gather matches the actual amount of army you will have on the gather target tiles at the end of the gather execution.
+    @param shouldLog:
+    @param priorityMatrix:
     @return:
     """
     totalValue, rootNodes = knapsack_levels_backpack_gather_with_value(
@@ -958,6 +961,7 @@ def knapsack_levels_backpack_gather(
         distPriorityMap=distPriorityMap,
         useTrueValueGathered=useTrueValueGathered,
         includeGatherTreeNodesThatGatherNegative=includeGatherTreeNodesThatGatherNegative,
+        priorityMatrix=priorityMatrix,
         shouldLog=shouldLog,
     )
 
@@ -1912,6 +1916,124 @@ def prune_mst_to_turns_with_values(
         viewInfo=viewInfo,
         noLog=noLog,
         pruneBranches=True,
+        gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
+        tileDictToPrune=tileDictToPrune,
+        parentPruneFunc=parentPruneFunc,
+    )
+
+
+def prune_mst_to_tiles(
+        rootNodes: typing.List[GatherTreeNode],
+        tiles: typing.Set[Tile],
+        searchingPlayer: int,
+        viewInfo: ViewInfo | None = None,
+        noLog: bool = True,
+        gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
+        tileDictToPrune: typing.Dict[Tile, typing.Any] | None = None,
+        invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
+) -> typing.List[GatherTreeNode]:
+    """
+    Prunes nodes from an MST until a set of specific nodes are encountered. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
+    O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
+
+    @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
+    @param tiles: The tiles that should be force-kept within the spanning tree
+    @param searchingPlayer:
+    @param viewInfo:
+    @param noLog:
+    @param gatherTreeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
+    @param tileDictToPrune: Optionally, also prune tiles out of this dictionary
+    @param invalidMoveFunc: func(GatherTreeNode) -> bool, return true if you want a leaf GatherTreeNode to always be prune. For example, pruning gather nodes that begin at an enemy tile or that are 1's.
+
+    @return: The list same list of rootnodes passed in, modified.
+    """
+    count, totalValue, rootNodes = prune_mst_to_tiles_with_values(
+        rootNodes=rootNodes,
+        tiles=tiles,
+        searchingPlayer=searchingPlayer,
+        viewInfo=viewInfo,
+        noLog=noLog,
+        gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
+        tileDictToPrune=tileDictToPrune,
+        invalidMoveFunc=invalidMoveFunc,
+    )
+
+    return rootNodes
+
+
+def prune_mst_to_tiles_with_values(
+        rootNodes: typing.List[GatherTreeNode],
+        tiles: typing.Set[Tile],
+        searchingPlayer: int,
+        viewInfo: ViewInfo | None = None,
+        noLog: bool = True,
+        gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
+        tileDictToPrune: typing.Dict[Tile, typing.Any] | None = None,
+        invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
+        parentPruneFunc: typing.Callable[[Tile, GatherTreeNode], None] | None = None,
+) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
+    """
+    Prunes nodes from an MST until a set of specific nodes are encountered. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
+    O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
+    TODO optimize to reuse existing GatherTreeNode lookup map instead of rebuilding...?
+     MAKE A GATHER CLASS THAT STORES THE ROOT NODES, THE NODE LOOKUP, THE VALUE, THE TURNS
+
+    @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
+    @param tiles: The tiles that should be force-kept within the spanning tree
+    @param searchingPlayer:
+    @param viewInfo:
+    @param noLog:
+    @param gatherTreeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
+    @param tileDictToPrune: Optionally, also prune tiles out of this dictionary
+    @param invalidMoveFunc: func(GatherTreeNode) -> bool, return true if you want a leaf GatherTreeNode to always be prune. For example, pruning gather nodes that begin at an enemy tile or that are 1's.
+    @param parentPruneFunc: func(Tile, GatherTreeNode) When a node is pruned this function will be called for each parent tile above the node being pruned and passed the node being pruned.
+
+    @return: gatherTurns, gatherValue, rootNodes
+    """
+    start = time.perf_counter()
+
+    if invalidMoveFunc is None:
+        def invalid_move_func(node: GatherTreeNode):
+            if node.value <= 0:
+                return True
+            if node.tile.player != searchingPlayer and len(node.children) == 0:
+                return True
+        invalidMoveFunc = invalid_move_func
+
+    # count, nodeMap = calculate_mst_trunk_values_and_build_leaf_queue_and_node_map(rootNodes, searchingPlayer, invalidMoveFunc, viewInfo=viewInfo, noLog=noLog)
+
+    def pruneFunc(node: GatherTreeNode, curPrioObj: typing.Tuple | None):
+        rawValPerTurn = -100
+        # trunkValPerTurn = -100
+        # trunkBehindNodeValuePerTurn = -100
+        try:
+            rawValPerTurn = node.value / node.gatherTurns
+            # trunkValPerTurn = node.trunkValue / node.trunkDistance
+            # trunkValPerTurn = node.trunkValue / node.trunkDistance
+            # trunkBehindNodeValuePerTurn = trunkValPerTurn
+            # trunkBehindNodeValue = node.trunkValue - node.value
+            # trunkBehindNodeValuePerTurn = trunkBehindNodeValue / node.trunkDistance
+        except:
+            pass
+        if viewInfo is not None:
+            viewInfo.midRightGridText[node.tile.x][node.tile.y] = f'v{node.value}'
+            viewInfo.bottomMidRightGridText[node.tile.x][node.tile.y] = f'tv{node.trunkValue}'
+            viewInfo.bottomRightGridText[node.tile.x][node.tile.y] = f'td{node.trunkDistance}'
+
+            # viewInfo.bottomMidLeftGridText[node.tile.x][node.tile.y] = f'tt{trunkValPerTurn:.1f}'
+            viewInfo.bottomLeftGridText[node.tile.x][node.tile.y] = f'vt{rawValPerTurn:.1f}'
+
+        return rawValPerTurn, node.value, 0 - node.trunkDistance
+
+    return prune_mst_until(
+        rootNodes,
+        untilFunc=lambda node, _, turnsLeft, curValue: node.tile in tiles,
+        pruneOrderFunc=pruneFunc,
+        invalidMoveFunc=invalidMoveFunc,
+        pruneOverrideFunc=lambda node, _, turnsLeft, curValue: node.tile in tiles,
+        viewInfo=viewInfo,
+        noLog=noLog,
+        pruneBranches=False,
         gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
         tileDictToPrune=tileDictToPrune,
         parentPruneFunc=parentPruneFunc,

@@ -376,9 +376,9 @@ class GatherTests(TestBase):
                 rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=527)
                 botEnGen = rawMap.GetTile(enemyGeneral.x, enemyGeneral.y)
                 botEnGen.army = 0
+                botEnGen.isGeneral = False
                 botEnGen.player = -1
                 botEnGen.tile = TILE_EMPTY
-                botEnGen.isGeneral = False
                 rawMap.generals[enemyGeneral.player] = None
                 rawMap.players[enemyGeneral.player].general = None
 

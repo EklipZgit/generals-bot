@@ -82,6 +82,7 @@ class DangerAnalyzer(object):
         self.map: MapBase = map
         self.fastestVisionThreat: ThreatObj | None = None
         self.fastestThreat: ThreatObj | None = None
+        self.fastestCityThreat: ThreatObj | None = None
         self.fastestPotentialThreat: ThreatObj | None = None
         """A threat that could reach our general if we move our army off the general."""
 
@@ -116,6 +117,11 @@ class DangerAnalyzer(object):
 
         self.targets = defenseTiles
         self.fastestThreat = self.getFastestThreat(depth, armies, self.map.player_index)
+        self.fastestCityThreat = self.getFastestThreat(depth, armies, self.map.player_index, generalOnly=False)
+        if self.fastestCityThreat is not None and self.fastestThreat is not None:
+            if self.fastestCityThreat.armyAnalysis.tileB == self.fastestThreat.armyAnalysis.tileB:
+                self.fastestCityThreat = None
+
         negTiles = set()
         if self.fastestThreat is not None:
             negTiles.update(self.fastestThreat.path.tileSet)
@@ -184,7 +190,15 @@ class DangerAnalyzer(object):
         logging.info(f"VISION threat analyzer took {time.perf_counter() - startTime:.3f}")
         return threatObj
 
-    def getFastestThreat(self, depth: int, armies: typing.Dict[Tile, Army], againstPlayer: int, pretendTilesVacated: bool = False, negTiles: typing.Set[Tile] | None = None) -> ThreatObj | None:
+    def getFastestThreat(
+            self,
+            depth: int,
+            armies: typing.Dict[Tile, Army],
+            againstPlayer: int,
+            pretendTilesVacated: bool = False,
+            negTiles: typing.Set[Tile] | None = None,
+            generalOnly: bool = True
+    ) -> ThreatObj | None:
         startTime = time.perf_counter()
         logging.info(f"------  fastest threat analyzer: depth {depth}")
         curThreat = None
@@ -210,6 +224,10 @@ class DangerAnalyzer(object):
             for tile in self.map.players[againstPlayer].tiles:
                 if not tile.isGeneral and tile.army > 7:
                     negativeTilesToUse.add(tile)
+
+        targets = self.targets
+        if generalOnly:
+            targets = [general]
 
         searchArmyAmount = 0.5
         if pretendTilesVacated:
@@ -238,7 +256,7 @@ class DangerAnalyzer(object):
 
             path = dest_breadth_first_target(
                 map=self.map,
-                goalList=self.targets,
+                goalList=targets,
                 targetArmy=searchArmyAmount,
                 maxTime=0.05,
                 maxDepth=depth,
@@ -247,6 +265,7 @@ class DangerAnalyzer(object):
                 dontEvacCities=False,
                 dupeThreshold=3,
                 noLog=True)
+
             if (path is not None
                     and (curThreat is None
                          or path.length < curThreat.length
@@ -270,6 +289,7 @@ class DangerAnalyzer(object):
                     logging.info(f"saveTile blocks path to our king: {saveTile.x},{saveTile.y}")
                 logging.info(f"dest BFS found KILL against our target:\n{str(path)}")
                 curThreat = path
+                depth = path.length + 1
 
         for armyTile, army in armies.items():
             # if this is an army in the fog that isn't on a tile owned by that player, lets see if we need to path it.
@@ -294,7 +314,7 @@ class DangerAnalyzer(object):
 
             startTiles = {}
             startTiles[armyTile] = ((0, 0, 0, 0 - army.value - 1, armyTile.x, armyTile.y, 0.5), 0)
-            goalFunc = lambda tile, prio: tile in self.targets
+            goalFunc = lambda tile, prio: tile in targets
             path = breadth_first_dynamic(
                 self.map,
                 startTiles,

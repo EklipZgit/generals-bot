@@ -33,7 +33,7 @@ GRAY = (160, 160, 160)
 LIGHT_GRAY = (200, 195, 190)
 WHITE = (255, 255, 255)
 RED = (200, 40, 40)
-ORANGE = (220, 110, 40)
+ORANGE = (220, 150, 40)
 LIGHT_BLUE = (4, 160, 200)
 LIGHT_PINK = (170, 138, 141)
 PURPLE = (190, 30, 210)
@@ -616,19 +616,25 @@ class GeneralsViewer(object):
 
             if self._viewInfo.dangerAnalyzer is not None and self._viewInfo.dangerAnalyzer.anyThreat:
                 b = 0
+                r = 200
                 for threat in [
-                    self._viewInfo.dangerAnalyzer.fastestVisionThreat,
                     self._viewInfo.dangerAnalyzer.fastestThreat,
                     self._viewInfo.dangerAnalyzer.fastestAllyThreat,
-                    self._viewInfo.dangerAnalyzer.highestThreat
+                    self._viewInfo.dangerAnalyzer.highestThreat,
+                    self._viewInfo.dangerAnalyzer.fastestCityThreat,
+                    None,
+                    self._viewInfo.dangerAnalyzer.fastestVisionThreat,
                 ]:
                     if threat is None:
+                        r -= 30
+                        b += 30
                         continue
                     # Draw danger path
                     alpha = 200
                     alphaDec = 6
                     alphaMin = 145
-                    self.draw_path(threat.path, 150, 0, b, alpha, alphaDec, alphaMin)
+                    self.draw_path(threat.path, r, 0, b, alpha, alphaDec, alphaMin)
+                    r -= 30
                     b += 30
 
             for (tile, targetStyle) in self._viewInfo.targetedTiles:

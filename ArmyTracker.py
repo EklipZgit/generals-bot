@@ -934,7 +934,7 @@ class ArmyTracker(object):
             or missingCities > 0  # TODO questionable
         ):
             if missingCities > 0:
-                logging.info(f"        For new army at tile {str(tile)} there were no adjacent fogBois, checking for undiscovered city emergence")
+                logging.info(f"        For new army at tile {str(tile)}, checking for undiscovered city emergence")
                 allowVisionlessObstaclesAndCities = True
             else:
                 logging.info(f"        For new army at tile {str(tile)} there were no adjacent fogBois and no missing cities, give up...?")
@@ -969,7 +969,7 @@ class ArmyTracker(object):
                     moveHalfVal = negArmy
                 if moveHalfVal > val:
                     logging.info(
-                        f"using moveHalfVal {moveHalfVal:.1f} over val {val:.1f} for tile {thisTile.toString()} turn {self.map.turn}")
+                        f"using moveHalfVal {moveHalfVal:.1f} over val {val:.1f} for tile {str(thisTile)} turn {self.map.turn}")
                     val = moveHalfVal
             elif not thisTile.discovered:
                 negArmy -= max(1, int(self.emergenceLocationMap[armyPlayer][thisTile.x][thisTile.y] ** 0.25) - 1)
@@ -1037,7 +1037,7 @@ class ArmyTracker(object):
                 elif nextTile.discovered:
                     negArmy += nextTile.army + 1
 
-            if not meetsCriteria and not nextTile.visible:
+            if not meetsCriteria and not nextTile.was_visible_last_turn():
                 meetsCriteria = nextTile in self.tiles_ever_owned_by_player[armyPlayer] or self.valid_general_positions_by_player[armyPlayer][nextTile]
 
             if negArmy <= 0:
@@ -1061,7 +1061,8 @@ class ArmyTracker(object):
 
             # logging.info("nextTile {}: negArmy {}".format(nextTile.toString(), negArmy))
             return (
-                    (nextTile.visible and not nextTile.delta.gainedSight and not (wasDiscoveredEnemyTile and self.is_friendly_team(nextTile.player, tile.player)))
+                    False
+                    or (nextTile.visible and not nextTile.delta.gainedSight and not (wasDiscoveredEnemyTile and self.is_friendly_team(nextTile.player, tile.player)))
                     or turnsNegative > 6
                     or consecutiveUndiscovered > 20
                     or dist > 30
@@ -1804,6 +1805,24 @@ class ArmyTracker(object):
         @param army:
         @return:
         """
+        pathA = self.get_army_expected_path_non_flank(army)
+        pathB = self.get_army_expected_path_flank(army)
+
+        if pathB is not None and (pathA is None or pathB.length >= pathA.length // 2):
+            return pathB
+
+        return pathA
+
+    def get_army_expected_path_non_flank(self, army: Army) -> Path | None:
+        """
+        Returns none if asked to predict a friendly army path.
+
+        Returns the path to the nearest player target out of the tiles,
+         WHETHER OR NOT the army can actually reach that target or capture it successfully.
+
+        @param army:
+        @return:
+        """
 
         if army.tile.isCity and army.expectedPath is None and army.tile.lastMovedTurn < self.map.turn - 2:
             return None
@@ -1840,6 +1859,59 @@ class ArmyTracker(object):
             skipTiles=skip,
             maxTime=0.1,
             maxDepth=23,
+            noNeutralCities=army.tile.army < 150,
+            searchingPlayer=army.player,
+            noLog=True)
+
+        return path
+
+    def get_army_expected_path_flank(self, army: Army) -> Path | None:
+        """
+        Returns none if asked to predict a friendly army path.
+
+        Returns the path to the nearest player target out of the tiles,
+         WHETHER OR NOT the army can actually reach that target or capture it successfully.
+
+        @param army:
+        @return:
+        """
+
+        if army.tile.isCity and army.expectedPath is None and army.tile.lastMovedTurn < self.map.turn - 2:
+            return None
+
+        if army.player == self.map.player_index or army.player in self.map.teammates:
+            return None
+
+        def valueFunc(tile: Tile, prioVals) -> typing.Tuple | None:
+            if tile.visible:
+                return None
+
+            return 0 - self.genDistances[tile.x][tile.y], 0
+
+        def prioFunc(tile: Tile, prioVals) -> typing.Tuple | None:
+            if tile.visible:
+                return None
+
+            return self.genDistances[tile.x][tile.y], 0
+
+        skip = set()
+
+        for tile in self.map.get_all_tiles():
+            if tile.visible:
+                skip.add(tile)
+
+        startTiles = {army.tile: ((0, 0), 0)}
+
+        logging.info(f'Looking for army {str(army)}s expected movement path:')
+        path = SearchUtils.breadth_first_dynamic_max(
+            self.map,
+            startTiles,
+            # goalFunc=lambda tile, armyAmt, dist: armyAmt + tile.army > 0 and tile in self.player_targets,  # + tile.army so that we find paths that reach tiles regardless of killing them.
+            valueFunc=valueFunc,
+            priorityFunc=prioFunc,
+            skipTiles=skip,
+            maxTime=0.1,
+            maxDepth=30,
             noNeutralCities=army.tile.army < 150,
             searchingPlayer=army.player,
             noLog=True)
@@ -2084,6 +2156,8 @@ class ArmyTracker(object):
                 if isDroppingChainedBadFog:
                     if curPlayer == -1 and curTile.player == forPlayer:
                         logging.info(f'resetting wrong undisc fog guess {str(curTile)}')
+                        if curTile.isCity and curTile in self.map.players[curTile.player].cities:
+                            self.map.players[curTile.player].cities.remove(curTile)
                         curTile.reset_wrong_undiscovered_fog_guess()
                     if curPlayer == -1:
                         self.emergenceLocationMap[forPlayer][curTile.x][curTile.y] = 0
@@ -2091,6 +2165,8 @@ class ArmyTracker(object):
                     if curTile.player != -1 and curPlayer != curTile.player:
                         logging.info(f'resetting wrong undisc fog guess {str(curTile)}')
                         curTile.reset_wrong_undiscovered_fog_guess()
+                        if curTile.isCity and curTile in self.map.players[curTile.player].cities:
+                            self.map.players[curTile.player].cities.remove(curTile)
 
                     # for p, playerEmergences in enumerate(self.emergenceLocationMap):
                     #     if p == curPlayer:

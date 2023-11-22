@@ -20,7 +20,7 @@ class FFATests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         bot = simHost.get_bot(general.player)
-        bot.handle_pla
+
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()

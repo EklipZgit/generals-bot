@@ -1,0 +1,171 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                                        M                   M         M              M
+M         c1   c2   c3                       M    M                        M              M         M
+          c1   M                        M         M         M         M
+M    M    c1                                      M                                       M    M    M
+          c9   c2   c2   c2   c2   c1             M                             M         M              M
+c1   c1   c1   c1   c1   c1   c5   c1   c1   M         M                   M    M              b3   b3   b3
+c2   c2   c1   M    M    c1   M    M    c1   M         M              M                   b2   b1   b1   b1
+M    c3   M    c1   c1   c1   c1   c1   c1   c1   M    d2   M         M         M    b2   b1   b1   M    b1
+M    c2   c2   c2   c2   c1   c1   c1   C44  c15  d5   d1   d1   M         d1   b1   b1   b1D  M         b1
+c2   c2   M    c2   c2   c1   c1   c1   C43  d1   d3   M    d2   d2   M    d1   d1   b2   b1D  b1D  b1D  b1D
+c2   c2   M    cG12 c1   c1   C41  c1   c1   c1   dG6  d1   d1   M    d1   d1   a1   a1   b1   MD   b2D  b2D
+c2   M    c2   M    M    c2   c2   M    c1   d1   C50  d1   d1   d1   d1   d1   d1   d58  b1   d1D  a1D  a1D
+c4   c2   c2   c3   c2   C50  M    c4   c1   d1   d1   d1   d1   M    d1   M    M    b70  b1   b1D  b1D  b1D
+     c3        M    c2   c2   c2   c2   c2   d2   d1   d1   M         M         MD   aG2D C40D a1D  a1D  b1D
+M    M         c2   c2   M    M    c2   c2   d2   d1   d1             M    M    M    a1   a1D  a1D  a1D  b1
+               M    M    C47  M         c2   c2   c2   c2   M    M    M    a1   a1   a1                  b1
+                              M         c2   c2   c2   c2   M         M    a1             M              b1
+               M    M    M                        M    C45  a3        a1   a2   a5   a5        M         b1
+                    M                        M         M    M    M    M    M    a1   a5
+     M                        M              M                                  a1   a1   a1   a1
+               M         M                        M    M                        M              a1        M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=237
+player_index=2
+teams=1,1,2,2
+mode=team
+bot_target_player=0
+targetPlayerExpectedGeneralLocation=17,13
+bot_is_all_in_losing=False
+bot_all_in_losing_counter=0
+bot_is_all_in_army_advantage=True
+bot_all_in_army_advantage_counter=35
+bot_all_in_army_advantage_cycle=50
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=True
+bot_finishing_exploration=False
+bot_cur_path=None
+aUsername=Teammate.exe
+aTiles=38
+aScore=57
+aStandingArmy=19
+aStars=52
+aCityCount=3
+aGeneral=17,13
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=252
+aDelta25Tiles=-6
+aDelta25Score=-59
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=233
+a_bot_general_approx=17,13
+bUsername=goodeyemight
+bTiles=63
+bScore=174
+bStandingArmy=111
+bStars=52
+bCityCount=1
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=106
+bDelta25Tiles=17
+bDelta25Score=96
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=237
+b_bot_general_approx=21,8
+cUsername=Exe.human
+cTiles=86
+cScore=178
+cStandingArmy=92
+cStars=58
+cCityCount=1
+cGeneral=3,10
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=13
+cDelta25Score=42
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=237
+c_bot_general_approx=3,10
+dUsername=Human.exe
+dTiles=35
+dScore=108
+dStandingArmy=73
+dStars=58
+dCityCount=1
+dGeneral=10,10
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+dDelta25Tiles=-8
+dDelta25Score=25
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=237
+d_bot_general_approx=10,10
+ot_1_c_200_tileCount=98
+ot_1_c_200_score=263
+ot_1_c_200_standingArmy=165
+ot_1_c_200_cityCount=3
+ot_1_c_200_fightingDiff=8
+ot_1_c_200_unexplainedTileDelta=1
+ot_2_c_200_tileCount=120
+ot_2_c_200_score=313
+ot_2_c_200_standingArmy=193
+ot_2_c_200_cityCount=2
+ot_2_c_200_fightingDiff=-1
+ot_2_c_200_unexplainedTileDelta=-1
+ot_1_c_150_tileCount=93
+ot_1_c_150_score=238
+ot_1_c_150_standingArmy=145
+ot_1_c_150_cityCount=2
+ot_1_c_150_fightingDiff=0
+ot_1_c_150_unexplainedTileDelta=0
+ot_2_c_150_tileCount=92
+ot_2_c_150_score=222
+ot_2_c_150_standingArmy=130
+ot_2_c_150_cityCount=2
+ot_2_c_150_fightingDiff=0
+ot_2_c_150_unexplainedTileDelta=0
+ot_1_c_100_tileCount=83
+ot_1_c_100_score=228
+ot_1_c_100_standingArmy=145
+ot_1_c_100_cityCount=2
+ot_1_c_100_fightingDiff=0
+ot_1_c_100_unexplainedTileDelta=0
+ot_2_c_100_tileCount=70
+ot_2_c_100_score=213
+ot_2_c_100_standingArmy=143
+ot_2_c_100_cityCount=2
+ot_2_c_100_fightingDiff=0
+ot_2_c_100_unexplainedTileDelta=0
+ot_1_stats_moves_spent_capturing_fog_tiles=15
+ot_1_stats_moves_spent_capturing_visible_tiles=11
+ot_1_stats_moves_spent_gathering_fog_tiles=45
+ot_1_stats_moves_spent_gathering_visible_tiles=1
+ot_1_stats_approximate_army_gathered_this_cycle=77
+ot_1_stats_army_annihilated_visible=301
+ot_1_stats_army_annihilated_fog=-28
+ot_1_stats_army_annihilated_total=0
+ot_1_stats_approximate_fog_army_available_total=0
+ot_1_stats_approximate_fog_city_army=1
+ot_2_stats_moves_spent_capturing_fog_tiles=5
+ot_2_stats_moves_spent_capturing_visible_tiles=1
+ot_2_stats_moves_spent_gathering_fog_tiles=1
+ot_2_stats_moves_spent_gathering_visible_tiles=67
+ot_2_stats_approximate_army_gathered_this_cycle=-21
+ot_2_stats_army_annihilated_visible=-56
+ot_2_stats_army_annihilated_fog=19
+ot_2_stats_army_annihilated_total=0
+ot_2_stats_approximate_fog_army_available_total=0
+ot_2_stats_approximate_fog_city_army=0
+ot_a_tcs=23x2|29x1
+ot_b_tcs=30x2|34x1

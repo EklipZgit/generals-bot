@@ -1813,8 +1813,8 @@ whoever has less extra troops will always get ahead
         enVisionGen = rawMap.GetTile(enemyGeneral.x, enemyGeneral.y)
         enVisionGen.tile = TILE_FOG
         enVisionGen.army = 0
-        enVisionGen.player = -1
         enVisionGen.isGeneral = False
+        enVisionGen.player = -1
 
         rawMap.generals[enemyGeneral.player] = None
         rawMap.players[enemyGeneral.player].general = None
@@ -1822,9 +1822,9 @@ whoever has less extra troops will always get ahead
         enVisionTile = rawMap.GetTile(16, 7)
         enVisionTile.tile = TILE_FOG
         enVisionTile.army = 0
-        enVisionTile.player = -1
         enVisionTile.isGeneral = False
-        
+        enVisionTile.player = -1
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '16,7->16,6->15,6->14,6->13,6->13,5->13,4->12,4->11,4->11,3->10,3->9,3->8,3->7,3->7,2->7,1->6,1')

@@ -728,7 +728,7 @@ class ArmyTrackerTests(TestBase):
                 self.assertIsNone(winner)
     
     def test_should_detect_cities_based_on_incontroversial_moves_from_fog(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_detect_cities_based_on_incontroversial_moves_from_fog___z2GMYKXZ1---1--388.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 388, fill_out_tiles=True)
         actualCity = map.GetTile(4, 9)
@@ -865,7 +865,7 @@ class ArmyTrackerTests(TestBase):
         self.assertIsNone(winner)
 
     def test_should_determine_opp_took_city_in_fog_and_register_scary_alternate_attack_threat(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         # the results are kinda randomized based on how the tile movables are shuffled; make sure they all result in finding the city.
 
@@ -2132,6 +2132,52 @@ a1   b1   b1   bG1
         genTile = playerMap.GetTile(8, 2)
         self.assertEqual(2, genTile.player)
 
+    def test_should_choose_max_locality_from_valid_general_positions(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_choose_max_locality_from_valid_general_positions___t4J6NOKOM---0--100.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 100, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=100)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][enemyGeneral.x][enemyGeneral.y] = 0
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+
+        self.assertLess(bot.euclidDist(7, 4, bot.targetPlayerExpectedGeneralLocation.x, bot.targetPlayerExpectedGeneralLocation.y), 3)
+
+    def test_should_path_fog_army_as_deep_a_flank_as_possible(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_path_fog_army_as_deep_a_flank_as_possible___QC4clcAIv---1--653.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 653, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=653)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '10,17->10,18->4,18->4,16->1,16->1,13->0,13->0,11->1,11->1,8->2,8->2,6->4,6')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=22)
+        self.assertIsNone(winner)
+
+        tile = playerMap.GetTile(1, 8)
+        army = bot.armyTracker.armies.get(tile, None)
+
+        self.assertIsNotNone(army)
+        self.assertEqual(enemyGeneral.player, tile.player)
+        self.assertGreater(tile.army, 200)
+        self.assertGreater(army.value, 200)
+
+
 # 55-47 fail-pass ish
 # 50-52 now
 # 44-61 now (with 10 army threshold).
@@ -2139,3 +2185,4 @@ a1   b1   b1   bG1
 # 47-61 now
 # 36-72 now after fixing 1-deep map emergence
 # 39-69 after fixing test opponenttracker load and army tracker fog dupe emergence on move-halfs
+# 35-76 after fixing some fog movement stuff

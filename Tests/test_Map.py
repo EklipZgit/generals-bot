@@ -1408,4 +1408,28 @@ C5
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=3)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
-    # 4590 failed, 23,663 passed
+    # 4590 failed, 23,663 passed    
+    def test_should_not_try_to_set_ally_general_to_other_player(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+
+        for move in [0, -1, 1]:
+            with self.subTest(move=move):
+                mapFile = 'GameContinuationEntries/should_not_try_to_set_ally_general_to_other_player___ydcsakF7K---2--237.txtmap'
+                map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 237, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=237)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=False)
+                simHost.queue_player_moves_str(enemyGeneral.player, '17,13->17,12->17,11')
+                if move != 0:
+                    simHost.queue_player_moves_str(allyGen.player, f'17,11->17,{11+move}')
+                else:
+                    simHost.queue_player_moves_str(allyGen.player, 'None')
+                bot = simHost.get_bot(general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+                self.assertNoFriendliesKilled(map, general, allyGen)

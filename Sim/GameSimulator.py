@@ -286,11 +286,11 @@ class GameSimulator(object):
                 if destTile.isGeneral:
                     genArmy = destTile.army
                     # player killed
+                    destTile.isGeneral = False
                     self._execute_player_capture(player, destPlayer)
                     # we just incorrectly halved this, set it back to what it should be
                     destTile.army = genArmy
                     destTile.isCity = True
-                    destTile.isGeneral = False
 
                 destTile.player = player_index
                 # destTile.delta.newOwner = player_index

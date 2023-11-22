@@ -323,9 +323,14 @@ class GeneralsClient(object):
                     fromUsername = chat_msg["username"]
 
                     recordMessage = True
+                    if self._start_data is not None and 'teams' in self._start_data:
+                        recordMessage = False
+
                     if fromUsername != self.server_username:
                         if self.is_allowed_to_reply_to(fromUsername):
                             recordMessage = self.handle_chat_message(fromUsername, message)
+                        else:
+                            recordMessage = False
 
                         fromTeam = 'team_chat_room' in self._start_data and self._start_data['team_chat_room'] == chat_room
 
@@ -341,7 +346,6 @@ class GeneralsClient(object):
                         except:
                             logging.info(
                                 "!!!!!!!!!!\n!!!!!!!!!!!!!\n!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!\ncouldn't write chat message to file")
-
                 elif " captured " in chat_msg["text"]:
                     yield "player_capture", chat_msg
                 else:
@@ -354,6 +358,8 @@ class GeneralsClient(object):
                         and " wins!" not in chat_msg["text"]
                         and "Chat is being recorded." not in chat_msg["text"]
                         and "Chat is being limited." not in chat_msg["text"]
+                        and "You're sending messages too quickly." not in chat_msg["text"]
+                        and "being recorded" not in chat_msg["text"]
                     ):
                         self.writingFile = True
                         try:

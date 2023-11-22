@@ -256,3 +256,32 @@ class OpponentTrackerTests(TestBase):
         self.assertGreater(sumFogStuff, 12)
 
         self.assertLess(sumFogStuff, 16)
+    
+    def test_should_gather_maximally_from_edges_while_defending_econ(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_gather_maximally_from_edges_while_defending_econ___dD6E59lT7---1--300.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 300, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=300)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        matrix = bot.get_gather_tiebreak_matrix()
+        # these should all be 'out of play' gather tiles, and should ALWAYS be rewarded for gathering.
+        self.assertGreater(matrix[playerMap.GetTile(5, 7)], 0.1)
+        self.assertGreater(matrix[playerMap.GetTile(4, 7)], 0.1)
+        self.assertGreater(matrix[playerMap.GetTile(3, 7)], 0.1)
+        self.assertGreater(matrix[playerMap.GetTile(3, 8)], 0.1)
+        self.assertGreater(matrix[playerMap.GetTile(3, 6)], 0.1)
+        self.assertGreater(matrix[playerMap.GetTile(3, 5)], 0.1)
+        self.assertGreater(matrix[playerMap.GetTile(4, 6)], 0.1)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=39)
+        self.assertIsNone(winner)
+
+        self.assertGreater(bot.sum_player_army_near_or_on_tiles(bot.target_player_gather_path.tileList, distance=3), 130)

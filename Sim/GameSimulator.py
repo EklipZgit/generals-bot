@@ -385,6 +385,9 @@ class GameSimulator(object):
             player.map.update(bypassDeltas=noDeltas)
             player.tiles_lost_this_turn = set()
             player.tiles_gained_this_turn = set()
+            if noDeltas:
+                for tile in player.map.get_all_tiles():
+                    tile.turn_captured = 0
         logging.info(f'END SIM PLAYER MAP UPDATES FOR TURN {self.turn}')
 
     def _send_player_lost_vision_of_tile(self, player: GamePlayer, tile: Tile):
@@ -530,8 +533,8 @@ class GameSimulatorHost(object):
             player = self.sim.players[playerIndex]
             # this actually just initializes the bots viewers and stuff, we throw this first move away
             botHost.eklipz_bot.initialize_map_for_first_time(player.map)
-            # botHost.eklipz_bot.targetPlayer = (botHost.eklipz_bot.general.player + 1) % 2
-            # botHost.eklipz_bot.targetPlayerObj = botHost.eklipz_bot._map.players[botHost.eklipz_bot.targetPlayer]
+            # botHost.eklipz_bot.player = (botHost.eklipz_bot.general.player + 1) % 2
+            # botHost.eklipz_bot.targetPlayerObj = botHost.eklipz_bot._map.players[botHost.eklipz_bot.player]
             # botHost.eklipz_bot.init_turn()
             botHost.make_move(player.map, time.time_ns() / NS_CONVERTER)
 
@@ -540,13 +543,14 @@ class GameSimulatorHost(object):
             botHost.eklipz_bot.curPath = None
             botHost.eklipz_bot.cached_scrims.clear()
             botHost.eklipz_bot.targetingArmy = None
+            botHost.eklipz_bot.armyTracker.lastTurn = map.turn
             botHost.last_init_turn = map.turn - 1
             if botHost.eklipz_bot.teammate_communicator is not None:
                 botHost.eklipz_bot.teammate_communicator.begin_next_turn()
                 botHost.eklipz_bot.teammate_communicator.begin_next_turn()
             botHost.eklipz_bot.viewInfo.turnInc()
 
-            if playerIndex == playerMapVision.player_index:
+            if playerMapVision is not None and playerIndex == playerMapVision.player_index:
                 botHost.eklipz_bot.load_resume_data(playerMapVision.resume_data)
 
         # throw the initialized moves away
@@ -727,6 +731,35 @@ class GameSimulatorHost(object):
 
         self.move_queue[player].append(Move(playerObj.map.GetTile(move.source.x, move.source.y), playerObj.map.GetTile(move.dest.x, move.dest.y), move.move_half))
 
+    def queue_player_leafmoves(self, player: int, num_moves: int = 100, allow_non_neutral: bool = False):
+        used = set()
+        curMove = 0
+        for tile in self.sim.sim_map.get_all_tiles():
+            if tile in used:
+                continue
+            if tile.player == player:
+                for adj in tile.movable:
+                    if adj in used:
+                        continue
+
+                    if not allow_non_neutral and not adj.isNeutral:
+                        continue
+
+                    if self.sim.sim_map.is_tile_on_team_with(adj, player):
+                        continue
+
+                    if adj.isMountain:
+                        continue
+
+                    if tile.army - 1 > adj.army:
+                        used.add(tile)
+                        used.add(adj)
+                        self.queue_player_move(player, Move(tile, adj))
+                        curMove += 1
+                        break
+            if curMove >= num_moves:
+                break
+
     def execute_turn(self, run_real_time: bool = False, turn_time: float = 0.5) -> int | None:
         """
         Runs a turn of the sim, and returns None or the player ID of the winner, if the game ended this turn.
@@ -784,10 +817,9 @@ class GameSimulatorHost(object):
 
         if run_real_time:
             self.check_for_viewer_events()
-            self.any_bot_has_viewer_running()
             elapsed = time.perf_counter() - start
             if len(self.sim.moves_history) == 0:
-                time.sleep(0.5)  # give a brief moment at the first move to allow a right click pause etc.
+                time.sleep(1.0)  # give a brief moment at the first move to allow a right click pause etc.
             self.check_for_viewer_events()
             while elapsed < turn_time and self.frame_skips_queued == 0:
                 time.sleep(min(turn_time - elapsed, 0.05))
@@ -942,3 +974,4 @@ class GameSimulatorHost(object):
         while self.frame_skips_queued == 0 and ((self.any_bot_has_viewer_running() and time.perf_counter() - start < max_seconds_to_wait) or self.paused):
             self.check_for_viewer_events()
             time.sleep(0.5)
+

@@ -152,8 +152,10 @@ class CityAnalyzer(object):
         @return:
         """
 
-        score.distance_from_player_general = board_analysis.intergeneral_analysis.aMap[city.x][city.y]
-        score.distance_from_enemy_general = board_analysis.intergeneral_analysis.bMap[city.x][city.y]
+        for adj in city.movable:
+            score.distance_from_player_general = min(score.distance_from_player_general, board_analysis.intergeneral_analysis.aMap[adj.x][adj.y] + 1)
+            score.distance_from_enemy_general = min(score.distance_from_enemy_general, board_analysis.intergeneral_analysis.bMap[adj.x][adj.y] + 1)
+
         currentShortest = board_analysis.intergeneral_analysis.shortestPathWay.distance
 
         score.intergeneral_distance_through_city = score.distance_from_enemy_general + score.distance_from_player_general

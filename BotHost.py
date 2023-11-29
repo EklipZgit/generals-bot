@@ -1,4 +1,5 @@
 import argparse
+import gc
 import logging
 import queue
 import sys
@@ -82,7 +83,7 @@ class BotHostBase(object):
                 move = self.eklipz_bot.find_move()
             except:
                 errMsg = traceback.format_exc()
-                self.eklipz_bot.viewInfo.addAdditionalInfoLine(f'ERROR: {errMsg}')
+                self.eklipz_bot.viewInfo.add_info_line(f'ERROR: {errMsg}')
                 logging.error('ERROR: IN EKBOT.find_move():')
                 logging.error(errMsg)
                 if self.rethrow:
@@ -121,6 +122,8 @@ class BotHostBase(object):
                     currentMap.result = False
                     self.notify_game_over()
 
+        gc.collect()
+
         return
 
     def receive_update_no_move(self, currentMap: MapBase, updateReceivedTime: float):
@@ -137,7 +140,7 @@ class BotHostBase(object):
                     self.eklipz_bot.init_turn()
             except:
                 errMsg = traceback.format_exc()
-                self.eklipz_bot.viewInfo.addAdditionalInfoLine(f'ERROR: {errMsg}')
+                self.eklipz_bot.viewInfo.add_info_line(f'ERROR: {errMsg}')
                 logging.error('ERROR: IN EKBOT.init_turn():')
                 logging.error(errMsg)
                 if self.rethrow:
@@ -145,7 +148,7 @@ class BotHostBase(object):
 
             duration = timer.get_elapsed_since_update(currentMap.turn)
             self.eklipz_bot.viewInfo.lastMoveDuration = duration
-            self.eklipz_bot.viewInfo.addAdditionalInfoLine(f'Missed move chance turn {currentMap.turn}')
+            self.eklipz_bot.viewInfo.add_info_line(f'Missed move chance turn {currentMap.turn}')
 
             if not self.eklipz_bot.no_file_logging:
                 with moveTimer.begin_event(f'Dump {currentMap.turn}.txtmap to disk'):

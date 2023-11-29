@@ -9,6 +9,14 @@ from bot_ek0x45 import EklipZBot
 
 
 class ExpansionTests(TestBase):
+    def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
+        bot = super().get_debug_render_bot(simHost, player)
+
+        bot.info_render_expansion_matrix_values = True
+        bot.info_render_general_undiscovered_prediction_values = True
+        bot.info_render_leaf_move_values = True
+
+        return bot
 
     def run_expansion(
             self,
@@ -23,16 +31,16 @@ class ExpansionTests(TestBase):
         # self.render_view_info(map, ViewInfo("h", map.cols, map.rows))
         # self.begin_capturing_logging()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=mapVision, allAfkExceptMapPlayer=True)
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         bot.viewInfo.turnInc()
 
         path, otherPaths = self.run_expansion_raw(bot, turns, negativeTiles, timeLimit)
 
         if debugMode:
             bot.prep_view_info_for_render()
-            bot.viewInfo.addAdditionalInfoLine(f'max {str(path)}')
+            bot.viewInfo.add_info_line(f'max {str(path)}')
             for otherPath in otherPaths:
-                bot.viewInfo.addAdditionalInfoLine(f'other {str(otherPath)}')
+                bot.viewInfo.add_info_line(f'other {str(otherPath)}')
 
             self.render_view_info(bot._map, viewInfo=bot.viewInfo)
 
@@ -289,7 +297,7 @@ bot_target_player=1
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap,
                                     allAfkExceptMapPlayer=True)
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         bot.timings = bot.get_timings()
         bot.timings.quickExpandTurns = 0
         bot.timings.launchTiming = 25
@@ -314,7 +322,7 @@ bot_target_player=1
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap,
                                     allAfkExceptMapPlayer=True)
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         bot.timings = bot.get_timings()
         bot.timings.quickExpandTurns = 0
         bot.timings.launchTiming = 25
@@ -339,7 +347,7 @@ bot_target_player=1
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=136)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         bot.expansion_use_cutoff = False
         # bot.expansion_use_leaf_moves_first = True
         simHost.queue_player_moves_str(enemyGeneral.player, '7,6->7,5->7,4  9,6->10,6->11,6->11,5')
@@ -386,7 +394,7 @@ bot_target_player=1
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -409,7 +417,7 @@ bot_target_player=1
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         self.set_general_emergence_around(6, 13, simHost, general.player, enemyGeneral.player, emergenceAmt=20)
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         # bot.expansion_length_weight_offset = 0.0
         playerMap = simHost.get_player_map(general.player)
 
@@ -434,7 +442,7 @@ bot_target_player=1
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         self.set_general_emergence_around(6, 13, simHost, general.player, enemyGeneral.player, emergenceAmt=20)
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -459,7 +467,7 @@ bot_target_player=1
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -482,7 +490,7 @@ bot_target_player=1
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         self.set_general_emergence_around(10, 14, simHost, general.player, enemyGeneral.player, 21)
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         initDifferential = self.get_tile_differential(simHost, general.player)
@@ -511,7 +519,7 @@ bot_target_player=1
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         self.set_general_emergence_around(9, 15, simHost, general.player, enemyGeneral.player, 21)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -534,7 +542,7 @@ bot_target_player=1
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -556,7 +564,7 @@ bot_target_player=1
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '7,6->7,5')
         simHost.queue_player_moves_str(enemyAllyGen.player, '7,6->7,5')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -576,7 +584,7 @@ bot_target_player=1
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -597,7 +605,7 @@ bot_target_player=1
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -633,7 +641,7 @@ bot_target_player=1
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '13,8->13,7->12,7->12,6->12,5->12,4->13,4')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -654,7 +662,7 @@ bot_target_player=1
     #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap,
     #                                 allAfkExceptMapPlayer=True)
     #     simHost.queue_player_moves_str(enemyGeneral.player, '13,8->13,7->12,7->12,6->12,5->12,4->13,4')
-    #     bot = simHost.get_bot(general.player)
+    #     bot = self.get_debug_render_bot(simHost, general.player)
     #     playerMap = simHost.get_player_map(general.player)
 
     def test_should_use_short_expansion_time_limit_when_told_to__low_tile_count(self):
@@ -668,7 +676,7 @@ bot_target_player=1
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap,
                                     allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         timeStart = time.perf_counter()
@@ -697,7 +705,7 @@ bot_target_player=1
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap,
                                     allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         timeStart = time.perf_counter()
@@ -725,7 +733,7 @@ bot_target_player=1
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -742,7 +750,7 @@ bot_target_player=1
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -761,7 +769,7 @@ bot_target_player=1
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -780,7 +788,7 @@ bot_target_player=1
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         bot.timings = bot.get_timings()
         bot.timings.launchTiming = 27
         bot.timings.splitTurns = 24
@@ -806,7 +814,7 @@ bot_target_player=1
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -827,7 +835,7 @@ bot_target_player=1
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '8,7->8,8->10,8->10,6')
         simHost.queue_player_moves_str(general.player, '9,4->8,4')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -844,7 +852,7 @@ bot_target_player=1
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=False)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -861,9 +869,104 @@ bot_target_player=1
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=-2, playerMapVision=rawMap, allAfkExceptMapPlayer=False)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=50)
         self.assertIsNone(winner)
+    
+    def test_should_not_blow_up(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_blow_up___EMfTbz1Ig---1--78.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 78, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=78)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+    
+    def test_should_not_launch_super_early_v1(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_launch_super_early_v1___Sxz0Jeer6---1--121.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 121, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=121)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=30)
+        self.assertIsNone(winner)
+    
+    def test_should_not_launch_super_early_v2(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_launch_super_early_v1___Sxz0Jeer6---1--120.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 120, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=120)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=20)
+        self.assertIsNone(winner)
+    
+    def test_should_not_take_ages_predicting_expansion(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_take_ages_predicting_expansion___rETyBtOqf---0--277.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 277, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=277)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+
+        self.assertEqual(0, simHost.dropped_move_counts_by_player[general.player])
+    
+    def test_should_not_launch_on_inefficient_wasteful_capture_path(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_launch_on_inefficient_wasteful_capture_path___TS0Bqk2B5---1--83.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 83, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=83)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        self.set_general_emergence_around(9, 17, simHost, general.player, enemyGeneral.player, emergenceAmt=30)
+        playerMap = simHost.get_player_map(general.player)
+
+        tileDiff = self.get_tile_differential(simHost, general.player, enemyGeneral.player)
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=17)
+        self.assertIsNone(winner)
+
+        finalTileDiff = self.get_tile_differential(simHost, general.player, enemyGeneral.player)
+
+        # we can do 13 by going immediately down with the 5 and the up right then up left from gen
+        self.assertGreater(finalTileDiff-tileDiff, 12)
+

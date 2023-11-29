@@ -1,22 +1,8 @@
-import logging
-import time
-import traceback
-import typing
-
-import SearchUtils
-from ArmyEngine import ArmyEngine, ArmySimResult
-from ArmyTracker import Army
-from BoardAnalyzer import BoardAnalyzer
-from DataModels import Move
-from Engine.ArmyEngineModels import calc_value_int, calc_econ_value, ArmySimState
-from MctsLudii import MctsDUCT, MoveSelectionFunction
-from Sim.GameSimulator import GameSimulatorHost, GameSimulator
 from TestBase import TestBase
-from base.client.map import Tile, MapBase
 from bot_ek0x45 import EklipZBot
 
 
-class ArmyEngineABTests(TestBase):
+class ABTests(TestBase):
     def test__mcts_should_always_win__vs__brute_force__top_left_bottom_right(self):
         numRuns = 20
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1048,11 +1034,11 @@ class ArmyEngineABTests(TestBase):
         self.begin_capturing_logging()
 
         def configure_b(bBot: EklipZBot):
-            bBot.behavior_max_allowed_quick_expand = 7
+            bBot.expansion_enemy_expansion_plan_inbound_penalty = 0.0
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.behavior_max_allowed_quick_expand = 0
+            aBot.expansion_enemy_expansion_plan_inbound_penalty = 1.0  # b = 0.0, the current
 
             # 283-213
             # aBot.expansion_always_include_non_terminating_leafmoves_in_iteration = True
@@ -1125,17 +1111,21 @@ class ArmyEngineABTests(TestBase):
 
     def test_A_B__OTHER__3(self):
         numRuns = 500
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         self.begin_capturing_logging()
 
         def configure_b(bBot: EklipZBot):
-            bBot.behavior_max_allowed_quick_expand = 7
+            bBot.expansion_enemy_expansion_plan_inbound_penalty = 0.0
+            # bBot.behavior_max_allowed_quick_expand = 7
             # bBot.expansion_length_weight_offset = -0.3
             # bBot.expansion_allow_gather_plan_extension = False
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.behavior_max_allowed_quick_expand = 0
+            aBot.expansion_enemy_expansion_plan_inbound_penalty = 0.75  # b = 0.0, the current
+
+            # aBot.behavior_max_allowed_quick_expand = 0
+
             # 257-237
             # aBot.expansion_allow_gather_plan_extension = True
 
@@ -1168,14 +1158,18 @@ class ArmyEngineABTests(TestBase):
         self.begin_capturing_logging()
 
         def configure_b(bBot: EklipZBot):
-            bBot.engine_include_path_pre_expansion = False
+            bBot.expansion_enemy_expansion_plan_inbound_penalty = 0.0
+
+            # bBot.engine_include_path_pre_expansion = False
 
             # bBot.expansion_length_weight_offset = -0.3
             # bBot.behavior_launch_timing_offset = +4
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.engine_include_path_pre_expansion = True
+            aBot.expansion_enemy_expansion_plan_inbound_penalty = 0.5  # b = 0.0, the current
+
+            # aBot.engine_include_path_pre_expansion = True
 
             # in stage 1 and 2
             # 261-234

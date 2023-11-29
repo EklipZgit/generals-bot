@@ -235,7 +235,7 @@ class GeneralsClient(object):
             try:
                 msg = self._ws.recv()
 
-                logging.info(f"{self._get_log_time()} - WS recv: {json.dumps(msg)}")
+                # logging.info(f"{self._get_log_time()} - WS recv: {json.dumps(msg)}")
                 self.lastCommunicationTime = time.time_ns() / (10 ** 9)
             except WebSocketConnectionClosedException as ex:
                 logging.info("socket closed")
@@ -252,11 +252,17 @@ class GeneralsClient(object):
                 continue
 
             # ignore heartbeats and connection acks
-            if msg in {"2", "3", "40", "41"}:
-                # 41 means abort...?
-                logging.info("2, 3 40, 41 ignored, " + json.dumps(msg))
+            if msg in {"2", "3"}:
+                # logging.info("2, 3 40, 41 ignored, " + json.dumps(msg))
                 if not self._seen_update and time.perf_counter() - startTime > idleTimeout:
                     raise ValueError('Reconnecting, idle for too long...')
+                continue
+
+            logging.info(f"{self._get_log_time()} - WS recv: {json.dumps(msg)}")
+
+            if msg in {"40", "41"}:
+                # 41 means abort...?
+                logging.info("40, 41 ignored, " + json.dumps(msg))
                 continue
 
             # remove numeric prefix

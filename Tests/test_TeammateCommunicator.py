@@ -45,7 +45,7 @@ class TeamCommunicatorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
         simHost.queue_player_moves_str(enAllyGen.player, '16,8->15,8->14,8->13,8->12,8->11,8->10,8')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.assertIsNotNone(bot.threat)
@@ -104,7 +104,7 @@ class TeamCommunicatorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=allyGen.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
         simHost.queue_player_moves_str(enAllyGen.player, '16,8->15,8->14,8->13,8->12,8->11,8->10,8')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.assertIsNotNone(bot.threat)
@@ -192,7 +192,7 @@ class TeamCommunicatorTests(TestBase):
                     simHost.queue_player_moves_str(enemyAllyGen.player, '5,11->5,10->5,9->6,9->7,9->8,9->9,9->10,9->10,10')
                 else:
                     simHost.queue_player_moves_str(enemyAllyGen.player, '5,11->5,10->5,9->6,9->7,9->8,9->9,9->9,8->9,7->9,6->10,6->11,6')
-                bot = simHost.get_bot(general.player)
+                bot = self.get_debug_render_bot(simHost, general.player)
                 self.set_general_emergence_around(7, 22, simHost, general.player, emergencePlayer=enemyGeneral.player, emergenceAmt=33)
                 self.set_general_emergence_around(7, 22, simHost, allyGen.player, emergencePlayer=enemyGeneral.player, emergenceAmt=33)
                 playerMap = simHost.get_player_map(general.player)
@@ -215,7 +215,7 @@ class TeamCommunicatorTests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '16,16->15,16->15,17->15,18->15,19->14,19->13,19->12,19->11,19->10,19->9,19->8,19->8,20')
         simHost.queue_player_moves_str(general.player, '15,16->15,15')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -236,7 +236,7 @@ class TeamCommunicatorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '15,11->15,12->15,13->16,13->16,14->17,14->17,15->17,16->17,17->17,18->17,19->17,20->18,20')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -255,7 +255,7 @@ class TeamCommunicatorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '9,11->8,11->8,12->8,13->8,14->7,14->6,14->5,14->4,14->4,15->4,16')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)

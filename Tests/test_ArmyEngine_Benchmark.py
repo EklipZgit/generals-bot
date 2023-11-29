@@ -1215,7 +1215,7 @@ dur 0.3073, iter   109, nodesExplored   109, rollouts   109,
                                 # # self.enable_search_time_limits_and_disable_debug_asserts()
                                 # simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap,
                                 #                             allAfkExceptMapPlayer=True)
-                                # bot = simHost.get_bot(general.player)
+                                # bot = self.get_debug_render_bot(simHost, general.player)
                                 bot = EklipZBot()
                                 bot.initialize_map_for_first_time(map)
                                 bot.targetPlayer = enemyGeneral.player

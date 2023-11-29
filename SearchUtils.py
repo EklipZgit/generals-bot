@@ -584,7 +584,7 @@ def breadth_first_dynamic(
 def breadth_first_dynamic_max(
         map,
         startTiles: typing.Union[typing.List[Tile], typing.Dict[Tile, typing.Tuple[object, int]]],
-        valueFunc,  # higher is better
+        valueFunc=None,  # higher is better
         maxTime=0.2,
         maxTurns=100,
         maxDepth=100,
@@ -661,26 +661,17 @@ def breadth_first_dynamic_max(
     if negativeTiles is None:
         negativeTiles = set()
 
-    # make sure to initialize the initial base values and account for first priorityObject being None. Or initialize all your start values in the dict.
-    def default_priority_func(nextTile, currentPriorityObject):
-        (dist, negCityCount, negEnemyTileCount, negArmySum, sumX, sumY, goalIncrement) = currentPriorityObject
-        dist += 1
-        if nextTile.isCity:
-            negCityCount -= 1
-        if nextTile.player != searchingPlayer and (
-                nextTile.player != -1 or (preferNeutral and nextTile.isCity == False)):
-            negEnemyTileCount -= 1
+    if valueFunc is None:
+        # make sure to initialize the initial base values and account for first priorityObject being None. Or initialize all your start values in the dict.
+        def default_value_func(curTile, currentPriorityObject):
+            (dist, negCityCount, negEnemyTileCount, negArmySum, sumX, sumY, goalIncrement) = currentPriorityObject
 
-        if negativeTiles is None or next not in negativeTiles:
-            if nextTile.player == searchingPlayer:
-                negArmySum -= nextTile.army
-            else:
-                negArmySum += nextTile.army
-        # always leaving 1 army behind. + because this is negative.
-        negArmySum += 1
-        # -= because we passed it in positive for our general and negative for enemy gen / cities
-        negArmySum -= goalIncrement
-        return dist, negCityCount, negEnemyTileCount, negArmySum, sumX + nextTile.x, sumY + nextTile.y, goalIncrement
+            if dist == 0:
+                return None
+
+            return 0 - negArmySum / dist, 0 - negEnemyTileCount
+
+        valueFunc = default_value_func
 
     if fullOnly:
         oldValFunc = valueFunc
@@ -717,7 +708,29 @@ def breadth_first_dynamic_max(
 
     if searchingPlayer == -2:
         searchingPlayer = map.player_index
+
     if priorityFunc is None:
+        # make sure to initialize the initial base values and account for first priorityObject being None. Or initialize all your start values in the dict.
+        def default_priority_func(nextTile, currentPriorityObject):
+            (dist, negCityCount, negEnemyTileCount, negArmySum, sumX, sumY, goalIncrement) = currentPriorityObject
+            dist += 1
+            if nextTile.isCity:
+                negCityCount -= 1
+            if nextTile.player != searchingPlayer and (
+                    nextTile.player != -1 or (preferNeutral and nextTile.isCity == False)):
+                negEnemyTileCount -= 1
+
+            if negativeTiles is None or next not in negativeTiles:
+                if nextTile.player == searchingPlayer:
+                    negArmySum -= nextTile.army
+                else:
+                    negArmySum += nextTile.army
+            # always leaving 1 army behind. + because this is negative.
+            negArmySum += 1
+            # -= because we passed it in positive for our general and negative for enemy gen / cities
+            negArmySum -= goalIncrement
+            return dist, negCityCount, negEnemyTileCount, negArmySum, sumX + nextTile.x, sumY + nextTile.y, goalIncrement
+
         priorityFunc = default_priority_func
     frontier = PriorityQueue()
 
@@ -1735,7 +1748,7 @@ def bidirectional_breadth_first_dynamic(
 def breadth_first_find_queue(
         map,
         startTiles,
-        goalFunc,
+        goalFunc: typing.Callable[[Tile, int, int], int],
         maxTime=0.1,
         maxDepth=20,
         noNeutralCities=False,

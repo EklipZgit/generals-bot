@@ -98,6 +98,8 @@ class TeamStats(object):
         self.fightingDiff: int = fightingDiff
         self.unexplainedTileDelta: int = unexplainedTileDelta
 
+    def __str__(self) -> str:
+        return f'{self.score} {self.tileCount}t {self.cityCount}c  {self.standingArmy}standingArmy {self.fightingDiff}fightingDiff {self.unexplainedTileDelta}unexTileDelta'
 
 class Player(object):
     def __init__(self, player_index: int):
@@ -106,6 +108,7 @@ class Player(object):
         self.index: int = player_index
         self.stars = 0
         self.score: int = 0
+        self.team: int = player_index
 
         self.scoreDelta: int = 0
         """The player score delta since last move."""
@@ -633,6 +636,8 @@ class Tile(object):
             self.tile = TILE_FOG
         self.army = 0
         self._player = -1
+        self.isGeneral = False
+        self.delta = TileDelta()
 
     @classmethod
     def get_move_half_amount(cls, army: int) -> int:
@@ -654,6 +659,9 @@ class Score(object):
             for player, scores_entry
             in enumerate(scores_from_server)
         ]
+
+    def __str__(self) -> str:
+        return f'p{self.player}{" DEAD" if self.dead else ""} {self.total} {self.tiles}t'
 
 
 class MapBase(object):
@@ -687,7 +695,12 @@ class MapBase(object):
 
         self.usernames: typing.List[str] = user_names  # List of String Usernames
         self.players: typing.List[Player] = [Player(x) for x in range(len(self.usernames))]
+
         self._teams = MapBase.get_teams_array(self)
+        for p, t in enumerate(self._teams):
+            if t != -1:
+                self.players[p].team = t
+
         self.pathableTiles: typing.Set[Tile] = set()
         """Tiles PATHABLE from the general spawn on the map, including neutral cities but not including mountains/undiscovered obstacles"""
 
@@ -813,7 +826,7 @@ class MapBase(object):
             return None
         return self.grid[y][x]
 
-    def _update_player_information(self):
+    def _update_player_information(self, bypassDeltas: bool):
         cityCounts = [0 for i in range(len(self.players))]
         for player in self.players:
             if self.scores[player.index] is None:
@@ -867,7 +880,8 @@ class MapBase(object):
                 else:
                     self.remainingPlayers += 1
 
-        self.calculate_player_deltas()
+        if not bypassDeltas:
+            self.calculate_player_deltas()
 
         if self.remainingPlayers > 2 and self.is_city_bonus_turn and not self.is_2v2:
             for i, player in enumerate(self.players):
@@ -921,6 +935,8 @@ class MapBase(object):
         capturingPlayer = self.players[capturerIdx]
         captureePlayer = self.players[captureeIdx]
         captureePlayer.capturedBy = capturerIdx
+        logging.info(f'increasing capturer p{capturerIdx} cities from {capturingPlayer.cityCount} by captured players {captureePlayer.cityCount} cityCount')
+        capturingPlayer.cityCount += captureePlayer.cityCount
         for tile in self.get_all_tiles():
             if tile.player != captureeIdx:
                 continue
@@ -996,13 +1012,15 @@ class MapBase(object):
         unexplainedTileDelta = 0
 
         for player in self.players:
-            if self.is_player_on_team_with(player.index, teamPlayer):
-                tileCount += player.tileCount
-                score += player.score
-                standingArmy += player.standingArmy
-                cities += player.cityCount
-                fightingDiff += player.actualScoreDelta - player.expectedScoreDelta
-                unexplainedTileDelta += player.unexplainedTileDelta
+            if not self.is_player_on_team_with(player.index, teamPlayer):
+                continue
+
+            tileCount += player.tileCount
+            score += player.score
+            standingArmy += player.standingArmy
+            cities += player.cityCount
+            fightingDiff += player.actualScoreDelta - player.expectedScoreDelta
+            unexplainedTileDelta += player.unexplainedTileDelta
 
         return TeamStats(tileCount=tileCount, score=score, standingArmy=standingArmy, cityCount=cities, fightingDiff=fightingDiff, unexplainedTileDelta=unexplainedTileDelta)
 
@@ -1023,8 +1041,20 @@ class MapBase(object):
 
         return False
 
+    def is_tile_on_team(self, tile: Tile, team: int) -> bool:
+        if team == self._teams[tile.player]:
+            return True
+
+        return False
+
     def is_player_on_team_with(self, player1: int, player2: int) -> bool:
         if self._teams[player1] == self._teams[player2]:
+            return True
+
+        return False
+
+    def is_player_on_team(self, player: int, team: int) -> bool:
+        if self._teams[player] == team:
             return True
 
         return False
@@ -1109,11 +1139,23 @@ class MapBase(object):
         if self.complete and not self.result and self.remainingPlayers > 2:  # Game Over - Ignore Empty Board Updates in FFA
             return self
 
+        for curTile in self.get_all_tiles():
+            if curTile.isCity and curTile.delta.oldOwner != curTile.delta.newOwner and not curTile.delta.gainedSight:
+                oldOwner = curTile.delta.oldOwner
+                newOwner = curTile.player
+                # if self.remainingPlayers > 2 or not self.is_city_bonus_turn:
+                #     curTile.
+                if oldOwner != -1:
+                    logging.info(f'decrementing p{oldOwner}s cities due to {str(curTile)} flipping to p{newOwner}')
+                    self.players[oldOwner].cityCount -= 1
+
+                self.players[newOwner].cityCount += 1
+
         for i in range(len(self.scoreHistory) - 1, 0, -1):
             self.scoreHistory[i] = self.scoreHistory[i - 1]
         self.scoreHistory[0] = self.scores
 
-        self._update_player_information()
+        self._update_player_information(bypassDeltas=bypassDeltas)
 
         for player in self.players:
             if player is not None:
@@ -1134,41 +1176,6 @@ class MapBase(object):
 
         if not bypassDeltas:
             self.detect_movement_and_populate_unexplained_diffs()
-        #
-        # else:
-        #
-        #     if not bypassDeltas:
-        #         # Check for OBVIOUS army movement, first
-        #         for x in range(self.cols):
-        #             for y in range(self.rows):
-        #                 curTile = self.grid[y][x]
-        #
-        #                 maybeMovedTo = self.army_moved_grid[y][x]
-        #                 if maybeMovedTo:
-        #                     # look for candidate tiles that army may have come from
-        #                     bestCandTile = evaluateTileDiffsVisible(curTile)
-        #
-        #                     if bestCandTile is not None:
-        #                         byPlayer = curTile.player
-        #                         if byPlayer == -1:
-        #                             byPlayer = bestCandTile.player
-        #                         self.set_tile_moved(curTile, bestCandTile, byPlayer=byPlayer)
-        #
-        #         # Make assumptions about unseen tiles
-        #         for x in range(self.cols):
-        #             for y in range(self.rows):
-        #                 curTile = self.grid[y][x]
-        #
-        #                 maybeMovedTo = self.army_moved_grid[y][x]
-        #                 if maybeMovedTo:
-        #                     # look for candidate tiles that army may have come from
-        #                     bestCandTile = evaluateTileDiffsFog(curTile)
-        #
-        #                     if bestCandTile is not None:
-        #                         byPlayer = curTile.player
-        #                         if byPlayer == -1:
-        #                             byPlayer = bestCandTile.player
-        #                         self.set_tile_moved(curTile, bestCandTile, byPlayer=byPlayer)
 
         if not bypassDeltas:
             for x in range(self.cols):
@@ -1545,6 +1552,8 @@ class MapBase(object):
 
         # source.delta.imperfectArmyDelta = False
         # dest.delta.imperfectArmyDelta = False
+        oldSourceMovedHere = source.delta.armyMovedHere
+        oldDestMovedHere = dest.delta.armyMovedHere
         source.delta.armyMovedHere = False
         dest.delta.armyMovedHere = False
 
@@ -1572,6 +1581,8 @@ class MapBase(object):
                 logging.error(
                     f'    map determined player DEFINITELY dropped move {str(last_player_index_submitted_move)}. Setting last move to none...')
                 self.last_player_index_submitted_move = None
+                source.delta.armyMovedHere = oldSourceMovedHere
+                dest.delta.armyMovedHere = oldDestMovedHere
                 return None
             else:
                 logging.error(
@@ -1609,6 +1620,8 @@ class MapBase(object):
                 logging.info(f'   Mutual attack appears to have fully cancelled out our move, returning no move from us.')
                 # source.delta.armyMovedHere = True
                 self.last_player_index_submitted_move = None
+                source.delta.armyMovedHere = oldSourceMovedHere
+                dest.delta.armyMovedHere = oldDestMovedHere
                 return None
 
         sourceHasEnPriorityDeltasNearby = False
@@ -1646,6 +1659,7 @@ class MapBase(object):
                     # self.unaccounted_tile_diffs[source] = srcUnexpectedDelta  # negative number
                     # source.delta.destUnexpectedDelta = srcUnexpectedDelta
                     source.delta.armyMovedHere = True
+                    dest.delta.armyMovedHere = True
                     self.last_player_index_submitted_move = None
                     return None
                 else:
@@ -1759,39 +1773,6 @@ class MapBase(object):
         self.last_player_index_submitted_move = last_player_index_submitted_move
         return source, dest, move_half
 
-    # def is_exact_fog_move(self, tile: Tile, candidateTile: Tile) -> bool:
-    #     # print(str(tile.army) + " : " + str(candidateTile.army))
-    #     if candidateTile.visible:
-    #         if tile.army + candidateTile.delta.armyDelta < -1 and candidateTile.player != -1:
-    #             tile.player = candidateTile.player
-    #             tile.delta.newOwner = candidateTile.player
-    #             oldArmy = tile.army
-    #             tile.army = 0 - candidateTile.delta.armyDelta - tile.army
-    #             # THIS HANDLED EXTERNAL IN THE UPDATE LOOP, AFTER THIS LOGIC HAPPENS
-    #             # if tile.isCity and isCityBonusTurn:
-    #             #     tile.army += 1
-    #             # if isArmyBonusTurn:
-    #             #     tile.army += 1
-    #             logging.info(f" (islandFog 1) tile {str(tile)} army from {oldArmy} to {tile.army}")
-    #             return 100
-    #     elif tile.army - candidateTile.army < -1 and candidateTile.player != -1:
-    #         tile.player = candidateTile.player
-    #         tile.delta.newOwner = candidateTile.player
-    #         oldArmy = tile.army
-    #         tile.army = candidateTile.army - tile.army - 1
-    #         oldCandArmy = candidateTile.army
-    #         candidateTile.army = 1
-    #         # THIS HANDLED EXTERNAL IN THE UPDATE LOOP, AFTER THIS LOGIC HAPPENS
-    #         # if candidateTile.isCity and isCityBonusTurn:
-    #         #     candidateTile.army += 1
-    #         # if isArmyBonusTurn:
-    #         #     candidateTile.army += 1
-    #         logging.info(f" (islandFog 2) tile {str(tile)} army from {oldArmy} to {tile.army}")
-    #         logging.info(
-    #             f" (islandFog 2) candTile {candidateTile.toString()} army from {oldCandArmy} to {candidateTile.army}")
-    #         return 100
-    #     return -100
-
     def execute_definite_fog_island_capture(self, tileLost: Tile, killedByTile: Tile):
         # print(str(tile.army) + " : " + str(candidateTile.army))
         if killedByTile.visible:
@@ -1868,147 +1849,11 @@ class MapBase(object):
 
         self.run_positive_delta_movement_scan(skipPlayers, possibleMovesDict, allowFogSource=True)
 
-        # TODO for debugging only
-        tilesWithDiffsPreFog = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
-        tilesWithMovedHerePreFog = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
-
-        logging.info(f'Tiles with diffs at pre-FOG: {str([str(t) for t in tilesWithDiffsPreFog])}')
-        logging.info(f'Tiles with MovedHere at pre-FOG: {str([str(t) for t in tilesWithMovedHerePreFog])}')
-
-        # now check for destinations into fog
-        for x in range(self.cols):
-            for y in range(self.rows):
-                sourceTile = self.grid[y][x]
-                if not sourceTile.delta.armyMovedHere:
-                    continue
-                if sourceTile.delta.imperfectArmyDelta:
-                    continue
-                if sourceTile.delta.oldOwner == self.player_index:
-                    continue
-                if sourceTile.delta.oldOwner in self.teammates:
-                    continue
-                if sourceTile.delta.oldOwner == -1 or sourceTile.delta.oldOwner in skipPlayers:
-                    continue
-
-                potentialDests = []
-                sourceWasAttackedNonLethalOrVacated = sourceTile.delta.armyDelta < 0 and sourceTile.delta.oldOwner == sourceTile.delta.newOwner
-                # sourceWasAttackedNonLethalOrVacated = sourceTile.delta.oldArmy + sourceTile.delta.armyDelta < sourceTile.delta.oldArmy
-                for potentialDest in sourceTile.movable:
-                    if potentialDest.visible and not potentialDest.delta.gainedSight:
-                        continue
-                    if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(sourceTile, potentialDest):
-                        logging.info(
-                            f'FOG SOURCE SCAN DEST {repr(potentialDest)} SRC {repr(sourceTile)} WAS sourceWasAttackedNonLethalOrVacated {sourceWasAttackedNonLethalOrVacated} FORCE-SELECTED DUE TO EXACT MATCH, BREAKING EARLY')
-                        potentialDests = [potentialDest]
-                        break
-                    if potentialDest.delta.oldOwner in skipPlayers:
-                        continue
-
-                    if potentialDest.delta.imperfectArmyDelta and sourceWasAttackedNonLethalOrVacated:
-                        logging.info(
-                            f'FOG SOURCE SCAN DEST {repr(potentialDest)} SRC {repr(sourceTile)} WAS potentialDest.delta.imperfectArmyDelta and sourceWasAttackedNonLethalOrVacated, INCLUDING IT AS POTENTIAL DEST')
-                        potentialDests.append(potentialDest)
-                    elif self._is_partial_army_movement_delta_match(source=sourceTile, dest=potentialDest):
-                        logging.info(
-                            f'FOG SOURCE SCAN DEST {repr(potentialDest)} SRC {repr(sourceTile)} WAS self._is_partial_army_movement_delta_match(source=sourceTile, dest=potentialDest), INCLUDING IT AS POTENTIAL DEST')
-                        potentialDests.append(potentialDest)
-
-                if len(potentialDests) == 1:
-                    exclusiveDest = potentialDests[0]
-                    # we have our dest...?
-                    exactMatch = (
-                            not sourceTile.delta.imperfectArmyDelta
-                            and not exclusiveDest.delta.imperfectArmyDelta
-                            and self._is_exact_army_movement_delta_match(exclusiveDest, sourceTile)
-                    )
-
-                    # should have had perfect info of this tile for this case to get hit so should always be this.
-                    byPlayer = sourceTile.delta.oldOwner
-                    if byPlayer == -1:
-                        byPlayer = sourceTile.player
-                    if byPlayer == -1:
-                        byPlayer = exclusiveDest.player
-                    if byPlayer == -1:
-                        # we can get here if they attacked a neutral city from fog
-                        for adj in sourceTile.movable:
-                            if adj.visible and self.is_tile_enemy(adj):
-                                byPlayer = adj.player
-                                break
-                    if byPlayer == -1:
-                        # we can get here if they attacked a neutral city from fog
-                        for adj in sourceTile.movable:
-                            if self.is_tile_enemy(adj):
-                                byPlayer = adj.player
-                                break
-
-                    logging.info(
-                        f'FOG SOURCE SCAN DEST {repr(exclusiveDest)} SRC {repr(sourceTile)} WAS EXCLUSIVE DEST, EXACT MATCH {exactMatch} INCLUDING IN MOVES, CALCED PLAYER {byPlayer}')
-
-                    self.set_tile_moved(
-                        exclusiveDest,
-                        sourceTile,
-                        fullFromDiffCovered=exactMatch,
-                        fullToDiffCovered=exactMatch,
-                        byPlayer=byPlayer)
-                else:
-                    if len(potentialDests) > 0:
-                        logging.info(f'FOG SOURCE SCAN SRC {repr(sourceTile)} RESULTED IN MULTIPLE DESTS {repr([repr(s) for s in potentialDests])}, UNHANDLED FOR NOW')
-                    possibleMovesDict[sourceTile] = potentialDests
+        self.run_movement_into_fog_scan(skipPlayers, possibleMovesDict)
 
         self.run_attacked_tile_movement_scan(skipPlayers, possibleMovesDict, allowFogSource=True)
 
-        # TODO for debugging only
-        tilesWithDiffsPreIsland = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
-        tilesWithMovedHerePreIsland = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
-
-        logging.info(f'Tiles with diffs at pre-ISLAND-VISION-LOSS: {str([str(t) for t in tilesWithDiffsPreIsland])}')
-        logging.info(f'Tiles with MovedHere at pre-ISLAND-VISION-LOSS: {str([str(t) for t in tilesWithMovedHerePreIsland])}')
-
-        # now check for island vision loss
-        for x in range(self.cols):
-            for y in range(self.rows):
-                destTile = self.grid[y][x]
-
-                if not destTile.delta.armyMovedHere:
-                    continue
-                if not destTile.delta.lostSight:
-                    continue
-                if destTile.delta.oldOwner != self.player_index and destTile.delta.oldOwner not in self.teammates:
-                    continue
-
-                potentialSources = []
-                destWasAttackedNonLethalOrVacated = destTile.delta.armyDelta < 0  # and destTile.delta.oldOwner == destTile.delta.newOwner
-                # destWasAttackedNonLethalOrVacated = True
-                # destWasAttackedNonLethalOrVacated = destTile.delta.oldArmy + destTile.delta.armyDelta < destTile.delta.oldArmy
-
-                # prefer most recently moved, followed by smallest capturer
-                for potentialSource in sorted(destTile.movable, key=lambda t: (0 - t.lastMovedTurn, t.army)):
-                    # we already track our own moves successfully prior to this.
-                    if potentialSource.delta.oldOwner == self.player_index or potentialSource.delta.oldOwner in self.teammates or potentialSource.delta.oldOwner == -1:
-                        continue
-                    if not potentialSource.delta.lostSight:
-                        logging.info(f'ISLAND FOG DEST {repr(destTile)}: SRC {repr(potentialSource)} SKIPPED BECAUSE DIDNT LOSE VISION OF SOURCE, WHICH MEANS IT SHOULD HAVE BEEN CAUGHT BY ANOTHER HANDLER ALREADY (?)')
-                        continue
-                    if evaluate_island_fog_move(destTile, potentialSource):
-                        byPlayer = potentialSource.delta.oldOwner
-
-                        logging.info(
-                            f'ISLAND FOG DEST {repr(destTile)} SRC {repr(potentialSource)} WAS EXCLUSIVE SOURCE, INCLUDING IN MOVES, CALCED PLAYER {byPlayer}')
-
-                        self.set_tile_moved(
-                            destTile,
-                            potentialSource,
-                            fullFromDiffCovered=True,
-                            fullToDiffCovered=True,
-                            byPlayer=byPlayer)
-
-                        break
-
-                else:
-                    if len(potentialSources) > 0:
-                        logging.info(f'ISLAND FOG DEST {repr(destTile)} RESULTED IN MULTIPLE SOURCES {repr([repr(s) for s in potentialSources])}, UNHANDLED FOR NOW')
-                    possibleMovesDict[destTile] = potentialSources
-        # TODO compare potential sources limited to one per player.
+        self.run_island_vision_loss_scan(possibleMovesDict)
 
         # TODO for debugging only
         tilesWithDiffsEnd = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
@@ -2045,6 +1890,8 @@ class MapBase(object):
         for city in myPlayer.cities:
             if city.player != myPlayer.index:
                 myPlayer.cityCount -= 1
+                if city.player == -1:
+                    continue
 
                 self.players[city.player].cityCount = self.players[city.player].lastCityCount + 1
 
@@ -2065,6 +1912,8 @@ class MapBase(object):
                 for city in teammatePlayer.cities:
                     if city.player != teammatePlayer.index:
                         teammatePlayer.cityCount -= 1
+                        if city.player == -1:
+                            continue
 
                         self.players[city.player].cityCount = self.players[city.player].lastCityCount + 1
 
@@ -2151,11 +2000,11 @@ class MapBase(object):
 
                 logging.info(f'team{teamIndex} realEnemyCities {realEnemyCities} based on actualEnemyTeamDelta {actualEnemyTeamDelta}, friendlyFightDelta {friendlyFightDelta} (teamCurrentCities {teamCurrentCities}, expectedEnemyTeamDelta {expectedEnemyTeamDelta}, cityDifference {cityDifference})')
 
-                if cityDifference <= -30:
+                if cityDifference <= -10:
                     # then opp just took a neutral city
                     newCityCount += 1
                     logging.info(f"set team {teamIndex} cityCount += 1 to {newCityCount} because it appears they just took a city based on realEnemyCities {realEnemyCities}.")
-                elif cityDifference >= 30:
+                elif cityDifference >= 10:
                     # then our player just took a neutral city, noop
                     logging.info(
                         f"WE just took a city? enemy team cityDifference {cityDifference} > 30 should only happen when we just took a city because of the effect on tiledelta. Ignoring realEnemyCities {realEnemyCities} this turn, realEnemyCities {realEnemyCities} >= 30 and actualEnemyTeamDelta {actualEnemyTeamDelta} < -30")
@@ -2192,6 +2041,7 @@ class MapBase(object):
                     if teamPlayer.dead:
                         continue
                     teamPlayer.cityCount += 1
+                    teamPlayer.cityGainedTurn = self.turn
                     logging.info(f'Incrementing p{playerIndex} cities by 1 from {teamPlayer.cityCount - 1} to {teamPlayer.cityCount}')
                     sum += 1
                     if sum >= newCityCount:
@@ -2204,6 +2054,7 @@ class MapBase(object):
                     if teamPlayer.dead:
                         continue
                     teamPlayer.cityCount -= 1
+                    teamPlayer.cityLostTurn = self.turn
                     logging.info(f'Decrementing p{playerIndex} cities by 1 from {teamPlayer.cityCount + 1} to {teamPlayer.cityCount}')
                     sum -= 1
                     if sum <= newCityCount:
@@ -2307,6 +2158,150 @@ class MapBase(object):
         logging.info(f'+++EMERGENCE {repr(fromTile)} = {armyEmerged}')
         self.army_emergences[fromTile] = (armyEmerged, byPlayer)
 
+    def run_movement_into_fog_scan(
+            self,
+            skipPlayers,
+            possibleMovesDict,
+    ):
+        tilesWithDiffsPreFog = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
+        tilesWithMovedHerePreFog = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
+        logging.info(f'Tiles with diffs at pre-FOG: {str([str(t) for t in tilesWithDiffsPreFog])}')
+        logging.info(f'Tiles with MovedHere at pre-FOG: {str([str(t) for t in tilesWithMovedHerePreFog])}')
+        # now check for destinations into fog
+        for x in range(self.cols):
+            for y in range(self.rows):
+                sourceTile = self.grid[y][x]
+                if not sourceTile.delta.armyMovedHere:
+                    continue
+                if sourceTile.delta.imperfectArmyDelta:
+                    continue
+                if sourceTile.delta.oldOwner == self.player_index:
+                    continue
+                if sourceTile.delta.oldOwner in self.teammates:
+                    continue
+                if sourceTile.delta.oldOwner == -1 or sourceTile.delta.oldOwner in skipPlayers:
+                    continue
+
+                potentialDests = []
+                sourceWasAttackedNonLethalOrVacated = sourceTile.delta.armyDelta < 0 and sourceTile.delta.oldOwner == sourceTile.delta.newOwner
+                # sourceWasAttackedNonLethalOrVacated = sourceTile.delta.oldArmy + sourceTile.delta.armyDelta < sourceTile.delta.oldArmy
+                for potentialDest in sourceTile.movable:
+                    if potentialDest.visible and not potentialDest.delta.gainedSight:
+                        continue
+                    if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(sourceTile, potentialDest):
+                        logging.info(
+                            f'FOG SOURCE SCAN DEST {repr(potentialDest)} SRC {repr(sourceTile)} WAS sourceWasAttackedNonLethalOrVacated {sourceWasAttackedNonLethalOrVacated} FORCE-SELECTED DUE TO EXACT MATCH, BREAKING EARLY')
+                        potentialDests = [potentialDest]
+                        break
+                    if potentialDest.delta.oldOwner in skipPlayers:
+                        continue
+
+                    if potentialDest.delta.imperfectArmyDelta and sourceWasAttackedNonLethalOrVacated:
+                        logging.info(
+                            f'FOG SOURCE SCAN DEST {repr(potentialDest)} SRC {repr(sourceTile)} WAS potentialDest.delta.imperfectArmyDelta and sourceWasAttackedNonLethalOrVacated, INCLUDING IT AS POTENTIAL DEST')
+                        potentialDests.append(potentialDest)
+                    elif self._is_partial_army_movement_delta_match(source=sourceTile, dest=potentialDest):
+                        logging.info(
+                            f'FOG SOURCE SCAN DEST {repr(potentialDest)} SRC {repr(sourceTile)} WAS self._is_partial_army_movement_delta_match(source=sourceTile, dest=potentialDest), INCLUDING IT AS POTENTIAL DEST')
+                        potentialDests.append(potentialDest)
+
+                potentialUsKillDests = [d for d in potentialDests if self.is_player_on_team_with(d.delta.oldOwner, self.player_index)]
+                if len(potentialUsKillDests) == 1:
+                    potentialDests = potentialUsKillDests
+
+                if len(potentialDests) == 1:
+                    exclusiveDest = potentialDests[0]
+                    # we have our dest...?
+                    exactMatch = (
+                            not sourceTile.delta.imperfectArmyDelta
+                            and not exclusiveDest.delta.imperfectArmyDelta
+                            and self._is_exact_army_movement_delta_match(exclusiveDest, sourceTile)
+                    )
+
+                    # should have had perfect info of this tile for this case to get hit so should always be this.
+                    byPlayer = sourceTile.delta.oldOwner
+                    if byPlayer == -1:
+                        byPlayer = sourceTile.player
+                    if byPlayer == -1:
+                        byPlayer = exclusiveDest.player
+                    if byPlayer == -1:
+                        # we can get here if they attacked a neutral city from fog
+                        for adj in sourceTile.movable:
+                            if adj.visible and self.is_tile_enemy(adj):
+                                byPlayer = adj.player
+                                break
+                    if byPlayer == -1:
+                        # we can get here if they attacked a neutral city from fog
+                        for adj in sourceTile.movable:
+                            if self.is_tile_enemy(adj):
+                                byPlayer = adj.player
+                                break
+
+                    logging.info(
+                        f'FOG SOURCE SCAN DEST {repr(exclusiveDest)} SRC {repr(sourceTile)} WAS EXCLUSIVE DEST, EXACT MATCH {exactMatch} INCLUDING IN MOVES, CALCED PLAYER {byPlayer}')
+
+                    self.set_tile_moved(
+                        exclusiveDest,
+                        sourceTile,
+                        fullFromDiffCovered=exactMatch,
+                        fullToDiffCovered=exactMatch,
+                        byPlayer=byPlayer)
+                else:
+                    if len(potentialDests) > 0:
+                        logging.info(f'FOG SOURCE SCAN SRC {repr(sourceTile)} RESULTED IN MULTIPLE DESTS {repr([repr(s) for s in potentialDests])}, UNHANDLED FOR NOW')
+                    possibleMovesDict[sourceTile] = potentialDests
+
+    def run_island_vision_loss_scan(self, possibleMovesDict):
+        # TODO for debugging only
+        tilesWithDiffsPreIsland = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
+        tilesWithMovedHerePreIsland = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
+        logging.info(f'Tiles with diffs at pre-ISLAND-VISION-LOSS: {str([str(t) for t in tilesWithDiffsPreIsland])}')
+        logging.info(f'Tiles with MovedHere at pre-ISLAND-VISION-LOSS: {str([str(t) for t in tilesWithMovedHerePreIsland])}')
+        # now check for island vision loss
+        for x in range(self.cols):
+            for y in range(self.rows):
+                destTile = self.grid[y][x]
+
+                if not destTile.delta.armyMovedHere:
+                    continue
+                if not destTile.delta.lostSight:
+                    continue
+                if destTile.delta.oldOwner != self.player_index and destTile.delta.oldOwner not in self.teammates:
+                    continue
+
+                potentialSources = []
+                destWasAttackedNonLethalOrVacated = destTile.delta.armyDelta < 0  # and destTile.delta.oldOwner == destTile.delta.newOwner
+                # destWasAttackedNonLethalOrVacated = True
+                # destWasAttackedNonLethalOrVacated = destTile.delta.oldArmy + destTile.delta.armyDelta < destTile.delta.oldArmy
+
+                # prefer most recently moved, followed by smallest capturer
+                for potentialSource in sorted(destTile.movable, key=lambda t: (0 - t.lastMovedTurn, t.army)):
+                    # we already track our own moves successfully prior to this.
+                    if potentialSource.delta.oldOwner == self.player_index or potentialSource.delta.oldOwner in self.teammates or potentialSource.delta.oldOwner == -1:
+                        continue
+                    if not potentialSource.delta.lostSight:
+                        logging.info(f'ISLAND FOG DEST {repr(destTile)}: SRC {repr(potentialSource)} SKIPPED BECAUSE DIDNT LOSE VISION OF SOURCE, WHICH MEANS IT SHOULD HAVE BEEN CAUGHT BY ANOTHER HANDLER ALREADY (?)')
+                        continue
+                    if evaluate_island_fog_move(destTile, potentialSource):
+                        byPlayer = potentialSource.delta.oldOwner
+
+                        logging.info(
+                            f'ISLAND FOG DEST {repr(destTile)} SRC {repr(potentialSource)} WAS EXCLUSIVE SOURCE, INCLUDING IN MOVES, CALCED PLAYER {byPlayer}')
+
+                        self.set_tile_moved(
+                            destTile,
+                            potentialSource,
+                            fullFromDiffCovered=True,
+                            fullToDiffCovered=True,
+                            byPlayer=byPlayer)
+
+                        break
+
+                else:
+                    if len(potentialSources) > 0:
+                        logging.info(f'ISLAND FOG DEST {repr(destTile)} RESULTED IN MULTIPLE SOURCES {repr([repr(s) for s in potentialSources])}, UNHANDLED FOR NOW')
+                    possibleMovesDict[destTile] = potentialSources
+
     def run_positive_delta_movement_scan(self, skipPlayers: typing.Set[int], possibleMovesDict: typing.Dict[Tile, typing.List[Tile]], allowFogSource: bool):
         fogFlag = ""
         if allowFogSource:
@@ -2391,6 +2386,8 @@ class MapBase(object):
                         byPlayer = destTile.player
                     if byPlayer == -1 and exclusiveSrc.was_visible_last_turn():
                         byPlayer = exclusiveSrc.delta.oldOwner
+                    if byPlayer == -1 and not exclusiveSrc.was_visible_last_turn():
+                        byPlayer = exclusiveSrc.delta.oldOwner
                     if byPlayer == -1:
                         byPlayer = destTile.player
 
@@ -2407,6 +2404,14 @@ class MapBase(object):
                     possibleMovesDict[destTile] = potentialSources
 
     def run_attacked_tile_movement_scan(self, skipPlayers: typing.Set[int], possibleMovesDict: typing.Dict[Tile, typing.List[Tile]], allowFogSource: bool):
+        """
+        Note, does not support attacks INTO fog.
+
+        @param skipPlayers:
+        @param possibleMovesDict:
+        @param allowFogSource:
+        @return:
+        """
         fogFlag = ""
         if allowFogSource:
             fogFlag = "(FOG) "

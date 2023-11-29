@@ -7,6 +7,15 @@ from bot_ek0x45 import EklipZBot
 
 
 class CityAnalyzerTests(TestBase):
+    def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
+        bot = super().get_debug_render_bot(simHost, player)
+
+        bot.info_render_centrality_distances = True
+        bot.info_render_city_priority_debug_info = True
+        # bot.info_render_general_undiscovered_prediction_values = True
+
+        return bot
+
     def test_analyzes_cities__produces_expandability(self):
         map, general = self.load_map_and_general(f'WonFullMapVisionSampleMaps/Be72k28nn---b--552.txtmap', turn=5)
 
@@ -214,7 +223,7 @@ class CityAnalyzerTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         scores = bot.cityAnalyzer.get_sorted_neutral_scores()
         topCity, topScore = scores[0]
 
@@ -233,7 +242,7 @@ class CityAnalyzerTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()

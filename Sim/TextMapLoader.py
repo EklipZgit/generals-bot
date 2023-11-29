@@ -120,9 +120,9 @@ class TextMapLoader(object):
             else:
                 gameType = 'ffa'
 
-            if map.teams is not None:
-                teams = ','.join([str(t) for t in map.teams])
-                lines.append(f'teams={teams}')
+        if map.teams is not None:
+            teams = ','.join([str(t) for t in map.teams])
+            lines.append(f'teams={teams}')
 
         lines.append(f'mode={gameType}')
 
@@ -209,6 +209,8 @@ class TextMapLoader(object):
             army = int(armyStr)
             tile.army = army
 
+        tile.turn_captured = 0
+
     @staticmethod
     def get_map_raw_string_from_file(file_path_from_tests_folder):
         if not file_path_from_tests_folder.endswith('.txtmap'):
@@ -286,3 +288,6 @@ class TextMapLoader(object):
                 player.cityLostTurn = int(data[f'{char}CityLostTurn'])
             if f'{char}LastSeenMoveTurn' in data:
                 player.last_seen_move_turn = int(data[f'{char}LastSeenMoveTurn'])
+
+        for tile in map.get_all_tiles():
+            tile.turn_captured = 0

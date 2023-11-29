@@ -76,7 +76,7 @@ class ViewInfo(object):
         """
         self.playerTargetScores: typing.List[int] = []
 
-        self.targetedTiles: typing.List[typing.Tuple[Tile, TargetStyle]] = []
+        self.targetedTiles: typing.List[typing.Tuple[Tile, TargetStyle, int]] = []
         # self.redTargetedTileHistory: typing.List[typing.List[typing.Tuple[Tile, TargetStyle]]] = []
         # for i in range(countHist):
         #     self.redTargetedTileHistory.append([])
@@ -97,10 +97,12 @@ class ViewInfo(object):
         self.lastMoveDuration = 0.0
         self.addlTimingsLineText: str = ""
         self.addlInfoLines: typing.List[str] = []
+        self.statsLines: typing.List[str] = []
 
     def turnInc(self):
         self.addlTimingsLineText = ""
         self.addlInfoLines = []
+        self.statsLines = []
         self._divisions = []
         self._zones = []
         self.board_analysis: BoardAnalyzer | None = None
@@ -134,12 +136,16 @@ class ViewInfo(object):
 
         self.evaluatedGrid = [[0 for y in range(self.rows)] for x in range(self.cols)]
 
-    def add_targeted_tile(self, tile: Tile, targetStyle: TargetStyle = TargetStyle.RED):
-        self.targetedTiles.append((tile, targetStyle))
+    def add_targeted_tile(self, tile: Tile, targetStyle: TargetStyle = TargetStyle.RED, radiusReduction: int = 6):
+        self.targetedTiles.append((tile, targetStyle, radiusReduction))
 
-    def addAdditionalInfoLine(self, additionalInfo: str):
+    def add_info_line(self, additionalInfo: str):
         logging.info(additionalInfo)
         self.addlInfoLines.append(additionalInfo)
+
+    def add_stats_line(self, statsLine: str):
+        logging.info(statsLine)
+        self.statsLines.append(statsLine)
 
     def add_map_division(self, divisionMatrix: MapMatrix[bool], color: typing.Tuple[int, int, int], alpha: int = 128):
         self._divisions.append((divisionMatrix, color, alpha))
@@ -148,5 +154,8 @@ class ViewInfo(object):
         """Note this doesn't do pure alpha...?"""
         self._zones.append((zoneMatrix, color, alpha))
 
-    def color_path(self, pathColorer: PathColorer):
-        self.paths.append(pathColorer)
+    def color_path(self, pathColorer: PathColorer, start: bool = False):
+        if not start:
+            self.paths.append(pathColorer)
+        else:
+            self.paths.insert(0, pathColorer)

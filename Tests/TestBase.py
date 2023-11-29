@@ -6,6 +6,7 @@ import typing
 import unittest
 
 import BotHost
+from BotHost import BotHostBase
 import EarlyExpandUtils
 import GatherUtils
 import SearchUtils
@@ -31,6 +32,23 @@ class TestBase(unittest.TestCase):
     def __init__(self, methodName: str = ...):
         super().__init__(methodName)
         self._initialized: bool = False
+
+    def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
+        if player == -2:
+            player = simHost.sim.sim_map.player_index
+
+        bot = simHost.get_bot(player)
+        bot.info_render_gather_values = False
+        bot.info_render_centrality_distances = False
+        bot.info_render_leaf_move_values = False
+        bot.info_render_army_emergence_values = False
+        bot.info_render_city_priority_debug_info = False
+        bot.info_render_general_undiscovered_prediction_values = False
+        bot.info_render_tile_deltas = False
+        bot.info_render_gather_locality_values = False
+        bot.info_render_expansion_matrix_values = False
+
+        return bot
 
     def begin_capturing_logging(self, logLevel: int = logging.INFO):
         if TestBase.GLOBAL_BYPASS_REAL_TIME_TEST:
@@ -445,7 +463,7 @@ class TestBase(unittest.TestCase):
 
         if addlViewInfoLogLines is not None:
             for line in addlViewInfoLogLines:
-                viewInfo.addAdditionalInfoLine(line)
+                viewInfo.add_info_line(line)
 
         self.render_view_info(map, viewInfo, infoStr)
 
@@ -751,6 +769,27 @@ class TestBase(unittest.TestCase):
         if countCaptured.value < requireCountCapturedInWindow:
             self.fail(f'dist {radius} from {str(sourceTile)} only had {countCaptured.value} captured tiles, required {requireCountCapturedInWindow}.')
 
+    def assertMinArmyNear(self, playerMap: MapBase, tile: Tile, player: int, minArmyAmount: int, distance: int = 3, reason: str = ''):
+        counter = SearchUtils.Counter(0)
+
+        def armyCounter(t: Tile):
+            if t.player == player:
+                counter.add(t.army - 1)
+
+        SearchUtils.breadth_first_foreach(playerMap, [tile], maxDepth=distance, foreachFunc=armyCounter)
+
+        if len(reason) > 0:
+            reason = f': {reason}'
+
+        self.assertGreater(counter.value, minArmyAmount - 1, f'Expected {str(tile)} to have at least {minArmyAmount} army within {distance} tiles of it for player {player}, instead found {counter.value}{reason}')
+
+    def assertTileNearOtherTile(self, playerMap: MapBase, expectedLocation: Tile, actualLocation: Tile, distance: int = 3):
+        found = SearchUtils.breadth_first_find_queue(playerMap, [expectedLocation], lambda t, a, d: t == actualLocation, maxDepth=1000, noNeutralCities=True)
+        if not found:
+            self.fail(f'Expected {str(expectedLocation)} to be within {distance} of {str(actualLocation)}, but no path was found at all.')
+
+        self.assertLess(found.length, distance + 1, f'Expected {str(expectedLocation)} to be within {distance} of {str(actualLocation)}, but found {found.length}')
+
     def get_player_tile(self, x: int, y: int, sim: GameSimulator, player_index: int) -> Tile:
         player = sim.players[player_index]
         tile = player.map.GetTile(x, y)
@@ -820,7 +859,7 @@ class TestBase(unittest.TestCase):
                         tile.reset_wrong_undiscovered_fog_guess()
                         break
                 iter += 1
-                if iter > 10:
+                if iter > 30:
                     raise AssertionError('infinite looped trying to reduce enemy real fog cities')
 
         countTilesEnemy = SearchUtils.Counter(SearchUtils.count(map.pathableTiles, lambda tile: tile.player == enemyGeneral.player))

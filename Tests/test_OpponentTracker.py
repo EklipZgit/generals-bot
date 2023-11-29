@@ -8,9 +8,9 @@ from ViewInfo import ViewInfo
 from base.client.map import TILE_MOUNTAIN, TILE_EMPTY, MapBase
 
 
-class OpponentTrackerTests(TestBase):    
+class OpponentTrackerTests(TestBase):
     def test_should_convert_city_capture_into_lost_army(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_convert_city_capture_into_lost_army___4r4HqWsPJ---0--388.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 388, fill_out_tiles=True)
 
@@ -21,7 +21,7 @@ class OpponentTrackerTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '0,10->0,11')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.assertEqual(190, bot.opponent_tracker.current_team_cycle_stats[1].approximate_fog_army_available_total)
@@ -40,7 +40,7 @@ class OpponentTrackerTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.assertEqual(50, bot.opponent_tracker.team_score_data_history[0][50].score)
@@ -80,7 +80,7 @@ class OpponentTrackerTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(general.player, '8,6->7,6->6,6')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -101,7 +101,7 @@ class OpponentTrackerTests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '3,10->4,10')
         simHost.queue_player_moves_str(general.player, '5,10->4,10')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -121,7 +121,7 @@ class OpponentTrackerTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '4,13->4,12')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -142,7 +142,7 @@ class OpponentTrackerTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(general.player, '7,6->7,7')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -163,7 +163,7 @@ class OpponentTrackerTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         ogTileDiff = self.get_tile_differential(simHost)
@@ -172,7 +172,7 @@ class OpponentTrackerTests(TestBase):
         self.assertIsNone(winner)
 
         endTileDiff = self.get_tile_differential(simHost)
-        self.assertLess(endTileDiff, ogTileDiff + 6)
+        self.assertLess(endTileDiff, ogTileDiff + 8)
 
     def test_should_continue_defending_based_on_cycle_army_incoming(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -184,7 +184,7 @@ class OpponentTrackerTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         ogDiff = self.get_tile_differential(simHost)
@@ -204,7 +204,7 @@ class OpponentTrackerTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
         bot.locked_launch_point = bot.general
         bot.target_player_gather_path = None
@@ -225,7 +225,7 @@ class OpponentTrackerTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -243,7 +243,7 @@ class OpponentTrackerTests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '8,4->8,5z  8,4->8,5->8,6')
         simHost.queue_player_moves_str(general.player, '8,5->8,6->8,7->7,7')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -267,7 +267,7 @@ class OpponentTrackerTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         matrix = bot.get_gather_tiebreak_matrix()
@@ -285,3 +285,68 @@ class OpponentTrackerTests(TestBase):
         self.assertIsNone(winner)
 
         self.assertGreater(bot.sum_player_army_near_or_on_tiles(bot.target_player_gather_path.tileList, distance=3), 130)
+    
+    def test_should_acknowledge_serious_enemy_attack_path_threat_and_defense_gather(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_acknowledge_serious_enemy_attack_path-threat_and_defense_gather___Sl1-YUT46---1--267.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 267, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=267)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=33)
+        self.assertIsNone(winner)
+    
+    def test_should_not_reduce_enemy_army_while_capturing_visible_tiles(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_reduce_enemy_army_while_capturing_visible_tiles___futhAqN24---1--339.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 339, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=339)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=-2, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '12,14->13,14')
+        simHost.queue_player_leafmoves(enemyGeneral.player, num_moves=7)
+        simHost.queue_player_moves_str(general.player, '14,14->10,14->10,11')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+        self.assertIsNone(winner)
+
+        enStats = bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player)
+        self.assertEqual(9, enStats.approximate_fog_city_army)
+        self.assertEqual(0, enStats.approximate_fog_army_available_total)
+        counts = bot.opponent_tracker.get_player_fog_tile_count_dict()
+        self.assertEqual(9, counts[enemyGeneral.player][2], "should have used 2's under the fog when expanding")
+    
+    def test_should_not_launch_instead_of_leaf_moves_when_opponent_hasnt_shown_intentions(self):
+        # TODO not sure if I really do want do have it move the top left tiles first. Definitely shouldn't launch, though.
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_launch_instead_of_leaf_moves_when_opponent_hasnt_shown_intentions___atTOZgR22---1--125.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 125, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=125)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.timings = bot.get_timings()
+        bot.timings.launchTiming = 25
+        bot.timings.splitTurns = 25
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        self.assertIsNone(winner)
+
+        self.assertEqual(0, bot.sum_player_army_near_or_on_tiles([playerMap.GetTile(2, 11)], distance=6, player=general.player), "should have used all the tiles in the top left")

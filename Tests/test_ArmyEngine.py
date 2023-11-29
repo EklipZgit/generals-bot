@@ -2248,7 +2248,7 @@ bTiles=20
 
                 simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
                 simHost.queue_player_moves_str(enemyGeneral.player, '13,11->14,11->14,12')
-                simHost.get_bot(general.player).engine_use_mcts = True
+                self.get_debug_render_bot(simHost, general.player).engine_use_mcts = True
 
                 simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
@@ -2270,7 +2270,7 @@ bTiles=20
 
                 simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
                 simHost.queue_player_moves_str(enemyGeneral.player, '12,11->13,11->14,11->14,12')
-                simHost.get_bot(general.player).engine_use_mcts = True
+                self.get_debug_render_bot(simHost, general.player).engine_use_mcts = True
 
                 simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
@@ -2510,7 +2510,7 @@ bTiles=20
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=529)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         bot.engine_army_nearby_tiles_range = 0
         bot.targetingArmy = bot.get_army_at_x_y(15, 19)
 
@@ -2536,7 +2536,7 @@ bTiles=20
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
 
         # bot.perf_timer.current_move.move_beginning_time =
 

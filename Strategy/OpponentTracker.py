@@ -11,10 +11,15 @@ from base.client.map import MapBase, TeamStats, Tile, Player, PLAYER_CHAR_BY_IND
 
 ENABLE_DEBUG_ASSERTS = False
 
+
 class OpponentTracker(object):
     def __init__(self, map: MapBase, viewInfo: ViewInfo | None = None):
         self.map: MapBase = map
         self.team_score_data_history: typing.Dict[int, typing.Dict[int, TeamStats | None]] = {}
+        self.targetPlayer: int = -1
+        self.skip_this_turn: bool = False
+        """Set to true when loading up a unit test so that the end of original turn stats are kept instead of running on top of those again."""
+
         self.current_team_scores: typing.Dict[int, TeamStats | None] = {}
         """Track the current (or during scan, last turn) data for diffing what happened since last turn"""
 
@@ -22,6 +27,7 @@ class OpponentTracker(object):
         """Track the last (or during scan, two turns ago) data for diffing what happened since two turns ago, useful for things like city changes since army increments only tick on even turns."""
 
         self.team_cycle_stats_history: typing.Dict[int, typing.Dict[int, CycleStatsData | None]] = {}
+
         self.current_team_cycle_stats: typing.Dict[int, CycleStatsData] = {}
 
         self.assumed_player_average_tile_values: typing.Dict[int, float] = {}
@@ -78,10 +84,15 @@ class OpponentTracker(object):
 
     def analyze_turn(self, targetPlayer: int):
         self.current_differential_vs_us_by_team: typing.Dict[int, CycleStatsData]
+        self.targetPlayer = targetPlayer
 
         for player in self.map.players:
             # if we don't figure out anything else, then probably a fog gather. Default to that at start of each turn.
             self.last_player_move_type[player.index] = PlayerMoveCategory.FogGather
+
+        if self.skip_this_turn:
+            self.skip_this_turn = False
+            return
 
         for team in self._team_indexes:
             curTurnTeamScore = self.map.get_team_stats_by_team_id(team)
@@ -187,14 +198,27 @@ class OpponentTracker(object):
         for i in range(3):
             cycleTurn = self.get_last_cycle_end_turn(cyclesToGoBack=i)
             for team in self._team_indexes:
-                stats = self.team_score_data_history[team].get(cycleTurn, None)
+                score = self.team_score_data_history[team].get(cycleTurn, None)
+                if score is not None:
+                    data.append(f'ot_{team}_c_{cycleTurn}_tileCount={score.tileCount}')
+                    data.append(f'ot_{team}_c_{cycleTurn}_score={score.score}')
+                    data.append(f'ot_{team}_c_{cycleTurn}_standingArmy={score.standingArmy}')
+                    data.append(f'ot_{team}_c_{cycleTurn}_cityCount={score.cityCount}')
+                    data.append(f'ot_{team}_c_{cycleTurn}_fightingDiff={score.fightingDiff}')
+                    data.append(f'ot_{team}_c_{cycleTurn}_unexplainedTileDelta={score.unexplainedTileDelta}')
+
+                stats = self.team_cycle_stats_history[team].get(cycleTurn, None)
                 if stats is not None:
-                    data.append(f'ot_{team}_c_{cycleTurn}_tileCount={stats.tileCount}')
-                    data.append(f'ot_{team}_c_{cycleTurn}_score={stats.score}')
-                    data.append(f'ot_{team}_c_{cycleTurn}_standingArmy={stats.standingArmy}')
-                    data.append(f'ot_{team}_c_{cycleTurn}_cityCount={stats.cityCount}')
-                    data.append(f'ot_{team}_c_{cycleTurn}_fightingDiff={stats.fightingDiff}')
-                    data.append(f'ot_{team}_c_{cycleTurn}_unexplainedTileDelta={stats.unexplainedTileDelta}')
+                    data.append(f'ot_{team}_c_{cycleTurn}_stats_moves_spent_capturing_fog_tiles={stats.moves_spent_capturing_fog_tiles}')
+                    data.append(f'ot_{team}_c_{cycleTurn}_stats_moves_spent_capturing_visible_tiles={stats.moves_spent_capturing_visible_tiles}')
+                    data.append(f'ot_{team}_c_{cycleTurn}_stats_moves_spent_gathering_fog_tiles={stats.moves_spent_gathering_fog_tiles}')
+                    data.append(f'ot_{team}_c_{cycleTurn}_stats_moves_spent_gathering_visible_tiles={stats.moves_spent_gathering_visible_tiles}')
+                    data.append(f'ot_{team}_c_{cycleTurn}_stats_approximate_army_gathered_this_cycle={stats.approximate_army_gathered_this_cycle}')
+                    data.append(f'ot_{team}_c_{cycleTurn}_stats_army_annihilated_visible={stats.army_annihilated_visible}')
+                    data.append(f'ot_{team}_c_{cycleTurn}_stats_army_annihilated_fog={stats.army_annihilated_fog}')
+                    data.append(f'ot_{team}_c_{cycleTurn}_stats_army_annihilated_total={stats.army_annihilated_total}')
+                    data.append(f'ot_{team}_c_{cycleTurn}_stats_approximate_fog_army_available_total={stats.approximate_fog_army_available_total}')
+                    data.append(f'ot_{team}_c_{cycleTurn}_stats_approximate_fog_city_army={stats.approximate_fog_city_army}')
 
         for team in self._team_indexes:
             stats = self.current_team_cycle_stats.get(team, None)
@@ -221,26 +245,34 @@ class OpponentTracker(object):
         return '\n'.join(data)
 
     def load_from_map_data(self, data: typing.Dict[str, str]):
-        # self._team_indexes = []
-        #
-        # for i in range(20):
-        #     if f'ot_{i}_stats_moves_spent_capturing_fog_tiles' in data:
-        #         self._team_indexes.append(i)
-
         for i in range(5):
             cycleTurn = self.get_last_cycle_end_turn_raw(cyclesToGoBack=i)
             if cycleTurn is None:
                 break
             for team in self._team_indexes:
-                stats = TeamStats(0, 0, 0, 0, 0, 0)
-                self.team_score_data_history[team][cycleTurn] = stats
+                teamScore = TeamStats(0, 0, 0, 0, 0, 0)
+                self.team_score_data_history[team][cycleTurn] = teamScore
                 if f'ot_{team}_c_{cycleTurn}_tileCount' in data:
-                    stats.tileCount = int(data[f'ot_{team}_c_{cycleTurn}_tileCount'])
-                    stats.score = int(data[f'ot_{team}_c_{cycleTurn}_score'])
-                    stats.standingArmy = int(data[f'ot_{team}_c_{cycleTurn}_standingArmy'])
-                    stats.cityCount = int(data[f'ot_{team}_c_{cycleTurn}_cityCount'])
-                    stats.fightingDiff = int(data[f'ot_{team}_c_{cycleTurn}_fightingDiff'])
-                    stats.unexplainedTileDelta = int(data[f'ot_{team}_c_{cycleTurn}_unexplainedTileDelta'])
+                    teamScore.tileCount = int(data[f'ot_{team}_c_{cycleTurn}_tileCount'])
+                    teamScore.score = int(data[f'ot_{team}_c_{cycleTurn}_score'])
+                    teamScore.standingArmy = int(data[f'ot_{team}_c_{cycleTurn}_standingArmy'])
+                    teamScore.cityCount = int(data[f'ot_{team}_c_{cycleTurn}_cityCount'])
+                    teamScore.fightingDiff = int(data[f'ot_{team}_c_{cycleTurn}_fightingDiff'])
+                    teamScore.unexplainedTileDelta = int(data[f'ot_{team}_c_{cycleTurn}_unexplainedTileDelta'])
+
+                if f'ot_{team}_c_{cycleTurn}_stats_moves_spent_capturing_fog_tiles' in data:
+                    stats = CycleStatsData(team, self.get_team_players(team))
+                    stats.moves_spent_capturing_fog_tiles = int(data[f'ot_{team}_c_{cycleTurn}_stats_moves_spent_capturing_fog_tiles'])
+                    stats.moves_spent_capturing_visible_tiles = int(data[f'ot_{team}_c_{cycleTurn}_stats_moves_spent_capturing_visible_tiles'])
+                    stats.moves_spent_gathering_fog_tiles = int(data[f'ot_{team}_c_{cycleTurn}_stats_moves_spent_gathering_fog_tiles'])
+                    stats.moves_spent_gathering_visible_tiles = int(data[f'ot_{team}_c_{cycleTurn}_stats_moves_spent_gathering_visible_tiles'])
+                    stats.approximate_army_gathered_this_cycle = int(data[f'ot_{team}_c_{cycleTurn}_stats_approximate_army_gathered_this_cycle'])
+                    stats.army_annihilated_visible = int(data[f'ot_{team}_c_{cycleTurn}_stats_army_annihilated_visible'])
+                    stats.army_annihilated_fog = int(data[f'ot_{team}_c_{cycleTurn}_stats_army_annihilated_fog'])
+                    stats.army_annihilated_total = int(data[f'ot_{team}_c_{cycleTurn}_stats_army_annihilated_total'])
+                    stats.approximate_fog_army_available_total = int(data[f'ot_{team}_c_{cycleTurn}_stats_approximate_fog_army_available_total'])
+                    stats.approximate_fog_city_army = int(data[f'ot_{team}_c_{cycleTurn}_stats_approximate_fog_city_army'])
+                    self.team_cycle_stats_history[team][cycleTurn] = stats
 
         for team in self._team_indexes:
             stats = self.current_team_cycle_stats[team]
@@ -270,10 +302,13 @@ class OpponentTracker(object):
                 countsSplit = data[f'ot_{PLAYER_CHAR_BY_INDEX[player.index]}_tcs'].split('|')
 
                 for sizeCountStr in countsSplit:
-                    countStr, sizeStr = sizeCountStr.strip().strip('s').split('x')
-                    size = int(sizeStr)
-                    for i in range(int(countStr)):
-                        self._gather_queues_by_player[player.index].append(size)
+                    if 'x' in sizeCountStr:
+                        countStr, sizeStr = sizeCountStr.strip().strip('s').split('x')
+                        size = int(sizeStr)
+                        for i in range(int(countStr)):
+                            self._gather_queues_by_player[player.index].append(size)
+
+        self.skip_this_turn = True
 
     def calculate_cycle_stats(self, team: int, curTurnScores: TeamStats) -> CycleStatsData | None:
         lastCycleEndTurn = self.get_last_cycle_end_turn()
@@ -339,7 +374,14 @@ class OpponentTracker(object):
         return stats
 
     def get_team_players(self, team: int) -> typing.List[int]:
+        if team == -1:
+            return [-1]
         return self._players_lookup_by_team[team]
+
+    def get_team_players_by_player(self, player: int) -> typing.List[int]:
+        if player == -1:
+            return [-1]
+        return self._players_lookup_by_team[self._team_lookup_by_player[player]]
 
     def did_player_make_fog_capture_move(self, player: int) -> bool:
         return self.last_player_move_type[player] == PlayerMoveCategory.FogCapture
@@ -356,12 +398,12 @@ class OpponentTracker(object):
         playerAnnihilated = player.expectedScoreDelta - player.actualScoreDelta
 
         if player.unexplainedTileDelta > 0 and currentTeamStats.unexplainedTileDelta >= 0:
-            teamAnnihilatedFog = 0 - currentTeamStats.fightingDiff
+            teamAnnihilatedFog = self._get_team_annihilated_fog_internal(currentTeamStats, player)
 
             if teamAnnihilatedFog > 0:
                 logging.info(f'Assuming p{player.index} attacked another player under fog, annihilated {playerAnnihilated}.')
                 # player is fighting a player in the fog and capped their tile
-                self._assume_fog_player_capture_move(player, currentCycleStats)
+                self._assume_fog_player_capture_move(player, currentCycleStats, teamAnnihilatedFog)
             elif teamAnnihilatedFog < 0:
                 logging.error(f'This should be impossible unless we mis-counted cities... p{player.index} captured ally tile under fog (or ffa player capture?), annihilated {playerAnnihilated}.')
                 # they must have captured someone or taken an allied tile
@@ -439,26 +481,37 @@ class OpponentTracker(object):
         currentCycleStats.approximate_army_gathered_this_cycle -= 1
         currentCycleStats.approximate_fog_army_available_total -= 1
 
+        gatherQueue = self.get_player_gather_queue(player.index)
+        if currentCycleStats.approximate_fog_army_available_total < 0 and len(gatherQueue) != 0 and gatherQueue[0] > 1:
+            self._remove_queued_gather_closest_to_amount(player.index, 2)
+            self._gather_queues_by_player[player.index].append(1)
+            currentCycleStats.approximate_army_gathered_this_cycle += 1
+            currentCycleStats.approximate_fog_army_available_total += 1
+
         self._check_available_fog_army(currentCycleStats)
 
         currentCycleStats.moves_spent_capturing_fog_tiles += 1
         currentCycleStats.tiles_gained += 1
-        gatherQueue = self.get_player_gather_queue(player.index)
         gatherQueue.append(1)
 
         self.last_player_move_type[player.index] = PlayerMoveCategory.FogCapture
 
-    def _assume_fog_player_capture_move(self, player: Player, currentCycleStats: CycleStatsData):
-        playerAnnihilatedFog = player.expectedScoreDelta - player.actualScoreDelta
-        currentCycleStats.army_annihilated_fog += playerAnnihilatedFog
-        currentCycleStats.approximate_army_gathered_this_cycle -= playerAnnihilatedFog + 1
-        currentCycleStats.approximate_fog_army_available_total -= playerAnnihilatedFog + 1
+    def _assume_fog_player_capture_move(self, player: Player, currentCycleStats: CycleStatsData, annihilatedFogArmy: int):
+        currentCycleStats.army_annihilated_fog += annihilatedFogArmy
+        currentCycleStats.approximate_army_gathered_this_cycle -= annihilatedFogArmy + 1
+        currentCycleStats.approximate_fog_army_available_total -= annihilatedFogArmy + 1
+        gatherQueue = self.get_player_gather_queue(player.index)
+
+        if currentCycleStats.approximate_fog_army_available_total < 0 and len(gatherQueue) != 0 and gatherQueue[0] > annihilatedFogArmy + 2:
+            self._remove_queued_gather_closest_to_amount(player.index, annihilatedFogArmy + 2)
+            self._gather_queues_by_player[player.index].append(1)
+            currentCycleStats.approximate_army_gathered_this_cycle += annihilatedFogArmy + 1
+            currentCycleStats.approximate_fog_army_available_total += annihilatedFogArmy + 1
 
         self._check_available_fog_army(currentCycleStats)
 
         currentCycleStats.moves_spent_capturing_fog_tiles += 1
         currentCycleStats.tiles_gained += 1
-        gatherQueue = self.get_player_gather_queue(player.index)
         gatherQueue.append(1)
 
         self.last_player_move_type[player.index] = PlayerMoveCategory.FogCapture
@@ -535,9 +588,19 @@ class OpponentTracker(object):
 
         return average
 
-    def get_last_cycle_stats_by_team(self, team: int) -> CycleStatsData | None:
-        lastCycleTurn = self.get_last_cycle_end_turn()
+    def get_last_cycle_stats_by_team(self, team: int, cyclesToGoBack: int = 0) -> CycleStatsData | None:
+        lastCycleTurn = self.get_last_cycle_end_turn(cyclesToGoBack=cyclesToGoBack)
         return self.team_cycle_stats_history[team].get(lastCycleTurn, None)
+
+    def get_last_cycle_stats_by_player(self, player: int, cyclesToGoBack: int = 0) -> CycleStatsData | None:
+        return self.get_last_cycle_stats_by_team(self._team_lookup_by_player[player], cyclesToGoBack=cyclesToGoBack)
+
+    def get_last_cycle_score_by_team(self, team: int, cyclesToGoBack: int = 0) -> TeamStats | None:
+        lastCycleTurn = self.get_last_cycle_end_turn(cyclesToGoBack=cyclesToGoBack)
+        return self.team_score_data_history[team].get(lastCycleTurn, None)
+
+    def get_last_cycle_score_by_player(self, player: int, cyclesToGoBack: int = 0) -> TeamStats | None:
+        return self.get_last_cycle_score_by_team(self._team_lookup_by_player[player], cyclesToGoBack=cyclesToGoBack)
 
     def get_player_gather_queue(self, player: int) -> deque[int]:
         return self._gather_queues_by_player[player]
@@ -785,9 +848,9 @@ class OpponentTracker(object):
         if armyPerFogCity <= 0:
             return
 
-        if currentCycleStats.approximate_fog_army_available_total <= 0:
+        if currentCycleStats.approximate_fog_army_available_total < 0:
             for i in range(fogCityCount):
-                if currentCycleStats.approximate_fog_army_available_total <= 0:
+                if currentCycleStats.approximate_fog_army_available_total < 0:
                     logging.info(
                         f'FogCheck: team[{currentCycleStats.team}] approximate_fog_army_available_total {currentCycleStats.approximate_fog_army_available_total} <= 0, pulling from fog cities which each are estimated at armyPerFogCity {armyPerFogCity}')
 
@@ -819,6 +882,9 @@ class OpponentTracker(object):
     def get_current_cycle_stats_by_player(self, player: int) -> CycleStatsData:
         return self.current_team_cycle_stats[self._team_lookup_by_player[player]]
 
+    def get_current_team_scores_by_player(self, player: int) -> TeamStats:
+        return self.current_team_scores[self._team_lookup_by_player[player]]
+
     def _execute_emergence(self, currentCycleStats: CycleStatsData, tile: Tile, emergence: int, player: int = -2):
         if player == -2:
             player = tile.player
@@ -836,7 +902,7 @@ class OpponentTracker(object):
                 logging.error(
                     f'UNDERESTIMATED BY {emergence - teamTotalFogEmergenceEst}! E+: fullFogReset - emergence {emergence} > thresh {thresh:.1f} (based on teamTotalFogEmergenceEst {teamTotalFogEmergenceEst})')
                 if self.view_info is not None:
-                    self.view_info.addAdditionalInfoLine(f'UNDERESTIMATED BY {emergence - teamTotalFogEmergenceEst}! E+: fullFogReset - emergence {emergence} > thresh {thresh:.1f} (based on teamTotalFogEmergenceEst {teamTotalFogEmergenceEst})')
+                    self.view_info.add_info_line(f'UNDERESTIMATED BY {emergence - teamTotalFogEmergenceEst}! E+: fullFogReset - emergence {emergence} > thresh {thresh:.1f} (based on teamTotalFogEmergenceEst {teamTotalFogEmergenceEst})')
                     self.view_info.add_targeted_tile(tile, TargetStyle.ORANGE)
             fullFogReset = True
 
@@ -875,7 +941,7 @@ class OpponentTracker(object):
 
         return playerTurnsSpentGathering - otherPlayerTurnsSpentGathering
 
-    def get_approximate_fog_army_risk(self, player: int, cityLimit=3) -> int:
+    def get_approximate_fog_army_risk(self, player: int, cityLimit: int = 3, inTurns: int = 0) -> int:
         stats = self.get_current_cycle_stats_by_player(player)
         if stats is None:
             return 0
@@ -885,6 +951,16 @@ class OpponentTracker(object):
         cityTotal = self.get_next_fog_city_amounts(player, cityLimit=cityLimit)
 
         armyRisk += cityTotal
+
+        if inTurns > 0:
+            enScores = self.get_current_team_scores_by_player(player)
+            for i in range(inTurns):
+                if i & 0 == 1:
+                    armyRisk += min(cityLimit, enScores.cityCount)
+
+                for p in stats.players:
+                    if i < len(self._gather_queues_by_player[p]):
+                        armyRisk += self._gather_queues_by_player[p][i] - 1
 
         return armyRisk
 
@@ -908,3 +984,112 @@ class OpponentTracker(object):
         if not army.visible and army.path:
             logging.info(f"OT: Army Moved handler! Tile {repr(tile)}")
             self._moves_into_fog.append(army)
+
+    def even_or_up_on_cities(self, againstPlayer: int = -2) -> bool:
+        """
+
+        @param againstPlayer:
+        @return:
+        """
+
+        return self.up_on_cities(againstPlayer=againstPlayer, byNumber=0)
+
+    def up_on_cities(self, againstPlayer: int = -2, byNumber: int = 1) -> bool:
+        """
+
+        @param againstPlayer:
+        @param byNumber: default 1, the offset to subtract from our cities before comparing greater or equal.
+        So, 2 cities vs 2 cities returns False with byNumber 1, True for byNumber 0.
+        @return:
+        """
+        if againstPlayer == -2:
+            againstPlayer = self.targetPlayer
+
+        if againstPlayer == -1:
+            return True
+
+        ourStats = self.map.get_team_stats(self.map.player_index)
+
+        enStats = self.map.get_team_stats(againstPlayer)
+
+        return ourStats.cityCount - byNumber >= enStats.cityCount
+
+    def winning_on_economy(self, byRatio: float = 1.0, cityValue: int = 25, againstPlayer: int = -2, offset: int = 0):
+        """
+
+        @param byRatio:
+        @param cityValue:
+        @param againstPlayer:
+        @param offset: Positive means more likely to return true, negative is less. Value in extra 'tiles' contributed.
+        @return:
+        """
+        if againstPlayer == -2:
+            againstPlayer = self.targetPlayer
+        if againstPlayer == -1:
+            return True
+
+        ourStats = self.map.get_team_stats(self.map.player_index)
+
+        enStats = self.map.get_team_stats(againstPlayer)
+
+        playerEconValue = (ourStats.tileCount + ourStats.cityCount * cityValue) + offset
+        oppEconValue = (enStats.tileCount + enStats.cityCount * cityValue) * byRatio
+        return playerEconValue >= oppEconValue
+
+    def winning_on_tiles(self, byRatio: float = 1.0, againstPlayer: int = -2, offset: int = 0):
+        """
+
+        @param byRatio:
+        @param againstPlayer:
+        @param offset: Positive means more likely to return true, negative is less. Value in extra 'tiles' contributed.
+        @return:
+        """
+
+        return self.winning_on_economy(byRatio=byRatio, againstPlayer=againstPlayer, cityValue=0, offset=offset)
+
+    def winning_on_army(self, byRatio: float = 1.0, useFullArmy: bool = False, againstPlayer: int = -2, offset: int = 0):
+        if againstPlayer == -2:
+            againstPlayer = self.targetPlayer
+        if againstPlayer == -1:
+            return True
+
+        ourStats = self.map.get_team_stats(self.map.player_index)
+
+        enStats = self.map.get_team_stats(againstPlayer)
+
+        targetArmy = enStats.standingArmy
+        playerArmy = ourStats.standingArmy
+
+        if useFullArmy:
+            targetArmy = enStats.score
+            playerArmy = ourStats.score
+
+        winningOnArmy = playerArmy + offset >= targetArmy * byRatio
+        logging.info(
+            f"winning_on_army({byRatio}): playerArmy {playerArmy} >= targetArmy {targetArmy} (weighted {targetArmy * byRatio:.1f}) ?  {winningOnArmy}")
+        return winningOnArmy
+
+    def get_team_annihilated_fog(self, team: int) -> int:
+        if team == -1:
+            return 0
+
+        return self.get_team_annihilated_fog_by_player(self._players_lookup_by_team[team][0])
+
+    def get_team_annihilated_fog_by_player(self, player: int) -> int:
+        if player == -1:
+            return 0
+
+        currentTeamStats = self.get_current_team_scores_by_player(player)
+        playerObj = self.map.players[player]
+
+        return self._get_team_annihilated_fog_internal(currentTeamStats, playerObj)
+
+    def _get_team_annihilated_fog_internal(self, currentTeamStats: TeamStats, playerObj: Player) -> int:
+        teamAnnihilatedFog = 0 - currentTeamStats.fightingDiff
+        if self.map.is_player_on_team_with(self.map.player_index, playerObj.fighting_with_player):
+            # then we captured their stuff?
+            ourStats = self.map.players[playerObj.fighting_with_player]
+            ourFightingDiff = ourStats.actualScoreDelta - ourStats.expectedScoreDelta
+            teamAnnihilatedFog += ourFightingDiff
+
+        return teamAnnihilatedFog

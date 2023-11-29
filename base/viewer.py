@@ -4,6 +4,7 @@
     Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
     Game Viewer
 """
+import gc
 import os
 import queue
 import sys
@@ -22,7 +23,7 @@ from ArmyAnalyzer import *
 from ViewInfo import TargetStyle, ViewInfo
 from base.client.map import MapBase, Score, TILE_MOUNTAIN
 
-MIN_WINDOW_WIDTH = 14
+MIN_WINDOW_WIDTH = 16
 
 # Color Definitions
 BLACK = (0, 0, 0)
@@ -47,7 +48,7 @@ P_RED = (245, 65, 50)
 P_BLUE = (30, 30, 230)
 P_GREEN = (60, 160, 10)
 P_PURPLE = (128, 30, 128)
-P_TEAL = (30, 128, 128)
+P_TEAL = (30, 118, 128)
 P_DARK_GREEN = (5, 75, 45)
 P_DARK_RED = (100, 5, 35)
 P_YELLOW = (160, 150, 20)
@@ -171,6 +172,9 @@ class GeneralsViewer(object):
 
         self.infoLineHeight = 0
         self.infoRowHeight = 0
+        self.statsWidth = 0
+        self.board_width_px = 0
+        self.window_width_px = 0
         self.last_render_time: float = time.perf_counter()
 
         self.plusDepth = 9
@@ -228,11 +232,16 @@ class GeneralsViewer(object):
     def _initViewier(self, alignTop: bool, alignLeft: bool):
         self.infoLineHeight = 17
         self.infoRowHeight = 250
+        self.statsWidth = 600
 
         if self.cellHeight is None:
             self.cellHeight = min(85, (1080 - self.infoRowHeight - self.scoreRowHeight) // (self._map.rows + 1))
             self.cellHeight = max(29, self.cellHeight)
             self.cellWidth = self.cellHeight
+
+        self.board_width_px = self._map.cols * (self.cellWidth + CELL_MARGIN) + CELL_MARGIN
+
+        self.window_width_px = self.board_width_px + self.statsWidth
 
         self.scoreRowHeight = int((self.cellHeight + 2) * 3.5)
 
@@ -241,11 +250,11 @@ class GeneralsViewer(object):
 
         x = 3 + self.offset1080Above1440p
         if not alignLeft:
-            x = self.offset1080Above1440p + 1920 - 3 - (self.cellWidth + CELL_MARGIN) * self._map.cols
+            x = self.offset1080Above1440p + 1920 - 3 - self.window_width_px
 
         y = 3 - 1080
         if not alignTop:
-            y = 20 # bottom monitor
+            y = 20  # bottom monitor
 
         position = (x, y)
 
@@ -265,8 +274,7 @@ class GeneralsViewer(object):
         # Set Window Size
         window_height = self._map.rows * (
                     self.cellHeight + CELL_MARGIN) + CELL_MARGIN + self.scoreRowHeight + self.infoRowHeight
-        window_width = max(MIN_WINDOW_WIDTH, self._map.cols) * (self.cellWidth + CELL_MARGIN) + CELL_MARGIN
-        self._window_size = [window_width, window_height]
+        self._window_size = [self.window_width_px, window_height]
         self._screen = pygame.display.set_mode(self._window_size)
         self._transparent = pygame.Surface(self._window_size, pygame.SRCALPHA)
 
@@ -282,10 +290,10 @@ class GeneralsViewer(object):
         self._smallFontWidth = self._smallFontHeight / 2.27
         self._medFontWidth = self._medFontHeight / 2.27
         self._lrgFontWidth = self._lrgFontHeight / 2.27
-        # self.infoSpaceFromLeft = self.get_large_text_offset_from_right("Turn: 1000, (.50) ")
+        # self.statsSpaceFromLeft = self.get_large_text_offset_from_right("Turn: 1000, (.50) ")
         samplePerfText = ".004 Rebuilding intergeneral_analysis "
         self.perfWidthCutoff = len(samplePerfText)
-        self.infoSpaceFromLeft = self.get_any_text_width(samplePerfText, self.infoLineHeight / 2.27) + 1
+        self.statsSpaceFromLeft = self.get_any_text_width(samplePerfText, self.infoLineHeight / 2.27) + 1
 
         self._clock = pygame.time.Clock()
 
@@ -406,6 +414,8 @@ class GeneralsViewer(object):
                     self.save_image()
 
                     logging.info(f"GeneralsViewer saving image took {time.perf_counter() - start:.3f}")
+
+                    gc.collect()
             except queue.Empty:
                 elapsed = time.perf_counter() - self.last_update_received
                 if not self.noLog:
@@ -464,58 +474,24 @@ class GeneralsViewer(object):
         time.sleep(1.0)
         pygame.quit()  # Done.  Quit pygame.
 
+
     def _drawGrid(self):
         try:
             self.include_viable_general_spawns()
 
             self._screen.fill(BLACK)  # Set BG Color
             self._transparent.fill((0, 0, 0, 0))  # transparent
-            allInText = " "
-            if self._viewInfo.allIn:
-                allInText = "+"
 
             # Draw Bottom Info Text
             self._screen.blit(self._lrgFont.render(
                 f"Turn: {self._map.turn}, ({('%.2f' % self._viewInfo.lastMoveDuration).lstrip('0')})",
                 True, WHITE), (10, self._window_size[1] - self.infoRowHeight + 4))
-            curInfoTextHeight = 0
-            self._screen.blit(self._infoFont.render(self._viewInfo.infoText, True, WHITE),
-                              (self.infoSpaceFromLeft, self._window_size[1] - self.infoRowHeight))
-            curInfoTextHeight += self.infoLineHeight
-            if self._viewInfo.timings:
-                timings = self._viewInfo.timings
-                timingTurn = (self._map.turn + timings.offsetTurns) % timings.cycleTurns
-                timingsText = f"{str(timings)} ({timingTurn}) - {allInText}{self._viewInfo.allInCounter}  {self._viewInfo.addlTimingsLineText}"
-                self._screen.blit(
-                    self._infoFont.render(
-                        timingsText,
-                        True,
-                        WHITE),
-                    (self.infoSpaceFromLeft, self._window_size[1] - self.infoRowHeight + curInfoTextHeight))
-                curInfoTextHeight += self.infoLineHeight
 
-            for addlInfo in self._viewInfo.addlInfoLines:
-                if addlInfo == self._viewInfo.infoText:
-                    continue
-                self._screen.blit(
-                    self._infoFont.render(
-                        addlInfo,
-                        True,
-                        WHITE),
-                    (self.infoSpaceFromLeft, self._window_size[1] - self.infoRowHeight + curInfoTextHeight))
-                curInfoTextHeight += self.infoLineHeight
+            self.draw_stat_text()
 
-            perfEventHeight = self._lrgFontHeight
-            for perfEvent in self._viewInfo.perfEvents:
-                if perfEvent == self._viewInfo.infoText:
-                    continue
-                self._screen.blit(
-                    self._infoFont.render(
-                        perfEvent[:self.perfWidthCutoff],
-                        True,
-                        WHITE),
-                    (0, self._window_size[1] - self.infoRowHeight + perfEventHeight))
-                perfEventHeight += self.infoLineHeight
+            self.draw_info_text()
+
+            self.draw_perf_stats()
 
             # Draw Scores
             self.draw_player_scores()
@@ -601,10 +577,20 @@ class GeneralsViewer(object):
 
             # p(self._map.grid[1][1],
 
-            while len(self._viewInfo.paths) > 0:
-                pColorer = self._viewInfo.paths.pop()
-                self.draw_path(pColorer.path, pColorer.color[0], pColorer.color[1], pColorer.color[2], pColorer.alpha,
-                               pColorer.alphaDecreaseRate, pColorer.alphaMinimum)
+            # while len(self._viewInfo.paths) > 0:
+            #     pColorer = self._viewInfo.paths.pop()
+            #     self.draw_path(pColorer.path, pColorer.color[0], pColorer.color[1], pColorer.color[2], pColorer.alpha,
+            #                    pColorer.alphaDecreaseRate, pColorer.alphaMinimum)
+
+            for pColorer in self._viewInfo.paths:
+                self.draw_path(
+                    pColorer.path,
+                    pColorer.color[0],
+                    pColorer.color[1],
+                    pColorer.color[2],
+                    pColorer.alpha,
+                    pColorer.alphaDecreaseRate,
+                    pColorer.alphaMinimum)
 
             alpha = 250
             alphaDec = 4
@@ -637,18 +623,8 @@ class GeneralsViewer(object):
                     r -= 30
                     b += 30
 
-            for (tile, targetStyle) in self._viewInfo.targetedTiles:
-                if tile is None:
-                    continue
-                pos_left = (CELL_MARGIN + self.cellWidth) * tile.x + CELL_MARGIN
-                pos_top = (CELL_MARGIN + self.cellHeight) * tile.y + CELL_MARGIN
-                pos_left_circle = int(pos_left + (self.cellWidth / 2))
-                pos_top_circle = int(pos_top + (self.cellHeight / 2))
-                targetColor = self.get_color_from_target_style(targetStyle)
-                pygame.draw.circle(self._screen, BLACK, [pos_left_circle, pos_top_circle], int(self.cellWidth / 2 - 2),
-                                   7)
-                pygame.draw.circle(self._screen, targetColor, [pos_left_circle, pos_top_circle],
-                                   int(self.cellWidth / 2) - 5, 1)
+            self.draw_targets()
+
             for i, approx in enumerate(self._viewInfo.generalApproximations):
                 if approx[2] > 0:
                     pColor = PLAYER_COLORS[i]
@@ -657,10 +633,10 @@ class GeneralsViewer(object):
                     pos_left_circle = int(pos_left + (self.cellWidth / 2))
                     pos_top_circle = int(pos_top + (self.cellHeight / 2))
                     pygame.draw.circle(self._screen, BLACK, [pos_left_circle, pos_top_circle],
-                                       int(self.cellWidth / 2 - 2),
+                                       self.cellWidth / 2 - 2,
                                        7)
                     pygame.draw.circle(self._screen, pColor, [pos_left_circle, pos_top_circle],
-                                       int(self.cellWidth / 2) - 5, 1)
+                                       self.cellWidth / 2 - 5, 1)
             s = pygame.Surface((self.cellWidth, self.cellHeight))
             s.fill(WHITE)
             s.set_colorkey(WHITE)
@@ -831,6 +807,98 @@ class GeneralsViewer(object):
             logging.error(''.join('!! ' + line for line in lines))  # Log it or whatever here
             raise
 
+    def draw_info_text(self):
+        curInfoTextHeight = 0
+
+        for addlInfo in self._viewInfo.addlInfoLines:
+            if addlInfo == self._viewInfo.infoText:
+                continue
+            self._screen.blit(
+                self._infoFont.render(
+                    addlInfo,
+                    True,
+                    WHITE),
+                (self.board_width_px, curInfoTextHeight))
+            curInfoTextHeight += self.infoLineHeight
+
+        self._screen.blit(self._infoFont.render(self._viewInfo.infoText, True, WHITE),
+                          (self.board_width_px, curInfoTextHeight))
+
+    def draw_stat_text(self):
+        allInText = " "
+        if self._viewInfo.allIn:
+            allInText = "+"
+
+        curInfoTextHeight = 0
+
+        if self._viewInfo.timings:
+            timings = self._viewInfo.timings
+            timingTurn = (self._map.turn + timings.offsetTurns) % timings.cycleTurns
+            timingsText = f"{str(timings)} ({timingTurn}) - {allInText}{self._viewInfo.allInCounter}  {self._viewInfo.addlTimingsLineText}"
+            self._screen.blit(
+                self._infoFont.render(
+                    timingsText,
+                    True,
+                    WHITE),
+                (self.statsSpaceFromLeft, self._window_size[1] - self.infoRowHeight + curInfoTextHeight))
+            curInfoTextHeight += self.infoLineHeight
+
+        for statInfo in self._viewInfo.statsLines:
+            if statInfo == self._viewInfo.infoText:
+                continue
+            self._screen.blit(
+                self._infoFont.render(
+                    statInfo,
+                    True,
+                    WHITE),
+                (self.statsSpaceFromLeft, self._window_size[1] - self.infoRowHeight + curInfoTextHeight))
+            curInfoTextHeight += self.infoLineHeight
+
+
+    def draw_perf_stats(self):
+        perfEventHeight = self._lrgFontHeight
+        for perfEvent in self._viewInfo.perfEvents:
+            if perfEvent == self._viewInfo.infoText:
+                continue
+            self._screen.blit(
+                self._infoFont.render(
+                    perfEvent[:self.perfWidthCutoff],
+                    True,
+                    WHITE),
+                (0, self._window_size[1] - self.infoRowHeight + perfEventHeight))
+            perfEventHeight += self.infoLineHeight
+
+    def draw_targets(self):
+        # draw the black circles, THEN the colored circles so we can end up with bands of color.
+        for (tile, targetStyle, radReduction) in self._viewInfo.targetedTiles:
+            if tile is None:
+                continue
+            pos_left = (CELL_MARGIN + self.cellWidth) * tile.x + CELL_MARGIN
+            pos_top = (CELL_MARGIN + self.cellHeight) * tile.y + CELL_MARGIN
+            pos_left_circle = pos_left + (self.cellWidth / 2)
+            pos_top_circle = pos_top + (self.cellHeight / 2)
+            pygame.draw.circle(
+                self._screen,
+                BLACK,
+                center=[pos_left_circle, pos_top_circle],
+                radius=self.cellWidth / 2 - radReduction,
+                width=4)
+
+        for (tile, targetStyle, radReduction) in self._viewInfo.targetedTiles:
+            if tile is None:
+                continue
+            pos_left = (CELL_MARGIN + self.cellWidth) * tile.x + CELL_MARGIN
+            pos_top = (CELL_MARGIN + self.cellHeight) * tile.y + CELL_MARGIN
+            pos_left_circle = pos_left + (self.cellWidth / 2)
+            pos_top_circle = pos_top + (self.cellHeight / 2)
+            targetColor = self.get_color_from_target_style(targetStyle)
+            pygame.draw.circle(
+                self._screen,
+                targetColor,
+                center=[pos_left_circle, pos_top_circle],
+                radius=self.cellWidth / 2 - radReduction - 1,
+                width=2)
+
     def tile_text_colorer(self, tile) -> typing.Tuple[int, int, int]:
         if tile.player == -1 and tile.visible:
             return BLACK
@@ -860,7 +928,7 @@ class GeneralsViewer(object):
         # after drawing the circle, we can set the
         # alpha value (transparency) of the surface
         tile = army.tile
-        (playerR, playerG, playerB) = WHITE
+        (playerR, playerG, playerB) = R, G, B
         if army.player != army.tile.player:
             (playerR, playerG, playerB) = PLAYER_COLORS[army.player]
             playerR += 50
@@ -873,8 +941,8 @@ class GeneralsViewer(object):
 
         # self.draw_path(army.path, R, G, B, alphaStart, 0, 0)
 
-        if army.expectedPath is not None:
-            self.draw_path(army.expectedPath, 255, 0, 0, 150, 10, 100)
+        for path in army.expectedPaths:
+            self.draw_path(path, 255, 0, 0, 150, 10, 100)
 
         pos_left = (CELL_MARGIN + self.cellWidth) * tile.x + CELL_MARGIN
         pos_top = (CELL_MARGIN + self.cellHeight) * tile.y + CELL_MARGIN
@@ -886,7 +954,7 @@ class GeneralsViewer(object):
 
         for army in list(self._viewInfo.armyTracker.armies.values()):
             if army.scrapped:
-                self.draw_army(army, 200, 200, 200, 80)
+                self.draw_army(army, 230, 180, 50, 130)
             else:
                 self.draw_army(army, 255, 255, 255, 150)
 

@@ -37,7 +37,7 @@ class Army(object):
         self.value: int = 0
         """Always the value of the tile, minus one. For some reason."""
         self.update_tile(tile)
-        self.expectedPath: Path | None = None
+        self.expectedPaths: typing.List[Path] = []
         self.entangledArmies: typing.List[Army] = []
         self.name = self.get_letter()
         self.entangledValue = None
@@ -64,10 +64,14 @@ class Army(object):
         for tile in fogTiles:
             splitArmy = self.clone()
             splitArmy.entangledValue = self.value
+            if self.entangledValue is not None:
+                splitArmy.entangledValue = self.entangledValue
             split.append(splitArmy)
         # entangle the armies
+        for existingEntangled in self.entangledArmies:
+            existingEntangled.entangledArmies.extend(split)
         for splitBoi in split:
-            splitBoi.entangledArmies = list(where(split, lambda army: army != splitBoi))
+            splitBoi.entangledArmies.extend(where(split, lambda army: army != splitBoi))
         logging.info(f"for army {self.toString()} set self as scrapped because splitting for fog")
         self.scrapped = True
         return split
@@ -80,21 +84,50 @@ class Army(object):
         newDude.visible = self.visible
         newDude.value = self.value
         newDude.last_moved_turn = self.last_moved_turn
-        if self.expectedPath is not None:
-            newDude.expectedPath = self.expectedPath.clone()
+        for path in self.expectedPaths:
+            newDude.expectedPaths.append(path.clone())
         newDude.entangledArmies = list(self.entangledArmies)
         newDude.name = self.name
         newDude.scrapped = self.scrapped
         return newDude
 
     def toString(self):
-        return f"[{self.name} {self.tile} p{self.player} v{self.value}]"
+        return f"[{self.name} {self.tile} p{self.player} v{self.value}{' scr' if self.scrapped else ''}]"
 
     def __str__(self):
         return self.toString()
 
     def __repr__(self):
         return self.toString()
+
+    def include_path(self, path: Path):
+        if path is None:
+            return
+
+        foundMatch = False
+        for existingPath in self.expectedPaths:
+            pathNode = path.start
+            existingPathNode = existingPath.start
+
+            isPathMatch = True
+            while pathNode is not None and existingPathNode is not None:
+                if pathNode.tile != existingPathNode.tile:
+                    isPathMatch = False
+                    break
+
+                pathNode = pathNode.next
+                existingPathNode = existingPathNode.next
+
+            if pathNode is not None or existingPathNode is not None:
+                # then one was longer than the other, also false
+                isPathMatch = False
+
+            if isPathMatch:
+                foundMatch = True
+                break
+
+        if not foundMatch:
+            self.expectedPaths.append(path)
 
 
 class PlayerAggressionTracker(object):
@@ -252,66 +285,76 @@ class ArmyTracker(object):
             if army.tile.visible:
                 continue
             if army.player == self.map.player_index or army.player in self.map.teammates:
-                self.scrap_army(army)
+                self.scrap_army(army, scrapEntangled=False)
                 continue
             if army.last_moved_turn == self.map.turn - 1:
                 army.value = army.tile.army - 1
                 continue
 
-            if (army.expectedPath is None
-                    or army.expectedPath.start is None
-                    or army.expectedPath.start.next is None
-                    or army.expectedPath.start.next.tile is None
-                    or army.expectedPath.start.next.tile.visible
-            ):
-                army.value = army.tile.army - 1
-
-                continue
-
             if army.player in self.player_moves_this_turn:
                 continue
+            #
+            # if army.scrapped:
+            #     continue
 
-            nextTile = army.expectedPath.start.next.tile
-            if not nextTile.visible:
-                self.armies.pop(army.tile, None)
+            logging.info(f'moving fogged army paths for {str(army)}')
 
-                logging.info(
-                    f"Moving fogged army {str(army)} along expected path {str(army.expectedPath)}")
+            fogPathNexts = {}
+            for path in army.expectedPaths:
+                if (path is None
+                        or path.start is None
+                        or path.start.next is None
+                        or path.start.next.tile is None
+                ):
+                    continue
 
-                oldTile = army.tile
-                oldTile.army = 1
-                if self.map.is_city_bonus_turn and oldTile.isCity or oldTile.isGeneral:
-                    oldTile.army += 1
-                if self.map.is_army_bonus_turn:
-                    oldTile.army += 1
-                # if not oldTile.discovered:
-                #     oldTile.player = -1
-                #     oldTile.army = 0
-                if nextTile.player == army.player:
-                    nextTile.army = nextTile.army + army.value
-                else:
-                    nextTile.army = nextTile.army - army.value
-                    if nextTile.army < 0:
-                        nextTile.army = 0 - nextTile.army
-                    nextTile.player = army.player
+                nextPaths = fogPathNexts.get(path.start.next.tile, [])
+                nextPaths.append(path)
+                fogPathNexts[path.start.next.tile] = nextPaths
 
-                existingArmy = self.armies.get(nextTile, None)
-                if existingArmy is not None:
-                    if existingArmy in army.entangledArmies:
-                        logging.info(f'entangled army collided with itself, scrapping the collision-mover {str(army)} in favor of {str(existingArmy)}')
-                        self.scrap_army(army)
+            if len(fogPathNexts) > 1:
+                nextArmies = army.get_split_for_fog(list(fogPathNexts.keys()))
+
+                for nextTile, paths in fogPathNexts.items():
+                    nextArmy = nextArmies.pop()
+                    # nextArmy.expectedPaths = where(nextArmy.expectedPaths, lambda p: p.start.next.tile == nextTile)
+                    nextArmy.expectedPaths = []
+
+                    first = True
+                    for path in paths:
+                        nextArmy.expectedPaths.append(path)
+                        if path.start.next.tile.visible:
+                            logging.info(f'for army {str(nextArmy)} ignoring SPLIT fog path move into visible: {str(path)}')
+                            continue
+
+                        logging.info(f'respecting army {str(nextArmy)} SPLIT fog path: {str(path)}')
+
+                        self._move_fogged_army_along_path(nextArmy, path)
+
+                        logging.info(f'AFTER: army {str(nextArmy)}: {str(nextArmy.expectedPaths)}')
+                        # if first:
+                        # else:
+                        #     path.made_move()
+                        first = False
+                    if not nextArmy.scrapped:
+                        self.armies[nextArmy.tile] = nextArmy
+
+            elif len(fogPathNexts) == 1:
+                first = True
+                for path in army.expectedPaths:
+                    if path is not None and path.start.next is not None and path.start.next.tile.visible:
+                        logging.info(f'for army {str(army)} ignoring fog path move into visible: {str(path)}')
                         continue
-                    elif existingArmy.player == army.player:
-                        if existingArmy.value > army.value:
-                            self.merge_armies(existingArmy, army, nextTile)
-                        else:
-                            self.merge_armies(army, existingArmy, nextTile)
-                        continue
 
-                army.update_tile(nextTile)
-                army.value = nextTile.army - 1
-                self.armies[nextTile] = army
-                army.expectedPath.made_move()
+                    logging.info(f'respecting army {str(army)} fog path: {str(path)}')
+
+                    self._move_fogged_army_along_path(army, path)
+
+                    logging.info(f'AFTER: army {str(army)}: {str(army.expectedPaths)}')
+                    # if first:
+                    # elif path.length > 0:
+                    #     path.made_move()
+                    first = False
 
     def clean_up_armies(self):
         for army in list(self.armies.values()):
@@ -322,7 +365,7 @@ class ArmyTracker(object):
                 continue
             elif (army.player == self.map.player_index or army.player in self.map.teammates) and not army.tile.visible:
                 logging.info(f"Army {str(army)} was ours but under fog now, so was destroyed. Scrapping.")
-                self.scrap_army(army)
+                self.scrap_army(army, scrapEntangled=True)
             elif army.tile.visible and len(army.entangledArmies) > 0 and army.tile.player == army.player:
                 if army.tile.army * 1.2 > army.value > (army.tile.army - 1) * 0.8:
                     # we're within range of expected army value, resolve entanglement :D
@@ -332,8 +375,11 @@ class ArmyTracker(object):
                     logging.info(
                         f"Army {str(army)} was entangled at this tile, but army value doesn't match expected?\n  - NOT army.tile.army * 1.2 ({army.tile.army * 1.2}) > army.value ({army.value}) > (army.tile.army - 1) * 0.8 ({(army.tile.army - 1) * 0.8})")
                     for entangled in army.entangledArmies:
-                        logging.info(f"    removing {str(army)} from entangled {entangled.toString()}")
-                        entangled.entangledArmies.remove(army)
+                        logging.info(f"    removing {str(army)} from entangled {str(entangled)}")
+                        try:
+                            entangled.entangledArmies.remove(army)
+                        except:
+                            pass
                     if army.tile in self.armies and self.armies[army.tile] == army:
                         del self.armies[army.tile]
                 continue
@@ -342,7 +388,7 @@ class ArmyTracker(object):
                 logging.info(
                     f"Army {str(army)} just uncovered was an incorrect army prediction. Disentangle and remove from other entangley bois")
                 for entangled in army.entangledArmies:
-                    logging.info(f"    removing {str(army)} from entangled {entangled.toString()}")
+                    logging.info(f"    removing {str(army)} from entangled {str(entangled)}")
                     entangled.entangledArmies.remove(army)
 
                 if army.tile in self.armies and self.armies[army.tile] == army:
@@ -393,7 +439,7 @@ class ArmyTracker(object):
                         skip.add(src)
                     else:
                         logging.info(f'ARMY {str(armyAtSrc)} AT SOURCE OF PLAYER {player.index} MOVE {str(src)}->{str(dest)} DID NOT MATCH THE PLAYER THE MAP DETECTED AS MOVER, SCRAPPING ARMY...')
-                        self.scrap_army(armyAtSrc)
+                        self.scrap_army(armyAtSrc, scrapEntangled=False)
 
         self.unaccounted_tile_diffs: typing.Dict[Tile, int] = {}
         for tile, diffTuple in self.map.army_emergences.items():
@@ -501,7 +547,7 @@ class ArmyTracker(object):
             # any of our armies CANT have moved (other than the one handled explicitly above), ignore them, let other armies collide with / capture them.
             if army.player == self.map.player_index:
                 if army.last_moved_turn < self.map.turn - 1 and army.tile.army < self.track_threshold:
-                    self.scrap_army(army)
+                    self.scrap_army(army, scrapEntangled=False)
                 else:
                     army.update()
                 continue
@@ -586,7 +632,7 @@ class ArmyTracker(object):
 
         if army.value < -1 or (army.player != army.tile.player and army.tile.visible):
             logging.info(f"    Army {str(army)} scrapped for being negative or run into larger tile")
-            self.scrap_army(army)
+            self.scrap_army(army, scrapEntangled=False)
         if army.tile.visible and len(army.entangledArmies) > 0:
             self.resolve_entangled_armies(army)
 
@@ -602,28 +648,30 @@ class ArmyTracker(object):
         #     toTile.player = army.player
 
         if army.scrapped:
-            army.expectedPath = None
+            army.expectedPaths = []
         else:
-            # if army.expectedPath is not None \
-            #         and army.expectedPath.start.next is not None \
-            #         and army.expectedPath.start.next.tile == army.tile:
-            #     army.expectedPath.made_move()
-            # else:
             # Ok then we need to recalculate the expected path.
             # TODO detect if enemy army is likely trying to defend
-            army.expectedPath = self.get_army_expected_path(army)
-            logging.info(f'set army {str(army)} expected path to {str(army.expectedPath)}')
+            army.expectedPaths = self.get_army_expected_path(army)
+            logging.info(f'set army {str(army)} expected paths to {str(army.expectedPaths)}')
 
         army.last_moved_turn = self.map.turn - 1
 
         for listener in self.notify_army_moved:
             listener(army)
 
-    def scrap_army(self, army):
+    def scrap_army(self, army: Army, scrapEntangled: bool):
         army.scrapped = True
-        for entangledArmy in army.entangledArmies:
-            entangledArmy.scrapped = True
-        self.resolve_entangled_armies(army)
+        if scrapEntangled:
+            for entangledArmy in army.entangledArmies:
+                entangledArmy.scrapped = True
+            self.resolve_entangled_armies(army)
+        else:
+            for entangledArmy in army.entangledArmies:
+                try:
+                    entangledArmy.entangledArmies.remove(army)
+                except:
+                    pass
 
     def resolve_entangled_armies(self, army):
         if len(army.entangledArmies) > 0:
@@ -772,7 +820,7 @@ class ArmyTracker(object):
                 )
             ):
                 logging.info(
-                    f"{str(tile)} Discovered as Army! (tile.army {tile.army}, tile.delta {tile.delta.armyDelta}) Determining if came from fog")
+                    f"{str(tile)} Discovered as Army! (tile.army {tile.army}, tile.delta {tile.delta.armyDelta}) - no fog emergence")
 
                 army = self.get_or_create_army_at(tile)
                 if not army.visible:
@@ -844,48 +892,6 @@ class ArmyTracker(object):
         # then reset bad predictions that went into the fog from this tile
         self.drop_incorrect_player_fog_around(neutralTile, neutralTile.delta.oldOwner)
 
-        # distance = 6
-        # armyEmergenceValue = 20
-
-        # def foreachFunc(tile, dist):
-        #     for i in range(len(self.emergenceLocationMap)):
-        #         if i == self.map.player_index or i in self.map.teammates:
-        #             continue
-        #         self.emergenceLocationMap[i][tile.x][tile.y] -= 1 * armyEmergenceValue // (dist + 5)
-        #         if self.emergenceLocationMap[i][tile.x][tile.y] < 0:
-        #             self.emergenceLocationMap[i][tile.x][tile.y] = 0
-        #
-        # def skipFunc(tile: Tile):
-        #     if tile == neutralTile:
-        #         return False
-        #     isTileEnemy = tile.discovered and self.map.is_tile_enemy(tile)
-        #     if isTileEnemy:
-        #         return False
-        #
-        #     if tile.was_visible_last_turn():
-        #         return True
-        #     if tile.discoveredAsNeutral:
-        #         return True
-        #
-        #     return False
-        #
-        # # negativeLambda = lambda tile: tile.discovered
-        #
-        # breadth_first_foreach_dist(self.map, [neutralTile], distance, foreachFunc, negativeFunc=None, skipFunc=skipFunc, bypassDefaultSkip=True)
-        #
-        # # def foreachResetBadGuesses(tile, dist):
-        # #     if tile.isCity and not tile.discovered:
-        # #         try:
-        # #             self.map.players[tile.player].cities.remove(tile)
-        # #         except:
-        # #             pass
-        # #         tile.reset_wrong_undiscovered_fog_guess()
-        # #
-        # # resetFogCitiesDist = 3
-        # # negativeLambda = lambda tile: tile.discovered
-        # # skipFunc = lambda tile: tile.discovered or any_where(tile.movable, lambda m: m.discovered and m.player >= 0 and m.player != self.map.player_index)
-        # # breadth_first_foreach_dist(self.map, [neutralTile], resetFogCitiesDist, foreachResetBadGuesses, negativeLambda, skipFunc)
-
     def is_friendly_team(self, p1: int, p2: int) -> bool:
         if p1 == p2:
             return True
@@ -955,25 +961,30 @@ class ArmyTracker(object):
                 return None
 
             val = 0
-            if negArmy > 0:
-                val = -2000 - negArmy
+            if negArmy > 3 * dist + 3:
+                val = -10000 - negArmy * 10
+            elif negArmy > 0:
+                val = -5000 - negArmy * 10
+            # elif negArmy > 10:
+            #     val = -10000 - negArmy
             else:
-                val = negArmy
+                val = negArmy * 10
 
             if self.is_friendly_team(thisTile.player, armyPlayer) and thisTile.army > 8:
-                negArmy += thisTile.army // 2
-
-                if negArmy > 0:
-                    moveHalfVal = -2000 - negArmy
+                negMhArmy = negArmy + thisTile.army // 2
+                if negMhArmy > 3 * dist + 3:
+                    moveHalfVal = -10000 - negMhArmy * 10
+                elif negMhArmy > 0:
+                    moveHalfVal = -5000 - negMhArmy * 10
                 else:
-                    moveHalfVal = negArmy
+                    moveHalfVal = negMhArmy * 10
                 if moveHalfVal > val:
                     logging.info(
                         f"using moveHalfVal {moveHalfVal:.1f} over val {val:.1f} for tile {str(thisTile)} turn {self.map.turn}")
                     val = moveHalfVal
             elif not thisTile.discovered:
                 negArmy -= max(1, int(self.emergenceLocationMap[armyPlayer][thisTile.x][thisTile.y] ** 0.25) - 1)
-                val += self.emergenceLocationMap[armyPlayer][thisTile.x][thisTile.y] / 1
+                val += 3 - 3 / max(1, self.emergenceLocationMap[armyPlayer][thisTile.x][thisTile.y])
 
             # closest path value to the actual army value. Fake tuple for logging.
             # 2*abs for making it 3x improvement on the way to the right path, and 1x unemprovement for larger armies than the found tile
@@ -1038,7 +1049,7 @@ class ArmyTracker(object):
                     negArmy += nextTile.army + 1
 
             if not meetsCriteria and not nextTile.was_visible_last_turn():
-                meetsCriteria = nextTile in self.tiles_ever_owned_by_player[armyPlayer] or self.valid_general_positions_by_player[armyPlayer][nextTile]
+                meetsCriteria = nextTile in self.tiles_ever_owned_by_player[armyPlayer] or self.valid_general_positions_by_player[armyPlayer][nextTile] or theArmy is not None
 
             if negArmy <= 0:
                 turnsNeg += 1
@@ -1131,6 +1142,12 @@ class ArmyTracker(object):
             (dist, _) = prioObject
 
             dist += 1
+            if nextTile.isUndiscoveredObstacle:
+                # try to path around obstacles over going through them..? Takes 2 extra moves to 
+                # go around an obstacle to the other side so at minimum make it cost that 
+                # much extra so going around is otherwise equal to through
+                dist += 2
+
             return dist, 0
 
         def fogSkipFunc(
@@ -1260,18 +1277,21 @@ class ArmyTracker(object):
         if maxArmy is not None:
             # update path on army
             node = sourceFogArmyPath.get_reversed().start
-            while node.tile != maxArmy.tile:
+            while node is not None and node.tile != maxArmy.tile:
                 node = node.next
-            node = node.next
-            while node is not None:
-                maxArmy.update_tile(node.tile)
+
+            if node is not None:
                 node = node.next
+                while node is not None:
+                    maxArmy.update_tile(node.tile)
+                    node = node.next
 
             # scrap other armies from the fog
             for army in armiesFromFog:
                 if army != maxArmy:
                     logging.info(f"  ^ scrapping {str(army)} as it was not largest on emergence path")
-                    self.scrap_army(army)
+                    self.scrap_army(army, scrapEntangled=True)
+
             self.resolve_entangled_armies(maxArmy)
             logging.info(f'set fog source for {str(fogTile)} to {str(maxArmy)}')
             maxArmy.update_tile(fogTile)
@@ -1279,7 +1299,7 @@ class ArmyTracker(object):
             # maxArmy.player = fogTile.player
             # self.armies[fogTile] = maxArmy
             maxArmy.path = sourceFogArmyPath
-            maxArmy.expectedPath = None
+            maxArmy.expectedPaths = []
         else:
             # then this is a brand new army because no armies were on the fogPath, but we set the source path to 1's still
             maxArmy = Army(fogTile)
@@ -1294,7 +1314,14 @@ class ArmyTracker(object):
     def merge_armies(self, largerArmy: Army, smallerArmy: Army, finalTile: Tile, armyDict: typing.Dict[Tile, Army] | None = None):
         self.armies.pop(largerArmy.tile, None)
         self.armies.pop(smallerArmy.tile, None)
-        self.scrap_army(smallerArmy)
+        self.scrap_army(smallerArmy, scrapEntangled=False)
+        for entangled in smallerArmy.entangledArmies:
+            entangled.entangledArmies.append(largerArmy)
+        if largerArmy.entangledValue is None:
+            largerArmy.entangledValue = largerArmy.value
+        if smallerArmy.entangledValue is None:
+            smallerArmy.entangledValue = smallerArmy.value
+        largerArmy.entangledValue += smallerArmy.entangledValue
 
         if largerArmy.tile != finalTile:
             largerArmy.update_tile(finalTile)
@@ -1313,13 +1340,13 @@ class ArmyTracker(object):
             # determine expected army value
             if (targetArmy.value < movingArmy.value and not finalTile.visible) or (finalTile.player == movingArmy.player and finalTile.visible):
                 targetArmy.value = 0
-                self.scrap_army(targetArmy)
+                self.scrap_army(targetArmy, scrapEntangled=True)
             else:
                 targetArmy.value -= movingArmy.tile.delta.armyDelta
         elif finalTile.isGeneral and finalTile.player != movingArmy.player:
-            self.scrap_army(movingArmy)
+            self.scrap_army(movingArmy, scrapEntangled=True)
         else:
-            self.scrap_army(targetArmy)
+            self.scrap_army(targetArmy, scrapEntangled=True)
 
         if movingArmy.tile != finalTile:
             movingArmy.update_tile(finalTile)
@@ -1339,108 +1366,6 @@ class ArmyTracker(object):
         return False
 
     def try_track_own_move(self, army: Army, skip: typing.Set[Tile], trackingArmies: typing.Dict[Tile, Army]):
-        # playerMoveDest = self.lastMove.dest
-        # playerMoveSrc = self.lastMove.source
-        # logging.info(
-        #     f"    Army (lastMove) probably moved from {str(army)} to {playerMoveDest.toString()}")
-        # expectedDestDelta = army.value
-        # if self.lastMove.move_half:
-        #     expectedDestDelta = (army.value + 1) // 2
-        # expectedSourceDelta = 0 - expectedDestDelta  # these should always match if no other army interferes.
-        # if not self.is_friendly_team(playerMoveDest.delta.oldOwner, self.map.player_index):
-        #     expectedDestDelta = 0 - expectedDestDelta
-        #
-        # likelyDroppedMove = False
-        # if playerMoveSrc.delta.armyDelta == 0 and playerMoveSrc.visible:
-        #     likelyDroppedMove = True
-        #     if playerMoveDest.delta.armyDelta == 0:
-        #         logging.error(
-        #             f'Army tracker determined player DEFINITELY dropped move {str(self.lastMove)}. Setting last move to none...')
-        #         self.lastMove = None
-        #         return
-        #     else:
-        #         logging.error(
-        #             f'Army tracker determined player PROBABLY dropped move {str(self.lastMove)}, but the dest DID have an army delta, double check on this... Continuing in case this is 2v2 BS or something.')
-        #
-        # # ok, then probably we didn't drop a move.
-        #
-        # actualSrcDelta = playerMoveSrc.delta.armyDelta
-        # actualDestDelta = playerMoveDest.delta.armyDelta
-        #
-        # sourceDeltaMismatch = expectedSourceDelta != actualSrcDelta
-        # destDeltaMismatch = expectedDestDelta != actualDestDelta
-        #
-        # # works in 1v1, but 50/50 wrong in FFA, TODO do we care...?
-        # fakeOtherPlayer = (self.map.player_index + 1) & 1
-        #
-        # sourceWasAttackedWithPriority = False
-        # sourceWasCaptured = False
-        # if sourceDeltaMismatch or self.lastMove.source.player != self.map.player_index:
-        #     amountAttacked = actualSrcDelta - expectedSourceDelta
-        #     if self.lastMove.source.player != self.map.player_index:
-        #         sourceWasCaptured = True
-        #         if MapBase.player_had_priority_over_other(self.lastMove.source.player, self.map.player_index, self.map.turn):
-        #             sourceWasAttackedWithPriority = True
-        #             logging.info(
-        #                 f'MOVE {str(self.lastMove)} seems to have been captured with priority. Nuking our army and having no unexplained diffs (to let the main army tracker just calculate this capture).')
-        #             if destDeltaMismatch:
-        #                 logging.error(
-        #                     f'  ^ {str(self.lastMove)} IS QUESTIONABLE THOUGH BECAUSE DEST DID HAVE AN UNEXPLAINED DIFF. NUKING ANYWAY.')
-        #             self.scrap_army(army)
-        #             # self.unaccounted_tile_diffs[self.lastMove.source] = amountAttacked  # negative number
-        #             self.lastMove = None
-        #             return
-        #         else:
-        #             logging.info(
-        #                 f'MOVE {str(self.lastMove)} was capped WITHOUT priority..? Adding unexplained diff {amountAttacked} based on actualSrcDelta {actualSrcDelta} - expectedSourceDelta {expectedSourceDelta}. Continuing with dest diff calc')
-        #             self.unaccounted_tile_diffs[self.lastMove.source] = amountAttacked  # negative number
-        #     else:
-        #         # we can get here if the source tile was attacked with priority but not for full damage, OR if it was attacked without priority for non full damage...
-        #         destArmyInterferedToo = False
-        #         if not destDeltaMismatch:
-        #             # then we almost certainly didn't have source attacked with priority.
-        #             logging.warning(
-        #                 f'MOVE {str(self.lastMove)} ? src attacked for amountAttacked {amountAttacked} WITHOUT priority based on actualSrcDelta {actualSrcDelta} vs expectedSourceDelta {expectedSourceDelta}')
-        #         elif not MapBase.player_had_priority_over_other(self.map.player_index, fakeOtherPlayer, self.map.turn):
-        #             # if we DIDNT have priority (this is hit or miss in FFA, tho).
-        #             armyMadeItToDest = playerMoveDest.delta.armyDelta
-        #             amountAttacked = expectedDestDelta - armyMadeItToDest
-        #             if playerMoveSrc.army == 0:
-        #                 amountAttacked -= 1  # enemy can attack us down to 0 without flipping the tile, special case this
-        #
-        #             logging.warning(
-        #                 f'MOVE {str(self.lastMove)} ? src attacked for amountAttacked {amountAttacked} based on destDelta {playerMoveDest.delta.armyDelta} vs expectedDestDelta {expectedDestDelta}')
-        #         else:
-        #             destArmyInterferedToo = True
-        #             # TODO what to do here?
-        #             logging.warning(
-        #                 f'???MOVE {str(self.lastMove)} ? player had priority but we still had a dest delta as well as source delta...?')
-        #
-        #         self.unaccounted_tile_diffs[self.lastMove.source] = amountAttacked  # negative number
-        #         if not destArmyInterferedToo:
-        #             # intentionally do nothing about the dest tile diff if we found a source tile diff, as it is really unlikely that both source and dest get interfered with on same turn.
-        #             self.army_moved(army, playerMoveDest, trackingArmies)
-        #             return
-        # else:
-        #     # nothing happened, we moved the expected army off of source. Not unexplained.
-        #     self.unaccounted_tile_diffs.pop(playerMoveSrc, 0)
-        #
-        # if destDeltaMismatch:
-        #     unexplainedDelta = expectedDestDelta - actualDestDelta
-        #     if playerMoveDest.delta.oldOwner == playerMoveDest.delta.newOwner:
-        #         unexplainedDelta = 0 - unexplainedDelta
-        #
-        #     if not MapBase.player_had_priority_over_other(self.map.player_index, fakeOtherPlayer, self.map.turn):  # the source tile could have been attacked for non-lethal damage BEFORE the move was made to target.
-        #         self.unaccounted_tile_diffs[self.lastMove.source] = unexplainedDelta
-        #     self.unaccounted_tile_diffs[self.lastMove.dest] = unexplainedDelta
-        #     logging.info(
-        #         f'MOVE {str(self.lastMove)} with expectedDestDelta {expectedDestDelta} likely collided with unexplainedDelta {unexplainedDelta} at dest based on actualDestDelta {actualDestDelta}.')
-        # else:
-        #     logging.info(
-        #         f'!MOVE {str(self.lastMove)} made it to dest with no issues, moving army.\r\n    expectedDestDelta {expectedDestDelta}, expectedSourceDelta {expectedSourceDelta}, actualSrcDelta {actualSrcDelta}, actualDestDelta {actualDestDelta}, sourceWasAttackedWithPriority {sourceWasAttackedWithPriority}, sourceWasCaptured {sourceWasCaptured}')
-        #     self.unaccounted_tile_diffs.pop(playerMoveDest, 0)
-        #     # if playerMoveDest.player != self.map.player_index:
-        #     skip.add(playerMoveDest)  # might not need this at alll.....?
         if self.map.last_player_index_submitted_move is not None:
             # then map determined it did something and wasn't dropped. Execute it.
             src, dest, move_half = self.map.last_player_index_submitted_move
@@ -1523,21 +1448,6 @@ class ArmyTracker(object):
             if foundLocation:
                 break
 
-        # elif self.isArmyBonus and armyRealTileDelta > 0 and abs(adjDelta - armyRealTileDelta) == 2:
-        #     # handle bonus turn capture moves?
-        #     foundLocation = True
-        #     logging.info("    Army (BONUS CAPTURE?) probably moved from {} to {}".format(army.toString(), adjacent.toString()))
-        #     self.army_moved(army, adjacent, trackingArmies)
-        #     break
-
-        # if not foundLocation:
-        #     # first check if the map decided where it went
-        #     if army.tile.delta.toTile is not None:
-        #         foundLocation = True
-        #         logging.info(
-        #             f"  army.tile.delta.toTile != None, using {army.tile.delta.toTile.toString()}")
-        #         self.army_moved(army, army.tile.delta.toTile, trackingArmies)
-
         if not foundLocation:
             if not army.visible and not army.tile.visible:
                 # let the fog mover handle it
@@ -1595,9 +1505,9 @@ class ArmyTracker(object):
                 fogArmies = []
                 if len(fogBois) == 1:
                     fogTarget = fogBois[0]
-                    if fogTarget.visible and not fogTarget.army > 5:
-                        self.scrap_army(army)
-                        return
+                    # if fogTarget.visible and not fogTarget.army > 5:
+                    #     self.scrap_army(army)
+                    #     return
                     foundLocation = True
                     logging.info(f"    WHOO! Army {str(army)} moved into fog at {fogBois[0].toString()}!?")
                     self.move_fogged_army(army, fogTarget)
@@ -1624,7 +1534,7 @@ class ArmyTracker(object):
 
             if army.player != army.tile.player and army.tile.was_visible_last_turn():
                 logging.info(f"  Army {str(army)} got eated? Scrapped for not being the right player anymore")
-                self.scrap_army(army)
+                self.scrap_army(army, scrapEntangled=True)
 
         army.update()
 
@@ -1639,11 +1549,12 @@ class ArmyTracker(object):
             army = Army(tile)
             army.last_moved_turn = self.map.turn
             if not tile.visible:
+                army.last_moved_turn = self.map.turn - 2  # this should only really happen on incrementing fog cities or on initial unit test map load
                 army.value = tile.army - 1
 
             if not skip_expected_path:
-                army.expectedPath = self.get_army_expected_path(army)
-                logging.info(f'set army {str(army)} expected path to {str(army.expectedPath)}')
+                army.expectedPaths = self.get_army_expected_path(army)
+                logging.info(f'set army {str(army)} expected path to {str(army.expectedPaths)}')
 
             self.armies[tile] = army
 
@@ -1788,14 +1699,14 @@ class ArmyTracker(object):
                 or (not army.tile.visible and army.value < thresh)
         ):
             logging.info(f"  Army {str(army)} Stopped moving. Scrapped for being low value")
-            self.scrap_army(army)
+            self.scrap_army(army, scrapEntangled=False)
 
     def scrap_unmoved_low_armies(self):
         for army in list(self.armies.values()):
             if army.last_moved_turn < self.map.turn - 1:
                 self.check_for_should_scrap_unmoved_army(army)
 
-    def get_army_expected_path(self, army: Army) -> Path | None:
+    def get_army_expected_path(self, army: Army) -> typing.List[Path]:
         """
         Returns none if asked to predict a friendly army path.
 
@@ -1808,10 +1719,20 @@ class ArmyTracker(object):
         pathA = self.get_army_expected_path_non_flank(army)
         pathB = self.get_army_expected_path_flank(army)
 
-        if pathB is not None and (pathA is None or pathB.length >= pathA.length // 2):
-            return pathB
+        paths = []
 
-        return pathA
+        if pathB is not None and (pathA is None or pathB.length >= pathA.length // 2):
+            paths.append(pathB)
+            if pathA is not None:
+                paths.append(pathA)
+        elif pathA is not None:
+            paths.append(pathA)
+            if pathB is not None and pathB.length != pathA.length:
+                paths.append(pathB)
+        elif pathB is not None:
+            paths.append(pathB)
+
+        return paths
 
     def get_army_expected_path_non_flank(self, army: Army) -> Path | None:
         """
@@ -1824,7 +1745,7 @@ class ArmyTracker(object):
         @return:
         """
 
-        if army.tile.isCity and army.expectedPath is None and army.tile.lastMovedTurn < self.map.turn - 2:
+        if army.tile.isCity and len(army.expectedPaths) == 0 and army.tile.lastMovedTurn < self.map.turn - 2:
             return None
 
         if army.player == self.map.player_index or army.player in self.map.teammates:
@@ -1844,10 +1765,9 @@ class ArmyTracker(object):
         if len(army.entangledArmies) > 0:
             skip = set()
             for entangled in army.entangledArmies:
-                if entangled.expectedPath is not None:
-                    skip.update(entangled.expectedPath.tileList)
-                else:
-                    skip.add(entangled.tile)
+                skip.add(entangled.tile)
+                for entangledPath in entangled.expectedPaths:
+                    skip.update(entangledPath.tileList)
 
         logging.info(f'Looking for army {str(army)}s expected movement path:')
         path = SearchUtils.breadth_first_find_queue(
@@ -1876,7 +1796,7 @@ class ArmyTracker(object):
         @return:
         """
 
-        if army.tile.isCity and army.expectedPath is None and army.tile.lastMovedTurn < self.map.turn - 2:
+        if army.tile.isCity and len(army.expectedPaths) == 0 and army.tile.lastMovedTurn < self.map.turn - 2:
             return None
 
         if army.player == self.map.player_index or army.player in self.map.teammates:
@@ -1899,6 +1819,12 @@ class ArmyTracker(object):
         for tile in self.map.get_all_tiles():
             if tile.visible:
                 skip.add(tile)
+
+        if len(army.entangledArmies) > 0:
+            for entangled in army.entangledArmies:
+                skip.add(entangled.tile)
+                for entangledPath in entangled.expectedPaths:
+                    skip.update(entangledPath.tileList)
 
         startTiles = {army.tile: ((0, 0), 0)}
 
@@ -1967,8 +1893,11 @@ class ArmyTracker(object):
     def check_need_to_shift_fog_city(self, city: Tile) -> Tile | None:
         if city.delta.oldOwner == city.player:
             return None
+        if city.delta.oldOwner == -1:
+            return None
         if city.was_visible_last_turn():
             return None
+
         if len(self.map.players[city.delta.oldOwner].cities) >= self.map.players[city.delta.oldOwner].cityCount + 1:
             logging.info(f'Not shifting player {city.delta.oldOwner} city {str(city)} because already enough cities on the board.')
             return None
@@ -2051,7 +1980,7 @@ class ArmyTracker(object):
                         self.dropped_fog_tiles_this_turn.add(toRemove)
                         army = self.armies.get(toRemove, None)
                         if army:
-                            self.scrap_army(army)
+                            self.scrap_army(army, scrapEntangled=False)
 
                 player.tiles = [t for t in self.map.get_all_tiles() if t.player == player.index]
 
@@ -2108,8 +2037,8 @@ class ArmyTracker(object):
                     army = self.armies.get(toReduce, None)
                     if army:
                         army.value = toReduce.army - 1
-                        if army.value == 0:
-                            self.scrap_army(army)
+                        if army.value <= 0:
+                            self.scrap_army(army, scrapEntangled=False)
 
     def get_tile_emergence_for_player(self, tile: Tile, player: int) -> int:
         if player == -1:
@@ -2194,6 +2123,11 @@ class ArmyTracker(object):
             if tile.player == -1 and not tile.isMountain and not tile.isCity and tile.delta.discovered:
                 self.tile_discovered_neutral(tile)
 
+            if tile.delta.lostSight:
+                for adj in tile.adjacents:
+                    if adj.delta.lostSight:
+                        self.tiles_ever_owned_by_player[tile.player].add(adj)
+
         for tile in self._flipped_tiles:
             logging.info(f"AT Handling flipped {repr(tile)}")
             if tile.player != -1 and (tile.delta.oldOwner == -1 or not self.map.players[tile.delta.oldOwner].dead):
@@ -2209,6 +2143,12 @@ class ArmyTracker(object):
                 if tile.isGeneral:
                     for player in self.map.players:
                         if self.map.is_player_on_team_with(player.index, tile.player):
+                            if tile.player != player.index and self.map.is_2v2:
+                                def limitSpawnAroundAllyGen(t: Tile):
+                                    if abs(t.x - tile.x) + abs(t.y - tile.y) > 11:
+                                        self.valid_general_positions_by_player[player.index][t] = False
+
+                                SearchUtils.breadth_first_foreach(self.map, [tile], 100, foreachFunc=limitSpawnAroundAllyGen)
                             continue
 
                         SearchUtils.breadth_first_foreach(self.map, [tile], self.min_spawn_distance, foreachFunc=limitSpawnAroundOtherGen)
@@ -2299,7 +2239,7 @@ class ArmyTracker(object):
                 self.emergenceLocationMap[player][t.x][t.y] += launchEmergence
 
         def skipper(t: Tile) -> bool:
-            if t.discoveredAsNeutral and t not in self.tiles_ever_owned_by_player[player]:
+            if t.discoveredAsNeutral and t not in self.tiles_ever_owned_by_player[player]:  # and (t.visible or self.map.turn < 50)   # should be solved without the visible check by adding the lost-sight-ever-owned-by-player hack to allow pathing through the fog now.
                 return True
             if (t.isCity and t.player == -1 and (t.visible or hasPerfectInfoOfPlayerCities)) or t.isMountain or (t.isUndiscoveredObstacle and hasPerfectInfoOfPlayerCities) or t.isGeneral:
                 return True
@@ -2540,3 +2480,123 @@ class ArmyTracker(object):
             newTrackThreshold = tileAtPercentile.army - 1
             logging.info(f'RAISING TRACK THRESHOLD FROM {self.track_threshold} TO {newTrackThreshold}')
             self.track_threshold = newTrackThreshold
+
+    def _move_fogged_army_along_path(self, army: Army, path: Path):
+
+        isCompletePath = (
+            path is None
+            or path.start is None
+            or path.start.next is None
+            or path.start.next.tile is None
+        )
+
+        if isCompletePath:
+            try:
+                army.expectedPaths.remove(path)
+            except:
+                pass
+
+        if isCompletePath or path.start.next.tile.visible:
+            army.value = army.tile.army - 1
+
+            return
+
+        nextTile = path.start.next.tile
+        if not nextTile.visible:
+            existingArmy = self.armies.get(nextTile, None)
+            if existingArmy is not None and existingArmy == army:
+                existingArmy = None
+            # if existingArmy is not None and army in existingArmy.entangledArmies:
+            #     logging.info(
+            #         f"Refusing to move army {str(army)} into entangled brother {str(existingArmy)}")
+            #     # do nothing
+            #     return
+
+            self.armies.pop(army.tile, None)
+
+            logging.info(
+                f"Moving fogged army {str(army)} along expected path {str(path)}")
+
+            oldTile = army.tile
+            oldTile.army = 1
+            if self.map.is_city_bonus_turn and oldTile.isCity or oldTile.isGeneral:
+                oldTile.army += 1
+            if self.map.is_army_bonus_turn:
+                oldTile.army += 1
+
+            if existingArmy is not None:
+                if existingArmy in army.entangledArmies:
+                    logging.info(f'entangled army collided with itself, scrapping the collision-mover {str(army)} in favor of {str(existingArmy)}')
+                    self.scrap_army(army, scrapEntangled=False)
+                    return
+
+            # if not oldTile.discovered:
+            #     oldTile.player = -1
+            #     oldTile.army = 0
+            if nextTile.player == army.player:
+                nextTile.army = nextTile.army + army.value
+            else:
+                nextTile.army = nextTile.army - army.value
+                if nextTile.army < 0:
+                    nextTile.army = 0 - nextTile.army
+                nextTile.player = army.player
+
+            if existingArmy is not None:
+                if existingArmy.player == army.player:
+                    if existingArmy.value > army.value:
+                        self.merge_armies(existingArmy, army, nextTile)
+                    else:
+                        self.merge_armies(army, existingArmy, nextTile)
+                    return
+
+            army.update_tile(nextTile)
+            army.value = nextTile.army - 1
+            self.armies[nextTile] = army
+            path.made_move()
+
+    def try_find_army_sink(
+            self,
+            player: int,
+            annihilatedFogArmy: int,
+            tookNeutCity: bool
+    ) -> bool:
+        """
+        Tries to find a fog army sink for fog annihilation, and optionally converts it into a neutral city if the player just took one.
+
+        @param player:
+        @param annihilatedFogArmy:
+        @param tookNeutCity:
+
+        @return:
+        """
+
+        possibleArmies = []
+        for army in self.armies.values():
+            if army.player != player:
+                continue
+            if army.visible:
+                continue
+
+            possibleArmies.append(army)
+
+        possibleArmies = list(sorted(possibleArmies, key=lambda a: abs(annihilatedFogArmy - a.value)))
+
+        for army in possibleArmies:
+            army.value -= annihilatedFogArmy
+            if army.value < 0:
+                army.value = 0
+            army.tile.army = army.value + 1
+
+            if tookNeutCity:
+                potentialCity = self.find_next_fog_city_candidate_near_tile(player, army.tile)
+                if potentialCity is not None:
+                    self.convert_fog_city_to_player_owned(potentialCity, player)
+                    army.tile.army = 1
+                    army.update_tile(potentialCity)
+                    potentialCity.army = army.value + 1
+
+                    break
+
+            else:
+                break
+

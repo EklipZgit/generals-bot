@@ -59,12 +59,14 @@ class ThreatObj(object):
                 # logging.info(f'Threat path tile {str(tile)} increased to dist {newDist} based on neighbors {neighbors}')
                 pass
             # elif not allowNonChoke and tile not in self.armyAnalysis.pathChokes and not self.path.start.next.tile in tile.movable:
-            elif not allowNonChoke and tile not in self.armyAnalysis.pathChokes:# and not self.path.start.next.tile in tile.movable:
+            elif not allowNonChoke and tile not in self.armyAnalysis.pathChokes:  # and not self.path.start.next.tile in tile.movable:
                 # pathWay = self.armyAnalysis.pathWayLookupMatrix[tile]
                 # neighbors = where(pathWay.tiles, lambda t: t != tile and self.armyAnalysis.aMap[t.x][t.y] == self.armyAnalysis.aMap[tile.x][tile.y] and self.armyAnalysis.bMap[t.x][t.y] == self.armyAnalysis.bMap[tile.x][tile.y])
-                newDist = dist + self.armyAnalysis.chokeWidths[tile] - 2
-                logging.info(f'Threat path tile {str(tile)} increased to dist {newDist} from {dist} based on not being a choke')
-                dict[tile] = newDist
+                chokeWidth = self.armyAnalysis.chokeWidths.get(tile, None)
+                if chokeWidth is not None:
+                    newDist = dist + chokeWidth - 2
+                    logging.info(f'Threat path tile {str(tile)} increased to dist {newDist} from {dist} based on not being a choke')
+                    dict[tile] = newDist
                 # logging.info(f'stripping threat defense tile {str(tile)} bc not in path chokes')
                 # del dict[tile]  # necessary for 'test_should_not_make_move_away_from_threat' to pass.
                 pass
@@ -74,6 +76,9 @@ class ThreatObj(object):
         # dict[self.path.start.tile] -= 1
 
         return dict
+
+    def __str__(self):
+        return f'[p{self.threatPlayer} {self.threatValue} in {self.turns} @ {self.path.tail.tile}: {str(self.path)}]'
 
 
 class DangerAnalyzer(object):
@@ -117,10 +122,11 @@ class DangerAnalyzer(object):
 
         self.targets = defenseTiles
         self.fastestThreat = self.getFastestThreat(depth, armies, self.map.player_index)
-        self.fastestCityThreat = self.getFastestThreat(depth, armies, self.map.player_index, generalOnly=False)
-        if self.fastestCityThreat is not None and self.fastestThreat is not None:
-            if self.fastestCityThreat.armyAnalysis.tileB == self.fastestThreat.armyAnalysis.tileB:
-                self.fastestCityThreat = None
+        self.fastestCityThreat = self.getFastestThreat(depth, armies, self.map.player_index, generalOnly=False, requireMovement=True)
+        # TODO why was this here...?
+        # if self.fastestCityThreat is not None and self.fastestThreat is not None:
+        #     if self.fastestCityThreat.armyAnalysis.tileB == self.fastestThreat.armyAnalysis.tileB:
+        #         self.fastestCityThreat = None
 
         negTiles = set()
         if self.fastestThreat is not None:
@@ -197,8 +203,20 @@ class DangerAnalyzer(object):
             againstPlayer: int,
             pretendTilesVacated: bool = False,
             negTiles: typing.Set[Tile] | None = None,
-            generalOnly: bool = True
+            generalOnly: bool = True,
+            requireMovement: bool = False
     ) -> ThreatObj | None:
+        """
+
+        @param depth:
+        @param armies:
+        @param againstPlayer:
+        @param pretendTilesVacated:
+        @param negTiles:
+        @param generalOnly:
+        @param requireMovement: If true, will only return threats sourced from tiles that recently moved.
+        @return:
+        """
         startTime = time.perf_counter()
         logging.info(f"------  fastest threat analyzer: depth {depth}")
         curThreat = None
@@ -254,6 +272,10 @@ class DangerAnalyzer(object):
             if player.general is not None:
                 curNegs.add(player.general)
 
+            if requireMovement:
+                # we only run the other large-tile scan for movement based flagging
+                continue
+
             path = dest_breadth_first_target(
                 map=self.map,
                 goalList=targets,
@@ -294,8 +316,11 @@ class DangerAnalyzer(object):
         for armyTile, army in armies.items():
             # if this is an army in the fog that isn't on a tile owned by that player, lets see if we need to path it.
             # if army.player != target.player:
-            if armyTile.visible:
+            if armyTile.visible and not requireMovement:
                 continue
+
+            if armyTile.player == army.player and not requireMovement:
+                continue  # covered under normal search above
 
             if army.player not in defendableFromPlayers:
                 continue
@@ -303,14 +328,14 @@ class DangerAnalyzer(object):
             if self.map.is_tile_friendly(armyTile):
                 continue
 
-            if armyTile.player == army.player:
-                continue  # covered under normal search above
-
             if armyTile.player in self.map.teammates:
                 continue
 
-            if army.last_moved_turn < self.map.turn - 4:
+            if not army.visible and army.last_moved_turn < self.map.turn - 4:
                 continue  # dont defend against invisible predicted threats that probably arent real
+
+            if requireMovement and army.last_moved_turn < self.map.turn - 2:
+                continue
 
             startTiles = {}
             startTiles[armyTile] = ((0, 0, 0, 0 - army.value - 1, armyTile.x, armyTile.y, 0.5), 0)
@@ -329,7 +354,7 @@ class DangerAnalyzer(object):
                 if path.value > 0 and (
                         curThreat is None or path.length < curThreat.length or path.value > curThreat.value):
                     curThreat = path
-                army.expectedPath = path
+                army.expectedPaths.append(path)
 
         if curThreat is not None:
             army = curThreat.start.tile

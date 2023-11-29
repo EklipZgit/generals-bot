@@ -45,7 +45,6 @@ def get_start_expand_value(
         curPath = curPath.clone()
     movingArmy = 0
     for turn in range(curTurn, 50):
-        # logging.info(f'turn: {turn}')
         movingGen = False
         pathComplete = False
         if curPath is None:
@@ -125,13 +124,27 @@ def __evaluate_plan_value(
     adjAvailable = SearchUtils.Counter(0)
 
     pathTileSet = set()
+    visibleTileSet = set(already_visited)
+    for tile in already_visited:
+        visibleTileSet.update(tile.adjacents)
+
     for path in path_list:
         if path is not None:
+            visibleTileSet.update(path.tileList)
             pathTileSet.update(path.tileList)
+
+    visibilityValue = SearchUtils.Counter(0.0)
 
     for tile in pathTileSet:
         tileWeightSum += tile_weight_map[tile.x][tile.y]
         genDistSum += dist_to_gen_map[tile.x][tile.y]
+        for adj in tile.adjacents:
+            if adj not in visibleTileSet:
+                visibleTileSet.add(adj)
+                if not adj.isNotPathable:
+                    reward = 8 - tile_weight_map[adj.x][adj.y]
+                    if reward > 0:
+                        visibilityValue.value += reward
 
     def count_func(tile: Tile):
         if (tile not in pathTileSet
@@ -140,13 +153,22 @@ def __evaluate_plan_value(
                 and not tile.isCity
                 and tile.player == -1
                 and tile.army == 0):
-            adjAvailable.add(1)
+            adjAvailable.value += 1
+            # if not tile.visible:
+            #     visibilityValue.value -= tile_weight_map[adj.x][adj.y]
 
-    breadth_first_foreach(map, pathTileSet, 4, count_func, noLog=True)
+    breadth_first_foreach(map, pathTileSet, 3, count_func, noLog=True)
 
     pathValue = get_start_expand_value(map, general, general_army, cur_turn, path_list, visitedSet=already_visited, noLog=no_log)
 
-    return pathValue, adjAvailable.value, 0-tileWeightSum, genDistSum
+    return (
+        pathValue,
+        # adjAvailable.value,
+        adjAvailable.value + int(visibilityValue.value),
+        # int(visibilityValue.value),
+        0 - tileWeightSum,
+        genDistSum
+    )
 
 
 def max_plan(plan1: ExpansionPlan, plan2: ExpansionPlan, map: MapBase, distToGenMap, tile_weight_map, visited) -> ExpansionPlan:
@@ -181,7 +203,7 @@ def max_plan(plan1: ExpansionPlan, plan2: ExpansionPlan, map: MapBase, distToGen
 def optimize_first_25(
         map: MapBase,
         general: Tile,
-        tile_weight_map: typing.List[typing.List[int]],
+        tile_minimization_map: typing.List[typing.List[int]],
         debug_view_info: typing.Union[None, ViewInfo] = None,
         no_recurse: bool = False,
         skipTiles: typing.Set[Tile] | None = None,
@@ -193,7 +215,7 @@ def optimize_first_25(
 
     @param map:
     @param general:
-    @param tile_weight_map: lower numbers = better
+    @param tile_minimization_map: lower numbers = better
     @param debug_view_info: the viewInfo to write debug data to (mainly for unit testing).
     @param no_recurse: Used to prevent infinite recursion when optimizing with alt tile weights
     @param skipTiles: Tiles that will be not counted for expansion
@@ -229,7 +251,7 @@ def optimize_first_25(
             general,
             genArmyAtStart,
             distToGenMap,
-            tile_weight_map,
+            tile_minimization_map,
             turn=turnInCycle,
             visited_set=visited,
             prune_below=prune_cutoff,
@@ -268,7 +290,7 @@ def optimize_first_25(
             general,
             genArmy,
             distToGenMap,
-            tile_weight_map,
+            tile_minimization_map,
             turn=launchTurn,
             allow_wasted_moves=optimalWastedMoves + 3,
             debug_view_info=debug_view_info,
@@ -279,7 +301,7 @@ def optimize_first_25(
             no_log=no_log)
         for _ in range(mapTurnAtStart, launchTurn):
             launchResult.insert(0, None)
-        launchVal = __evaluate_plan_value(map, general, genArmyAtStart, map.turn, launchResult, dist_to_gen_map=distToGenMap, tile_weight_map=tile_weight_map, already_visited=visited, no_log=no_log)
+        launchVal = __evaluate_plan_value(map, general, genArmyAtStart, map.turn, launchResult, dist_to_gen_map=distToGenMap, tile_weight_map=tile_minimization_map, already_visited=visited, no_log=no_log)
         logging.info(f'{genArmy} ({optimalWastedMoves}) launch ({launchVal}) {">>>" if maxVal is None or maxVal < launchVal else "<"} prev launches (prev max {maxVal})')
         if maxVal is None or launchVal > maxVal:
             maxVal = launchVal

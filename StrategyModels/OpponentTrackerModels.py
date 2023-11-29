@@ -65,6 +65,9 @@ class CycleStatsData:
         myClone.approximate_fog_city_army = self.approximate_fog_city_army
         return myClone
 
+    def __str__(self) -> str:
+        return f'g:{self.approximate_army_gathered_this_cycle:3d}  Δt:{self.tiles_gained:2d}  Δc:{self.cities_gained:d}   a:{self.approximate_fog_army_available_total:3d}/c:{self.approximate_fog_city_army:2d}'
+
 
 class PlayerMoveCategory(Enum):
     FogGather = 1

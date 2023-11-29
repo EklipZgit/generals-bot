@@ -13,18 +13,39 @@ class FFATests(TestBase):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_gather_defensively_when_just_captured_3rd_player_and_winning_on_econ_and_last_player_doesnt_know_gen_pos___j4GQjpuy4---0--379.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 379, fill_out_tiles=True)
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 6, 20)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=379)
         
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = simHost.get_bot(general.player)
+        simHost.queue_player_moves_str(enemyGeneral.player, '9,6->9,4->14,4->14,5->15,5->15,6->17,6->17,5->20,5->20,4->22,4->22,7->21,7->21,8->10,8')
+        bot = self.get_debug_render_bot(simHost, general.player)
 
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=100)
+        self.assertIsNone(winner)
+    
+    def test_should_find_kill_in_ffa_position(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_find_kill_in_ffa_position___eW64nZ8rZ---2--69.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 69, fill_out_tiles=True)
+        enemyGeneral.army = 10
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=69)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
         self.assertIsNone(winner)
 
-        self.skipTest("TODO add asserts for should_gather_defensively_when_just_captured_3rd_player_and_winning_on_econ_and_last_player_doesnt_know_gen_pos")
+        self.assertEqual(general.player, enemyGeneral.player, 'should have captured fincher')
+
+    # 0f 2p

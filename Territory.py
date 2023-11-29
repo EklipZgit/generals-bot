@@ -17,14 +17,15 @@ from base.client.map import new_map_grid
 
 
 # attempts to classify tiles into territories.
-class TerritoryClassifier():
-    def __init__(self, map):
-        self.territories = [None for player in map.players]
-        self.map = map
+class TerritoryClassifier(object):
+    def __init__(self, map: MapBase):
+        self.map: MapBase = map
         self.lastCalculatedTurn = -1
         self.territoryMap = new_value_grid(self.map, -1)
         self.needToUpdateAroundTiles = set()
+        self.team_indexes: typing.List[int] = list(set(MapBase.get_teams_array(self.map)))
         self.territoryDistances: typing.List[MapMatrix[int]] = [MapMatrix(map, 1000) for p in map.players]
+        self.territoryTeamDistances: typing.List[MapMatrix[int]] = [MapMatrix(map, 1000) for p in self.team_indexes]
         for tile in self.map.pathableTiles:
             self.needToUpdateAroundTiles.add(tile)
 
@@ -140,3 +141,34 @@ class TerritoryClassifier():
                     startTiles.append(tile)
 
             self.territoryDistances[player.index] = SearchUtils.build_distance_map_matrix(self.map, startTiles)
+
+        for team in self.team_indexes:
+            startTiles = []
+            for tile in self.map.pathableTiles:
+                if self.map.is_player_on_team(self.territoryMap[tile.x][tile.y], team):
+                    startTiles.append(tile)
+
+            self.territoryTeamDistances[team] = SearchUtils.build_distance_map_matrix(self.map, startTiles)
+
+    def is_tile_in_friendly_territory(self, tile: Tile) -> bool:
+        """Returns False if tile is in neutral or enemy territory. True only for player territory."""
+        territory = self.get_tile_territory(tile)
+        if territory == -1:
+            return False
+
+        return self.map.is_player_on_team_with(territory, self.map.player_index)
+
+    def is_tile_in_enemy_territory(self, tile: Tile) -> bool:
+        """Returns True if the tile is not in neutral or friendly territory."""
+
+        territory = self.get_tile_territory(tile)
+        return territory >= 0 and not self.map.is_player_on_team_with(territory, self.map.player_index)
+
+    def is_tile_in_player_territory(self, tile: Tile, player: int) -> bool:
+        """Returns True if the tile is not in neutral territory and is in the territory of the specified player."""
+
+        territory = self.get_tile_territory(tile)
+        return self.map.is_player_on_team_with(territory, player)
+
+    def get_tile_territory(self, tile: Tile) -> int:
+        return self.territoryMap[tile.x][tile.y]

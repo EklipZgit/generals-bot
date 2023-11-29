@@ -111,6 +111,7 @@ class GatherTreeNode(typing.Generic[T]):
         newNode.value = self.value
         newNode.trunkValue = self.trunkValue
         newNode.gatherTurns = self.gatherTurns
+        newNode.trunkDistance = self.trunkDistance
         newNode.children = [node.deep_clone() for node in self.children]
         newNode.pruned = [node.deep_clone() for node in self.pruned]
         return newNode

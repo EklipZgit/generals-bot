@@ -8,7 +8,7 @@
 import logging
 from enum import Enum
 
-class Timings():
+class Timings(object):
     def __init__(self, cycleTurns, quickExpandSplitTurns, splitTurns, launchTiming, offsetTurns, recalcTurn, disallowEnemyGather):
         self.cycleTurns = cycleTurns
         self.quickExpandTurns = quickExpandSplitTurns

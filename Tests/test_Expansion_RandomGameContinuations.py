@@ -21,7 +21,7 @@ class ExpansionTests(TestBase):
         # self.render_view_info(map, ViewInfo("h", map.cols, map.rows))
         # self.begin_capturing_logging()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=mapVision, allAfkExceptMapPlayer=True)
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         bot.viewInfo.turnInc()
 
         self.begin_capturing_logging()
@@ -43,9 +43,9 @@ class ExpansionTests(TestBase):
 
         if debugMode:
             bot.prep_view_info_for_render()
-            bot.viewInfo.addAdditionalInfoLine(f'max {str(path)}')
+            bot.viewInfo.add_info_line(f'max {str(path)}')
             for otherPath in otherPaths:
-                bot.viewInfo.addAdditionalInfoLine(f'other {str(otherPath)}')
+                bot.viewInfo.add_info_line(f'other {str(otherPath)}')
 
             self.render_view_info(bot._map, viewInfo=bot.viewInfo)
 

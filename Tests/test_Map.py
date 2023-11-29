@@ -9,7 +9,7 @@ from DataModels import Move
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
 from base.client.map import MapBase, Tile, TILE_FOG, TILE_OBSTACLE, TILE_MOUNTAIN, Score
-
+from bot_ek0x45 import EklipZBot
 
 ALL_SCENARIOS_TEAM_MAP = data = """
 |    |    |    |    |    
@@ -40,6 +40,14 @@ dTiles=5
 
 
 class MapTests(TestBase):
+    def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
+        bot = super().get_debug_render_bot(simHost, player)
+
+        bot.info_render_tile_deltas = True
+        bot.info_render_army_emergence_values = True
+
+        return bot
+
     def assertCorrectArmyDeltas(
             self,
             simHost: GameSimulatorHost,
@@ -977,7 +985,7 @@ C5
         self.assertEqual(enemyPlayer, botMap.GetTile(6,13).player)
 
     def test_army_should_not_duplicate_backwards_on_capture(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/army_should_not_duplicate_backwards_on_capture___Bgb7Eiba2---a--399.txtmap'
 
         # Grant the general the same fog vision they had at the turn the map was exported
@@ -1119,7 +1127,7 @@ C5
         # OK so this works correctly at the map level, must be the bot itself with army tracking / emergence updating the fog to 1/0...?
 
     def test_capture_from_fog_should_not_duplicate_out_into_fog(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/capture_from_fog_should_not_duplicate_out_into_fog___rgI9fxNa3---a--485.txtmap'
         rawMap, gen = self.load_map_and_general(mapFile, 485)
 
@@ -1378,7 +1386,7 @@ C5
         simHost.queue_player_moves_str(3, '5,6->6,6  None')
         simHost.queue_player_moves_str(1, 'None  None')
         simHost.queue_player_moves_str(2, 'None  None')
-        # bot = simHost.get_bot(general.player)
+        # bot = self.get_debug_render_bot(simHost, general.player)
         # playerMap = simHost.get_player_map(general.player)
 
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -1398,7 +1406,7 @@ C5
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '11,14->11,15->11,16')
-        bot = simHost.get_bot(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -1408,7 +1416,6 @@ C5
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=3)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
-    # 4590 failed, 23,663 passed    
     def test_should_not_try_to_set_ally_general_to_other_player(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
 
@@ -1426,10 +1433,35 @@ C5
                     simHost.queue_player_moves_str(allyGen.player, f'17,11->17,{11+move}')
                 else:
                     simHost.queue_player_moves_str(allyGen.player, 'None')
-                bot = simHost.get_bot(general.player)
+                bot = self.get_debug_render_bot(simHost, general.player)
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
                 simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
                 winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
                 self.assertNoFriendliesKilled(map, general, allyGen)
+    
+    def test_should_not_turn_cities_neutral_on_capture(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_not_turn_cities_neutral_on_capture___Human.exe-TEST__fd14d74c-6889-4816-85b9-9a692c3f397e---0--297.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 297, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=297)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '7,5->8,5')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+
+        city = playerMap.GetTile(8, 5)
+        self.assertEqual(enemyGeneral.player, city.player)
+
+
+    # 4590 failed, 23,663 passed
+    # 4904 failed, 23,353 passed after fixing move into fog issue
+    # 4904 failed, 23,354 passed after fixing city capture at fog border issue

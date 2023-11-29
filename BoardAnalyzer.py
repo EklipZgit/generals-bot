@@ -30,6 +30,12 @@ class BoardAnalyzer:
         self.outerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
         """Tiles that only have a single inward path towards our general."""
 
+        self.central_defense_point: Tile = map.players[map.player_index].general
+
+        self.friendly_city_distances: typing.Dict[Tile, MapMatrix[int]] = {}
+
+        self.defense_centrality_sums: MapMatrix[int] = MapMatrix(self.map, initVal=250)
+
         self.intergeneral_analysis: ArmyAnalyzer = None
 
         self.core_play_area_matrix: MapMatrix[bool] = None
@@ -39,10 +45,13 @@ class BoardAnalyzer:
         self.flank_danger_play_area_matrix: MapMatrix[bool] = None
 
         self.general_distances: typing.List[typing.List[int]] = []
-        self.friendly_distances: typing.List[typing.List[int]] = []
+
+        self.friendly_general_distances: typing.List[typing.List[int]] = []
+        """The distance map to any friendly general."""
+
         self.teammate_distances: typing.List[typing.List[int]] = []
 
-        self.inter_general_distance: int = 0
+        self.inter_general_distance: int = 10
         """The (possibly estimated) distance between our gen and target player gen."""
 
         self.within_core_play_area_threshold: int = 1
@@ -73,19 +82,40 @@ class BoardAnalyzer:
         self.innerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
 
         self.outerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
+        cities = list(self.map.players[self.map.player_index].cities)
 
         self.general_distances = build_distance_map(self.map, [self.general])
         if self.teammate_general is not None and self.teammate_general.player in self.map.teammates:
             self.teammate_distances = build_distance_map(self.map, [self.teammate_general])
-            self.friendly_distances = build_distance_map(self.map, [self.teammate_general, self.general])
+            self.friendly_general_distances = build_distance_map(self.map, [self.teammate_general, self.general])
+            cities.extend(self.map.players[self.teammate_general.player].cities)
         else:
-            self.friendly_distances = self.general_distances
+            self.friendly_general_distances = self.general_distances
+
+        self.friendly_city_distances = {}
+        for city in cities:
+            self.friendly_city_distances[city] = build_distance_map_matrix(self.map, [city])
+        self.defense_centrality_sums = MapMatrix(self.map, 250)
+
+        lowestAvgDist = 10000000
+        lowestAvgTile: Tile | None = None
 
         for tile in self.map.pathableTiles:
             # logging.info("Rescanning chokes for {}".format(tile.toString()))
-            tileDist = self.friendly_distances[tile.x][tile.y]
-            movableInnerCount = count(tile.movable, lambda adj: tileDist == self.friendly_distances[adj.x][adj.y] - 1)
-            movableOuterCount = count(tile.movable, lambda adj: tileDist == self.friendly_distances[adj.x][adj.y] + 1)
+            tileDist = self.friendly_general_distances[tile.x][tile.y]
+
+            distSum = tileDist
+            for city, distances in self.friendly_city_distances.items():
+                distSum += distances[tile]
+
+            if distSum < lowestAvgDist or (distSum == lowestAvgDist and self.intergeneral_analysis is not None and self.intergeneral_analysis.bMap[tile.x][tile.y] < self.intergeneral_analysis.bMap[lowestAvgTile.x][lowestAvgTile.y]):
+                lowestAvgTile = tile
+                lowestAvgDist = distSum
+
+            self.defense_centrality_sums[tile] = distSum
+
+            movableInnerCount = count(tile.movable, lambda adj: tileDist == self.friendly_general_distances[adj.x][adj.y] - 1)
+            movableOuterCount = count(tile.movable, lambda adj: tileDist == self.friendly_general_distances[adj.x][adj.y] + 1)
             if movableInnerCount == 1:
                 self.outerChokes[tile.x][tile.y] = True
             # checking movableInner to avoid considering dead ends 'chokes'
@@ -96,10 +126,13 @@ class BoardAnalyzer:
             if self.map.turn > 4:
                 if oldInner[tile.x][tile.y] != self.innerChokes[tile.x][tile.y]:
                     logging.info(
-                        f"  inner choke change: tile {tile.toString()}, old {oldInner[tile.x][tile.y]}, new {self.innerChokes[tile.x][tile.y]}")
+                        f"  inner choke change: tile {str(tile)}, old {oldInner[tile.x][tile.y]}, new {self.innerChokes[tile.x][tile.y]}")
                 if oldOuter[tile.x][tile.y] != self.outerChokes[tile.x][tile.y]:
                     logging.info(
-                        f"  outer choke change: tile {tile.toString()}, old {oldOuter[tile.x][tile.y]}, new {self.outerChokes[tile.x][tile.y]}")
+                        f"  outer choke change: tile {str(tile)}, old {oldOuter[tile.x][tile.y]}, new {self.outerChokes[tile.x][tile.y]}")
+
+        logging.info(f'calculated central defense point to be {str(lowestAvgTile)} due to lowestAvgDist {lowestAvgDist}')
+        self.central_defense_point = lowestAvgTile
 
     def rebuild_intergeneral_analysis(self, opponentGeneral: Tile):
         self.intergeneral_analysis = ArmyAnalyzer(self.map, self.general, opponentGeneral)

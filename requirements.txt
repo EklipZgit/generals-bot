@@ -6,4 +6,5 @@ nashpy
 numpy==1.24.0 # after numba update let this upgrade? Numba being stupid.
 numba
 scipy
+Logbook
 # dill

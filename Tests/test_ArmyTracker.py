@@ -2415,3 +2415,43 @@ a1   b1   b1   bG1
 # 35-79 now after fixing moves into fog a bit
 # 21-83 (skipped 13) now after fixing entanglement collisions
 # 25-83
+
+    def test_should_not_duplicate_collided_armies_into_fog(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_duplicate_collided_armies_into_fog___50vyo-z9H---1--242.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 242, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=242)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '9,9->9,10')
+        simHost.queue_player_moves_str(general.player, '9,11->9,10')
+
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+
+        self.assertNoFogMismatches(simHost, general.player, aroundTile=playerMap.GetTile(9, 10))
+    
+    def test_should_not_use_general_player_as_fog_capturer(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_use_general_player_as_fog_capturer___EzGh3A9qs---0--371.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 371, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=371)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '10,9->11,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+
+        self.assertEqual(enemyGeneral.player, playerMap.GetTile(11, 9).player)

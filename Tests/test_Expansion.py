@@ -758,7 +758,8 @@ bot_target_player=1
         self.assertIsNone(winner)
 
         shouldBeGen = playerMap.GetTile(7, 14)
-        self.assertEqual(general.player, shouldBeGen.player)    
+        self.assertEqual(general.player, shouldBeGen.player)
+
     def test_should_prefer_enemy_tiles(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_prefer_enemy_tiles___T60rbPlAO---0--81.txtmap'
@@ -772,11 +773,13 @@ bot_target_player=1
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
+        initTileDiff = self.get_tile_differential(simHost)
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=19)
         self.assertIsNone(winner)
 
-        self.skipTest("TODO add asserts for should_prefer_enemy_tiles")
+        self.assertGreater(self.get_tile_differential(simHost) - initTileDiff, 16)
+        # we can beat 16
     
     def test_should_not_immediately_launch_from_general_before_launch_split(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -839,8 +842,9 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
         self.assertIsNone(winner)
+        self.assertPlayerTileCountGreater(simHost, general.player, 58)
 
     def test_should_perform_early_gather_to_tendrils__cramped(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -875,6 +879,8 @@ bot_target_player=1
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=50)
         self.assertIsNone(winner)
+
+        self.assertGreater(playerMap.players[general.player].tileCount, 56)
     
     def test_should_not_blow_up(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -907,7 +913,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=30)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
         self.assertIsNone(winner)
     
     def test_should_not_launch_super_early_v2(self):
@@ -970,3 +976,70 @@ bot_target_player=1
         # we can do 13 by going immediately down with the 5 and the up right then up left from gen
         self.assertGreater(finalTileDiff-tileDiff, 12)
 
+    def test_should_launch_when_no_other_options(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_launch_when_no_other_options___Na9JsoSCp---1--74.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 74, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=74)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_leafmoves(enemyGeneral.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=26)
+        self.assertIsNone(winner)
+
+        self.assertPlayerTileCountGreater(simHost, general.player, 56)
+    
+    def test_should_not_bypass_launch_path_leaving_unused_tiles(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_bypass_launch_path_leaving_unused_tiles___-NIEW0it3---1--79.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 79, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=79)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.timings = bot.get_timings()
+        bot.timings.splitTurns = 19
+        bot.timings.launchTiming = 28
+        bot.completed_first_100 = False
+        playerMap = simHost.get_player_map(general.player)
+
+        tileDiff = self.get_tile_differential(simHost)
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=21)
+        self.assertIsNone(winner)
+
+        finalTileDiff = self.get_tile_differential(simHost)
+
+        self.assertGreater(finalTileDiff - tileDiff, 21)
+
+    def test_should_spend_rest_of_round_capturing_tiles_unless_threat_defense_immediately_necessary(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_spend_rest_of_round_capturing_tiles_unless_threat_defense_immediately_necessary___XvcaedBMu---0--233.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 233, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=233)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '11,9->12,9->12,10->12,11z->12,14->14,14->14,15  12,10->13,10->13,11z->13,13->14,13  13,10->14,10->14,8')
+        # example good play
+        # simHost.queue_player_moves_str(general.player, '12,10->10,10->10,9->9,9->9,8  14,17->14,16  16,17->16,16')
+
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=17)
+        self.assertIsNone(winner)
+
+        diff = self.get_tile_differential(simHost)
+        self.assertGreater(diff, 3, "should not lose entire advantage when can spend most of round safely capping tiles")

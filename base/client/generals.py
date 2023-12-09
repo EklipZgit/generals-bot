@@ -580,7 +580,6 @@ class GeneralsClient(object):
                                 or message.lower().startswith("gl ")
                                 or message.lower() == "gl"
                         )
-                        and not self.already_good_lucked
                 )
                 or (
                         (self.is_message_talking_to_us(message) or self.is_not_ffa())
@@ -595,8 +594,7 @@ class GeneralsClient(object):
                                 or message.lower() == 'hi'
                         )
                 )
-                and isHumanMessage
-        ):
+        ) and isHumanMessage and not self.already_good_lucked:
             responses = []
             responses.append("Hello fellow human!")
             responses.append("Hey :)")
@@ -710,7 +708,7 @@ class GeneralsClient(object):
 
             sourceResponses = responses
             randNum = random.choice(range(1, 7))
-            if randNum > 4:
+            if randNum > 3:
                 sourceResponses = lessCommonResponses
             self.send_chat_broken_up_by_sentence(random.choice(sourceResponses))
             self.already_good_lucked = True

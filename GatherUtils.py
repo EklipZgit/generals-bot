@@ -253,7 +253,11 @@ def extend_tree_node_lookup(
         # skipping because first tile is actually already on the path
         pathNode = pathNode.next
         # add the new path to startTiles and then search a new path
+        iter = 0
         while pathNode is not None:
+            iter += 1
+            if iter > 600:
+                raise AssertionError(f'Infinite looped in extend_tree_node_lookup, {str(pathNode)}')
             runningTrunkDist += 1
             newDist = distance + addlDist
             distanceLookup[pathNode.tile] = newDist
@@ -290,12 +294,21 @@ def extend_tree_node_lookup(
 
         # now bubble the value of the path and turns up the tree
         curGatherTreeNode = gatherTreeNodePathAddingOnTo
+        iter = 0
         while True:
+            iter += 1
+
             curGatherTreeNode.value += valuePerTurnPath.value
             curGatherTreeNode.gatherTurns += valuePerTurnPath.length
             if curGatherTreeNode.fromTile is None:
                 break
             nextGatherTreeNode = gatherTreeNodeLookup.get(curGatherTreeNode.fromTile, None)
+            if nextGatherTreeNode.fromTile == curGatherTreeNode.tile:
+                logging.error(f'found graph cycle in extend_tree_node_lookup, {str(curGatherTreeNode)}<-{str(curGatherTreeNode.fromTile)}  ({str(nextGatherTreeNode)}<-{str(nextGatherTreeNode.fromTile)}) setting curGatherTreeNode fromTile to None to break the cycle.')
+                curGatherTreeNode.fromTile = None
+                break
+            if iter > 600:
+                raise AssertionError(f'Infinite looped in extend_tree_node_lookup, {str(curGatherTreeNode)}<-{str(curGatherTreeNode.fromTile)}  ({str(nextGatherTreeNode)}<-{str(nextGatherTreeNode.fromTile)})')
             if nextGatherTreeNode is None:
                 startTilesDictStringed = "\r\n      ".join([repr(t) for t in startTilesDict.items()])
                 gatherTreeNodeLookupStringed = "\r\n      ".join([repr(t) for t in gatherTreeNodeLookup.items()])
@@ -315,7 +328,6 @@ def extend_tree_node_lookup(
             curGatherTreeNode = nextGatherTreeNode
 
     return gatherTreeNodeLookup
-
 
 def build_next_level_start_dict(
         newPaths: typing.List[Path],
@@ -1842,6 +1854,7 @@ def prune_mst_to_turns(
         noLog: bool = True,
         gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
         tileDictToPrune: typing.Dict[Tile, typing.Any] | None = None,
+        preferPrune: typing.Set[Tile] | None = None,
         invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
 ) -> typing.List[GatherTreeNode]:
     """
@@ -1867,6 +1880,7 @@ def prune_mst_to_turns(
         noLog=noLog,
         gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
         tileDictToPrune=tileDictToPrune,
+        preferPrune=preferPrune,
         invalidMoveFunc=invalidMoveFunc,
     )
 
@@ -1882,6 +1896,7 @@ def prune_mst_to_turns_with_values(
         gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
         tileDictToPrune: typing.Dict[Tile, typing.Any] | None = None,
         invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
+        preferPrune: typing.Set[Tile] | None = None,
         parentPruneFunc: typing.Callable[[Tile, GatherTreeNode], None] | None = None,
 ) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
     """
@@ -1948,6 +1963,7 @@ def prune_mst_to_turns_with_values(
         pruneBranches=True,
         gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
         tileDictToPrune=tileDictToPrune,
+        preferPrune=preferPrune,
         parentPruneFunc=parentPruneFunc,
     )
 
@@ -1960,6 +1976,7 @@ def prune_mst_to_tiles(
         noLog: bool = True,
         gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
         tileDictToPrune: typing.Dict[Tile, typing.Any] | None = None,
+        preferPrune: typing.Set[Tile] | None = None,
         invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
 ) -> typing.List[GatherTreeNode]:
     """
@@ -1985,6 +2002,7 @@ def prune_mst_to_tiles(
         noLog=noLog,
         gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
         tileDictToPrune=tileDictToPrune,
+        preferPrune=preferPrune,
         invalidMoveFunc=invalidMoveFunc,
     )
 
@@ -2000,6 +2018,7 @@ def prune_mst_to_tiles_with_values(
         gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
         tileDictToPrune: typing.Dict[Tile, typing.Any] | None = None,
         invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
+        preferPrune: typing.Set[Tile] | None = None,
         parentPruneFunc: typing.Callable[[Tile, GatherTreeNode], None] | None = None,
 ) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
     """
@@ -2066,6 +2085,7 @@ def prune_mst_to_tiles_with_values(
         pruneBranches=False,
         gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
         tileDictToPrune=tileDictToPrune,
+        preferPrune=preferPrune,
         parentPruneFunc=parentPruneFunc,
     )
 
@@ -2081,6 +2101,7 @@ def prune_mst_to_army_with_values(
         noLog: bool = True,
         gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
         invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
+        preferPrune: typing.Set[Tile] | None = None,
         pruneLargeTilesFirst: bool = False,
 ) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
     """
@@ -2188,6 +2209,7 @@ def prune_mst_to_army_with_values(
         viewInfo=viewInfo,
         noLog=noLog,
         gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
+        preferPrune=preferPrune,
         pruneBranches=False  # if you turn this to true, test_should_not_miscount_gather_prune_at_neut_city will fail. Need to fix how mid-branch city prunes function apparently.
     )
 
@@ -2207,6 +2229,7 @@ def prune_mst_to_army(
         noLog: bool = True,
         gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
         invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
+        preferPrune: typing.Set[Tile] | None = None,
         pruneLargeTilesFirst: bool = False,
 ) -> typing.List[GatherTreeNode]:
     """
@@ -2236,6 +2259,7 @@ def prune_mst_to_army(
         noLog=noLog,
         gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
         invalidMoveFunc=invalidMoveFunc,
+        preferPrune=preferPrune,
         pruneLargeTilesFirst=pruneLargeTilesFirst,
     )
 
@@ -2394,6 +2418,7 @@ def prune_mst_to_max_army_per_turn_with_values(
         noLog: bool = True,
         gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
         invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
+        preferPrune: typing.Set[Tile] | None = None,
         allowBranchPrune: bool = True,
 ) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
     """
@@ -2430,6 +2455,9 @@ def prune_mst_to_max_army_per_turn_with_values(
     if totalTurns == 0:
         return 0, 0, rootNodes
 
+    if totalValue < minArmy:
+        return totalTurns, totalValue, rootNodes
+
     def cityCounterFunc(node: GatherTreeNode):
         if (node.tile.isGeneral or node.tile.isCity) and not node.tile.isNeutral and node.tile not in citySkipTiles:
             if teams[node.tile.player] == teams[searchingPlayer]:
@@ -2438,6 +2466,7 @@ def prune_mst_to_max_army_per_turn_with_values(
                 cityGatherDepthCounter.add(node.trunkDistance)
             else:
                 cityCounter.add(-1)
+
     iterate_tree_nodes(rootNodes, cityCounterFunc)
 
     if invalidMoveFunc is None:
@@ -2491,6 +2520,7 @@ def prune_mst_to_max_army_per_turn_with_values(
         viewInfo=viewInfo,
         noLog=noLog,
         gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
+        preferPrune=preferPrune,
         pruneBranches=allowBranchPrune
     )
 
@@ -2504,6 +2534,7 @@ def prune_mst_to_max_army_per_turn(
         noLog: bool = True,
         gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
         invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
+        preferPrune: typing.Set[Tile] | None = None,
         allowBranchPrune: bool = True
 ) -> typing.List[GatherTreeNode]:
     """
@@ -2532,6 +2563,7 @@ def prune_mst_to_max_army_per_turn(
         noLog=noLog,
         gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
         invalidMoveFunc=invalidMoveFunc,
+        preferPrune=preferPrune,
         allowBranchPrune=allowBranchPrune
     )
 
@@ -2550,6 +2582,7 @@ def prune_mst_until(
         noLog: bool = True,
         gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
         tileDictToPrune: typing.Dict[Tile, typing.Any] | None = None,
+        preferPrune: typing.Set[Tile] | None = None,
         parentPruneFunc: typing.Callable[[Tile, GatherTreeNode], None] | None = None,
 ) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
     """
@@ -2576,6 +2609,8 @@ def prune_mst_until(
     nodeMap: typing.Dict[Tile, GatherTreeNode] = {}
     pruneHeap = PriorityQueue()
 
+    iter = 0
+
     def nodeInitializer(current: GatherTreeNode):
         nodeMap[current.tile] = current
         if current.fromTile is not None and (len(current.children) == 0 or pruneBranches):
@@ -2591,7 +2626,7 @@ def prune_mst_until(
             if not noLog:
                 logging.info(
                     f"  tile {current.tile.toString()} had value {value:.1f}, trunkDistance {current.trunkDistance}")
-            pruneHeap.put((validMove, pruneOrderFunc(current, None), current))
+            pruneHeap.put((validMove, preferPrune is None or current.tile not in preferPrune, pruneOrderFunc(current, None), current))
 
     iterate_tree_nodes(rootNodes, nodeInitializer)
 
@@ -2605,10 +2640,21 @@ def prune_mst_until(
 
     childRecurseQueue: typing.Deque[GatherTreeNode] = deque()
 
+    initialCount = len(nodeMap)
+
     try:
         # now we have all the leaves, smallest value first
         while not pruneHeap.empty():
-            validMove, prioObj, current = pruneHeap.get()
+            validMove, isPreferPrune, prioObj, current = pruneHeap.get()
+            iter += 1
+            if iter > initialCount * 3:
+                logging.error("PRUNE WENT INFINITE, BREAKING")
+                if viewInfo is not None:
+                    viewInfo.add_info_line('ERR PRUNE WENT INFINITE!!!!!!!!!')
+                    viewInfo.add_info_line('ERR PRUNE WENT INFINITE!!!!!!!!!')
+                    viewInfo.add_info_line('ERR PRUNE WENT INFINITE!!!!!!!!!')
+                break
+
             if current.fromTile is None:
                 continue
 
@@ -2637,7 +2683,7 @@ def prune_mst_until(
             if validMove:
                 doubleCheckPrioObj = pruneOrderFunc(current, prioObj)
                 if doubleCheckPrioObj > prioObj:
-                    pruneHeap.put((validMove, doubleCheckPrioObj, current))
+                    pruneHeap.put((validMove, preferPrune is None or current.tile not in preferPrune, doubleCheckPrioObj, current))
                     if not noLog:
                         logging.info(
                             f'requeued {str(current)} (prio went from {str(prioObj)} to {str(doubleCheckPrioObj)})')
@@ -2666,8 +2712,17 @@ def prune_mst_until(
                 parent = nodeMap[parent.fromTile]
 
             childRecurseQueue.append(current)
+            childIter = 0
             while len(childRecurseQueue) > 0:
                 toDropFromLookup = childRecurseQueue.popleft()
+                childIter += 1
+                if childIter > initialCount * 3:
+                    logging.error("PRUNE CHILD WENT INFINITE, BREAKING")
+                    if viewInfo is not None:
+                        viewInfo.add_info_line('ERR PRUNE CHILD WENT INFINITE!!!!!!!!!')
+                        viewInfo.add_info_line('ERR PRUNE CHILD WENT INFINITE!!!!!!!!!')
+                        viewInfo.add_info_line('ERR PRUNE CHILD WENT INFINITE!!!!!!!!!')
+                    break
 
                 if gatherTreeNodeLookupToPrune is not None:
                     gatherTreeNodeLookupToPrune.pop(toDropFromLookup.tile, None)
@@ -2700,7 +2755,7 @@ def prune_mst_until(
                         f"  Appending parent {str(realParent.tile)} (valid {parentValidMove}) had value {value:.1f}, trunkDistance {realParent.trunkDistance}")
 
                 nextPrioObj = pruneOrderFunc(realParent, prioObj)
-                pruneHeap.put((parentValidMove, nextPrioObj, realParent))
+                pruneHeap.put((parentValidMove, preferPrune is None or realParent.tile not in preferPrune, nextPrioObj, realParent))
 
     except Exception as ex:
         logging.error('prune got an error, dumping state:')
@@ -2733,14 +2788,18 @@ def iterate_tree_nodes(
         gatherTreeNodes: typing.List[GatherTreeNode],
         forEachFunc: typing.Callable[[GatherTreeNode], None]
 ):
+    i = 0
     q: typing.Deque[GatherTreeNode] = deque()
     for n in gatherTreeNodes:
         q.append(n)
     while len(q) > 0:
+        i += 1
         cur = q.popleft()
         forEachFunc(cur)
         for c in cur.children:
             q.append(c)
+        if i > 500:
+            raise AssertionError(f'iterate_tree_nodes infinite looped. Nodes in the cycle: {str([str(n) for n in q])}')
 
 
 def get_tree_leaves(gathers: typing.List[GatherTreeNode]) -> typing.List[GatherTreeNode]:

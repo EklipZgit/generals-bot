@@ -760,6 +760,33 @@ class GameSimulatorHost(object):
             if curMove >= num_moves:
                 break
 
+        for tile in self.sim.sim_map.get_all_tiles():
+            if tile in used:
+                continue
+            if tile.player == player:
+                for adj in tile.movable:
+                    if adj in used:
+                        continue
+
+                    if not allow_non_neutral and not adj.isNeutral:
+                        continue
+
+                    if self.sim.sim_map.is_tile_on_team_with(adj, player):
+                        continue
+
+                    if adj.isMountain:
+                        continue
+
+                    if tile.army > adj.army:
+                        used.add(tile)
+                        used.add(adj)
+                        self.queue_player_move(player, Move(tile, adj))
+                        curMove += 1
+                        break
+
+            if curMove >= num_moves:
+                break
+
     def execute_turn(self, run_real_time: bool = False, turn_time: float = 0.5) -> int | None:
         """
         Runs a turn of the sim, and returns None or the player ID of the winner, if the game ended this turn.

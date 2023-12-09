@@ -3,10 +3,12 @@ import time
 import typing
 from enum import Enum
 
+import DebugHelper
 import GatherUtils
 import SearchUtils
 from BoardAnalyzer import BoardAnalyzer
 from CityAnalyzer import CityAnalyzer
+from DataModels import GatherTreeNode
 from MapMatrix import MapMatrix
 from Territory import TerritoryClassifier
 from .OpponentTracker import OpponentTracker
@@ -36,8 +38,11 @@ class WinConditionAnalyzer(object):
         self.territories: TerritoryClassifier = territories
         self.board_analysis: BoardAnalyzer = boardAnalyzer
         self.viable_win_conditions: typing.Set[WinCondition] = set()
+        self.is_contesting_cities: bool = False
         self.target_player: int = -1
         self.target_player_location: Tile = map.GetTile(0, 0)
+        self.recommended_offense_plan_turns: int = 0
+        self.recommended_city_defense_plan_turns: int = 0
 
         self.target_cities: typing.Set[Tile] = set()
         self.defend_cities: typing.Set[Tile] = set()
@@ -57,6 +62,7 @@ class WinConditionAnalyzer(object):
 
         if self.is_able_to_contest_enemy_city():
             self.viable_win_conditions.add(WinCondition.ContestEnemyCity)
+            self.is_contesting_cities = True
             if self.opponent_tracker.get_current_team_scores_by_player(self.target_player).cityCount == 2:
                 self.viable_win_conditions.add(WinCondition.KillAllIn)
 
@@ -67,29 +73,39 @@ class WinConditionAnalyzer(object):
 
         if self.is_winning_and_defending_economic_lead_wont_lose_economy():
             self.viable_win_conditions.add(WinCondition.DefendEconomicLead)
-        if self.opponent_tracker.winning_on_economy(byRatio=1.05, offset=-5) and self.is_threat_of_loss_to_city_contest():
+        if self.is_threat_of_loss_to_city_contest():
             self.viable_win_conditions.add(WinCondition.DefendContestedFriendlyCity)
 
     def is_able_to_contest_enemy_city(self) -> bool:
         didEnemyTakeHardToDefendEarlyCity = False
+        if self.map.turn % 50 == 0:
+            self.is_contesting_cities = False
 
         enTargetCities = self.city_analyzer.get_sorted_enemy_scores()
 
         attackTime = self.board_analysis.inter_general_distance + 5
 
+        ourOffense = 0
+
         if self.target_player_location is not None and not self.target_player_location.isObstacle:
-            ourOffenseTurns, ourOffense = self.get_dynamic_attack_against(self.target_player_location, maxTurns=self.board_analysis.inter_general_distance * 2, asPlayer=self.map.player_index)
+            ourOffenseTurns, ourOffense = self.get_dynamic_turns_approximate_attack_against(self.target_player_location, maxTurns=self.board_analysis.inter_general_distance, asPlayer=self.map.player_index)
             attackTime = ourOffenseTurns
+            
+        self.recommended_offense_plan_turns = attackTime
 
         # frCapThreat = self.get_rough_estimate_friendly_attack(turns=15)
         # enDefPoss = self.get_rough_estimate_enemy_defense(turns=15)
 
         frArmyStats = self.opponent_tracker.get_current_cycle_stats_by_player(self.map.player_index)
         enArmyStats = self.opponent_tracker.get_current_cycle_stats_by_player(self.target_player)
+        if enArmyStats is None:
+            self.is_contesting_cities = False
+            return False
 
         frScores = self.opponent_tracker.get_current_team_scores_by_player(self.map.player_index)
         enScores = self.opponent_tracker.get_current_team_scores_by_player(self.target_player)
         if enScores.cityCount == len(enArmyStats.players):
+            self.is_contesting_cities = False
             return False
 
         currentlyOwnedContestedEnCities = [c for c in self.city_analyzer.owned_contested_cities if not self.territories.is_tile_in_friendly_territory(c)]
@@ -101,7 +117,9 @@ class WinConditionAnalyzer(object):
 
         contestableCities = [c for c, score in enTargetCities if self.map.is_tile_on_team_with(c, self.target_player)][0:3]
 
-        baselineWinRequirement = -0.6   # 0.5 equates to 12.5 tile econ advantage by holding the city
+        baselineWinRequirement = 0.4   # 0.5 equates to 12.5 tile econ advantage by holding the city
+        if self.is_contesting_cities:
+            baselineWinRequirement = 0.1
         cityCapsRequiredToReachWinningStatus = baselineWinRequirement + enScores.tileCount / 25 - frScores.tileCount / 25 + baseEnCities - baseFrCities
 
         cityCaps = len(currentlyOwnedContestedEnCities)
@@ -113,11 +131,24 @@ class WinConditionAnalyzer(object):
 
         logging.info(f'baseFrCities {baseFrCities}, baseEnCities {baseEnCities}, cityCapsRequiredToReachWinningStatus {cityCapsRequiredToReachWinningStatus:.2f}. Cities already contested: {len(currentlyOwnedContestedEnCities)}  {str(currentlyOwnedContestedEnCities)}')
 
+        enDefense = self.opponent_tracker.get_approximate_fog_army_risk(self.target_player, cityLimit=4, inTurns=attackTime)
+
         if len(contestableCities) > 0:
             # then we can plan around one of their cities
             for city in contestableCities:
-                ourOffense = self.get_approximate_attack_against(city, inTurns=attackTime, asPlayer=self.map.player_index)
+                ourOffense = self.get_approximate_attack_against([city], inTurns=attackTime, asPlayer=self.map.player_index)
+
                 enDefense = self.opponent_tracker.get_approximate_fog_army_risk(self.target_player, cityLimit=4, inTurns=attackTime)
+                bestVisibleDefenseTurns, bestVisibleDefenseValue = self.get_dynamic_turns_visible_defense_against([city], attackTime, asPlayer=self.target_player)
+                if bestVisibleDefenseTurns > 0:
+                    visibleVt = bestVisibleDefenseValue / bestVisibleDefenseTurns
+                    fogVt = enDefense / attackTime
+
+                    if visibleVt > fogVt:
+                        remainingFogDefense = self.opponent_tracker.get_approximate_fog_army_risk(self.target_player, cityLimit=2, inTurns=attackTime - bestVisibleDefenseTurns)
+                        logging.info(
+                            f'assuming visible defense of {str(city)} with value {bestVisibleDefenseValue} in {bestVisibleDefenseTurns} ({visibleVt:.2f}v/t), resulting in remainingFogDefense {remainingFogDefense}')
+                        enDefense = bestVisibleDefenseValue + remainingFogDefense
 
                 if ourOffense > enDefense:
                     logging.info(f'able to contest {str(city)} with expected enDefense {enDefense} vs our offense {ourOffense}')
@@ -127,10 +158,44 @@ class WinConditionAnalyzer(object):
                         ableToContest = True
                 else:
                     logging.info(f'NOT able to contest {str(city)} with expected enDefense {enDefense} vs our offense {ourOffense}')
-        else:
+            #
+            # if len(contestableCities) > 3:
+            #     remainingCities = contestableCities[3:]
+            #     ourOffense = self.get_approximate_attack_against(remainingCities, inTurns=attackTime, asPlayer=self.map.player_index)
+            #
+            #     if ourOffense > enDefense:
+            #         logging.info(f'able to contest some cities with expected enDefense {enDefense} vs our offense {ourOffense}')
+            #         self.target_cities.update(remainingCities)
+            #         cityCaps += 1
+            #         if cityCaps >= cityCapsRequiredToReachWinningStatus:
+            #             ableToContest = True
+            #     else:
+            #         logging.info(f'NOT able to contest some cities with expected enDefense {enDefense} vs our offense {ourOffense}')
+        elif self.target_player_location is not None:
             # we dont know where their cities are, but we can try to search if the attack is strong enough.
             # ourOffense = self.get_approximate_attack_against(self.target_player_location, inTurns=attackTime, asPlayer=self.map.player_index)
-            enDefense = self.opponent_tracker.get_approximate_fog_army_risk(self.target_player, cityLimit=4, inTurns=attackTime)
+            defenseExtraTurns = 0
+            if not self.target_player_location.isGeneral:
+                targetPlayerObj = self.map.players[self.target_player]
+                tilesWeHaveSeen = set([t for t in targetPlayerObj.tiles if t.discovered])
+                tileCountUnseen = targetPlayerObj.tileCount - len(tilesWeHaveSeen)
+
+                cutoffIncrease = 1 + int(tileCountUnseen / 2)
+                defenseExtraTurns = cutoffIncrease
+
+                # todo also support valid general positions
+
+            enDefense = self.opponent_tracker.get_approximate_fog_army_risk(self.target_player, cityLimit=4, inTurns=attackTime + defenseExtraTurns)
+
+            bestVisibleDefenseTurns, bestVisibleDefenseValue = self.get_dynamic_turns_visible_defense_against([self.target_player_location], attackTime, asPlayer=self.target_player)
+            if bestVisibleDefenseTurns > 0:
+                visibleVt = bestVisibleDefenseValue / bestVisibleDefenseTurns
+                fogVt = enDefense / attackTime
+
+                if visibleVt > fogVt:
+                    remainingFogDefense = self.opponent_tracker.get_approximate_fog_army_risk(self.target_player, cityLimit=2, inTurns=attackTime - bestVisibleDefenseTurns)
+                    logging.info(f'assuming visible defense of {str(self.target_player_location)} with value {bestVisibleDefenseValue} in {bestVisibleDefenseTurns} ({visibleVt:.2f}v/t), resulting in remainingFogDefense {remainingFogDefense}')
+                    enDefense = bestVisibleDefenseValue + remainingFogDefense
 
             if ourOffense > enDefense:
                 logging.info(f'able to contest {str(self.target_player_location)} with expected enDefense {enDefense} vs our offense {ourOffense}')
@@ -141,6 +206,7 @@ class WinConditionAnalyzer(object):
             else:
                 logging.info(f'NOT able to contest {str(self.target_player_location)} with expected enDefense {enDefense} vs our offense {ourOffense}')
 
+        self.is_contesting_cities = ableToContest
         return ableToContest
 
     def is_able_to_win_or_recover_economically(self) -> bool:
@@ -174,24 +240,61 @@ class WinConditionAnalyzer(object):
         return self.opponent_tracker.winning_on_economy(byRatio=1.07, offset=-15)
 
     def is_threat_of_loss_to_city_contest(self) -> bool:
+        weAreSlightlyAhead = self.opponent_tracker.winning_on_economy(byRatio=1.05, offset=-5)
+
+        oldDefTurns = self.recommended_city_defense_plan_turns
+        self.recommended_city_defense_plan_turns = 0
+
+        mostForwardCity = None
+        mostForwardDist = 1000
+
         for city, score in self.city_analyzer.player_city_scores.items():
-            if self.is_city_forward_relative_to_central_point(city, offset=2):
+            cityDist = self.get_tile_dist_to_enemy(city)
+            if cityDist < mostForwardDist:
+                mostForwardCity = city
+                mostForwardDist = cityDist
+
+            if self.is_city_forward_relative_to_central_point(city, offset=5):
                 self.defend_cities.add(city)
 
+        maxThreat = 0
+        maxThreatTurns = 0
         for city in self.city_analyzer.owned_contested_cities:
-            # if not self.territories.is_tile_in_enemy_territory()
-            # if self.is_city_forward_relative_to_central_point(city, offset=-3):
-            self.defend_cities.add(city)
+            threatAllowedTurns = oldDefTurns - 1
+            if threatAllowedTurns < 5:
+                threatAllowedTurns = 20
+
+            approxThreatTurns, approxThreat = self.get_dynamic_turns_approximate_attack_against(city, maxTurns=threatAllowedTurns, asPlayer=self.target_player)
+
+            approxDefTurns, approxDef = self.get_dynamic_turns_visible_defense_against(tiles=[city], maxTurns=threatAllowedTurns, asPlayer=self.map.player_index)
+
+            if approxThreat > approxDef + city.army:
+                self.defend_cities.add(city)
+                if approxThreat - city.army > maxThreat:
+                    maxThreat = approxThreat - city.army
+                    maxThreatTurns = approxThreatTurns
 
         numRiskyCities = len(self.defend_cities)
         sortOfWinningEconCurrently = self.opponent_tracker.winning_on_economy(byRatio=0.9)
 
         wouldStillBeWinningIfLostRiskies = self.opponent_tracker.winning_on_economy(byRatio=1.0, offset=-50 * numRiskyCities)
 
+        sumArmyOnDefCities = 0
+        for city in self.defend_cities:
+            sumArmyOnDefCities += city.army
+
+        fogRisk = self.opponent_tracker.get_approximate_fog_army_risk(self.target_player, cityLimit=5, inTurns=10)
+        if fogRisk < sumArmyOnDefCities:
+            return False
+
+        self.recommended_city_defense_plan_turns = maxThreatTurns
+
         return numRiskyCities > 0 and sortOfWinningEconCurrently and not wouldStillBeWinningIfLostRiskies
 
-    def get_approximate_attack_against(self, tile: Tile, inTurns: int, asPlayer: int) -> int:
-        curTiles = [tile]
+    def get_approximate_attack_against(self, tiles: typing.List[Tile], inTurns: int, asPlayer: int, timeLimit: float = 0.005) -> int:
+        curTiles = tiles
+        if DebugHelper.IS_DEBUGGING:
+            timeLimit *= 3
 
         value, gatherNodes = GatherUtils.knapsack_levels_backpack_gather_with_value(
             self.map,
@@ -207,15 +310,63 @@ class WinConditionAnalyzer(object):
             includeGatherTreeNodesThatGatherNegative=False,
             incrementBackward=False,
             useTrueValueGathered=True,
-            cutoffTime=time.perf_counter() + 0.111,
+            cutoffTime=time.perf_counter() + timeLimit,
             shouldLog=False
             # priorityMatrix=priorityMatrix
         )
 
-        return value
+        value += self.get_additional_fog_gather_risk(gatherNodes, asPlayer, inTurns)
+        logging.info(f'concluded get_approximate_attack_against gather, value {value}')
 
-    def get_dynamic_attack_against(self, tile: Tile, maxTurns: int, asPlayer: int) -> typing.Tuple[int, int]:
+        return max(0, value)
+
+    def get_dynamic_turns_visible_defense_against(self, tiles: typing.List[Tile], maxTurns: int, asPlayer: int, timeLimit: float = 0.005) -> typing.Tuple[int, int]:
+        curTiles = tiles
+        if DebugHelper.IS_DEBUGGING:
+            timeLimit *= 3
+
+        value, gatherNodes = GatherUtils.knapsack_levels_backpack_gather_with_value(
+            self.map,
+            curTiles,
+            maxTurns,
+            negativeTiles = set([t for t in self.map.players[asPlayer].tiles if not t.visible]),
+            searchingPlayer=asPlayer,
+            # skipFunc=skipFunc,
+            # viewInfo=self.viewInfo if self.info_render_gather_values else None,
+            # skipTiles=skipTiles,
+            distPriorityMap=self.board_analysis.intergeneral_analysis.bMap,
+            # priorityTiles=priorityTiles,
+            includeGatherTreeNodesThatGatherNegative=False,
+            incrementBackward=False,
+            useTrueValueGathered=True,
+            cutoffTime=time.perf_counter() + timeLimit,
+            shouldLog=False
+            # priorityMatrix=priorityMatrix
+        )
+
+        logging.info(f'concluded get_dynamic_visible_defense_against gather, value {value}')
+
+        if value > 0:
+            prunedTurns, prunedValue, gatherNodes = GatherUtils.prune_mst_to_max_army_per_turn_with_values(
+                gatherNodes,
+                minArmy=1,
+                searchingPlayer=asPlayer,
+                teams=MapBase.get_teams_array(self.map),
+                # viewInfo=self.viewInfo if self.info_render_gather_values else None,
+                allowBranchPrune=False
+            )
+
+            logging.info(f'concluded get_dynamic_visible_defense_against prune, value {prunedValue}')
+
+            return prunedTurns, max(0, prunedValue)
+
+        logging.info(f'concluded get_dynamic_visible_defense_against zeros')
+        return 0, 0
+
+    def get_dynamic_turns_approximate_attack_against(self, tile: Tile, maxTurns: int, asPlayer: int, timeLimit: float = 0.005) -> typing.Tuple[int, int]:
         curTiles = [tile]
+        if DebugHelper.IS_DEBUGGING:
+            timeLimit *= 3
 
         value, gatherNodes = GatherUtils.knapsack_levels_backpack_gather_with_value(
             self.map,
@@ -231,27 +382,64 @@ class WinConditionAnalyzer(object):
             includeGatherTreeNodesThatGatherNegative=False,
             incrementBackward=False,
             useTrueValueGathered=True,
-            cutoffTime=time.perf_counter() + 0.111,
+            cutoffTime=time.perf_counter() + timeLimit,
             shouldLog=False
             # priorityMatrix=priorityMatrix
         )
 
-        prunedTurns, prunedValue, gatherNodes = GatherUtils.prune_mst_to_max_army_per_turn_with_values(
-            gatherNodes,
-            minArmy=1,
-            searchingPlayer=asPlayer,
-            teams=MapBase.get_teams_array(self.map),
-            # viewInfo=self.viewInfo if self.info_render_gather_values else None,
-            allowBranchPrune=False
-        )
+        logging.info(f'concluded get_dynamic_attack_against gather')
 
-        return prunedTurns, prunedValue
+        if value > 0:
+            prunedTurns, prunedValue, gatherNodes = GatherUtils.prune_mst_to_max_army_per_turn_with_values(
+                gatherNodes,
+                minArmy=1,
+                searchingPlayer=asPlayer,
+                teams=MapBase.get_teams_array(self.map),
+                # viewInfo=self.viewInfo if self.info_render_gather_values else None,
+                allowBranchPrune=False
+            )
+
+            prunedValue += self.get_additional_fog_gather_risk(gatherNodes, asPlayer, prunedTurns)
+
+            logging.info(f'concluded get_dynamic_attack_against prune, value {prunedValue}')
+
+            return prunedTurns, max(0, prunedValue)
+
+        logging.info(f'concluded get_dynamic_attack_against zeros')
+
+        return 0, 0
 
     def is_city_forward_relative_to_central_point(self, city: Tile, offset: int = 3):
         if self.board_analysis.central_defense_point is None:
             return True
 
-        if self.board_analysis.intergeneral_analysis.bMap[city.x][city.y] + offset < self.board_analysis.intergeneral_analysis.bMap[self.board_analysis.central_defense_point.x][self.board_analysis.central_defense_point.y]:
+        if self.get_tile_dist_to_enemy(city) + offset < self.get_tile_dist_to_enemy(self.board_analysis.central_defense_point):
             return True
 
         return False
+
+    def get_tile_dist_to_enemy(self, tile: Tile) -> int:
+        return self.board_analysis.intergeneral_analysis.bMap[tile.x][tile.y]
+
+    def get_additional_fog_gather_risk(self, gatherNodes: typing.List[GatherTreeNode], asPlayer: int, inTurns: int) -> int:
+        if not self.map.is_player_on_team_with(asPlayer, self.map.player_index):
+            numFogTiles = SearchUtils.Counter(0)
+
+            fogValue = SearchUtils.Counter(0)
+
+            def fogCounterFunc(node: GatherTreeNode):
+                if not node.tile.visible:
+                    numFogTiles.value += 1
+                    if self.map.is_player_on_team_with(node.tile.player, asPlayer):
+                        fogValue.value += node.tile.army - 1
+                    else:
+                        fogValue.value -= node.tile.army + 1
+
+            GatherUtils.iterate_tree_nodes(gatherNodes, forEachFunc=fogCounterFunc)
+
+            result = self.opponent_tracker.get_approximate_fog_army_risk(asPlayer, inTurns=inTurns) - fogValue.value
+            logging.info(f'get_additional_fog_gather_risk fogValue {fogValue.value}, numFogTiles {numFogTiles.value}, inTurns {inTurns}, result {result}')
+            if numFogTiles.value > inTurns // 3:
+                return max(0, result)
+
+        return 0

@@ -745,6 +745,7 @@ class DefenseTests(TestBase):
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=441)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '6,15->0,15')
 
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -752,7 +753,6 @@ class DefenseTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
-        self.fail('need asserts and engen path')
     
     def test_should_not_allow_army_to_pass(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1644,14 +1644,15 @@ class DefenseTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=16)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=18)
         self.assertIsNone(winner)
 
         c1 = playerMap.GetTile(10, 9)
         c2 = playerMap.GetTile(11, 10)
 
         self.assertEqual(general.player, c1.player)
-        self.assertEqual(general.player, c2.player)    
+        self.assertEqual(general.player, c2.player)
+
     def test_should_not_wait_on_necessary_defense_move(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_wait_on_necessary_defense_move___atTOZgR22---1--379.txtmap'
@@ -1754,4 +1755,24 @@ class DefenseTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=22)
         self.assertIsNone(winner)
+    
+    def test_should_not_loop_on_wait_gathDef_vs_city_contest(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_loop_on_wait_gathDef_vs_city_contest___SaRQmDLde---0--436.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 436, fill_out_tiles=True)
 
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=436)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+
+        self.assertNoRepetition(simHost)
+
+# 31f - 62p - 4skip

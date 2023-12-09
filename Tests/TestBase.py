@@ -41,7 +41,7 @@ class TestBase(unittest.TestCase):
         bot.info_render_gather_values = False
         bot.info_render_centrality_distances = False
         bot.info_render_leaf_move_values = False
-        bot.info_render_army_emergence_values = False
+        bot.info_render_army_emergence_values = True
         bot.info_render_city_priority_debug_info = False
         bot.info_render_general_undiscovered_prediction_values = False
         bot.info_render_tile_deltas = False
@@ -487,6 +487,11 @@ class TestBase(unittest.TestCase):
         GatherUtils.USE_DEBUG_ASSERTS = False
         BotHost.FORCE_NO_VIEWER = False
         base.client.map.ENABLE_DEBUG_ASSERTS = False
+
+    def reset_general(self, rawMap, enemyGeneral):
+        mapTile = rawMap.GetTile(enemyGeneral.x, enemyGeneral.y)
+        mapTile.reset_wrong_undiscovered_fog_guess()
+        rawMap.generals[enemyGeneral.player] = None
 
     def reset_map_to_just_generals(self, map: MapBase, turn: int = 16):
         """
@@ -1114,7 +1119,7 @@ class TestBase(unittest.TestCase):
 
                     simHost.sim.ignore_illegal_moves = True
                     base.client.map.ENABLE_DEBUG_ASSERTS = False
-                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=debugModeTurnTime)
+                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=debugModeTurnTime, turns=700)
                     lastWinTurns = simHost.sim.turn
                     if lastWinTurns < minGameDurationToCount:
                         self.begin_capturing_logging()

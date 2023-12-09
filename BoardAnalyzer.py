@@ -172,6 +172,8 @@ class BoardAnalyzer:
             ):
                 self.flank_danger_play_area_matrix[tile] = True
 
+        self.rescan_chokes()
+
     def get_flank_pathways(
             self,
             filter_out_players: typing.List[int] | None = None,

@@ -63,6 +63,7 @@ class ViewInfo(object):
         self.allIn: bool = False
         self.timings: Timings | None = None
         self.allInCounter: int = 0
+        self.givingUpCounter: int = 0
         self.targetPlayer: int = -1
         self.team_cycle_stats: typing.Dict[int, CycleStatsData] = {}
         self.team_last_cycle_stats: typing.Dict[int, CycleStatsData] = {}

@@ -142,21 +142,20 @@ def get_expansion_single_knapsack_path_trimmed(
 def path_has_cities_and_should_wait(
         path: Path | None,
         friendlyPlayers,
-        playerCities: typing.List[Tile],
         negativeTiles: typing.Set[Tile],
         territoryMap: typing.List[typing.List[int]],
         remainingTurns: int
 ) -> bool:
     cityCount = 0
-    for c in playerCities:
-        if c in path.tileSet:
+    for t in path.tileList:
+        if (t.isCity or t.isGeneral) and t.player in friendlyPlayers:
             cityCount += 1
 
     if cityCount == 0:
         return False
 
-    if path.length >= remainingTurns:
-        return False
+    # if path.length >= remainingTurns:
+    #     return False
 
     # TODO get better about this later
     assumeTerritoryTileValue = 1
@@ -193,18 +192,18 @@ def path_has_cities_and_should_wait(
         curArmy = nextArmy
         worstCaseArmy = nextWorstCaseArmy
         turn += 1
-
-    if worstCaseArmy > 2:
-        cappable = []
-        for movable in path.tail.tile.movable:
-            if movable.isObstacle or movable.army > worstCaseArmy - 2 or movable in negativeTiles:
-                continue
-            if movable.player not in friendlyPlayers:
-                cappable.append(movable)
-        if len(cappable) > 0:
-            if DebugHelper.IS_DEBUGGING:
-                logging.info(f'  WORST CASE END ARMY {worstCaseArmy} (realArmy {curArmy}) CAN CAP MORE TILES, RETURNING FALSE ({str(path)})')
-            return False
+    #
+    # if worstCaseArmy > 2:
+    #     cappable = []
+    #     for movable in path.tail.tile.movable:
+    #         if movable.isObstacle or movable.army > worstCaseArmy - 2 or movable in negativeTiles:
+    #             continue
+    #         if movable.player not in friendlyPlayers:
+    #             cappable.append(movable)
+    #     if len(cappable) > 0:
+    #         if DebugHelper.IS_DEBUGGING:
+    #             logging.info(f'  WORST CASE END ARMY {worstCaseArmy} (realArmy {curArmy}) CAN CAP MORE TILES, RETURNING FALSE ({str(path)})')
+    #         return False
 
     if pathWorstCaseTurns != path.length and DebugHelper.IS_DEBUGGING:
         logging.info(f'  WORST CASE TURNS {pathWorstCaseTurns} < path len {path.length} ({str(path)})')
@@ -302,7 +301,7 @@ def _get_tile_path_value(
         elif tile.player == -1:
             value += 1.0
         elif map.is_player_on_team_with(searchingPlayer, tile.player):
-            value -= 0.5 / (1 + tile.army)
+            value -= 0.5 / max(1, (1 + tile.army))
 
         # if tile.visible:
         #     value += 0.02
@@ -434,7 +433,7 @@ def knapsack_multi_paths(
         valueFunc=multiple_choice_knapsack_expansion_path_value_converter
     )
 
-    path = find_best_expansion_path_to_move_first_by_city_weights(
+    path = find_optimal_expansion_path_to_move_first(
         map,
         maxPaths,
         tryAvoidSet,
@@ -511,7 +510,9 @@ def knapsack_multi_paths_no_crossover(
         for dist, pathTuple in pathsByDist.items():
             val, p = pathTuple
 
-            if (tile.isCity or tile.isGeneral) and p.length < 5:
+            # if (tile.isCity or tile.isGeneral) and p.length < 5:
+            if (tile.isCity or tile.isGeneral) and p.length < remainingTurns // 2:
+                # if coming from a city, group by the first tile captured instead of by the city itself...?
                 groupTile = tile
                 for t in p.tileList:
                     if not map.is_player_on_team_with(tile.player, t.player):
@@ -553,7 +554,7 @@ def knapsack_multi_paths_no_crossover(
         valueFunc=multiple_choice_knapsack_expansion_path_value_converter
     )
 
-    path = find_best_expansion_path_to_move_first_by_city_weights(
+    path = find_optimal_expansion_path_to_move_first(
         map,
         maxPaths,
         tryAvoidSet,
@@ -644,7 +645,7 @@ def get_optimal_expansion(
     logEntries = []
     try:
 
-        start = time.perf_counter()
+        startTime = time.perf_counter()
 
         teams = MapBase.get_teams_array(map)
         targetPlayers = [p for p, t in enumerate(teams) if teams[targetPlayer] == t]
@@ -661,7 +662,6 @@ def get_optimal_expansion(
         # lengthWeightOffset = max(0.25, lengthWeightOffset)
 
         logEntries.append(f"\n\nAttempting Optimal Expansion (tm) for turns {turns} (lengthWeightOffset {lengthWeightOffset}), negatives {str([str(t) for t in negativeTiles])}:\n")
-        startTime = time.perf_counter()
         generalPlayer = map.players[searchingPlayer]
         if negativeTiles is None:
             negativeTiles = set()
@@ -1040,10 +1040,11 @@ def get_optimal_expansion(
         #    logEntries.append("Only had {} tiles to play with, switching cutoffFactor to full...".format(len(sortedTiles)))
         #    cutoffFactor = fullCutoff
         player = map.players[searchingPlayer]
-        logStuff = True
-        if player.tileCount > 70 or turns > 25:
-            logEntries.append("Not doing algorithm logging for expansion due to player tilecount > 70 or turn count > 25")
-            logStuff = False
+        # logStuff = True
+        # if player.tileCount > 70 or turns > 25:
+        #     logEntries.append("Not doing algorithm logging for expansion due to player tilecount > 70 or turn count > 25")
+        #     logStuff = False
+        logStuff = False
 
         pathsCrossingTiles: typing.Dict[Tile, typing.List[Path]] = {}
 
@@ -1456,6 +1457,7 @@ def get_optimal_expansion(
             viewInfo.add_info_line(f'path move_half value was {value} (path {str(path)})')
         if value <= 0:
             path.start.move_half = False
+            value = path.calculate_value(searchingPlayer, map._teams, originalNegativeTiles)
 
         return path, otherPaths
 
@@ -1877,21 +1879,26 @@ def _get_capture_counts(
 
 
 def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: Path, originalNegativeTiles: typing.Set[Tile]) -> float:
-    rating = max(0, path.value) ** 0.5
-    for t in path.tileList:
+    # rating = max(0, path.value) ** 0.5
+    rating = 0
+    for t in path.tileList[1:]:
         if t.player not in friendlyPlayers:
             rating += 0.5
             if t.player >= 0:
-                rating += 2.0
-
+                rating += 1.0
+                if not t.visible:
+                    rating += 1.0
+                if not t.discovered:
+                    rating += 2.0
         if not t.visible:
             rating += 0.25
         if not t.discovered:
-            rating += 0.5
+            rating += 0.1
 
     return rating
 
-def find_best_expansion_path_to_move_first_by_city_weights(
+
+def find_optimal_expansion_path_to_move_first(
         map,
         maxPaths,
         negativeTiles,
@@ -1902,32 +1909,46 @@ def find_best_expansion_path_to_move_first_by_city_weights(
         friendlyPlayers,
         territoryMap
 ) -> Path | None:
-    playerCities = list(map.players[searchingPlayer].cities)
-    if map.players[searchingPlayer].general is not None:
-        playerCities.append(map.players[searchingPlayer].general)
-    maxVal = 0
-    maxUncertainty = 0
-    path: Path | None = None
-    waitingPaths = []
+
+    # playerCities = list(map.players[searchingPlayer].cities)
+    # if map.players[searchingPlayer].general is not None:
+    #     playerCities.append(map.players[searchingPlayer].general)
+
+    waitingPaths = set()
     for p in maxPaths:
         shouldWaitDueToCities = path_has_cities_and_should_wait(
             p,
             friendlyPlayers,
-            playerCities,
             negativeTiles,
             territoryMap,
             remainingTurns)
         if shouldWaitDueToCities:
-            waitingPaths.append(p)
+            waitingPaths.add(p)
+
     sumWaiting = 0
     for waitingPath in waitingPaths:
         sumWaiting += waitingPath.length
-    if sumWaiting > remainingTurns - 2:
-        logging.info('bypassing waiting city paths due to them covering most of the expansion plan')
-        waitingPaths = []
+
+    if sumWaiting > remainingTurns:  # - 2
+        logging.info(f'bypassing {len(waitingPaths)} waiting city paths with total turns {sumWaiting} due to them covering most of the expansion plan remaining {remainingTurns}')
+        waitingPaths = set()
+
+    if len(waitingPaths) == len(maxPaths):
+        waitingPaths = set()
+
+    maxVal = 0
+    maxUncertainty = 0
+    path: Path | None = None
     for p in maxPaths:
-        thisVal = postPathEvalFunction(p, originalNegativeTiles) + (p.start.tile.army * p.start.tile.army - 4)
+        bonus = 0
+        # bonus = (p.start.tile.army * p.start.tile.army - 4)
+        thisVal = postPathEvalFunction(p, originalNegativeTiles) + bonus
         thisUncertainty = _get_uncertainty_capture_rating(friendlyPlayers, p, originalNegativeTiles)
+        # if p.start.tile.isCity or p.start.tile.isGeneral and len(wai)
+        # thisUncertainty = 0
+
+        # thisVal = thisVal / max(1, p.length)
+        thisUncertainty = thisUncertainty / (p.length + 1)
 
         if thisUncertainty > maxUncertainty or thisUncertainty == maxUncertainty and thisVal > maxVal:
             if p not in waitingPaths:
@@ -1981,6 +2002,7 @@ def expansion_knapsack_gather_iteration(
 
     totalValue = 0
     maxKnapsackedPaths = []
+    pathValLookup = {}
 
     error = True
     attempts = 0
@@ -1999,8 +2021,10 @@ def expansion_knapsack_gather_iteration(
                     for path in pathGroup:
                         groups.append(groupIdx)
                         paths.append(path)
-                        values.append(valueFunc(path))
+                        pathVal = valueFunc(path)
+                        values.append(pathVal)
                         weights.append(path.length)
+                        pathValLookup[path] = pathVal
                     groupIdx += 1
             if len(paths) == 0:
                 return 0, []
@@ -2018,14 +2042,14 @@ def expansion_knapsack_gather_iteration(
                 weights,
                 values,
                 groups,
-                longRuntimeThreshold=0.1)
+                longRuntimeThreshold=0.03)
             logging.info(f"maxKnapsackedPaths value {totalValue} length {len(maxKnapsackedPaths)},")
             error = False
         except AssertionError:
             logging.error(f'OVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE. v\r\n{traceback.format_exc()}\r\nOVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE.^ ')
             valuePerTurnPathPerTile = _prune_worst_paths_greedily(valuePerTurnPathPerTile, valueFunc)
 
-    return totalValue, maxKnapsackedPaths
+    return totalValue, sorted(maxKnapsackedPaths, key=lambda p: pathValLookup[p] / max(1, p.length), reverse=True)
 
 
 def should_consider_path_move_half(

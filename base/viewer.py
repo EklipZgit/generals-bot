@@ -684,19 +684,6 @@ class GeneralsViewer(object):
                         textVal = "   X"
                         self._screen.blit(self._medFont.render(textVal, True, color_font),
                                           (pos_left + 2, pos_top + self.cellHeight / 4))
-
-                    # Draw Text Value
-                    if (
-                        tile.army != 0
-                        # and (
-                        #     tile.discovered
-                        #     or tile in self._viewInfo.armyTracker.armies
-                        # )
-                    ):  # Don't draw on empty tiles
-                        textVal = str(tile.army)
-                        textWidth = self._medFontWidth * len(textVal)
-                        self._screen.blit(self._medFont.render(textVal, True, color_font),
-                                          (pos_left + (self.cellWidth - textWidth) / 2, pos_top + self.cellHeight / 4))
                     # Draw coords
                     textVal = f"{tile.x},{tile.y}"
                     self._screen.blit(self.small_font(textVal, color_font),
@@ -791,6 +778,36 @@ class GeneralsViewer(object):
 
             self.draw_emergences()
 
+            # draw text
+            for row in range(self._map.rows):
+                for column in range(self._map.cols):
+                    tile = self._map.grid[row][column]
+                    pos_left = (CELL_MARGIN + self.cellWidth) * column + CELL_MARGIN
+                    pos_top = (CELL_MARGIN + self.cellHeight) * row + CELL_MARGIN
+
+                    color_font = self.get_font_color(tile)
+                    color_small_font = self.get_small_font_color(tile)
+
+                    if not tile in self._map.pathableTiles and not tile.isNotPathable and not tile.isCity and not tile.isMountain:
+                        textVal = "   X"
+                        self._screen.blit(self._medFont.render(textVal, True, color_font),
+                                          (pos_left + 2, pos_top + self.cellHeight / 4))
+
+                    # Draw Text Value
+                    if (
+                        tile.army != 0
+                        # and (
+                        #     tile.discovered
+                        #     or tile in self._viewInfo.armyTracker.armies
+                        # )
+                    ):  # Don't draw on empty tiles
+                        textVal = str(tile.army)
+                        textWidth = self._medFontWidth * len(textVal)
+                        self._screen.blit(self._medFont.render(textVal, True, color_font),
+                                          (pos_left + (self.cellWidth - textWidth) / 2, pos_top + self.cellHeight / 4))
+                        self._screen.blit(self._medFont.render(textVal, True, color_font),
+                                          (pos_left + (self.cellWidth - textWidth) / 2, pos_top + self.cellHeight / 4))
+
             # Go ahead and update the screen with what we've drawn.
             pygame.display.flip()
 
@@ -834,7 +851,7 @@ class GeneralsViewer(object):
         if self._viewInfo.timings:
             timings = self._viewInfo.timings
             timingTurn = (self._map.turn + timings.offsetTurns) % timings.cycleTurns
-            timingsText = f"{str(timings)} ({timingTurn}) - {allInText}{self._viewInfo.allInCounter}  {self._viewInfo.addlTimingsLineText}"
+            timingsText = f"{str(timings)} ({timingTurn}) - {allInText}{self._viewInfo.allInCounter}/{self._viewInfo.givingUpCounter}  {self._viewInfo.addlTimingsLineText}"
             self._screen.blit(
                 self._infoFont.render(
                     timingsText,
@@ -1301,7 +1318,7 @@ class GeneralsViewer(object):
         if targetStyle == TargetStyle.BLUE:
             return 50, 50, 255
         if targetStyle == TargetStyle.GOLD:
-            return 255, 215, 0
+            return 185, 145, 0
         if targetStyle == TargetStyle.GREEN:
             return P_GREEN
         if targetStyle == TargetStyle.PURPLE:

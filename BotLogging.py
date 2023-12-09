@@ -1,6 +1,8 @@
 import logging
 import os
 
+import logbook
+
 # logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
 FILE_FORMATTER = logging.Formatter("%(asctime)s  %(name)s  %(message)s")
 LOG_FORMATTER = logging.Formatter("%(message)s")
@@ -18,7 +20,7 @@ def add_file_log_output(botName: str, gameMode: str, replayId: str, logFolder: s
     # rootLogger.addHandler(fileHandler)
     pass
 
-def set_up_logger(logLevel: int):
+def set_up_logger(logLevel: int, mainProcess: bool = False):
     global LOGGING_SET_UP
 
     if LOGGING_SET_UP:
@@ -26,14 +28,29 @@ def set_up_logger(logLevel: int):
         return
 
     LOGGING_SET_UP = True
-    # logging.basicConfig(format='%(message)s', level=logging.DEBUG, force=True)
-    # logging.basicConfig(format='%(levelname)s:%(message)s', filename="D:\\GeneralsLogs\\test.txt", level=logging.DEBUG, force=True)
-    rootLogger = logging.getLogger()
-    rootLogger.setLevel(logLevel)
 
-    consoleHandler = logging.StreamHandler()
-    consoleHandler.setFormatter(LOG_FORMATTER)
-    rootLogger.addHandler(consoleHandler)
+    if mainProcess:
+        from logbook import StreamHandler
+        import sys
+        my_handler = StreamHandler(sys.stdout, logLevel, format_string=LOG_FORMATTER)
+        from logbook.queues import ZeroMQSubscriber
+        subscriber = ZeroMQSubscriber('tcp://127.0.0.1:12345')
+        with my_handler:
+            subscriber.dispatch_forever()
+
+    else:
+        from logbook.queues import ZeroMQHandler
+        handler = ZeroMQHandler('tcp://127.0.0.1:12345')
+        handler.push_application()
+    #
+    # # logging.basicConfig(format='%(message)s', level=logging.DEBUG, force=True)
+    # # logging.basicConfig(format='%(levelname)s:%(message)s', filename="D:\\GeneralsLogs\\test.txt", level=logging.DEBUG, force=True)
+    # rootLogger = logging.getLogger()
+    # rootLogger.setLevel(logLevel)
+    #
+    # consoleHandler = logging.StreamHandler()
+    # consoleHandler.setFormatter(LOG_FORMATTER)
+    # rootLogger.addHandler(consoleHandler)
 
 
 def get_file_safe_username(botName: str) -> str:
@@ -59,6 +76,6 @@ def get_file_logging_directory(rawBotName: str, replayId: str) -> str:
         try:
             os.makedirs(logDirectory)
         except:
-            logging.info("Couldn't create dir")
+            logbook.info("Couldn't create dir")
 
     return logDirectory

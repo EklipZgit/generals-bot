@@ -350,3 +350,73 @@ class OpponentTrackerTests(TestBase):
         self.assertIsNone(winner)
 
         self.assertEqual(0, bot.sum_player_army_near_or_on_tiles([playerMap.GetTile(2, 11)], distance=6, player=general.player), "should have used all the tiles in the top left")
+    
+    def test_should_be_greedy_when_recognizing_greedy_buffer_against_gathering_opponent(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_be_greedy_when_recognizing_greedy_buffer___ZsyD7bgAv---0--100.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 100, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=100)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=35)
+        self.assertIsNone(winner)
+
+        self.assertGreater(bot.sum_player_army_near_or_on_tiles([general], distance=2), 60)
+        self.assertPlayerTileCountGreater(simHost, general.player, 52)
+        self.assertPlayerTileCountLess(simHost, general.player, 57)
+
+    def test_should_be_extremely_greedy_when_recognizing_greedy_buffer_against_expanding_opponent(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_be_greedy_when_recognizing_greedy_buffer___ZsyD7bgAv---0--100.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 100, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=100)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_leafmoves(enemyGeneral.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=35)
+        self.assertIsNone(winner)
+
+        self.assertLess(bot.sum_player_army_near_or_on_tiles([general], distance=2), 45)
+        self.assertPlayerTileCountGreater(simHost, general.player, 60)
+        self.assertPlayerTileCountLess(simHost, general.player, 70)
+
+    def test_should_correctly_reduce_en_fog_army_even_when_visible_tile_captured(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_correctly_reduce_en_fog_army_even_when_visible_tile_captured__real_map___glKjUk9Yo---1--129.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 129, fill_out_tiles=True)
+
+        mapFile = 'GameContinuationEntries/should_correctly_reduce_en_fog_army_even_when_visible_tile_captured___glKjUk9Yo---1--129.txtmap'
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=129)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '4,10->4,9  4,8->4,9')
+        simHost.queue_player_moves_str(general.player, '13,4->13,3  None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertIsNone(winner)
+
+        stats = bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player)
+
+        with self.subTest(mainAsserts=True):
+            self.assertGreater(stats.approximate_fog_army_available_total + stats.approximate_fog_city_army, 11)
+            self.assertLess(stats.approximate_fog_army_available_total + stats.approximate_fog_city_army, 14)
+        with self.subTest(mainAsserts=False):
+            # 2 on main city, 9 on new city, one 2 left on board see https://generals.io/replays/glKjUk9Yo turn 65.5
+            self.assertEqual(12, stats.approximate_fog_army_available_total + stats.approximate_fog_city_army)

@@ -1181,4 +1181,25 @@ player_index=0
         self.assertEqual(1, playerMap.GetTile(18, 4).army)
         self.assertEqual(1, playerMap.GetTile(16, 3).army)
         self.assertEqual(1, playerMap.GetTile(15, 3).army)
-        self.assertEqual(1, playerMap.GetTile(15, 4).army)
+        self.assertEqual(1, playerMap.GetTile(15, 4).army)    
+    def test_should_not_leave_tiles_behind_gathering(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_leave_tiles_behind_gathering___THq1ygSqm---0--218.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 218, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=218)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.timings = bot.get_timings()
+        bot.timings.launchTiming = 36
+        bot.timings.splitTurns = 36
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        self.assertIsNone(winner)
+
+        self.assertGreater(bot.sum_friendly_army_near_or_on_tiles([playerMap.GetTile(2, 7)]), 15)

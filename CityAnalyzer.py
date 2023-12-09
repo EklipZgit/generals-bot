@@ -306,8 +306,8 @@ class CityAnalyzer(object):
         enemyTileScores = [t for t in sorted(self.enemy_city_scores.items(), reverse=True, key=lambda ts: ts[1].get_weighted_enemy_capture_value())]
         return enemyTileScores
 
-    def is_contested(self, city: Tile) -> bool:
-        if city.turn_captured > self.map.turn - 20:
+    def is_contested(self, city: Tile, captureCutoffAgoTurns: int = 20, enemyTerritorySearchDepth: int = 4) -> bool:
+        if city.turn_captured > self.map.turn - captureCutoffAgoTurns:
             return True
 
         countFriendlyNear = SearchUtils.Counter(0)
@@ -322,7 +322,7 @@ class CityAnalyzer(object):
         SearchUtils.breadth_first_foreach_dist(
             self.map,
             [city],
-            maxDepth=5,
+            maxDepth=enemyTerritorySearchDepth,
             noLog=True,
             foreachFunc=counterFunc,
         )

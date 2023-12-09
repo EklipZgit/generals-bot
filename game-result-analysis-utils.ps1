@@ -162,6 +162,8 @@ function Create-TestContinuingGameFrom {
         $DestFolderRoot = "D:\2019_reformat_Backup\generals-bot\Tests\"
     )
 
+    $TestName = $TestName.Replace(' ', '_')
+
     $destFolder = "$DestFolderRoot\GameContinuationEntries"
     if (-not (Test-Path $destFolder))
     {

@@ -314,7 +314,7 @@ def a_star_kill(
 
     while not frontier.empty():
         iter += 1
-        if iter & 256 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
+        if iter & 64 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
             logging.info("breaking A* early")
             break
         prio, current = frontier.get()
@@ -1102,7 +1102,7 @@ def breadth_first_dynamic_max_per_tile(
 
     while not frontier.empty():
         iter += 1
-        if iter & 256 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING or iter > maxIterations:
+        if iter & 64 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING or iter > maxIterations:
             logging.info(f"BFS-DYNAMIC-MAX-PER-TILE BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
             break
 
@@ -1420,8 +1420,8 @@ def breadth_first_dynamic_max_per_tile_per_distance(
 
     while not frontier.empty():
         iter += 1
-        if iter & 256 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING or iter > maxIterations:
-            logging.info(f"BFS-DYNAMIC-MAX BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
+        if iter & 64 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING or iter > maxIterations:
+            logging.info(f"BFS-DYNAMIC-MAX-PER-TILE-PER-DIST BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
             break
 
         (prioVals, dist, current, parent, nodeList, startTile) = frontier.get()

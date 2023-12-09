@@ -48,4 +48,21 @@ class FFATests(TestBase):
 
         self.assertEqual(general.player, enemyGeneral.player, 'should have captured fincher')
 
-    # 0f 2p
+    # 0f 2p    
+    def test_should_not_time_out_on_win_condition_in_ffa(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_time_out_on_win_condition_in_ffa___uu_dzfs6v---1--1275.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 1275, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=1275)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '17,21->18,21->18,17->20,17->20,6->18,6->18,4->20,4->20,0->21,0')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=35)
+        self.assertIsNone(winner)
+

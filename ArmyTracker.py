@@ -389,7 +389,10 @@ class ArmyTracker(object):
                     f"Army {str(army)} just uncovered was an incorrect army prediction. Disentangle and remove from other entangley bois")
                 for entangled in army.entangledArmies:
                     logging.info(f"    removing {str(army)} from entangled {str(entangled)}")
-                    entangled.entangledArmies.remove(army)
+                    try:
+                        entangled.entangledArmies.remove(army)
+                    except:
+                        pass
 
                 if army.tile in self.armies and self.armies[army.tile] == army:
                     del self.armies[army.tile]
@@ -1125,7 +1128,7 @@ class ArmyTracker(object):
                 prioObject
         ):
             dist, _ = prioObject
-            if thisTile.visible:
+            if thisTile.visible or dist == 0:
                 return None
 
             isPotentialFogCity = thisTile.isCity and thisTile.isNeutral
@@ -2257,6 +2260,7 @@ class ArmyTracker(object):
                 raise AssertionError('we produced an invalid general position restriction with 0 valid tiles.')
             else:
                 logging.error('we produced an invalid general position restriction with 0 valid tiles.')
+                self._check_over_elimination(player)
                 return
 
         elims = 0
@@ -2273,6 +2277,8 @@ class ArmyTracker(object):
         if elims > 0 and (existingLimit is None or existingLimit > maxDist):
             logging.info(f'including new elim p{player} {str(tile)} at dist {maxDist} which eliminated {elims}')
             self.uneliminated_emergence_events[player][tile] = maxDist
+
+        self._check_over_elimination(player)
 
     def _initialize_viable_general_positions(self):
         ourGens = [self.map.generals[self.map.player_index]]
@@ -2559,7 +2565,7 @@ class ArmyTracker(object):
             player: int,
             annihilatedFogArmy: int,
             tookNeutCity: bool
-    ) -> bool:
+    ):
         """
         Tries to find a fog army sink for fog annihilation, and optionally converts it into a neutral city if the player just took one.
 
@@ -2591,12 +2597,25 @@ class ArmyTracker(object):
                 potentialCity = self.find_next_fog_city_candidate_near_tile(player, army.tile)
                 if potentialCity is not None:
                     self.convert_fog_city_to_player_owned(potentialCity, player)
-                    army.tile.army = 1
+                    army.tile.army = army.value + 1
                     army.update_tile(potentialCity)
                     potentialCity.army = army.value + 1
+                    army.expectedPaths = self.get_army_expected_path(army)
 
                     break
 
             else:
                 break
 
+    def _check_over_elimination(self, player: int):
+        anyValid = False
+        for tile in self.map.pathableTiles:
+            if self.valid_general_positions_by_player[player][tile]:
+                anyValid = True
+                break
+
+        if not anyValid:
+            logging.error(f'having to reset general valid positions for p{player} due to over elimination')
+            for tile in self.map.pathableTiles:
+                if not tile.visible:
+                    self.valid_general_positions_by_player[player][tile] = True

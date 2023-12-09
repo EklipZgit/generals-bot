@@ -1034,11 +1034,15 @@ class ABTests(TestBase):
         self.begin_capturing_logging()
 
         def configure_b(bBot: EklipZBot):
-            bBot.expansion_enemy_expansion_plan_inbound_penalty = 0.0
+            bBot.expansion_enemy_expansion_plan_inbound_penalty = 0.6
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.expansion_enemy_expansion_plan_inbound_penalty = 1.0  # b = 0.0, the current
+            # 156-152
+            aBot.expansion_enemy_expansion_plan_inbound_penalty = 0.55  # b = 0.6, the current
+
+            # # 174-158
+            # aBot.expansion_enemy_expansion_plan_inbound_penalty = 0.95  # b = 0.0, the current
 
             # 283-213
             # aBot.expansion_always_include_non_terminating_leafmoves_in_iteration = True
@@ -1115,14 +1119,18 @@ class ABTests(TestBase):
         self.begin_capturing_logging()
 
         def configure_b(bBot: EklipZBot):
-            bBot.expansion_enemy_expansion_plan_inbound_penalty = 0.0
+            bBot.expansion_enemy_expansion_plan_inbound_penalty = 0.6
             # bBot.behavior_max_allowed_quick_expand = 7
             # bBot.expansion_length_weight_offset = -0.3
             # bBot.expansion_allow_gather_plan_extension = False
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.expansion_enemy_expansion_plan_inbound_penalty = 0.75  # b = 0.0, the current
+            # 146-152
+            aBot.expansion_enemy_expansion_plan_inbound_penalty = 0.75  # b = 0.6, the current
+
+            # 188-160
+            # aBot.expansion_enemy_expansion_plan_inbound_penalty = 0.75  # b = 0.0, the current
 
             # aBot.behavior_max_allowed_quick_expand = 0
 
@@ -1158,7 +1166,7 @@ class ABTests(TestBase):
         self.begin_capturing_logging()
 
         def configure_b(bBot: EklipZBot):
-            bBot.expansion_enemy_expansion_plan_inbound_penalty = 0.0
+            bBot.expansion_enemy_expansion_plan_inbound_penalty = 0.6
 
             # bBot.engine_include_path_pre_expansion = False
 
@@ -1167,7 +1175,14 @@ class ABTests(TestBase):
             pass
 
         def configure_a(aBot: EklipZBot):
-            aBot.expansion_enemy_expansion_plan_inbound_penalty = 0.5  # b = 0.0, the current
+            # 134-157
+            aBot.expansion_enemy_expansion_plan_inbound_penalty = 0.5  # b = 0.6, the current
+
+            # killed 126-137
+            # aBot.expansion_enemy_expansion_plan_inbound_penalty = 0.45  # b = 0.6, the current
+
+            # # 200-135
+            # aBot.expansion_enemy_expansion_plan_inbound_penalty = 0.6  # b = 0.0, the current
 
             # aBot.engine_include_path_pre_expansion = True
 

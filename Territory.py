@@ -5,7 +5,7 @@
     EklipZ bot - Tries to play generals lol
 """
 
-import logging
+import logbook
 import time
 import json
 
@@ -58,7 +58,7 @@ class TerritoryClassifier(object):
                     self.territoryMap[movable.x][movable.y] = tile.player
 
     def scan(self):
-        logging.info("Scanning map for territories, aww geez")
+        logbook.info("Scanning map for territories, aww geez")
         counts = new_map_grid(self.map, lambda x, y: [0 for n in range(len(self.map.players) + 1)])
         startTime = time.perf_counter()
         undiscoveredCounterDepth = 5
@@ -120,15 +120,15 @@ class TerritoryClassifier(object):
                 userName = self.map.usernames[maxPlayer]
 
             if evaluatingTile.player != maxPlayer and evaluatingTile.player != -1:
-                logging.info("Tile {} is in player {} {} territory".format(evaluatingTile.toString(), maxPlayer, userName))
+                logbook.info("Tile {} is in player {} {} territory".format(evaluatingTile.toString(), maxPlayer, userName))
 
             self.territoryMap[evaluatingTile.x][evaluatingTile.y] = maxPlayer
         startTiles = list(self.needToUpdateAroundTiles)
-        logging.info("  Scanning territory around {}".format(" - ".join([tile.toString() for tile in startTiles])))
+        logbook.info("  Scanning territory around {}".format(" - ".join([tile.toString() for tile in startTiles])))
         breadth_first_foreach(self.map, startTiles, undiscoveredCounterDepth, foreach_near_updated_tiles, None, lambda tile: tile.isMountain, None, self.map.player_index)
         duration = time.perf_counter() - startTime
             
-        logging.info("Completed scanning territories in {:.3f}".format(duration))
+        logbook.info("Completed scanning territories in {:.3f}".format(duration))
         self.needToUpdateAroundTiles = set()
 
         for player in self.map.players:

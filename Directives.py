@@ -5,7 +5,7 @@
     EklipZ bot - Tries to play generals lol
 """
 
-import logging
+import logbook
 from enum import Enum
 
 class Timings(object):

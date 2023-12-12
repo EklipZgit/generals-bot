@@ -1,4 +1,4 @@
-import logging
+import logbook
 import time
 import typing
 
@@ -49,7 +49,7 @@ def get_start_expand_value(
         pathComplete = False
         if curPath is None:
             if not noLog:
-                logging.info(f'{turn} ({genArmy}) - no-opped move')
+                logbook.info(f'{turn} ({genArmy}) - no-opped move')
             pathIdx += 1
             if pathIdx >= len(expandPaths):
                 break
@@ -64,14 +64,14 @@ def get_start_expand_value(
             nextTile = move.next.tile
             if nextTile in tilesCapped or map.is_player_on_team_with(nextTile.player, general.player):
                 if not noLog:
-                    logging.info(f'{turn} ({genArmy}) - {str(nextTile)} (a{movingArmy}) already capped')
+                    logbook.info(f'{turn} ({genArmy}) - {str(nextTile)} (a{movingArmy}) already capped')
             else:
                 movingArmy -= 1
                 tilesCapped.add(nextTile)
                 if nextTile.player >= 0:
                     enCapped.add(nextTile)
                 if not noLog:
-                    logging.info(f'{turn} ({genArmy}) - {str(nextTile)} (a{movingArmy}) ({len(tilesCapped)})')
+                    logbook.info(f'{turn} ({genArmy}) - {str(nextTile)} (a{movingArmy}) ({len(tilesCapped)})')
                 if movingArmy <= 0 and DEBUG_ASSERTS:
                     raise AssertionError(f'illegal plan, moved army from 1 tile, see last log above')
             if curPath.length == 0:
@@ -81,7 +81,7 @@ def get_start_expand_value(
                 pathComplete = True
                 if movingArmy > 1 and turn < 50:
                     if not noLog:
-                        logging.info(f"Army not fully used. {movingArmy} army ended at {str(nextTile)}, turn {turn}. Should almost never see this in a final result...")
+                        logbook.info(f"Army not fully used. {movingArmy} army ended at {str(nextTile)}, turn {turn}. Should almost never see this in a final result...")
 
         if pathComplete:
             curPath = expandPaths[pathIdx]
@@ -99,10 +99,10 @@ def get_start_expand_value(
         if DEBUG_ASSERTS:
             raise AssertionError(errorMsg)
         else:
-            logging.info(errorMsg)
+            logbook.info(errorMsg)
 
     if not noLog:
-        logging.info(
+        logbook.info(
             f'result of curTurn {curTurn}: capped {len(tilesCapped)}, final genArmy {genArmy}')
 
     return len(tilesCapped) + len(enCapped)
@@ -302,7 +302,7 @@ def optimize_first_25(
         for _ in range(mapTurnAtStart, launchTurn):
             launchResult.insert(0, None)
         launchVal = __evaluate_plan_value(map, general, genArmyAtStart, map.turn, launchResult, dist_to_gen_map=distToGenMap, tile_weight_map=tile_minimization_map, already_visited=visited, no_log=no_log)
-        logging.info(f'{genArmy} ({optimalWastedMoves}) launch ({launchVal}) {">>>" if maxVal is None or maxVal < launchVal else "<"} prev launches (prev max {maxVal})')
+        logbook.info(f'{genArmy} ({optimalWastedMoves}) launch ({launchVal}) {">>>" if maxVal is None or maxVal < launchVal else "<"} prev launches (prev max {maxVal})')
         if maxVal is None or launchVal > maxVal:
             maxVal = launchVal
             maxResult = launchResult
@@ -314,9 +314,9 @@ def optimize_first_25(
             break
         launchTurn += 1
 
-    logging.info(f'max launch result  v')
+    logbook.info(f'max launch result  v')
     get_start_expand_value(map, general, general.army, mapTurnAtStart, maxResult, visitedSet=visited, noLog=False)
-    logging.info(f'max launch result {maxVal}, turn {launchTurn} ^')
+    logbook.info(f'max launch result {maxVal}, turn {launchTurn} ^')
 
     return ExpansionPlan(maxVal[0], maxResult, launchTurn, general)
 
@@ -385,7 +385,7 @@ def _sub_optimize_first_25_specific_wasted(
 
             if path1 is None:
                 if not no_log:
-                    logging.info(f'got none path for genArmy {curAttemptGenArmy} with allow_wasted {force_wasted_moves} (already visited {len(visited_set)})')
+                    logbook.info(f'got none path for genArmy {curAttemptGenArmy} with allow_wasted {force_wasted_moves} (already visited {len(visited_set)})')
                 pathList.append(None)
                 return capped, pathList
 
@@ -393,11 +393,11 @@ def _sub_optimize_first_25_specific_wasted(
 
             if capped[0] == 0:
                 pathList.append(None)
-                logging.info(f'got 0 value path {str(path1)}, returning None instead')
+                logbook.info(f'got 0 value path {str(path1)}, returning None instead')
                 return capped, pathList
 
             if not no_log:
-                logging.info(f'appending val {capped}, path {str(path1)}')
+                logbook.info(f'appending val {capped}, path {str(path1)}')
 
             pathList.append(path1)
 
@@ -408,7 +408,7 @@ def _sub_optimize_first_25_specific_wasted(
 
             curAttemptGenArmy = 1
             if not no_log:
-                logging.info(f'path1.length {path1.length} ({str(path1)})')
+                logbook.info(f'path1.length {path1.length} ({str(path1)})')
             for _ in range(path1.length):
                 curTurn += 1
                 if curTurn % 2 == 0:
@@ -416,14 +416,14 @@ def _sub_optimize_first_25_specific_wasted(
 
         if curTurn >= 50:
             if not no_log:
-                logging.info(f'curTurn {curTurn} >= 50, returning current path')
+                logbook.info(f'curTurn {curTurn} >= 50, returning current path')
             return capped, pathList
 
         allow_wasted_moves = max(0, allow_wasted_moves)
 
         # try immediate launch
         if not no_log:
-            logging.info(f'normal, curTurn {curTurn}, genArmy {curAttemptGenArmy}')
+            logbook.info(f'normal, curTurn {curTurn}, genArmy {curAttemptGenArmy}')
         maxOptimized = _sub_optimize_remaining_cycle_expand_from_cities(
             map,
             general,
@@ -450,7 +450,7 @@ def _sub_optimize_first_25_specific_wasted(
                 curTurn += 1
                 allow_wasted_moves -= 1
             if not no_log:
-                logging.info(
+                logbook.info(
                     f'withWait (double: {not isSuboptimalLaunchTurn}), curTurn {curTurn}, genArmy {curAttemptGenArmy}')
             withOneWait = _sub_optimize_remaining_cycle_expand_from_cities(
                 map,
@@ -469,7 +469,7 @@ def _sub_optimize_first_25_specific_wasted(
             oneWaitVal = __evaluate_plan_value(map, general, curAttemptGenArmy, curTurn, withOneWait, dist_to_gen_map=dist_to_gen_map, tile_weight_map=tile_weight_map, already_visited=visited_set, no_log=no_log)
             if oneWaitVal >= maxValue:
                 if not no_log:
-                    logging.info(
+                    logbook.info(
                         f'waiting (double: {not isSuboptimalLaunchTurn}) until {curTurn} resulted in better yield, {maxValue} vs {oneWaitVal}')
                 maxOptimized = withOneWait
                 maxValue = oneWaitVal
@@ -479,7 +479,7 @@ def _sub_optimize_first_25_specific_wasted(
 
         if maxValue[0] == 0:
             if not no_log:
-                logging.info('throwing out bad path')
+                logbook.info('throwing out bad path')
             return maxValue, [None]
 
         for pathVal in maxOptimized:
@@ -519,7 +519,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
     @return:
     """
     if not no_log:
-        logging.info(f'sub-optimizing turn {turn} genArmy {gen_army}')
+        logbook.info(f'sub-optimizing turn {turn} genArmy {gen_army}')
 
     maxCombinationValue = (0, 0, 0, 0)
     maxCombinationPathList = [None]
@@ -553,7 +553,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
         bestCaseResult = len(visited_set) + turnsLeft - force_wasted_moves
         if bestCaseResult < prune_below:
             if not no_log:
-                logging.info(f'pruning due to bestCaseResult {bestCaseResult} compared to prune_below {prune_below}')
+                logbook.info(f'pruning due to bestCaseResult {bestCaseResult} compared to prune_below {prune_below}')
             break
 
         if time.perf_counter() > cutoff_time:
@@ -605,7 +605,7 @@ def _optimize_25_launch_segment(
 
     if gen_army <= 1:
         if not no_log:
-            logging.info('RETURNING NONE from _optimize_25_launch_segment, gen_army <= 1')
+            logbook.info('RETURNING NONE from _optimize_25_launch_segment, gen_army <= 1')
         return None
 
     i = SearchUtils.Counter(0)
@@ -630,7 +630,7 @@ def _optimize_25_launch_segment(
             return None
 
         # if currentGenDist < fromTileGenDist:
-        #     logging.info(f'bounded off loop path (value)...? {str(fromTile)}->{str(currentTile)}')
+        #     logbook.info(f'bounded off loop path (value)...? {str(fromTile)}->{str(currentTile)}')
             # return None
 
         valObj = 0 - pathCappedNeg, 0 - abs(repeats - force_wasted_moves), 0 - cappedAdj, currentGenDist, tileValue - negAdjWeight / 3
@@ -654,7 +654,7 @@ def _optimize_25_launch_segment(
 
         #
         # if pathCappedNeg + genArmy <= 0:
-        #     logging.info(f'tile {str(nextTile)} ought to be skipped...?')
+        #     logbook.info(f'tile {str(nextTile)} ought to be skipped...?')
         #     return None
 
         closerToEnemyNeg = tile_weight_map[nextTile.x][nextTile.y]
@@ -717,7 +717,7 @@ def _optimize_25_launch_segment(
         if maxGenDist > genDist:
             countSearchedAroundGen.add(1)
             if maxGenDist > 5:
-                # logging.info(f'bounded off loop path (skip)...? {str(fromTile)}->{str(nextTile)}')
+                # logbook.info(f'bounded off loop path (skip)...? {str(fromTile)}->{str(nextTile)}')
                 return True
             if countSearchedAroundGen.value > loopingGeneralSearchCutoff:
                 return True
@@ -731,7 +731,7 @@ def _optimize_25_launch_segment(
     startVals: typing.Dict[Tile, typing.Tuple[object, int]] = {}
     startVals[general] = ((0, 0, -1000, 0, 0, 0, 0, 0), 0)
     if not no_log:
-        logging.info(f'finding segment for genArmy {gen_army}, force_wasted_moves {force_wasted_moves}, alreadyVisited {len(visited_set)}')
+        logbook.info(f'finding segment for genArmy {gen_army}, force_wasted_moves {force_wasted_moves}, alreadyVisited {len(visited_set)}')
     path = breadth_first_dynamic_max(
         map,
         startVals,

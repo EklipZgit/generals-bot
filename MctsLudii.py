@@ -5,7 +5,7 @@ https://github.com/Ludeme/LudiiExampleAI/blob/master/src/mcts/ExampleDUCT.java
 """
 from __future__ import annotations
 
-import logging
+import logbook
 import math
 import random
 import time
@@ -233,7 +233,7 @@ class MctsDUCT(object):
                 with self.performance_telemetry.monitor_telemetry(key):
                     currentNode = self.select_or_expand_child_node(currentNode, forcingPlayer, forcedMove)
                 if self.logAll and forcedMove is not None:
-                    logging.info(f'forced p{forcingPlayer} turn {currentNode.context.turn} move {str(forcedMove)} (actual moves {str(prevNode.legalMovesPerPlayer[0][prevNode.lastSelectedMovesPerPlayer[0]])} / {str(prevNode.legalMovesPerPlayer[1][prevNode.lastSelectedMovesPerPlayer[1]])})')
+                    logbook.info(f'forced p{forcingPlayer} turn {currentNode.context.turn} move {str(forcedMove)} (actual moves {str(prevNode.legalMovesPerPlayer[0][prevNode.lastSelectedMovesPerPlayer[0]])} / {str(prevNode.legalMovesPerPlayer[1][prevNode.lastSelectedMovesPerPlayer[1]])})')
 
                 if currentNode.totalVisitCount == 0:
                     # We've expanded a new node, time for playout!
@@ -257,7 +257,7 @@ class MctsDUCT(object):
                         minRandomInitialMoves=self.min_random_playout_moves_initial
                     )
                 if self.logAll:
-                    logging.info(f'  trial for node t{currentNode.context.turn} {str(currentNode.context.board_state)} resulted in \r\n    ctxEnd t{contextEnd.turn} {str(contextEnd.board_state)} \r\n    (trial t{trial.context.turn} {str(trial.context.board_state)})')
+                    logbook.info(f'  trial for node t{currentNode.context.turn} {str(currentNode.context.board_state)} resulted in \r\n    ctxEnd t{contextEnd.turn} {str(contextEnd.board_state)} \r\n    (trial t{trial.context.turn} {str(trial.context.board_state)})')
 
                 self._trials_performed += 1
 
@@ -266,7 +266,7 @@ class MctsDUCT(object):
             with self.performance_telemetry.monitor_telemetry('utilities calc'):
                 utilities: typing.List[float] = self.get_player_utilities_n1_1(contextEnd.board_state)
             if self.logAll:
-                logging.info(f'boardState {str(contextEnd.board_state)} compressed to {", ".join([f"{compressed:.4f}" for compressed in utilities])}')
+                logbook.info(f'boardState {str(contextEnd.board_state)} compressed to {", ".join([f"{compressed:.4f}" for compressed in utilities])}')
 
             # Backpropagate utilities through the tree
             with self.performance_telemetry.monitor_telemetry('backprop all inclusive'):
@@ -274,7 +274,7 @@ class MctsDUCT(object):
                     if currentNode.totalVisitCount > 0:  # -1...?
                         # This node was not newly expanded in this iteration
                         for p, lastSelMove in enumerate(currentNode.lastSelectedMovesPerPlayer):
-                            # logging.info(f'backpropogating {str(contextEnd.board_state)} at t{contextEnd.turn} up through the tree to {str(currentNode.context.board_state)} t{currentNode.context.turn}')
+                            # logbook.info(f'backpropogating {str(contextEnd.board_state)} at t{contextEnd.turn} up through the tree to {str(currentNode.context.board_state)} t{currentNode.context.turn}')
                             if lastSelMove != NO_MOVE_FOUND:
                                 with self.performance_telemetry.monitor_telemetry('backprop normal node vals'):
                                     if lastSelMove == len(currentNode.visitCounts[p]):
@@ -319,16 +319,16 @@ class MctsDUCT(object):
 
     def bench_random_stuff(self):
         # for i in range(-100, 100, 10):
-        #     logging.info(f'fast_tanh {i} = {MctsDUCT.fast_tanh_jit(i)}')
+        #     logbook.info(f'fast_tanh {i} = {MctsDUCT.fast_tanh_jit(i)}')
         for i in range(-1000, 1000, 10):
-            logging.info(f'fast_tanh_scaled {i} = {MctsDUCT.fast_tanh_scaled_jit(i, self.utility_compression_ratio)}')
-        logging.info(f'fast_tanh_scaled {10000} = {MctsDUCT.fast_tanh_scaled_jit(10000, self.utility_compression_ratio)}')
-        logging.info(f'fast_tanh_scaled {-10000} = {MctsDUCT.fast_tanh_scaled_jit(-10000, self.utility_compression_ratio)}')
+            logbook.info(f'fast_tanh_scaled {i} = {MctsDUCT.fast_tanh_scaled_jit(i, self.utility_compression_ratio)}')
+        logbook.info(f'fast_tanh_scaled {10000} = {MctsDUCT.fast_tanh_scaled_jit(10000, self.utility_compression_ratio)}')
+        logbook.info(f'fast_tanh_scaled {-10000} = {MctsDUCT.fast_tanh_scaled_jit(-10000, self.utility_compression_ratio)}')
 
         for i in range(-100, 100, 10):
-            logging.info(f'fast_sigmoid {i} = {MctsDUCT.fast_sigmoid_jit(i)}')
+            logbook.info(f'fast_sigmoid {i} = {MctsDUCT.fast_sigmoid_jit(i)}')
         for i in range(-100, 100, 10):
-            logging.info(f'expit {i} = {expit([i])[0]}')
+            logbook.info(f'expit {i} = {expit([i])[0]}')
 
         testRange = numpy.arange(-10000.0, 10000.0, 0.01)
         timer = PerformanceTimer()
@@ -350,7 +350,7 @@ class MctsDUCT(object):
                 tanhs = [MctsDUCT.fast_tanh(i) for i in testRange]
 
         for entry in sorted(timer.current_move.event_list, key=lambda e: e.get_duration(), reverse=True):
-            logging.info(f'{entry.get_duration():.3f} {entry.event_name}'.lstrip('0'))
+            logbook.info(f'{entry.get_duration():.3f} {entry.event_name}'.lstrip('0'))
 
     """
      * Selects child of the given "current" node according to UCB1 equation.
@@ -387,12 +387,12 @@ class MctsDUCT(object):
                     for i, move in enumerate(current.legalMovesPerPlayer[p]):
                         if move != forcedMove:
                             if self.logAll:
-                                logging.info(
+                                logbook.info(
                                     f't{current.context.turn} p{p} move {str(move)}, index {i} skipped because isnt the forcedMove {str(forcedMove)}')
                             continue
 
                         if self.logAll:
-                            logging.info(
+                            logbook.info(
                                 f't{current.context.turn} p{p} move {str(move)}, index {i} was forcedMove {str(forcedMove)}')
                         # bestValue = ucb1Value
                         bestMove = move
@@ -401,22 +401,22 @@ class MctsDUCT(object):
 
                     lastSelIdx = current.lastSelectedMovesPerPlayer[p]
                     if lastSelIdx != NO_MOVE_FOUND:
-                        # logging.error(f'NO MOVE FOUND p{p}, FORCING MOVE {str(forcedMove)}, LEGAL MOVES {str(current.legalMovesPerPlayer[p])}')
+                        # logbook.error(f'NO MOVE FOUND p{p}, FORCING MOVE {str(forcedMove)}, LEGAL MOVES {str(current.legalMovesPerPlayer[p])}')
                         # raise AssertionError("h")
 
                         moveFound = current.legalMovesPerPlayer[p][lastSelIdx]
                         if moveFound != forcedMove:
-                            logging.error(f'FORCING MOVE MISMATCH p{p}: ForcedMove {str(forcedMove)}, LEGAL MOVES {str(current.legalMovesPerPlayer[p])}')
+                            logbook.error(f'FORCING MOVE MISMATCH p{p}: ForcedMove {str(forcedMove)}, LEGAL MOVES {str(current.legalMovesPerPlayer[p])}')
                             raise AssertionError("h")
                 else:
                     for i, move in enumerate(current.legalMovesPerPlayer[p]):
                         if move is not None:
                             if self.logAll:
-                                logging.info(
+                                logbook.info(
                                     f't{current.context.turn} p{p} move {str(move)}, index {i} skipped because isnt None and we want to force None for other player.')
                             continue
                         if self.logAll:
-                            logging.info(
+                            logbook.info(
                                 f't{current.context.turn} p{p} NONE, index {i} forced due to other player forcing.')
                         # bestValue = ucb1Value
                         bestMove = move
@@ -426,7 +426,7 @@ class MctsDUCT(object):
                     if current.lastSelectedMovesPerPlayer[p] == NO_MOVE_FOUND:
                         newNoneIndex = len(current.legalMovesPerPlayer[p])
                         if self.logAll:
-                            logging.info(
+                            logbook.info(
                                 f't{current.context.turn} p{p} NONE, index added {newNoneIndex} forced due to other player forcing.')
 
                         current.legalMovesPerPlayer[p].append(None)
@@ -453,7 +453,7 @@ class MctsDUCT(object):
                     ucb1Value: float = exploit + explore
 
                     if self.logAll:
-                        logging.info(f't{current.context.turn} p{p} move {str(move)}, oit {exploit:.3f}, ore {explore:.3f}, ucb1 {ucb1Value:.3f} vs {bestValue:.3f} (exploit was scoreSum {curMoveSumScore} / visits {curMoveVisits})')
+                        logbook.info(f't{current.context.turn} p{p} move {str(move)}, oit {exploit:.3f}, ore {explore:.3f}, ucb1 {ucb1Value:.3f} vs {bestValue:.3f} (exploit was scoreSum {curMoveSumScore} / visits {curMoveVisits})')
                     if ucb1Value >= bestValue:
                         if ucb1Value == bestValue:
                             numBestFound += 1
@@ -468,13 +468,13 @@ class MctsDUCT(object):
                             current.lastSelectedMovesPerPlayer[p] = i
 
             if current.lastSelectedMovesPerPlayer[p] == NO_MOVE_FOUND:
-                logging.error(f'NO MOVE FOUND p{p}, FORCING MOVE {str(forcedMove)}, LEGAL MOVES {str(current.legalMovesPerPlayer[p])}')
+                logbook.error(f'NO MOVE FOUND p{p}, FORCING MOVE {str(forcedMove)}, LEGAL MOVES {str(current.legalMovesPerPlayer[p])}')
                 raise AssertionError("h")
             # if p == forcingPlayer:
             #     lastSelIdx = current.lastSelectedMovesPerPlayer[p]
             #     moveFound = current.legalMovesPerPlayer[p][lastSelIdx]
             #     if moveFound != forcedMove:
-            #         logging.error(f'FORCING MOVE MISMATCH p{p}: ForcedMove {str(forcedMove)}, LEGAL MOVES {str(current.legalMovesPerPlayer[p])}')
+            #         logbook.error(f'FORCING MOVE MISMATCH p{p}: ForcedMove {str(forcedMove)}, LEGAL MOVES {str(current.legalMovesPerPlayer[p])}')
             #         raise AssertionError("h")
             playerMoves.append(bestMove)
         frMove = playerMoves[0]
@@ -484,7 +484,7 @@ class MctsDUCT(object):
         node: MctsNode | None = current.children.get(combinedMove, None)
         if node is not None:
             if self.logAll:
-                logging.info(f'existing node t{node.context.turn} board move {str(combinedMove)}  (node {str(node.context)})')
+                logbook.info(f'existing node t{node.context.turn} board move {str(combinedMove)}  (node {str(node.context)})')
             # We already have a node for this combination of moves
             return node
         else:
@@ -500,7 +500,7 @@ class MctsDUCT(object):
             self._nodes_explored += 1
 
             if self.logAll:
-                logging.info(f'expanding new child node t{context.turn} board move {str(combinedMove)} state {str(context.board_state)}')
+                logbook.info(f'expanding new child node t{context.turn} board move {str(combinedMove)} state {str(context.board_state)}')
             return newNode
 
     """
@@ -515,7 +515,7 @@ class MctsDUCT(object):
             self,
             rootNode: MctsNode
     ) -> MctsEngineSummary:
-        logging.info('MCTS BUILDING BEST MOVE CHOICES')
+        logbook.info('MCTS BUILDING BEST MOVE CHOICES')
 
         with self.performance_telemetry.monitor_telemetry('summary build'):
             summary = MctsEngineSummary(
@@ -547,7 +547,7 @@ class MctsDUCT(object):
                     avgScore = sumScores / visitCount
 
                 # if len(pMoves) < 10:
-                logging.info(f'p{p} t{node.context.turn} move {str(move)} visits {visitCount} score {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f})')
+                logbook.info(f'p{p} t{node.context.turn} move {str(move)} visits {visitCount} score {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f})')
 
             for i, move in enumerate(pMoves):
                 sumScores: float = node.scoreSums[p][i]
@@ -557,7 +557,7 @@ class MctsDUCT(object):
                     avgScore = sumScores / visitCount
 
                 if visitCount > bestVisitCount:
-                    logging.info(f'p{p} t{node.context.turn} new best move {str(move)} had \r\n'
+                    logbook.info(f'p{p} t{node.context.turn} new best move {str(move)} had \r\n'
                                  f'   visitCount {visitCount} > bestVisitCount {bestVisitCount}, \r\n'
                                  f'   avgScore {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f}) vs bestAvgScore {bestAvgScore:.3f} ({self.decompress_player_utility(bestAvgScore) / 10:.1f}), \r\n'
                                  f'   new bestMove {str(move)} > old bestMove {str(bestMove)}, \r\n'
@@ -568,7 +568,7 @@ class MctsDUCT(object):
                     numBestFound = 1
                 elif visitCount == bestVisitCount:
                     if avgScore > bestAvgScore:
-                        logging.info(f'p{p} t{node.context.turn} visit tie - new best move {str(move)} had \r\n'
+                        logbook.info(f'p{p} t{node.context.turn} visit tie - new best move {str(move)} had \r\n'
                                      f'   visitCount {visitCount} > bestVisitCount {bestVisitCount}, \r\n'
                                      f'   avgScore {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f}) vs bestAvgScore {bestAvgScore:.3f} ({self.decompress_player_utility(bestAvgScore) / 10:.1f}), \r\n'
                                      f'   new bestMove {str(move)} > old bestMove {str(bestMove)}, \r\n'
@@ -580,19 +580,19 @@ class MctsDUCT(object):
                     elif avgScore == bestAvgScore:
                         numBestFound += 1
 
-                        logging.info(f'p{p} t{node.context.turn} TIEBREAK move {str(move)} had \r\n'
+                        logbook.info(f'p{p} t{node.context.turn} TIEBREAK move {str(move)} had \r\n'
                                      f'   visitCount {visitCount} == bestVisitCount {bestVisitCount}, \r\n'
                                      f'   avgScore {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f}) vs bestAvgScore {bestAvgScore:.3f} ({self.decompress_player_utility(bestAvgScore) / 10:.1f}), \r\n'
                                      f'   move {str(move)} vs bestMove {str(bestMove)}, \r\n'
                                      f'   state {str(node.context.board_state)}')
                         if self.get_rand_int() % numBestFound == 0:
-                            logging.info('  (won tie break)')
+                            logbook.info('  (won tie break)')
                             # this case implements random tie-breaking
                             bestMove = move
                             bestAvgScore = avgScore
                         else:
-                            logging.info('  (lost tie break)')
-            logging.info(f'p{p} t{node.context.turn} best move {str(bestMove)} had \r\n'
+                            logbook.info('  (lost tie break)')
+            logbook.info(f'p{p} t{node.context.turn} best move {str(bestMove)} had \r\n'
                          f'   visitCount {bestVisitCount}, \r\n'
                          f'   bestAvgScore {bestAvgScore:.3f} ({self.decompress_player_utility(bestAvgScore) / 10:.1f})')
             playerMoves.append(bestMove)
@@ -601,7 +601,7 @@ class MctsDUCT(object):
 
         boardMove = BoardMoves(playerMoves)
 
-        logging.info(f't{node.context.turn} COMBINED move {str(boardMove)} had \r\n'
+        logbook.info(f't{node.context.turn} COMBINED move {str(boardMove)} had \r\n'
                      f'   visitCounts {str(playerVisitCounts)}, \r\n'
                      f'   bestAvgScores {str([f"{s:.3f} ({self.decompress_player_utility(s) / 10:.1f})" for s in playerScores])}')
         return playerScores[0], boardMove
@@ -673,7 +673,7 @@ class MctsDUCT(object):
                      f'   visitCounts {str(playerVisitCounts)}, \r\n'
                      f'   bestAvgScores {str([f"{s:.3f} ({self.decompress_player_utility(s) / 10:.1f})" for s in playerScores])}')
 
-        logging.info('\n'.join(logs))
+        logbook.info('\n'.join(logs))
 
         return playerScores[0], boardMove
 
@@ -875,7 +875,7 @@ class MctsEngineSummary(object):
         finally:
             game._disablePositionalWinDetectionInRollouts = oldDisablePosition
 
-        logging.info('\n'.join(logs))
+        logbook.info('\n'.join(logs))
 
         self.best_result_state: ArmySimState = finalContext.board_state
         """Includes the speculative final expansion board state."""
@@ -1086,7 +1086,7 @@ class Game(object):
             alwaysBiased = biasedMoveRatio == 1.0
 
             while True:
-                # logging.info(f'playouting {str(trial.context.board_state)} at t{trial.context.turn}')
+                # logbook.info(f'playouting {str(trial.context.board_state)} at t{trial.context.turn}')
                 with self.telemetry.monitor_telemetry('playout over check'):
                     if (
                         trial.over()
@@ -1109,7 +1109,7 @@ class Game(object):
                             trial = self.playout_random_move(trial)
                 iter += 1
                 if iter > maxNumPlayoutActions + 1:
-                    logging.info(f'inf looping? {str(trial.context.board_state)}')
+                    logbook.info(f'inf looping? {str(trial.context.board_state)}')
                     if iter > maxNumPlayoutActions * 2:
                         raise AssertionError('wtf, infinite looped?')
 
@@ -1217,11 +1217,11 @@ class Game(object):
             bestEnMove = self.pick_best_move_heuristic(self.enemy_player, self.friendly_player, self.teams, enMoves, bs, prevMove=bs.enemy_move)
 
         # if bestFrMove is not None and bs.friendly_move is not None and bestFrMove.dest.x == bs.friendly_move.source.x and bestFrMove.dest.y == bs.friendly_move.source.y:
-        #     logging.info('wtf')
+        #     logbook.info('wtf')
         #     raise AssertionError("?")
         #
         # if bestEnMove is not None and bs.enemy_move is not None and bestEnMove.dest.x == bs.enemy_move.source.x and bestEnMove.dest.y == bs.enemy_move.source.y:
-        #     logging.info('wtf')
+        #     logbook.info('wtf')
         #     raise AssertionError("?")
 
         chosen = BoardMoves([bestFrMove, bestEnMove])

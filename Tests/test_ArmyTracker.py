@@ -1,4 +1,4 @@
-import logging
+import logbook
 
 import GatherUtils
 import SearchUtils
@@ -2402,20 +2402,6 @@ a1   b1   b1   bG1
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
-
-# 55-47 fail-pass ish
-# 50-52 now
-# 44-61 now (with 10 army threshold).
-# 57-51 now (with push-back-into-fog fix)
-# 47-61 now
-# 36-72 now after fixing 1-deep map emergence
-# 39-69 after fixing test opponenttracker load and army tracker fog dupe emergence on move-halfs
-# 35-76 after fixing some fog movement stuff
-# 36-76 now after fixing some emergence pathing
-# 35-79 now after fixing moves into fog a bit
-# 21-83 (skipped 13) now after fixing entanglement collisions
-# 25-83
-
     def test_should_not_duplicate_collided_armies_into_fog(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_duplicate_collided_armies_into_fog___50vyo-z9H---1--242.txtmap'
@@ -2455,3 +2441,41 @@ a1   b1   b1   bG1
         self.assertIsNone(winner)
 
         self.assertEqual(enemyGeneral.player, playerMap.GetTile(11, 9).player)
+
+    def test_should_not_over_emerge_fog_island_dips(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_over_emerge_fog_island_dips___DaQ8qgZt2---0--78.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 78, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=78)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '9,8->10,8->10,5->7,5->7,7')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.assertEqual(1, bot.armyTracker.emergenceLocationMap[enemyGeneral.player][7][6])
+        self.begin_capturing_logging(logbook.DEBUG)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=9)
+        self.assertIsNone(winner)
+
+        self.assertEqual(1, bot.armyTracker.emergenceLocationMap[enemyGeneral.player][7][6], "should not have increased emergence, what the hell man")
+
+        # 55-47 fail-pass ish
+        # 50-52 now
+        # 44-61 now (with 10 army threshold).
+        # 57-51 now (with push-back-into-fog fix)
+        # 47-61 now
+        # 36-72 now after fixing 1-deep map emergence
+        # 39-69 after fixing test opponenttracker load and army tracker fog dupe emergence on move-halfs
+        # 35-76 after fixing some fog movement stuff
+        # 36-76 now after fixing some emergence pathing
+        # 35-79 now after fixing moves into fog a bit
+        # 21-83 (skipped 13) now after fixing entanglement collisions
+        # 25-83
+        # 36f-75p-14s
+        # 28-83-14s after dropping bonus
+        # 34 ..?
+        # 24-87
+        # 27-84

@@ -1,4 +1,4 @@
-import logging
+import logbook
 import time
 import typing
 
@@ -246,7 +246,7 @@ class GatherTests(TestBase):
         self.assertEqual(valueGathered, sumVal)
         self.assertEqual(turnsUsed, sumTurns)
 
-        logging.info(
+        logbook.info(
             f'{str(move)} Final panic gather value {valueGathered}/{threat.threatValue} turns {turnsUsed}/{threat.turns}')
 
     def test_gather_prune_less_produces_correct_length_plan(self):
@@ -304,7 +304,7 @@ class GatherTests(TestBase):
         self.assertEqual(valueGathered - 1, sumVal)
         self.assertEqual(turnsUsed - 1, sumTurns)
 
-        logging.info(
+        logbook.info(
             f'{str(move)} Final panic gather value {valueGathered}/{threat.threatValue} turns {turnsUsed}/{threat.turns}')
 
         viewInfo = ekBot.viewInfo
@@ -357,7 +357,7 @@ class GatherTests(TestBase):
                 else:
                     self.assertEqual(0, sumVal)
 
-                logging.info(
+                logbook.info(
                     f'{str(move)} Final panic gather value {valueGathered}/{threat.threatValue} turns {turnsUsed}/{threat.turns}')
 
                 viewInfo = ekBot.viewInfo

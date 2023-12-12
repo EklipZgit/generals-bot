@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+import logbook
 import time
 import typing
 
@@ -185,15 +185,15 @@ class ArmyEngine(object):
             result = self.execute_scan_brute_force(baseBoardState, turns, noThrow=noThrow)
 
             duration = time.perf_counter() - start
-            logging.info(f'brute force army scrim depth {turns} complete in {duration:.3f} after iter {self.iterations} (nash {self.time_in_nash:.3f} - {self.nash_eq_iterations} eq itr, {self.time_in_nash_eq:.3f} in eq)')
+            logbook.info(f'brute force army scrim depth {turns} complete in {duration:.3f} after iter {self.iterations} (nash {self.time_in_nash:.3f} - {self.nash_eq_iterations} eq itr, {self.time_in_nash_eq:.3f} in eq)')
         else:
             if self.mcts_runner is None:
                 self.mcts_runner = MctsDUCT()
 
             result, summary = self.execute_scan_MCTS(baseBoardState, turns, noThrow=noThrow)
 
-            logging.info(f'MONTE CARLO army scrim complete in scan {summary.duration:.4f} full {time.perf_counter() - start:.4f}')
-            logging.info(f'Monte Carlo summary: {str(summary)}')
+            logbook.info(f'MONTE CARLO army scrim complete in scan {summary.duration:.4f} full {time.perf_counter() - start:.4f}')
+            logbook.info(f'Monte Carlo summary: {str(summary)}')
         return result
 
     def simulate_recursive_brute_force(
@@ -227,7 +227,7 @@ class ArmyEngine(object):
                     # don't over-penalize to short depths, give them extra scan time
                     self.time_limit += self._time_limit_dec
 
-                logging.error(f'AE BRUTE ITER {self.iterations} EXCEEDED TIME {self.time_limit:.3f} ({duration:.3f}) reducing end turn from {oldTurn} to {self.to_turn}')
+                logbook.error(f'AE BRUTE ITER {self.iterations} EXCEEDED TIME {self.time_limit:.3f} ({duration:.3f}) reducing end turn from {oldTurn} to {self.to_turn}')
                 self.time_limit += self._time_limit_dec
 
         if (currentTurn >= self.to_turn
@@ -264,7 +264,7 @@ class ArmyEngine(object):
                 #         and enMove.source.y == 4
                 #         and boardState.depth < 2
                 # ):
-                #     logging.info('gotcha')
+                #     logbook.info('gotcha')
                 nextBoardState = self.get_next_board_state(nextTurn, boardState, frMove, enMove)
                 nextResult = self.simulate_recursive_brute_force(
                     nextBoardState,
@@ -632,7 +632,7 @@ class ArmyEngine(object):
                     currentBoardState.can_force_repetition = True
                 if (friendlyRepeats or bothNoOp) and diff <= 0:
                     currentBoardState.can_enemy_force_repetition = True
-                # logging.info(f'DETECTED REPETITION')
+                # logbook.info(f'DETECTED REPETITION')
             return True
         else:
             currentBoardState.repetition_count = 0
@@ -698,16 +698,16 @@ class ArmyEngine(object):
 
     def render_payoffs(self, boardState: ArmySimState, frMoves, enMoves, payoffs):
         colWidth = 16
-        logging.info(f'~~~')
-        logging.info(boardState.get_moves_string())
-        logging.info(f'~~~ {str(boardState.depth).ljust(colWidth - 4)}{" ".join([str(move).ljust(colWidth) for move in enMoves])}')
+        logbook.info(f'~~~')
+        logbook.info(boardState.get_moves_string())
+        logbook.info(f'~~~ {str(boardState.depth).ljust(colWidth - 4)}{" ".join([str(move).ljust(colWidth) for move in enMoves])}')
 
         for frIdx, frMove in enumerate(frMoves):
             payoffRow = []
             for enIdx, enMove in enumerate(enMoves):
                 payoffRow.append(str(payoffs[frIdx][enIdx]).ljust(colWidth))
 
-            logging.info(f'{str(frMove).rjust(colWidth - 2)}  {"".join(payoffRow)}')
+            logbook.info(f'{str(frMove).rjust(colWidth - 2)}  {"".join(payoffRow)}')
 
     def are_tiles_adjacent(self, saveTile: Tile | None, threatTile: Tile | None):
         if threatTile is not None and saveTile is not None and threatTile in saveTile.movable:
@@ -753,7 +753,7 @@ class ArmyEngine(object):
             for enIdx, enMove in enEqMoves:
                 state = payoffs[frIdx][enIdx]
                 # if logEvals:
-                #     logging.info(
+                #     logbook.info(
                 #         f'opponent cant make this move :D   {str(state)} <= {str(bestEnemyMoveWorstCaseFriendlyResponse)}')
                 if curFriendlyMoveWorstCaseOpponentResponse is None or state.calculate_value_int() < curFriendlyMoveWorstCaseOpponentResponse.calculate_value_int():
                     curFriendlyMoveWorstCaseOpponentResponse = state
@@ -765,9 +765,9 @@ class ArmyEngine(object):
 
         if self.log_everything or curDepth < self.log_payoff_depth:
             if bestFriendlyMoveExpectedEnemyMove != bestEnemyMove or bestFriendlyMove != bestEnemyMoveExpectedFriendlyMove or bestFriendlyMoveWorstCaseOpponentResponse != bestEnemyMoveWorstCaseFriendlyResponse:
-                logging.info(f'~~~  diverged, why?\r\n    FR fr: ({str(bestFriendlyMove)}) en: ({str(bestFriendlyMoveExpectedEnemyMove)})  eval {str(bestFriendlyMoveWorstCaseOpponentResponse)}\r\n    EN fr: ({str(bestEnemyMoveExpectedFriendlyMove)}) en: ({str(bestEnemyMove)})  eval {str(bestEnemyMoveWorstCaseFriendlyResponse)}\r\n')
+                logbook.info(f'~~~  diverged, why?\r\n    FR fr: ({str(bestFriendlyMove)}) en: ({str(bestFriendlyMoveExpectedEnemyMove)})  eval {str(bestFriendlyMoveWorstCaseOpponentResponse)}\r\n    EN fr: ({str(bestEnemyMoveExpectedFriendlyMove)}) en: ({str(bestEnemyMove)})  eval {str(bestEnemyMoveWorstCaseFriendlyResponse)}\r\n')
             else:
-                logging.info(f'~~~  both players agreed  fr: ({str(bestFriendlyMove)}) en: ({str(bestEnemyMove)}) eval {str(bestEnemyMoveWorstCaseFriendlyResponse)}\r\n')
+                logbook.info(f'~~~  both players agreed  fr: ({str(bestFriendlyMove)}) en: ({str(bestEnemyMove)}) eval {str(bestEnemyMoveWorstCaseFriendlyResponse)}\r\n')
 
         worstCaseForUs = bestFriendlyMoveWorstCaseOpponentResponse
         # worstCaseForUs = bestEnemyMoveWorstCaseFriendlyResponse
@@ -777,7 +777,7 @@ class ArmyEngine(object):
         #
         # worstCaseForUs.expected_best_moves.insert(0, (bestFriendlyMove, bestEnemyMove))
         # if logEvals:
-        #     logging.info(f'\r\nworstCase tileCap {worstCaseForUs.best_result_state.tile_differential}' + '\r\n'.join([f"{str(aMove)}, {str(bMove)}" for aMove, bMove in worstCaseForUs.expected_best_moves]))
+        #     logbook.info(f'\r\nworstCase tileCap {worstCaseForUs.best_result_state.tile_differential}' + '\r\n'.join([f"{str(aMove)}, {str(bMove)}" for aMove, bMove in worstCaseForUs.expected_best_moves]))
         return worstCaseForUs
 
     def get_nash_game_comparison_expected_result_state(
@@ -833,18 +833,18 @@ class ArmyEngine(object):
                         enEqMoves.append(enEnumMoves[moveIdx])
 
             if len(frEqMoves) > 1:
-                logging.warning(
+                logbook.warn(
                     f'{len(frEqMoves)} fr support moves returned...? {", ".join([str(move) for move in frEqMoves])}')
             if len(enEqMoves) > 1:
-                logging.warning(
+                logbook.warn(
                     f'{len(enEqMoves)} en support moves returned...? {", ".join([str(move) for move in enEqMoves])}')
 
             if len(frEqMoves) == 0 and len(frEnumMoves) > 0:
-                logging.warning(
+                logbook.warn(
                     f'{len(frEqMoves)} fr support moves returned...? {", ".join([str(move) for move in frEqMoves])}')
                 frEqMoves = frEnumMoves
             if len(enEqMoves) == 0 and len(enEnumMoves) > 0:
-                logging.warning(
+                logbook.warn(
                     f'{len(enEqMoves)} en support moves returned...? {", ".join([str(move) for move in enEqMoves])}')
                 enEqMoves = enEnumMoves
 
@@ -894,18 +894,18 @@ class ArmyEngine(object):
                     enEqMoves.append(enEnumMoves[moveIdx])
 
         if len(frEqMoves) > 1:
-            logging.warning(
+            logbook.warn(
                 f'{len(frEqMoves)} fr lemke moves returned...? {", ".join([str(move) for move in frEqMoves])}')
         if len(enEqMoves) > 1:
-            logging.warning(
+            logbook.warn(
                 f'{len(enEqMoves)} en lemke moves returned...? {", ".join([str(move) for move in enEqMoves])}')
 
         if len(frEqMoves) == 0 and len(frEnumMoves) > 0:
-            logging.warning(
+            logbook.warn(
                 f'{len(frEqMoves)} fr lemke moves returned...? {", ".join([str(move) for move in frEqMoves])}')
             frEqMoves = frEnumMoves
         if len(enEqMoves) == 0 and len(enEnumMoves) > 0:
-            logging.warning(
+            logbook.warn(
                 f'{len(enEqMoves)} en lemke moves returned...? {", ".join([str(move) for move in enEqMoves])}')
             enEqMoves = enEnumMoves
 
@@ -961,7 +961,7 @@ class ArmyEngine(object):
                         if not noThrow:
                             raise AssertionError(msg)
                         else:
-                            logging.error(msg)
+                            logbook.error(msg)
                 parentFr = curFr
             if curEn is not None:
                 if parentEn is not None:
@@ -970,7 +970,7 @@ class ArmyEngine(object):
                         if not noThrow:
                             raise AssertionError(msg)
                         else:
-                            logging.error(msg)
+                            logbook.error(msg)
                 parentEn = curEn
 
         return result
@@ -1008,7 +1008,7 @@ class ArmyEngine(object):
         decompressedExpectedScore = self.mcts_runner.decompress_player_utility(mctsSummary.expected_score)
         decompressedExpandedExpectedScore = self.mcts_runner.decompress_player_utility(mctsSummary.expanded_expected_score)
 
-        logging.info(f'MCTS e{decompressedExpectedScore/10:.1f}({mctsSummary.expected_score:.4f}) : ee{decompressedExpandedExpectedScore/10:.1f}({mctsSummary.expanded_expected_score:.4f}) iter {mctsSummary.iterations}, nodesExplored {mctsSummary.nodes_explored}, rollouts {mctsSummary.trials_performed}, backprops {mctsSummary.backprop_iter}, rolloutExpansions {mctsSummary.rollout_expansions}, biasedRolloutExpansions {mctsSummary.biased_rollout_expansions}')
+        logbook.info(f'MCTS e{decompressedExpectedScore/10:.1f}({mctsSummary.expected_score:.4f}) : ee{decompressedExpandedExpectedScore/10:.1f}({mctsSummary.expanded_expected_score:.4f}) iter {mctsSummary.iterations}, nodesExplored {mctsSummary.nodes_explored}, rollouts {mctsSummary.trials_performed}, backprops {mctsSummary.backprop_iter}, rolloutExpansions {mctsSummary.rollout_expansions}, biasedRolloutExpansions {mctsSummary.biased_rollout_expansions}')
 
         if self.honor_mcts_expected_score:
             result.net_economy_differential = decompressedExpectedScore / 10

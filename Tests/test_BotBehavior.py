@@ -1,4 +1,4 @@
-import logging
+import logbook
 
 import SearchUtils
 from Directives import Timings
@@ -84,7 +84,7 @@ class BotBehaviorTests(TestBase):
         startTurn = simHost.sim.turn
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=80)
-        logging.info(f'game over after {simHost.sim.turn - startTurn} turns')
+        logbook.info(f'game over after {simHost.sim.turn - startTurn} turns')
         self.assertIsNotNone(winner)
         self.assertEqual(map.player_index, winner)
 

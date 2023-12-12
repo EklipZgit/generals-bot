@@ -1,4 +1,4 @@
-import logging
+import logbook
 import time
 import traceback
 import typing
@@ -60,13 +60,13 @@ def get_expansion_single_knapsack_path_trimmed(
     # build knapsack weights and values
     weights = [path.length for friendlyCityCount, tilesCaptured, path in paths]
     values = [int(intFactor * tilesCaptured) for friendlyCityCount, tilesCaptured, path in paths]
-    logging.info(f"Feeding the following paths into knapsackSolver at turns {turns}...")
+    logbook.info(f"Feeding the following paths into knapsackSolver at turns {turns}...")
     for i, pathTuple in enumerate(paths):
         friendlyCityCount, tilesCaptured, curPath = pathTuple
-        logging.info(f"{i}:  cap {tilesCaptured:.2f} length {curPath.length} path {curPath.toString()}")
+        logbook.info(f"{i}:  cap {tilesCaptured:.2f} length {curPath.length} path {curPath.toString()}")
 
     totalValue, maxKnapsackedPaths = solve_knapsack(paths, turns, weights, values)
-    logging.info(f"maxKnapsackedPaths value {totalValue} length {len(maxKnapsackedPaths)},")
+    logbook.info(f"maxKnapsackedPaths value {totalValue} length {len(maxKnapsackedPaths)},")
 
     path: typing.Union[None, Path] = None
     if len(maxKnapsackedPaths) > 0:
@@ -74,11 +74,11 @@ def get_expansion_single_knapsack_path_trimmed(
         totalTrimmable = 0
         for friendlyCityCount, tilesCaptured, curPath in maxKnapsackedPaths:
             if curPath.start.tile in trimmable:
-                logging.info(
+                logbook.info(
                     f"trimmable in current knapsack, {curPath.toString()} (friendlyCityCount {friendlyCityCount}, tilesCaptured {tilesCaptured})")
                 trimmablePath, possibleTrim = trimmable[curPath.start.tile]
                 totalTrimmable += possibleTrim
-        logging.info(f"totalTrimmable! {totalTrimmable}")
+        logbook.info(f"totalTrimmable! {totalTrimmable}")
 
         if totalTrimmable > 0:
             trimmableStart = time.perf_counter()
@@ -89,16 +89,16 @@ def get_expansion_single_knapsack_path_trimmed(
                 otherValue, otherKnapsackedPaths = solve_knapsack(paths, turns + i, weights, values)
                 # offset by i to compensate for the skipped moves
                 otherValueWeightedByTrim = otherValue - i * intFactor
-                logging.info(
+                logbook.info(
                     f"i {i} - otherKnapsackedPaths value {otherValue} weightedValue {otherValueWeightedByTrim} length {len(otherKnapsackedPaths)}")
                 if otherValueWeightedByTrim > maxKnapsackVal:
                     maxKnapsackVal = otherValueWeightedByTrim
                     maxKnapsackedPaths = otherKnapsackedPaths
-                    logging.info(f"NEW MAX {maxKnapsackVal}")
-            logging.info(
+                    logbook.info(f"NEW MAX {maxKnapsackVal}")
+            logbook.info(
                 f"(Time spent on {trimRange} trimmable iterations: {time.perf_counter() - trimmableStart:.3f})")
         # Select which of the knapsack paths to move first
-        logging.info("Selecting which of the above paths to move first")
+        logbook.info("Selecting which of the above paths to move first")
         for friendlyCityCount, tilesCaptured, curPath in maxKnapsackedPaths:
             trimmableVal = 0
             if curPath.start.tile in trimmable:
@@ -113,10 +113,10 @@ def get_expansion_single_knapsack_path_trimmed(
             if thisVal > maxVal:
                 maxVal = thisVal
                 path = curPath
-                logging.info(
+                logbook.info(
                     f"new max val, eval [{'], ['.join(str(x) for x in maxVal)}], path {path.toString()}")
             else:
-                logging.info(
+                logbook.info(
                     f"NOT max val, eval [{'], ['.join(str(x) for x in thisVal)}], path {curPath.toString()}")
 
     otherPaths = [p for _, _, p in maxKnapsackedPaths if p != path]
@@ -202,11 +202,11 @@ def path_has_cities_and_should_wait(
     #             cappable.append(movable)
     #     if len(cappable) > 0:
     #         if DebugHelper.IS_DEBUGGING:
-    #             logging.info(f'  WORST CASE END ARMY {worstCaseArmy} (realArmy {curArmy}) CAN CAP MORE TILES, RETURNING FALSE ({str(path)})')
+    #             logbook.info(f'  WORST CASE END ARMY {worstCaseArmy} (realArmy {curArmy}) CAN CAP MORE TILES, RETURNING FALSE ({str(path)})')
     #         return False
 
     if pathWorstCaseTurns != path.length and DebugHelper.IS_DEBUGGING:
-        logging.info(f'  WORST CASE TURNS {pathWorstCaseTurns} < path len {path.length} ({str(path)})')
+        logbook.info(f'  WORST CASE TURNS {pathWorstCaseTurns} < path len {path.length} ({str(path)})')
 
     return True
 
@@ -223,10 +223,10 @@ def _group_expand_paths_by_crossovers(
     #     for val, p in multiPathDict[tile].values():
     #         allPaths.append((val, p))
     #         combinedTurnLengths += p.length
-    # logging.info(
+    # logbook.info(
     #     f'EXP MULT KNAP {len(multiPathDict)} grps, {len(allPaths)} paths, {remainingTurns} turns, combinedPathLengths {combinedTurnLengths}:')
     # for val, p in allPaths:
-    #     logging.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
+    #     logbook.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
     #
     allPaths = []
     # initially group by starting tile
@@ -269,7 +269,7 @@ def _merge_path_groups_recurse(
             crossedPathGroup = pathGroupLookup[crossedPath]
             if groupNumber != crossedPathGroup:
                 if DebugHelper.IS_DEBUGGING:
-                    logging.info(f'path {groupNumber} {str(path)}\r\n  crosses path {crossedPathGroup} {str(crossedPath)}, converting')
+                    logbook.info(f'path {groupNumber} {str(path)}\r\n  crosses path {crossedPathGroup} {str(crossedPath)}, converting')
                 pathGroupLookup[crossedPath] = groupNumber
                 _merge_path_groups_recurse(groupNumber, crossedPath, pathGroupLookup, pathsCrossingTiles)
 
@@ -324,16 +324,16 @@ def _get_tile_path_value(
 
         if destDistSum >= enemyDistPenaltyPoint:
             if destDistSum < sourceDistSum:
-                # logging.info(f"move {str(last)}->{str(tile)} was TOWARDS shortest path")
+                # logbook.info(f"move {str(last)}->{str(tile)} was TOWARDS shortest path")
                 value += 0.01
 
         if destDistSum == sourceDistSum:
-            # logging.info(f"move {str(last)}->{str(tile)} was flanking parallel to shortest path")
+            # logbook.info(f"move {str(last)}->{str(tile)} was flanking parallel to shortest path")
             value += 0.01
 
         if abs(destEnDist - destGenDist) <= abs(sourceEnDist - sourceGenDist):
             valueAdd = abs(destEnDist - destGenDist) / 200
-            # logging.info(
+            # logbook.info(
             #     f"move {last.toString()}->{tile.toString()} was moving towards the center, valuing it {valueAdd} higher")
             value += valueAdd
     return value
@@ -415,11 +415,11 @@ def knapsack_multi_paths(
         for val, p in pathValues:
             allPaths.append((val, p))
             combinedTurnLengths += p.length
-    logging.info(
+    logbook.info(
         f'EXP MULT KNAP {groupsWithPaths} grps, {len(allPaths)} paths, {remainingTurns} turns, combinedPathLengths {combinedTurnLengths}:')
     if DebugHelper.IS_DEBUGGING:
         for val, p in allPaths:
-            logging.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
+            logbook.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
 
     def multiple_choice_knapsack_expansion_path_value_converter(p: Path) -> int:
         floatVal = postPathEvalFunction(p, negativeTiles)
@@ -455,7 +455,7 @@ def knapsack_multi_paths(
         negativeTiles)
 
     # viewInfo.add_info_line(
-    logging.info(
+    logbook.info(
         f'MEXPC en{enemyCapped} neut{neutralCapped} {turnsUsed}/{remainingTurns} {totalValue}v num paths {len(maxPaths)}')
 
     otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, negativeTiles) / pa.length, reverse=True)]
@@ -536,11 +536,11 @@ def knapsack_multi_paths_no_crossover(
         for val, p in pathValues:
             allPaths.append((val, p))
             combinedTurnLengths += p.length
-    logging.info(
+    logbook.info(
         f'EXP MULT KNAP {groupsWithPaths} grps, {len(allPaths)} paths, {remainingTurns} turns, combinedPathLengths {combinedTurnLengths}:')
     if DebugHelper.IS_DEBUGGING:
         for val, p in allPaths:
-            logging.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
+            logbook.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
 
     def multiple_choice_knapsack_expansion_path_value_converter(p: Path) -> int:
         floatVal = postPathEvalFunction(p, negativeTiles)
@@ -576,7 +576,7 @@ def knapsack_multi_paths_no_crossover(
         negativeTiles)
 
     # viewInfo.add_info_line(
-    logging.info(
+    logbook.info(
         f'MEXPN en{enemyCapped} neut{neutralCapped} {turnsUsed}/{remainingTurns} {totalValue}v num paths {len(maxPaths)}')
 
     otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, negativeTiles) / pa.length, reverse=True)]
@@ -1415,7 +1415,7 @@ def get_optimal_expansion(
             if viewInfo is not None:
                 viewInfo.add_info_line(msg)
             else:
-                logging.warning(msg)
+                logbook.warn(msg)
 
             path = altPath
             otherPaths = altOtherPaths
@@ -1462,7 +1462,7 @@ def get_optimal_expansion(
         return path, otherPaths
 
     finally:
-        logging.info('\n'.join(logEntries))
+        logbook.info('\n'.join(logEntries))
 
 
 def _include_leaf_moves_in_exp_plan(
@@ -1502,14 +1502,14 @@ def _include_leaf_moves_in_exp_plan(
                 continue
 
             if leafMove.source.army - leafMove.dest.army >= 3:
-                logging.info(
+                logbook.info(
                     f"Did NOT add leafMove {str(leafMove)} to knapsack input because its value was high. Why wasn't it already input if it is a good move?")
                 continue
 
             if skipNeutrals and leafMove.dest.isNeutral:
                 continue
 
-            # logging.info(f"adding leafMove {str(leafMove)} to knapsack input")
+            # logbook.info(f"adding leafMove {str(leafMove)} to knapsack input")
             path = Path(leafMove.source.army - leafMove.dest.army - 1)
             path.add_next(leafMove.source)
             path.add_next(leafMove.dest)
@@ -1591,11 +1591,11 @@ def _execute_expansion_gather_to_borders(
             searchingPlayer = startTiles[0].player
 
     if shouldLog:
-        logging.info(f"Trying exp timing gather. Turns {depth}. Searching player {searchingPlayer}")
+        logbook.info(f"Trying exp timing gather. Turns {depth}. Searching player {searchingPlayer}")
     if valueFunc is None:
 
         if shouldLog:
-            logging.info("Using default valueFunc")
+            logbook.info("Using default valueFunc")
 
         def default_value_func_max_gathered_per_turn(
                 currentTile,
@@ -1634,14 +1634,14 @@ def _execute_expansion_gather_to_borders(
                        # 0 - ySum
             )
             if shouldLog:
-                logging.info(f'VALUE {str(currentTile)} : {str(prioObj)}')
+                logbook.info(f'VALUE {str(currentTile)} : {str(prioObj)}')
             return prioObj
 
         valueFunc = default_value_func_max_gathered_per_turn
 
     if priorityFunc is None:
         if shouldLog:
-            logging.info("Using default priorityFunc")
+            logbook.info("Using default priorityFunc")
 
         def default_priority_func(nextTile, currentPriorityObject):
             (
@@ -1693,22 +1693,22 @@ def _execute_expansion_gather_to_borders(
                 numPrioTiles
             )
             if shouldLog:
-                logging.info(f'PRIO {str(nextTile)} : {str(prioObj)}')
-            # logging.info("prio: nextTile {} got realDist {}, negNextArmy {}, negDistanceSum {}, newDist {}, xSum {}, ySum {}".format(nextTile.toString(), realDist + 1, 0-nextArmy, negDistanceSum, dist + 1, xSum + nextTile.x, ySum + nextTile.y))
+                logbook.info(f'PRIO {str(nextTile)} : {str(prioObj)}')
+            # logbook.info("prio: nextTile {} got realDist {}, negNextArmy {}, negDistanceSum {}, newDist {}, xSum {}, ySum {}".format(nextTile.toString(), realDist + 1, 0-nextArmy, negDistanceSum, dist + 1, xSum + nextTile.x, ySum + nextTile.y))
             return prioObj
 
         priorityFunc = default_priority_func
 
     if baseCaseFunc is None:
         if shouldLog:
-            logging.info("Using default baseCaseFunc")
+            logbook.info("Using default baseCaseFunc")
 
         def default_base_case_func(tile, startingDist):
             startArmy = tile.army
             # we would like to not gather to an enemy tile without killing it, so must factor it into the path. army value is negative for priority, so use positive for enemy army.
             # if useTrueValueGathered and tile.player != searchingPlayer:
             #     if shouldLog:
-            #         logging.info(
+            #         logbook.info(
             #             f"tile {tile.toString()} was not owned by searchingPlayer {searchingPlayer}, adding its army {tile.army}")
             #     startArmy = tile.army
 
@@ -1727,7 +1727,7 @@ def _execute_expansion_gather_to_borders(
                 0
             )
             if shouldLog:
-                logging.info(f"BASE CASE: {str(tile)} -> {str(prioObj)}")
+                logbook.info(f"BASE CASE: {str(tile)} -> {str(prioObj)}")
             return prioObj
 
         baseCaseFunc = default_base_case_func
@@ -1752,7 +1752,7 @@ def _execute_expansion_gather_to_borders(
         (startPriorityObject, distance) = startTilesDict[tile]
 
         if shouldLog:
-            logging.info(f"Including tile {tile.x},{tile.y} in startTiles at distance {distance}")
+            logbook.info(f"Including tile {tile.x},{tile.y} in startTiles at distance {distance}")
 
     valuePerTurnPathPerTilePerDistance = SearchUtils.breadth_first_dynamic_max_per_tile_per_distance(
         map,
@@ -1825,13 +1825,13 @@ def _try_include_alt_sourced_path(
     curTileDict = multiPathDict.get(path.start.tile, {})
     existingMax, existingPath = curTileDict.get(path.length, defaultNoPathValue)
     # if value > existingMax:
-    #     logging.info(
+    #     logbook.info(
     #         f'leafMove {str(path.start.tile)} BETTER than existing:\r\n'
     #         f'   new   {value} {str(path)}\r\n'
     #         f'   exist {existingMax} {str(existingPath)}')
     #     curTileDict[path.length] = (value, path)
     # else:
-    #     logging.info(
+    #     logbook.info(
     #         f'leafMove for {str(path.start.tile)} worse than existing:\r\n      bad {value} {str(path)}\r\n   exist {existingMax} {str(existingPath)}')
     multiPathDict[path.start.tile] = curTileDict
 
@@ -1930,7 +1930,7 @@ def find_optimal_expansion_path_to_move_first(
         sumWaiting += waitingPath.length
 
     if sumWaiting > remainingTurns:  # - 2
-        logging.info(f'bypassing {len(waitingPaths)} waiting city paths with total turns {sumWaiting} due to them covering most of the expansion plan remaining {remainingTurns}')
+        logbook.info(f'bypassing {len(waitingPaths)} waiting city paths with total turns {sumWaiting} due to them covering most of the expansion plan remaining {remainingTurns}')
         waitingPaths = set()
 
     if len(waitingPaths) == len(maxPaths):
@@ -1952,12 +1952,12 @@ def find_optimal_expansion_path_to_move_first(
 
         if thisUncertainty > maxUncertainty or thisUncertainty == maxUncertainty and thisVal > maxVal:
             if p not in waitingPaths:
-                logging.info(f'    path uncert{thisUncertainty:.2f} v{thisVal:.2f} > uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)} and is new best')
+                logbook.info(f'    path uncert{thisUncertainty:.2f} v{thisVal:.2f} > uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)} and is new best')
                 path = p
                 maxVal = thisVal
                 maxUncertainty = thisUncertainty
             else:
-                logging.info(
+                logbook.info(
                     f'    waiting on city path uncert{thisUncertainty:.2f} v{thisVal:.2f} > uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)} because path_has_cities_and_should_wait')
 
     return path
@@ -2030,10 +2030,10 @@ def expansion_knapsack_gather_iteration(
                 return 0, []
 
             # if shouldLog:
-            logging.info(f"Feeding solve_multiple_choice_knapsack {len(paths)} paths turns {turns}:")
+            logbook.info(f"Feeding solve_multiple_choice_knapsack {len(paths)} paths turns {turns}:")
             if shouldLog:
                 for i, path in enumerate(paths):
-                    logging.info(
+                    logbook.info(
                         f"{i}:  group[{groups[i]}] value {values[i]} length {weights[i]} path {str(path)}")
 
             totalValue, maxKnapsackedPaths = KnapsackUtils.solve_multiple_choice_knapsack(
@@ -2043,10 +2043,10 @@ def expansion_knapsack_gather_iteration(
                 values,
                 groups,
                 longRuntimeThreshold=0.03)
-            logging.info(f"maxKnapsackedPaths value {totalValue} length {len(maxKnapsackedPaths)},")
+            logbook.info(f"maxKnapsackedPaths value {totalValue} length {len(maxKnapsackedPaths)},")
             error = False
         except AssertionError:
-            logging.error(f'OVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE. v\r\n{traceback.format_exc()}\r\nOVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE.^ ')
+            logbook.error(f'OVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE. v\r\n{traceback.format_exc()}\r\nOVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE.^ ')
             valuePerTurnPathPerTile = _prune_worst_paths_greedily(valuePerTurnPathPerTile, valueFunc)
 
     return totalValue, sorted(maxKnapsackedPaths, key=lambda p: pathValLookup[p] / max(1, p.length), reverse=True)

@@ -5,7 +5,7 @@
     EklipZ bot - Tries to play generals lol
 """
 
-import logging
+import logbook
 import time
 import json
 from ArmyAnalyzer import *
@@ -101,7 +101,7 @@ class BoardAnalyzer:
         lowestAvgTile: Tile | None = None
 
         for tile in self.map.pathableTiles:
-            # logging.info("Rescanning chokes for {}".format(tile.toString()))
+            # logbook.info("Rescanning chokes for {}".format(tile.toString()))
             tileDist = self.friendly_general_distances[tile.x][tile.y]
 
             distSum = tileDist
@@ -125,13 +125,13 @@ class BoardAnalyzer:
                 self.innerChokes[tile.x][tile.y] = True
             if self.map.turn > 4:
                 if oldInner[tile.x][tile.y] != self.innerChokes[tile.x][tile.y]:
-                    logging.info(
+                    logbook.info(
                         f"  inner choke change: tile {str(tile)}, old {oldInner[tile.x][tile.y]}, new {self.innerChokes[tile.x][tile.y]}")
                 if oldOuter[tile.x][tile.y] != self.outerChokes[tile.x][tile.y]:
-                    logging.info(
+                    logbook.info(
                         f"  outer choke change: tile {str(tile)}, old {oldOuter[tile.x][tile.y]}, new {self.outerChokes[tile.x][tile.y]}")
 
-        logging.info(f'calculated central defense point to be {str(lowestAvgTile)} due to lowestAvgDist {lowestAvgDist}')
+        logbook.info(f'calculated central defense point to be {str(lowestAvgTile)} due to lowestAvgDist {lowestAvgDist}')
         self.central_defense_point = lowestAvgTile
 
     def rebuild_intergeneral_analysis(self, opponentGeneral: Tile):
@@ -145,7 +145,7 @@ class BoardAnalyzer:
         self.within_core_play_area_threshold = int((self.inter_general_distance + 1) * 1.1)
         self.within_extended_play_area_threshold = int((self.inter_general_distance + 2) * 1.2)
         self.within_flank_danger_play_area_threshold = int((self.inter_general_distance + 2) * 1.3)
-        logging.info(f'BOARD ANALYSIS THRESHOLDS:\r\n'
+        logbook.info(f'BOARD ANALYSIS THRESHOLDS:\r\n'
                      f'     board shortest dist: {self.inter_general_distance}\r\n'
                      f'     core area dist: {self.within_core_play_area_threshold}\r\n'
                      f'     extended area dist: {self.within_extended_play_area_threshold}\r\n'
@@ -220,6 +220,6 @@ class BoardAnalyzer:
                             includedPathways.add(pathwaySource)
                             goodLeaves.append(move)
                     else:
-                        logging.info("Pathway for tile {} was already included, skipping".format(move.source.toString()))
+                        logbook.info("Pathway for tile {} was already included, skipping".format(move.source.toString()))
 
         return goodLeaves

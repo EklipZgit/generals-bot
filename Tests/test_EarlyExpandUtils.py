@@ -1,5 +1,5 @@
 import inspect
-import logging
+import logbook
 import os
 import pathlib
 import time
@@ -678,7 +678,7 @@ class EarlyExpandUtilsTests(TestBase):
         files = os.listdir(folderWithHistoricals)
         joined = '\n'.join(files)
         self.begin_capturing_logging()
-        logging.info(f'files:\n{joined}')
+        logbook.info(f'files:\n{joined}')
         for file in files:
             with self.subTest(file=file.split('.')[0]):
                 map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=50)

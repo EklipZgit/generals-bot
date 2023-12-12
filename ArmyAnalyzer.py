@@ -5,9 +5,12 @@
     EklipZ bot - Tries to play generals lol
 """
 
-import logging
+import logbook
 import time
 import json
+
+import logbook
+
 from ArmyTracker import *
 from SearchUtils import *
 from collections import deque 
@@ -57,20 +60,20 @@ class ArmyAnalyzer:
         self.shortestPathWay: PathWay = PathWay(distance=INF)
         self.chokeWidths: typing.Dict[Tile, int] = {}
 
-        logging.info("ArmyAnalyzer analyzing {} and {}".format(self.tileA.toString(), self.tileB.toString()))
+        logbook.info("ArmyAnalyzer analyzing {} and {}".format(self.tileA.toString(), self.tileB.toString()))
             
         # a map of distances from point A
         # self.aMap = build_distance_map(self.map, [self.tileA], [self.tileB])
         self.aMap = build_distance_map(self.map, [self.tileA], [])
         # closestTile = min(self.tileB.movable, key=lambda tile: self.aMap[tile.x][tile.y])
         # self.aMap[self.tileB.x][self.tileB.y] = self.aMap[closestTile.x][closestTile.y] + 1
-        # logging.info("set aMap({}) to {}".format(self.tileB.toString(), self.aMap[self.tileB.x][self.tileB.y]))
+        # logbook.info("set aMap({}) to {}".format(self.tileB.toString(), self.aMap[self.tileB.x][self.tileB.y]))
         # a map of distances from point B
         # self.bMap = build_distance_map(self.map, [self.tileB], [self.tileA])
         self.bMap = build_distance_map(self.map, [self.tileB], [])
         # closestTile = min(self.tileA.movable, key=lambda tile: self.bMap[tile.x][tile.y])
         # self.bMap[self.tileA.x][self.tileA.y] = self.bMap[closestTile.x][closestTile.y] + 1
-        # logging.info("set bMap({}) to {}".format(self.tileA.toString(), self.bMap[self.tileA.x][self.tileA.y]))
+        # logbook.info("set bMap({}) to {}".format(self.tileA.toString(), self.bMap[self.tileA.x][self.tileA.y]))
 
         self.scan()
 
@@ -108,10 +111,10 @@ class ArmyAnalyzer:
             if path is not None:
                 chokeKey = (path.distance, self.aMap[tile.x][tile.y], self.bMap[tile.x][tile.y])
                 if chokeCounterMap[chokeKey] == 1:
-                    #logging.info("  (maybe) found choke at {}? Testing for shorter pathway joins".format(tile.toString()))
+                    #logbook.info("  (maybe) found choke at {}? Testing for shorter pathway joins".format(tile.toString()))
                     shorter = count(tile.movable, lambda adjTile: adjTile in self.pathWayLookupMatrix and self.pathWayLookupMatrix[adjTile].distance < path.distance)
                     if shorter == 0:
-                        #logging.info("    OK WE DID FIND A CHOKEPOINT AT {}! adding to self.pathChokes".format(tile.toString()))
+                        #logbook.info("    OK WE DID FIND A CHOKEPOINT AT {}! adding to self.pathChokes".format(tile.toString()))
                         # Todo this should probably be on pathways lol
                         self.pathChokes.add(tile)
                 self.chokeWidths[tile] = chokeCounterMap[chokeKey]
@@ -120,7 +123,7 @@ class ArmyAnalyzer:
 
     def build_pathway(self, tile) -> PathWay:
         distance = self.aMap[tile.x][tile.y] + self.bMap[tile.x][tile.y]
-        #logging.info("  building pathway from tile {} distance {}".format(tile.toString(), distance))
+        #logbook.info("  building pathway from tile {} distance {}".format(tile.toString(), distance))
         path = PathWay(distance = distance)
 
         queue = deque()
@@ -133,7 +136,7 @@ class ArmyAnalyzer:
             if currentTileDistance < 300:
                 #so not inf
                 if currentTileDistance == distance:
-                    #logging.info("    adding tile {}".format(currentTile.toString()))
+                    #logbook.info("    adding tile {}".format(currentTile.toString()))
                     path.add_tile(currentTile)
                     self.pathWayLookupMatrix[currentTile] = path
 

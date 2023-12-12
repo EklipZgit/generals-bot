@@ -5,7 +5,7 @@
     EklipZ bot - Tries to play generals lol
 """
 
-import logging
+import logbook
 import math
 import random
 import typing
@@ -56,7 +56,7 @@ class ThreatObj(object):
                 # neighbors = where(pathWay.tiles, lambda t: t != tile and self.armyAnalysis.aMap[t.x][t.y] == self.armyAnalysis.aMap[tile.x][tile.y] and self.armyAnalysis.bMap[t.x][t.y] == self.armyAnalysis.bMap[tile.x][tile.y])
                 # newDist = dist + 1
                 # del dict[tile]  # necessary for 'test_should_not_make_move_away_from_threat' to pass.
-                # logging.info(f'Threat path tile {str(tile)} increased to dist {newDist} based on neighbors {neighbors}')
+                # logbook.info(f'Threat path tile {str(tile)} increased to dist {newDist} based on neighbors {neighbors}')
                 pass
             # elif not allowNonChoke and tile not in self.armyAnalysis.pathChokes and not self.path.start.next.tile in tile.movable:
             elif not allowNonChoke and tile not in self.armyAnalysis.pathChokes:  # and not self.path.start.next.tile in tile.movable:
@@ -65,13 +65,13 @@ class ThreatObj(object):
                 chokeWidth = self.armyAnalysis.chokeWidths.get(tile, None)
                 if chokeWidth is not None:
                     newDist = dist + chokeWidth - 2
-                    logging.info(f'Threat path tile {str(tile)} increased to dist {newDist} from {dist} based on not being a choke')
+                    logbook.info(f'Threat path tile {str(tile)} increased to dist {newDist} from {dist} based on not being a choke')
                     dict[tile] = newDist
-                # logging.info(f'stripping threat defense tile {str(tile)} bc not in path chokes')
+                # logbook.info(f'stripping threat defense tile {str(tile)} bc not in path chokes')
                 # del dict[tile]  # necessary for 'test_should_not_make_move_away_from_threat' to pass.
                 pass
             # else:
-            #     logging.info(f'Threat path tile {str(tile)} left at dist {dist}')
+            #     logbook.info(f'Threat path tile {str(tile)} left at dist {dist}')
 
         # dict[self.path.start.tile] -= 1
 
@@ -142,7 +142,7 @@ class DangerAnalyzer(object):
 
     def getVisionThreat(self, depth: int, armies: typing.Dict[Tile, Army]) -> ThreatObj | None:
         startTime = time.perf_counter()
-        logging.info("------  VISION threat analyzer: depth {}".format(depth))
+        logbook.info("------  VISION threat analyzer: depth {}".format(depth))
         curThreat = None
 
         threatenedGen = None
@@ -163,7 +163,7 @@ class DangerAnalyzer(object):
                     skip = False
                     for tile in general.adjacents:
                         if tile.player != -1 and tile.player != general.player:
-                            logging.info(
+                            logbook.info(
                                 f"not searching general vision due to tile {tile.x},{tile.y} of player {tile.player}")
                             # there is already general vision.
                             skip = True
@@ -183,7 +183,7 @@ class DangerAnalyzer(object):
                     if path is not None and (curThreat is None or path.length < curThreat.length or (
                             path.length == curThreat.length and path.value > curThreat.value)):
                         # self.viewInfo.addSearched(path[1].tile)
-                        logging.info(f"dest BFS found VISION against our general:\n{str(path)}")
+                        logbook.info(f"dest BFS found VISION against our general:\n{str(path)}")
                         curThreat = path
                         threatenedGen = general
         threatObj = None
@@ -193,7 +193,7 @@ class DangerAnalyzer(object):
                 army = armies[army]
             analysis = ArmyAnalyzer(self.map, threatenedGen, army)
             threatObj = ThreatObj(curThreat.length - 1, curThreat.value, curThreat, ThreatType.Vision, None, analysis)
-        logging.info(f"VISION threat analyzer took {time.perf_counter() - startTime:.3f}")
+        logbook.info(f"VISION threat analyzer took {time.perf_counter() - startTime:.3f}")
         return threatObj
 
     def getFastestThreat(
@@ -218,7 +218,7 @@ class DangerAnalyzer(object):
         @return:
         """
         startTime = time.perf_counter()
-        logging.info(f"------  fastest threat analyzer: depth {depth}")
+        logbook.info(f"------  fastest threat analyzer: depth {depth}")
         curThreat = None
         saveTile = None
         # searchArmyAmount = -0.5  # commented during off by one defense issues and replaced with 0?
@@ -308,8 +308,8 @@ class DangerAnalyzer(object):
                     skipTiles=[lastTile])
                 if altPath is None or altPath.length > path.length:
                     saveTile = lastTile
-                    logging.info(f"saveTile blocks path to our king: {saveTile.x},{saveTile.y}")
-                logging.info(f"dest BFS found KILL against our target:\n{str(path)}")
+                    logbook.info(f"saveTile blocks path to our king: {saveTile.x},{saveTile.y}")
+                logbook.info(f"dest BFS found KILL against our target:\n{str(path)}")
                 curThreat = path
                 depth = path.length + 1
 
@@ -338,7 +338,7 @@ class DangerAnalyzer(object):
                 continue
 
             startTiles = {}
-            startTiles[armyTile] = ((0, 0, 0, 0 - army.value - 1, armyTile.x, armyTile.y, 0.5), 0)
+            startTiles[armyTile] = ((0, 0, 0, 0 - army.value, armyTile.x, armyTile.y, 0.5), 0)
             goalFunc = lambda tile, prio: tile in targets
             path = breadth_first_dynamic(
                 self.map,
@@ -347,9 +347,10 @@ class DangerAnalyzer(object):
                 0.2,
                 depth,
                 noNeutralCities=army.value < 150,
-                searchingPlayer=army.player)
+                searchingPlayer=army.player,
+                incrementBackward=True)
             if path is not None:
-                logging.info(
+                logbook.info(
                     f"Army tile mismatch threat searcher found a path! Army {str(army)}, path {str(path)}")
                 if path.value > 0 and (
                         curThreat is None or path.length < curThreat.length or path.value > curThreat.value):
@@ -364,7 +365,7 @@ class DangerAnalyzer(object):
             threatObj = ThreatObj(curThreat.length - 1, curThreat.value, curThreat, ThreatType.Kill, saveTile, analysis)
             return threatObj
         else:
-            logging.info("no fastest threat found")
+            logbook.info("no fastest threat found")
         return threatObj
 
     def getHighestThreat(self, general: Tile, depth: int, armies: typing.Dict[Tile, Army]):

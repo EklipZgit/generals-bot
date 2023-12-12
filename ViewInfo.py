@@ -5,7 +5,7 @@
     EklipZ bot - Tries to play generals lol
 """
 
-import logging
+import logbook
 import typing
 from collections import deque
 from enum import Enum
@@ -141,11 +141,11 @@ class ViewInfo(object):
         self.targetedTiles.append((tile, targetStyle, radiusReduction))
 
     def add_info_line(self, additionalInfo: str):
-        logging.info(additionalInfo)
+        logbook.info(additionalInfo)
         self.addlInfoLines.append(additionalInfo)
 
     def add_stats_line(self, statsLine: str):
-        logging.info(statsLine)
+        logbook.info(statsLine)
         self.statsLines.append(statsLine)
 
     def add_map_division(self, divisionMatrix: MapMatrix[bool], color: typing.Tuple[int, int, int], alpha: int = 128):

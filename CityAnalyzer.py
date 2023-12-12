@@ -1,4 +1,4 @@
-import logging
+import logbook
 import typing
 
 import DebugHelper
@@ -54,14 +54,14 @@ class CityScoreData(object):
     def get_weighted_neutral_value(self) -> float:
         totalScore = self.city_defensability_score * self.city_relevance_score * self.city_expandability_score * self.city_general_defense_score
         totalScore = totalScore
-        logging.info(f"cityScore neut {self.tile.x},{self.tile.y}: re{self.city_relevance_score:.4f}, ex{self.city_expandability_score:.4f}, def{self.city_defensability_score:.4f}, gdef{self.city_general_defense_score:.4f}, tot{totalScore:.3f}")
+        logbook.info(f"cityScore neut {self.tile.x},{self.tile.y}: re{self.city_relevance_score:.4f}, ex{self.city_expandability_score:.4f}, def{self.city_defensability_score:.4f}, gdef{self.city_general_defense_score:.4f}, tot{totalScore:.3f}")
         return totalScore
 
     def get_weighted_enemy_capture_value(self) -> float:
         totalScore = self.city_defensability_score * self.city_relevance_score
         if not self.tile.discovered:
             totalScore = totalScore / 2
-        logging.info(f"cityScore enemy {self.tile.x},{self.tile.y}: re{self.city_relevance_score:.4f}, def{self.city_defensability_score:.4f}, tot{totalScore:.3f}")
+        logbook.info(f"cityScore enemy {self.tile.x},{self.tile.y}: re{self.city_relevance_score:.4f}, def{self.city_defensability_score:.4f}, tot{totalScore:.3f}")
         return totalScore
 
 
@@ -273,7 +273,7 @@ class CityAnalyzer(object):
 
         cityDistSum = usDistFromCity + allyDistFromCity
         if DebugHelper.IS_DEBUGGING:
-            logging.info(f'2v2 ally city calc, {str(tile)} - cityDistSum {cityDistSum} = usDistFromCity {usDistFromCity} + allyDistFromCity {allyDistFromCity}, vs allyDistFromUs {allyDistFromUs}')
+            logbook.info(f'2v2 ally city calc, {str(tile)} - cityDistSum {cityDistSum} = usDistFromCity {usDistFromCity} + allyDistFromCity {allyDistFromCity}, vs allyDistFromUs {allyDistFromUs}')
         if cityDistSum < allyDistFromUs:
             oldExpScore = score.city_expandability_score
             oldRelScore = score.city_relevance_score
@@ -282,7 +282,7 @@ class CityAnalyzer(object):
             score.city_defensability_score *= 2
             score.city_general_defense_score *= 2
             if DebugHelper.IS_DEBUGGING:
-                logging.info(
+                logbook.info(
                     f'2v2 CHOKE city, {str(tile)} - exp {oldExpScore} -> {score.city_expandability_score},  rel {oldRelScore} -> {score.city_relevance_score}')
         #
         # if allyDistFromCity < usDistFromCity:

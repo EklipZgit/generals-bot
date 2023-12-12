@@ -1,4 +1,4 @@
-import logging
+import logbook
 import math
 import time
 import typing
@@ -78,7 +78,7 @@ def solve_multiple_choice_knapsack(
     if estTime > longRuntimeThreshold:
         raise AssertionError(f"Knapsack potential long run est {estTime:.3f}: the inputs (n {n} * capacity {capacity} * math.sqrt(maxGroupSize {maxGroupSize}) {maxGrSq}) are going to result in a substantial runtime, maybe try a different algorithm")
     if not noLog:
-        logging.info(f'estimated knapsack time: {estTime:.3f} (n {n} * capacity {capacity} * math.sqrt(maxGroupSize {maxGroupSize}) {maxGrSq:.1f})')
+        logbook.info(f'estimated knapsack time: {estTime:.3f} (n {n} * capacity {capacity} * math.sqrt(maxGroupSize {maxGroupSize}) {maxGrSq:.1f})')
 
     for curCapacity in range(capacity + 1):
         for i in range(n + 1):
@@ -100,7 +100,7 @@ def solve_multiple_choice_knapsack(
     res = K[n][capacity]
     timeTaken = time.perf_counter() - timeStart
     if not noLog:
-        logging.info(f"Value Found {res} in {timeTaken:.3f}")
+        logbook.info(f"Value Found {res} in {timeTaken:.3f}")
     includedItems = []
     includedGroups = []
     w = capacity
@@ -129,7 +129,7 @@ def solve_multiple_choice_knapsack(
         lastTakenGroup = group
         # This item is included.
         if not noLog:
-            logging.info(
+            logbook.info(
                 f"item at index {i - 1} with value {values[i - 1]} and weight {weights[i - 1]} was included... adding it to output. (Res {res})")
         includedItems.append(items[i - 1])
 
@@ -142,7 +142,7 @@ def solve_multiple_choice_knapsack(
         uniqueGroupsIncluded = set(includedGroups)
         if len(uniqueGroupsIncluded) != len(includedGroups):
             raise AssertionError("Yo, the multiple choice knapsacker failed to be distinct by groups")
-        logging.info(
+        logbook.info(
             f"multiple choice knapsack completed on {n} items for capacity {capacity} finding value {K[n][capacity]} in Duration {time.perf_counter() - timeStart:.3f}")
 
     return K[n][capacity], includedItems
@@ -189,7 +189,7 @@ def solve_knapsack(
 
     # stores the result of Knapsack
     res = K[n][capacity]
-    logging.info("Value Found {}".format(res))
+    logbook.info("Value Found {}".format(res))
     includedItems = []
     w = capacity
     for i in range(n, 0, -1):
@@ -211,7 +211,7 @@ def solve_knapsack(
             continue
 
         # This item is included.
-        logging.info(
+        logbook.info(
             f"item at index {i - 1} with value {values[i - 1]} and weight {weights[i - 1]} was included... adding it to output. (Res {res})")
         includedItems.append(items[i - 1])
 
@@ -220,7 +220,7 @@ def solve_knapsack(
         res = res - values[i - 1]
         w = w - weights[i - 1]
 
-    logging.info(
+    logbook.info(
         f"knapsack completed on {n} items for capacity {capacity} finding value {K[n][capacity]} in Duration {time.perf_counter() - timeStart:.3f}")
     return K[n][capacity], includedItems
 

@@ -6,7 +6,7 @@
 """
 import sys
 import traceback
-import logging
+import logbook
 import os
 import queue
 import threading
@@ -74,13 +74,13 @@ class GeneralsClientHost(object):
         while self._running:
             time.sleep(1.0)
 
-        logging.info(f'No longer self._running=True in bot_base.py, starting suicide thread')
+        logbook.info(f'No longer self._running=True in bot_base.py, starting suicide thread')
         create_thread(self._suicide_in_4_seconds)
 
     def _suicide_in_4_seconds(self):
-        logging.info('suicide thread started, waiting 4 seconds before killing the process')
+        logbook.info('suicide thread started, waiting 4 seconds before killing the process')
         time.sleep(4.0)
-        logging.info('ok, killing process')
+        logbook.info('ok, killing process')
         time.sleep(0.1)
         exit(0)
 
@@ -88,7 +88,7 @@ class GeneralsClientHost(object):
         # Create Game
         self._game = generals.GeneralsClient(self._userId, self._name, self._gameType, gameid=self._privateRoomID, public_server=self._public_server)
 
-        logging.info("game start...?")
+        logbook.info("game thread start...?")
 
         # Start Receiving Updates
         try:
@@ -100,23 +100,23 @@ class GeneralsClientHost(object):
         except ValueError:  # Already in match, restart
             exc_type, exc_value, exc_traceback = sys.exc_info()
             lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-            logging.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
+            logbook.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
             
-            logging.info("Exit: Already in queue in _start_update_loop")
+            logbook.info("Exit: Already in queue in _start_update_loop")
         except:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-            #logging.info("inf")  # Log it or whatever here
-            #logging.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
-            #logging.info("warn")  # Log it or whatever here
-            #logging.warning(''.join('!! ' + line for line in lines))  # Log it or whatever here
-            logging.info("err")  # Log it or whatever here
-            logging.error(''.join('!! ' + line for line in lines))  # Log it or whatever here
+            #logbook.info("inf")  # Log it or whatever here
+            #logbook.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
+            #logbook.info("warn")  # Log it or whatever here
+            #logbook.warn(''.join('!! ' + line for line in lines))  # Log it or whatever here
+            logbook.info("err")  # Log it or whatever here
+            logbook.error(''.join('!! ' + line for line in lines))  # Log it or whatever here
 
         self._running = False
         self._game._terminate()
 
-        logging.info("crashed out of update loop, creating suicide thread")
+        logbook.info("crashed out of update loop, creating suicide thread")
 
         create_thread(self._suicide_in_4_seconds)
 
@@ -136,21 +136,21 @@ class GeneralsClientHost(object):
                 self._game.send_surrender()
 
         if over:
-            logging.info(f"!!!! Game Complete. Result = {updateType} !!!!")
+            logbook.info(f"!!!! Game Complete. Result = {updateType} !!!!")
             if '_moves_realized' in dir(self):
-                logging.info(f"Moves: {self._updates_received:d}, Realized: {self._moves_realized:d}")
+                logbook.info(f"Moves: {self._updates_received:d}, Realized: {self._moves_realized:d}")
 
             # why was this sleep here?
             time.sleep(2.0)
             self._running = False
-            logging.info("terminating in _set_update")
+            logbook.info("terminating in _set_update")
             self._game._terminate()
             time.sleep(2.0)
-            logging.info("Spawning suicide thread from server-updates thread..?")
+            logbook.info("Spawning suicide thread from server-updates thread..?")
             try:
                 create_thread(self._suicide_in_4_seconds)
             except:
-                logging.info(traceback.format_exc())
+                logbook.info(traceback.format_exc())
 
         return over
 
@@ -163,7 +163,7 @@ class GeneralsClientHost(object):
             if self._map is not None and self._map.complete and self._map.remainingPlayers > 1 and not self._map.players[self._map.player_index].dead:
                 # bot gave up, terminate
                 self._running = False
-                logging.info(f'bot gave up :(')
+                logbook.info(f'bot gave up :(')
                 break
 
             try:
@@ -185,7 +185,7 @@ class GeneralsClientHost(object):
                             if self._map is None:
                                 raise AssertionError('_map was none... but missed update?')
 
-                            logging.info(f'UH OH, MULTIPLE SERVER UPDATES RECEIVED IN A ROW, TURN {self._map.turn} MISSED MOVE CHANCE')
+                            logbook.info(f'UH OH, MULTIPLE SERVER UPDATES RECEIVED IN A ROW, TURN {self._map.turn} MISSED MOVE CHANCE')
                             mapUpdateTime = updateReceivedTime
                             self._notify_bot_of_missed_update(self._map, updateReceivedTime)
                 except queue.Empty:
@@ -196,24 +196,24 @@ class GeneralsClientHost(object):
 
                     self._moves_realized += 1
             except queue.Empty:
-                logging.info('no update received after 1s of waiting...?')
+                logbook.info('no update received after 1s of waiting...?')
             except:
                 exc_type, exc_value, exc_traceback = sys.exc_info()
                 lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-                #logging.info("inf")  # Log it or whatever here
-                #logging.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
-                #logging.info("warn")  # Log it or whatever here
-                #logging.warning(''.join('!! ' + line for line in lines))  # Log it or whatever here
-                logging.info("err")  # Log it or whatever here
-                logging.error(''.join('!! ' + line for line in lines))  # Log it or whatever here
+                #logbook.info("inf")  # Log it or whatever here
+                #logbook.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
+                #logbook.info("warn")  # Log it or whatever here
+                #logbook.warn(''.join('!! ' + line for line in lines))  # Log it or whatever here
+                logbook.info("err")  # Log it or whatever here
+                logbook.error(''.join('!! ' + line for line in lines))  # Log it or whatever here
 
     def _process_map_diff(self, data):
         if not self._seen_update:
-            logging.info('First update...?')
+            logbook.info('First update...?')
             self._seen_update = True
             self._map = Map(self._game._start_data, data)
 
-        logging.info('applying server update...?')
+        logbook.info('applying server update...?')
 
         self._map.apply_server_update(data)
 

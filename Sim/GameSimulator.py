@@ -1,4 +1,4 @@
-import logging
+import logbook
 import time
 import traceback
 import typing
@@ -182,7 +182,7 @@ class GameSimulator(object):
     def execute_turn(self, dont_require_all_players_to_move=False):
         moveOrder = [pair for pair in enumerate(self.moves)]
 
-        logging.info(f'SIM MAP TURN {self.turn + 1}')
+        logbook.info(f'SIM MAP TURN {self.turn + 1}')
         self.sim_map.update_turn(self.turn + 1)
         for tile in self.sim_map.get_all_tiles():
             tile.delta.oldArmy = tile.army
@@ -207,7 +207,7 @@ class GameSimulator(object):
         self._update_tile_deltas()
         self._update_map_values_for_any_increments()
         self._update_scores()
-        logging.info(f'END SIM MAP TURN {self.turn}, UPDATING PLAYER MAPS')
+        logbook.info(f'END SIM MAP TURN {self.turn}, UPDATING PLAYER MAPS')
 
         self.send_update_to_player_maps()
         self.tiles_updated_this_cycle = set()
@@ -219,13 +219,13 @@ class GameSimulator(object):
                 player.dead = True
             if not player.dead:
                 livingTeams.add(self.teams[player.index])
-                logging.info(f'player {player.index} still alive')
+                logbook.info(f'player {player.index} still alive')
 
         if len(livingTeams) > 1:
-            logging.info(f'living teams {livingTeams}')
+            logbook.info(f'living teams {livingTeams}')
             return False
 
-        logging.info(f'Detected game win')
+        logbook.info(f'Detected game win')
 
         for player in self.players:
             if not player.dead:
@@ -363,9 +363,9 @@ class GameSimulator(object):
         # call update
 
         for player in self.players:
-            logging.info(f'----')
-            logging.info(f'----')
-            logging.info(f'SIM SENDING TURN {self.turn} MAP UPDATES TO PLAYER {player.index}')
+            logbook.info(f'----')
+            logbook.info(f'----')
+            logbook.info(f'SIM SENDING TURN {self.turn} MAP UPDATES TO PLAYER {player.index}')
             player.map.update_turn(self.turn)
 
             playerScoreClone = [Score(score.player, score.total, score.tiles, score.dead) for score in self.sim_map.scores]
@@ -388,7 +388,7 @@ class GameSimulator(object):
             if noDeltas:
                 for tile in player.map.get_all_tiles():
                     tile.turn_captured = 0
-        logging.info(f'END SIM PLAYER MAP UPDATES FOR TURN {self.turn}')
+        logbook.info(f'END SIM PLAYER MAP UPDATES FOR TURN {self.turn}')
 
     def _send_player_lost_vision_of_tile(self, player: GamePlayer, tile: Tile):
         tileVal = TILE_FOG
@@ -582,8 +582,10 @@ class GameSimulatorHost(object):
                 botHost.run_viewer_loop()
 
         if run_real_time:
-            # time to look at the first move, pygame doesn't start up that quickly
-            time.sleep(2)
+            stopSleep = time.perf_counter() + 3.0
+            while time.perf_counter() < stopSleep:
+                # time to look at the first move, pygame doesn't start up that quickly
+                time.sleep(0.2)
 
         winner = None
         try:
@@ -612,13 +614,13 @@ class GameSimulatorHost(object):
                         continue
                     botHost.notify_game_over()
             except:
-                logging.error(f"(error v notifying bots of game over turn {self.sim.turn})")
-                logging.error(traceback.format_exc())
-                logging.error("(error ^ notifying bots of game over above, less important than real error logged below)")
+                logbook.error(f"(error v notifying bots of game over turn {self.sim.turn})")
+                logbook.error(traceback.format_exc())
+                logbook.error("(error ^ notifying bots of game over above, less important than real error logged below)")
 
-            logging.error(f"(error v running bot sim turn {self.sim.turn})")
-            logging.error(traceback.format_exc())
-            logging.fatal(f'IMPORT TEST FILES FOR TURN {self.sim.turn} FROM @ {repr([b.eklipz_bot.logDirectory for b in self.bot_hosts if b is not None])}')
+            logbook.error(f"(error v running bot sim turn {self.sim.turn})")
+            logbook.error(traceback.format_exc())
+            logbook.critical(f'IMPORT TEST FILES FOR TURN {self.sim.turn} FROM @ {repr([b.eklipz_bot.logDirectory for b in self.bot_hosts if b is not None])}')
             raise
 
         if run_real_time:
@@ -794,7 +796,7 @@ class GameSimulatorHost(object):
         @param turn_time:
         @return:
         """
-        logging.info(f'sim starting turn {self.sim.turn}')
+        logbook.info(f'sim starting turn {self.sim.turn}')
         start = time.perf_counter()
         winner = None
         for playerIndex, botHost in enumerate(self.bot_hosts):
@@ -809,7 +811,7 @@ class GameSimulatorHost(object):
 
                 moveTime = time.perf_counter() - moveStart
                 if self.respect_turn_time_limit and self.sim.sim_map.turn > 20 and moveTime > self.player_move_cutoff_time and not DebugHelper.IS_DEBUGGING:
-                    logging.error(f'turn {self.sim.sim_map.turn}: player {playerIndex} {self.sim.sim_map.usernames[playerIndex]} took {moveTime:.3f} to move, dropping its move!')
+                    logbook.error(f'turn {self.sim.sim_map.turn}: player {playerIndex} {self.sim.sim_map.usernames[playerIndex]} took {moveTime:.3f} to move, dropping its move!')
                     self.sim.make_move(playerIndex, None, force=True)
                     self.dropped_move_counts_by_player[playerIndex] += 1
 
@@ -944,8 +946,8 @@ class GameSimulatorHost(object):
         try:
             func()
         except:
-            logging.error(f'assertion failure while running live, turn {self.sim.turn}')
-            logging.error(traceback.format_exc())
+            logbook.error(f'assertion failure while running live, turn {self.sim.turn}')
+            logbook.error(traceback.format_exc())
             if run_real_time:
                 self.wait_until_viewer_closed_or_time_elapses(3)
             raise
@@ -964,7 +966,7 @@ class GameSimulatorHost(object):
                 if p == player or bot is None or bot.eklipz_bot is None:
                     continue
                 if self.sim.sim_map.teams[player] == self.sim.sim_map.teams[p]:
-                    logging.info(f'SIM NOTIFYING TILE PING {str(tile)} FROM p{player} TO p{p}')
+                    logbook.info(f'SIM NOTIFYING TILE PING {str(tile)} FROM p{player} TO p{p}')
                     bot.eklipz_bot.notify_tile_ping(tile)
 
     def notify_chat_messages(self):
@@ -976,7 +978,7 @@ class GameSimulatorHost(object):
                     continue
                 if not teamChat or self.sim.sim_map.teams[player] == self.sim.sim_map.teams[p]:
                     chatUpdate = ChatUpdate(self.sim.sim_map.usernames[player], teamChat, message)
-                    logging.info(f'SIM NOTIFYING CHAT {str(chatUpdate)} FROM p{player} TO p{p}')
+                    logbook.info(f'SIM NOTIFYING CHAT {str(chatUpdate)} FROM p{player} TO p{p}')
                     bot.eklipz_bot.notify_chat_message(chatUpdate)
 
     def any_bot_has_viewer_running(self) -> bool:
@@ -997,7 +999,7 @@ class GameSimulatorHost(object):
 
         start = time.perf_counter()
 
-        logging.info(f'(WAITING UNTIL YOU CLOSE THE VIEWER OR {max_seconds_to_wait} SECONDS ELAPSES....)')
+        logbook.info(f'(WAITING UNTIL YOU CLOSE THE VIEWER OR {max_seconds_to_wait} SECONDS ELAPSES....)')
         while self.frame_skips_queued == 0 and ((self.any_bot_has_viewer_running() and time.perf_counter() - start < max_seconds_to_wait) or self.paused):
             self.check_for_viewer_events()
             time.sleep(0.5)

@@ -6,7 +6,7 @@
 """
 
 from __future__ import annotations
-import logging
+import logbook
 import typing
 import math
 from DataModels import GatherTreeNode, Move
@@ -128,7 +128,7 @@ class Path(object):
 
     def remove_end(self) -> PathMove:
         if len(self._pathQueue) == 0:
-            logging.info(", bitch? Removing nothing??")
+            logbook.info(", bitch? Removing nothing??")
             return
         if self._tileList is not None:
             self._tileList.remove(self.tail.tile)

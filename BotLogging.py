@@ -1,13 +1,15 @@
+import logbook
 import logging
 import os
 
-import logbook
 
 # logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
 FILE_FORMATTER = logging.Formatter("%(asctime)s  %(name)s  %(message)s")
 LOG_FORMATTER = logging.Formatter("%(message)s")
 
 LOGGING_SET_UP = False
+LOGGING_PORT = 0
+LOGGING_QUEUE = None
 
 
 def add_file_log_output(botName: str, gameMode: str, replayId: str, logFolder: str | None = None):
@@ -20,37 +22,69 @@ def add_file_log_output(botName: str, gameMode: str, replayId: str, logFolder: s
     # rootLogger.addHandler(fileHandler)
     pass
 
-def set_up_logger(logLevel: int, mainProcess: bool = False):
+
+# def run_log_output_process(port: int):
+#     set_up_logger(logging.INFO, mainProcess=True, port=port)
+
+def run_log_output_process(queue):
+    set_up_logger(logging.INFO, mainProcess=True, queue=queue)
+
+
+def set_up_logger(logLevel: int, mainProcess: bool = False, queue = None):
     global LOGGING_SET_UP
+    global LOGGING_QUEUE
+    # global LOGGING_PORT
+    #
+    # if port != 0:
+    #     LOGGING_PORT = port
 
-    if LOGGING_SET_UP:
-        logging.info('logging already set up')
-        return
-
-    LOGGING_SET_UP = True
+    if queue is not None:
+        LOGGING_QUEUE = queue
+    elif LOGGING_QUEUE is None:
+        import multiprocessing
+        LOGGING_QUEUE = multiprocessing.Queue(-1)
 
     if mainProcess:
-        from logbook import StreamHandler
         import sys
-        my_handler = StreamHandler(sys.stdout, logLevel, format_string=LOG_FORMATTER)
-        from logbook.queues import ZeroMQSubscriber
-        subscriber = ZeroMQSubscriber('tcp://127.0.0.1:12345')
+        from logbook import StreamHandler
+        my_handler = StreamHandler(sys.stderr, logbook.INFO)  #  format_string=LOG_FORMATTER
+        # from logbook.queues import ZeroMQSubscriber
+        # subscriber = ZeroMQSubscriber(f'tcp://127.0.0.1:{LOGGING_PORT}')
+        # # with my_handler:
+        # #     subscriber.dispatch_forever()
+        # subscriber.dispatch_in_background(my_handler)
+        from logbook.queues import MultiProcessingSubscriber
+        subscriber = MultiProcessingSubscriber(LOGGING_QUEUE)
+        # subscriber.dispatch_in_background(my_handler)
         with my_handler:
             subscriber.dispatch_forever()
 
-    else:
-        from logbook.queues import ZeroMQHandler
-        handler = ZeroMQHandler('tcp://127.0.0.1:12345')
+    # if LOGGING_SET_UP:
+    #     logbook.info('logging already set up')
+    #     return
+
+    LOGGING_SET_UP = True
+
+    if not mainProcess:
+        # from logbook.queues import ZeroMQHandler
+        # handler = ZeroMQHandler(f'tcp://127.0.0.1:{LOGGING_PORT}', multi=True)
+        # handler.push_application()
+        from logbook.queues import MultiProcessingHandler
+        handler = MultiProcessingHandler(LOGGING_QUEUE)
         handler.push_application()
-    #
-    # # logging.basicConfig(format='%(message)s', level=logging.DEBUG, force=True)
-    # # logging.basicConfig(format='%(levelname)s:%(message)s', filename="D:\\GeneralsLogs\\test.txt", level=logging.DEBUG, force=True)
-    # rootLogger = logging.getLogger()
-    # rootLogger.setLevel(logLevel)
-    #
-    # consoleHandler = logging.StreamHandler()
-    # consoleHandler.setFormatter(LOG_FORMATTER)
-    # rootLogger.addHandler(consoleHandler)
+
+        logbook.info('yo, first log')
+
+        # # logging.basicConfig(format='%(message)s', level=logbook.debug, force=True)
+        # # logging.basicConfig(format='%(levelname)s:%(message)s', filename="D:\\GeneralsLogs\\test.txt", level=logbook.debug, force=True)
+        # rootLogger = logging.getLogger()
+        # rootLogger.setLevel(logLevel)
+        #
+        # consoleHandler = logging.StreamHandler()
+        # consoleHandler.setFormatter(LOG_FORMATTER)
+        # rootLogger.addHandler(consoleHandler)
+        #
+        # logging.info('got past logbook log...?')
 
 
 def get_file_safe_username(botName: str) -> str:
@@ -69,7 +103,7 @@ def get_file_logging_directory(rawBotName: str, replayId: str) -> str:
     fileSafeUserName = get_file_safe_username(rawBotName)
     fileSafeUserName = fileSafeUserName.replace("[Bot] ", "")
     fileSafeUserName = fileSafeUserName.replace("[Bot]", "")
-    # logging.info("\n\n\nFILE SAFE USERNAME\n {}\n\n".format(fileSafeUserName))
+    # logbook.info("\n\n\nFILE SAFE USERNAME\n {}\n\n".format(fileSafeUserName))
     logDirectory = "D:\\GeneralsLogs\\{}-{}".format(fileSafeUserName, replayId)
 
     if not os.path.exists(logDirectory):

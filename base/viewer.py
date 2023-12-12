@@ -314,10 +314,11 @@ class GeneralsViewer(object):
 
         self.logDirectory = BotLogging.get_file_logging_directory(self._map.usernames[self._map.player_index], self.repId)
 
-    def run_main_viewer_loop(self, alignTop=True, alignLeft=True):
+    def run_main_viewer_loop(self, alignTop=True, alignLeft=True, loggingQueue = None):
         termSec = 600
-        # if not self.noLog:
-        #     BotLogging.set_up_logger(logging.INFO)
+        if not self.noLog:
+            import logging
+            BotLogging.set_up_logger(logging.INFO, mainProcess=False, queue=loggingQueue)
         while not self._receivedUpdate:  # Wait for first update
             try:
                 viewInfo, map, isComplete = self._inbound_update_queue.get(block=True, timeout=15.0)
@@ -329,10 +330,10 @@ class GeneralsViewer(object):
             except queue.Empty:
                 elapsed = time.perf_counter() - self.last_update_received
                 if not self.noLog:
-                    logging.info(f'waiting for update...... {elapsed:.3f} / {termSec} sec')
+                    logbook.info(f'waiting for update...... {elapsed:.3f} / {termSec} sec')
                 # TODO add a server ping callback here so while we're waiting in a lobby for a while we can keep the viewer thread alive
                 if elapsed > termSec:
-                    logging.info(f'GeneralsViewer zombied with no game start, self-terminating after {termSec} seconds')
+                    logbook.info(f'GeneralsViewer zombied with no game start, self-terminating after {termSec} seconds')
                     time.sleep(1.0)
 
                     self.send_closed_event(killedByUserClose=False)  # this causes the bot itself to die when it finally starts a game after being in queue for a long time.
@@ -367,7 +368,7 @@ class GeneralsViewer(object):
 
             try:
                 if not self.noLog:
-                    logging.info("GeneralsViewer waiting for queue event:")
+                    logbook.info("GeneralsViewer waiting for queue event:")
                 viewInfo, map, isComplete = self._inbound_update_queue.get(block=True, timeout=1.0)
                 self._map = map
                 thisUpdateTime = time.perf_counter()
@@ -381,11 +382,11 @@ class GeneralsViewer(object):
                 self.last_update_received = thisUpdateTime
 
                 if isComplete:
-                    logging.info("GeneralsViewer received done event!")
+                    logbook.info("GeneralsViewer received done event!")
                     done = True
 
                 if not self.noLog:
-                    logging.info(f"GeneralsViewer received an event after {diff:.3f}! Updating grid")
+                    logbook.info(f"GeneralsViewer received an event after {diff:.3f}! Updating grid")
 
                 if diff < medianUpdateTime * 4:
                     # ignore massively delayed updates
@@ -396,47 +397,47 @@ class GeneralsViewer(object):
 
                 sleepFor = expectedRenderTime - thisUpdateTime - 0.05
                 if sleepFor > 0:
-                    logging.info(f"GeneralsViewer sleeping for {sleepFor:.3f} calculated expected render {expectedRenderTime:.3f} from medianUpdateTime {medianUpdateTime:.3f} based on lastWindowUpdateSum {lastWindowUpdateSum:.3f}")
+                    logbook.info(f"GeneralsViewer sleeping for {sleepFor:.3f} calculated expected render {expectedRenderTime:.3f} from medianUpdateTime {medianUpdateTime:.3f} based on lastWindowUpdateSum {lastWindowUpdateSum:.3f}")
                     time.sleep(sleepFor)
 
                 start = time.perf_counter()
                 if not self.noLog:
-                    logging.info("GeneralsViewer drawing grid:")
+                    logbook.info("GeneralsViewer drawing grid:")
                 self._drawGrid()
                 self.last_render_time = start
 
                 if not self.noLog:
-                    logging.info(f"GeneralsViewer drawing grid took {time.perf_counter() - start:.3f}")
+                    logbook.info(f"GeneralsViewer drawing grid took {time.perf_counter() - start:.3f}")
 
                 if not self.noLog:
                     start = time.perf_counter()
-                    logging.info("GeneralsViewer saving image:")
+                    logbook.info("GeneralsViewer saving image:")
                     self.save_image()
 
-                    logging.info(f"GeneralsViewer saving image took {time.perf_counter() - start:.3f}")
+                    logbook.info(f"GeneralsViewer saving image took {time.perf_counter() - start:.3f}")
 
                     gc.collect()
             except queue.Empty:
                 elapsed = time.perf_counter() - self.last_update_received
                 if not self.noLog:
-                    logging.info(f'No GeneralsViewer update received in {elapsed:.2f} seconds')
+                    logbook.info(f'No GeneralsViewer update received in {elapsed:.2f} seconds')
                 if elapsed > 180.0:
-                    logging.info(f'GeneralsViewer zombied, self-terminating after 10 seconds')
+                    logbook.info(f'GeneralsViewer zombied, self-terminating after 10 seconds')
                     done = True
 
                     self.send_closed_event(killedByUserClose=False)
                 pass
             except EOFError:
-                logging.info('GeneralsViewer pipe died (EOFError)')
+                logbook.info('GeneralsViewer pipe died (EOFError)')
                 done = True
             except BrokenPipeError:
-                logging.info('GeneralsViewer pipe died (BrokenPipeError)')
+                logbook.info('GeneralsViewer pipe died (BrokenPipeError)')
                 done = True
 
             for event in pygame.event.get():  # User did something
                 if event.type == pygame.QUIT:  # User clicked quit
                     done = True  # Flag done
-                    logging.info('GeneralsViewer pygame exited by user, setting done and exiting')
+                    logbook.info('GeneralsViewer pygame exited by user, setting done and exiting')
                     closedByUser = True
                     break
 
@@ -464,13 +465,13 @@ class GeneralsViewer(object):
         mapComplete = None
         if map is not None:
             mapComplete = map.complete
-        logging.info(f'Pygame closed in GeneralsViewer, sending closedByUser {closedByUser} | map.complete {mapComplete} back to main threads')
+        logbook.info(f'Pygame closed in GeneralsViewer, sending closedByUser {closedByUser} | map.complete {mapComplete} back to main threads')
         #
         # if map.complete:
         #     closedByUser = True
 
         self.send_closed_event(closedByUser)
-        logging.info('GeneralsViewer, exiting pygame w/ pygame.quit() in 1 second:')
+        logbook.info('GeneralsViewer, exiting pygame w/ pygame.quit() in 1 second:')
         time.sleep(1.0)
         pygame.quit()  # Done.  Quit pygame.
 
@@ -816,12 +817,12 @@ class GeneralsViewer(object):
         except:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-            # logging.info("inf")  # Log it or whatever here
-            # logging.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
-            # logging.info("warn")  # Log it or whatever here
-            # logging.warning(''.join('!! ' + line for line in lines))  # Log it or whatever here
-            logging.info("err")  # Log it or whatever here
-            logging.error(''.join('!! ' + line for line in lines))  # Log it or whatever here
+            # logbook.info("inf")  # Log it or whatever here
+            # logbook.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
+            # logbook.info("warn")  # Log it or whatever here
+            # logbook.warn(''.join('!! ' + line for line in lines))  # Log it or whatever here
+            logbook.info("err")  # Log it or whatever here
+            logbook.error(''.join('!! ' + line for line in lines))  # Log it or whatever here
             raise
 
     def draw_info_text(self):
@@ -1075,19 +1076,19 @@ class GeneralsViewer(object):
             drawingFrontier = deque()
             drawingFrontier.appendleft(pathWay.seed_tile)
             if pathWay.seed_tile is None:
-                logging.info('WTF, pathway seed tile was none...?')
+                logbook.info('WTF, pathway seed tile was none...?')
                 continue
             while len(drawingFrontier) != 0:
                 tile = drawingFrontier.pop()
                 tile = self._map.GetTile(tile.x, tile.y)
                 if tile is None:
-                    logging.info('WTF, none tile in pathway draw frontier??')
+                    logbook.info('WTF, none tile in pathway draw frontier??')
                     continue
                 if tile not in drawnFrom:
                     drawnFrom.add(tile)
                     for adj in tile.movable:
                         if adj is None:
-                            logging.info(f'WTF, moveable tile was none in tile {str(tile)}...?')
+                            logbook.info(f'WTF, moveable tile was none in tile {str(tile)}...?')
                             continue
                         if adj not in drawnFrom:
                             if adj in pathWay.tiles:
@@ -1167,7 +1168,7 @@ class GeneralsViewer(object):
                 if alpha < alphaMin:
                     alpha = alphaMin
             except:
-                logging.error(f'wtf, couldnt draw path {str(path)}')
+                logbook.error(f'wtf, couldnt draw path {str(path)}')
                 path = path.next
 
     def get_delta_arrow(self):
@@ -1364,7 +1365,7 @@ class GeneralsViewer(object):
         try:
             pygame.image.save(self._screen, f"{self.logDirectory}\\{self._map.turn}.png")
         except:
-            logging.error(traceback.format_exc())
+            logbook.error(traceback.format_exc())
 
     def send_closed_event(self, killedByUserClose: bool):
         try:

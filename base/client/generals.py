@@ -10,7 +10,7 @@ import traceback
 import typing
 
 import certifi
-import logging
+import logbook
 import json
 import requests
 import ssl
@@ -85,7 +85,7 @@ class GeneralsClient(object):
         self.cursewords = {'pussy', 'fuck', 'fk ', ' fk', 'cunt', 'bitch', 'ass', 'of shit', 'dick', 'cheater', 'hack', 'cock',
                            'kill yourself', ' kys', 'kys ', ' fag', 'fag ', 'faggot', 'stupid'}
         _spawn(self._start_killswitch_timer)
-        logging.debug("Creating connection")
+        logbook.debug("Creating connection")
 
         endpoint = self.get_endpoint_ws() + "&sid=" + self.get_sid()
 
@@ -95,12 +95,12 @@ class GeneralsClient(object):
 
         self._ws = create_connection(endpoint, sslopt={"cert_reqs": ssl.CERT_NONE})
 
-        logging.debug("Connection created, sending 2probe / 5")
+        logbook.debug("Connection created, sending 2probe / 5")
 
         self._ws.send("2probe")
         self._ws.send("5")
 
-        logging.debug("Spawning heartbeat")
+        logbook.debug("Spawning heartbeat")
         # if self.public_server:
         #     self._ws.send("3probe")
 
@@ -128,7 +128,7 @@ class GeneralsClient(object):
         #             "0.nPYb3-b6tCbTxdOzv6R6GXtXGxrc0nleDhsBuoiVXwNf3ZL5FCRRJrxaonexJUbvBkjPThjs2idOqyhHdsOUJj2cwQwzEJbu9ddpw5P761dZja0-ZkASCmyrII2EIHmgDWIxU_D0bGrJO6uOixWt9d2yZwcfA1cVWDYxP_nK7QQxrbvMpUXLWh4so_SQEOeqW3bXw9vIszikWXYrJLBNzpnSi1bKeUu0Skm0NcFWX_2BO_pCX9gGHPqN4d07Yj3ZrnJugSWG2vOR8WfsKthjd0uqgbi1Y3I7dYqhSUAZQZ9f1ZsqxyJ2Stv5cf--slw-DIN0-GqoTlwCJLxFiuQ0cvyeMFu8Vdnxf1FteAcVnfK5F1FGfl3fHjm-0dxQ08nnX1nXAbdThrKRRLBLNUz3sl3z5HqDkMOzGCtZwYGD4HM.Auq4pgagKfvUlSlIZ5FJ5Q.ec1ea2309c9506edb7800d2e052ee12183c32396d1b7cf316f2ae2c4245971da",
         #             self.bot_key])
 
-        logging.debug("Joining game, userid: " + userid)
+        logbook.debug("Joining game, userid: " + userid)
 
         if mode == "private":
             self.isPrivate = True
@@ -139,7 +139,7 @@ class GeneralsClient(object):
             self._gameid = gameid  # Set Game ID
             if gameid is None:
                 raise ValueError("Gameid must be provided for private games")
-            logging.debug("CUSTOM GAME JOIN {}".format(gameid))
+            logbook.debug("CUSTOM GAME JOIN {}".format(gameid))
             self._send(["join_private", gameid, userid, self.bot_key])
         elif mode == "1v1":
             self._send(["join_1v1", userid, self.bot_key])
@@ -155,7 +155,7 @@ class GeneralsClient(object):
 
         if force_start:
             _spawn(self._send_forcestart)
-        logging.debug("Starting heartbeat thread")
+        logbook.debug("Starting heartbeat thread")
 
         self._seen_update = False
         self._move_id = 1
@@ -187,7 +187,7 @@ class GeneralsClient(object):
         checkOne = requests.post(self.get_endpoint_requests() + "&t=ObyKmbC&sid=" + sid, data="40", verify=False)
 
     # checkTwo = requests.get(self._endpointRequests() + "&t=ObyKmbC.0&sid=" + sid)
-    # logging.debug("Check two: %s" % checkTwo.text)
+    # logbook.debug("Check two: %s" % checkTwo.text)
 
     def send_chat(self, msg, teamChat: bool = False):
         if not teamChat:
@@ -235,34 +235,34 @@ class GeneralsClient(object):
             try:
                 msg = self._ws.recv()
 
-                # logging.info(f"{self._get_log_time()} - WS recv: {json.dumps(msg)}")
+                # logbook.info(f"{self._get_log_time()} - WS recv: {json.dumps(msg)}")
                 self.lastCommunicationTime = time.time_ns() / (10 ** 9)
             except WebSocketConnectionClosedException as ex:
-                logging.info("socket closed")
+                logbook.info("socket closed")
                 exc_type, exc_value, exc_traceback = sys.exc_info()
                 lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-                logging.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
+                logbook.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
                 break
             except:
-                logging.info("other error happened in get updates loop")
+                logbook.info("other error happened in get updates loop")
                 raise
 
             if not msg.strip():
-                logging.info("not msg strip: " + json.dumps(msg))
+                logbook.info("not msg strip: " + json.dumps(msg))
                 continue
 
             # ignore heartbeats and connection acks
             if msg in {"2", "3"}:
-                # logging.info("2, 3 40, 41 ignored, " + json.dumps(msg))
+                # logbook.info("2, 3 40, 41 ignored, " + json.dumps(msg))
                 if not self._seen_update and time.perf_counter() - startTime > idleTimeout:
                     raise ValueError('Reconnecting, idle for too long...')
                 continue
 
-            logging.info(f"{self._get_log_time()} - WS recv: {json.dumps(msg)}")
+            logbook.info(f"{self._get_log_time()} - WS recv: {json.dumps(msg)}")
 
             if msg in {"40", "41"}:
                 # 41 means abort...?
-                logging.info("40, 41 ignored, " + json.dumps(msg))
+                logbook.info("40, 41 ignored, " + json.dumps(msg))
                 continue
 
             # remove numeric prefix
@@ -277,19 +277,19 @@ class GeneralsClient(object):
             except:
                 exc_type, exc_value, exc_traceback = sys.exc_info()
                 lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-                logging.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
+                logbook.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
 
             if not isinstance(msg, list):
-                logging.info("msg was not list, " + json.dumps(msg))
+                logbook.info("msg was not list, " + json.dumps(msg))
                 continue
 
             if msg[0] == "game_start":
-                logging.info("Game info: {}".format(msg[1]))
+                logbook.info("Game info: {}".format(msg[1]))
                 self._start_data = msg[1]
                 print("logging????")
                 # for handler in logging.root.handlers[:]:
                 #     logging.root.removeHandler(handler)
-                # logging.basicConfig(format='%(levelname)s:%(message)s', filename='D:\\GeneralsLogs\\' + self._start_data['replay_id'] + '.log', level=logging.DEBUG)
+                # logging.basicConfig(format='%(levelname)s:%(message)s', filename='D:\\GeneralsLogs\\' + self._start_data['replay_id'] + '.log', level=logbook.debug)
                 self.logFile = "D:\\GeneralsLogs\\" + self.username + "-" + self.mode + "-" + self._start_data[
                     'replay_id'] + ".txt"
                 self.chatLogFile = "D:\\GeneralsLogs\\_chat\\" + self.username + "-" + self.mode + "-" + \
@@ -304,7 +304,7 @@ class GeneralsClient(object):
                                 myfile.write(log)
                             self.earlyLogs = None
                     except:
-                        logging.info(
+                        logbook.info(
                             "!!!!!!!!!!\n!!!!!!!!!!!!!\n!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!\ncouldn't write EARLY LOGS to file")
             elif msg[0] == "game_update":
                 self._seen_update = True
@@ -313,7 +313,7 @@ class GeneralsClient(object):
             elif msg[0] == "ping_tile":
                 yield msg[0], msg[1]
             elif msg[0] in ["game_won", "game_lost"]:
-                logging.info(f'\r\nRESULT\r\nmsg[0] {json.dumps(msg[0])}\r\nmsg[1] {json.dumps(msg[1])}\r\n----')
+                logbook.info(f'\r\nRESULT\r\nmsg[0] {json.dumps(msg[0])}\r\nmsg[1] {json.dumps(msg[1])}\r\n----')
                 yield msg[0], msg[1]
                 break
             elif msg[0] == "gio_error" and msg[1].startswith('You must choose a username'):
@@ -324,7 +324,7 @@ class GeneralsClient(object):
                 chat_room = msg[1]
                 chat_msg = msg[2]
                 if "username" in chat_msg:
-                    logging.info("~~~\n~~~\nFrom %s: %s\n~~~\n~~~" % (chat_msg["username"], chat_msg["text"]))
+                    logbook.info("~~~\n~~~\nFrom %s: %s\n~~~\n~~~" % (chat_msg["username"], chat_msg["text"]))
                     message = chat_msg["text"]
                     fromUsername = chat_msg["username"]
 
@@ -350,12 +350,12 @@ class GeneralsClient(object):
                             with open(self.chatLogFile, "a+") as myfile:
                                 myfile.write("\nFrom %s: %s" % (chat_msg["username"], chat_msg["text"]))
                         except:
-                            logging.info(
+                            logbook.info(
                                 "!!!!!!!!!!\n!!!!!!!!!!!!!\n!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!\ncouldn't write chat message to file")
                 elif " captured " in chat_msg["text"]:
                     yield "player_capture", chat_msg
                 else:
-                    logging.info("Message: %s" % chat_msg["text"])
+                    logbook.info("Message: %s" % chat_msg["text"])
                     if self.writingFile or (
                         self.chatLogFile is not None
                         and " surrendered" not in chat_msg["text"]
@@ -372,30 +372,30 @@ class GeneralsClient(object):
                             with open(self.chatLogFile, "a+") as myfile:
                                 myfile.write("\nUnknown message: %s" % chat_msg["text"])
                         except:
-                            logging.info(
+                            logbook.info(
                                 "!!!!!!!!!!\n!!!!!!!!!!!!!\n!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!\ncouldn't write unknown message to file")
             elif msg[0] == "error_user_id":
-                logging.info("error_user_id, Already in game???")
+                logbook.info("error_user_id, Already in game???")
                 time.sleep(2)
                 raise ValueError("Already in game")
             elif msg[0] == "server_down":
-                logging.info("server_down, Server is down???")
+                logbook.info("server_down, Server is down???")
                 raise ValueError("Server is down")
             elif msg[0] == "server_restart":
-                logging.info("server_restart, Server is restarting???")
+                logbook.info("server_restart, Server is restarting???")
                 raise ValueError("Server is restarting")
             elif msg[0] == "error_set_username":
-                logging.info("error_set_username, ???")
+                logbook.info("error_set_username, ???")
             elif msg[0] == "error_banned":
                 sleepDuration = random.choice(range(20, 60))
-                logging.info(
+                logbook.info(
                     f"TOO MANY CONNECTION ATTEMPTS? {msg}\n:( sleeping and then trying again in {sleepDuration}")
                 time.sleep(sleepDuration)
-                logging.info('Calling _terminate from game loop')
+                logbook.info('Calling _terminate from game loop')
                 self._terminate()
-                logging.info('Game loop _terminate complete')
+                logbook.info('Game loop _terminate complete')
             else:
-                logging.info(f"Unknown message type: {msg}")
+                logbook.info(f"Unknown message type: {msg}")
 
     def close(self):
         with self._lock:
@@ -410,7 +410,7 @@ class GeneralsClient(object):
     def _start_killswitch_timer(self):
         while time.time_ns() / (10 ** 9) - self.lastCommunicationTime < 60:
             time.sleep(10)
-        logging.info('killswitch elapsed on no communication')
+        logbook.info('killswitch elapsed on no communication')
         if self.map is not None:
             self.map.complete = True
             self.map.result = False
@@ -428,25 +428,25 @@ class GeneralsClient(object):
                 repId = 'none'
                 if self._start_data is not None and 'replay_id' in self._start_data:
                     repId = self._start_data['replay_id']
-                logging.info(
+                logbook.info(
                     f"\n\n        IN TERMINATE {repId}  (won? {self.map.result})   \n\n")
             except:
-                logging.info(traceback.format_exc())
+                logbook.info(traceback.format_exc())
 
         with self._lock:
             # self._send(["leave_game"])
-            logging.info(" in lock IN TERMINATE, calling self.close()")
+            logbook.info(" in lock IN TERMINATE, calling self.close()")
             # time.sleep(1)
             self.close()
-            logging.info(" self.close() done")
+            logbook.info(" self.close() done")
 
     def send_clear_moves(self):
-        logging.info("\n\nSending clear_moves")
+        logbook.info("\n\nSending clear_moves")
         with self._lock:
             self._send(["clear_moves"])
 
     def send_surrender(self):
-        logging.info("\n\nSending surrender")
+        logbook.info("\n\nSending surrender")
         with self._lock:
             self._send(["surrender"])
 
@@ -469,7 +469,7 @@ class GeneralsClient(object):
                     self._send(["make_custom_public", self._gameid])
                 time.sleep(0.3)
             self._send(["set_force_start", self._gameid, True])
-            logging.info("Sent force_start")
+            logbook.info("Sent force_start")
             time.sleep(3)
 
     def _start_sending_heartbeat(self):
@@ -498,7 +498,7 @@ class GeneralsClient(object):
     def _send(self, msg):
         try:
             toSend = "42" + json.dumps(msg)
-            logging.info(f'{self._get_log_time()} - WS Sending: {toSend}')
+            logbook.info(f'{self._get_log_time()} - WS Sending: {toSend}')
             with self._lock:
                 self._ws.send(toSend)
             if _LOG_WS:

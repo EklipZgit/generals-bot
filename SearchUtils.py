@@ -5,7 +5,7 @@
     EklipZ bot - Tries to play generals lol
 """
 
-import logging
+import logbook
 import math
 import typing
 import time
@@ -80,7 +80,7 @@ def dest_breadth_first_target(
         for goal in goalList.keys():
             (startDist, goalTargetArmy, goalIncModifier) = goalList[goal]
             if goal.isMountain:
-                # logging.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
+                # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
                 continue
 
             goalInc = goalIncModifier + additionalIncrement
@@ -107,7 +107,7 @@ def dest_breadth_first_target(
         for goalRaw in goalList:
             goal: Tile = goalRaw
             if goal.isMountain:
-                # logging.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
+                # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
                 continue
 
             goalInc = additionalIncrement
@@ -137,13 +137,13 @@ def dest_breadth_first_target(
         if visited[current.x][current.y] is not None:
             continue
         if skipTiles is not None and current in skipTiles:
-            if not noLog and iter < 100: logging.info(
+            if not noLog and iter < 100: logbook.info(
                 f"PopSkipped skipTile current {current.toString()}, army {army}, goalInc {goalInc}, targetArmy {targetArmy}")
             continue
         if current.isMountain or (
                 current.isCity and noNeutralCities and current.player == -1 and current not in goalList) or (
                 not current.discovered and current.isNotPathable):
-            if not noLog and iter < 100: logging.info(
+            if not noLog and iter < 100: logbook.info(
                 f"PopSkipped Mountain, neutCity or Obstacle current {current.toString()}")
             continue
 
@@ -181,7 +181,7 @@ def dest_breadth_first_target(
             foundArmy = nextArmy
             endNode = current
             if not noLog and iter < 100:
-                logging.info(
+                logbook.info(
                     f"GOAL popped {current.toString()}, army {nextArmy}, goalInc {goalInc}, targetArmy {targetArmy}, processing")
             break
         if newDist > depthEvaluated:
@@ -189,13 +189,13 @@ def dest_breadth_first_target(
         # targetArmy += goalInc
 
         if not noLog and iter < 100:
-            logging.info(
+            logbook.info(
                 f"Popped current {current.toString()}, army {nextArmy}, goalInc {goalInc}, targetArmy {targetArmy}, processing")
         if newDist <= maxDepth and not foundGoal:
             for next in current.movable:  # new spots to try
                 frontier.put(((newDist, negCaptures, 0 - nextArmy), next, newDist, nextArmy, goalInc, current))
     if not noLog:
-        logging.info(
+        logbook.info(
             f"BFS DEST SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}, FOUNDDIST: {foundDist}")
     if foundDist < 0:
         return None
@@ -204,15 +204,15 @@ def dest_breadth_first_target(
     dist = foundDist
     nodes = []
     army = foundArmy
-    # logging.info(json.dumps(visited))
-    # logging.info("PPRINT FULL")
-    # logging.info(pformat(visited))
+    # logbook.info(json.dumps(visited))
+    # logbook.info("PPRINT FULL")
+    # logbook.info(pformat(visited))
 
     while node is not None:
-        # logging.info("ARMY {} NODE {},{}  DIST {}".format(army, node.x, node.y, dist))
+        # logbook.info("ARMY {} NODE {},{}  DIST {}".format(army, node.x, node.y, dist))
         nodes.append((army, node))
 
-        # logging.info(pformat(visited[node.x][node.y]))
+        # logbook.info(pformat(visited[node.x][node.y]))
         (army, node) = visited[node.x][node.y]
         dist -= 1
     nodes.reverse()
@@ -235,19 +235,19 @@ def dest_breadth_first_target(
     for i, armyNode in enumerate(nodes[1:]):
         (curArmy, curNode) = armyNode
         if curNode is not None:
-            # logging.info("curArmy {} NODE {},{}".format(curArmy, curNode.x, curNode.y))
+            # logbook.info("curArmy {} NODE {},{}".format(curArmy, curNode.x, curNode.y))
             path = PathNode(curNode, path, curArmy, dist, -1, None)
             pathObject.add_start(curNode)
             dist -= 1
     while path is not None and path.tile.army <= 1:
-        logging.info(
+        logbook.info(
             "IS THIS THE INC BUG? OMG I THINK I FOUND IT!!!!!! Finds path where waiting 1 move for city increment is superior, but then we skip the 'waiting' move and just move the 2 army off the city instead of 3 army?")
-        logging.info(f"stripping path node {str(path)}")
+        logbook.info(f"stripping path node {str(path)}")
         path = path.parent
         pathObject.made_move()
 
     if pathObject.length <= 0:
-        logging.info("abandoned path")
+        logbook.info("abandoned path")
         return None
     # while (node != None):
     #     army, node = visited[node.x][node.y][dist]
@@ -255,7 +255,7 @@ def dest_breadth_first_target(
     #         dist -= 1
     #         path = PathNode(node, path, army, dist, -1, None)
 
-    logging.info(
+    logbook.info(
         f"DEST BFS FOUND KILLPATH OF LENGTH {pathObject.length} VALUE {pathObject.value}\n{pathObject.toString()}")
     return pathObject
 
@@ -283,7 +283,7 @@ def a_star_kill(
     if isinstance(startTiles, dict):
         for start in startTiles.keys():
             startDist = startTiles[start]
-            logging.info(f"a* enqueued start tile {start.toString()} with extraArmy {requireExtraArmy}")
+            logbook.info(f"a* enqueued start tile {start.toString()} with extraArmy {requireExtraArmy}")
             startArmy = start.army
             if ignoreStartTile:
                 startArmy = 0
@@ -295,7 +295,7 @@ def a_star_kill(
             came_from[start] = None
     else:
         for start in startTiles:
-            logging.info(f"a* enqueued start tile {start.toString()} with extraArmy {requireExtraArmy}")
+            logbook.info(f"a* enqueued start tile {start.toString()} with extraArmy {requireExtraArmy}")
             startArmy = start.army
             if ignoreStartTile:
                 startArmy = 0
@@ -315,7 +315,7 @@ def a_star_kill(
     while not frontier.empty():
         iter += 1
         if iter & 64 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
-            logging.info("breaking A* early")
+            logbook.info("breaking A* early")
             break
         prio, current = frontier.get()
         x = current.x
@@ -333,22 +333,22 @@ def a_star_kill(
                 goal = True
                 break
             else:  # skip paths that go through target, that wouldn't make sense
-                # logging.info("a* path went through target")
+                # logbook.info("a* path went through target")
                 continue
         if dist < maxDepth:
             for next in current.movable:  # new spots to try
                 if next == came_from[current]:
                     continue
                 if next.isMountain or ((not next.discovered) and next.isNotPathable):
-                    # logging.info("a* mountain")
+                    # logbook.info("a* mountain")
                     continue
                 if restrictionEvalFuncs is not None:
                     if current in restrictionEvalFuncs:
                         if not restrictionEvalFuncs[current](next):
-                            logging.info(f"dangerous, vetod: {current.x},{current.y}")
+                            logbook.info(f"dangerous, vetod: {current.x},{current.y}")
                             continue
                         else:
-                            logging.info(f"safe: {current.x},{current.y}")
+                            logbook.info(f"safe: {current.x},{current.y}")
 
                 inc = 0 if not ((next.isCity and next.player != -1) or next.isGeneral) else (dist + 1) / 2
 
@@ -362,16 +362,16 @@ def a_star_kill(
                     if next.isCity and next.player == -1:
                         nextArmy -= next.army * 2
                 if nextArmy <= 0 and army > 0:  # prune out paths that go negative after initially going positive
-                    # logging.info("a* next army <= 0: {}".format(nextArmy))
+                    # logbook.info("a* next army <= 0: {}".format(nextArmy))
                     continue
                 new_cost = (dist + 1, (0 - nextArmy))
                 if next not in cost_so_far or new_cost < cost_so_far[next]:
                     cost_so_far[next] = new_cost
                     priority = (dist + 1 + _shortestPathHeur(goalSet, next), 0 - nextArmy)
                     frontier.put((priority, next))
-                    # logging.info("a* enqueued next")
+                    # logbook.info("a* enqueued next")
                     came_from[next] = current
-    logging.info(
+    logbook.info(
         f"A* KILL SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
     goal = None
     for possibleGoal in goalSet:
@@ -385,14 +385,14 @@ def a_star_kill(
     node = goal
     dist = foundDist
     while came_from[node] is not None:
-        # logging.info("Node {},{}".format(node.x, node.y))
+        # logbook.info("Node {},{}".format(node.x, node.y))
         node = came_from[node]
         dist -= 1
         pathObject.add_start(node)
-    logging.info(f"A* FOUND KILLPATH OF LENGTH {pathObject.length} VALUE {pathObject.value}\n{pathObject.toString()}")
+    logbook.info(f"A* FOUND KILLPATH OF LENGTH {pathObject.length} VALUE {pathObject.value}\n{pathObject.toString()}")
     pathObject.calculate_value(startTiles[0].player, teams=map._teams)
     if pathObject.value < requireExtraArmy:
-        logging.info(f"A* path {pathObject.toString()} wasn't good enough, returning none")
+        logbook.info(f"A* path {pathObject.toString()} wasn't good enough, returning none")
         return None
     return pathObject
 
@@ -442,22 +442,17 @@ def breadth_first_dynamic(
     def default_priority_func(nextTile, currentPriorityObject):
         (dist, negCityCount, negEnemyTileCount, negArmySum, x, y, goalIncrement) = currentPriorityObject
         dist += 1
-        if nextTile.isCity:
-            negCityCount -= 1
-        if nextTile.player != searchingPlayer and (
-                nextTile.player != -1 or (preferNeutral and nextTile.isCity == False)):
-            negEnemyTileCount -= 1
+        if not map.is_player_on_team_with(nextTile.player, searchingPlayer):
+            # if negativeTiles is None or next not in negativeTiles:
+            negArmySum += nextTile.army
+        else:
+            negArmySum -= nextTile.army
 
-        if negativeTiles is None or next not in negativeTiles:
-            if nextTile.player == searchingPlayer:
-                negArmySum -= nextTile.army
-            else:
-                negArmySum += nextTile.army
         # always leaving 1 army behind. + because this is negative.
         negArmySum += 1
         # -= because we passed it in positive for our general and negative for enemy gen / cities
         negArmySum -= goalIncrement
-        return dist, negCityCount, negEnemyTileCount, negArmySum, nextTile.x, nextTile.y, goalIncrement
+        return dist, 0, 0, negArmySum, nextTile.x, nextTile.y, goalIncrement
 
     if searchingPlayer == -2:
         searchingPlayer = map.player_index
@@ -478,7 +473,7 @@ def breadth_first_dynamic(
                 raise AssertionError(
                     "yo you need to do the dictionary start if you're gonna pass a nonstandard priority func.")
             if tile.isMountain:
-                # logging.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
+                # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
                 continue
             dist = 0
             negCityCount = negEnemyTileCount = negArmySum = x = y = goalIncrement = 0
@@ -509,7 +504,7 @@ def breadth_first_dynamic(
     while not frontier.empty():
         iter += 1
         if iter % 1000 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
-            logging.info("BFS-DYNAMIC BREAKING")
+            logbook.info("BFS-DYNAMIC BREAKING")
             break
 
         (prioVals, dist, current, parent) = frontier.get()
@@ -542,7 +537,7 @@ def breadth_first_dynamic(
                     continue
                 frontier.put((nextVal, newDist, next, current))
 
-    logging.info(
+    logbook.info(
         f"BFS-DYNAMIC ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         return None
@@ -550,21 +545,21 @@ def breadth_first_dynamic(
     tile = endNode
     dist = foundDist
     tileList = []
-    # logging.info(json.dumps(visited))
-    # logging.info("PPRINT FULL")
-    # logging.info(pformat(visited))
+    # logbook.info(json.dumps(visited))
+    # logbook.info("PPRINT FULL")
+    # logbook.info(pformat(visited))
 
     while tile is not None:
-        # logging.info("ARMY {} NODE {},{}  DIST {}".format(army, node.x, node.y, dist))
+        # logbook.info("ARMY {} NODE {},{}  DIST {}".format(army, node.x, node.y, dist))
         tileList.append(tile)
 
-        # logging.info(pformat(visited[node.x][node.y]))
+        # logbook.info(pformat(visited[node.x][node.y]))
         (prioVal, tile) = visited[tile.x][tile.y][dist]
         dist -= 1
     pathObject = Path()
     for tile in reversed(tileList):
         if tile is not None:
-            # logging.info("curArmy {} NODE {},{}".format(curArmy, curNode.x, curNode.y))
+            # logbook.info("curArmy {} NODE {},{}".format(curArmy, curNode.x, curNode.y))
             pathObject.add_next(tile)
 
     # while (node != None):
@@ -576,7 +571,7 @@ def breadth_first_dynamic(
         searchingPlayer,
         teams=map._teams,
         incrementBackwards=incrementBackward)
-    logging.info(
+    logbook.info(
         f"DYNAMIC BFS FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}\n   {pathObject.toString()}")
     return pathObject
 
@@ -681,7 +676,7 @@ def breadth_first_dynamic_max(
 
             validMoveCount = 0
             # if not noLog:
-            #    logging.info("{}  EVAL".format(current.toString()))
+            #    logbook.info("{}  EVAL".format(current.toString()))
 
             for adj in current.movable:
                 skipMt = adj.isMountain or (adj.isCity and adj.player == -1)
@@ -691,17 +686,17 @@ def breadth_first_dynamic_max(
                 skipVisited = adj in tileSet or adj in negativeTiles
                 skipIt = skipMt or skipSearching or skipArmy or skipVisited
                 # if not noLog:
-                #    logging.info("    {}   {}  mt {}, player {}, army {} ({} - {} < 1), visitedNeg {}".format(adj.toString(), skipIt, skipMt, skipSearching, skipArmy, army, adj.army, skipVisited))
+                #    logbook.info("    {}   {}  mt {}, player {}, army {} ({} - {} < 1), visitedNeg {}".format(adj.toString(), skipIt, skipMt, skipSearching, skipArmy, army, adj.army, skipVisited))
                 if not skipIt:
                     validMoveCount += 1
 
             # validMoveCount = count(current.movable, lambda adj: not  and not adj.player == searchingPlayer and (not army - adj.army < 1) and not )
             if validMoveCount > 0 and dist < maxDepth:
                 # if not noLog:
-                #    logging.info("{} SKIPPED VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
+                #    logbook.info("{} SKIPPED VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
                 return None
             # if not noLog:
-            #    logging.info("{} VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
+            #    logbook.info("{} VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
             return oldValFunc(current, prioVals)
 
         valueFunc = newValFunc
@@ -749,7 +744,7 @@ def breadth_first_dynamic_max(
                 raise AssertionError(
                     "yo you need to do the dictionary start if you're gonna pass a nonstandard priority func.")
             if tile.isMountain:
-                # logging.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
+                # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
                 continue
             dist = 0
             negCityCount = negEnemyTileCount = negArmySum = x = y = goalIncrement = 0
@@ -791,7 +786,7 @@ def breadth_first_dynamic_max(
             and time.perf_counter() - start > maxTime
                 # and not BYPASS_TIMEOUTS_FOR_DEBUGGING
         ) or iter > maxIterations:
-            logging.info(f"BFS-DYNAMIC-MAX BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
+            logbook.info(f"BFS-DYNAMIC-MAX BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
             break
 
         (prioVals, dist, current, parent, nodeList) = frontier.get()
@@ -806,7 +801,7 @@ def breadth_first_dynamic_max(
 
         newValue = valueFunc(current, prioVals) if not includePath else valueFunc(current, prioVals, nodeList)
         # if logResultValues:
-        #    logging.info("Tile {} value?: [{}]".format(current.toString(), '], ['.join(str(x) for x in newValue)))
+        #    logbook.info("Tile {} value?: [{}]".format(current.toString(), '], ['.join(str(x) for x in newValue)))
         #    if parent != None:
         #        parentString = parent.toString()
         #    else:
@@ -818,14 +813,14 @@ def breadth_first_dynamic_max(
                     parentString = parent.toString()
                 else:
                     parentString = "None"
-                logging.info(
+                logbook.info(
                     f"+Tile {current.toString()} from {parentString} is new max value: [{'], ['.join('{:.3f}'.format(x) for x in newValue)}]  (dist {dist})")
             maxValue = newValue
             maxPrio = prioVals
             endNode = current
             maxList = nodeList
         # elif logResultValues:
-        #        logging.info("   Tile {} from {} was not max value: [{}]".format(current.toString(), parentString, '], ['.join(str(x) for x in newValue)))
+        #        logbook.info("   Tile {} from {} was not max value: [{}]".format(current.toString(), parentString, '], ['.join(str(x) for x in newValue)))
         if dist > depthEvaluated:
             depthEvaluated = dist
             # stop when we either reach the max depth (this is dynamic from start tiles) or use up the remaining turns (as indicated by len(nodeList))
@@ -846,7 +841,7 @@ def breadth_first_dynamic_max(
                                                                                                   maxPrio, nodeList)
                     if bounded:
                         if not noLog:
-                            logging.info(f"Bounded off {next.toString()}")
+                            logbook.info(f"Bounded off {next.toString()}")
                         continue
                 if skipFunc is not None:
                     skip = skipFunc(next, nextVal) if not includePath else skipFunc(next, nextVal, nodeList)
@@ -856,7 +851,7 @@ def breadth_first_dynamic_max(
                 newNodeList.append((next, nextVal))
                 frontier.put((nextVal, dist, next, current, newNodeList))
     if not noLog:
-        logging.info(f"BFS-DYNAMIC-MAX ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
+        logbook.info(f"BFS-DYNAMIC-MAX ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         if includePathValue:
             return None, None
@@ -871,10 +866,10 @@ def breadth_first_dynamic_max(
             if not noLog:
                 if prioVal is not None:
                     prioStr = '] ['.join(str(x) for x in prioVal)
-                    logging.info(f"  PATH TILE {str(tile)}: Prio [{prioStr}]")
+                    logbook.info(f"  PATH TILE {str(tile)}: Prio [{prioStr}]")
                 else:
-                    logging.info(f"  PATH TILE {str(tile)}: Prio [None]")
-            # logging.info("curArmy {} NODE {},{}".format(curArmy, curNode.x, curNode.y))
+                    logbook.info(f"  PATH TILE {str(tile)}: Prio [None]")
+            # logbook.info("curArmy {} NODE {},{}".format(curArmy, curNode.x, curNode.y))
             pathObject.add_next(tile)
 
     # while (node != None):
@@ -899,14 +894,14 @@ def breadth_first_dynamic_max(
 
     if pathObject.length == 0:
         if not noLog:
-            logging.info(
+            logbook.info(
                 f"BFS-DYNAMIC-MAX FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}, returning NONE!\n   {pathObject.toString()}")
         if includePathValue:
             return None, None
         return None
     else:
         if not noLog:
-            logging.info(
+            logbook.info(
                 f"BFS-DYNAMIC-MAX FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}\n   {pathObject.toString()}")
     if includePathValue:
         return pathObject, maxValue
@@ -1021,7 +1016,7 @@ def breadth_first_dynamic_max_per_tile(
 
             validMoveCount = 0
             # if not noLog:
-            #    logging.info("{}  EVAL".format(current.toString()))
+            #    logbook.info("{}  EVAL".format(current.toString()))
 
             for adj in current.movable:
                 skipMt = adj.isMountain or (adj.isCity and adj.player == -1)
@@ -1031,17 +1026,17 @@ def breadth_first_dynamic_max_per_tile(
                 skipVisited = adj in tileSet or adj in negativeTiles
                 skipIt = skipMt or skipSearching or skipArmy or skipVisited
                 # if not noLog:
-                #    logging.info("    {}   {}  mt {}, player {}, army {} ({} - {} < 1), visitedNeg {}".format(adj.toString(), skipIt, skipMt, skipSearching, skipArmy, army, adj.army, skipVisited))
+                #    logbook.info("    {}   {}  mt {}, player {}, army {} ({} - {} < 1), visitedNeg {}".format(adj.toString(), skipIt, skipMt, skipSearching, skipArmy, army, adj.army, skipVisited))
                 if not skipIt:
                     validMoveCount += 1
 
             # validMoveCount = count(current.movable, lambda adj: not  and not adj.player == searchingPlayer and (not army - adj.army < 1) and not )
             if validMoveCount > 0 and dist < maxDepth:
                 # if not noLog:
-                #    logging.info("{} SKIPPED VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
+                #    logbook.info("{} SKIPPED VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
                 return None
             # if not noLog:
-            #    logging.info("{} VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
+            #    logbook.info("{} VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
             return oldValFunc(current, prioVals)
 
         valueFunc = newValFunc
@@ -1067,7 +1062,7 @@ def breadth_first_dynamic_max_per_tile(
                 raise AssertionError(
                     "yo you need to do the dictionary start if you're gonna pass a nonstandard priority func.")
             if tile.isMountain:
-                # logging.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
+                # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
                 continue
             dist = 0
             negCityCount = negEnemyTileCount = negArmySum = x = y = goalIncrement = 0
@@ -1103,7 +1098,7 @@ def breadth_first_dynamic_max_per_tile(
     while not frontier.empty():
         iter += 1
         if iter & 64 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING or iter > maxIterations:
-            logging.info(f"BFS-DYNAMIC-MAX-PER-TILE BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
+            logbook.info(f"BFS-DYNAMIC-MAX-PER-TILE BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
             break
 
         (prioVals, dist, current, parent, nodeList, startTile) = frontier.get()
@@ -1118,7 +1113,7 @@ def breadth_first_dynamic_max_per_tile(
 
         newValue = valueFunc(current, prioVals) if not includePath else valueFunc(current, prioVals, nodeList)
         # if logResultValues:
-        #    logging.info("Tile {} value?: [{}]".format(current.toString(), '], ['.join(str(x) for x in newValue)))
+        #    logbook.info("Tile {} value?: [{}]".format(current.toString(), '], ['.join(str(x) for x in newValue)))
         #    if parent != None:
         #        parentString = parent.toString()
         #    else:
@@ -1132,14 +1127,14 @@ def breadth_first_dynamic_max_per_tile(
                 else:
                     parentString = "None"
                 valStr = '], ['.join('{:.3f}'.format(x) for x in newValue)
-                logging.info(
+                logbook.info(
                     f"+Tile {current.toString()} from {parentString} is new max value: [{valStr}]  (dist {dist})")
             maxValues[startTile] = newValue
             maxPrios[startTile] = prioVals
             endNodes[startTile] = current
             maxLists[startTile] = nodeList
         # elif logResultValues:
-        #        logging.info("   Tile {} from {} was not max value: [{}]".format(current.toString(), parentString, '], ['.join(str(x) for x in newValue)))
+        #        logbook.info("   Tile {} from {} was not max value: [{}]".format(current.toString(), parentString, '], ['.join(str(x) for x in newValue)))
         if dist > depthEvaluated:
             depthEvaluated = dist
         if dist >= maxDepth or len(nodeList) > maxTurns:
@@ -1165,7 +1160,7 @@ def breadth_first_dynamic_max_per_tile(
                             bounded = boundFunc(next, nextPrio, boundPrio, nodeList)
                         if bounded:
                             if not noLog:
-                                logging.info(f"Bounded off {next.toString()}")
+                                logbook.info(f"Bounded off {next.toString()}")
                             continue
                 if skipFunc is not None:
                     skip = skipFunc(next, nextPrio) if not includePath else skipFunc(next, nextPrio, nodeList)
@@ -1175,7 +1170,7 @@ def breadth_first_dynamic_max_per_tile(
                 newNodeList.append((next, nextPrio))
                 frontier.put((nextPrio, dist, next, current, newNodeList, startTile))
     if not noLog:
-        logging.info(f"BFS-DYNAMIC-MAX-PER-TILE ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
+        logbook.info(f"BFS-DYNAMIC-MAX-PER-TILE ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         return {}
 
@@ -1197,10 +1192,10 @@ def breadth_first_dynamic_max_per_tile(
                 if not noLog:
                     if prioVal is not None:
                         prioStr = ']\t['.join(str(x) for x in prioVal)
-                        logging.info(f"  PATH TILE {str(tile)}: Prio [{prioStr}]")
+                        logbook.info(f"  PATH TILE {str(tile)}: Prio [{prioStr}]")
                     else:
-                        logging.info(f"  PATH TILE {str(tile)}: Prio [None]")
-                # logging.info("curArmy {} NODE {},{}".format(curArmy, curNode.x, curNode.y))
+                        logbook.info(f"  PATH TILE {str(tile)}: Prio [None]")
+                # logbook.info("curArmy {} NODE {},{}".format(curArmy, curNode.x, curNode.y))
                 pathObject.add_next(tile)
         maxPaths[startTile] = pathObject
 
@@ -1218,12 +1213,12 @@ def breadth_first_dynamic_max_per_tile(
 
         if pathObject.length == 0:
             if not noLog:
-                logging.info(
+                logbook.info(
                     f"BFS-DYNAMIC-MAX-PER-TILE FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}, returning NONE!\n   {pathObject.toString()}")
             continue
         else:
             if not noLog:
-                logging.info(
+                logbook.info(
                     f"BFS-DYNAMIC-MAX-PER-TILE FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}\n   {pathObject.toString()}")
 
     return maxPaths
@@ -1339,7 +1334,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
 
             validMoveCount = 0
             # if not noLog:
-            #    logging.info("{}  EVAL".format(current.toString()))
+            #    logbook.info("{}  EVAL".format(current.toString()))
 
             for adj in current.movable:
                 skipMt = adj.isMountain or (adj.isCity and adj.player == -1)
@@ -1349,17 +1344,17 @@ def breadth_first_dynamic_max_per_tile_per_distance(
                 skipVisited = adj in tileSet or adj in negativeTiles
                 skipIt = skipMt or skipSearching or skipArmy or skipVisited
                 # if not noLog:
-                #    logging.info("    {}   {}  mt {}, player {}, army {} ({} - {} < 1), visitedNeg {}".format(adj.toString(), skipIt, skipMt, skipSearching, skipArmy, army, adj.army, skipVisited))
+                #    logbook.info("    {}   {}  mt {}, player {}, army {} ({} - {} < 1), visitedNeg {}".format(adj.toString(), skipIt, skipMt, skipSearching, skipArmy, army, adj.army, skipVisited))
                 if not skipIt:
                     validMoveCount += 1
 
             # validMoveCount = count(current.movable, lambda adj: not  and not adj.player == searchingPlayer and (not army - adj.army < 1) and not )
             if validMoveCount > 0 and dist < maxDepth:
                 # if not noLog:
-                #    logging.info("{} SKIPPED VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
+                #    logbook.info("{} SKIPPED VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
                 return None
             # if not noLog:
-            #    logging.info("{} VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
+            #    logbook.info("{} VALUE, moveCt {}, dist {}, maxDepth {}".format(current.toString(), validMoveCount, dist, maxDepth))
             return oldValFunc(current, prioVals)
 
         valueFunc = newValFunc
@@ -1385,7 +1380,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
                 raise AssertionError(
                     "yo you need to do the dictionary start if you're gonna pass a nonstandard priority func.")
             if tile.isMountain:
-                # logging.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
+                # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
                 continue
             dist = 0
             negCityCount = negEnemyTileCount = negArmySum = x = y = goalIncrement = 0
@@ -1421,7 +1416,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
     while not frontier.empty():
         iter += 1
         if iter & 64 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING or iter > maxIterations:
-            logging.info(f"BFS-DYNAMIC-MAX-PER-TILE-PER-DIST BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
+            logbook.info(f"BFS-DYNAMIC-MAX-PER-TILE-PER-DIST BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
             break
 
         (prioVals, dist, current, parent, nodeList, startTile) = frontier.get()
@@ -1436,7 +1431,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
 
         newValue = valueFunc(current, prioVals) if not includePath else valueFunc(current, prioVals, nodeList)
         # if logResultValues:
-        #    logging.info("Tile {} value?: [{}]".format(current.toString(), '], ['.join(str(x) for x in newValue)))
+        #    logbook.info("Tile {} value?: [{}]".format(current.toString(), '], ['.join(str(x) for x in newValue)))
         #    if parent != None:
         #        parentString = parent.toString()
         #    else:
@@ -1456,7 +1451,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
                         parentString = parent.toString()
                     else:
                         parentString = "None"
-                    logging.info(
+                    logbook.info(
                         f"+Tile {current.toString()} from {parentString} for startTile {str(startTile)} at dist {dist} is new max value: [{'], ['.join('{:.3f}'.format(x) for x in newValue)}]")
                 maxValuesTMP[startTile][dist] = newValue
                 maxPriosTMP[startTile][dist] = prioVals
@@ -1491,7 +1486,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
 
                             if bounded:
                                 if not noLog:
-                                    logging.info(f"Bounded off {next.toString()}")
+                                    logbook.info(f"Bounded off {next.toString()}")
                                 continue
                 if skipFunc is not None:
                     skip = skipFunc(next, nextPrio) if not includePath else skipFunc(next, nextPrio, nodeList)
@@ -1501,7 +1496,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
                 newNodeList.append((next, nextPrio))
                 frontier.put((nextPrio, dist, next, current, newNodeList, startTile))
     if not noLog:
-        logging.info(f"BFS-DYNAMIC-MAX ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
+        logbook.info(f"BFS-DYNAMIC-MAX ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         return {}
 
@@ -1521,7 +1516,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
             # if dist - 1 in maxValuesTMP[startTile]:
             #     shorterVal = maxValuesTMP[startTile][dist - 1]
             #     if maxValuesTMP[startTile][dist] <= shorterVal:
-            #         logging.info(f"  PRUNED PATH TO {str(startTile)} at dist {dist} because its value {shorterVal} was same or less than shorter dists value")
+            #         logbook.info(f"  PRUNED PATH TO {str(startTile)} at dist {dist} because its value {shorterVal} was same or less than shorter dists value")
             #         continue
 
             maxList = maxListsTMP[startTile][dist]
@@ -1531,10 +1526,10 @@ def breadth_first_dynamic_max_per_tile_per_distance(
                     if not noLog:
                         if prioVal is not None:
                             prioStr = ']\t['.join(str(x) for x in prioVal)
-                            logging.info(f"  PATH TILE {str(tile)}: Prio [{prioStr}]")
+                            logbook.info(f"  PATH TILE {str(tile)}: Prio [{prioStr}]")
                         else:
-                            logging.info(f"  PATH TILE {str(tile)}: Prio [None]")
-                    # logging.info("curArmy {} NODE {},{}".format(curArmy, curNode.x, curNode.y))
+                            logbook.info(f"  PATH TILE {str(tile)}: Prio [None]")
+                    # logbook.info("curArmy {} NODE {},{}".format(curArmy, curNode.x, curNode.y))
                     pathObject.add_next(tile)
 
             pathObject.calculate_value(
@@ -1551,12 +1546,12 @@ def breadth_first_dynamic_max_per_tile_per_distance(
 
             if pathObject.length == 0:
                 if not noLog:
-                    logging.info(
+                    logbook.info(
                         f"BFS-DYNAMIC-MAX-PER-TILE FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}, returning NONE!\n   {pathObject.toString()}")
                 continue
             else:
                 if not noLog:
-                    logging.info(
+                    logbook.info(
                         f"BFS-DYNAMIC-MAX-PER-TILE FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}\n   {pathObject.toString()}")
             pathListForTile.append(pathObject)
         maxPaths[startTile] = pathListForTile
@@ -1645,7 +1640,7 @@ def bidirectional_breadth_first_dynamic(
                 raise AssertionError(
                     "yo you need to do the dictionary start if you're gonna pass a nonstandard priority func.")
             if tile.isMountain:
-                # logging.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
+                # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
                 continue
             dist = 0
             negCityCount = negEnemyTileCount = negArmySum = x = y = goalIncrement = 0
@@ -1676,7 +1671,7 @@ def bidirectional_breadth_first_dynamic(
     while not frontier.empty():
         iter += 1
         if iter % 1000 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
-            logging.info("BI-DIR BREAKING")
+            logbook.info("BI-DIR BREAKING")
             break
 
         (prioVals, dist, current, parent) = frontier.get()
@@ -1709,7 +1704,7 @@ def bidirectional_breadth_first_dynamic(
                     continue
                 frontier.put((nextVal, newDist, next, current))
 
-    logging.info(
+    logbook.info(
         f"BI-DIR BFS-FIND ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         return None
@@ -1717,21 +1712,21 @@ def bidirectional_breadth_first_dynamic(
     tile = endNode
     dist = foundDist
     tileList = []
-    # logging.info(json.dumps(visited))
-    # logging.info("PPRINT FULL")
-    # logging.info(pformat(visited))
+    # logbook.info(json.dumps(visited))
+    # logbook.info("PPRINT FULL")
+    # logbook.info(pformat(visited))
 
     while tile is not None:
-        # logging.info("ARMY {} NODE {},{}  DIST {}".format(army, node.x, node.y, dist))
+        # logbook.info("ARMY {} NODE {},{}  DIST {}".format(army, node.x, node.y, dist))
         tileList.append(tile)
 
-        # logging.info(pformat(visited[node.x][node.y]))
+        # logbook.info(pformat(visited[node.x][node.y]))
         (prioVal, tile) = visited[tile.x][tile.y][dist]
         dist -= 1
     pathObject = Path()
     for tile in reversed(tileList):
         if tile is not None:
-            # logging.info("curArmy {} NODE {},{}".format(curArmy, curNode.x, curNode.y))
+            # logbook.info("curArmy {} NODE {},{}".format(curArmy, curNode.x, curNode.y))
             pathObject.add_next(tile)
 
     # while (node != None):
@@ -1740,7 +1735,7 @@ def bidirectional_breadth_first_dynamic(
     #         dist -= 1
     #         path = PathNode(node, path, army, dist, -1, None)
     pathObject.calculate_value(searchingPlayer, teams=map._teams, incrementBackwards=incrementBackward)
-    logging.info(
+    logbook.info(
         f"BI-DIR DYNAMIC BFS FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}\n   {pathObject.toString()}")
     return pathObject
 
@@ -1776,7 +1771,7 @@ def breadth_first_find_queue(
         for tile in startTiles.keys():
             (startDist, startArmy) = startTiles[tile]
             if tile.isMountain and not bypassDefaultSkipLogic:
-                # logging.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
+                # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
                 continue
             goalInc = 0
             if (tile.isCity or tile.isGeneral) and tile.player != -1:
@@ -1792,7 +1787,7 @@ def breadth_first_find_queue(
     else:
         for tile in startTiles:
             if tile.isMountain and not bypassDefaultSkipLogic:
-                # logging.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
+                # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
                 continue
             goalInc = 0
             startArmy = tile.army - 1
@@ -1858,7 +1853,7 @@ def breadth_first_find_queue(
                 frontier.appendleft((next, newDist, nextArmy, goalInc))
 
     if not noLog:
-        logging.info(
+        logbook.info(
             f"BFS-FIND-QUEUE ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         return None
@@ -1867,15 +1862,15 @@ def breadth_first_find_queue(
     dist = foundDist
     nodes = []
     army = foundArmy
-    # logging.info(json.dumps(visited))
-    # logging.info("PPRINT FULL")
-    # logging.info(pformat(visited))
+    # logbook.info(json.dumps(visited))
+    # logbook.info("PPRINT FULL")
+    # logbook.info(pformat(visited))
 
     while node is not None:
-        # logging.info("ARMY {} NODE {},{}  DIST {}".format(army, node.x, node.y, dist))
+        # logbook.info("ARMY {} NODE {},{}  DIST {}".format(army, node.x, node.y, dist))
         nodes.append((army, node))
 
-        # logging.info(pformat(visited[node.x][node.y]))
+        # logbook.info(pformat(visited[node.x][node.y]))
         (army, node) = nodeValues[node.x][node.y]
         dist -= 1
     nodes.reverse()
@@ -1886,7 +1881,7 @@ def breadth_first_find_queue(
     for i, armyNode in enumerate(nodes[1:]):
         (curArmy, curNode) = armyNode
         if curNode is not None:
-            # logging.info("curArmy {} NODE {},{}".format(curArmy, curNode.x, curNode.y))
+            # logbook.info("curArmy {} NODE {},{}".format(curArmy, curNode.x, curNode.y))
             pathObject.add_next(curNode)
             dist -= 1
 
@@ -1897,7 +1892,7 @@ def breadth_first_find_queue(
     #         path = PathNode(node, path, army, dist, -1, None)
 
     if not noLog:
-        logging.info(
+        logbook.info(
             f"BFS-FIND-QUEUE found path OF LENGTH {pathObject.length} VALUE {pathObject.value}\n{pathObject.toString()}")
     return pathObject
 
@@ -1930,12 +1925,12 @@ def breadth_first_foreach(map: MapBase, startTiles, maxDepth, foreachFunc, negat
     if skipTiles is not None:
         for tile in skipTiles:
             if not noLog:
-                logging.info(f"    skipTiles contained {tile.toString()}")
+                logbook.info(f"    skipTiles contained {tile.toString()}")
             globalVisited[tile.x][tile.y] = True
 
     for tile in startTiles:
         if tile.isMountain:
-            # logging.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
+            # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
             continue
         frontier.appendleft((tile, 0))
 
@@ -1971,7 +1966,7 @@ def breadth_first_foreach(map: MapBase, startTiles, maxDepth, foreachFunc, negat
         for next in current.movable:  # new spots to try
             frontier.appendleft((next, newDist))
     if not noLog:
-        logging.info(
+        logbook.info(
             f"Completed breadth_first_foreach. startTiles[0] {startTiles[0].x},{startTiles[0].y}: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
 
 
@@ -2014,7 +2009,7 @@ def breadth_first_foreach_dist(
 
     for tile in startTiles:
         if tile.isMountain:
-            # logging.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
+            # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
             continue
         frontier.appendleft((tile, 0))
 
@@ -2049,7 +2044,7 @@ def breadth_first_foreach_dist(
         for next in current.movable:  # new spots to try
             frontier.appendleft((next, newDist))
     if not noLog:
-        logging.info(
+        logbook.info(
             f"Completed breadth_first_foreach_dist. startTiles[0] {startTiles[0].x},{startTiles[0].y}: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
 
 
@@ -2095,7 +2090,7 @@ def breadth_first_foreach_dist_revisit_callback(
 
     for tile in startTiles:
         if tile.isMountain:
-            # logging.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
+            # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
             continue
         frontier.appendleft((tile, 0))
 
@@ -2130,7 +2125,7 @@ def breadth_first_foreach_dist_revisit_callback(
         for next in current.movable:  # new spots to try
             frontier.appendleft((next, newDist))
     if not noLog:
-        logging.info(
+        logbook.info(
             f"Completed breadth_first_foreach_dist. startTiles[0] {startTiles[0].x},{startTiles[0].y}: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
 
 

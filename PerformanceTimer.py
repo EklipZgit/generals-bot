@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+import logbook
 import queue
 import time
 import typing
@@ -21,7 +21,7 @@ class MoveEvent(object):
 
     def __exit__(self, *args, **kwargs):
         self.event_end_time = time.time_ns() / NS_CONVERTER
-        logging.info(f'--------------------\nComplete: {self.event_name} ({self.event_end_time - self.event_start_time:.3f})\n^^^--------------^^^')
+        logbook.info(f'--------------------\nComplete: {self.event_name} ({self.event_end_time - self.event_start_time:.3f})\n^^^--------------^^^')
 
     def get_duration(self):
         endTime = self.event_end_time
@@ -44,7 +44,7 @@ class MoveTimer(object):
 
     def __exit__(self, *args, **kwargs):
         self.move_sent_time = time.time_ns() / NS_CONVERTER
-        logging.info(f'\nMOVE Complete: {self.turn} ({self.move_sent_time - self.move_beginning_time:.3f} in, at game {self.move_sent_time:.3f})\n^^^~~~~~~~~~~~~~~^^^')
+        logbook.info(f'\nMOVE Complete: {self.turn} ({self.move_sent_time - self.move_beginning_time:.3f} in, at game {self.move_sent_time:.3f})\n^^^~~~~~~~~~~~~~~^^^')
 
     def begin_event(self, event_description: str) -> MoveEvent:
         parent: MoveEvent | None = None
@@ -58,7 +58,7 @@ class MoveTimer(object):
         event = MoveEvent(event_description, parent)
         self.event_list.append(event)
         self._event_stack.put(event)
-        logging.info(f'vvv--------------vvv\nBeginning: {event_description} ({event.event_start_time - self.move_beginning_time:.3f} in)\n')
+        logbook.info(f'vvv--------------vvv\nBeginning: {event_description} ({event.event_start_time - self.move_beginning_time:.3f} in)\n')
         return event
 
     def get_events_organized_longest_to_shortest(self, limit: int = 15, indentSize: int = 3) -> typing.List[str]:
@@ -115,10 +115,10 @@ class PerformanceTimer(object):
     def record_update(self, turn: int, timeOfUpdate: float):
         if self.current_move is not None:
             if turn != self.current_move.turn + 1:
-                logging.info(f'UPDATE FOR {turn} RECEIVED BEFORE PREVIOUS MOVE {self.current_move.turn} WAS COMPLETE')
+                logbook.info(f'UPDATE FOR {turn} RECEIVED BEFORE PREVIOUS MOVE {self.current_move.turn} WAS COMPLETE')
             if self.current_move.move_sent_time is None:
-                logging.info(f'UPDATE FOR {turn} RECEIVED while previous move {self.current_move.turn} is still incomplete...? Previous move timer data:')
-                logging.info(str(self.current_move))
+                logbook.info(f'UPDATE FOR {turn} RECEIVED while previous move {self.current_move.turn} is still incomplete...? Previous move timer data:')
+                logbook.info(str(self.current_move))
 
         while len(self.update_received_history) <= turn:
             self.update_received_history.append(0.0)
@@ -132,12 +132,12 @@ class PerformanceTimer(object):
         sinceLast = 0.0
         if self.current_move is not None:
             if newMove.turn != self.current_move.turn + 1:
-                logging.info(f'DROPPED MOVE FROM {self.current_move.turn} to {newMove.turn}')
+                logbook.info(f'DROPPED MOVE FROM {self.current_move.turn} to {newMove.turn}')
             if self.current_move.move_sent_time is None:
-                logging.info(f'STARTING MOVE {turn} while previous move {self.current_move.turn} is still incomplete...? Previous move timer data:')
-                logging.info(str(self.current_move))
+                logbook.info(f'STARTING MOVE {turn} while previous move {self.current_move.turn} is still incomplete...? Previous move timer data:')
+                logbook.info(str(self.current_move))
             sinceLast = newMove.move_beginning_time - self.current_move.move_beginning_time
-        logging.info(f'vvv~~~~~~~~~~~~~~vvv\nMOVE Beginning: {turn} ({sinceLast:.3f} since last, at game {newMove.move_beginning_time:.3f})\n~~~~~~~~~~~~~~~~~~~~')
+        logbook.info(f'vvv~~~~~~~~~~~~~~vvv\nMOVE Beginning: {turn} ({sinceLast:.3f} since last, at game {newMove.move_beginning_time:.3f})\n~~~~~~~~~~~~~~~~~~~~')
         self.move_history.append(self.current_move)
         self.current_move = newMove
         self.last_turn = turn

@@ -1,4 +1,4 @@
-import logging
+import logbook
 import time
 import typing
 from collections import deque
@@ -202,12 +202,12 @@ def extend_tree_node_lookup(
     for valuePerTurnPath in newPaths:
         if valuePerTurnPath.tail.tile.army <= 1 or valuePerTurnPath.tail.tile.player != searchingPlayer:
             # THIS should never happen since we are supposed to nuke these already in the startTilesDict builder
-            logging.error(
+            logbook.error(
                 f"TERMINATING extend_tree_node_lookup PATH BUILDING DUE TO TAIL TILE {valuePerTurnPath.tail.tile.toString()} THAT WAS < 1 OR NOT OWNED BY US. PATH: {valuePerTurnPath.toString()}")
             continue
 
         if shouldLog:
-            logging.info(
+            logbook.info(
                 f"Adding valuePerTurnPath (v/t {(valuePerTurnPath.value - valuePerTurnPath.start.tile.army + 1) / valuePerTurnPath.length:.3f}): {valuePerTurnPath.toString()}")
 
         # itr += 1
@@ -231,7 +231,7 @@ def extend_tree_node_lookup(
                         f'  startTiles was\r\n      {startTilesDictStringed}\r\n'
                         f'  gatherTreeNodeLookup was\r\n      {gatherTreeNodeLookupStringed}\r\n'
                         f'  newPaths was\r\n      {newPathsStringed}')
-            logging.error(msg)
+            logbook.error(msg)
 
             if not force:
                 raise AssertionError(msg)
@@ -304,7 +304,7 @@ def extend_tree_node_lookup(
                 break
             nextGatherTreeNode = gatherTreeNodeLookup.get(curGatherTreeNode.fromTile, None)
             if nextGatherTreeNode.fromTile == curGatherTreeNode.tile:
-                logging.error(f'found graph cycle in extend_tree_node_lookup, {str(curGatherTreeNode)}<-{str(curGatherTreeNode.fromTile)}  ({str(nextGatherTreeNode)}<-{str(nextGatherTreeNode.fromTile)}) setting curGatherTreeNode fromTile to None to break the cycle.')
+                logbook.error(f'found graph cycle in extend_tree_node_lookup, {str(curGatherTreeNode)}<-{str(curGatherTreeNode.fromTile)}  ({str(nextGatherTreeNode)}<-{str(nextGatherTreeNode.fromTile)}) setting curGatherTreeNode fromTile to None to break the cycle.')
                 curGatherTreeNode.fromTile = None
                 break
             if iter > 600:
@@ -323,7 +323,7 @@ def extend_tree_node_lookup(
                 if not force:
                     raise AssertionError(msg)
                 else:
-                    logging.error(msg)
+                    logbook.error(msg)
                 break
             curGatherTreeNode = nextGatherTreeNode
 
@@ -352,12 +352,12 @@ def build_next_level_start_dict(
 
     for valuePerTurnPath in newPaths:
         if valuePerTurnPath.tail.tile.army <= 1 or valuePerTurnPath.tail.tile.player != searchingPlayer:
-            logging.info(
+            logbook.info(
                 f"TERMINATING build_next_level_start_dict PATH BUILDING DUE TO TAIL TILE {valuePerTurnPath.tail.tile.toString()} THAT WAS < 1 OR NOT OWNED BY US. PATH: {valuePerTurnPath.toString()}")
             # in theory this means you fucked up your value function; your value function should return none when the path under evaluation isn't even worth considering
             hadInvalidPath = True
             continue
-        logging.info(
+        logbook.info(
             f"Adding valuePerTurnPath (v/t {(valuePerTurnPath.value - valuePerTurnPath.start.tile.army + 1) / valuePerTurnPath.length:.3f}): {valuePerTurnPath.toString()}")
 
         remainingTurns = remainingTurns - valuePerTurnPath.length
@@ -380,7 +380,7 @@ def build_next_level_start_dict(
             nextPrioObj = baseCaseFunc(node.tile, newDist)
             startTilesDict[node.tile] = (nextPrioObj, newDist)
             # skipTiles.add(node.tile)
-            # logging.info(
+            # logbook.info(
             #     f"Including tile {node.tile.x},{node.tile.y} in startTilesDict at newDist {newDist}  (distance {distance} addlDist {addlDist})")
             # if viewInfo:
 
@@ -426,7 +426,7 @@ def add_tree_nodes_to_start_tiles_dict_recurse(
     #
     # if startTilesEntry is not None:
     #     (prioObj, oldDist) = startTilesEntry
-    #     logging.info(f'shifting {str(rootNode.tile)} from {oldDist} to {oldDist + added}')
+    #     logbook.info(f'shifting {str(rootNode.tile)} from {oldDist} to {oldDist + added}')
     #     startTilesDict[rootNode.tile] = (prioObj, oldDist + added)
 
     return added
@@ -513,7 +513,7 @@ def _knapsack_levels_gather_recurse(
         if turnsToTry <= 0:
             continue
 
-        logging.info(f"Sub-knap ({time.perf_counter() - startTime:.3f} into search) looking for the next path with remainingTurns {turnsToTry} (fullTurns {fullTurns})")
+        logbook.info(f"Sub-knap ({time.perf_counter() - startTime:.3f} into search) looking for the next path with remainingTurns {turnsToTry} (fullTurns {fullTurns})")
         newGatheredArmy, newPaths = get_sub_knapsack_gather(
             map,
             startTilesDict,
@@ -556,11 +556,11 @@ def _knapsack_levels_gather_recurse(
 
             probablyBad = False
             if turnsLeft is None:
-                logging.info(
+                logbook.info(
                     f'bad paths were found in the plan with {expectedLeftOverTurns} remaining turns, we should probably not continue searching')
                 probablyBad = True
             elif expectedLeftOverTurns != turnsLeft:
-                logging.info(
+                logbook.info(
                     f'this iteration (remainingTurns {remainingTurns} - turnsToTry {turnsToTry}) found a less than full gather plan length {remainingTurns - calculatedLeftOverTurns} (possibly because it didnt have enough tiles to gather a full plan to).')
 
             turnsToTry = calculatedLeftOverTurns
@@ -591,7 +591,7 @@ def _knapsack_levels_gather_recurse(
             )
 
             if probablyBad and len(newChildPaths) > 0:
-                logging.error(
+                logbook.error(
                     f'expected no new paths because bad path found in parent plan, but the child plan WAS able to find new paths...? This means assumptions I am making are incorrect')
 
             turnsUsed = 0
@@ -644,7 +644,8 @@ def _knapsack_levels_gather_iterative_prune(
         useTrueValueGathered=False,
         priorityMatrix: MapMatrix[float] | None = None,
         includeGatherTreeNodesThatGatherNegative=False,
-        shouldLog=False
+        shouldLog=False,
+        fastMode=False
 ) -> typing.Tuple[int, typing.List[GatherTreeNode]]:
     """
 
@@ -685,6 +686,8 @@ def _knapsack_levels_gather_iterative_prune(
     rootNodes: typing.List[GatherTreeNode] = []
 
     maxPerIteration = max(4, fullTurns // 3 - 1)
+    if fastMode:
+        maxPerIteration = max(6, fullTurns // 2)
 
     teams = MapBase.get_teams_array(map)
 
@@ -703,6 +706,9 @@ def _knapsack_levels_gather_iterative_prune(
     startTime = time.perf_counter()
 
     logEntries = []
+
+    timeUsed = 0.0
+    startTime = time.perf_counter()
 
     try:
         while lastPrunedTo < fullTurns:
@@ -733,7 +739,7 @@ def _knapsack_levels_gather_iterative_prune(
             )
 
             if len(newPaths) == 0:
-                logging.info('no new paths found, breaking knapsack stuff')
+                logbook.info('no new paths found, breaking knapsack stuff')
                 break
 
             turnsUsedByNewPaths = 0
@@ -796,8 +802,10 @@ def _knapsack_levels_gather_iterative_prune(
 
             totalTurns = turnsUsedByNewPaths + turnsSoFar
 
-            if time.perf_counter() > cutoffTime:
-                logEntries.append(f'BREAKING GATHER EARLY AFTER {time.perf_counter() - startTime:.4f}')
+            now = time.perf_counter()
+            timeUsed = (now - startTime) / max(0.00001, cutoffTime - startTime)
+            if now > cutoffTime:
+                logEntries.append(f'BREAKING GATHER EARLY AFTER {time.perf_counter() - startTime:.4f} WITH TURNS USED {totalTurns}')
                 break
 
             # keep only the maxPerIteration best from each gather level
@@ -805,15 +813,17 @@ def _knapsack_levels_gather_iterative_prune(
             pruneToTurns = lastPrunedTo + maxPerIteration
             # maxPerIteration = max(maxPerIteration // 2, 1)
             maxPerIteration = maxPerIteration // 2 + 1
+            if fastMode:
+                maxPerIteration += 1
 
             # if we're at the end of the gather, gather 1 level at a time for the last phase to make sure we dont miss any optimal branches.
 
             # if fullTurns - pruneToTurns < max(maxPerIteration, 12):
-            if fullTurns - pruneToTurns <= maxPerIteration * 2:
+            if fullTurns - pruneToTurns <= maxPerIteration * 2 and not fastMode:
                 maxPerIteration = 1
                 pruneToTurns = lastPrunedTo + maxPerIteration
 
-            logEntries.append(f'pruning current {totalValue}v @ {totalTurns}t to {pruneToTurns}t')
+            logEntries.append(f'pruning current {totalValue}v @ {totalTurns}t to {pruneToTurns}t (maxPerIteration {maxPerIteration})')
             totalTurns, totalValue, rootNodes = prune_mst_to_turns_with_values(
                 rootNodes,
                 turns=pruneToTurns,
@@ -865,7 +875,7 @@ def _knapsack_levels_gather_iterative_prune(
             lastPrunedTo = pruneToTurns
             turnsSoFar = totalTurns
     finally:
-        logging.info('\n'.join(logEntries))
+        logbook.info('\n'.join(logEntries))
 
     return totalValue, rootNodes
 
@@ -879,7 +889,7 @@ def _start_tiles_prune_helper(
 
     if prioDistTuple is not None:
         prios, oldDist = prioDistTuple
-        logging.info(f'pruning {str(parentTile)} from {oldDist} to {oldDist - gatherNodeBeingPruned.gatherTurns} (pruned {str(gatherNodeBeingPruned.tile)} gatherTurns {gatherNodeBeingPruned.gatherTurns})')
+        logbook.info(f'pruning {str(parentTile)} from {oldDist} to {oldDist - gatherNodeBeingPruned.gatherTurns} (pruned {str(gatherNodeBeingPruned.tile)} gatherTurns {gatherNodeBeingPruned.gatherTurns})')
         startTilesDict[parentTile] = (prios, oldDist - gatherNodeBeingPruned.gatherTurns)
 
 
@@ -888,9 +898,9 @@ def _debug_print_diff_between_start_dict_and_tree_nodes(
         startDict: typing.Dict[Tile, typing.Tuple[typing.Any, int]]
 ):
     if len(gatherTreeNodes) != len(startDict):
-        logging.info(f'~~startDict: {len(startDict)}, vs GatherTreeNodes {len(gatherTreeNodes)}')
+        logbook.info(f'~~startDict: {len(startDict)}, vs GatherTreeNodes {len(gatherTreeNodes)}')
     else:
-        logging.info(f'startDict: {len(startDict)}, vs GatherTreeNodes {len(gatherTreeNodes)}')
+        logbook.info(f'startDict: {len(startDict)}, vs GatherTreeNodes {len(gatherTreeNodes)}')
 
     for tile, node in sorted(gatherTreeNodes.items()):
         if tile not in startDict:
@@ -899,12 +909,12 @@ def _debug_print_diff_between_start_dict_and_tree_nodes(
             while curNode is not None:
                 path.add_next(curNode.tile)
                 curNode = gatherTreeNodes.get(curNode.fromTile, None)
-            logging.info(f'  missing from startDict: {str(tile)}  ({str(node)}), path {str(path)}')
+            logbook.info(f'  missing from startDict: {str(tile)}  ({str(node)}), path {str(path)}')
 
     for tile, val in sorted(startDict.items()):
         (prioThing, dist) = val
         if tile not in gatherTreeNodes:
-            logging.info(f'  missing from GatherTreeNodes: {str(tile)}  (dist {dist}, [{str(prioThing)}])')
+            logbook.info(f'  missing from GatherTreeNodes: {str(tile)}  (dist {dist}, [{str(prioThing)}])')
 
 
 def knapsack_levels_backpack_gather(
@@ -1019,7 +1029,8 @@ def knapsack_levels_backpack_gather_with_value(
         shouldLog=DebugHelper.IS_DEBUGGING,
         useRecurse=False,
         priorityMatrix: MapMatrix[float] | None = None,
-        cutoffTime: float | None = None
+        cutoffTime: float | None = None,
+        fastMode: bool = False
 ) -> typing.Tuple[int, typing.List[GatherTreeNode]]:
     """
     Does black magic and shits out a spiderweb with numbers in it, sometimes the numbers are even right
@@ -1092,11 +1103,11 @@ def knapsack_levels_backpack_gather_with_value(
             searchingPlayer = startTiles[0].player
 
     if shouldLog:
-        logging.info(f"Trying knapsack-bfs-gather. Turns {turns}. Searching player {searchingPlayer}")
+        logbook.info(f"Trying knapsack-bfs-gather. Turns {turns}. Searching player {searchingPlayer}")
     if valueFunc is None:
 
         if shouldLog:
-            logging.info("Using default valueFunc")
+            logbook.info("Using default valueFunc")
 
         def default_value_func_max_gathered_per_turn(
                 currentTile,
@@ -1135,14 +1146,14 @@ def knapsack_levels_backpack_gather_with_value(
                        # 0 - ySum
             )
             if shouldLog:
-                logging.info(f'VALUE {str(currentTile)} : {str(prioObj)}')
+                logbook.info(f'VALUE {str(currentTile)} : {str(prioObj)}')
             return prioObj
 
         valueFunc = default_value_func_max_gathered_per_turn
 
     if priorityFunc is None:
         if shouldLog:
-            logging.info("Using default priorityFunc")
+            logbook.info("Using default priorityFunc")
 
         def default_priority_func(nextTile, currentPriorityObject):
             (
@@ -1195,22 +1206,22 @@ def knapsack_levels_backpack_gather_with_value(
                 numPrioTiles
             )
             if shouldLog:
-                logging.info(f'PRIO {str(nextTile)} : {str(prioObj)}')
-            # logging.info("prio: nextTile {} got realDist {}, negNextArmy {}, negDistanceSum {}, newDist {}, xSum {}, ySum {}".format(nextTile.toString(), realDist + 1, 0-nextArmy, negDistanceSum, dist + 1, xSum + nextTile.x, ySum + nextTile.y))
+                logbook.info(f'PRIO {str(nextTile)} : {str(prioObj)}')
+            # logbook.info("prio: nextTile {} got realDist {}, negNextArmy {}, negDistanceSum {}, newDist {}, xSum {}, ySum {}".format(nextTile.toString(), realDist + 1, 0-nextArmy, negDistanceSum, dist + 1, xSum + nextTile.x, ySum + nextTile.y))
             return prioObj
 
         priorityFunc = default_priority_func
 
     if baseCaseFunc is None:
         if shouldLog:
-            logging.info("Using default baseCaseFunc")
+            logbook.info("Using default baseCaseFunc")
 
         def default_base_case_func(tile, startingDist):
             startArmy = 0
             # we would like to not gather to an enemy tile without killing it, so must factor it into the path. army value is negative for priority, so use positive for enemy army.
             # if useTrueValueGathered and tile.player != searchingPlayer:
             #     if shouldLog:
-            #         logging.info(
+            #         logbook.info(
             #             f"tile {tile.toString()} was not owned by searchingPlayer {searchingPlayer}, adding its army {tile.army}")
             #     startArmy = tile.army
 
@@ -1229,7 +1240,7 @@ def knapsack_levels_backpack_gather_with_value(
                 0
             )
             if shouldLog:
-                logging.info(f"BASE CASE: {str(tile)} -> {str(prioObj)}")
+                logbook.info(f"BASE CASE: {str(tile)} -> {str(prioObj)}")
             return prioObj
 
         baseCaseFunc = default_base_case_func
@@ -1254,7 +1265,7 @@ def knapsack_levels_backpack_gather_with_value(
         (startPriorityObject, distance) = startTilesDict[tile]
 
         if shouldLog:
-            logging.info(f"Including tile {tile.x},{tile.y} in startTiles at distance {distance}")
+            logbook.info(f"Including tile {tile.x},{tile.y} in startTiles at distance {distance}")
 
     origStartTilesDict = startTilesDict.copy()
 
@@ -1287,6 +1298,7 @@ def knapsack_levels_backpack_gather_with_value(
             useTrueValueGathered=useTrueValueGathered,
             includeGatherTreeNodesThatGatherNegative=includeGatherTreeNodesThatGatherNegative,
             shouldLog=shouldLog,
+            fastMode=fastMode
         )
     else:
         gatheredValue, maxPaths = _knapsack_levels_gather_recurse(
@@ -1335,7 +1347,7 @@ def knapsack_levels_backpack_gather_with_value(
             viewInfo=viewInfo,
             shouldAssert=True)
 
-    logging.info(
+    logbook.info(
         f"Concluded knapsack_levels_backpack_gather with {itr.value} path segments, value {totalValue}. Duration: {time.perf_counter() - startTime:.3f}")
     return totalValue, rootNodes
 
@@ -1466,9 +1478,9 @@ def greedy_backpack_gather_values(
         else:
             searchingPlayer = startTiles[0].player
 
-    logging.info(f"Trying greedy-bfs-gather. Turns {turns}. Searching player {searchingPlayer}")
+    logbook.info(f"Trying greedy-bfs-gather. Turns {turns}. Searching player {searchingPlayer}")
     if valueFunc is None:
-        logging.info("Using default valueFunc")
+        logbook.info("Using default valueFunc")
 
         def default_value_func_max_gathered_per_turn(currentTile, priorityObject):
             (realDist,
@@ -1491,7 +1503,7 @@ def greedy_backpack_gather_values(
         valueFunc = default_value_func_max_gathered_per_turn
 
     if priorityFunc is None:
-        logging.info("Using default priorityFunc")
+        logbook.info("Using default priorityFunc")
 
         def default_priority_func(nextTile, currentPriorityObject):
             (realDist, negPrioTilesPerTurn, negGatheredSum, negArmySum, negDistanceSum, dist, xSum, ySum,
@@ -1517,19 +1529,19 @@ def greedy_backpack_gather_values(
             if priorityTiles is not None and nextTile in priorityTiles:
                 numPrioTiles += 1
             realDist += 1
-            # logging.info("prio: nextTile {} got realDist {}, negNextArmy {}, negDistanceSum {}, newDist {}, xSum {}, ySum {}".format(nextTile.toString(), realDist + 1, 0-nextArmy, negDistanceSum, dist + 1, xSum + nextTile.x, ySum + nextTile.y))
+            # logbook.info("prio: nextTile {} got realDist {}, negNextArmy {}, negDistanceSum {}, newDist {}, xSum {}, ySum {}".format(nextTile.toString(), realDist + 1, 0-nextArmy, negDistanceSum, dist + 1, xSum + nextTile.x, ySum + nextTile.y))
             return realDist, numPrioTiles / realDist, negGatheredSum, negArmySum, negDistanceSum, dist + 1, xSum + nextTile.x, ySum + nextTile.y, numPrioTiles
 
         priorityFunc = default_priority_func
 
     if baseCaseFunc is None:
-        logging.info("Using default baseCaseFunc")
+        logbook.info("Using default baseCaseFunc")
 
         def default_base_case_func(tile, startingDist):
             startArmy = 0
             # we would like to not gather to an enemy tile without killing it, so must factor it into the path. army value is negative for priority, so use positive for enemy army.
             if useTrueValueGathered and tile.player != searchingPlayer:
-                logging.info(
+                logbook.info(
                     f"tile {tile.toString()} was not owned by searchingPlayer {searchingPlayer}, adding its army {tile.army}")
                 startArmy = tile.army
 
@@ -1537,7 +1549,7 @@ def greedy_backpack_gather_values(
             if distPriorityMap is not None:
                 initialDistance = distPriorityMap[tile.x][tile.y]
 
-            logging.info(
+            logbook.info(
                 f"tile {tile.toString()} got base case startArmy {startArmy}, startingDist {startingDist}")
             return 0, 0, 0, startArmy, 0 - initialDistance, startingDist, tile.x, tile.y, 0
 
@@ -1561,7 +1573,7 @@ def greedy_backpack_gather_values(
 
     for tile in startTilesDict.keys():
         (startPriorityObject, distance) = startTilesDict[tile]
-        logging.info(f"Including tile {tile.x},{tile.y} in startTiles at distance {distance}")
+        logbook.info(f"Including tile {tile.x},{tile.y} in startTiles at distance {distance}")
 
     gatherTreeNodeLookup = {}
     itr = 0
@@ -1571,10 +1583,10 @@ def greedy_backpack_gather_values(
     while remainingTurns > 0:
         if valuePerTurnPath is not None:
             if valuePerTurnPath.tail.tile.army <= 1 or valuePerTurnPath.tail.tile.player != searchingPlayer:
-                logging.info(
+                logbook.info(
                     f"TERMINATING greedy-bfs-gather PATH BUILDING DUE TO TAIL TILE {valuePerTurnPath.tail.tile.toString()} THAT WAS < 1 OR NOT OWNED BY US. PATH: {valuePerTurnPath.toString()}")
                 break
-            logging.info(
+            logbook.info(
                 f"Adding valuePerTurnPath (v/t {(valuePerTurnPath.value - valuePerTurnPath.start.tile.army + 1) / valuePerTurnPath.length:.3f}): {valuePerTurnPath.toString()}")
 
             remainingTurns = remainingTurns - valuePerTurnPath.length
@@ -1608,7 +1620,7 @@ def greedy_backpack_gather_values(
                 nextPrioObj = baseCaseFunc(node.tile, newDist)
                 startTilesDict[node.tile] = (nextPrioObj, newDist)
                 negativeTiles.add(node.tile)
-                logging.info(
+                logbook.info(
                     f"Including tile {node.tile.x},{node.tile.y} in startTilesDict at newDist {newDist}  (distance {distance} addlDist {addlDist})")
                 # if viewInfo:
                 #    viewInfo.bottomRightGridText[node.tile.x][node.tile.y] = newDist
@@ -1622,7 +1634,7 @@ def greedy_backpack_gather_values(
                 addlDist += 1
                 node = node.next
 
-        logging.info(f"Searching for the next path with remainingTurns {remainingTurns}")
+        logbook.info(f"Searching for the next path with remainingTurns {remainingTurns}")
         valuePerTurnPath = SearchUtils.breadth_first_dynamic_max(
             map,
             startTilesDict,
@@ -1656,7 +1668,7 @@ def greedy_backpack_gather_values(
         onlyCalculateFriendlyArmy=not useTrueValueGathered,
         viewInfo=viewInfo)
 
-    logging.info(
+    logbook.info(
         f"Concluded greedy-bfs-gather with {itr} path segments, value {totalValue}. Duration: {time.perf_counter() - startTime:.3f}")
     return totalValue, turnsUsed, rootNodes
 
@@ -1674,7 +1686,7 @@ def recalculate_tree_values(
 ) -> typing.Tuple[int, int]:
     totalValue = 0
     totalTurns = 0
-    logging.info('recalcing treenodes....')
+    logbook.info('recalcing treenodes....')
     for currentNode in rootNodes:
         _recalculate_tree_values_recurse(
             currentNode,
@@ -1801,7 +1813,7 @@ def get_tree_move(
         pop: bool = False
 ) -> typing.Union[None, Move]:
     if len(gathers) == 0:
-        logging.info("get_tree_move... len(gathers) == 0?")
+        logbook.info("get_tree_move... len(gathers) == 0?")
         return None
 
     # TODO this is just an iterate-all-leaves-and-keep-max function, why the hell are we using a priority queue?
@@ -1828,7 +1840,7 @@ def get_tree_move(
             ):
                 highestValue = thisValue
                 highestValueNode = curGather
-                logging.info(f"new highestValueNode {str(highestValueNode)}!")
+                logbook.info(f"new highestValueNode {str(highestValueNode)}!")
         for gather in curGather.children:
             nextPrio = priorityFunc(gather.tile, curPrio)
             q.put((nextPrio, gather))
@@ -1842,7 +1854,7 @@ def get_tree_move(
             parent.children.remove(highestValueNode)
 
     highestValueMove = Move(highestValueNode.tile, highestValueNode.fromTile)
-    logging.info(f"highestValueMove in get_tree_move was {highestValueMove.toString()}!")
+    logbook.info(f"highestValueMove in get_tree_move was {highestValueMove.toString()}!")
     return highestValueMove
 
 
@@ -2501,7 +2513,7 @@ def prune_mst_to_max_army_per_turn_with_values(
         if node.gatherTurns == 0 or node.trunkDistance == 0:
             if node.fromTile is not None:
                 msg = f'ERRPRUNE {repr(node)} td {node.trunkDistance} or gathTurns {node.gatherTurns}'
-                logging.info(msg)
+                logbook.info(msg)
                 if viewInfo:
                     viewInfo.add_info_line(msg)
                 if USE_DEBUG_ASSERTS:
@@ -2620,11 +2632,11 @@ def prune_mst_until(
             validMove = True
             if invalidMoveFunc(current) and len(current.children) == 0:
                 if not noLog:
-                    logging.info(
+                    logbook.info(
                         f"tile {current.tile.toString()} will be eliminated due to invalid move, army {current.tile.army}")
                 validMove = False
             if not noLog:
-                logging.info(
+                logbook.info(
                     f"  tile {current.tile.toString()} had value {value:.1f}, trunkDistance {current.trunkDistance}")
             pruneHeap.put((validMove, preferPrune is None or current.tile not in preferPrune, pruneOrderFunc(current, None), current))
 
@@ -2636,7 +2648,7 @@ def prune_mst_until(
 
     count = len(nodeMap) - len(rootNodes)
     if not noLog:
-        logging.info(f'MST prune beginning with {count} nodes ({len(pruneHeap.queue)} nodes)')
+        logbook.info(f'MST prune beginning with {count} nodes ({len(pruneHeap.queue)} nodes)')
 
     childRecurseQueue: typing.Deque[GatherTreeNode] = deque()
 
@@ -2648,7 +2660,7 @@ def prune_mst_until(
             validMove, isPreferPrune, prioObj, current = pruneHeap.get()
             iter += 1
             if iter > initialCount * 3:
-                logging.error("PRUNE WENT INFINITE, BREAKING")
+                logbook.error("PRUNE WENT INFINITE, BREAKING")
                 if viewInfo is not None:
                     viewInfo.add_info_line('ERR PRUNE WENT INFINITE!!!!!!!!!')
                     viewInfo.add_info_line('ERR PRUNE WENT INFINITE!!!!!!!!!')
@@ -2669,14 +2681,14 @@ def prune_mst_until(
                     # Thus we should break. Otherwise if validMove == 0, we want to keep popping invalid moves off until they're valid again.
                     continue
             elif not noLog:
-                logging.info(f'pruning extra invalid tree node despite untilFunc == True: {str(current)}')
+                logbook.info(f'pruning extra invalid tree node despite untilFunc == True: {str(current)}')
 
             if not noLog:
-                logging.info(f'pruning tree node {str(current)}')
+                logbook.info(f'pruning tree node {str(current)}')
 
             if pruneOverrideFunc is not None and pruneOverrideFunc(current, prioObj, count, curValue):
                 if not noLog:
-                    logging.info(f'SKIPPING pruning tree node {str(current)} due to pruneOverrideFunc')
+                    logbook.info(f'SKIPPING pruning tree node {str(current)} due to pruneOverrideFunc')
                 continue
 
             # make sure the value of this prune didn't go down, if it did, shuffle it back into the heap with new priority.
@@ -2685,7 +2697,7 @@ def prune_mst_until(
                 if doubleCheckPrioObj > prioObj:
                     pruneHeap.put((validMove, preferPrune is None or current.tile not in preferPrune, doubleCheckPrioObj, current))
                     if not noLog:
-                        logging.info(
+                        logbook.info(
                             f'requeued {str(current)} (prio went from {str(prioObj)} to {str(doubleCheckPrioObj)})')
                     continue
 
@@ -2717,7 +2729,7 @@ def prune_mst_until(
                 toDropFromLookup = childRecurseQueue.popleft()
                 childIter += 1
                 if childIter > initialCount * 3:
-                    logging.error("PRUNE CHILD WENT INFINITE, BREAKING")
+                    logbook.error("PRUNE CHILD WENT INFINITE, BREAKING")
                     if viewInfo is not None:
                         viewInfo.add_info_line('ERR PRUNE CHILD WENT INFINITE!!!!!!!!!')
                         viewInfo.add_info_line('ERR PRUNE CHILD WENT INFINITE!!!!!!!!!')
@@ -2731,13 +2743,13 @@ def prune_mst_until(
                 nodeMap.pop(toDropFromLookup.tile, None)
                 count -= 1
                 if not noLog:
-                    logging.info(
+                    logbook.info(
                         f"    popped/pruned BRANCH CHILD {toDropFromLookup.tile.toString()} value {toDropFromLookup.value:.1f} count {count}")
                 for child in toDropFromLookup.children:
                     childRecurseQueue.append(child)
 
             if not noLog:
-                logging.info(f"    popped/pruned {current.tile.toString()} value {current.value:.1f} count {count}")
+                logbook.info(f"    popped/pruned {current.tile.toString()} value {current.value:.1f} count {count}")
 
             if realParent is not None and len(realParent.children) == 0 and realParent.fromTile is not None:
                 # (value, length) = self.get_prune_point(nodeMap, realParent)
@@ -2746,30 +2758,30 @@ def prune_mst_until(
                 parentValidMove = True
                 if invalidMoveFunc(realParent):
                     if not noLog:
-                        logging.info(
+                        logbook.info(
                             f"parent {str(realParent.tile)} will be eliminated due to invalid move, army {realParent.tile.army}")
                     parentValidMove = False
 
                 if not noLog:
-                    logging.info(
+                    logbook.info(
                         f"  Appending parent {str(realParent.tile)} (valid {parentValidMove}) had value {value:.1f}, trunkDistance {realParent.trunkDistance}")
 
                 nextPrioObj = pruneOrderFunc(realParent, prioObj)
                 pruneHeap.put((parentValidMove, preferPrune is None or realParent.tile not in preferPrune, nextPrioObj, realParent))
 
     except Exception as ex:
-        logging.error('prune got an error, dumping state:')
+        logbook.error('prune got an error, dumping state:')
 
-        logging.error(f'rootNodes: {repr(rootNodes)}')
-        # logging.error(f'untilFunc: {repr(untilFunc)}')
-        # logging.error(f'pruneOrderFunc: {repr(pruneOrderFunc)}')
-        # logging.error(f'invalidMoveFunc: {repr(invalidMoveFunc)}')
-        logging.error(f'pruneBranches: {repr(pruneBranches)}')
-        # logging.error(f'pruneOverrideFunc: {repr(pruneOverrideFunc)}')
-        # logging.error(f'viewInfo: {repr(viewInfo)}')
-        # logging.error(f'noLog: {repr(noLog)}')
-        logging.error(f'gatherTreeNodeLookupToPrune: {repr(gatherTreeNodeLookupToPrune)}')
-        logging.error(f'tileDictToPrune: {repr(tileDictToPrune)}')
+        logbook.error(f'rootNodes: {repr(rootNodes)}')
+        # logbook.error(f'untilFunc: {repr(untilFunc)}')
+        # logbook.error(f'pruneOrderFunc: {repr(pruneOrderFunc)}')
+        # logbook.error(f'invalidMoveFunc: {repr(invalidMoveFunc)}')
+        logbook.error(f'pruneBranches: {repr(pruneBranches)}')
+        # logbook.error(f'pruneOverrideFunc: {repr(pruneOverrideFunc)}')
+        # logbook.error(f'viewInfo: {repr(viewInfo)}')
+        # logbook.error(f'noLog: {repr(noLog)}')
+        logbook.error(f'gatherTreeNodeLookupToPrune: {repr(gatherTreeNodeLookupToPrune)}')
+        logbook.error(f'tileDictToPrune: {repr(tileDictToPrune)}')
         raise
 
     #while not leaves.empty():
@@ -2779,7 +2791,7 @@ def prune_mst_until(
         # node.value += 1
         totalValue += node.value
     if not noLog:
-        logging.info(
+        logbook.info(
             f"  Pruned MST to turns {count} with value {totalValue} in duration {time.perf_counter() - start:.3f}")
     return count, totalValue, rootNodes
 

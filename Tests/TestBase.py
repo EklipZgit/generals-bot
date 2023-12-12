@@ -1,9 +1,13 @@
-import logging
+import sys
+
+import logbook
 import random
 import time
 import traceback
 import typing
 import unittest
+
+from logbook import StreamHandler
 
 import BotHost
 from BotHost import BotHostBase
@@ -32,6 +36,7 @@ class TestBase(unittest.TestCase):
     def __init__(self, methodName: str = ...):
         super().__init__(methodName)
         self._initialized: bool = False
+        self._logging_handler = StreamHandler(sys.stderr, logbook.INFO)  #  format_string=LOG_FORMATTER
 
     def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
         if player == -2:
@@ -50,15 +55,20 @@ class TestBase(unittest.TestCase):
 
         return bot
 
-    def begin_capturing_logging(self, logLevel: int = logging.INFO):
+    def begin_capturing_logging(self, logLevel: int = logbook.INFO):
         if TestBase.GLOBAL_BYPASS_REAL_TIME_TEST:
             return
+
+        self._logging_handler.level = logLevel
         # without force=True, the first time a logging.log* is called earlier in the code, the config gets set to
         # default: WARN and basicConfig after that point has no effect without force=True
-        logging.basicConfig(format='%(message)s', level=logLevel, force=True)
+        # logging.basicConfig(format='%(message)s', level=logLevel, force=True)
+
+        self._logging_handler.push_application()
 
     def stop_capturing_logging(self):
-        logging.basicConfig(format='%(message)s', level=logging.FATAL, force=True)
+        # logging.basicConfig(format='%(message)s', level=logbook.CRITICAL, force=True)
+        self._logging_handler.pop_application()
 
     def _initialize(self):
         if not self._initialized:
@@ -110,7 +120,7 @@ class TestBase(unittest.TestCase):
             rawMapStr = TextMapLoader.get_map_raw_string_from_file(mapFilePath)
             return self.load_map_and_general_from_string(rawMapStr, turn, player_index, respect_undiscovered)
         except:
-            logging.info(f'failed to load file {mapFilePath}')
+            logbook.info(f'failed to load file {mapFilePath}')
             raise
 
     def load_map_and_generals(
@@ -1123,7 +1133,7 @@ class TestBase(unittest.TestCase):
                     lastWinTurns = simHost.sim.turn
                     if lastWinTurns < minGameDurationToCount:
                         self.begin_capturing_logging()
-                        logging.info(f'replaying short game turns {simHost.sim.turn} (won by {"a" if winner == a else "b"}={winner})')
+                        logbook.info(f'replaying short game turns {simHost.sim.turn} (won by {"a" if winner == a else "b"}={winner})')
                         self.stop_capturing_logging()
 
                 if a == winner:
@@ -1137,11 +1147,11 @@ class TestBase(unittest.TestCase):
                 bLastDropped = simHost.dropped_move_counts_by_player[b]
                 aDroppedMoves += aLastDropped
                 bDroppedMoves += bLastDropped
-                logging.info(f'aWins: {aWins}, bWins: {bWins} (games {aWins + bWins}), aDropped {aLastDropped} total {aDroppedMoves}, bDropped {bLastDropped} total {bDroppedMoves}')
+                logbook.info(f'aWins: {aWins}, bWins: {bWins} (games {aWins + bWins}), aDropped {aLastDropped} total {aDroppedMoves}, bDropped {bLastDropped} total {bDroppedMoves}')
                 self.stop_capturing_logging()
             except:
                 self.begin_capturing_logging()
-                logging.info(f'error: {traceback.format_exc()}')
+                logbook.info(f'error: {traceback.format_exc()}')
                 self.stop_capturing_logging()
                 pass
 
@@ -1151,7 +1161,7 @@ class TestBase(unittest.TestCase):
 
         self.begin_capturing_logging()
         msg = f'{aIndicator} | A won {aWins} times, B won {bWins} times out of {numRuns} games ({numRuns - aWins - bWins} errors?)'
-        logging.info(msg)
+        logbook.info(msg)
 
         self.assertGreater(aWins, bWins, msg)
 

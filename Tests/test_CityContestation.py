@@ -658,3 +658,59 @@ class CityContestationTests(TestBase):
         self.assertIsNone(winner)
 
         self.assertNoRepetition(simHost)
+    
+    def test_should_not_loop_on_not_recently_captured_mid_cities(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_gather_to_hold_large_contestation___reoSs8lSW---0--501.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 501, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=501)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        cities = [
+            playerMap.GetTile(13, 9),
+            playerMap.GetTile(17, 9),
+            playerMap.GetTile(19, 9),
+            playerMap.GetTile(21, 6),
+        ]
+        # for city in cities:
+        #     city.turn_captured = map.turn
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=30)
+        self.assertIsNone(winner)
+        self.assertGreater(bot.sum_player_army_near_or_on_tiles(cities), 300)
+
+        self.assertNoRepetition(simHost)
+
+    def test_should_gather_to_hold_large_contestation(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_gather_to_hold_large_contestation___reoSs8lSW---0--501.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 501, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=501)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        cities = [
+            playerMap.GetTile(13, 9),
+            playerMap.GetTile(17, 9),
+            playerMap.GetTile(19, 9),
+            playerMap.GetTile(21, 6),
+        ]
+        for city in cities:
+            city.turn_captured = map.turn
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=30)
+        self.assertIsNone(winner)
+        self.assertGreater(bot.sum_player_army_near_or_on_tiles(cities), 300)

@@ -1,9 +1,13 @@
 import argparse
 import gc
 import logging
-import queue
+import signal
+from multiprocessing.context import DefaultContext, DefaultContext
+from multiprocessing.managers import SyncManager
+
+import logbook
+import multiprocessing
 import sys
-import time
 import traceback
 import typing
 
@@ -32,7 +36,9 @@ class BotHostBase(object):
         alignBottom: bool = False,
         alignRight: bool = False,
         throw: bool = False,
-        noLog: bool = False
+        noLog: bool = False,
+        ctx: DefaultContext | None = None,
+        mgr: SyncManager | None = None,
     ):
         """
 
@@ -63,9 +69,11 @@ class BotHostBase(object):
         self._viewer: ViewerHost | None = None
         self.rethrow: bool = throw
         self.noLog: bool = noLog
+        self.ctx: DefaultContext | None = ctx
+        self.mgr: SyncManager | None = mgr
 
     def run_viewer_loop(self):
-        logging.info("attempting to start viewer loop")
+        logbook.info("attempting to start viewer loop")
         self._viewer.start()
 
     def make_move(self, currentMap: MapBase, updateReceivedTime: float):
@@ -84,8 +92,8 @@ class BotHostBase(object):
             except:
                 errMsg = traceback.format_exc()
                 self.eklipz_bot.viewInfo.add_info_line(f'ERROR: {errMsg}')
-                logging.error('ERROR: IN EKBOT.find_move():')
-                logging.error(errMsg)
+                logbook.error('ERROR: IN EKBOT.find_move():')
+                logbook.error(errMsg)
                 if self.rethrow:
                     raise
 
@@ -93,7 +101,7 @@ class BotHostBase(object):
             self.eklipz_bot.viewInfo.lastMoveDuration = duration
             if move is not None:
                 if move.source.army == 1 or move.source.army == 0 or move.source.player != self.eklipz_bot.general.player:
-                    logging.info(
+                    logbook.info(
                         f"!!!!!!!!! {move.source.x},{move.source.y} -> {move.dest.x},{move.dest.y} was a bad move from enemy / 1 tile!!!! This turn will do nothing :(")
                 else:
                     with moveTimer.begin_event(f'Sending move {str(move)} to server'):
@@ -141,8 +149,8 @@ class BotHostBase(object):
             except:
                 errMsg = traceback.format_exc()
                 self.eklipz_bot.viewInfo.add_info_line(f'ERROR: {errMsg}')
-                logging.error('ERROR: IN EKBOT.init_turn():')
-                logging.error(errMsg)
+                logbook.error('ERROR: IN EKBOT.init_turn():')
+                logbook.error(errMsg)
                 if self.rethrow:
                     raise
 
@@ -178,7 +186,7 @@ class BotHostBase(object):
                     exc_type, exc_value, exc_traceback = sys.exc_info()
                     lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
 
-                    logging.info(f'failed to dump map, {lines}')
+                    logbook.info(f'failed to dump map, {lines}')
                     mapStr = f'failed to dump map, {lines}'
 
             ekBotData = self.eklipz_bot.dump_turn_data_to_string()
@@ -190,11 +198,11 @@ class BotHostBase(object):
             with open(mapFilePath, 'w') as mapFile:
                 mapFile.write(mapStr)
         except:
-            logging.error(traceback.format_exc())
+            logbook.error(traceback.format_exc())
 
     def initialize_viewer(self, skip_file_logging: bool = False, onClick: typing.Callable[[Tile, bool], None] | None = None):
         window_title = "%s (%s)" % (self._name.split('_')[-1], self._game_type)
-        self._viewer = ViewerHost(window_title, alignTop=not self.align_bottom, alignLeft=not self.align_right, noLog=skip_file_logging, onClick=onClick)
+        self._viewer = ViewerHost(window_title, alignTop=not self.align_bottom, alignLeft=not self.align_right, noLog=skip_file_logging, onClick=onClick, ctx=self.ctx, mgr=self.mgr)
 
     def is_viewer_closed_by_user(self) -> bool:
         if self.has_viewer and self._viewer is not None and self._viewer.check_viewer_closed_by_user():
@@ -238,8 +246,10 @@ class BotHostLiveServer(BotHostBase):
             alignBottom: bool,
             alignRight: bool,
             noLog: bool,
+            ctx: DefaultContext,
+            mgr: SyncManager
     ):
-        super().__init__(name, self.place_move, self.ping_server_tile, self.send_server_chat, gameType, noUi, alignBottom, alignRight, noLog=noLog)
+        super().__init__(name, self.place_move, self.ping_server_tile, self.send_server_chat, gameType, noUi, alignBottom, alignRight, noLog=noLog, ctx=ctx, mgr=mgr)
 
         if FORCE_PRIVATE and self._game_type != 'private':
             raise AssertionError('Bot forced private only for the moment')
@@ -261,10 +271,10 @@ class BotHostLiveServer(BotHostBase):
     # returns whether the placed move was valid
     def place_move(self, source: Tile, dest: Tile, move_half=False):
         if source.army == 1 or source.army == 0:
-            logging.info(
+            logbook.info(
                 f"BOT PLACED BAD MOVE! {source.x},{source.y} to {dest.x},{dest.y}. Will send anyway, i guess.")
         else:
-            logging.info(f"Placing move: {source.x},{source.y} to {dest.x},{dest.y}")
+            logbook.info(f"Placing move: {source.x},{source.y} to {dest.x},{dest.y}")
         self.bot_client.place_move(source, dest, move_half=move_half)
 
     def ping_server_tile(self, pingTile: Tile):
@@ -279,26 +289,60 @@ class BotHostLiveServer(BotHostBase):
 
         # Start Game Viewer
         if self.has_viewer:
-            logging.info("attempting to initialize viewer")
+            logbook.info("attempting to initialize viewer")
             self.initialize_viewer()
             self.run_viewer_loop()
 
-        logging.info("attempting to run bot_client")
+        logbook.info("attempting to run bot_client")
         try:
             self.bot_client.run(addlThreads)
         except KeyboardInterrupt:
-            logging.info('keyboard interrupt received, killing viewer if any')
+            logbook.info('keyboard interrupt received, killing viewer if any')
             self.notify_game_over()
         except:
-            logging.info('unknown error occurred in bot_client.run(), notifying game over. Error was:')
-            logging.info(traceback.format_exc())
+            logbook.info('unknown error occurred in bot_client.run(), notifying game over. Error was:')
+            logbook.info(traceback.format_exc())
 
             self.notify_game_over()
+
+
+def run_bothost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight, noLog: bool = False):
+    loggingProc = None
+    mgr = None
+    ctx: DefaultContext = multiprocessing.get_context('spawn')
+    if not noLog:
+        import BotLogging
+        mgr = ctx.Manager()
+        queue = mgr.Queue(-1)
+        BotLogging.set_up_logger(logging.INFO, queue=queue)
+
+        loggingProc = ctx.Process(target=BotLogging.run_log_output_process, args=[BotLogging.LOGGING_QUEUE])
+
+        loggingProc.start()
+
+        def signal_handler(sig, frame):
+            if loggingProc is not None:
+                # loggingProc.join()
+                loggingProc.kill()
+            print('You pressed Ctrl+C!')
+            sys.exit(0)
+
+        signal.signal(signal.SIGINT, signal_handler)
+
+    try:
+        logbook.info("newing up bot host")
+        host = BotHostLiveServer(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight, noLog=noLog, ctx=ctx, mgr=mgr)
+
+        logbook.info("running bot host")
+        host.run()
+    finally:
+        print('Ended!')
+        if loggingProc is not None:
+            loggingProc.join(1.5)
+            loggingProc.kill()
 
 
 if __name__ == '__main__':
-    import BotLogging
-
     # raise AssertionError("stop")
     parser = argparse.ArgumentParser()
     parser.add_argument('-name', metavar='str', type=str, default='helpImAlive2',
@@ -329,11 +373,4 @@ if __name__ == '__main__':
     alignBottom: bool = args['bottom']
     alignRight: bool = args['right']
 
-    if not noLog:
-        BotLogging.set_up_logger(logging.INFO)
-
-    logging.info("newing up bot host")
-    host = BotHostLiveServer(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight, noLog=noLog)
-
-    logging.info("running bot host")
-    host.run()
+    run_bothost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight, noLog)

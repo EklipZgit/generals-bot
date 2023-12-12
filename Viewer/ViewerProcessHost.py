@@ -1,13 +1,16 @@
-import logging
+import logbook
 import queue
 import traceback
 import typing
 from multiprocessing import Queue
-from multiprocessing.context import BaseContext
+from multiprocessing.context import DefaultContext
 import multiprocessing as mp
 from multiprocessing.managers import SyncManager
 from multiprocessing.process import BaseProcess
 
+import logbook
+
+import BotLogging
 from ViewInfo import ViewInfo
 from base.client.map import MapBase, Tile
 
@@ -20,28 +23,31 @@ class ViewerHost(object):
             cell_height: int | None = None,
             alignTop: bool = True,
             alignLeft: bool = True,
-            ctx: BaseContext | None = None,
+            ctx: DefaultContext | None = None,
+            mgr: SyncManager | None = None,
             onClick: typing.Callable[[Tile, bool], None] | None = None,
             noLog: bool = False
     ):
         if ctx is None:
-            logging.info("getting spawn context")
+            logbook.info("getting spawn context")
             ctx = mp.get_context('spawn')
 
         self.on_click: typing.Callable[[Tile, bool], None] | None = onClick
-        self.ctx: BaseContext = ctx
-        logging.info("getting mp manager")
-        self.mgr: SyncManager = ctx.Manager()
-        logging.info("getting mgr queues")
+        self.ctx: DefaultContext = ctx
+        self.mgr: SyncManager = mgr
+        if self.mgr is None:
+            logbook.info("getting mp manager")
+            self.mgr = ctx.Manager()
+            logbook.info("getting mgr queues")
         self._update_queue: "Queue[typing.Tuple[ViewInfo | None, MapBase | None, bool]]" = self.mgr.Queue()
         self._viewer_event_queue: "Queue[typing.Tuple[str, typing.Any]]" = self.mgr.Queue()
-        logging.info("importing GeneralsViewer")
+        logbook.info("importing GeneralsViewer")
         from base.viewer import GeneralsViewer
-        logging.info("newing up GeneralsViewer")
+        logbook.info("newing up GeneralsViewer")
         self._viewer = GeneralsViewer(self._update_queue, self._viewer_event_queue, window_title, cell_width=cell_width, cell_height=cell_height, no_log=noLog)
         self._closed_by_user: bool | None = None
-        logging.info("newing up viewer process")
-        self.process: BaseProcess = self.ctx.Process(target=self._viewer.run_main_viewer_loop, args=(alignTop, alignLeft))
+        logbook.info("newing up viewer process")
+        self.process: BaseProcess = self.ctx.Process(target=self._viewer.run_main_viewer_loop, args=(alignTop, alignLeft, BotLogging.LOGGING_QUEUE))
         self.no_log: bool = noLog
 
     def __getstate__(self):
@@ -51,20 +57,20 @@ class ViewerHost(object):
         raise AssertionError('this should never get de-serialized')
 
     def start(self):
-        logging.info("starting viewer process")
+        logbook.info("starting viewer process")
         self.process.start()
 
     def kill(self):
-        logging.info("putting Complete viewer update in queue")
+        logbook.info("putting Complete viewer update in queue")
         try:
             self._update_queue.put((None, None, True))
         except BrokenPipeError:
             pass
 
-        logging.info("joining viewer")
+        logbook.info("joining viewer")
         if self.process.is_alive():
             self.process.join(1.0)
-            logging.info("killing viewer")
+            logbook.info("killing viewer")
             self.process.kill()
 
     def check_viewer_closed(self) -> bool:
@@ -101,24 +107,24 @@ class ViewerHost(object):
             #     print('TESTING VIEW INFO')
             #     TestPickle.test_pickle_v2(viewInfo)
             #     # string = dill.dumps(obj)
-            #     # logging.info('DILL dumped???')
-            #     # logging.info(string)
-            #     # logging.info('DILL loading:')
+            #     # logbook.info('DILL dumped???')
+            #     # logbook.info(string)
+            #     # logbook.info('DILL loading:')
             #     # dill.loads(string)
             # except:
-            #     logging.info(f'DILL LOAD ERROR: ' + traceback.format_exc())
+            #     logbook.info(f'DILL LOAD ERROR: ' + traceback.format_exc())
             #     pass
 
             self._update_queue.put(obj)
         except BrokenPipeError as ex:
             if ex.winerror == 232:
-                logging.info('multi processing is shutting down, got a BrokenPipeError from the viewer, unable to send (final?) update to viewer.')
+                logbook.info('multi processing is shutting down, got a BrokenPipeError from the viewer, unable to send (final?) update to viewer.')
             else:
-                logging.info(f'outer update publish catch, error: ')
-                logging.info(traceback.format_exc())
+                logbook.info(f'outer update publish catch, error: ')
+                logbook.info(traceback.format_exc())
         except:
-            logging.info(f'outer update publish catch, error: ')
-            logging.info(traceback.format_exc())
+            logbook.info(f'outer update publish catch, error: ')
+            logbook.info(traceback.format_exc())
 
     def handle_viewer_events(self):
         try:

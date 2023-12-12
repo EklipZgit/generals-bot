@@ -195,7 +195,7 @@ class TeammateCommunicator(object):
         logMsg = [f'p{self.map.player_index} DEF LEAD {self.is_defense_lead}: COORDINATED BLOCKED TILES']
         for t in sorted(self.coordinated_defense.blocked_tiles, key=lambda t: (t.x, t.y)):
             logMsg.append(f'   {str(t)}')
-        logging.info('\n'.join(logMsg))
+        logbook.info('\n'.join(logMsg))
 
         for defense in self.coordinated_defense.defenses:
             isThreatTileMatch = threatTile == defense.threat_tile or threatTile in defense.threat_tile.movable
@@ -221,12 +221,12 @@ class TeammateCommunicator(object):
             if not self.is_defense_lead or not self.coordinated_defense.is_defense_lead:
                 self.is_defense_lead = True
                 self.coordinated_defense.is_defense_lead = True
-                logging.info(f'swapping TO defense lead.')
+                logbook.info(f'swapping TO defense lead.')
         elif usDist < allyDist - 2:
             if self.is_defense_lead or self.coordinated_defense.is_defense_lead:
                 self.is_defense_lead = False
                 self.coordinated_defense.is_defense_lead = False
-                logging.info(f'swapping OFF of defense lead.')
+                logbook.info(f'swapping OFF of defense lead.')
 
 
 

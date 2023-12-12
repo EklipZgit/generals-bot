@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+import logbook
 import typing
 
 import GatherUtils
@@ -139,11 +139,11 @@ class CoordinatedDefense(object):
                 # then we're updating defense plan A
                 if threatTurns == defPlan.remaining_turns:
                     # then this is the same defense we already have planned :)
-                    logging.info(f'Threat {str(threatTile)}->{str(threatTarget)} behaving as expected')
+                    logbook.info(f'Threat {str(threatTile)}->{str(threatTarget)} behaving as expected')
                     pass
                 else:
                     # defense has changed?
-                    logging.info(
+                    logbook.info(
                         f'Threat {str(threatTile)}->{str(threatTarget)} not behaving as expected, turns {threatTurns} vs expected {defPlan.remaining_turns - 1}, is it targeting something other than what we expect...?')
                     pass
                 # update the plan either way

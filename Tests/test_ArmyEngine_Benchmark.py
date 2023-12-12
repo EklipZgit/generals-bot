@@ -1,4 +1,4 @@
-import logging
+import logbook
 import random
 import time
 import traceback
@@ -1251,7 +1251,7 @@ dur 0.3073, iter   109, nodesExplored   109, rollouts   109,
                                     self.render_view_info(bot._map, bot.viewInfo)
 
         self.begin_capturing_logging()
-        logging.info('nArmy, nTile, +Army, depth, biasD')
+        logbook.info('nArmy, nTile, +Army, depth, biasD')
 
         outer_cumulative_iterations = 0
         outer_cumulative_nodes_explored = 0
@@ -1306,7 +1306,7 @@ dur 0.3073, iter   109, nodesExplored   109, rollouts   109,
             avg_biased_rollout_expansions = int(cumulative_biased_rollout_expansions / len(resultList))
             avg_duration = cumulative_duration / len(resultList)
 
-            logging.info(
+            logbook.info(
                 f'{", ".join([str(v).rjust(5) for v in resultCombo])}: dur {avg_duration:.4f}, iter {str(avg_iterations).rjust(5)}, nodesExplored {str(avg_nodes_explored).rjust(5)}, rollouts {str(avg_trials_performed).rjust(5)}, \n                      backprops {str(avg_backprop_iter).rjust(5)}, rolloutExpansions {str(avg_rollout_expansions).rjust(5)}, biasedRolloutExpansions {str(avg_biased_rollout_expansions).rjust(5)}')
 
         outer_avg_iterations = int(outer_cumulative_iterations / (len(results) * trialsPerParamSet))
@@ -1317,8 +1317,8 @@ dur 0.3073, iter   109, nodesExplored   109, rollouts   109,
         outer_avg_biased_rollout_expansions = int(outer_cumulative_biased_rollout_expansions / (len(results) * trialsPerParamSet))
         outer_avg_duration = outer_cumulative_duration / (len(results) * trialsPerParamSet)
 
-        logging.info(
+        logbook.info(
             f'AVG:\ndur {outer_avg_duration:.4f}, iter {str(outer_avg_iterations).rjust(5)}, nodesExplored {str(outer_avg_nodes_explored).rjust(5)}, rollouts {str(outer_avg_trials_performed).rjust(5)}, \n                      backprops {str(outer_avg_backprop_iter).rjust(5)}, rolloutExpansions {str(outer_avg_rollout_expansions).rjust(5)}, biasedRolloutExpansions {str(outer_avg_biased_rollout_expansions).rjust(5)}')
 
-        logging.info("Perf metrics:")
-        logging.info(str(sharedTelemetry))
+        logbook.info("Perf metrics:")
+        logbook.info(str(sharedTelemetry))

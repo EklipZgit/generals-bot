@@ -1,4 +1,4 @@
-import logging
+import logbook
 
 import SearchUtils
 from Directives import Timings

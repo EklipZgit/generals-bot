@@ -706,7 +706,7 @@ class GameSimulatorHost(object):
                     continue
 
                 if prevTile.x != nextTile.x and prevTile.y != nextTile.y:
-                    raise AssertionError(f'Cannot jump diagnoally between {str(prevTile)} and {str(nextTile)}')
+                    raise AssertionError(f'Cannot jump diagonally between {str(prevTile)} and {str(nextTile)}')
 
                 xInc = nextTile.x - prevTile.x
                 if xInc < 0:

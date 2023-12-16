@@ -240,6 +240,9 @@ class GeneralsClientHost(object):
     def send_clear_moves(self):
         self._game.send_clear_moves()
 
+    def send_surrender(self):
+        self._game.send_surrender()
+
     def _start_chat_thread(self):
         # Send Chat Messages
         try:

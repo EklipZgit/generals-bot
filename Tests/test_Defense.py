@@ -1840,3 +1840,63 @@ class DefenseTests(TestBase):
 
                 city = playerMap.GetTile(17, 12)
                 self.assertEqual(general.player, city.player, 'should have held city')
+    
+    def test_should_go_for_kill_instead_of_attempting_defense_when_cannot_defend(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_continue_intercept___GaUZiDSCr---1--568.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 568, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=568)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '10,13->10,12->10,11->9,11->9,10->8,10->8,7->9,7->9,4->7,4->7,0->8,0')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=25)
+        self.assertEqual(general.player, winner)
+
+    # 36-69-5 as of tweaking chokes and honoring allowNonChoke
+    # 31-74-5 reverted chokeWidth reduction to -2 from -1, which i'm like 100% sure is wrong but it makes the 'one too far' tests pass, lmao.
+    # 50-55 if i switch to gathering to shortest pathway tiles with pathwidth offset
+    # 34-71
+    # 57-49 with chokewidth -1 instead of -2 and the choke defense changes in place
+    # 53-53
+
+    def test_should_not_do_weird_flank_vision_thing_when_opp_clearly_going_to_nuke_up_the_middle(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_do_weird_flank_vision_thing_when_opp_clearly_going_to_nuke_up_the_middle___gbd4mui8Z---1--111.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 111, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=111)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=25)
+        self.assertIsNone(winner)
+
+        self.assertGreater(bot.sum_player_army_near_or_on_tiles(bot.shortest_path_to_target_player.tileList, distance=0, player=general.player), 37)
+
+    def test_should_consider_long_attack_a_threat(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_consider_long_attack_a_threat___aXropQVFj---0--428.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 428, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=428)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '9,11->8,11->8,8->9,8->9,7->11,7->11,4->15,4')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        self.assertIsNone(winner)

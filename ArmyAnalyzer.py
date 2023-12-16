@@ -11,6 +11,7 @@ import json
 
 import logbook
 
+import DebugHelper
 from ArmyTracker import *
 from SearchUtils import *
 from collections import deque 
@@ -59,6 +60,7 @@ class ArmyAnalyzer:
         self.pathWays: typing.List[PathWay] = []
         self.shortestPathWay: PathWay = PathWay(distance=INF)
         self.chokeWidths: typing.Dict[Tile, int] = {}
+        self.interceptChokes: typing.Dict[Tile, int] = {}
 
         logbook.info("ArmyAnalyzer analyzing {} and {}".format(self.tileA.toString(), self.tileB.toString()))
             
@@ -100,7 +102,8 @@ class ArmyAnalyzer:
                     minPath = path
 
             # map out choke counts. TODO i don't think this pathChoke stuff works :/ make sure to visualize it well and debug.
-            chokeKey = (path.distance, self.aMap[tile.x][tile.y], self.bMap[tile.x][tile.y])
+            chokeKey = self._get_choke_key(path, tile)
+
             if not chokeKey in chokeCounterMap:
                 chokeCounterMap[chokeKey] = 1
             else:
@@ -109,15 +112,26 @@ class ArmyAnalyzer:
         for tile in self.map.pathableTiles:
             path = self.pathWayLookupMatrix[tile]
             if path is not None:
-                chokeKey = (path.distance, self.aMap[tile.x][tile.y], self.bMap[tile.x][tile.y])
-                if chokeCounterMap[chokeKey] == 1:
-                    #logbook.info("  (maybe) found choke at {}? Testing for shorter pathway joins".format(tile.toString()))
+                chokeKey = self._get_choke_key(path, tile)
+                width = chokeCounterMap[chokeKey]
+                if width == 1:
+                    if DebugHelper.IS_DEBUGGING:
+                        logbook.info("  (maybe) found choke at {}? Testing for shorter pathway joins".format(tile.toString()))
                     shorter = count(tile.movable, lambda adjTile: adjTile in self.pathWayLookupMatrix and self.pathWayLookupMatrix[adjTile].distance < path.distance)
                     if shorter == 0:
-                        #logbook.info("    OK WE DID FIND A CHOKEPOINT AT {}! adding to self.pathChokes".format(tile.toString()))
+                        if DebugHelper.IS_DEBUGGING:
+                            logbook.info("    OK WE DID FIND A CHOKEPOINT AT {}! adding to self.pathChokes".format(tile.toString()))
                         # Todo this should probably be on pathways lol
                         self.pathChokes.add(tile)
-                self.chokeWidths[tile] = chokeCounterMap[chokeKey]
+                self.chokeWidths[tile] = width
+                if (
+                        tile in minPath.tiles
+                        and tile != self.tileA
+                        and tile != self.tileB
+                        and width < 4
+                        and self._is_tile_middle_of_width(tile, path)
+                ):
+                    self.interceptChokes[tile] = width
 
         self.shortestPathWay = minPath
 
@@ -144,5 +158,13 @@ class ArmyAnalyzer:
                         queue.appendleft(adjacentTile)
         return path
 
+    def _get_choke_key(self, path: PathWay, tile: Tile) -> typing.Tuple:
+        # including path in the key forces the 'chokes' to be part of the same pathway.
+        return path, self.aMap[tile.x][tile.y], self.bMap[tile.x][tile.y]
 
+        # return self.aMap[tile.x][tile.y], self.bMap[tile.x][tile.y]
+        # return path.distance, self.aMap[tile.x][tile.y], self.bMap[tile.x][tile.y]
 
+    def _is_tile_middle_of_width(self, tile: Tile, path: PathWay) -> bool:
+        # TODO need to implement.
+        return True

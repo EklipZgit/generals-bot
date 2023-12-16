@@ -714,3 +714,64 @@ class CityContestationTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=30)
         self.assertIsNone(winner)
         self.assertGreater(bot.sum_player_army_near_or_on_tiles(cities), 300)
+    
+    def test_should_not_defend_preemptive_when_would_be_behind_on_econ(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_defend_preemptive_when_would_be_behind_on_econ___F-bhF7SYZ---1--185.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 185, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=185)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        self.assertIsNone(winner)
+
+        self.assertGreater(self.get_tile_differential(simHost), -5)
+
+    def test_should_not_pull_forward_armies_back_to_cities__esp_when_not_winning_on_economy(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_pull_forward_armies_back_to_cities__esp_when_not_winning_on_economy___b4ucQw2N6---1--453.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 453, fill_out_tiles=True)
+        self.move_enemy_general(map, enemyGeneral, 1, 14)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=453)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+
+        point = playerMap.GetTile(17, 7)
+        # self.assertEqual(bot.locked_launch_point, point, "17,7 should become the launch point despite the backwards cities and general that are all fully safe behind the choke.")
+
+        self.assertEqual(108, playerMap.players[general.player].tileCount, "should have capped tiles the whole time...")
+
+    def test_should_not_gather_small_attacks_to_unknown_offensive_targets(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_gather_small_attacks_to_unknown_offensive_targets___Hn8ec1Na9---0--280.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 280, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=280)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=20)
+        self.assertIsNone(winner)
+
+        self.assertGreater(self.get_tile_differential(simHost), 24, 'should have expanded mainly')

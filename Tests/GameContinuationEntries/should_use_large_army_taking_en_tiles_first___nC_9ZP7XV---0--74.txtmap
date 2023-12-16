@@ -32,7 +32,6 @@ bot_all_in_army_advantage_cycle=35
 bot_is_rapid_capturing_neut_cities=False
 bot_is_blocking_neutral_city_captures=False
 bot_finishing_exploration=False
-bot_cur_path=[4 len 5] 17,9 -> 18,9 -> 19,9 -> 19,8 -> 18,8 -> 17,8
 aUsername=Human.exe
 aTiles=23
 aScore=57

@@ -744,6 +744,7 @@ bot_target_player=1
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_use_large_army_taking_en_tiles_first___nC_9ZP7XV---0--74.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 74, fill_out_tiles=True)
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 4, 15)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=74)
         
@@ -751,6 +752,10 @@ bot_target_player=1
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         bot = self.get_debug_render_bot(simHost, general.player)
+        bot.completed_first_100 = True
+        bot.timings = bot.get_timings()
+        bot.timings.launchTiming = 24
+        bot.timings.splitTurns = 24
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -801,11 +806,11 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=11)
         self.assertIsNone(winner)
 
         self.assertGreater(playerMap.GetTile(general.x, general.y).army, 32, 'should not have launched from general yet.')
-        self.assertPlayerTileCountGreater(simHost, general.player, 44, "should have captured neutrals, though")
+        self.assertGreater(self.get_tile_differential(simHost), 5, "should have captured tiles, though")
     
     def test_should_launch_attack_when_attack_path_captures_more_than_expansion_plan(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1043,3 +1048,34 @@ bot_target_player=1
 
         diff = self.get_tile_differential(simHost)
         self.assertGreater(diff, 3, "should not lose entire advantage when can spend most of round safely capping tiles")
+    
+    def test_should_take_2_en_tiles_and_then_cap_one_behind_gen(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_take_2_en_tiles_and_then_cap_one_behind_gen___B_DQQI22q---0--93.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 93, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=93)
+        self.reset_general(rawMap, enemyGeneral)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        initDiff = self.get_tile_differential(simHost)
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+        self.assertIsNone(winner)
+
+        finalDiff = self.get_tile_differential(simHost)
+
+        self.assertEqual(5, finalDiff - initDiff, "should have capped two en tiles and then taken one behind general, wtf")
+# 15f-23p-2s totally original
+# 17f-21p RE 19-19 minus the self-tile-penalty
+# 15f-23p-2s self-tile-penalty 0.2 instead of 0.5
+# 16f-22p-2s with cutoff
+# 17f-21p-2s no cutoff
+# 14-24 with cutoff tweak
+# 15-23 with revamp of including all paths from tile if any path from tile meets value per turn cutoff
+# 13-25 ^ but rolled back early one?

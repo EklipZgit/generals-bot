@@ -1555,7 +1555,9 @@ class ArmyTracker(object):
         if army is None:
             logbook.info(f'creating new army at {str(tile)} in get_or_create.')
             army = Army(tile)
-            army.last_moved_turn = self.map.turn
+            army.last_moved_turn = 0
+            if army.tile.delta.fromTile is not None:
+                army.last_moved_turn = self.map.turn - 1
             if not tile.visible:
                 army.last_moved_turn = self.map.turn - 2  # this should only really happen on incrementing fog cities or on initial unit test map load
                 army.value = tile.army - 1

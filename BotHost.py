@@ -267,6 +267,7 @@ class BotHostLiveServer(BotHostBase):
             public_server=isPublic)
 
         self.eklipz_bot.clear_moves_func = self.bot_client.send_clear_moves
+        self.eklipz_bot.surrender_func = self.bot_client.send_surrender
 
     # returns whether the placed move was valid
     def place_move(self, source: Tile, dest: Tile, move_half=False):

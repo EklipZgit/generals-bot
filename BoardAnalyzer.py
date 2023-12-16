@@ -92,8 +92,13 @@ class BoardAnalyzer:
         else:
             self.friendly_general_distances = self.general_distances
 
+        closestCities = cities
+        if self.intergeneral_analysis is not None:
+            # only consider the closest 3 cities to enemy...?
+            closestCities = list(sorted(cities, key=lambda c: self.intergeneral_analysis.bMap[c.x][c.y]))[0:3]
+
         self.friendly_city_distances = {}
-        for city in cities:
+        for city in closestCities:
             self.friendly_city_distances[city] = build_distance_map_matrix(self.map, [city])
         self.defense_centrality_sums = MapMatrix(self.map, 250)
 

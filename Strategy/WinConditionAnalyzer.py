@@ -38,6 +38,7 @@ class WinConditionAnalyzer(object):
         self.territories: TerritoryClassifier = territories
         self.board_analysis: BoardAnalyzer = boardAnalyzer
         self.viable_win_conditions: typing.Set[WinCondition] = set()
+        self.last_viable_win_conditions: typing.Set[WinCondition] = set()
         self.is_contesting_cities: bool = False
         self.target_player: int = -1
         self.target_player_location: Tile = map.GetTile(0, 0)
@@ -49,6 +50,7 @@ class WinConditionAnalyzer(object):
         self.defend_cities: typing.Set[Tile] = set()
 
     def analyze(self, targetPlayer: int, targetPlayerExpectedGeneralLocation: Tile):
+        self.last_viable_win_conditions = self.viable_win_conditions
         self.viable_win_conditions = set()
 
         self.target_cities = set()
@@ -244,7 +246,9 @@ class WinConditionAnalyzer(object):
         return self.opponent_tracker.winning_on_economy(byRatio=1.07, offset=-15)
 
     def is_threat_of_loss_to_city_contest(self) -> bool:
-        weAreSlightlyAhead = self.opponent_tracker.winning_on_economy(byRatio=1.05, offset=-5)
+        weAreSlightlyAhead = self.opponent_tracker.winning_on_economy(byRatio=1.1, offset=-10)
+        if WinCondition.DefendContestedFriendlyCity in self.last_viable_win_conditions:
+            weAreSlightlyAhead = self.opponent_tracker.winning_on_economy(byRatio=1.03, offset=-4)
 
         oldDefTurns = self.recommended_city_defense_plan_turns
         self.recommended_city_defense_plan_turns = 0
@@ -299,29 +303,49 @@ class WinConditionAnalyzer(object):
         if fogRisk < sumArmyOnDefCities:
             return False
 
+        if not weAreSlightlyAhead:
+            return False
+
         self.recommended_city_defense_plan_turns = maxThreatTurns
 
         couldLose = numRiskyCities > 0 and sortOfWinningEconCurrently and not wouldStillBeWinningIfLostRiskies
 
         return couldLose
 
-    def get_approximate_attack_against(self, tiles: typing.List[Tile], inTurns: int, asPlayer: int, timeLimit: float = 0.005) -> int:
-        curTiles = tiles
+    def get_approximate_attack_against(
+            self,
+            tiles: typing.List[Tile],
+            inTurns: int,
+            asPlayer: int,
+            timeLimit: float = 0.005,
+            forceFogRisk: bool = False
+    ) -> int:
+        """
+        Does NOT include the army ON the target tile.
+
+        @param tiles:
+        @param inTurns:
+        @param asPlayer:
+        @param timeLimit:
+        @param forceFogRisk:
+        @return:
+        """
         if DebugHelper.IS_DEBUGGING:
             timeLimit *= 4
+            timeLimit += 0.01
 
         value, gatherNodes = GatherUtils.knapsack_levels_backpack_gather_with_value(
             self.map,
-            curTiles,
+            tiles,
             inTurns,
-            negativeTiles=set(),
+            negativeTiles=set(tiles),
             searchingPlayer=asPlayer,
             # skipFunc=skipFunc,
             # viewInfo=self.viewInfo if self.info_render_gather_values else None,
             # skipTiles=skipTiles,
             distPriorityMap=self.board_analysis.intergeneral_analysis.bMap,
             # priorityTiles=priorityTiles,
-            includeGatherTreeNodesThatGatherNegative=False,
+            includeGatherTreeNodesThatGatherNegative=True,
             incrementBackward=False,
             useTrueValueGathered=True,
             cutoffTime=time.perf_counter() + timeLimit,
@@ -330,19 +354,18 @@ class WinConditionAnalyzer(object):
             # priorityMatrix=priorityMatrix
         )
 
-        value += self.get_additional_fog_gather_risk(gatherNodes, asPlayer, inTurns)
+        value += self.get_additional_fog_gather_risk(gatherNodes, asPlayer, inTurns, forceFogRisk=forceFogRisk)
         logbook.info(f'concluded get_approximate_attack_against gather, value {value}')
 
         return max(0, value)
 
     def get_dynamic_turns_visible_defense_against(self, tiles: typing.List[Tile], maxTurns: int, asPlayer: int, timeLimit: float = 0.005) -> typing.Tuple[int, int]:
-        curTiles = tiles
         if DebugHelper.IS_DEBUGGING:
             timeLimit *= 4
 
         value, gatherNodes = GatherUtils.knapsack_levels_backpack_gather_with_value(
             self.map,
-            curTiles,
+            tiles,
             maxTurns,
             negativeTiles = set([t for t in self.map.players[asPlayer].tiles if not t.visible]),
             searchingPlayer=asPlayer,
@@ -371,6 +394,10 @@ class WinConditionAnalyzer(object):
                 # viewInfo=self.viewInfo if self.info_render_gather_values else None,
                 allowBranchPrune=False
             )
+
+            for tile in tiles:
+                if self.map.is_tile_on_team_with(tile, asPlayer):
+                    value += tile.army - 1
 
             logbook.info(f'concluded get_dynamic_visible_defense_against prune, value {prunedValue}')
 
@@ -440,7 +467,7 @@ class WinConditionAnalyzer(object):
     def get_tile_dist_to_enemy(self, tile: Tile) -> int:
         return self.board_analysis.intergeneral_analysis.bMap[tile.x][tile.y]
 
-    def get_additional_fog_gather_risk(self, gatherNodes: typing.List[GatherTreeNode], asPlayer: int, inTurns: int) -> int:
+    def get_additional_fog_gather_risk(self, gatherNodes: typing.List[GatherTreeNode], asPlayer: int, inTurns: int, forceFogRisk: bool = False) -> int:
         if self.map.is_player_on_team_with(asPlayer, self.map.player_index):
             return 0
 
@@ -462,5 +489,8 @@ class WinConditionAnalyzer(object):
         logbook.info(f'get_additional_fog_gather_risk fogValue {fogValue.value}, numFogTiles {numFogTiles.value}, inTurns {inTurns}, result {result}')
         if numFogTiles.value > inTurns // 4:
             return max(0, result)
+
+        if forceFogRisk:
+            return result - 20  # rough approximation of the cost to go through our territory. In reality we should use the worst case flank path, instead.
 
         return 0

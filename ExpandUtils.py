@@ -301,7 +301,7 @@ def _get_tile_path_value(
         elif tile.player == -1:
             value += 1.0
         elif map.is_player_on_team_with(searchingPlayer, tile.player):
-            value -= 0.5 / max(1, (1 + tile.army))
+            value -= 0.2 / max(1, (1 + tile.army))
 
         # if tile.visible:
         #     value += 0.02
@@ -914,6 +914,8 @@ def get_optimal_expansion(
                     bonusPoints = bonusCapturePointMatrix[nextTile]
                     if bonusPoints < 0.0 or usefulMove:  # for penalized tiles, always apply the penalty. For rewarded tiles, only reward when it is a move that does something.
                         negTileCapturePoints -= bonusPoints
+                    if bonusPoints < -10:
+                        return None
 
                 iter[0] += 1
                 nextAdjacentSet = None
@@ -1030,11 +1032,16 @@ def get_optimal_expansion(
         fullCutoff = 20
         cutoffFactor = 5
         valPerTurnCutoff = 0.5
-        valPerTurnCutoffScaledown = 0.8
+        valPerTurnCutoffScaledown = 0.6
         if not useCutoff:
             cutoffFactor = 20
             valPerTurnCutoff = 0.25
-            valPerTurnCutoffScaledown = 0.5
+            valPerTurnCutoffScaledown = 0.3
+
+        # if turns < 8:
+        #     valPerTurnCutoff = 0.0
+        #     valPerTurnCutoffScaledown = 0.3
+
 
         # if len(sortedTiles) < 5:
         #    logEntries.append("Only had {} tiles to play with, switching cutoffFactor to full...".format(len(sortedTiles)))
@@ -1278,12 +1285,19 @@ def get_optimal_expansion(
             newPaths = []
             for tile in newPathDict.keys():
                 curTileDict = multiPathDict.get(tile, {})
+                anyPathInc = False
+                values = {}
                 for path in newPathDict[tile]:
-
                     value = postPathEvalFunction(path, negativeTiles)
-                    if value >= 0.1 and value / path.length >= valPerTurnCutoff:
-                        anyHighValue = True
+                    values[path] = value
+                    vpt = value / path.length
+                    if value >= 0.2 and vpt >= valPerTurnCutoff:
+                        anyPathInc = True
+
+                if anyPathInc:
+                    for path in newPathDict[tile]:
                         visited = set()
+                        value = values[path]
                         friendlyCityCount = 0
                         node = path.start
                         while node is not None:

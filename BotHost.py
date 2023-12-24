@@ -86,16 +86,22 @@ class BotHostBase(object):
         self.eklipz_bot._map = currentMap
 
         with timer.begin_move(currentMap.turn) as moveTimer:
+            gap = timer.get_elapsed_since_update(currentMap.turn)
+            quickTurn = gap > 0.05
             move: Move | None = None
-            try:
-                move = self.eklipz_bot.find_move()
-            except:
-                errMsg = traceback.format_exc()
-                self.eklipz_bot.viewInfo.add_info_line(f'ERROR: {errMsg}')
-                logbook.error('ERROR: IN EKBOT.find_move():')
-                logbook.error(errMsg)
-                if self.rethrow:
-                    raise
+            if gap > 0.15:
+                with moveTimer.begin_event(f'LAG GAP Init turn {currentMap.turn} - no move chance / dropped move'):
+                    self.eklipz_bot.init_turn()
+            else:
+                try:
+                    move = self.eklipz_bot.find_move(is_lag_move=quickTurn)
+                except:
+                    errMsg = traceback.format_exc()
+                    self.eklipz_bot.viewInfo.add_info_line(f'ERROR: {errMsg}')
+                    logbook.error('ERROR: IN EKBOT.find_move():')
+                    logbook.error(errMsg)
+                    if self.rethrow:
+                        raise
 
             duration = timer.get_elapsed_since_update(currentMap.turn)
             self.eklipz_bot.viewInfo.lastMoveDuration = duration

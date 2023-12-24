@@ -7,7 +7,7 @@ function Run-BotOnce {
         $game, 
         [switch]$public, 
         [switch]$right, 
-        $privateGame, 
+        [switch]$privateGame, 
         $roomID = $null,
         [switch]$noui,
         $path = "D:\2019_reformat_Backup\generals-bot\BotHost.py",
@@ -27,14 +27,14 @@ function Run-BotOnce {
 
     $df = Get-Date -format yyyy-MM-dd_hh-mm-ss 
     $arguments = [System.Collections.ArrayList]::new()
+    $roomName = ''
     if ($privateGame) {
         $game = "private"
-        if ($publicLobby)
-        {
+        if ($publicLobby) {
             $game = "custom"
         }
-        [void] $arguments.Add("-roomID")
-        [void] $arguments.Add($privateGame)
+
+        $roomName = "_$roomID"
     }
 
     if ($roomID) {
@@ -71,7 +71,7 @@ function Run-BotOnce {
     `$arguments = @('$([string]::Join("', '", $arguments))')
     Write-Output "arguments $([string]::Join(', ', $arguments))"
     `$cleanName = '$name'.Replace('[', '').Replace(']', '')
-    `$logName = "`$cleanName-$game-$df$privateGame"
+    `$logName = "`$cleanName-$game-$df$roomName"
     `$logFile = "`$logName.txt"
     `$logPath = "D:\GeneralsLogs\`$logFile"
 
@@ -97,13 +97,17 @@ function Run-BotOnce {
             `$content = Get-Content `$logPath
             `$prevLine = [string]::Empty
             `$repId = `$null
+            if (-not `$content) {
+                Write-Warning "No content found in `$logPath"
+            }
+
             `$newContent = foreach (`$line in `$content)
             {
                 if (`$line -ne [string]::Empty)
                 {
                     `$prevLine = `$line
                     `$line
-                    if (`$repId -eq `$null -and `$line -match '''replay_id'': ''([^'']+)''')
+                    if (`$repId -eq `$null -and `$line -match 'replay_id:\[([^\]]+)\]')
                     {
                         `$repId = `$Matches[1]
                     }
@@ -235,6 +239,28 @@ function Start-WindowsTerminalAltBots {
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
         $command = 'Run-Path -game ffa'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-Path -game 1v1, ffa'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-Blob -game 1v1, ffa'
         try {
             Invoke-Expression $command
         } finally {
@@ -699,7 +725,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-Human -game team -left -sleepMax 5'
+        $command = 'Run-Human -game team -right -sleepMax 5'
         try {
             Invoke-Expression $command
         } finally {
@@ -711,7 +737,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-HumanTeammate -game team -sleepMax 60'
+        $command = 'Run-HumanTeammate -game team -right -sleepMax 180'
         try {
             Invoke-Expression $command
         } finally {
@@ -723,7 +749,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-Teammate -sleepMax 120 -left'
+        $command = 'Run-Teammate -sleepMax 180 -left'
         try {
             Invoke-Expression $command
         } finally {

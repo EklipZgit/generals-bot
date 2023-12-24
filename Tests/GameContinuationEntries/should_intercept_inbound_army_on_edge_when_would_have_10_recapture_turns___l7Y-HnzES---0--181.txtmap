@@ -39,7 +39,6 @@ bot_timings_cycle_turns=50
 bot_is_rapid_capturing_neut_cities=False
 bot_is_blocking_neutral_city_captures=False
 bot_finishing_exploration=False
-bot_cur_path=[58 len 4] 14,6 -> 13,6 -> 12,6 -> 11,6 -> 11,7
 aUsername=Human.exe
 aTiles=67
 aScore=186

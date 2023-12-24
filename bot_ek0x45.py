@@ -23,6 +23,7 @@ import SearchUtils
 import ExpandUtils
 from ArmyAnalyzer import ArmyAnalyzer
 from ArmyEngine import ArmyEngine, ArmySimResult
+from Behavior.ArmyInterceptor import ArmyInterceptor, ArmyInterception
 from CityAnalyzer import CityAnalyzer, CityScoreData
 from Communication import TeammateCommunicator, TileCompressor, ServerTileCompressor
 from GatherAnalyzer import GatherAnalyzer
@@ -73,6 +74,7 @@ class ExpansionPotential(object):
         self.all_paths: typing.List[Path] = allPaths
         self.plan_tiles: typing.Set[Tile] = set()
         self.preferred_tiles: typing.Set[Tile] = set()
+        self.includes_intercept: bool = False
         for path in allPaths:
             self.plan_tiles.update(path.tileList)
 
@@ -91,6 +93,8 @@ class EklipZBot(object):
         self.perf_timer = PerformanceTimer()
         self.cities_gathered_this_cycle: typing.Set[Tile] = set()
         self.tiles_gathered_to_this_cycle: typing.Set[Tile] = set()
+        self.tiles_captured_this_cycle: typing.Set[Tile] = set()
+        self.tiles_evacuated_this_cycle: typing.Set[Tile] = set()
         self.player: Player = Player(-1)
         self.targetPlayerObj: typing.Union[Player, None] = None
         self.city_expand_plan: EarlyExpandUtils.ExpansionPlan | None = None
@@ -151,6 +155,8 @@ class EklipZBot(object):
         self.enemy_expansion_plan: ExpansionPotential | None = None
 
         self.enemy_expansion_plan_tile_path_cap_values: typing.Dict[Tile, int] = {}
+
+        self.intercept_plans: typing.Dict[Tile, ArmyInterception] = {}
 
         self.generalApproximations: typing.List[typing.Tuple[float, float, int, Tile | None]] = []
         """
@@ -222,7 +228,8 @@ class EklipZBot(object):
         self.pathableTiles = set()
         self.history = History()
         self.timings: Timings = None
-        self.armyTracker: ArmyTracker | None = None
+        self.armyTracker: ArmyTracker = None
+        self.army_interceptor: ArmyInterceptor = None
         self.win_condition_analyzer: WinConditionAnalyzer = None
         self.finishing_exploration = True
         self.targetPlayerExpectedGeneralLocation: Tile | None = None
@@ -341,6 +348,7 @@ class EklipZBot(object):
         self.info_render_tile_deltas: bool = True
         self.info_render_gather_locality_values: bool = False
         self.info_render_expansion_matrix_values: bool = True
+        self.info_render_intercept_data: bool = True
 
     def __repr__(self):
         return str(self)
@@ -429,10 +437,10 @@ class EklipZBot(object):
             move.move_half = True
         return move
 
-    def find_move(self, allowRetry = True) -> Move | None:
+    def find_move(self, is_lag_move=False) -> Move | None:
         move: Move | None = None
         try:
-            move = self.select_move(allowRetry)
+            move = self.select_move(is_lag_move=is_lag_move)
 
             if self.teammate_communicator is not None:
                 teammate_messages = self.teammate_communicator.produce_teammate_communications()
@@ -755,6 +763,9 @@ class EklipZBot(object):
         if self.last_init_turn == self._map.turn:
             return
 
+        self.gathers = None
+        self.gatherNodes = None
+
         timeSinceLastUpdate = 0
         now = time.perf_counter()
         if self.lastTurnStartTime != 0:
@@ -817,10 +828,10 @@ class EklipZBot(object):
 
         self.redGatherTreeNodes = None
         if self.general is not None:
-            self._gen_distances = SearchUtils.build_distance_map(self._map, [self.general])
+            self._gen_distances = SearchUtils.build_distance_map_incl_mountains(self._map, [self.general])
 
         if self.teammate_general is not None:
-            self._ally_distances = SearchUtils.build_distance_map(self._map, [self.teammate_general])
+            self._ally_distances = SearchUtils.build_distance_map_incl_mountains(self._map, [self.teammate_general])
 
         if not self.isInitialized and self._map is not None:
             self.initialize_map_for_first_time(self._map)
@@ -882,6 +893,8 @@ class EklipZBot(object):
                     for player in self._map.players:
                         if player.team == team:
                             self.armyTracker.try_find_army_sink(player.index, annihilatedFog, tookNeutCity=self.did_player_just_take_fog_city(player.index))
+
+        self.armyTracker.verify_player_tile_and_army_counts_valid()
 
         with self.perf_timer.begin_move_event('WinConditionAnalyzer Analyze'):
             self.win_condition_analyzer.analyze(self.targetPlayer, self.targetPlayerExpectedGeneralLocation)
@@ -960,22 +973,22 @@ class EklipZBot(object):
             elif genPlayer.tileCount - countOnPath > 120 or realDist > 29:
                 # cycleDuration = 100
                 # gatherSplit = 65
-                gatherSplit = 33
+                gatherSplit = 28
             elif genPlayer.tileCount - countOnPath > 100:
                 # slightly longer gatherSplit
-                gatherSplit = 31
+                gatherSplit = 27
             elif genPlayer.tileCount - countOnPath > 85:
                 # slightly longer gatherSplit
-                gatherSplit = 29
+                gatherSplit = 26
             elif genPlayer.tileCount - countOnPath > 65:
                 # slightly longer gatherSplit
-                gatherSplit = 27
+                gatherSplit = 25
             elif genPlayer.tileCount - countOnPath > 45:
                 # slightly longer gatherSplit
-                gatherSplit = 25
+                gatherSplit = 24
             elif genPlayer.tileCount - countOnPath > 30:
                 # slightly longer gatherSplit
-                gatherSplit = 24
+                gatherSplit = 23
             elif genPlayer.tileCount - countOnPath > 21:
                 # slightly longer gatherSplit
                 gatherSplit = 21
@@ -1254,7 +1267,7 @@ class EklipZBot(object):
         #             move = self.get_first_path_move(path)
         #         return move
 
-    def perform_move_prep(self):
+    def perform_move_prep(self, is_lag_move: bool = False):
         with self.perf_timer.begin_move_event('scan_map()'):
             self.scan_map_for_large_tiles_and_leaf_moves()
 
@@ -1277,12 +1290,11 @@ class EklipZBot(object):
 
         # self.check_if_need_to_gather_longer_to_hold_fresh_cities()
 
+        # allowOutOfPlayCheck = self._map.cols * self._map.rows < 400 and len(self.player.cities) < 7
+        oldOutOfPlay = self.army_out_of_play
         self.army_out_of_play = self.check_army_out_of_play_ratio()
-        if not wasFlanking and self.army_out_of_play:
-            with self.perf_timer.begin_move_event('flank/oop recalculate_player_paths'):
-                # TODO why was this here? the not wasFlanking means we're never changing self.flanking from true to false... all we're doing is messing with OTHER locked launch points...?
-                # self.flanking = False
-                # self.locked_launch_point = None
+        if not is_lag_move and not wasFlanking and self.army_out_of_play != oldOutOfPlay:
+            with self.perf_timer.begin_move_event('flank/outOfPlay recalc_player_paths'):
                 self.recalculate_player_paths(force=True)
 
         if self.timings is None or self.timings.should_recalculate(self._map.turn):
@@ -1304,8 +1316,9 @@ class EklipZBot(object):
                     self.targetPlayerObj.general.army = 3
                     self.clear_fog_armies_around(self.targetPlayerObj.general)
 
-                with self.perf_timer.begin_move_event('all in change recalculate_player_paths'):
-                    self.recalculate_player_paths(force=True)
+                if not is_lag_move:
+                    with self.perf_timer.begin_move_event('all in change recalculate_player_paths'):
+                        self.recalculate_player_paths(force=True)
             # self.all_in_army_advantage_counter += 1
         elif self.is_all_in_army_advantage and not self.all_in_city_behind:
             self.is_all_in_army_advantage = False
@@ -1316,15 +1329,35 @@ class EklipZBot(object):
         # the server before sending more moves to prevent moves from backing up and getting executed later.
         if self._map.turn - 1 in self.history.move_history:
             if self.droppedMove():
+                msg = "(Dropped move)... Sending clear_moves..."
+                self.viewInfo.add_info_line(msg)
                 logbook.info(
-                    "\n\n\n^^^^^^^^^VVVVVVVVVVVVVVVVV^^^^^^^^^^^^^VVVVVVVVV^^^^^^^^^^^^^\nD R O P P E D   M O V E ? ? ? ? (Dropped move)... Sending clear_moves...\n^^^^^^^^^VVVVVVVVVVVVVVVVV^^^^^^^^^^^^^VVVVVVVVV^^^^^^^^^^^^^")
+                    f"\n\n\n^^^^^^^^^VVVVVVVVVVVVVVVVV^^^^^^^^^^^^^VVVVVVVVV^^^^^^^^^^^^^\nD R O P P E D   M O V E ? ? ? ? {msg}\n^^^^^^^^^VVVVVVVVVVVVVVVVV^^^^^^^^^^^^^VVVVVVVVV^^^^^^^^^^^^^")
                 if self.clear_moves_func:
                     with self.perf_timer.begin_move_event('Sending clear_moves due to dropped move'):
                         self.clear_moves_func()
+            else:
+                lastMove = self.history.move_history[self._map.turn - 1][0]
+                if lastMove is not None:
+                    if self._map.is_player_on_team_with(lastMove.dest.delta.oldOwner, self.general.player):
+                        self.tiles_gathered_to_this_cycle.add(lastMove.dest)
+                        if lastMove.dest.isCity:
+                            self.cities_gathered_this_cycle.discard(lastMove.dest)
+                    elif lastMove.dest.player == self.general.player:
+                        self.tiles_captured_this_cycle.add(lastMove.dest)
 
-    def select_move(self, allowRetry=True):
+                    if not lastMove.move_half:
+                        self.tiles_gathered_to_this_cycle.discard(lastMove.source)
+                        self.tiles_evacuated_this_cycle.add(lastMove.source)
+                        if lastMove.source.isCity:
+                            self.cities_gathered_this_cycle.add(lastMove.source)
+
+    def select_move(self, is_lag_move=False):
         start = time.perf_counter()
-        self.init_turn(secondAttempt=not allowRetry)
+        self.init_turn()
+
+        if is_lag_move:
+            self.viewInfo.add_info_line(f'skipping some stuff because is_lag_move == True')
 
         if self._map.turn <= 1:
             # bypass divide by 0 error instead of fixing it
@@ -1333,10 +1366,11 @@ class EklipZBot(object):
         if self._map.remainingPlayers == 1:
             return None
 
-        self.perform_move_prep()
+        self.perform_move_prep(is_lag_move=is_lag_move)
 
-        with self.perf_timer.begin_move_event("recalculating player path"):
-            self.recalculate_player_paths()
+        if not is_lag_move:
+            with self.perf_timer.begin_move_event("recalculating player path"):
+                self.recalculate_player_paths()
 
         if not self.is_still_ffa_and_non_dominant():
             self.prune_timing_split_if_necessary()
@@ -1397,11 +1431,16 @@ class EklipZBot(object):
         #if not self.isAllIn() and (threat.turns > -1 and self.dangerAnalyzer.anyThreat):
         #    armyAmount = (self.general_min_army_allowable() + enemyNearGen) * 1.1 if threat is None else threat.threatValue + general.army + 1
 
-        with self.perf_timer.begin_move_event('Expansion quick check'):
-            self.expansion_plan = self.build_expansion_plan(timeLimit=0.025, expansionNegatives=defenseCriticalTileSet, pathColor=(150, 100, 150))
+        self.intercept_plans = self.build_intercept_plans()
+        for i, interceptPlan in enumerate(self.intercept_plans.values()):
+            self.render_intercept_plan(interceptPlan, colorIndex=i)
 
-        with self.perf_timer.begin_move_event('ENEMY Expansion quick check'):
-            self.enemy_expansion_plan = self.build_enemy_expansion_plan(timeLimit=0.025, pathColor=(255, 150, 130))
+        if not is_lag_move:
+            with self.perf_timer.begin_move_event('Expansion quick check'):
+                self.expansion_plan = self.build_expansion_plan(timeLimit=0.025, expansionNegatives=defenseCriticalTileSet, pathColor=(150, 100, 150))
+
+            with self.perf_timer.begin_move_event('ENEMY Expansion quick check'):
+                self.enemy_expansion_plan = self.build_enemy_expansion_plan(timeLimit=0.025, pathColor=(255, 150, 130))
 
         defenseSavePath: Path | None = None
         if not self.is_all_in_losing and threat is not None and threat.threatType != ThreatType.Vision:
@@ -1485,14 +1524,14 @@ class EklipZBot(object):
         # if ahead on economy, but not %30 ahead on army we should play defensively
         self.defend_economy = self.should_defend_economy(defenseCriticalTileSet)
 
-        if self.targetingArmy and not self.targetingArmy.scrapped and self.targetingArmy.tile.army > 2:
-            with self.perf_timer.begin_move_event('Continue Army Kill'):
-                armyTargetMove = self.continue_killing_target_army()
-            if armyTargetMove:
-                # already logged internally
-                return armyTargetMove
-        else:
-            self.targetingArmy = None
+        # if self.targetingArmy and not self.targetingArmy.scrapped and self.targetingArmy.tile.army > 2 and not self.is_all_in_losing:
+        #     with self.perf_timer.begin_move_event('Continue Army Kill'):
+        #         armyTargetMove = self.continue_killing_target_army()
+        #     if armyTargetMove:
+        #         # already logged internally
+        #         return armyTargetMove
+        # else:
+        #     self.targetingArmy = None
 
         if WinCondition.DefendContestedFriendlyCity in self.win_condition_analyzer.viable_win_conditions:
             with self.perf_timer.begin_move_event(f'Getting city preemptive defense {str(self.win_condition_analyzer.defend_cities)}'):
@@ -1500,11 +1539,6 @@ class EklipZBot(object):
             if cityDefenseMove is not None:
                 self.info(f'City preemptive defense move! {str(cityDefenseMove)}')
                 return cityDefenseMove
-
-        largeArmyExpContinuationMove = self.try_get_enemy_territory_continuation_move(defenseCriticalTileSet)
-        if largeArmyExpContinuationMove is not None:
-            # already logged
-            return largeArmyExpContinuationMove
 
         with self.perf_timer.begin_move_event(f'capture_cities'):
             (cityPath, gatherMove) = self.capture_cities(defenseCriticalTileSet)
@@ -1517,6 +1551,11 @@ class EklipZBot(object):
             logbook.info(f"{self.get_elapsed()} returning capture_cities cityPath {str(cityPath)}")
             # self.curPath = cityPath
             return self.get_first_path_move(cityPath)
+
+        largeArmyExpContinuationMove = self.try_get_enemy_territory_continuation_move(defenseCriticalTileSet)
+        if largeArmyExpContinuationMove is not None:
+            # already logged
+            return largeArmyExpContinuationMove
 
         # if self.threat_kill_path is not None and self.threat_kill_path:
         #     self.info(f"we're pretty safe from threat via gather, trying to kill threat instead.")
@@ -1629,9 +1668,13 @@ class EklipZBot(object):
 
             with self.perf_timer.begin_move_event(f'{msg}. self.all_in_army_advantage_cycle {self.all_in_army_advantage_cycle}, self.all_in_army_advantage_counter {self.all_in_army_advantage_counter}'):
                 gathNeg = defenseCriticalTileSet.copy()
+                citiesToHalf = set()
                 if self.is_all_in_army_advantage:
                     for contestedCity in self.cityAnalyzer.owned_contested_cities:
-                        gathNeg.add(contestedCity)
+                        if contestedCity.army > self.targetPlayerObj.standingArmy:
+                            citiesToHalf.add(contestedCity)
+                        else:
+                            gathNeg.add(contestedCity)
 
                 move, valueGathered, turnsUsed, gatherNodes = self.get_gather_to_target_tiles(
                     targets,
@@ -1647,6 +1690,8 @@ class EklipZBot(object):
                         hitGeneralAtTurn + 15,
                         maximizeArmyGatheredPerTurn=True,
                         negativeSet=gathNeg)
+                elif move.source in citiesToHalf:
+                    move.move_half = True
 
             if move is not None:
                 self.info(msg)
@@ -1660,38 +1705,9 @@ class EklipZBot(object):
                 self.gatherNodes = gatherNodes
                 return move
 
-        turnsLeft = self.timings.get_turns_left_in_cycle(self._map.turn)
-        utilizationCutoff = turnsLeft - turnsLeft // 7
-        value = self.expansion_plan.en_tiles_captured * 2 + self.expansion_plan.neut_tiles_captured
-        haveFullExpPlanAlready = False
-        if (
-                self.expansion_plan.turns_used >= self.timings.get_turns_left_in_cycle(self._map.turn) - self.player.cityCount * 2
-                and self.expansion_plan.en_tiles_captured > self.expansion_plan.neut_tiles_captured // 2
-                and value > utilizationCutoff
-                and (self.armyTracker.lastMove is None or self.armyTracker.lastMove.dest in self.target_player_gather_targets)
-        ):
-            haveFullExpPlanAlready = True
-
-        #if len(paths) == 0 and (self.curPath is None or self.curPath.start.next is None) and self._map.turn >= 50:
-        if haveFullExpPlanAlready or ((self.curPath is None or self.curPath.start.next is None) and not self.defend_economy or self._map.turn < 100):
-            expNegs = set(defenseCriticalTileSet)
-            if not haveFullExpPlanAlready or self.is_all_in():
-                with self.perf_timer.begin_move_event('checking launch move'):
-                    attackLaunchMove = self.check_for_attack_launch_move(expNegs)
-                if attackLaunchMove is not None and not haveFullExpPlanAlready:
-                    return attackLaunchMove
-
-            with self.perf_timer.begin_move_event("try_find_expansion_move main timing"):
-                timeLimit = self.expansion_full_time_limit
-                move = self.try_find_expansion_move(expNegs, timeLimit, forceBypassLaunch=haveFullExpPlanAlready)
-
-            if move is not None:
-                if not self.timings.in_expand_split(self._map.turn):
-                    cycleTurn = self.timings.get_turn_in_cycle(self._map.turn)
-                    self.viewInfo.add_info_line('Due to full expansion plan, moving down launch/gather split.')
-                    self.timings.launchTiming = max(20, cycleTurn)
-                    self.timings.splitTurns = cycleTurn
-                return move  # already logged
+        expMove = self.try_find_main_timing_expansion_move_if_applicable(defenseCriticalTileSet)
+        if expMove is not None:
+            return expMove  # already logged
 
         needToKillTiles = list()
         if not self.timings.disallowEnemyGather and not self.is_all_in_losing:
@@ -2299,6 +2315,7 @@ class EklipZBot(object):
             additionalIncrement: int = 0,
             priorityMatrix: MapMatrix[float] | None = None,
             shouldLog: bool = False,
+            fastMode: bool = False
     ) -> typing.Tuple[typing.Union[Move, None], int, int, typing.Union[None, typing.List[GatherTreeNode]]]:
         """
         returns move, valueGathered, turnsUsed, gatherNodes
@@ -2324,6 +2341,7 @@ class EklipZBot(object):
         @param leafMoveSelectionValueFunc:
         @param shouldLog:
         @param priorityMatrix:
+        @param fastMode: whether to gather using fast mode.
         @return:
         """
 
@@ -2340,7 +2358,7 @@ class EklipZBot(object):
                 gatherNodes,
                 gatherTurns - 1,
                 self.general.player,
-                viewInfo=self.viewInfo,
+                viewInfo=self.viewInfo if self.info_render_gather_values else None,
                 preferPrune=self.expansion_plan.preferred_tiles if self.expansion_plan is not None else None)
 
             if maximizeArmyGatheredPerTurn:
@@ -2351,7 +2369,7 @@ class EklipZBot(object):
                     teams=MapBase.get_teams_array(self._map),
                     additionalIncrement=additionalIncrement,
                     preferPrune=self.expansion_plan.preferred_tiles if self.expansion_plan is not None else None,
-                    viewInfo=self.viewInfo)
+                    viewInfo=self.viewInfo if self.info_render_gather_values else None)
 
             gatherMove = self.get_tree_move_default(gatherNodes, priorityFunc=leafMoveSelectionPriorityFunc, valueFunc=leafMoveSelectionValueFunc)
             value = 0
@@ -2374,13 +2392,14 @@ class EklipZBot(object):
                 targetArmy,
                 negativeTiles=negativeSet,
                 searchingPlayer=self.general.player,
-                viewInfo=self.viewInfo,
+                viewInfo=self.viewInfo if self.info_render_gather_values else None,
                 useTrueValueGathered=useTrueValueGathered,
                 incrementBackward=False,
                 includeGatherTreeNodesThatGatherNegative=includeGatherTreeNodesThatGatherNegative,
                 priorityMatrix=priorityMatrix,
                 cutoffTime=time.perf_counter() + maxTime,
-                shouldLog=shouldLog)
+                shouldLog=shouldLog,
+                fastMode=fastMode)
 
             if maximizeArmyGatheredPerTurn:
                 turns, value, gatherNodes = GatherUtils.prune_mst_to_max_army_per_turn_with_values(
@@ -2390,7 +2409,7 @@ class EklipZBot(object):
                     teams=MapBase.get_teams_array(self._map),
                     additionalIncrement=additionalIncrement,
                     preferPrune=self.expansion_plan.preferred_tiles if self.expansion_plan is not None else None,
-                    viewInfo=self.viewInfo)
+                    viewInfo=self.viewInfo if self.info_render_gather_values else None)
 
             totalValue = 0
             turns = 0
@@ -2650,8 +2669,7 @@ class EklipZBot(object):
             negativeTiles = set()
         else:
             negativeTiles = negativeTiles.copy()
-        for tile in negativeTiles:
-            logbook.info(f"negativeTile: {str(tile)}")
+        logbook.info(f"negativeTiles: {str(negativeTiles)}")
 
         distSource = [self.general]
         if self.target_player_gather_path is not None:
@@ -2688,9 +2706,9 @@ class EklipZBot(object):
                 wastedMoves, pathPriorityDivided, negArmyRemaining, negValidExplorationCount, negRevealedCount, enemyTiles, neutralTiles, pathPriority, distSoFar, tileSetSoFar, revealedSoFar = nextVal
                 if negArmyRemaining >= negMinArmy:
                     return True
-                if distSoFar > 5 and negValidExplorationCount == 0:
+                if distSoFar > 6 and negValidExplorationCount == 0:
                     return True
-                if wastedMoves > 5:
+                if wastedMoves > 3:
                     return True
                 return False
             skipFunc = skip_after_out_of_army
@@ -2820,7 +2838,7 @@ class EklipZBot(object):
             # second 0.1s, use all tiles (to make sure our small tiles are included)
             # third 0.1s - knapsack optimal stuff outside this loop i guess?
             if timeUsed > 0.03:
-                logbook.info("timeUsed > 0.03... Breaking loop and knapsacking...")
+                logbook.info(f"timeUsed > 0.03... Breaking loop and knapsacking...")
                 break
 
             #startIdx = max(0, ((cutoffFactor - 1) * len(sortedTiles))//fullCutoff)
@@ -2843,17 +2861,17 @@ class EklipZBot(object):
                 self._map,
                 startDict,
                 valueFunc,
-                0.2,
+                0.025,
                 remainingTurns,
                 turns,
-                noNeutralCities = True,
-                negativeTiles = negativeTiles,
-                searchingPlayer = self.general.player,
-                priorityFunc = priorityFunc,
-                useGlobalVisitedSet = False,
-                skipFunc = skipFunc,
-                logResultValues = logStuff,
-                includePathValue = True)
+                noNeutralCities=True,
+                negativeTiles=negativeTiles,
+                searchingPlayer=self.general.player,
+                priorityFunc=priorityFunc,
+                useGlobalVisitedSet=False,
+                skipFunc=skipFunc,
+                logResultValues=logStuff,
+                includePathValue=True)
 
             if path:
                 (pathPriorityPerTurn, posPathPrio, distSoFar) = pathValue
@@ -3341,7 +3359,7 @@ class EklipZBot(object):
 
         return GatherUtils.get_tree_move(gathers, priorityFunc, valueFunc, pop=pop)
 
-    def get_threat_killer_move(self, threat: ThreatObj, searchTurns, negativeTiles):
+    def get_threat_killer_move(self, threat: ThreatObj, searchTurns, negativeTiles) -> Move | None:
         """
         Attempt to find a threat kill path / move that kills a specific threat. TODO can this largely be replaced by defense backpack gather...?
         @param threat:
@@ -3349,7 +3367,10 @@ class EklipZBot(object):
         @param negativeTiles:
         @return:
         """
-        killTiles = [threat.path.start.next.tile, threat.path.start.tile]
+        killTiles = [threat.path.start.tile]
+        if threat.path.start.next:
+            killTiles.insert(0, threat.path.start.next.tile)
+
         armyAmount = threat.threatValue + 1
         saveTile = None
         largestTile = None
@@ -3875,12 +3896,13 @@ class EklipZBot(object):
 
         losingEnoughForCounter = enStats.tileCount + 35 * enStats.cityCount > 5 + frStats.tileCount * 1.05 + (35 * frStats.cityCount)
         if self.all_in_losing_counter == 0 and self.timings.get_turns_left_in_cycle(self._map.turn) <= 30:
-            losingEnoughForCounter = enStats.tileCount + 35 * enStats.cityCount > 5 + frStats.tileCount * 1.09 + 35 * (frStats.cityCount + 1)
+            losingEnoughForCounter = enStats.tileCount + 35 * enStats.cityCount > 5 + frStats.tileCount * 1.08 + 35 * (frStats.cityCount + 1)
 
         if self.is_all_in_losing:
             losingEnoughForCounter = enStats.tileCount + 35 * enStats.cityCount > frStats.tileCount * 1.0 + (35 * frStats.cityCount)
 
-        allInLosingCounterThreshold = frStats.tileCount // 6 + 15
+        allInLosingCounterThreshold = frStats.tileCount // 5 + 15
+        allInLosingCounterThreshold = max(50, allInLosingCounterThreshold)
 
         self.is_all_in_losing = False
 
@@ -3908,7 +3930,7 @@ class EklipZBot(object):
                 self.giving_up_counter += 1
                 logbook.info(
                     f"~ ~ ~ ~ ~ ~ ~ giving_up_counter: {self.giving_up_counter}. Player {self.targetPlayer} (or team) with {enStats.tileCount} tiles and {enStats.score} army.")
-                if self.giving_up_counter > frStats.tileCount + 20 and not self.finishing_exploration:
+                if self.giving_up_counter > frStats.tileCount + 20 and not self.finishing_exploration or self.giving_up_counter > frStats.tileCount + 70:
                     logbook.info(
                         f"~ ~ ~ ~ ~ ~ ~ giving up due to player {self.targetPlayer} (or team) with {enStats.tileCount} tiles and {enStats.score} army.")
                     self.viewInfo.add_info_line(f'surrendering')
@@ -5015,6 +5037,7 @@ class EklipZBot(object):
         if fallbackTile is None or fallbackTile == self.general:
             self.viewInfo.add_info_line("target path fallback failed, returning tile next to general.")
             return self.general.movable[0]
+
         return fallbackTile
 
     def is_player_spawn_cramped(self, spawnDist = -1) -> bool:
@@ -5108,6 +5131,8 @@ class EklipZBot(object):
         self.viewInfo.add_info_line(f'Timing cycle ended, turn {self._map.turn}')
         self.cities_gathered_this_cycle = set()
         self.tiles_gathered_to_this_cycle = set()
+        self.tiles_captured_this_cycle: typing.Set[Tile] = set()
+        self.tiles_evacuated_this_cycle: typing.Set[Tile] = set()
         self.city_expand_plan = None
         self.curPath = None
         player = self._map.players[self.general.player]
@@ -5290,7 +5315,10 @@ class EklipZBot(object):
         self.enemy_expansion_plan = None
 
         for army in self.armyTracker.armies.values():
-            army.last_moved_turn = self._map.turn - 1
+            if army.tile.discovered:
+                army.last_moved_turn = self._map.turn - 1
+            else:
+                army.last_moved_turn = self._map.turn - 5
 
         return
         #
@@ -5414,96 +5442,103 @@ class EklipZBot(object):
         if requiredContribution is None:
             requiredContribution = threats[0].threatValue
 
-        commonInterceptPoints = {}
-        largeIntercepts = []
-        middlest = threats[0].armyAnalysis.tileA
-        middlestDist = threats[0].turns + 1
-        for threat in threats:
-            largeTiles = self.find_large_tiles_near(list(threat.armyAnalysis.shortestPathWay.tiles), threat.turns // 3 + 1, forPlayer=self.general.player, minArmy=max(threat.threatValue, threat.path.start.tile.army - 5), addlFilterFunc=lambda t, d: threat.armyAnalysis.bMap[t.x][t.y] <= threat.armyAnalysis.shortestPathWay.distance)
-            largeIntercepts.extend(largeTiles)
-            for choke in threat.armyAnalysis.pathChokes:
-                if choke not in threat.armyAnalysis.shortestPathWay.tiles:
-                    continue
-                containedInAll = True
-                sumDist = threat.armyAnalysis.pathWayLookupMatrix[choke].distance
-                for otherThreat in threats:
-                    if otherThreat == threat:
-                        continue
-                    if choke not in otherThreat.armyAnalysis.pathChokes or choke not in otherThreat.armyAnalysis.shortestPathWay.tiles:
-                        containedInAll = False
-                        break
-
-                    sumDist += otherThreat.armyAnalysis.pathWayLookupMatrix[choke].distance
-
-                if containedInAll:
-                    commonInterceptPoints[choke] = sumDist
-                    middleDist = abs(threat.armyAnalysis.bMap[choke.x][choke.y] - threat.turns // 2)
-                    if middleDist < middlestDist:
-                        middlest = choke
-                        middlestDist = middleDist
-
-        if interceptArmy and len(largeIntercepts) > 0:
-            self.viewInfo.add_info_line(f'large intercept attempt')
-            closestXY = 100.0
-            closestManhattan = 100
-            closestMove = None
-            for tile in largeIntercepts:
-                for adj in tile.movable:
-                    manhattan = threats[0].armyAnalysis.bMap[adj.x][adj.y]
-                    euclid = self.euclidDist(adj.x, adj.y, middlest.x, middlest.y)
-                    if manhattan < closestManhattan or (manhattan == closestManhattan and euclid < closestXY):
-                        closestMove = Move(tile, adj)
-                        closestXY = euclid
-                        closestManhattan = manhattan
-                        logbook.info(f"new shortest intercept closest move {str(closestMove)}, manhattan {closestManhattan}, euclid {closestXY:.2f}")
-
-            if closestMove is not None:
-                self.info(f"awwwwwww shit intercept closest move {str(closestMove)}, manhattan {closestManhattan}, euclid {closestXY:.2f}")
-                return closestMove, closestMove.source.army, closestManhattan, []
-
         # gatherDepth = max([threats[0].armyAnalysis.bMap[t.x][t.y] for t in commonInterceptPoints.keys()]) - 1 + addlTurns
         gatherDepth = threats[0].path.length - 1 + addlTurns
-
+        # #
+        # # commonInterceptPoints = {}
+        # # largeIntercepts = []
+        # # middlest = threats[0].armyAnalysis.tileA
+        # # middlestDist = threats[0].turns + 1
+        # # for threat in threats:
+        # #     largeTiles = self.find_large_tiles_near(list(threat.armyAnalysis.shortestPathWay.tiles), threat.turns // 3 + 1, forPlayer=self.general.player, minArmy=max(threat.threatValue, threat.path.start.tile.army - 5), addlFilterFunc=lambda t, d: threat.armyAnalysis.bMap[t.x][t.y] <= threat.armyAnalysis.shortestPathWay.distance)
+        # #     largeIntercepts.extend(largeTiles)
+        # #     for choke in threat.armyAnalysis.pathChokes:
+        # #         if choke not in threat.armyAnalysis.shortestPathWay.tiles:
+        # #             continue
+        # #         containedInAll = True
+        # #         sumDist = threat.armyAnalysis.pathWayLookupMatrix[choke].distance
+        # #         for otherThreat in threats:
+        # #             if otherThreat == threat:
+        # #                 continue
+        # #             if choke not in otherThreat.armyAnalysis.pathChokes or choke not in otherThreat.armyAnalysis.shortestPathWay.tiles:
+        # #                 containedInAll = False
+        # #                 break
+        # #
+        # #             sumDist += otherThreat.armyAnalysis.pathWayLookupMatrix[choke].distance
+        # #
+        # #         if containedInAll:
+        # #             commonInterceptPoints[choke] = sumDist
+        # #             middleDist = abs(threat.armyAnalysis.bMap[choke.x][choke.y] - threat.turns // 2)
+        # #             if middleDist < middlestDist:
+        # #                 middlest = choke
+        # #                 middlestDist = middleDist
+        # #
+        # # if interceptArmy and len(largeIntercepts) > 0:
+        # #     self.viewInfo.add_info_line(f'large intercept attempt')
+        # #     closestXY = 100.0
+        # #     closestManhattan = 100
+        # #     closestMove = None
+        # #     for tile in largeIntercepts:
+        # #         for adj in tile.movable:
+        # #             manhattan = threats[0].armyAnalysis.bMap[adj.x][adj.y]
+        # #             euclid = self.euclidDist(adj.x, adj.y, middlest.x, middlest.y)
+        # #             if manhattan < closestManhattan or (manhattan == closestManhattan and euclid < closestXY):
+        # #                 closestMove = Move(tile, adj)
+        # #                 closestXY = euclid
+        # #                 closestManhattan = manhattan
+        # #                 logbook.info(f"new shortest intercept closest move {str(closestMove)}, manhattan {closestManhattan}, euclid {closestXY:.2f}")
+        # #
+        # #     if closestMove is not None:
+        # #         self.info(f"awwwwwww shit intercept closest move {str(closestMove)}, manhattan {closestManhattan}, euclid {closestXY:.2f}")
+        # #         return closestMove, closestMove.source.army, closestManhattan, []
+        # #
+        # # intercepts = {}
+        # # # tileCutoff = max(threats[0].threatValue // 4, threats)
+        # # for tile, width in threats[0].armyAnalysis.interceptChokes.items():
+        # #     if self.info_render_intercept_data:
+        # #         self.viewInfo.bottomRightGridText[tile.x][tile.y] = f'iw{width}'
+        # #     # todo change to shortest path set
+        # #     if tile not in threats[0].path.tileSet: # and tile.player == self.general.player and tile.army < threats[0].
+        # #         continue
+        # #     aDist = threats[0].armyAnalysis.aMap[tile.x][tile.y]
+        # #     bDist = threats[0].armyAnalysis.bMap[tile.x][tile.y]
+        # #     totalDist = threats[0].armyAnalysis.shortestPathWay.distance
+        # #     # if bDist > totalDist // 4:  # and aDist > totalDist // 4
+        # #     if aDist > totalDist // 4:  # and aDist > totalDist // 4
+        # #         iDist = bDist * 2 + width - 1
+        # #         intercepts[tile] = iDist
+        # #         if self.info_render_intercept_data:
+        # #             self.viewInfo.bottomLeftGridText[tile.x][tile.y] = f'i{iDist}'
+        # #
+        # #             self.viewInfo.add_targeted_tile(tile, TargetStyle.WHITE, radiusReduction=4)
+        #
+        # skipTiles = set()
+        # if additionalNegatives is not None:
+        #     skipTiles = additionalNegatives.copy()
+        # for tile in self._map.get_all_tiles():
+        #     aDist = threats[0].armyAnalysis.aMap[tile.x][tile.y]
+        #     if aDist > threats[0].path.length:
+        #         skipTiles.add(tile)
+        #
+        # with self.perf_timer.begin_move_event(f'intercept gath @{str(threats[0].path.start.tile)}'):
+        #     move, value, turnsUsed, gatherNodes = self.try_threat_gather(
+        #         threats=threats,
+        #         distDict=intercepts,
+        #         gatherDepth=gatherDepth * 2 + 5,
+        #         force_turns_up_threat_path=force_turns_up_threat_path,
+        #         requiredContribution=requiredContribution,
+        #         gatherMax=False,
+        #         additionalNegatives=skipTiles,
+        #         timeLimit=timeLimit,
+        #         pruneDepth=gatherDepth,
+        #         shouldLog=shouldLog,
+        #         fastMode=True)
+        #
+        # if move is None or value < requiredContribution:
+        #     self.info(f' int gath {value:.2f}/{requiredContribution} ({turnsUsed}t) {str(move)}  for {str(threats[0].path.start.tile)}@{str(threats[0].path.tail.tile)}')
         distDict = threats[0].convert_to_dist_dict(allowNonChoke=force_turns_up_threat_path != 0)
 
-        intercepts = {}
-        for tile, width in threats[0].armyAnalysis.interceptChokes.items():
-            # todo change to shortest path set
-            if tile not in threats[0].path.tileSet:
-                continue
-            aDist = threats[0].armyAnalysis.aMap[tile.x][tile.y]
-            bDist = threats[0].armyAnalysis.bMap[tile.x][tile.y]
-            totalDist = threats[0].armyAnalysis.shortestPathWay.distance
-            # if bDist > totalDist // 4:  # and aDist > totalDist // 4
-            if aDist > totalDist // 4:  # and aDist > totalDist // 4
-                iDist = bDist * 2 + width - 1
-                intercepts[tile] = iDist
-                self.viewInfo.bottomLeftGridText[tile.x][tile.y] = f'i{iDist}'
-
-                self.viewInfo.add_targeted_tile(tile, TargetStyle.WHITE, radiusReduction=4)
-
-        skipTiles = set()
-        if additionalNegatives is not None:
-            skipTiles = additionalNegatives.copy()
-        for tile in self._map.get_all_tiles():
-            aDist = threats[0].armyAnalysis.aMap[tile.x][tile.y]
-            if aDist > threats[0].path.length:
-                skipTiles.add(tile)
-
-        move, value, turnsUsed, gatherNodes = self.try_threat_gather(
-            threats=threats,
-            distDict=intercepts,
-            gatherDepth=gatherDepth * 2 + 5,
-            force_turns_up_threat_path=force_turns_up_threat_path,
-            requiredContribution=requiredContribution,
-            gatherMax=False,
-            additionalNegatives=skipTiles,
-            timeLimit=timeLimit,
-            pruneDepth=gatherDepth,
-            shouldLog=shouldLog)
-
-        if move is None or value < requiredContribution:
-            self.info(f' int gath {value:.2f}/{requiredContribution} ({turnsUsed}t) {str(move)}  for {str(threats[0].path.start.tile)}@{str(threats[0].path.tail.tile)}')
+        with self.perf_timer.begin_move_event(f'real gath @{str(threats[0].path.start.tile)}'):
             move, value, turnsUsed, gatherNodes = self.try_threat_gather(
                 threats=threats,
                 distDict=distDict,
@@ -5514,8 +5549,8 @@ class EklipZBot(object):
                 additionalNegatives=additionalNegatives,
                 timeLimit=timeLimit,
                 shouldLog=shouldLog)
-        else:
-            self.info(f'USING INT GATH {value:.2f}/{requiredContribution} ({turnsUsed}t) {str(move)}  for {str(threats[0].path.start.tile)}@{str(threats[0].path.tail.tile)}')
+        # else:
+        #     self.info(f'USING INT GATH {value:.2f}/{requiredContribution} ({turnsUsed}t) {str(move)}  for {str(threats[0].path.start.tile)}@{str(threats[0].path.tail.tile)}')
 
         return move, value, turnsUsed, gatherNodes
 
@@ -5530,7 +5565,9 @@ class EklipZBot(object):
             additionalNegatives,
             timeLimit,
             pruneDepth: int | None = None,
-            shouldLog: bool = False):
+            shouldLog: bool = False,
+            fastMode: bool = False
+    ) -> typing.Tuple[None | Move, int, int, None | typing.List[GatherTreeNode]]:
 
         # for tile in list(distDict.keys()):
         #     if tile not in commonInterceptPoints:
@@ -5596,14 +5633,15 @@ class EklipZBot(object):
             includeGatherTreeNodesThatGatherNegative=True,
             priorityMatrix=prioMatrix,
             # maximizeArmyGatheredPerTurn=gatherMax,  # this just immediately breaks the whole gather, prunes everything but the largest tile basically.
-            shouldLog=shouldLog)
+            shouldLog=shouldLog,
+            fastMode=fastMode)
 
         if pruneDepth is not None and gatherNodes is not None:
             turnsUsed, value, gatherNodes = GatherUtils.prune_mst_to_turns_with_values(
                 gatherNodes,
                 pruneDepth,
                 searchingPlayer=self.general.player,
-                viewInfo=self.viewInfo
+                viewInfo=self.viewInfo if self.info_render_gather_values else None
             )
 
             move = self.get_tree_move_default(gatherNodes)
@@ -6148,11 +6186,9 @@ class EklipZBot(object):
             threats.append(self.dangerAnalyzer.fastestThreat)
         if self.dangerAnalyzer.fastestAllyThreat is not None and self.dangerAnalyzer.fastestAllyThreat.turns > -1:
             threats.append(self.dangerAnalyzer.fastestAllyThreat)
-
-        threats = [t for t in sorted(threats, key=lambda t: t.threatValue, reverse=True)]
-
         if self.dangerAnalyzer.fastestCityThreat is not None and self.dangerAnalyzer.fastestCityThreat.turns > -1:
             threats.append(self.dangerAnalyzer.fastestCityThreat)
+        # threats = [t for t in sorted(threats, key=lambda t: t.threatValue, reverse=True)]
 
         negativeTilesIncludingThreat = set()
         for tile in outputDefenseCriticalTileSet:
@@ -6164,6 +6200,39 @@ class EklipZBot(object):
                 # dict[self.general] = (0, threat.threatValue, 0)
                 for tile in threat.path.tileSet:
                     negativeTilesIncludingThreat.add(tile)
+
+        gatherDepth = threats[0].path.length - 1
+        # if len(threats) > 0:
+        #     threatsByTile = self.dangerAnalyzer.get_threats_by_tile(threats[0].path.start.tile, armies=self.armyTracker.armies, includePotentialThreat=False, includeVisionThreat=False)
+        #     with self.perf_timer.begin_move_event(f'DEF INTERCEPT @{str(threatsByTile[0].path.start.tile)}'):
+        #         plan = self.army_interceptor.get_interception_plan(threatsByTile, turnsLeftInCycle=self.timings.get_turns_left_in_cycle(self._map.turn))
+        #         bestOpt = None
+        #         bestOptAmt = 0
+        #         bestTurn = 0
+        #         bestOptAmtPerTurn = 0
+        #         for turn, option in plan.intercept_options.items():
+        #             val, path = option
+        #             valPerTurn = val / max(1, turn)
+        #             # if path.length < gatherDepth and val > bestOptAmt:
+        #             if path.length < gatherDepth and valPerTurn > bestOptAmtPerTurn:
+        #                 logbook.info(f'DEF NEW BEST INTERCEPT OPT {val}v/{turn}t -- {str(path)}')
+        #                 bestOpt = path
+        #                 bestOptAmt = val
+        #                 bestTurn = turn
+        #                 bestOptAmtPerTurn = valPerTurn
+        #
+        #         if bestOpt is not None:
+        #             move = self.get_first_path_move(bestOpt)
+        #             if self.detect_repetition(move, turns=4, numReps=2):
+        #                 move.move_half = True
+        #             if not self.detect_repetition(move, turns=6, numReps=3):
+        #                 self.info(f'DEF INTERCEPT {bestOptAmt}v/{bestTurn}t @ {str(threats[0].path.start.tile)}: {str(move)} -- {str(bestOpt)}')
+        #                 if self.info_render_intercept_data:
+        #                     self.render_intercept_plan(plan)
+        #                     self.viewInfo.color_path(PathColorer(bestOpt, 80, 200, 0, alpha=150))
+        #                 return move, bestOpt
+        #             else:
+        #                 self.info(f'REP BYP DEF INTERCEPT {bestOptAmt}v/{bestTurn}t @ {str(threats[0].path.start.tile)}: {str(move)} -- {str(bestOpt)}')
 
         movesToMakeAnyway = []
 
@@ -6225,16 +6294,16 @@ class EklipZBot(object):
                 survivalThreshold = threat.threatValue
 
                 distOffset = 1
-                if (
-                        army is not None
-                        and len(threat.armyAnalysis.interceptChokes) > 0
-                        and army.last_moved_turn > self._map.turn - 2
-                        and not threatMovingWrongWay
-                        and not self.detect_repetition_at_all()
-                ):
-                    furthestForwardChoke = max(threat.armyAnalysis.interceptChokes.keys(), key=lambda t: threat.armyAnalysis.aMap[t.x][t.y])
-                    furthestDist = threat.armyAnalysis.aMap[furthestForwardChoke.x][furthestForwardChoke.y]
-                    distOffset = furthestDist
+                # if (
+                #         army is not None
+                #         and len(threat.armyAnalysis.interceptChokes) > 0
+                #         and army.last_moved_turn > self._map.turn - 2
+                #         and not threatMovingWrongWay
+                #         and not self.detect_repetition_at_all()
+                # ):
+                #     furthestForwardChoke = max(threat.armyAnalysis.interceptChokes.keys(), key=lambda t: threat.armyAnalysis.aMap[t.x][t.y])
+                #     furthestDist = threat.armyAnalysis.aMap[furthestForwardChoke.x][furthestForwardChoke.y]
+                #     distOffset = furthestDist
                 # gatherVal = int(threat.threatValue * 0.8)
                 with self.perf_timer.begin_move_event(f'Def Gath @ {str(threat.path.start.tile)}->{str(threat.path.tail.tile)}'):
                     additionalNegatives = set()
@@ -6303,7 +6372,7 @@ class EklipZBot(object):
                             saveTurns = threat.turns - 1
                             if threat.saveTile is not None or isEconThreat:
                                 saveTurns += 1
-                            leavesGreaterThanDistance = GatherUtils.get_tree_leaves_further_than_distance(pruned, threat.armyAnalysis.aMap, threat.turns - distOffset)
+                            leavesGreaterThanDistance = GatherUtils.get_tree_leaves_further_than_distance(pruned, threat.armyAnalysis.aMap, threat.turns - distOffset, survivalThreshold, sumPruned)
                             anyLeafIsSameDistAsThreat = len(leavesGreaterThanDistance) > 0
                             if anyLeafIsSameDistAsThreat:
                                 flags = f'leafDist {flags}'
@@ -6629,6 +6698,7 @@ class EklipZBot(object):
         self.targetPlayerExpectedGeneralLocation = self.general.movable[0]
         self.launchPoints.append(self.general)
         self.board_analysis = BoardAnalyzer(self._map, self.general, self.teammate_general)
+        self.army_interceptor = ArmyInterceptor(self._map, self.board_analysis)
         self.win_condition_analyzer = WinConditionAnalyzer(self._map, self.opponent_tracker, self.cityAnalyzer, self.territories, self.board_analysis)
         self.timing_cycle_ended()
 
@@ -7018,11 +7088,7 @@ class EklipZBot(object):
     def get_max_explorable_undiscovered_tile(self, minSpawnDist: int):
         # 4 and larger gets dicey
 
-        depth = 10
-        if self._map.rows * self._map.cols > 700:
-            depth = 5
-        elif self._map.rows * self._map.cols > 450:
-            depth = 8
+        depth = self.get_safe_per_tile_bfs_depth()
 
         if self._undisc_prio_turn != self._map.turn:
             self.undiscovered_priorities = self.find_expected_1v1_general_location_on_undiscovered_map(
@@ -7044,6 +7110,14 @@ class EklipZBot(object):
 
         self.viewInfo.add_targeted_tile(maxTile, TargetStyle.PURPLE)
         return maxTile
+
+    def get_safe_per_tile_bfs_depth(self):
+        depth = 9
+        if self._map.rows * self._map.cols > 500:
+            depth = 5
+        elif self._map.rows * self._map.cols > 350:
+            depth = 7
+        return depth
 
     def try_gather_tendrils_towards_enemy(self, turns: int | None = None) -> Move | None:
         # # TODO hack for now because this doesn't perform well
@@ -7472,6 +7546,34 @@ class EklipZBot(object):
                         break
 
             if not inExpPlan:
+                gatherDepth = 10
+                threats = [ThreatObj(p.length - 1, p.value, p, ThreatType.Kill) for p in self.targetingArmy.expectedPaths]
+                if len(threats) > 0:
+                    with self.perf_timer.begin_move_event(f'NEW INTERCEPT CONT @{str(self.targetingArmy)}'):
+                        plan = self.army_interceptor.get_interception_plan(threats, turnsLeftInCycle=self.timings.get_turns_left_in_cycle(self._map.turn))
+                        bestOpt = None
+                        bestOptAmt = 0
+                        bestTurn = 0
+                        bestOptAmtPerTurn = 0
+                        for turn, option in plan.intercept_options.items():
+                            val, path = option
+                            valPerTurn = val / max(1, turn)
+                            # if path.length < gatherDepth and val > bestOptAmt:
+                            if path.length < gatherDepth and valPerTurn > bestOptAmtPerTurn:
+                                logbook.info(f'NEW BEST INTERCEPT OPT {val}v/{turn}t -- {str(path)}')
+                                bestOpt = path
+                                bestOptAmt = val
+                                bestTurn = turn
+                                bestOptAmtPerTurn = valPerTurn
+
+                        if bestOpt is not None:
+                            move = self.get_first_path_move(bestOpt)
+                            self.info(f'INTERCEPT {bestOptAmt}v/{bestTurn}t @ {str(self.targetingArmy)}: {str(move)} -- {str(bestOpt)}')
+                            if self.info_render_intercept_data:
+                                self.render_intercept_plan(plan)
+                                self.viewInfo.color_path(PathColorer(bestOpt, 80, 200, 0, alpha=150))
+                            return move
+
                 self.viewInfo.add_info_line(f'stopped targeting army {str(self.targetingArmy)} because not in expansion plan')
                 self.targetingArmy = None
                 return None
@@ -7529,6 +7631,47 @@ class EklipZBot(object):
             self.targetingArmy = None
 
         return None
+
+    def build_intercept_plans(self) -> typing.Dict[Tile, ArmyInterception]:
+        interceptions: typing.Dict[Tile, ArmyInterception] = {}
+
+        threatsByTile = self.dangerAnalyzer.get_threats_grouped_by_tile(
+            self.armyTracker.armies,
+            includePotentialThreat=True,
+            includeVisionThreat=False,
+            alwaysIncludeArmy=self.targetingArmy,
+            includeArmiesWithThreats=True,
+            alwaysIncludeRecentlyMoved=True)
+
+        for tile, threats in threatsByTile.items():
+            if len(threats) == 0:
+                continue
+
+            with self.perf_timer.begin_move_event(f'NEW INTERCEPT @{str(tile)}'):
+                interceptions[tile] = self.army_interceptor.get_interception_plan(threats, turnsLeftInCycle=self.timings.get_turns_left_in_cycle(self._map.turn))
+                # bestOpt = None
+                # bestOptAmt = 0
+                # bestTurn = 0
+                # bestOptAmtPerTurn = 0
+                # for turn, option in plan.intercept_options.items():
+                #     val, path = option
+                #     valPerTurn = val / max(1, turn)
+                #     # if path.length < gatherDepth and val > bestOptAmt:
+                #     if path.length < gatherDepth and valPerTurn > bestOptAmtPerTurn:
+                #         logbook.info(f'NEW BEST INTERCEPT OPT {val}v/{turn}t -- {str(path)}')
+                #         bestOpt = path
+                #         bestOptAmt = val
+                #         bestTurn = turn
+                #         bestOptAmtPerTurn = valPerTurn
+                #
+                # if bestOpt is not None:
+                #     move = self.get_first_path_move(bestOpt)
+                #     self.info(f'INTERCEPT {bestOptAmt}v/{bestTurn}t @ {str(self.targetingArmy)}: {str(move)} -- {str(bestOpt)}')
+                #     if self.info_render_intercept_data:
+                #         self.render_intercept_plan(plan)
+                #         self.viewInfo.color_path(PathColorer(bestOpt, 80, 200, 0, alpha=150))
+                #     return move
+        return interceptions
 
     def try_find_counter_army_scrim_path_killpath(
             self,
@@ -8493,30 +8636,31 @@ class EklipZBot(object):
         #     logbook.info(f'bypassing neut cities due to currently_forcing_out_of_play_gathers {self.currently_forcing_out_of_play_gathers}')
         #     return False
 
-        with self.perf_timer.begin_move_event('approximate attack / def'):
-            threatTurns = self.shortest_path_to_target_player.length + 5
-            defTurns = threatTurns + 5
-            risk = self.win_condition_analyzer.get_approximate_attack_against(
-                [self.general],
-                inTurns=threatTurns,
-                asPlayer=self.targetPlayer,
-                forceFogRisk=True)
-            turns, value = self.win_condition_analyzer.get_dynamic_turns_visible_defense_against([self.general], defTurns, asPlayer=self.general.player)
-        cityDefVal = defTurns // 2
-        if self.opponent_tracker.even_or_up_on_cities(self.targetPlayer):
-            if risk > value - 40 + cityDefVal:
-                self.viewInfo.add_info_line(f'bypassing neut cities due to winCondition danger {risk} > {value} - 40 + cityDefVal {cityDefVal}')
+        if self.targetPlayer != -1:
+            with self.perf_timer.begin_move_event('approximate attack / def'):
+                threatTurns = self.shortest_path_to_target_player.length + 5
+                defTurns = threatTurns + 5
+                risk = self.win_condition_analyzer.get_approximate_attack_against(
+                    [self.general],
+                    inTurns=threatTurns,
+                    asPlayer=self.targetPlayer,
+                    forceFogRisk=True)
+                turns, value = self.win_condition_analyzer.get_dynamic_turns_visible_defense_against([self.general], defTurns, asPlayer=self.general.player)
+            cityDefVal = defTurns // 2
+            if self.opponent_tracker.even_or_up_on_cities(self.targetPlayer):
+                if risk > value - 40 + cityDefVal:
+                    self.viewInfo.add_info_line(f'bypassing neut cities due to winCondition danger {risk} > {value} - 40 + cityDefVal {cityDefVal}')
+                    return False
+
+                if self.is_blocking_neutral_city_captures:
+                    self.viewInfo.add_info_line(f'bypassing neut cities due to is_blocking_neutral_city_captures {self.is_blocking_neutral_city_captures}')
+                    return False
+
+            if self.defend_economy:
+                self.viewInfo.add_info_line(f'bypassing neut cities due to defend_economy {self.defend_economy}')
                 return False
 
-            if self.is_blocking_neutral_city_captures:
-                self.viewInfo.add_info_line(f'bypassing neut cities due to is_blocking_neutral_city_captures {self.is_blocking_neutral_city_captures}')
-                return False
-
-        if self.defend_economy:
-            self.viewInfo.add_info_line(f'bypassing neut cities due to defend_economy {self.defend_economy}')
-            return False
-
-        self.viewInfo.add_info_line(f'ALLOW neut cities due to winCondition danger {risk} <= {value} - 40 + cityDefVal {cityDefVal}')
+            self.viewInfo.add_info_line(f'ALLOW neut cities due to winCondition danger {risk} <= {value} - 40 + cityDefVal {cityDefVal}')
 
         # we now take cities proactively?
         proactivelyTakeCity = self.should_proactively_take_cities() or forceNeutralCapture
@@ -8567,9 +8711,10 @@ class EklipZBot(object):
         return False
 
     def find_hacky_path_to_find_target_player_spawn_approx(self, minSpawnDist: int):
-        prios = self.find_expected_1v1_general_location_on_undiscovered_map(
-            undiscoveredCounterDepth=10,
-            minSpawnDistance=minSpawnDist)
+        if not self.undiscovered_priorities:
+            self.undiscovered_priorities = self.find_expected_1v1_general_location_on_undiscovered_map(
+                undiscoveredCounterDepth=6,
+                minSpawnDistance=minSpawnDist)
 
         def value_func(tile: Tile, prioObj):
             (realDist, negScore, dist, lastTile) = prioObj
@@ -8591,7 +8736,7 @@ class EklipZBot(object):
                 negScore -= 100
             if lastTile is not None and not lastTile.visible and tile.visible:
                 negScore += 10000
-            undiscScore = prios[tile.x][tile.y]
+            undiscScore = self.undiscovered_priorities[tile.x][tile.y]
             negScore -= undiscScore
             negScore += 5
             realDist = self.distance_from_general(tile)
@@ -8757,6 +8902,11 @@ class EklipZBot(object):
         self.is_blocking_neutral_city_captures = True
 
     def continue_cur_path(self, threat: ThreatObj | None, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
+        if self.expansion_plan.includes_intercept:
+            self.curPath = None
+            self.viewInfo.add_info_line(f'clearing curPath because expansion includes intercept')
+            return None
+
         inc = 0
         while ((
                 self.curPath.start.tile.army <= 1
@@ -8830,8 +8980,7 @@ class EklipZBot(object):
                         self.curPathPrio = -1
                     else:
                         move = self.get_first_path_move(self.curPath)
-                        end = time.perf_counter()
-                        logbook.info(f"Path Move continuation of curPath.")
+                        self.info(f"CurPath cont {str(move)}")
                         # self.info("MAKING MOVE FROM NEW PATH CLASS! Path {}".format(self.curPath.toString()))
                         return self.move_half_on_repetition(move, 6, 3)
         self.info("path move failed...? setting curPath to none...")
@@ -9100,9 +9249,6 @@ class EklipZBot(object):
 
             if move.dest.isCity and move.dest.player == self.player.index and move.dest in self.cities_gathered_this_cycle:
                 self.cities_gathered_this_cycle.remove(move.dest)
-
-            self.tiles_gathered_to_this_cycle.add(move.dest)
-            self.tiles_gathered_to_this_cycle.discard(move.source)
 
             self.curPath = None
             self.info(
@@ -10061,7 +10207,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
             self.viewInfo.add_info_line(
                 f"exp: unknownEnCity: {stillDontKnowAboutEnemyCityPosition}, allInAgainstGen: {allInAndKnowsGenPosition}, stillSearch: {stillHaveSomethingToSearchFor}")
-            with self.perf_timer.begin_move_event('Attempting to finish/continue exploration'):
+            with self.perf_timer.begin_move_event('Attempt to fin/cont exploration'):
                 for city in self._map.players[self.general.player].cities:
                     undiscNeg.add(city)
 
@@ -10131,6 +10277,47 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         elif threat.threatValue - valueGathered > 0:
             self.send_teammate_communication(f"HELP! NEED {threat.threatValue - valueGathered} in {threat.turns - 1}")
             self.send_teammate_path_ping(threat.path, cooldown=2, cooldownKey="HELP ME")
+
+    def try_find_main_timing_expansion_move_if_applicable(self, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
+        if self.is_all_in_losing:
+            return None
+
+        turnsLeft = self.timings.get_turns_left_in_cycle(self._map.turn)
+        utilizationCutoff = turnsLeft - turnsLeft // 7
+        value = self.expansion_plan.en_tiles_captured * 2 + self.expansion_plan.neut_tiles_captured
+        haveFullExpPlanAlready = False
+        if (
+                self.expansion_plan.turns_used >= self.timings.get_turns_left_in_cycle(self._map.turn) - self.player.cityCount * 2
+                and self.expansion_plan.en_tiles_captured > self.expansion_plan.neut_tiles_captured // 2
+                and value > utilizationCutoff
+                and (self.armyTracker.lastMove is None or self.armyTracker.lastMove.dest in self.target_player_gather_targets)
+        ):
+            haveFullExpPlanAlready = True
+
+        havePotentialIntercept = self.expansion_plan.includes_intercept
+
+        # if len(paths) == 0 and (self.curPath is None or self.curPath.start.next is None) and self._map.turn >= 50:
+        if haveFullExpPlanAlready or havePotentialIntercept or ((self.curPath is None or self.curPath.start.next is None) and not self.defend_economy or self._map.turn < 100):
+            expNegs = set(defenseCriticalTileSet)
+            if not haveFullExpPlanAlready or self.is_all_in():
+                with self.perf_timer.begin_move_event('checking launch move'):
+                    attackLaunchMove = self.check_for_attack_launch_move(expNegs)
+                if attackLaunchMove is not None and not haveFullExpPlanAlready:
+                    return attackLaunchMove
+
+            with self.perf_timer.begin_move_event("try_find_expansion_move main timing"):
+                timeLimit = self.expansion_full_time_limit
+                move = self.try_find_expansion_move(expNegs, timeLimit, forceBypassLaunch=haveFullExpPlanAlready or havePotentialIntercept)
+
+            if move is not None:
+                if not self.timings.in_expand_split(self._map.turn):
+                    cycleTurn = self.timings.get_turn_in_cycle(self._map.turn)
+                    self.viewInfo.add_info_line('Due to full expansion plan, moving down launch/gather split.')
+                    self.timings.launchTiming = max(20, cycleTurn)
+                    self.timings.splitTurns = cycleTurn
+                return move  # already logged
+
+        return None
 
     def try_find_expansion_move(self, defenseCriticalTileSet: typing.Set[Tile], timeLimit: float, forceBypassLaunch: bool = False, overrideTurns: int = -1) -> Move | None:
         skipForAllIn = self.is_all_in() and not self.all_in_city_behind
@@ -10219,10 +10406,12 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         expansionNegStr = f'({"), (".join([str(t) for t in expansionNegatives])})'
         if path:
             inLaunchSplit = self.timings.in_launch_split(self._map.turn)
-            if path.start.tile.isGeneral and not inLaunchSplit and len(allPaths) > 1:
+            if path.start.tile.isGeneral and not inLaunchSplit and len(allPaths) > 1 and not self.expansion_plan.includes_intercept:
+                # TODO hack to prevent gen from launching early? Why do we care?
                 path = allPaths[1]
-            if path.start.tile.isGeneral or path.start.tile.isCity:
-                self.curPath = path.get_subsegment(max(1, path.length // 2 + 1))
+            # if path.start.tile.isGeneral or path.start.tile.isCity and not self.expansion_plan.includes_intercept:
+            #     # TODO is this really even necessary anymore?
+            #     self.curPath = path.get_subsegment(max(1, path.length // 2 + 1))
 
             move = self.get_first_path_move(path)
             if self.is_all_in() and move.move_half:
@@ -10508,7 +10697,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                     matrix[tile] = 0.0
                     break
             if self.info_render_expansion_matrix_values:
-                self.viewInfo.bottomMidRightGridText[tile.x][tile.y] = f'x{matrix[tile]:0.2f}'
+                self.viewInfo.bottomMidRightGridText[tile.x][tile.y] = f'x{matrix[tile]:0.3f}'
 
         return matrix
 
@@ -10626,7 +10815,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         for tile in self._map.get_all_tiles():
             if self._map.is_tile_friendly(tile):
                 matrix[tile] = 0.0
-            else:
+            elif self.info_render_expansion_matrix_values:
                 self.viewInfo.bottomLeftGridText[tile.x][tile.y] = f'x{matrix[tile]:0.3f}'
         return matrix
 
@@ -10755,6 +10944,15 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                     # teammate might defend us, don't throw it all away
                     expansionNegatives.add(self.general)
 
+            interceptOptionsSet = set()
+            interceptOptions: typing.List[typing.Tuple[float, int, Path]] = []
+            """approxEconValue, approxTurns, path"""
+            for source, interceptPlan in self.intercept_plans.items():
+                for turns, (value, path) in interceptPlan.intercept_options.items():
+                    interceptOptions.append((value, turns, path))
+                    interceptOptionsSet.add(path)
+                    logbook.info(f'intOpt turns {turns}, value {value:.2f}, {str(path)}')
+
             path, otherPaths = ExpandUtils.get_optimal_expansion(
                 self._map,
                 searchingPlayer=self.player.index,
@@ -10778,7 +10976,8 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                 useCutoff=self.expansion_use_cutoff,
                 colors=pathColor,
                 smallTileExpansionTimeRatio=self.expansion_small_tile_time_ratio,
-                bonusCapturePointMatrix=bonusCapturePointMatrix)
+                bonusCapturePointMatrix=bonusCapturePointMatrix,
+                additionalOptionValues=interceptOptions)
 
             expansionTurnsAvailable = 0
             enCaps = 0
@@ -10802,7 +11001,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                     visited.add(tile)
                 scores[otherPath] = enCaps * 2 + neutCaps
 
-            self.viewInfo.add_info_line(f'EXP AVAIL {expansionTurnsAvailable} en{enCaps} neut{neutCaps}')
+            self.viewInfo.add_stats_line(f'EXP AVAIL {expansionTurnsAvailable} en{enCaps} neut{neutCaps}')
 
         plan = ExpansionPotential(
             expansionTurnsAvailable,
@@ -10813,10 +11012,24 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             scores
         )
 
-        plan = self.check_launch_against_expansion_plan(plan, expansionNegatives)
+        anyIntercept = False
+
+        if len(interceptOptions) > 0:
+            for otherPath in plan.all_paths:
+                if otherPath in interceptOptionsSet:
+                    # TODO figure out if better to wait for intercept, maybe...?
+                    self.viewInfo.add_info_line(f'EXP PLAN INCLUDED INTERCEPT {str(otherPath)}')
+                    plan.path = otherPath
+                    anyIntercept = True
+                    plan.includes_intercept = True
+                    break
+            if not anyIntercept:
+                self.viewInfo.add_info_line(f'no exp intercept.. despite {len(interceptOptions)} opts?')
+
+        if not anyIntercept:
+            plan = self.check_launch_against_expansion_plan(plan, expansionNegatives)
 
         for path in plan.all_paths:
-
             plan.preferred_tiles.update(path.tileList)
 
         return plan
@@ -10911,7 +11124,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
                 self.enemy_expansion_plan_tile_path_cap_values[otherPath.start.tile] = pathCaps
 
-            self.viewInfo.add_info_line(f'EN EXP AVAIL {expansionTurnsAvailable} fr{frCaps} neut{neutCaps}')
+            self.viewInfo.add_stats_line(f'EN EXP AVAIL {expansionTurnsAvailable} fr{frCaps} neut{neutCaps}')
 
         plan = ExpansionPotential(
             expansionTurnsAvailable,
@@ -11828,3 +12041,11 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                 shortestTile = adj
 
         return Move(sourceTile, shortestTile)
+
+    def render_intercept_plan(self, plan: ArmyInterception, colorIndex: int = 0):
+        for tile, iw in plan.common_intercept_chokes.items():
+            self.viewInfo.add_targeted_tile(tile, TargetStyle(colorIndex + 2), radiusReduction=11 - colorIndex)
+            self.viewInfo.bottomMidRightGridText[tile.x][tile.y] = f'iw{iw}'
+
+        for dist, (val, path) in plan.intercept_options.items():
+            logbook.info(f'intercept plan {plan.target_tile} dist {dist}: {val:.2f} {path}')

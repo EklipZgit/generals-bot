@@ -62,7 +62,7 @@ class ArmyAnalyzer:
         self.chokeWidths: typing.Dict[Tile, int] = {}
         self.interceptChokes: typing.Dict[Tile, int] = {}
 
-        logbook.info("ArmyAnalyzer analyzing {} and {}".format(self.tileA.toString(), self.tileB.toString()))
+        logbook.info(f"ArmyAnalyzer analyzing {self.tileA.toString()} and {self.tileB.toString()}")
             
         # a map of distances from point A
         # self.aMap = build_distance_map(self.map, [self.tileA], [self.tileB])
@@ -116,22 +116,24 @@ class ArmyAnalyzer:
                 width = chokeCounterMap[chokeKey]
                 if width == 1:
                     if DebugHelper.IS_DEBUGGING:
-                        logbook.info("  (maybe) found choke at {}? Testing for shorter pathway joins".format(tile.toString()))
+                        logbook.info(f"  (maybe) found choke at {tile.toString()}? Testing for shorter pathway joins")
                     shorter = count(tile.movable, lambda adjTile: adjTile in self.pathWayLookupMatrix and self.pathWayLookupMatrix[adjTile].distance < path.distance)
                     if shorter == 0:
                         if DebugHelper.IS_DEBUGGING:
-                            logbook.info("    OK WE DID FIND A CHOKEPOINT AT {}! adding to self.pathChokes".format(tile.toString()))
+                            logbook.info(f"    OK WE DID FIND A CHOKEPOINT AT {tile.toString()}! adding to self.pathChokes")
                         # Todo this should probably be on pathways lol
                         self.pathChokes.add(tile)
                 self.chokeWidths[tile] = width
                 if (
                         tile in minPath.tiles
-                        and tile != self.tileA
-                        and tile != self.tileB
-                        and width < 4
-                        and self._is_tile_middle_of_width(tile, path)
+                        # and tile != self.tileA
+                        # and tile != self.tileB
+                        and width < 5
                 ):
-                    self.interceptChokes[tile] = width
+                    tileMidWidth = self._get_tile_middle_width(tile, path, width)
+                    # TODO this shit is wrong
+                    if tileMidWidth <= (width + 1) // 2:
+                        self.interceptChokes[tile] = tileMidWidth
 
         self.shortestPathWay = minPath
 
@@ -165,6 +167,9 @@ class ArmyAnalyzer:
         # return self.aMap[tile.x][tile.y], self.bMap[tile.x][tile.y]
         # return path.distance, self.aMap[tile.x][tile.y], self.bMap[tile.x][tile.y]
 
-    def _is_tile_middle_of_width(self, tile: Tile, path: PathWay) -> bool:
-        # TODO need to implement.
-        return True
+    def _get_tile_middle_width(self, tile: Tile, path: PathWay, width: int) -> int:
+        # if width == 1:
+        #     return 0
+
+        return width // 2
+

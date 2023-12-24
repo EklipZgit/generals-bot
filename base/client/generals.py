@@ -295,6 +295,8 @@ class GeneralsClient(object):
                 self.chatLogFile = "D:\\GeneralsLogs\\_chat\\" + self.username + "-" + self.mode + "-" + \
                                    self._start_data['replay_id'] + ".txt"
 
+                logbook.info(f'replay_id:[{self._start_data["replay_id"]}]')
+
                 _spawn(self._delayed_chat_thread)
                 os.makedirs("D:\\GeneralsLogs\\_chat", exist_ok=True)
                 if _LOG_WS:

@@ -76,22 +76,26 @@ class WinConditionAnalyzer(object):
 
         if self.is_winning_and_defending_economic_lead_wont_lose_economy():
             self.viable_win_conditions.add(WinCondition.DefendEconomicLead)
+
         if self.is_threat_of_loss_to_city_contest():
-            self.viable_win_conditions.add(WinCondition.DefendContestedFriendlyCity)
+            if WinCondition.WinOnEconomy in self.viable_win_conditions:
+                self.viable_win_conditions.add(WinCondition.DefendContestedFriendlyCity)
 
     def is_able_to_contest_enemy_city(self) -> bool:
         didEnemyTakeHardToDefendEarlyCity = False
-        if self.map.turn % 50 == 0:
+        cycleTurn = self.map.turn % 50
+        remainingTurns = 50 - cycleTurn
+        if cycleTurn == 0:
             self.is_contesting_cities = False
 
         enTargetCities = self.city_analyzer.get_sorted_enemy_scores()
 
-        attackTime = self.board_analysis.inter_general_distance + 5
+        attackTime = min(remainingTurns, self.board_analysis.inter_general_distance + 5)
 
         ourOffense = 0
 
         if self.target_player_location is not None and not self.target_player_location.isObstacle:
-            ourOffenseTurns, ourOffense = self.get_dynamic_turns_approximate_attack_against(self.target_player_location, maxTurns=self.board_analysis.inter_general_distance, asPlayer=self.map.player_index)
+            ourOffenseTurns, ourOffense = self.get_dynamic_turns_approximate_attack_against(self.target_player_location, maxTurns=attackTime, asPlayer=self.map.player_index)
             attackTime = ourOffenseTurns
             
         self.recommended_offense_plan_turns = attackTime
@@ -123,9 +127,9 @@ class WinConditionAnalyzer(object):
 
         contestableCities = [c for c, score in enTargetCities if self.map.is_tile_on_team_with(c, self.target_player)][0:3]
 
-        baselineWinRequirement = 0.4   # 0.5 equates to 12.5 tile econ advantage by holding the city
+        baselineWinRequirement = 0.5   # 0.5 equates to 12.5 tile econ advantage by holding the city
         if self.is_contesting_cities:
-            baselineWinRequirement = 0.1
+            baselineWinRequirement = 0.2
         cityCapsRequiredToReachWinningStatus = baselineWinRequirement + enScores.tileCount / 25 - frScores.tileCount / 25 + baseEnCities - baseFrCities
 
         cityCaps = len(currentlyOwnedContestedEnCities)
@@ -136,8 +140,6 @@ class WinConditionAnalyzer(object):
         self.target_cities.update(currentlyOwnedContestedEnCities)
 
         logbook.info(f'baseFrCities {baseFrCities}, baseEnCities {baseEnCities}, cityCapsRequiredToReachWinningStatus {cityCapsRequiredToReachWinningStatus:.2f}. Cities already contested: {len(currentlyOwnedContestedEnCities)}  {str(currentlyOwnedContestedEnCities)}')
-
-        enDefense = self.opponent_tracker.get_approximate_fog_army_risk(self.target_player, cityLimit=4, inTurns=attackTime)
 
         if len(contestableCities) > 0:
             # then we can plan around one of their cities
@@ -219,11 +221,11 @@ class WinConditionAnalyzer(object):
         enStatsMinus1 = self.opponent_tracker.get_last_cycle_stats_by_player(self.target_player, cyclesToGoBack=0)
         frStatsMinus1 = self.opponent_tracker.get_last_cycle_stats_by_player(self.map.player_index, cyclesToGoBack=0)
 
-        enStatsMinus2 = self.opponent_tracker.get_last_cycle_stats_by_player(self.target_player, cyclesToGoBack=1)
-        frStatsMinus2 = self.opponent_tracker.get_last_cycle_stats_by_player(self.map.player_index, cyclesToGoBack=1)
-
         enScoreMinus1 = self.opponent_tracker.get_last_cycle_score_by_player(self.target_player, cyclesToGoBack=0)
         frScoreMinus1 = self.opponent_tracker.get_last_cycle_score_by_player(self.map.player_index, cyclesToGoBack=0)
+
+        enStatsMinus2 = self.opponent_tracker.get_last_cycle_stats_by_player(self.target_player, cyclesToGoBack=1)
+        frStatsMinus2 = self.opponent_tracker.get_last_cycle_stats_by_player(self.map.player_index, cyclesToGoBack=1)
 
         enScoreMinus2 = self.opponent_tracker.get_last_cycle_score_by_player(self.target_player, cyclesToGoBack=1)
         frScoreMinus2 = self.opponent_tracker.get_last_cycle_score_by_player(self.map.player_index, cyclesToGoBack=1)
@@ -231,13 +233,16 @@ class WinConditionAnalyzer(object):
         if frScoreMinus2 is None or frScoreMinus1 is None or frStatsMinus2 is None or frStatsMinus1 is None:
             return True
 
-        losingByTwoCyclesAgo = enScoreMinus2.tileCount + (enScoreMinus2.cityCount - enStatsMinus2.cities_gained) * 25 - frScoreMinus2.tileCount - (frScoreMinus2.cityCount - frStatsMinus2.cities_gained) * 25
+        losingByTwoCyclesAgo = self.get_economic_diff_against_target_player(cyclesAgo=2)
 
-        losingByOneCyclesAgo = enScoreMinus1.tileCount + (enScoreMinus1.cityCount - enStatsMinus1.cities_gained) * 25 - frScoreMinus1.tileCount - (frScoreMinus1.cityCount - frStatsMinus1.cities_gained) * 25
+        losingByOneCyclesAgo = self.get_economic_diff_against_target_player(cyclesAgo=1)
+
+        # losingByNow = self.get_economic_diff_against_target_player(cyclesAgo=0)
 
         logbook.info(f'losingByTwoCyclesAgo {losingByTwoCyclesAgo}, losingByOneCyclesAgo {losingByOneCyclesAgo}')
 
-        if losingByTwoCyclesAgo < 0 and losingByTwoCyclesAgo > losingByOneCyclesAgo - 2:
+        if losingByTwoCyclesAgo < -1 and losingByTwoCyclesAgo > losingByOneCyclesAgo + 1:
+            logbook.info(f'We appear to be losing more and more on economy.')
             return False
 
         return True
@@ -494,3 +499,31 @@ class WinConditionAnalyzer(object):
             return result - 20  # rough approximation of the cost to go through our territory. In reality we should use the worst case flank path, instead.
 
         return 0
+
+    def get_economic_diff_against_target_player(self, cyclesAgo: int = 0) -> int:
+        """
+        Negative means we are losing. Positive means we are winning.
+
+        By default, returns the economic diff RIGHT NOW. If cyclesAgo > 0, checks that many cycles ago (where 1 means the start of this cycle).
+
+        @param cyclesAgo:
+        @return:
+        """
+
+        enStats = self.opponent_tracker.get_current_cycle_stats_by_player(self.target_player)
+        frStats = self.opponent_tracker.get_current_cycle_stats_by_player(self.map.player_index)
+
+        enScore = self.opponent_tracker.get_current_team_scores_by_player(self.target_player)
+        frScore = self.opponent_tracker.get_current_team_scores_by_player(self.map.player_index)
+
+        if cyclesAgo > 0:
+            enStats = self.opponent_tracker.get_last_cycle_stats_by_player(self.target_player, cyclesToGoBack=cyclesAgo - 1)
+            frStats = self.opponent_tracker.get_last_cycle_stats_by_player(self.map.player_index, cyclesToGoBack=cyclesAgo - 1)
+
+            enScore = self.opponent_tracker.get_last_cycle_score_by_player(self.target_player, cyclesToGoBack=cyclesAgo - 1)
+            frScore = self.opponent_tracker.get_last_cycle_score_by_player(self.map.player_index, cyclesToGoBack=cyclesAgo - 1)
+
+        frEcon = frScore.tileCount + (frScore.cityCount - frStats.cities_gained) * 25
+        enEcon = enScore.tileCount + (enScore.cityCount - enStats.cities_gained) * 25
+
+        return frEcon - enEcon

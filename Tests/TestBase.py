@@ -10,7 +10,7 @@ import unittest
 from logbook import StreamHandler
 
 import BotHost
-from BotHost import BotHostBase
+from Behavior import ArmyInterceptor
 import EarlyExpandUtils
 import GatherUtils
 import SearchUtils
@@ -37,6 +37,7 @@ class TestBase(unittest.TestCase):
         super().__init__(methodName)
         self._initialized: bool = False
         self._logging_handler = StreamHandler(sys.stderr, logbook.INFO)  #  format_string=LOG_FORMATTER
+        ArmyInterceptor.DEBUG_BYPASS_BAD_INTERCEPTIONS = False
 
     def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
         if player == -2:
@@ -52,6 +53,8 @@ class TestBase(unittest.TestCase):
         bot.info_render_tile_deltas = False
         bot.info_render_gather_locality_values = False
         bot.info_render_expansion_matrix_values = False
+        bot.info_render_intercept_data = False
+        bot.info_render_board_analysis_choke_widths = False
 
         return bot
 
@@ -1020,6 +1023,14 @@ class TestBase(unittest.TestCase):
         enTiles = pMap.players[player - 1].tileCount
 
         return pTiles - enTiles
+
+    def assertTileDifferentialGreaterThan(self, minimum, simHost):
+        tileDiff = self.get_tile_differential(simHost)
+        self.assertGreater(tileDiff, minimum, f'expected tile differential to be greater than {minimum}, instead found {tileDiff}')
+
+    def assertTileDifferentialLessThan(self, maximum, simHost):
+        tileDiff = self.get_tile_differential(simHost)
+        self.assertLess(tileDiff, maximum, f'expected tile differential to be less than {maximum}, instead found {tileDiff}')
 
     def move_enemy_general(
             self,

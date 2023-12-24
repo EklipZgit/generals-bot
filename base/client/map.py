@@ -163,7 +163,7 @@ class Player(object):
         """True if this player knows the map.player_index players general location. False otherwise."""
 
     def __str__(self):
-        return f'p{self.index}{"(dead)" if self.dead else ""}: tiles {self.tileCount}, standingArmy {self.standingArmy}, general {str(self.general)}'
+        return f'p{self.index}{" (dead)" if self.dead else ""}: tiles {self.tileCount}, cities {self.cityCount}, standingArmy {self.standingArmy}, general {str(self.general)}'
 
 
 class TileDelta(object):
@@ -1292,6 +1292,10 @@ class MapBase(object):
 
     def convert_tile_to_mountain(self, tile: Tile):
         self.pathableTiles.discard(tile)
+        if tile.isCity:
+            for player in self.players:
+                if tile in player.cities:
+                    player.cities.remove(tile)
         tile.tile = TILE_MOUNTAIN
         tile.isCity = False
         tile.army = 0

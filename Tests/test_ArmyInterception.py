@@ -1,35 +1,228 @@
+import typing
+
+import logbook
+
+import ExpandUtils
+import SearchUtils
 import base.viewer
 from ArmyAnalyzer import ArmyAnalyzer
+from Behavior.ArmyInterceptor import ArmyInterceptor, ArmyInterception
 from BoardAnalyzer import BoardAnalyzer
+from DangerAnalyzer import ThreatObj, DangerAnalyzer, ThreatType
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
-from ViewInfo import ViewInfo
-from base.client.map import TILE_MOUNTAIN, TILE_EMPTY, MapBase
+from ViewInfo import ViewInfo, TargetStyle, PathColorer
+from base.client.map import TILE_MOUNTAIN, TILE_EMPTY, MapBase, Tile
+from bot_ek0x45 import EklipZBot
 
 
 class ArmyInterceptionTests(TestBase):
+    def __init__(self, methodName: str = ...):
+        super().__init__(methodName)
+
+    def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2, clearCurPath: bool = True) -> EklipZBot:
+        bot = super().get_debug_render_bot(simHost, player)
+
+        bot.info_render_intercept_data = True
+        bot.info_render_board_analysis_choke_widths = True
+        bot.info_render_army_emergence_values = False
+        if clearCurPath:
+            bot.curPath = None
+
+        return bot
+
+    def get_interceptor(self, map: MapBase, general: Tile, enemyGeneral: Tile, useDebugLogging: bool = True) -> ArmyInterceptor:
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral)
+
+        self.begin_capturing_logging()
+        interceptor = ArmyInterceptor(map, analysis, useDebugLogging=useDebugLogging)
+        return interceptor
+
+    def get_interception_plan(self, map: MapBase, general: Tile, enemyGeneral: Tile, enTile: Tile | None = None, turnsLeftInCycle: int = -1, useDebugLogging: bool = True) -> ArmyInterception:
+        interceptor = self.get_interceptor(
+            map,
+            general,
+            enemyGeneral,
+            useDebugLogging)
+
+        if turnsLeftInCycle == -1:
+            turnsLeftInCycle = 50 - map.turn % 50
+
+        genDists = SearchUtils.build_distance_map_matrix(map, [general])
+
+        if enTile is None:
+            enTile = max(map.get_all_tiles(), key=lambda t: t.army if t.player == enemyGeneral.player else 0)
+
+        # dangerAnalyzer = DangerAnalyzer(map)
+        # dangerAnalyzer.analyze([general], 40, {})
+
+        targets = [general]
+        targets.extend(map.players[general.player].cities)
+        threats = []
+        negs = set(targets)
+
+        for target in targets:
+            threatPath = SearchUtils.dest_breadth_first_target(map, [target], maxDepth=40, searchingPlayer=enemyGeneral.player, negativeTiles=negs)
+
+            if threatPath is not None:
+                analysis = ArmyAnalyzer(map, threatPath.tail.tile, threatPath.start.tile)
+                saveTile = None
+                if len(threatPath.tileList) > 1 and threatPath.tail.prev.tile in analysis.pathChokes:
+                    saveTile = threatPath.tail.prev.tile
+                threats.append(ThreatObj(threatPath.length - 1, threatPath.value, threatPath, ThreatType.Kill, saveTile, analysis))
+
+        def valueFunc(curTile, prioObj):
+            dist, negCaps, negArmy, genDist = prioObj
+            if negArmy > 0:
+                return None
+
+            return (0 - negCaps, 0 - dist)
+
+        def prioFunc(nextTile, prioObj):
+            dist, negCaps, negArmy, genDist = prioObj
+            if negArmy > 0:
+                return None
+            if map.is_tile_on_team_with(nextTile, enemyGeneral.player):
+                negArmy -= nextTile.army
+            else:
+                negArmy += nextTile.army
+                if map.is_tile_on_team_with(nextTile, general.player):
+                    negCaps -= 2.2
+                else:
+                    negCaps -= 0.7
+
+            negArmy += 1
+
+            return dist+1, negCaps, negArmy, genDists[nextTile]
+
+        path = SearchUtils.breadth_first_dynamic_max(
+            map,
+            {enTile: ((0, 0, 0 - enTile.army + 1, genDists[enTile]), 0)},
+            valueFunc=valueFunc,
+            priorityFunc=prioFunc,
+            searchingPlayer=enemyGeneral.player
+        )
+
+        if path is not None:
+            analysis = ArmyAnalyzer(map, path.tail.tile, path.start.tile)
+            saveTile = None
+            if len(path.tileList) > 1 and path.tail.prev.tile in analysis.pathChokes:
+                saveTile = path.tail.prev.tile
+            threats.append(ThreatObj(path.length - 1, path.value, path, ThreatType.Econ, saveTile, analysis))
+
+        self.assertGreater(len(threats), 0)
+
+        plan = interceptor.get_interception_plan(threats, turnsLeftInCycle=turnsLeftInCycle)
+
+        return plan
+
+    def get_best_intercept_option(self, plan: ArmyInterception, maxDepth=200) -> typing.Tuple[int, int, Path] | None:
+        bestOpt = None
+        bestOptAmt = 0
+        bestOptDist = 0
+        bestVt = 0
+        for dist, option in plan.intercept_options.items():
+            if dist > maxDepth:
+                continue
+            val, path = option
+            vt = val/dist
+            if vt > bestVt:
+                logbook.info(f'NEW BEST INTERCEPT OPT {val}/{dist} -- {str(path)}')
+                bestOpt = path
+                bestOptAmt = val
+                bestOptDist = dist
+                bestVt = vt
+
+        if bestOpt is None:
+            return None
+
+        return bestOptAmt, bestOptDist, bestOpt
+
+    def render_intercept_plan(self, map: MapBase, plan: ArmyInterception, colorIndex: int = 0):
+        viewInfo = self.get_renderable_view_info(map)
+        targetStyle = TargetStyle(colorIndex + 2)
+
+        for tile, iw in plan.common_intercept_chokes.items():
+            viewInfo.add_targeted_tile(tile, targetStyle, radiusReduction=11 - colorIndex)
+            viewInfo.bottomMidRightGridText[tile.x][tile.y] = f'iw{iw}'
+
+        for i, threat in enumerate(plan.threats):
+            color = ViewInfo.get_color_from_target_style(TargetStyle.YELLOW)
+            viewInfo.color_path(PathColorer(
+                threat.path,
+                color[0] + 20 * i,
+                90 - 10 * i,
+                121 + 15 * i,
+            ))
+
+        maxValPerTurn = 0
+        maxValTurnPath = None
+        maxVal = 0
+        maxTurn = 0
+        for dist, (val, path) in plan.intercept_options.items():
+            valPerTurn = val / dist
+            maxStr = ''
+            if valPerTurn > maxValPerTurn:
+                maxValPerTurn = valPerTurn
+                maxValTurnPath = path
+                maxStr = 'NEW MAX '
+                maxVal = val
+                maxTurn = dist
+            viewInfo.color_path(PathColorer(
+                path,
+                255,
+                255,
+                255,
+            ))
+
+            logbook.info(f'{maxStr}intercept plan {plan.target_tile} dist {dist}: {val:.2f} {path}')
+
+        if maxValTurnPath is not None:
+            viewInfo.color_path(PathColorer(
+                maxValTurnPath,
+                155,
+                255,
+                155,
+            ))
+        self.render_view_info(map, viewInfo, f'intercept {maxVal:.2f}/{maxTurn}={maxValPerTurn} - {str(maxValTurnPath)}')
+
+    def assertInterceptChokeTileMoves(self, plan: ArmyInterception, map: MapBase, x: int, y: int, w: int):
+        tile = map.GetTile(x, y)
+        self.assertIn(tile, plan.common_intercept_chokes, f'Expected {str(tile)} to be in chokes, but wasnt.')
+        val = plan.common_intercept_chokes[tile]
+        self.assertEqual(w, val, f'Expected choke {str(tile)} to be {w} but was {val}')
+
+    def assertNotInterceptChoke(self, plan: ArmyInterception, map: MapBase, x: int, y: int):
+        tile = map.GetTile(x, y)
+        val = plan.common_intercept_chokes.get(tile, -10)
+        if val != -10:
+            self.fail(f'Expected {str(tile)} NOT to be in chokes, instead found val {val}.')
+
     def test_should_intercept_army_that_is_one_tile_kill_and_city_threat_lol(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        for i in range(10):
-            with self.subTest(i=i):
-                mapFile = 'GameContinuationEntries/should_see_city_as_forward_from_central_point___HgAyaVTVa---1--307.txtmap'
-                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 307, fill_out_tiles=True)
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        for i in range(6):
+            mapFile = 'GameContinuationEntries/should_see_city_as_forward_from_central_point___HgAyaVTVa---1--307.txtmap'
+            map, general, enemyGeneral = self.load_map_and_generals(mapFile, 307, fill_out_tiles=True)
 
-                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=307)
+            rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=307)
+            rawMap.GetTile(7, 14).lastMovedTurn = map.turn - 1
 
-                self.enable_search_time_limits_and_disable_debug_asserts()
-                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-                simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-                bot = self.get_debug_render_bot(simHost, general.player)
-                playerMap = simHost.get_player_map(general.player)
-                playerMap.GetTile(7, 14).lastMovedTurn = map.turn
+            self.enable_search_time_limits_and_disable_debug_asserts()
+            simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+            simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+            bot = self.get_debug_render_bot(simHost, general.player)
+            playerMap = simHost.get_player_map(general.player)
+            playerMap.GetTile(7, 14).lastMovedTurn = map.turn - 1
+            army = bot.get_army_at_x_y(7, 14)
+            army.last_moved_turn = map.turn - 1
 
-                self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
-                self.assertIsNone(winner)
+            self.begin_capturing_logging()
+            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+            self.assertIsNone(winner)
 
-                self.assertEqual(general.player, playerMap.GetTile(7, 14).player)
+            self.assertEqual(general.player, playerMap.GetTile(7, 14).player)
     
     def test_should_continue_to_intercept_army(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -41,7 +234,7 @@ class ArmyInterceptionTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '8,8->7,8->7,12->8,12->8,10')
-        bot = self.get_debug_render_bot(simHost, general.player)
+        bot = self.get_debug_render_bot(simHost, general.player, clearCurPath=False)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -156,29 +349,28 @@ class ArmyInterceptionTests(TestBase):
 
     def test_should_split_when_chasing_threat_around_obstacle(self):
         for i in range(4):
-            with self.subTest(i=i):
-                debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-                mapFile = 'GameContinuationEntries/should_split_when_chasing_threat_around_obstacle___67Nv7tPW1---0--205.txtmap'
-                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 205, fill_out_tiles=True)
+            debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+            mapFile = 'GameContinuationEntries/should_split_when_chasing_threat_around_obstacle___67Nv7tPW1---0--205.txtmap'
+            map, general, enemyGeneral = self.load_map_and_generals(mapFile, 205, fill_out_tiles=True)
 
-                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=205)
+            rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=205)
 
-                self.enable_search_time_limits_and_disable_debug_asserts()
-                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-                simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-                bot = self.get_debug_render_bot(simHost, general.player)
-                playerMap = simHost.get_player_map(general.player)
+            self.enable_search_time_limits_and_disable_debug_asserts()
+            simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+            simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+            bot = self.get_debug_render_bot(simHost, general.player)
+            playerMap = simHost.get_player_map(general.player)
 
-                self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
-                self.assertIsNone(winner)
+            self.begin_capturing_logging()
+            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
+            self.assertIsNone(winner)
 
-                self.assertNoRepetition(simHost)
+            self.assertNoRepetition(simHost)
 
-                enTile = playerMap.GetTile(8, 18)
+            enTile = playerMap.GetTile(8, 18)
 
-                if enTile.player != general.player:
-                    self.assertLess(enTile.army, 5)
+            if enTile.player != general.player:
+                self.assertLess(enTile.army, 5)
 
     def test_should_intercept_at_inbound_choke(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -246,6 +438,30 @@ class ArmyInterceptionTests(TestBase):
 
         self.assertNoRepetition(simHost)
 
+# 22-12 with everything bad
+# 11f 19p - hacked defense intercept
+# 10-20 with defense -1 instead of -2
+    
+    def test_should_intercept_not_loop(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_intercept_not_loop___s7T8wCUyU---1--404.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 404, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=404)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        self.assertIsNone(winner)
+
+        city = playerMap.GetTile(7, 11)
+        self.assertEqual(general.player, city.player)
+
     def test_should_intercept_inbound_army_on_edge_when_would_have_10_recapture_turns(self):
         for enPath in [
             '8,5->8,4->9,4->9,3->14,3->14,2',
@@ -273,6 +489,368 @@ class ArmyInterceptionTests(TestBase):
 
                 self.assertGreater(self.get_tile_differential(simHost), 10)
 
-# 22-12 with everything bad
-# 11f 19p - hacked defense intercept
-# 10-20 with defense -1 instead of -2
+    def test_should_value_recaptures_properly(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_intercept_inbound_army_on_edge_when_would_have_10_recapture_turns___l7Y-HnzES---0--181.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 181, fill_out_tiles=True)
+
+        interceptor = self.get_interceptor(map, general, enemyGeneral)
+        path = Path()
+        path.add_next(map.GetTile(14, 6))
+        path.add_next(map.GetTile(13, 6))
+        path.add_next(map.GetTile(12, 6))
+        path.add_next(map.GetTile(11, 6))
+        path.add_next(map.GetTile(10, 6))
+        path.add_next(map.GetTile(10, 5))
+        path.add_next(map.GetTile(9, 5))
+
+        val, turnsUsed = interceptor._get_path_value(path, searchingPlayer=general.player, targetPlayer=enemyGeneral.player, turnsLeftInCycle=19, includeRecaptureEffectiveStartDist=1)
+        # we move 6 to intercept, they move 6 forward to 7,5. No collision yet.
+        # We collide with over 30 more army with them, giving us full recapture turns.
+        self.assertEqual(19, turnsUsed)
+
+        # Since we captured 0 other tiles, the value of the intercept should equal number of remaining recapture turns * 2, which should be 24
+        self.assertGreater(val, 21)
+
+    def test_should_identify_multi_threat_chokes_in_defense_plan(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_intercept_inbound_army_on_edge_when_would_have_10_recapture_turns___l7Y-HnzES---0--181.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 181, fill_out_tiles=True)
+
+        plan = self.get_interception_plan(map, general, enemyGeneral)
+        self.assertEqual(2, len(plan.threats))
+
+        self.assertInterceptChokeTileMoves(plan, map, x=8, y=5, w=0)
+        self.assertInterceptChokeTileMoves(plan, map, x=9, y=5, w=1)
+        self.assertNotInterceptChoke(plan, map, x=10, y=5)
+        self.assertNotInterceptChoke(plan, map, x=9, y=4)
+        self.assertNotInterceptChoke(plan, map, x=10, y=6)
+
+        self.assertEqual(map.GetTile(14, 6), plan.best_enemy_threat.path.tail.tile)
+
+    def test_should_identify_best_meeting_point_in_intercept_options(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_intercept_inbound_army_on_edge_when_would_have_10_recapture_turns___l7Y-HnzES---0--181.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 181, fill_out_tiles=True)
+        notCity = map.GetTile(14, 6)
+        notCity.isCity = False
+        map.players[general.player].cities.remove(notCity)
+
+        plan = self.get_interception_plan(map, general, enemyGeneral)
+        self.assertEqual(1, len(plan.threats))
+
+        self.assertInterceptChokeTileMoves(plan, map, x=8, y=5, w=0)
+        self.assertInterceptChokeTileMoves(plan, map, x=9, y=5, w=1)
+        self.assertInterceptChokeTileMoves(plan, map, x=13, y=3, w=0)
+        self.assertInterceptChokeTileMoves(plan, map, x=14, y=3, w=0)
+        self.assertInterceptChokeTileMoves(plan, map, x=9, y=4, w=0)
+        self.assertNotInterceptChoke(plan, map, x=10, y=5)
+        self.assertNotInterceptChoke(plan, map, x=10, y=6)
+
+        bestOpt = None
+        bestOptAmt = 0
+        gatherDepth = 20
+        for turn, option in plan.intercept_options.items():
+            val, path = option
+            if path.length < gatherDepth and val > bestOptAmt:
+                logbook.info(f'NEW BEST INTERCEPT OPT {val} -- {str(path)}')
+                bestOpt = path
+                bestOptAmt = val
+
+        self.assertEqual(map.GetTile(9, 5), bestOpt.tail.tile)
+
+# TODO still need an open-map wide choke example to test finding mid-choke-points on. 3 or wider choke required.
+# TODO what about threats where the chokes diverge super early from the threat? Need intercept chokes that are NOT on the shortest path, and find the lowest common denominator between them still?
+# TODO ^ also needs to detect when the path SPLITS vs lines on opposite sides of the same choke where an army could stage in the middle, vs being unable to stage in the middle due to blockage by mountains or pure split scenario.    
+    def test_should_recognize_multi_threat_and_intercept_at_choke__unit_test(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_multi_threat_and_intercept_at_choke___Human.exe-TEST__efebcb16-d770-4d80-ac54-b9c37c8e7bea---0--289.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 289, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=False, turn=289)
+
+        plan = self.get_interception_plan(rawMap, general, enemyGeneral)
+        self.assertEqual(2, len(plan.threats))
+
+        if debugMode:
+            self.render_intercept_plan(rawMap, plan)
+
+        self.assertInterceptChokeTileMoves(plan, map, x=2, y=7, w=1)
+        self.assertNotInterceptChoke(plan, map, x=5, y=7)
+        self.assertNotInterceptChoke(plan, map, x=1, y=5)
+        self.assertNotInterceptChoke(plan, map, x=1, y=6)
+        self.assertNotInterceptChoke(plan, map, x=1, y=7)
+        self.assertNotInterceptChoke(plan, map, x=2, y=8)
+        self.assertNotInterceptChoke(plan, map, x=3, y=8)
+        self.assertNotInterceptChoke(plan, map, x=4, y=8)
+
+        bestOpt = None
+        bestOptAmt = 0
+        gatherDepth = 20
+        option = plan.intercept_options[3]
+        val, path = option
+        if path.length < gatherDepth and val > bestOptAmt:
+            logbook.info(f'NEW BEST INTERCEPT OPT {val} -- {str(path)}')
+            bestOpt = path
+            bestOptAmt = val
+
+        self.assertEqual(map.GetTile(2, 7), bestOpt.tail.tile)
+
+    def test_should_recognize_multi_threat_and_intercept_at_choke(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_multi_threat_and_intercept_at_choke___Human.exe-TEST__efebcb16-d770-4d80-ac54-b9c37c8e7bea---0--289.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 289, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=289)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '1,8->2,8->2,7')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        self.assertIsNone(winner)
+
+        self.assertEqual(playerMap.GetTile(2, 7).player, general.player)
+
+    def test_should_defend_forward_city_against_incoming_threat(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+
+        mapFile = 'GameContinuationEntries/should_defend_forward_city_against_incoming_threat___SejdBT5Vp---1--370.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 370, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=370)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '11,4->11,6->6,6->6,8->4,8->4,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        city = playerMap.GetTile(4, 9)
+
+        self.begin_capturing_logging()
+        simHost.run_between_turns(lambda: self.assertEqual(general.player, city.player, 'should never lose control of the city.'))
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        self.assertIsNone(winner)
+
+    def test_should_kill_point_blank_army_lul(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_kill_point_blank_army_lul___ffrBNaR9l---0--133.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 133, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=133)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '7,6->7,7->7,8')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertIsNone(winner)
+
+        self.assertEqual(general.player, playerMap.GetTile(7, 7).player)
+
+    def test_should_not_blow_up(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_blow_up___U7l4Nbv2D---1--124.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 124, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=124)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+    
+    def test_should_return_to_save_general(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_return_to_save_general___DiPqVAsND---0--282.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 283, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=283)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '4,7->1,7->1,8')
+        # simHost.queue_player_moves_str(general.player, '4,9->1,9->1,8')  # saves
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        self.assertIsNone(winner)
+    
+    def test_should_not_chase_when_gets_self_killed(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_chase_when_gets_self_killed___DiPqVAsND---0--281.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 281, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=281)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '4,8->4,7->1,7->1,8')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+    
+    def test_should_one_move_intercept_to_prevent_expansion_threat(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_one_move_intercept_to_prevent_expansion_threat___DiPqVAsND---0--280.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 280, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=280)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '4,9->4,7->1,7->1,8')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertIsNone(winner)
+
+        self.assertEqual(general.player, playerMap.GetTile(4, 7).player)
+
+    def test_should_intercept_large_incoming_at_choke_even_with_not_quite_enough__unit_test(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_intercept_large_incoming_at_choke_even_with_not_quite_enough___DiPqVAsND---0--273.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 273, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=False, turn=273)
+
+        plan = self.get_interception_plan(rawMap, general, enemyGeneral)
+        self.assertEqual(2, len(plan.threats))
+
+        self.assertNotEqual(0, len(plan.intercept_options))
+        if debugMode:
+            self.render_intercept_plan(rawMap, plan)
+
+        paths = SearchUtils.where(plan.intercept_options.values(), lambda p: p[1].start.tile.x == 3 and p[1].start.tile.y == 9 and p[1].tail.tile.x == 7 and p[1].tail.tile.y == 9)
+        self.assertEqual(1, len(paths))
+    
+    def test_should_intercept_large_incoming_at_choke_even_with_not_quite_enough(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_intercept_large_incoming_at_choke_even_with_not_quite_enough___DiPqVAsND---0--273.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 273, fill_out_tiles=True)
+        enemyGeneral.army = 20
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=273)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '10,10->7,10->7,9->5,9->5,3->2,3->2,8->1,8  12,7->12,8  8,12->7,12  8,4->8,2->6,2')
+        # simHost.queue_player_moves_str(general.player, '4,4->5,4  3,9->6,9')  # proof this is doable
+
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=27)
+        self.assertIsNone(winner)
+
+        self.assertGreater(self.get_tile_differential(simHost), 20, "should not have lost a ton of econ by letting enemy walk around")
+    
+    def test_should_block_to_the_left(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_block_to_the_left__ideally_with_move_half___xv-dhECnq---0--243.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 243, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=243)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '14,8->13,8->13,14->12,14->12,16')
+        # simHost.queue_player_moves_str(general.player, '15,9->14,9z->13,9')  # proof this works
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+        self.assertIsNone(winner)
+
+        tile = playerMap.GetTile(13, 12)
+        self.assertEqual(general.player, tile.player)
+
+        self.assertEqual(6, self.get_tile_differential(simHost), "should have spent 2 turns blocking with a move-half, then spent the rest of the time capturing")
+
+    def test_should_block_to_the_left__with_move_half(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_block_to_the_left__ideally_with_move_half___xv-dhECnq---0--243.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 243, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=243)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '14,8->13,8->13,14->12,14->12,16')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertIsNone(winner)
+
+        tile = playerMap.GetTile(13, 12)
+        self.assertLess(tile.army, 4)
+        self.assertGreater(playerMap.GetTile(15, 9).army, 35, "should have move-halfed")
+
+#17f 18p - initial intercept/expand impl
+    def test_should_not_intercept_when_more_economic_to_just_keep_expanding__unit_test(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_gracefully_handle_deviating_en_expansion_path___YuXhnQtCE---1--142.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 142, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=False, turn=142)
+        self.reset_general(rawMap, enemyGeneral)
+
+        plan = self.get_interception_plan(rawMap, general, enemyGeneral)
+
+        if debugMode:
+            self.render_intercept_plan(rawMap, plan)
+
+        self.assertEqual(1, len(plan.threats), "only econ threat")
+
+        bestVal, bestTurns, bestPath = self.get_best_intercept_option(plan)
+        self.assertLess(bestVal, 7, "should not overvalue any of these intercepts")
+        self.assertLess(bestVal/bestTurns, 0.5, 'should not think any of these have great value per turn.')
+
+        self.assertEqual(map.GetTile(9, 8), bestPath.tail.tile)
+
+    def test_should_not_intercept_when_more_economic_to_just_keep_expanding(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_gracefully_handle_deviating_en_expansion_path___YuXhnQtCE---1--142.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 142, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=142)
+        self.reset_general(rawMap, enemyGeneral)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '14,8->13,8->13,9->12,9->12,8->11,8')
+        # proof
+        # simHost.queue_player_moves_str(general.player, '6,6->6,5->15,5')  # THIS gets 20
+        # BAD simHost.queue_player_moves_str(general.player, '6,6->6,8->13,8')  # THIS only gets 15
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+        self.assertIsNone(winner)
+
+        self.assertTileDifferentialGreaterThan(19, simHost)
+

@@ -24,6 +24,7 @@ from enum import Enum
 class ThreatType(Enum):
     Kill = 1
     Vision = 2
+    Econ = 3
 
 
 class ThreatObj(object):
@@ -196,6 +197,110 @@ class DangerAnalyzer(object):
         logbook.info(f"VISION threat analyzer took {time.perf_counter() - startTime:.3f}")
         return threatObj
 
+    def get_threats_grouped_by_tile(
+            self,
+            armies: typing.Dict[Tile, Army],
+            includePotentialThreat: bool = True,
+            includeVisionThreat: bool = True,
+            alwaysIncludeArmy: Army | None = None,
+            includeArmiesWithThreats: bool = False,
+            alwaysIncludeRecentlyMoved: bool = False,
+    ) -> typing.Dict[Tile, typing.List[ThreatObj]]:
+        threatLookup = {}
+        tailLookup = {}
+
+        def addIfNotDuplicate(threat: ThreatObj):
+            tailKey = threat.path.tail.tile
+            threatStart = threat.path.start.tile
+            l = threatLookup.get(threatStart, [])
+            if len(l) == 0:
+                threatLookup[threatStart] = l
+
+            added = tailLookup.get(threatStart, set())
+            if len(added) == 0:
+                tailLookup[threatStart] = added
+
+            if tailKey not in added:
+                l.append(threat)
+                added.add(tailKey)
+
+        if self.fastestThreat is not None:
+            addIfNotDuplicate(self.fastestThreat)
+        if self.highestThreat is not None:
+            addIfNotDuplicate(self.highestThreat)
+        if self.fastestCityThreat is not None:
+            addIfNotDuplicate(self.fastestCityThreat)
+        if self.fastestAllyThreat is not None:
+            addIfNotDuplicate(self.fastestAllyThreat)
+        if includePotentialThreat and self.fastestPotentialThreat is not None:
+            addIfNotDuplicate(self.fastestPotentialThreat)
+        if includeVisionThreat and self.fastestVisionThreat is not None:
+            addIfNotDuplicate(self.fastestVisionThreat)
+
+        for threatStart, threatList in threatLookup.items():
+            army = armies.get(threatStart, None)
+            if army is None:
+                continue
+
+            added = tailLookup.get(threatStart)
+
+            for path in army.expectedPaths:
+                if path.start.tile == threatStart:
+                    if path.tail.tile not in added:
+                        added.add(path.tail.tile)
+                        threat = ThreatObj(path.length - 1, path.value, path, ThreatType.Econ, None)
+                        threatList.append(threat)
+
+        if alwaysIncludeArmy or alwaysIncludeRecentlyMoved or includeArmiesWithThreats:
+            for army in armies.values():
+                threatStart = army.tile
+                if self.map.is_player_on_team_with(army.player, self.map.player_index):
+                    continue
+                if army.tile in threatLookup:
+                    continue  # already added
+
+                include = False
+                if alwaysIncludeArmy == army:
+                    include = True
+                elif alwaysIncludeRecentlyMoved and army.last_moved_turn > self.map.turn - 2:
+                    for path in army.expectedPaths:
+                        include = True
+                elif includeArmiesWithThreats:
+                    for path in army.expectedPaths:
+                        if sum(map(lambda t: 1 if self.map.is_tile_friendly(t) else 0, path.tileList)) > 3:
+                            include = True
+                            break
+
+                if include:
+                    added = set()
+                    threatList = []
+                    threatLookup[threatStart] = threatList
+                    for path in army.expectedPaths:
+                        if path.start.tile == threatStart:
+                            if path.tail.tile not in added:
+                                added.add(path.tail.tile)
+                                threat = ThreatObj(path.length - 1, path.value, path, ThreatType.Econ, None)
+                                threatList.append(threat)
+
+        return threatLookup
+
+    def get_threats_by_tile(self, tile: Tile, armies: typing.Dict[Tile, Army], includePotentialThreat: bool = True, includeVisionThreat: bool = True) -> typing.List[ThreatObj]:
+        threatLookup = self.get_threats_grouped_by_tile(armies, includePotentialThreat=includePotentialThreat, includeVisionThreat=includeVisionThreat)
+
+        threatList = threatLookup.get(tile, [])
+        if len(threatList) == 0:
+            army = armies.get(tile, None)
+            if army is not None:
+                added = set()
+                for path in army.expectedPaths:
+                    if path.start.tile == tile:
+                        if path.tail.tile not in added:
+                            added.add(path.tail.tile)
+                            threat = ThreatObj(path.length - 1, path.value, path, ThreatType.Kill, None)
+                            threatList.append(threat)
+
+        return threatList
+
     def getFastestThreat(
             self,
             depth: int,
@@ -353,7 +458,7 @@ class DangerAnalyzer(object):
                 logbook.info(
                     f"Army tile mismatch threat searcher found a path! Army {str(army)}, path {str(path)}")
                 if path.value > 0 and (
-                        curThreat is None or path.length < curThreat.length or path.value > curThreat.value):
+                        curThreat is None or path.length < curThreat.length or (path.value > curThreat.value and path.length == curThreat.length)):
                     curThreat = path
                 army.expectedPaths.append(path)
 

@@ -2479,3 +2479,41 @@ a1   b1   b1   bG1
         # 34 ..?
         # 24-87
         # 27-84
+
+    def test_should_not_vanish_known_entangled_fog_alternatives(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_vanish_known_entangled_fog_alternatives___uVVCJqe6r---1--282.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 282, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=282)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+    
+    def test_should_detect_obvious_wallbreak_city_near_general(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_detect_obvious_wallbreak_city_near_general___Pi30O47XH---1--488.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 488, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=488)
+        rawMap.GetTile(19, 16).reset_wrong_undiscovered_fog_guess()
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '16,15->16,16->18,16  None  18,16->20,16->20,15->21,15->21,12->18,12->18,11')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+
+        city = playerMap.GetTile(19, 16)
+        self.assertNotEqual(-1, city.player)

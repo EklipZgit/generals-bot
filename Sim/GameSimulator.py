@@ -70,6 +70,10 @@ def generate_player_map(player_index: int, map_raw: MapBase) -> MapBase:
 
     map.update(bypassDeltas=True)
 
+    for i, player in enumerate(map_raw.players):
+        map.players[i].cityCount = player.cityCount
+        map.players[i].lastCityCount = player.cityCount
+
     return map
 
 
@@ -476,7 +480,7 @@ class GameSimulatorHost(object):
         self.bot_hosts: typing.List[BotHostBase | None] = [None for player in self.sim.players]
         self.dropped_move_counts_by_player: typing.List[int] = [0 for player in self.sim.players]
 
-        self.player_move_cutoff_time: float = 0.475
+        self.player_move_cutoff_time: float = 0.35
         """If a player takes longer to move than this, and a debugger is not attached, then the players move will be discarded and an error logged. Does not include the first 12 turns."""
 
         self._between_turns_funcs: typing.List[typing.Callable] = []
@@ -830,6 +834,7 @@ class GameSimulatorHost(object):
                             move.army_moved = fullArmy // 2
 
                     self.bot_hosts[playerIndex].eklipz_bot.armyTracker.lastMove = move
+                    self.bot_hosts[playerIndex].eklipz_bot.curPath = None
                     self.bot_hosts[playerIndex].eklipz_bot.history.move_history[self.sim.turn] = [move]
 
                 player = self.sim.players[playerIndex]

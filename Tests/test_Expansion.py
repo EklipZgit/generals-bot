@@ -1079,3 +1079,28 @@ bot_target_player=1
 # 14-24 with cutoff tweak
 # 15-23 with revamp of including all paths from tile if any path from tile meets value per turn cutoff
 # 13-25 ^ but rolled back early one?
+
+    def test_should_not_make_ineficient_interception_moves(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_use_leaves_or_just_go_meet_army___XZ3WLBOYh---1--232.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 232, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=232)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '6,11->5,11->5,10->4,10->4,6->1,6  2,11->3,11->3,10  1,13->0,13->0,11')
+        # proof of concept tile diff
+        # simHost.queue_player_moves_str(general.player, '10,6->10,5->10,4->12,4  0,6->4,6  1,8->1,10->2,10->2,12  2,8->2,7->4,7->4,8  5,0->4,0  12,4->13,4')  # achieves +7
+        # simHost.queue_player_moves_str(general.player, '10,5->10,4->12,4  5,0->4,0  0,6->4,6  2,8->2,7  0,7->0,6->2,6->2,7->3,7->4,7')  # achieves +7 as well
+        # simHost.queue_player_moves_str(general.player, '0,7->0,6  0,5->0,6  5,0->4,0  10,4->11,4  0,6->4,6->4,7  1,8->2,8->2,7->4,7')  # achieves +8
+        simHost.sim.ignore_illegal_moves = True
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=18)
+        self.assertIsNone(winner)
+
+        tileDiff = self.get_tile_differential(simHost)
+        self.assertGreater(tileDiff, 6)

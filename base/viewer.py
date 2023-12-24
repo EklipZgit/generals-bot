@@ -8,51 +8,23 @@ import gc
 import os
 import queue
 import sys
-import time
 import traceback
-import typing
 from multiprocessing import Queue
+from base.Colors import *
 
 import pygame
 from pygame import *
 
 import BotLogging
-import SearchUtils
 from ArmyAnalyzer import *
 
-from ViewInfo import TargetStyle, ViewInfo
-from base.client.map import MapBase, Score, TILE_MOUNTAIN
+from ViewInfo import ViewInfo
+from base.client.map import MapBase, Score
 
 MIN_WINDOW_WIDTH = 16
 
 # Color Definitions
-BLACK = (0, 0, 0)
-GRAY_DARK = (52, 52, 52)
-UNDISCOVERED_GRAY = (110, 110, 110)
-NEUT_CITY_GRAY = (90, 90, 90)
-GRAY = (160, 160, 160)
-LIGHT_GRAY = (200, 195, 190)
-WHITE = (255, 255, 255)
-RED = (200, 40, 40)
-ORANGE = (220, 150, 40)
-LIGHT_BLUE = (4, 160, 200)
-LIGHT_PINK = (170, 138, 141)
-PURPLE = (190, 30, 210)
-DARK_PURPLE = (140, 0, 180)
-CHOKE_PURPLE = (93, 0, 111)
 
-OFF_BLACK = (40, 40, 40)
-WHITE_PURPLE = (255, 230, 240)
-
-P_RED = (245, 65, 50)
-P_BLUE = (30, 30, 230)
-P_GREEN = (60, 160, 10)
-P_PURPLE = (128, 30, 128)
-P_TEAL = (30, 118, 128)
-P_DARK_GREEN = (5, 75, 45)
-P_DARK_RED = (100, 5, 35)
-P_YELLOW = (160, 150, 20)
-P_LIGHT_PURPLE = (190, 150, 230)
 
 # P_BRIGHT_GREEN = (10,225,90)
 PLAYER_COLORS = [
@@ -424,7 +396,6 @@ class GeneralsViewer(object):
                 if elapsed > 180.0:
                     logbook.info(f'GeneralsViewer zombied, self-terminating after 10 seconds')
                     done = True
-
                     self.send_closed_event(killedByUserClose=False)
                 pass
             except EOFError:
@@ -909,7 +880,7 @@ class GeneralsViewer(object):
             pos_top = (CELL_MARGIN + self.cellHeight) * tile.y + CELL_MARGIN
             pos_left_circle = pos_left + (self.cellWidth / 2)
             pos_top_circle = pos_top + (self.cellHeight / 2)
-            targetColor = self.get_color_from_target_style(targetStyle)
+            targetColor = ViewInfo.get_color_from_target_style(targetStyle)
             pygame.draw.circle(
                 self._screen,
                 targetColor,
@@ -1312,27 +1283,6 @@ class GeneralsViewer(object):
                 pColor = rescale_color(alpha, 0, 255, pColor, (r, g, b))
 
         return pColor
-
-    def get_color_from_target_style(self, targetStyle: TargetStyle) -> typing.Tuple[int, int, int]:
-        if targetStyle == TargetStyle.RED:
-            return RED
-        if targetStyle == TargetStyle.BLUE:
-            return 50, 50, 255
-        if targetStyle == TargetStyle.GOLD:
-            return 185, 145, 0
-        if targetStyle == TargetStyle.GREEN:
-            return P_GREEN
-        if targetStyle == TargetStyle.PURPLE:
-            return P_PURPLE
-        if targetStyle == TargetStyle.TEAL:
-            return P_TEAL
-        if targetStyle == TargetStyle.YELLOW:
-            return P_YELLOW
-        if targetStyle == TargetStyle.WHITE:
-            return 200, 200, 200
-        if targetStyle == TargetStyle.ORANGE:
-            return ORANGE
-        return GRAY
 
     def small_font(self, text_val: str, color_font: typing.Tuple[int, int, int]):
         return self._smallFont.render(text_val, True, color_font)

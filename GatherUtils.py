@@ -939,7 +939,8 @@ def knapsack_levels_backpack_gather(
         includeGatherTreeNodesThatGatherNegative=False,
         priorityMatrix: MapMatrix[float] | None = None,
         cutoffTime: float | None = None,
-        shouldLog=False
+        shouldLog=False,
+        fastMode: bool = False
 ) -> typing.List[GatherTreeNode]:
     """
     Does black magic and shits out a spiderweb with numbers in it, sometimes the numbers are even right
@@ -976,6 +977,7 @@ def knapsack_levels_backpack_gather(
      Use useTrueValueGathered to make sure the gatherValue returned by the gather matches the actual amount of army you will have on the gather target tiles at the end of the gather execution.
     @param shouldLog:
     @param priorityMatrix:
+    @param fastMode: whether to use the fastMode (less optimal results but much quicker) iterative params.
     @return:
     """
     totalValue, rootNodes = knapsack_levels_backpack_gather_with_value(
@@ -1001,6 +1003,7 @@ def knapsack_levels_backpack_gather(
         priorityMatrix=priorityMatrix,
         cutoffTime=cutoffTime,
         shouldLog=shouldLog,
+        fastMode=fastMode
     )
 
     return rootNodes
@@ -2830,8 +2833,22 @@ def get_tree_leaves(gathers: typing.List[GatherTreeNode]) -> typing.List[GatherT
 def get_tree_leaves_further_than_distance(
         gatherNodes: typing.List[GatherTreeNode],
         distMap: typing.List[typing.List[int]],
-        dist: int
+        dist: int,
+        minArmy: int = 1,
+        curArmy: int = 0
 ) -> typing.List[GatherTreeNode]:
     leaves = get_tree_leaves(gatherNodes)
     leavesGreaterThanDistance = SearchUtils.where(leaves, lambda g: distMap[g.tile.x][g.tile.y] >= dist)
-    return leavesGreaterThanDistance
+
+    if minArmy > curArmy:
+        return leavesGreaterThanDistance
+
+    leavesToInclude = []
+    for leaf in leavesGreaterThanDistance:
+        leafContribution = (leaf.tile.army - 1)
+        if curArmy - leafContribution <= minArmy:
+            leavesToInclude.append(leaf)
+        else:
+            curArmy -= leafContribution
+
+    return leavesToInclude

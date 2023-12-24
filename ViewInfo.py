@@ -9,6 +9,7 @@ import logbook
 import typing
 from collections import deque
 from enum import Enum
+from base.Colors import *
 
 from ArmyTracker import Army, ArmyTracker
 from BoardAnalyzer import BoardAnalyzer
@@ -99,6 +100,28 @@ class ViewInfo(object):
         self.addlTimingsLineText: str = ""
         self.addlInfoLines: typing.List[str] = []
         self.statsLines: typing.List[str] = []
+
+    @staticmethod
+    def get_color_from_target_style(targetStyle: TargetStyle) -> typing.Tuple[int, int, int]:
+        if targetStyle == TargetStyle.RED:
+            return RED
+        if targetStyle == TargetStyle.BLUE:
+            return 50, 50, 255
+        if targetStyle == TargetStyle.GOLD:
+            return 185, 145, 0
+        if targetStyle == TargetStyle.GREEN:
+            return P_GREEN
+        if targetStyle == TargetStyle.PURPLE:
+            return P_PURPLE
+        if targetStyle == TargetStyle.TEAL:
+            return P_TEAL
+        if targetStyle == TargetStyle.YELLOW:
+            return P_YELLOW
+        if targetStyle == TargetStyle.WHITE:
+            return 200, 200, 200
+        if targetStyle == TargetStyle.ORANGE:
+            return ORANGE
+        return GRAY
 
     def turnInc(self):
         self.addlTimingsLineText = ""

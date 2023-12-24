@@ -383,12 +383,15 @@ def knapsack_multi_paths(
         negativeTiles: typing.Set[Tile],
         tryAvoidSet: typing.Set[Tile],
         viewInfo: ViewInfo | None,
+        valueOverrides: typing.Dict[Path, typing.Tuple[float, int]] | None = None,
 ) -> typing.Tuple[Path | None, typing.List[Path], int, float]:
     """
     Returns firstPath, allPaths, totalTurns, totalValue
 
     @param map:
     @param searchingPlayer:
+    @param friendlyPlayers:
+    @param targetPlayers
     @param remainingTurns:
     @param pathsCrossingTiles:
     @param multiPathDict:
@@ -397,6 +400,7 @@ def knapsack_multi_paths(
     @param negativeTiles:
     @param tryAvoidSet:
     @param viewInfo:
+    @param valueOverrides: path->(value, dist)
     @return:
     """
     tilePathGroupsRebuilt: typing.Dict[int, typing.List[Path]] = _group_expand_paths_by_crossovers(
@@ -421,10 +425,19 @@ def knapsack_multi_paths(
         for val, p in allPaths:
             logbook.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
 
-    def multiple_choice_knapsack_expansion_path_value_converter(p: Path) -> int:
-        floatVal = postPathEvalFunction(p, negativeTiles)
+    def multiple_choice_knapsack_expansion_path_value_converter(p: Path) -> typing.Tuple[int, int]:
+        floatVal = -10000
+        dist = p.length
+        if valueOverrides is not None:
+            tpl = valueOverrides.get(p, None)
+            if tpl is not None:
+                floatVal, dist = tpl
+
+        if floatVal == -10000:
+            floatVal = postPathEvalFunction(p, negativeTiles)
+
         intVal = int(floatVal * 10000.0)
-        return intVal
+        return intVal, dist
 
     totalValue, maxPaths = expansion_knapsack_gather_iteration(
         remainingTurns,
@@ -476,12 +489,15 @@ def knapsack_multi_paths_no_crossover(
         negativeTiles: typing.Set[Tile],
         tryAvoidSet: typing.Set[Tile],
         viewInfo: ViewInfo | None,
+        valueOverrides: typing.Dict[Path, typing.Tuple[float, int]] | None = None,
 ) -> typing.Tuple[Path | None, typing.List[Path], int, float]:
     """
     Returns firstPath, allPaths, totalTurns, totalValue
 
     @param map:
     @param searchingPlayer:
+    @param friendlyPlayers:
+    @param targetPlayers
     @param remainingTurns:
     @param pathsCrossingTiles:
     @param multiPathDict:
@@ -490,6 +506,7 @@ def knapsack_multi_paths_no_crossover(
     @param negativeTiles:
     @param tryAvoidSet:
     @param viewInfo:
+    @param valueOverrides: path->(value, dist)
     @return:
     """
 
@@ -511,7 +528,7 @@ def knapsack_multi_paths_no_crossover(
             val, p = pathTuple
 
             # if (tile.isCity or tile.isGeneral) and p.length < 5:
-            if (tile.isCity or tile.isGeneral) and p.length < remainingTurns // 2:
+            if (tile.isCity or tile.isGeneral) and dist < remainingTurns // 2:
                 # if coming from a city, group by the first tile captured instead of by the city itself...?
                 groupTile = tile
                 for t in p.tileList:
@@ -542,10 +559,19 @@ def knapsack_multi_paths_no_crossover(
         for val, p in allPaths:
             logbook.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
 
-    def multiple_choice_knapsack_expansion_path_value_converter(p: Path) -> int:
-        floatVal = postPathEvalFunction(p, negativeTiles)
+    def multiple_choice_knapsack_expansion_path_value_converter(p: Path) -> typing.Tuple[int, int]:
+        floatVal = -10000
+        dist = p.length
+        if valueOverrides is not None:
+            tpl = valueOverrides.get(p, None)
+            if tpl is not None:
+                floatVal, dist = tpl
+
+        if floatVal == -10000:
+            floatVal = postPathEvalFunction(p, negativeTiles)
+
         intVal = int(floatVal * 10000.0)
-        return intVal
+        return intVal, dist
 
     totalValue, maxPaths = expansion_knapsack_gather_iteration(
         remainingTurns,
@@ -633,6 +659,7 @@ def get_optimal_expansion(
         useCutoff: bool = True,
         bonusCapturePointMatrix: MapMatrix[float] | None = None,
         colors: typing.Tuple[int, int, int] = (235, 240, 50),
+        additionalOptionValues: typing.List[typing.Tuple[float, int, Path]] | None = None,
         perfTimer: PerformanceTimer | None = None,
 ) -> typing.Tuple[Path | None, typing.List[Path]]:
     """
@@ -640,6 +667,8 @@ def get_optimal_expansion(
     First, large tile plans.
     Second, small tile expansion plans.
     Third, adds all unused leafmove tiles into the path list and knapsacks.
+
+    @param additionalOptionValues: list(approxEconValue, approxTurns, path)
     """
 
     logEntries = []
@@ -747,7 +776,7 @@ def get_optimal_expansion(
                 dist = 1
                 if currentTile in negativeTiles or negArmyRemaining >= 0 or distSoFar == 0:
                     return None
-                if map.is_tile_friendly(currentTile):
+                if map.is_tile_on_team_with(currentTile,searchingPlayer):
                     return None
 
                 if currentTile.isCity and currentTile.isNeutral:
@@ -984,7 +1013,7 @@ def get_optimal_expansion(
                     tileArmy = 5
 
                 for adj in tile.movable:
-                    if adj.army > 3 and not map.is_tile_friendly(adj) and adj.player != -1 and adj not in negativeTiles:
+                    if adj.army > 3 and not map.is_tile_on_team_with(adj, searchingPlayer) and adj.player != -1 and adj not in negativeTiles:
                         startingEnemyExpansionTiles.add(adj)
                         enemyExpansionValue += (adj.army - 1) // 2
                         tileCapturePoints += ENEMY_EXPANSION_TILE_PENALTY
@@ -1051,7 +1080,7 @@ def get_optimal_expansion(
         # if player.tileCount > 70 or turns > 25:
         #     logEntries.append("Not doing algorithm logging for expansion due to player tilecount > 70 or turn count > 25")
         #     logStuff = False
-        logStuff = False
+        logStuff = DebugHelper.IS_DEBUGGING
 
         pathsCrossingTiles: typing.Dict[Tile, typing.List[Path]] = {}
 
@@ -1064,6 +1093,34 @@ def get_optimal_expansion(
 
         alwaysIncludes = []
         includeForGath: typing.List[Move] = []
+
+        if additionalOptionValues is not None:
+            logEntries.append(f"Beginning additional option inclusion.... elapsed {time.perf_counter() - startTime:.4f}")
+            addlPaths = additionalOptionValues
+
+            # counts = {}
+            for baseValueOverride, turnOverride, path in sorted(addlPaths, key=lambda p: p[0]/p[1], reverse=True):
+                # for tile in path.tileList:
+                #     count = counts.get(tile, 0)
+                #     counts[tile] = count + 1
+                logEntries.append(f'including addl opt: {baseValueOverride:.2f}/{turnOverride}  {str(path)}')
+
+                _try_include_alt_sourced_path(
+                    map,
+                    searchingPlayer,
+                    defaultNoPathValue,
+                    multiPathDict,
+                    negativeTiles,
+                    path,
+                    paths,
+                    pathsCrossingTiles,
+                    postPathEvalFunction,
+                    tryAvoidSet,
+                    useIterativeNegTiles=False,
+                    baseValueOverride=baseValueOverride,
+                    turnOverride=turnOverride,
+                    logEntries=logEntries)
+            logEntries.append(f"Completed additional option inclusion.... elapsed {time.perf_counter() - startTime:.4f}")
 
         # expansionGather = greedy_backpack_gather(map, tilesLargerThanAverage, turns, None, valueFunc, baseCaseFunc, skipTiles, None, searchingPlayer, priorityFunc, skipFunc = None)
         if allowLeafMoves and leafMoves is not None and useLeafMovesFirst:
@@ -1084,7 +1141,8 @@ def get_optimal_expansion(
                 targetPlayers=targetPlayers,
                 tryAvoidSet=tryAvoidSet,
                 useIterativeNegTiles=useIterativeNegTiles,
-                skipNeutrals=True)
+                skipNeutrals=True,
+                logEntries=logEntries)
 
         if allowGatherPlanExtension:
             logEntries.append(f"Beginning gather extension.... elapsed {time.perf_counter() - startTime:.4f}")
@@ -1120,7 +1178,8 @@ def get_optimal_expansion(
                     pathsCrossingTiles,
                     postPathEvalFunction,
                     tryAvoidSet,
-                    useIterativeNegTiles)
+                    useIterativeNegTiles,
+                    logEntries=logEntries)
             logEntries.append(f"Completed gather extension.... elapsed {time.perf_counter() - startTime:.4f}")
 
         if allowLeafMoves and leafMoves is not None and useLeafMovesFirst:
@@ -1141,7 +1200,8 @@ def get_optimal_expansion(
                 targetPlayers=targetPlayers,
                 tryAvoidSet=tryAvoidSet,
                 useIterativeNegTiles=useIterativeNegTiles,
-                skipNeutrals=False)
+                skipNeutrals=False,
+                logEntries=logEntries)
 
         stage1 = time_limit / 4
         stage2 = time_limit / 2
@@ -1160,6 +1220,11 @@ def get_optimal_expansion(
         inStage2 = False
         firstIteration = True
         iteration = 0
+
+        if logStuff:
+            for t, pathsByDist in multiPathDict.items():
+                for dist, (val, p) in pathsByDist.items():
+                    logEntries.append(f'pre tile {str(t)} val {val:.3f} @ dist {dist}: {str(p)}')
 
         while True:
             logEntries.append(f"Main cycle iter {iter} start - elapsed {time.perf_counter() - startTime:.4f}")
@@ -1396,6 +1461,16 @@ def get_optimal_expansion(
                             f'leafMove for {str(leafMove.source)} worse than existing:\r\n      bad {value} {str(path)}\r\n   exist {existingMax} {str(existingPath)}')
                     multiPathDict[leafMove.source] = curTileDict
 
+        if logStuff:
+            for t, pathsByDist in multiPathDict.items():
+                for dist, (val, p) in pathsByDist.items():
+                    logEntries.append(f'input tile {str(t)} val {val:.3f} @ dist {dist}: {str(p)}')
+
+        valueOverrides = {}
+        if additionalOptionValues is not None:
+            for baseValueOverride, turnOverride, path in additionalOptionValues:
+                valueOverrides[path] = (baseValueOverride, turnOverride)
+
         path, otherPaths, totalTurns, totalValue = knapsack_multi_paths(
             map,
             searchingPlayer,
@@ -1408,7 +1483,8 @@ def get_optimal_expansion(
             postPathEvalFunction,
             originalNegativeTiles,
             tryAvoidSet,
-            viewInfo)
+            viewInfo,
+            valueOverrides)
 
         altPath, altOtherPaths, altTotalTurns, altTotalValue = knapsack_multi_paths_no_crossover(
             map,
@@ -1422,7 +1498,8 @@ def get_optimal_expansion(
             postPathEvalFunction,
             originalNegativeTiles,
             tryAvoidSet,
-            viewInfo)
+            viewInfo,
+            valueOverrides)
 
         if totalTurns == 0 or (altTotalTurns > 0 and altTotalValue / altTotalTurns > totalValue / totalTurns):
             msg = f'EXP CROSS-KNAP WORSE THAN NON, v{altTotalValue}/{totalValue} t{altTotalTurns}/{totalTurns}'
@@ -1495,7 +1572,8 @@ def _include_leaf_moves_in_exp_plan(
         targetPlayers,
         tryAvoidSet,
         useIterativeNegTiles,
-        skipNeutrals: bool = False
+        skipNeutrals: bool = False,
+        logEntries: typing.List[str] | None = None
 ):
     for leafMove in leafMoves:
         if (leafMove.source not in negativeTiles
@@ -1516,8 +1594,9 @@ def _include_leaf_moves_in_exp_plan(
                 continue
 
             if leafMove.source.army - leafMove.dest.army >= 3:
-                logbook.info(
-                    f"Did NOT add leafMove {str(leafMove)} to knapsack input because its value was high. Why wasn't it already input if it is a good move?")
+                if logEntries is not None:
+                    logEntries.append(
+                        f"Did NOT add leafMove {str(leafMove)} to knapsack input because its value was high. Why wasn't it already input if it is a good move?")
                 continue
 
             if skipNeutrals and leafMove.dest.isNeutral:
@@ -1538,7 +1617,8 @@ def _include_leaf_moves_in_exp_plan(
                 pathsCrossingTiles,
                 postPathEvalFunction,
                 tryAvoidSet,
-                useIterativeNegTiles)
+                useIterativeNegTiles,
+                logEntries=logEntries)
 
 
 def _execute_expansion_gather_to_borders(
@@ -1816,10 +1896,16 @@ def _try_include_alt_sourced_path(
         pathsCrossingTiles,
         postPathEvalFunction,
         tryAvoidSet,
-        useIterativeNegTiles
+        useIterativeNegTiles,
+        baseValueOverride: float | None = None,
+        turnOverride: int = -1,
+        logEntries: typing.List[str] | None = None,
 ):
+    value = baseValueOverride
+    if value is None:
+        # TODO override here
+        value = postPathEvalFunction(path, negativeTiles)
 
-    value = postPathEvalFunction(path, negativeTiles)
     if value <= 0:
         return
 
@@ -1837,16 +1923,20 @@ def _try_include_alt_sourced_path(
         addToNegativeTiles=useIterativeNegTiles)
 
     curTileDict = multiPathDict.get(path.start.tile, {})
-    existingMax, existingPath = curTileDict.get(path.length, defaultNoPathValue)
-    # if value > existingMax:
-    #     logbook.info(
-    #         f'leafMove {str(path.start.tile)} BETTER than existing:\r\n'
-    #         f'   new   {value} {str(path)}\r\n'
-    #         f'   exist {existingMax} {str(existingPath)}')
-    #     curTileDict[path.length] = (value, path)
-    # else:
-    #     logbook.info(
-    #         f'leafMove for {str(path.start.tile)} worse than existing:\r\n      bad {value} {str(path)}\r\n   exist {existingMax} {str(existingPath)}')
+    if turnOverride == -1:
+        turnOverride = path.length
+    existingMax, existingPath = curTileDict.get(turnOverride, defaultNoPathValue)
+    if value > existingMax:
+        if logEntries is not None:
+            logEntries.append(
+                f'leafMove {str(path.start.tile)} BETTER than existing:\r\n'
+                f'   new   {value} {str(path)}\r\n'
+                f'   exist {existingMax} {str(existingPath)}')
+        curTileDict[path.length] = (value, path)
+    else:
+        if logEntries is not None:
+            logEntries.append(
+                f'leafMove for {str(path.start.tile)} worse than existing:\r\n      bad {value} {str(path)}\r\n   exist {existingMax} {str(existingPath)}')
     multiPathDict[path.start.tile] = curTileDict
 
 
@@ -1979,13 +2069,14 @@ def find_optimal_expansion_path_to_move_first(
 
 def _prune_worst_paths_greedily(
         valuePerTurnPathPerTile: typing.Dict[typing.Any, typing.List[Path]],
-        valueFunc: typing.Callable[[Path], int]
+        valueFunc: typing.Callable[[Path], typing.Tuple[int, int]]
 ) -> typing.Dict[typing.Any, typing.List[Path]]:
     sum = 0
     count = 0
     for group in valuePerTurnPathPerTile.keys():
         for path in valuePerTurnPathPerTile[group]:
-            sum += valueFunc(path) / path.length
+            value, dist = valueFunc(path)
+            sum += value / dist
             count += 1
     avg = sum / count
 
@@ -1994,7 +2085,8 @@ def _prune_worst_paths_greedily(
         pathListByGroup = valuePerTurnPathPerTile[group]
         newListByGroup = []
         for path in pathListByGroup:
-            valPerTurn = valueFunc(path) / path.length
+            value, dist = valueFunc(path)
+            valPerTurn = value / dist
             if valPerTurn > avg:
                 newListByGroup.append(path)
         if len(newListByGroup) > 0:
@@ -2007,11 +2099,11 @@ def expansion_knapsack_gather_iteration(
         turns: int,
         valuePerTurnPathPerTile: typing.Dict[typing.Any, typing.List[Path]],
         shouldLog: bool = False,
-        valueFunc: typing.Callable[[Path], int] | None = None,
+        valueFunc: typing.Callable[[Path], typing.Tuple[int, int]] | None = None,
 ) -> typing.Tuple[int, typing.List[Path]]:
     if valueFunc is None:
-        def value_func(p: Path) -> int:
-            return p.value
+        def value_func(p: Path) -> typing.Tuple[int, int]:
+            return p.value, p.length
         valueFunc = value_func
 
     totalValue = 0
@@ -2035,9 +2127,9 @@ def expansion_knapsack_gather_iteration(
                     for path in pathGroup:
                         groups.append(groupIdx)
                         paths.append(path)
-                        pathVal = valueFunc(path)
+                        pathVal, pathDist = valueFunc(path)
                         values.append(pathVal)
-                        weights.append(path.length)
+                        weights.append(pathDist)
                         pathValLookup[path] = pathVal
                     groupIdx += 1
             if len(paths) == 0:
@@ -2056,7 +2148,7 @@ def expansion_knapsack_gather_iteration(
                 weights,
                 values,
                 groups,
-                longRuntimeThreshold=0.03)
+                longRuntimeThreshold=0.01)
             logbook.info(f"maxKnapsackedPaths value {totalValue} length {len(maxKnapsackedPaths)},")
             error = False
         except AssertionError:

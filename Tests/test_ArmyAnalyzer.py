@@ -104,6 +104,45 @@ class ArmyAnalyzerTests(TestBase):
         cw = analyzer.chokeWidths[defensePoint]
         self.assertEqual(2, cw)
 
+        self.assertNotIn(map.GetTile(0, 7), analyzer.interceptChokes)
+        self.assertNotIn(map.GetTile(0, 8), analyzer.interceptChokes)
+        self.assertNotIn(map.GetTile(3, 7), analyzer.interceptChokes)
+        self.assertNotIn(map.GetTile(3, 8), analyzer.interceptChokes)
+        self.assertNotIn(allyTile, analyzer.interceptChokes, 'the tiles themselves should not be a choke (?)')
+        self.assertNotIn(enTile, analyzer.interceptChokes, 'the tiles themselves should not be a choke (?)')
+        self.assertIn(defensePoint, analyzer.interceptChokes)
+        icw = analyzer.interceptChokes[defensePoint]
+        self.assertEqual(1, icw)
+
+        innerChoke0 = map.GetTile(1, 8)
+        self.assertIn(innerChoke0, analyzer.interceptChokes)
+        icw0 = analyzer.interceptChokes[innerChoke0]
+        self.assertEqual(0, icw0, "should be a zero move intercept once we're here because it full blocks a choke.")
+
+    def test_should_intercept_inbound_army_on_edge_when_would_have_10_recapture_turns(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_intercept_inbound_army_on_edge_when_would_have_10_recapture_turns___l7Y-HnzES---0--181.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 181, fill_out_tiles=True)
+
+        allyTile = map.GetTile(14, 2)
+        enTile = map.GetTile(4, 8)
+        analyzer = ArmyAnalyzer(map, allyTile, enTile)
+
+        if debugMode:
+            self.render_army_analyzer(map, analyzer)
+
+        defensePoint = map.GetTile(2, 7)
+        self.assertIn(defensePoint, analyzer.chokeWidths)
+
+        cw = analyzer.chokeWidths[defensePoint]
+        self.assertEqual(2, cw)
+
+        self.assertNotIn(map.GetTile(0, 7), analyzer.interceptChokes)
+        self.assertNotIn(map.GetTile(0, 8), analyzer.interceptChokes)
+        self.assertNotIn(map.GetTile(3, 7), analyzer.interceptChokes)
+        self.assertNotIn(map.GetTile(3, 8), analyzer.interceptChokes)
+        self.assertNotIn(allyTile, analyzer.interceptChokes, 'the tiles themselves should not be a choke (?)')
+        self.assertNotIn(enTile, analyzer.interceptChokes, 'the tiles themselves should not be a choke (?)')
         self.assertIn(defensePoint, analyzer.interceptChokes)
         icw = analyzer.interceptChokes[defensePoint]
         self.assertEqual(1, icw)

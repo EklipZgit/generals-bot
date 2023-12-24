@@ -270,8 +270,6 @@ class ArmyTracker(object):
         if advancedTurn:
             self.move_fogged_army_paths()
 
-        self.verify_player_tile_and_army_counts_valid()
-
         for army in self.armies.values():
             if army.tile.visible:
                 army.last_seen_turn = self.map.turn
@@ -747,7 +745,7 @@ class ArmyTracker(object):
     def get_nearby_armies(self, army, armyMap=None):
         if armyMap is None:
             armyMap = self.armies
-        # super fast depth 2 bfs effectively
+        # super fastMode depth 2 bfs effectively
         nearbyArmies = []
         for tile in army.tile.movable:
             if tile in armyMap:
@@ -1028,6 +1026,9 @@ class ArmyTracker(object):
                 if prioritizeCityWallSource:
                     if nextTile.isUndiscoveredObstacle:
                         negBonusScore -= undiscVal
+                        for t in nextTile.movable:
+                            if not self.map.is_tile_on_team_with(t, armyPlayer) and t.visible and not t.isObstacle:
+                                negBonusScore += 1
                     else:
                         negBonusScore -= undiscVal
                     dist += 1  # try to deprioritize these with high distance...?
@@ -1133,7 +1134,7 @@ class ArmyTracker(object):
                 prioObject
         ):
             dist, _ = prioObject
-            if thisTile.visible or dist == 0:
+            if thisTile.visible or thisTile == tile or dist == 0:
                 return None
 
             isPotentialFogCity = thisTile.isCity and thisTile.isNeutral
@@ -1141,7 +1142,7 @@ class ArmyTracker(object):
             if not isPotentialFogCity:
                 return None
 
-            return self.emergenceLocationMap[cityPlayer][thisTile.x][thisTile.y] / dist, True  # has to be tuple or logging blows up i guess
+            return (self.emergenceLocationMap[cityPlayer][thisTile.x][thisTile.y] + 1) / dist, True  # has to be tuple or logging blows up i guess
 
         def pathSortFunc(
                 nextTile: Tile,
@@ -1155,6 +1156,12 @@ class ArmyTracker(object):
                 # go around an obstacle to the other side so at minimum make it cost that 
                 # much extra so going around is otherwise equal to through
                 dist += 2
+                for t in nextTile.movable:
+                    if t.isObstacle:
+                        continue
+
+                    if self.genDistances[t.x][t.y] > self.genDistances[nextTile.x][nextTile.y] + 4 and self.genDistances[t.x][t.y] < 150:
+                        dist -= 2
 
             return dist, 0
 
@@ -1957,11 +1964,18 @@ class ArmyTracker(object):
                 return False
             if self.emergenceLocationMap[armyPlayer][sourceTile.x][sourceTile.y] <= 0:
                 return False
+            if sourceTile.visible:
+                return False
+
             return True
 
         reasonablePath = SearchUtils.breadth_first_find_queue(self.map, [tile], reasonablePathDetector, noNeutralCities=True, maxDepth=8, noLog=True)
         if reasonablePath is not None:
+            logbook.info(f'army {str(tile)} by p{armyPlayer} found a reasonable path, so non-wall-breach. Path {str(reasonablePath)}.')
             return False
+
+        logbook.info(f'army {str(tile)} by p{armyPlayer} likely breached wall as no reasonable path was found.')
+
         return True
 
     def verify_player_tile_and_army_counts_valid(self):
@@ -2609,24 +2623,35 @@ class ArmyTracker(object):
 
         possibleArmies = list(sorted(possibleArmies, key=lambda a: abs(annihilatedFogArmy - a.value)))
 
-        for army in possibleArmies:
-            army.value -= annihilatedFogArmy
-            if army.value < 0:
-                army.value = 0
-            army.tile.army = army.value + 1
+        # likelyArmy = None
 
+        for army in possibleArmies:
             if tookNeutCity:
                 potentialCity = self.find_next_fog_city_candidate_near_tile(player, army.tile)
                 if potentialCity is not None:
                     self.convert_fog_city_to_player_owned(potentialCity, player)
-                    army.tile.army = army.value + 1
+                    split = army.get_split_for_fog([army.tile, potentialCity])
+                    ogArmySplit = split[0]
+                    # likelyArmy = ogArmySplit
+                    self.armies[army.tile] = ogArmySplit
+                    army = split[1]
+                    # army.tile.army = army.value + 1
+                    army.path = Path()
                     army.update_tile(potentialCity)
-                    potentialCity.army = army.value + 1
+                    potentialCity.army = max(1, army.value - annihilatedFogArmy)
+                    army.value = max(0, army.value - annihilatedFogArmy)
                     army.expectedPaths = self.get_army_expected_path(army)
+                    self.armies[army.tile] = army
 
                     break
 
             else:
+                # likelyArmy = army
+                army.value -= annihilatedFogArmy
+                if army.value < 0:
+                    army.value = 0
+                army.tile.army = army.value + 1
+
                 break
 
     def _check_over_elimination(self, player: int):

@@ -36,6 +36,13 @@ function Run-BotOnce {
         throw "Unable to find a run_config.txt file one folder above this scripts folder at $configFile. The file should contain multiple lines with:
 log_folder=D:\GeneralsLogs
 grouped_folder=D:\GeneralsLogs\GroupedLogs
+left_pos=0
+right_pos=1920
+top_pos=0
+bottom_pos=1080
+
+where window positions are pixels relative to the top left corner of your primary monitor, and correspond to where the game UI will show up when the bot is run with a UI and some combination of the -right / -bottom flags provided (default is top left if no positional flags passed).
+This allows you to have different bots running on different monitors, etc.
 ";
     }
 

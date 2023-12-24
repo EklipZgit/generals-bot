@@ -207,7 +207,7 @@ class BotHostBase(object):
             logbook.error(traceback.format_exc())
 
     def initialize_viewer(self, skip_file_logging: bool = False, onClick: typing.Callable[[Tile, bool], None] | None = None):
-        window_title = "%s (%s)" % (self._name.split('_')[-1], self._game_type)
+        window_title = f'{self._game_type} {self._name.split("_")[-1]}'
         self._viewer = ViewerHost(window_title, alignTop=not self.align_bottom, alignLeft=not self.align_right, noLog=skip_file_logging, onClick=onClick, ctx=self.ctx, mgr=self.mgr)
 
     def is_viewer_closed_by_user(self) -> bool:

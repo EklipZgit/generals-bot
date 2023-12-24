@@ -10,19 +10,54 @@ function Run-BotOnce {
         [switch]$privateGame, 
         $roomID = $null,
         [switch]$noui,
-        $path = "D:\2019_reformat_Backup\generals-bot\BotHost.py",
+        $path = "$PSScriptRoot\BotHost.py",
         $userID = $null,
         [switch]$nolog,
-        [switch]$publicLobby,
-        [string]$blockBotStartFile = 'D:\2019_reformat_Backup\block_bot.txt'
+        [switch]$publicLobby
     )
 
-    $content = Get-Content -Path $blockBotStartFile -Raw
+    $ErrorActionPreference = 'Stop'
+
+    $blockBotFile = "$PSScriptRoot/../block_bot.txt"
+    if (-not (Test-Path $blockBotFile)) {
+        throw "Unable to find a block_bot.txt file one folder above this scripts folder at $blockBotFile. The file should contain either the string False or the string True."
+    }
+
+    $content = Get-Content -Path $blockBotFile -Raw
     if ($content.Trim().ToLower() -eq 'true')
     {
-        Write-Host "Bot blocked by $blockBotStartFile"
+        Write-Host "Bot blocked by $blockBotFile"
         Start-Sleep -Seconds 15
         return
+    }
+
+    $configFile = "$PSScriptRoot/../run_config.txt"
+    if (-not (Test-Path $configFile)) {
+        throw "Unable to find a run_config.txt file one folder above this scripts folder at $configFile. The file should contain multiple lines with:
+log_folder=D:\GeneralsLogs
+grouped_folder=D:\GeneralsLogs\GroupedLogs
+";
+    }
+
+    $logFolder = ""
+    $groupedFolder = ""
+
+    $cfgContent = Get-Content -Path $configFile
+    foreach ($line in $cfgContent) {
+        if ($line -like 'log_folder=*') {
+            $logFolder = ($line -split '=')[1].TrimEnd('/', '\')
+        }
+
+        if ($line -like 'grouped_folder=*') {
+            $groupedFolder = ($line -split '=')[1].TrimEnd('/', '\')
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($groupedFolder)) {
+        throw "run_config.txt file at $configFile is required to have a grouped_folder=<path> entry."
+    }
+    if ([string]::IsNullOrWhiteSpace($logFolder)) {
+        throw "run_config.txt file at $configFile is required to have a log_folder=<path> entry."
     }
 
     $df = Get-Date -format yyyy-MM-dd_hh-mm-ss 
@@ -36,12 +71,10 @@ function Run-BotOnce {
 
         $roomName = "_$roomID"
     }
-
     if ($roomID) {
         [void] $arguments.Add("-roomID")
         [void] $arguments.Add($roomID)
     }
-
     if ($userID) {
         [void] $arguments.Add("-userID")
         [void] $arguments.Add($userID)
@@ -52,10 +85,11 @@ function Run-BotOnce {
     if ($public) { 
         [void] $arguments.Add("--public")
     }
+
     $arguments = $arguments.ToArray()
     $argString = $([string]::Join(" ", $arguments))
     Write-Verbose $argString -Verbose
-    $host.ui.RawUI.WindowTitle = "$($name.Replace('[Bot]', '').Trim()) - $game"
+    $host.ui.RawUI.WindowTitle = "$game - $($name.Replace('[Bot]', '').Trim())"
 
     # this exeString is a hack due to the powershell memory leak, need to keep opening new PS processes
     # or we fill up memory to 1GB per powershell window overnight :(
@@ -73,7 +107,7 @@ function Run-BotOnce {
     `$cleanName = '$name'.Replace('[', '').Replace(']', '')
     `$logName = "`$cleanName-$game-$df$roomName"
     `$logFile = "`$logName.txt"
-    `$logPath = "D:\GeneralsLogs\`$logFile"
+    `$logPath = "$logFolder\`$logFile"
 
     if (-not `$$($nolog.ToString()))
     {
@@ -127,11 +161,11 @@ function Run-BotOnce {
             {
                 `$filter = "*`$cleanName*`$repId*"
                 Write-Output "filter `$filter"
-                `$folder = Get-ChildItem "D:\GeneralsLogs" -Filter `$filter -Directory
+                `$folder = Get-ChildItem "$logFolder" -Filter `$filter -Directory
                 `$newLogPath = Join-Path `$folder.FullName "_`$logFile"
                 `$newContent | Set-Content -Path `$newLogPath -Force
-                `$null = mkdir D:\GeneralsLogs\GroupedLogs -Force
-                `$newFolder = Move-Item `$folder.FullName "D:\GeneralsLogs\GroupedLogs" -PassThru
+                `$null = mkdir "$groupedFolder" -Force
+                `$newFolder = Move-Item `$folder.FullName "$groupedFolder" -PassThru
                 `$newName = "`$logName---`$repId"
                 Rename-Item `$newFolder.FullName `$newName -PassThru
                 Write-Warning "`$newName"
@@ -148,12 +182,12 @@ function Run-BotOnce {
     if (-not `$$($nolog.tostring())) {
         `$rand = Get-Random -Maximum 100
         if (`$rand -eq 0) {
-            Get-ChildItem "D:\GeneralsLogs" | 
+            Get-ChildItem "$logFolder" | 
                 ? { `$_.FullName -notlike '*_chat*' } | 
                 ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-120) } | 
                 Remove-Item -Force -Recurse -ErrorAction Ignore
             
-            Get-ChildItem "D:\GeneralsLogs\GroupedLogs" -Directory | 
+            Get-ChildItem "$groupedFolder" -Directory | 
                 ? { `$_.FullName -notlike '*_chat*' } | 
                 ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-120) } |
                 Remove-Item -Force -Recurse -ErrorAction Ignore
@@ -163,12 +197,12 @@ function Run-BotOnce {
 
     $randNums = 1..10 | Get-Random -Count 10
     $randName = $randNums -join ''
-    $ps1File = "D:\2019_reformat_Backup\temp\$randName.ps1"
+    $ps1File = "$PSScriptRoot\..\temp\$randName.ps1"
     $exeString | Out-File $ps1File
     Write-Verbose $ps1File -Verbose
-    start Powershell "-File $ps1File" -Wait -NoNewWindow
+    Start-Process Powershell "-File $ps1File" -Wait -NoNewWindow
     try {
-        remove-item $ps1File
+        Remove-Item $ps1File
     }
     catch {
         # no op I guess

@@ -220,7 +220,7 @@ class TextMapLoader(object):
 
         with open(filePath, 'r') as file:
             data = file.read()
-            return data
+        return data
 
     @staticmethod
     def get_player_char_index_map():

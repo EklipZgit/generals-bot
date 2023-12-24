@@ -6,6 +6,7 @@
 """
 import gc
 import os
+import pathlib
 import queue
 import sys
 import traceback
@@ -150,7 +151,6 @@ class GeneralsViewer(object):
         self.last_render_time: float = time.perf_counter()
 
         self.plusDepth = 9
-        self.offset1080Above1440p = 276  # 320 was too far right...?
         self.scoreRowHeight: int = 0
         self.square: Rect = None
         self.square_inner_1: Rect = None
@@ -202,9 +202,34 @@ class GeneralsViewer(object):
         return s
 
     def _initViewier(self, alignTop: bool, alignLeft: bool):
+        cfgPath = pathlib.Path(__file__).parent / "../../run_config.txt"
+        with open(cfgPath, 'r') as file:
+            data = file.read()
+        cfgContents = data.splitlines()
+
+        topPos = 3
+        bottomPos = 1080
+        rightPos = 1920
+        leftPos = 0
+
+        for line in cfgContents:
+            if "=" not in line:
+                continue
+
+            key, value = line.split('=')
+
+            if key == "left_pos":
+                leftPos = int(value)
+            if key == "right_pos":
+                rightPos = int(value)
+            if key == "bottom_pos":
+                bottomPos = int(value)
+            if key == "top_pos":
+                topPos = int(value)
+
         self.infoLineHeight = 17
         self.infoRowHeight = 250
-        self.statsWidth = 600
+        self.statsWidth = 500
 
         if self.cellHeight is None:
             self.cellHeight = min(85, (1080 - self.infoRowHeight - self.scoreRowHeight) // (self._map.rows + 1))
@@ -220,13 +245,13 @@ class GeneralsViewer(object):
         self.tile_surface = pygame.Surface((self.cellWidth, self.cellHeight))
         self.player_fight_indicator_width = 2 * self.cellWidth
 
-        x = 3 + self.offset1080Above1440p
+        x = leftPos  # + 3
         if not alignLeft:
-            x = self.offset1080Above1440p + 1920 - 3 - self.window_width_px
+            x = rightPos - self.window_width_px  # - 3
 
-        y = 3 - 1080
+        y = topPos + 3  # space to click the top
         if not alignTop:
-            y = 20  # bottom monitor
+            y = bottomPos  # bottom monitor
 
         position = (x, y)
 

@@ -18,6 +18,10 @@ function Run-BotOnce {
 
     $ErrorActionPreference = 'Stop'
 
+    if (-not (Test-Path "$PSScriptRoot/../temp")) {
+        mkdir "$PSScriptRoot/../temp"
+    }
+
     $blockBotFile = "$PSScriptRoot/../block_bot.txt"
     if (-not (Test-Path $blockBotFile)) {
         throw "Unable to find a block_bot.txt file one folder above this scripts folder at $blockBotFile. The file should contain either the string False or the string True."

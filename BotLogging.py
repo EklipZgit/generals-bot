@@ -1,3 +1,5 @@
+import pathlib
+
 import logbook
 import logging
 import os
@@ -93,6 +95,23 @@ def get_file_safe_username(botName: str) -> str:
     return fileSafeUserName
 
 
+def get_config_log_folder():
+    cfgPath = pathlib.Path(__file__).parent / "../run_config.txt"
+    with open(cfgPath, 'r') as file:
+        data = file.read()
+    cfgContents = data.splitlines()
+    for line in cfgContents:
+        if "=" not in line:
+            continue
+
+        key, value = line.split('=')
+
+        if key == "log_folder":
+            return value.strip('/')
+
+    raise AssertionError(f'Unable to find a log folder in {cfgPath}')
+
+
 def get_file_logging_directory(rawBotName: str, replayId: str) -> str:
     """
     Gets the file logging directory to use for a given bot name and replay id. Makes sure the directory exists.
@@ -104,7 +123,8 @@ def get_file_logging_directory(rawBotName: str, replayId: str) -> str:
     fileSafeUserName = fileSafeUserName.replace("[Bot] ", "")
     fileSafeUserName = fileSafeUserName.replace("[Bot]", "")
     # logbook.info("\n\n\nFILE SAFE USERNAME\n {}\n\n".format(fileSafeUserName))
-    logDirectory = "D:\\GeneralsLogs\\{}-{}".format(fileSafeUserName, replayId)
+    logFolder = get_config_log_folder()
+    logDirectory = f"{logFolder}\\{fileSafeUserName}-{replayId}"
 
     if not os.path.exists(logDirectory):
         try:

@@ -18,6 +18,7 @@ import threading
 import time
 from websocket import create_connection, WebSocketConnectionClosedException
 
+import BotLogging
 from . import map
 
 _ENDPOINT_BOT = "://botws.generals.io/socket.io/?EIO=4"
@@ -63,6 +64,7 @@ class GeneralsClient(object):
         self.lastChatCommand = ""
         self.earlyLogs = []
         self.logFile = None
+        self.logFolder: str = BotLogging.get_config_log_folder()
         self.chatLogFile = None
         self.username = username
         self.server_username = username
@@ -290,15 +292,13 @@ class GeneralsClient(object):
                 # for handler in logging.root.handlers[:]:
                 #     logging.root.removeHandler(handler)
                 # logging.basicConfig(format='%(levelname)s:%(message)s', filename='D:\\GeneralsLogs\\' + self._start_data['replay_id'] + '.log', level=logbook.debug)
-                self.logFile = "D:\\GeneralsLogs\\" + self.username + "-" + self.mode + "-" + self._start_data[
-                    'replay_id'] + ".txt"
-                self.chatLogFile = "D:\\GeneralsLogs\\_chat\\" + self.username + "-" + self.mode + "-" + \
-                                   self._start_data['replay_id'] + ".txt"
+                self.logFile = f"{self.logFolder}\\{self.username}-{self.mode}-{self._start_data['replay_id']}.txt"
+                self.chatLogFile = f"{self.logFolder}\\_chat\\{self.username}-{self.mode}-{self._start_data['replay_id']}.txt"
 
                 logbook.info(f'replay_id:[{self._start_data["replay_id"]}]')
 
                 _spawn(self._delayed_chat_thread)
-                os.makedirs("D:\\GeneralsLogs\\_chat", exist_ok=True)
+                os.makedirs(f"{self.logFolder}\\_chat", exist_ok=True)
                 if _LOG_WS:
                     try:
                         with open(self.logFile, "a+") as myfile:

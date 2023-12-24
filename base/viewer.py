@@ -202,30 +202,7 @@ class GeneralsViewer(object):
         return s
 
     def _initViewier(self, alignTop: bool, alignLeft: bool):
-        cfgPath = pathlib.Path(__file__).parent / "../../run_config.txt"
-        with open(cfgPath, 'r') as file:
-            data = file.read()
-        cfgContents = data.splitlines()
-
-        topPos = 3
-        bottomPos = 1080
-        rightPos = 1920
-        leftPos = 0
-
-        for line in cfgContents:
-            if "=" not in line:
-                continue
-
-            key, value = line.split('=')
-
-            if key == "left_pos":
-                leftPos = int(value)
-            if key == "right_pos":
-                rightPos = int(value)
-            if key == "bottom_pos":
-                bottomPos = int(value)
-            if key == "top_pos":
-                topPos = int(value)
+        bottomPos, leftPos, rightPos, topPos = self.get_config_positions()
 
         self.infoLineHeight = 17
         self.infoRowHeight = 250
@@ -310,6 +287,32 @@ class GeneralsViewer(object):
         self.repId = self._map.replay_url.split("/").pop()
 
         self.logDirectory = BotLogging.get_file_logging_directory(self._map.usernames[self._map.player_index], self.repId)
+
+    def get_config_positions(self):
+        cfgPath = pathlib.Path(__file__).parent / "../../run_config.txt"
+        with open(cfgPath, 'r') as file:
+            data = file.read()
+        cfgContents = data.splitlines()
+        topPos = 3
+        bottomPos = 1080
+        rightPos = 1920
+        leftPos = 0
+        for line in cfgContents:
+            if "=" not in line:
+                continue
+
+            key, value = line.split('=')
+
+            if key == "left_pos":
+                leftPos = int(value)
+            if key == "right_pos":
+                rightPos = int(value)
+            if key == "bottom_pos":
+                bottomPos = int(value)
+            if key == "top_pos":
+                topPos = int(value)
+
+        return bottomPos, leftPos, rightPos, topPos
 
     def run_main_viewer_loop(self, alignTop=True, alignLeft=True, loggingQueue = None):
         termSec = 600

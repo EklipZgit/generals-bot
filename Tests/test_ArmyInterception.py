@@ -1,3 +1,5 @@
+import random
+import time
 import typing
 
 import logbook
@@ -66,6 +68,10 @@ class ArmyInterceptionTests(TestBase):
         targets.extend(map.players[general.player].cities)
         threats = []
         negs = set(targets)
+        # allow pathing through our tiles
+        for tile in map.get_all_tiles():
+            if map.is_tile_friendly(tile) and tile.army > 10:
+                negs.add(tile)
 
         for target in targets:
             threatPath = SearchUtils.dest_breadth_first_target(map, [target], maxDepth=40, searchingPlayer=enemyGeneral.player, negativeTiles=negs)
@@ -81,8 +87,10 @@ class ArmyInterceptionTests(TestBase):
             dist, negCaps, negArmy, genDist = prioObj
             if negArmy > 0:
                 return None
+            if dist == 0:
+                return None
 
-            return (0 - negCaps, 0 - dist)
+            return (0 - negCaps / dist, 0 - dist)
 
         def prioFunc(nextTile, prioObj):
             dist, negCaps, negArmy, genDist = prioObj
@@ -130,6 +138,7 @@ class ArmyInterceptionTests(TestBase):
         return plan
 
     def get_best_intercept_option(self, plan: ArmyInterception, maxDepth=200) -> typing.Tuple[int, int, Path] | None:
+        """Returns value, effectiveTurns, path"""
         bestOpt = None
         bestOptAmt = 0
         bestOptDist = 0
@@ -783,6 +792,125 @@ class ArmyInterceptionTests(TestBase):
         self.assertIsNone(winner)
 
         self.assertEqual(general.player, playerMap.GetTile(7, 7).player)
+
+    def test_should_recognize_diverging_path_around_mountain_as_non_intercept_chokes(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_kill_point_blank_army_lul___ffrBNaR9l---0--133.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 133, fill_out_tiles=False)
+
+        # map.GetTile(6, 7).isMountain = False
+        # map.update_reachable()
+
+        analysis = ArmyAnalyzer(map, map.GetTile(5, 17), map.GetTile(7, 6))
+        analysis.scan()
+        if debugMode:
+            self.render_army_analyzer(map, analysis)
+        interceptWidth = analysis.interceptChokes.get(map.GetTile(6, 6), None)
+        # self.assertEqual(4, interceptWidth)
+
+        interception = self.get_interception_plan(map, general, enemyGeneral)
+
+        if debugMode:
+            self.render_intercept_plan(map, interception)
+
+        value, turns, bestPath = self.get_best_intercept_option(interception)
+        self.assertEqual(6, bestPath.start.tile.x)
+        self.assertEqual(6, bestPath.start.tile.y)
+
+        path, val, turns = self.get_interceptor_path(interception, 6, 6, 7, 6)
+        self.assertIsNotNone(path)
+
+        path, val, turns = self.get_interceptor_path(interception, 5, 6, 7, 6)
+        self.assertIsNone(path)
+
+        self.assertNotInterceptChoke(interception, map, 6, 6)
+        self.assertNotInterceptChoke(interception, map, 7, 7)
+
+
+    def test_benchmark_bidir_a_star(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_kill_point_blank_army_lul___ffrBNaR9l---0--133.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 133, fill_out_tiles=False)
+        #
+        # points = [
+        #     map.GetTile(7, 6),
+        #     map.GetTile(16, 9),
+        #     map.GetTile(0, 4),
+        #     map.GetTile(7, 18),
+        #     map.GetTile(12, 11),
+        #     map.GetTile(9, 16),
+        #     map.GetTile(2, 1),
+        #     map.GetTile(11, 3),
+        #     map.GetTile(9, 10),
+        #     map.GetTile(5, 2),
+        #     map.GetTile(7, 2),
+        #     map.GetTile(13, 9),
+        #     map.GetTile(7, 2),
+        #     map.GetTile(11, 8),
+        # ]
+        points = list(map.pathableTiles)
+        random.shuffle(points)
+        points = points[0:50]
+
+        sumOgTime = 0.0
+        sumPQTime = 0.0
+        sumHQTime = 0.0
+        sumAStarTime = 0.0
+        sumBfsFindTime = 0.0
+        iters = 0
+
+        self.begin_capturing_logging()
+
+        for pointA in points:
+            for pointB in points:
+                if pointA == pointB:
+                    continue
+
+                iters += 1
+                start = time.perf_counter()
+                pOg = SearchUtils.bidirectional_a_star_orig(pointA, pointB)
+                sumOgTime += time.perf_counter() - start
+
+                start = time.perf_counter()
+                pPq = SearchUtils.bidirectional_a_star_pq(pointA, pointB)
+                sumPQTime += time.perf_counter() - start
+
+                start = time.perf_counter()
+                pHq = SearchUtils.bidirectional_a_star(pointA, pointB)
+                sumHQTime += time.perf_counter() - start
+
+                start = time.perf_counter()
+                pAStar = SearchUtils.a_star_find(map, [pointA], pointB, noLog=True)
+                sumAStarTime += time.perf_counter() - start
+
+                start = time.perf_counter()
+
+                def findFunc(tile: Tile, a: int, dist: int) -> bool:
+                    return tile == pointB
+
+                pFind = SearchUtils.breadth_first_find_queue(map, [pointA], findFunc, noNeutralCities=True, noLog=True)
+                sumBfsFindTime += time.perf_counter() - start
+
+                if pOg.length != pPq.length or pOg.length != pHq.length or pFind.length != pOg.length or pAStar.length != pOg.length:
+                    vi = self.get_renderable_view_info(map)
+                    vi.color_path(PathColorer(
+                        pOg, 255, 255, 0
+                    ))
+                    vi.color_path(PathColorer(
+                        pPq, 0, 255, 255
+                    ))
+                    vi.color_path(PathColorer(
+                        pHq, 255, 0, 255
+                    ))
+                    vi.color_path(PathColorer(
+                        pFind, 255, 255, 255
+                    ))
+                    vi.color_path(PathColorer(
+                        pAStar, 0, 0, 0
+                    ))
+                    self.render_view_info(map, vi, "mismatch")
+
+        logbook.info(f'iters {iters}: og {sumOgTime:.3f} vs PQ {sumPQTime:.3f} vs HQ {sumHQTime:.3f} vs find {sumBfsFindTime:.3f} vs aStar {sumAStarTime:.3f}')
 
     def test_should_not_blow_up(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True

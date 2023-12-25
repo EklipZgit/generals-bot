@@ -54,6 +54,9 @@ class ArmyAnalyzer:
         else:
             self.tileB: Tile = armyB
 
+        self.cMap: typing.List[typing.List[int]] = []
+        self.tileC: Tile = None  # Tile(0, 0, 0, 0)
+
         # path chokes are relative to the paths between A and B
         self.pathChokes: typing.Set[Tile] = set()
         self.pathWayLookupMatrix: MapMatrix[PathWay | None] = MapMatrix(map, initVal=None)
@@ -61,6 +64,7 @@ class ArmyAnalyzer:
         self.shortestPathWay: PathWay = PathWay(distance=INF)
         self.chokeWidths: typing.Dict[Tile, int] = {}
         self.interceptChokes: typing.Dict[Tile, int] = {}
+        """The value in here for a tile represents the number of additional moves necessary for worst case intercept, for an army that reaches this tile on the earliest turn the bTile army could reach this. It is effectively the difference between the best case and worst case intercept turns for an intercept reaching this tile."""
 
         logbook.info(f"ArmyAnalyzer analyzing {self.tileA.toString()} and {self.tileB.toString()}")
             
@@ -115,8 +119,8 @@ class ArmyAnalyzer:
                 chokeKey = self._get_choke_key(path, tile)
                 width = chokeCounterMap[chokeKey]
                 if width == 1:
-                    if DebugHelper.IS_DEBUGGING:
-                        logbook.info(f"  (maybe) found choke at {tile.toString()}? Testing for shorter pathway joins")
+                    # if DebugHelper.IS_DEBUGGING:
+                    #     logbook.info(f"  (maybe) found choke at {tile.toString()}? Testing for shorter pathway joins")
                     shorter = count(tile.movable, lambda adjTile: adjTile in self.pathWayLookupMatrix and self.pathWayLookupMatrix[adjTile].distance < path.distance)
                     if shorter == 0:
                         if DebugHelper.IS_DEBUGGING:
@@ -124,18 +128,20 @@ class ArmyAnalyzer:
                         # Todo this should probably be on pathways lol
                         self.pathChokes.add(tile)
                 self.chokeWidths[tile] = width
-                if (
-                        tile in minPath.tiles
-                        # and tile != self.tileA
-                        # and tile != self.tileB
-                        and width < 5
-                ):
-                    tileMidWidth = self._get_tile_middle_width(tile, path, width)
-                    # TODO this shit is wrong
-                    if tileMidWidth <= (width + 1) // 2:
-                        self.interceptChokes[tile] = tileMidWidth
+                # if (
+                #         tile in minPath.tiles
+                #         # and tile != self.tileA
+                #         # and tile != self.tileB
+                #         and width < 5
+                # ):
+                #     tileMidWidth = self._get_tile_middle_width(tile, path, width)
+                #     # TODO this shit is wrong
+                #     if tileMidWidth <= (width + 1) // 2:
+                #         self.interceptChokes[tile] = tileMidWidth
 
         self.shortestPathWay = minPath
+
+        self.build_intercept_chokes()
 
     def build_pathway(self, tile) -> PathWay:
         distance = self.aMap[tile.x][tile.y] + self.bMap[tile.x][tile.y]
@@ -172,4 +178,128 @@ class ArmyAnalyzer:
         #     return 0
 
         return width // 2
+
+    def build_intercept_chokes(self):
+        furthestRefTile = self.find_A_B_width_reference_point()
+
+        self.tileC = furthestRefTile
+        self.cMap = SearchUtils.build_distance_map(self.map, [furthestRefTile])
+        for tile in self.map.pathableTiles:
+            self.cMap[tile.x][tile.y] = abs(self.tileC.x - tile.x) + abs(self.tileC.y - tile.y)
+        #
+        # furthestOtherRefTile = None
+        # furthestOtherRefDist = 0
+        # for tile in self.map.pathableTiles:
+        #     cumulativeDist = self.aMap[tile.x][tile.y] + self.bMap[tile.x][tile.y] + self.reference_point_map[tile]
+        #     if cumulativeDist > furthestOtherRefDist:
+        #         furthestOtherRefTile = tile
+        #         furthestOtherRefDist = cumulativeDist
+        #
+        # otherRefDistMap = SearchUtils.build_distance_map_matrix(self.map, [furthestOtherRefTile])
+
+        q = deque()
+        curBDist = 0
+        curADist = self.aMap[self.tileB.x][self.tileB.y]
+
+        q.append(self.tileB)
+
+        # visited = set()
+        maxRefDist = 0
+        minRefDist = 1000
+        distMinMaxTable = {}
+
+        minX = 1000
+        maxX = -1
+        minY = 1000
+        maxY = -1
+
+        visited = set()
+
+        while len(q) > 0:
+            nextTile = q.popleft()
+            visited.add(nextTile)
+            nextBDist = self.bMap[nextTile.x][nextTile.y]
+            if nextBDist < curBDist:
+                continue
+
+            nextADist = self.aMap[nextTile.x][nextTile.y]
+            if nextADist > curADist:
+                continue
+
+            if nextBDist > curBDist:
+                distMinMaxTable[curBDist] = (minX, minY, maxX, maxY)
+                # distMinMaxTable[curBDist] = (minRefDist, maxRefDist)
+                curBDist = nextBDist
+                # if nextADist < curADist:
+                curADist = nextADist
+                # maxRefDist = 0
+                # minRefDist = 10000
+                minX = 1000
+                maxX = -1
+                minY = 1000
+                maxY = -1
+
+            # curRefDist = self.cMap[nextTile.x][nextTile.y]
+            # curRefDist = abs(self.tileC.x - nextTile.x) + abs(self.tileC.y - nextTile.y)
+            # maxRefDist = max(maxRefDist, curRefDist)
+            # minRefDist = min(minRefDist, curRefDist)
+            minX = min(minX, nextTile.x)
+            minY = min(minY, nextTile.y)
+            maxX = max(maxX, nextTile.x)
+            maxY = max(maxY, nextTile.y)
+
+            for t in nextTile.movable:
+                if t in self.shortestPathWay.tiles and t not in visited:
+                    q.append(t)
+
+        distMinMaxTable[curBDist] = (minX, minY, maxX, maxY)
+        # distMinMaxTable[curBDist] = (minRefDist, maxRefDist)
+
+        for tile in self.shortestPathWay.tiles:
+            curBDist = self.bMap[tile.x][tile.y]
+            # refDist = self.cMap[tile.x][tile.y]
+            # refDist = abs(self.tileC.x - tile.x) + abs(self.tileC.y - tile.y)
+            # minRefDist, maxRefDist = distMinMaxTable[curBDist]
+            (curMinX, curMinY, curMaxX, curMaxY) = distMinMaxTable[curBDist]
+
+            interceptFar = curMaxX - tile.x + curMaxY - tile.y
+            interceptClose = tile.x - curMinX + tile.y - curMinY
+            # interceptFar = maxRefDist - refDist
+            # interceptClose = refDist - minRefDist
+            worstCaseInterceptTurns = max(interceptFar, interceptClose)
+
+            self.interceptChokes[tile] = worstCaseInterceptTurns
+
+    def find_A_B_width_reference_point(self) -> Tile:
+        # furthestRefTile = None
+        # furthestRefDist = 0
+        # for tile in self.map.pathableTiles:
+        #     # cumulativeDist = self.aMap[tile.x][tile.y] + self.bMap[tile.x][tile.y]
+        #     cumulativeDist = abs(self.tileA.x - tile.x) + abs(self.tileA.y - tile.y) + abs(self.tileB.x - tile.x) + abs(self.tileB.y - tile.y)
+        #     if cumulativeDist > furthestRefDist:
+        #         furthestRefTile = tile
+        #         furthestRefDist = cumulativeDist
+        xDiff = self.tileA.x - self.tileB.x
+        yDiff = self.tileA.y - self.tileB.y
+
+        midX = (self.tileA.x + self.tileB.x) // 2
+        midY = (self.tileA.y + self.tileB.y) // 2
+
+        midPoint = self.map.GetTile(midX, midY)
+
+        refTile = self.map.GetTile(midX + yDiff, midY + xDiff)
+        if refTile is None:
+            refTile = self.map.GetTile(midX - yDiff, midY - xDiff)
+
+        if refTile is None:
+            yDiff = yDiff // 2
+            xDiff = xDiff // 2
+
+            refTile = self.map.GetTile(midX + yDiff, midY + xDiff)
+            if refTile is None:
+                refTile = self.map.GetTile(midX - yDiff, midY - xDiff)
+                if refTile is None:
+                    raise AssertionError(f'neither directions midpoint ref works to retrieve a valid tile rotation.')
+
+        return refTile
 

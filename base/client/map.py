@@ -441,11 +441,15 @@ class Tile(object):
     def __lt__(self, other):
         if other is None:
             return False
+        if isinstance(other, str):
+            return True
         return self.army < other.army
 
     def __gt__(self, other):
         if other is None:
             return True
+        if isinstance(other, str):
+            return False
         return self.army > other.army
 
     def __str__(self) -> str:

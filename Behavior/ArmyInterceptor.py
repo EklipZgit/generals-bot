@@ -13,7 +13,7 @@ from MapMatrix import MapMatrix
 from Path import Path
 from base.client.map import MapBase, Tile
 
-
+# TODO remove me once things fixed
 DEBUG_BYPASS_BAD_INTERCEPTIONS = True
 
 
@@ -344,11 +344,12 @@ class ArmyInterceptor(object):
         # TODO sort by earliest intercept + chokeWidth?
         for tile, interceptDist in interception.common_intercept_chokes.items():
             # TODO for final tile in the path, if tile is recapturable (city, normal tile) then increase maxDepth to turnsLeftInCycle
+            turnsToIntercept = interception.best_enemy_threat.armyAnalysis.bMap[tile.x][tile.y] + 1 #- interceptDist
 
             interceptPaths = self._get_intercept_paths(
                 tile,
                 interception,
-                maxDepth=maxDepth,
+                maxDepth=min(maxDepth, turnsToIntercept),
                 turnsLeftInCycle=turnsLeftInCycle,
                 threatDistFromCommon=threatDistFromCommon,
                 searchingPlayer=self.map.player_index)

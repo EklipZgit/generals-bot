@@ -206,7 +206,7 @@ class GeneralsViewer(object):
 
         self.infoLineHeight = 17
         self.infoRowHeight = 250
-        self.statsWidth = 500
+        self.statsWidth = 650
 
         if self.cellHeight is None:
             self.cellHeight = min(85, (1080 - self.infoRowHeight - self.scoreRowHeight) // (self._map.rows + 1))

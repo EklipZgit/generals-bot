@@ -244,43 +244,60 @@ class ArmyInterceptor(object):
 
     def determine_best_threat_value(self, interception: ArmyInterception, threats: typing.List[ThreatObj], turnsLeftInCycle: int):
         maxThreat = None
-        maxValPerTurn = 0
-        maxVal = 0
+        maxValPerTurn = -100000
+        maxVal = -1000000
+
         for threat in threats:
             enPlayer = threat.threatPlayer
             frPlayer = self.map.player_index
             val, threatLen = self._get_path_value(threat.path, enPlayer, frPlayer, turnsLeftInCycle)
 
-            valPerTurn = val / threatLen
+            valPerTurn = val / max(1, threatLen)
+            if valPerTurn == maxValPerTurn and threat.path.length > maxThreat.path.length:
+                maxValPerTurn -= 1
+
             if valPerTurn > maxValPerTurn:
                 maxValPerTurn = valPerTurn
                 maxVal = val
                 maxThreat = threat
 
-        logbook.info(f'max en threat was {str(maxThreat)} val {str(maxVal)} v/t {maxValPerTurn:.2f}')
+        logbook.info(f'best_enemy_threat was val {str(maxVal)} v/t {maxValPerTurn:.2f} - {str(maxThreat)}')
         interception.best_threat_econ_value = maxVal
         interception.best_enemy_threat = maxThreat
 
-    def _get_path_value(self, path: Path, searchingPlayer: int, targetPlayer: int, turnsLeftInCycle: int, interceptingArmy: int = 0, includeRecaptureEffectiveStartDist: int = -1) -> typing.Tuple[int, int]:
+    def _get_path_value(
+            self,
+            path: Path,
+            searchingPlayer: int,
+            targetPlayer: int,
+            turnsLeftInCycle: int,
+            interceptingArmy: int = 0,
+            includeRecaptureEffectiveStartDist: int = -1
+    ) -> typing.Tuple[int, int]:
         """Returns (value, turnsUsed). turnsUsed is always the path length unless includeRecaptureEffectiveStartDist >= 0"""
         val = 0
         cityCaps = 0
         genCaps = 0
         curTurn = self.map.turn
         cycleEnd = self.map.turn + turnsLeftInCycle
-        armyLeft = 0 - interceptingArmy
+        armyLeft = 0
         for tile in path.tileList:
+            if armyLeft <= 0 and curTurn > self.map.turn:
+                curTurn += 1
+                break
+
             if not self.map.is_tile_on_team_with(tile, searchingPlayer):
                 armyLeft -= tile.army
-                if tile.isGeneral:
-                    genCaps += 1
-                if tile.isCity:
-                    cityCaps += 1
 
-                if self.map.is_tile_on_team_with(tile, targetPlayer):
-                    val += 2
-                else:
-                    val += 1
+                if armyLeft > 0:
+                    if tile.isGeneral:
+                        genCaps += 1
+                    if tile.isCity:
+                        cityCaps += 1
+                    if self.map.is_tile_on_team_with(tile, targetPlayer):
+                        val += 2
+                    else:
+                        val += 1
             else:
                 armyLeft += tile.army
 
@@ -291,7 +308,11 @@ class ArmyInterceptor(object):
             if (curTurn & 1) == 0:
                 val += cityCaps
 
-        if cycleEnd > curTurn:
+        # account for we considered the first tile in the list a move, when it is just the start tile
+        curTurn -= 1
+        armyLeft -= interceptingArmy
+
+        if cycleEnd > curTurn and armyLeft > 0:
             left = cycleEnd - curTurn
             val += cityCaps * (left // 2)
 
@@ -360,7 +381,7 @@ class ArmyInterceptor(object):
                     turnsLeftInCycle=turnsLeftInCycle,
                     interceptingArmy=interceptArmy,
                     includeRecaptureEffectiveStartDist=addlTurns)
-                newValue += self._get_value_of_threat_blocked(path, interception.best_enemy_threat, threatValueOffset)
+                newValue += self._get_value_of_threat_blocked(path, interception.best_enemy_threat, turnsLeftInCycle)
 
                 if self.log_debug:
                     logbook.info(f'interceptPointDist:{interceptPointDist}, addlTurns:{addlTurns}, effectiveDist:{effectiveDist}, turnsUsed:{turnsUsed}')
@@ -472,9 +493,15 @@ class ArmyInterceptor(object):
 
         return byDist
 
-    def _get_value_of_threat_blocked(self, path: Path, best_enemy_threat: ThreatObj, threatValueOffset: int) -> int:
+    def _get_value_of_threat_blocked(self, path: Path, best_enemy_threat: ThreatObj, turnsLeftInCycle: int) -> int:
         amountBlocked = 0
+        turnsLeft = turnsLeftInCycle
+
         for tile in path.tileList:
+            if turnsLeft == 0:
+                break
+
+            turnsLeft -= 1
             if tile not in best_enemy_threat.path.tileSet:
                 if self.map.is_tile_friendly(tile):
                     amountBlocked += tile.army - 1

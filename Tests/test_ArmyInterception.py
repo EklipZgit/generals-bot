@@ -40,7 +40,7 @@ class ArmyInterceptionTests(TestBase):
         interceptor = ArmyInterceptor(map, analysis, useDebugLogging=useDebugLogging)
         return interceptor
 
-    def get_interception_plan(self, map: MapBase, general: Tile, enemyGeneral: Tile, enTile: Tile | None = None, turnsLeftInCycle: int = -1, useDebugLogging: bool = True) -> ArmyInterception:
+    def get_interception_plan(self, map: MapBase, general: Tile, enemyGeneral: Tile, enTile: Tile | None = None, turnsLeftInCycle: int = -1, useDebugLogging: bool = True, additionalPath: str | None = None) -> ArmyInterception:
         interceptor = self.get_interceptor(
             map,
             general,
@@ -49,6 +49,10 @@ class ArmyInterceptionTests(TestBase):
 
         if turnsLeftInCycle == -1:
             turnsLeftInCycle = 50 - map.turn % 50
+
+        addlPath = None
+        if additionalPath is not None:
+            addlPath = Path.from_string(map, additionalPath)
 
         genDists = SearchUtils.build_distance_map_matrix(map, [general])
 
@@ -105,6 +109,13 @@ class ArmyInterceptionTests(TestBase):
             searchingPlayer=enemyGeneral.player
         )
 
+        if addlPath is not None:
+            analysis = ArmyAnalyzer(map, addlPath.tail.tile, addlPath.start.tile)
+            saveTile = None
+            if len(addlPath.tileList) > 1 and addlPath.tail.prev.tile in analysis.pathChokes:
+                saveTile = addlPath.tail.prev.tile
+            threats.append(ThreatObj(addlPath.length - 1, addlPath.value, addlPath, ThreatType.Econ, saveTile, analysis))
+
         if path is not None:
             analysis = ArmyAnalyzer(map, path.tail.tile, path.start.tile)
             saveTile = None
@@ -139,6 +150,36 @@ class ArmyInterceptionTests(TestBase):
             return None
 
         return bestOptAmt, bestOptDist, bestOpt
+
+    def get_interceptor_path(self, plan: ArmyInterception, xStart: int, yStart: int, xEnd: int, yEnd: int) -> typing.Tuple[Path | None, int, int]:
+        """
+        Returns Path, value, turnsUsed if a path is found that starts and ends at those positions
+
+        @param plan:
+        @param xStart:
+        @param yStart:
+        @param xEnd:
+        @param yEnd:
+        @return:
+        """
+
+        bestOpt = None
+        bestOptAmt = 0
+        bestOptDist = 0
+        maxVt = 0
+
+        for dist, option in plan.intercept_options.items():
+            val, path = option
+            if path.start.tile.x == xStart and path.start.tile.y == yStart and path.tail.tile.x == xEnd and path.tail.tile.y == yEnd:
+                vt = val/dist
+                if vt > maxVt:
+                    logbook.info(f'NEW BEST INTERCEPT OPT {val}/{dist} -- {str(path)}')
+                    bestOpt = path
+                    bestOptAmt = val
+                    bestOptDist = dist
+                    maxVt = vt
+
+        return bestOpt, bestOptAmt, bestOptDist
 
     def render_intercept_plan(self, map: MapBase, plan: ArmyInterception, colorIndex: int = 0):
         viewInfo = self.get_renderable_view_info(map)
@@ -509,7 +550,7 @@ class ArmyInterceptionTests(TestBase):
         # We collide with over 30 more army with them, giving us full recapture turns.
         self.assertEqual(19, turnsUsed)
 
-        # Since we captured 0 other tiles, the value of the intercept should equal number of remaining recapture turns * 2, which should be 24
+        # Since we captured 0 other tiles, the value of the intercept should equal number of remaining recapture turns * 2, which should be 22
         self.assertGreater(val, 21)
 
     def test_should_identify_multi_threat_chokes_in_defense_plan(self):
@@ -600,13 +641,21 @@ class ArmyInterceptionTests(TestBase):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_recognize_multi_threat_and_intercept_at_choke___Human.exe-TEST__efebcb16-d770-4d80-ac54-b9c37c8e7bea---0--289.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 289, fill_out_tiles=True)
-
+        map.GetTile(1, 8).army = 1
+        map.GetTile(1, 8).player = 0
+        map.GetTile(1, 9).army = 75
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=289)
+        rawMap.GetTile(1, 8).army = 1
+        rawMap.GetTile(1, 8).player = 0
+        rawMap.GetTile(1, 9).army = 75
 
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-        simHost.queue_player_moves_str(enemyGeneral.player, '1,8->2,8->2,7')
+        simHost.queue_player_moves_str(enemyGeneral.player, '1,9->1,8->2,8->2,7')
+        # simHost.queue_player_moves_str(general.player, '2,5->2,8') # proof
+
         bot = self.get_debug_render_bot(simHost, general.player)
+        bot.targetingArmy = bot.get_army_at_x_y(1, 9)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -614,6 +663,86 @@ class ArmyInterceptionTests(TestBase):
         self.assertIsNone(winner)
 
         self.assertEqual(playerMap.GetTile(2, 7).player, general.player)
+
+    def test_should_recognize_multi_threat_and_intercept_at_choke__correctly_values_intercept_from_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_multi_threat_and_intercept_at_choke___Human.exe-TEST__efebcb16-d770-4d80-ac54-b9c37c8e7bea---0--289.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 289, fill_out_tiles=True)
+        map.GetTile(1, 8).army = 1
+        map.GetTile(1, 8).player = 0
+        map.GetTile(1, 9).army = 75
+
+        interception = self.get_interception_plan(map, general, enemyGeneral, additionalPath='1,9->1,8->6,8')
+
+        if debugMode:
+            self.render_intercept_plan(map, interception)
+
+        path, val, turns = self.get_interceptor_path(interception, 2, 5, 2, 8)
+        self.assertIsNotNone(path)
+        self.assertEqual(11, turns, 'max value per turn should be the full turns')
+        # the raw econ differential from this play is +14 econ (-9 -> +5) however it prevents a huge amount of enemy damage as well, so should be calculated as blocking 20 additional econ damage from opponent
+        # 14 + 20 should be a value of 36
+        self.assertEqual(34, val, 'prevents 20 enemy damage and also recaptures 14 econ worth of tiles')
+        # TODO CONTINUE
+
+    def test_should_recognize_multi_threat_and_intercept_at_choke__prevent_right_and_up(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_multi_threat_and_intercept_at_choke___Human.exe-TEST__efebcb16-d770-4d80-ac54-b9c37c8e7bea---0--289.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 289, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=289)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '1,8->6,8->6,7')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
+        self.assertIsNone(winner)
+
+        self.assertEqual(playerMap.GetTile(6, 7).player, general.player)
+
+    def test_should_recognize_multi_threat_and_intercept_at_choke__unit_test_does_not_value_incoming_collisions_that_dont_prevent_caps_to_round_end(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_multi_threat_and_intercept_at_choke___Human.exe-TEST__efebcb16-d770-4d80-ac54-b9c37c8e7bea---0--289.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 289, fill_out_tiles=True)
+
+        interception = self.get_interception_plan(map, general, enemyGeneral)
+
+        if debugMode:
+            self.render_intercept_plan(map, interception)
+
+        path, val, turns = self.get_interceptor_path(interception, 0, 8, 1, 8)
+
+        if path is not None:  # not even finding this as an intercept is also valid, so only fail if it is found AND its value isn't 0
+            self.assertEqual(0, val, 'does not prevent enemy from recapturing till end of cycle so slamming a 3 into the tile does nothing this cycle.')
+
+        path, val, turns = self.get_interceptor_path(interception, 2, 5, 2, 7)
+        self.assertIsNotNone(path)
+        self.assertEqual(11, turns, 'max value per turn should be the full turns')
+        self.assertEqual(18, val, 'prevents enemy damage and also recaptures')
+
+    def test_should_recognize_multi_threat_and_cannot_fully_intercept_at_choke__unit_recognizes_can_only_block_along_bottom_if_goes_right(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_multi_threat_and_intercept_at_choke___Human.exe-TEST__efebcb16-d770-4d80-ac54-b9c37c8e7bea---0--289.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 289, fill_out_tiles=True)
+
+        interception = self.get_interception_plan(map, general, enemyGeneral)
+
+        if debugMode:
+            self.render_intercept_plan(map, interception)
+
+        path, val, turns = self.get_interceptor_path(interception, 0, 8, 1, 8)
+
+        if path is not None:  # not even finding this as an intercept is also valid, so only fail if it is found AND its value isn't 0
+            self.assertEqual(0, val, 'does not prevent enemy from recapturing till end of cycle so slamming a 3 into the tile does nothing this cycle.')
+
+        path, val, turns = self.get_interceptor_path(interception, 2, 5, 2, 7)
+        self.assertIsNotNone(path)
+        self.assertEqual(11, turns, 'max value per turn should be the full turns')
+        self.assertEqual(18, val, 'prevents enemy damage and also recaptures')
 
     def test_should_defend_forward_city_against_incoming_threat(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True

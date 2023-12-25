@@ -12,7 +12,7 @@ import math
 from DataModels import GatherTreeNode, Move
 from collections import deque
 
-from base.client.map import Tile
+from base.client.map import Tile, MapBase
 
 
 class PathMove(object):
@@ -289,3 +289,47 @@ class Path(object):
             node = node.next
 
         return moves
+
+    @classmethod
+    def from_string(cls, map: MapBase, pathStr: str) -> Path:
+        moves = pathStr.split('->')
+        prevTile: Tile | None = None
+        path = Path()
+        for move_str in moves:
+            xStr, yStr = move_str.strip().split(',')
+            moveHalf = False
+            if yStr.strip().endswith('z'):
+                moveHalf = True
+                yStr = yStr.strip('z ')
+
+            nextTile = map.GetTile(int(xStr), int(yStr))
+
+            if prevTile is None:
+                path.add_next(nextTile)
+                prevTile = nextTile
+                continue
+
+            if prevTile.x != nextTile.x and prevTile.y != nextTile.y:
+                raise AssertionError(f'Cannot jump diagonally between {str(prevTile)} and {str(nextTile)}')
+
+            xInc = nextTile.x - prevTile.x
+            if xInc < 0:
+                xInc = -1
+            elif xInc > 0:
+                xInc = 1
+
+            yInc = nextTile.y - prevTile.y
+            if yInc < 0:
+                yInc = -1
+            elif yInc > 0:
+                yInc = 1
+
+            while prevTile.x != nextTile.x or prevTile.y != nextTile.y:
+                currentTile = map.GetTile(prevTile.x + xInc, prevTile.y + yInc)
+                path.add_next(currentTile, moveHalf)
+                prevTile = currentTile
+                moveHalf = False
+
+        path.calculate_value(forPlayer=path.start.tile.player, teams=map._teams)
+
+        return path

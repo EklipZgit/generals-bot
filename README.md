@@ -38,7 +38,7 @@ Places where it is lacking as a Generals player:
 
 ## Setup
 
-- [ ] Python3.11+ (https://www.python.org/downloads/) or on windows with Chocolatey, as admin, run choco install python3
+- [ ] Python3.11 (https://www.python.org/downloads/) or on windows with Chocolatey, as admin, run choco install python311. Python 312 has setuptools issues and will not install packages, didn't bother to figure out why. If you can sort it out, feel free to run with 3.12+ and let me know how you fixed it on windows.
 - [ ] Install Dependencies: `pip3 install -r requirements.txt`
 - [ ] Update all the hardcoded paths to whatever you want them to be on your system, see https://github.com/EklipZgit/generals-bot/commit/76b114c4d6bd551dd273fe9192e82a5690ea260e
 
@@ -46,8 +46,8 @@ Places where it is lacking as a Generals player:
 
 Powershell:
 ```Powershell
-. ".\run-bot.ps1"
-run-bot -game 1v1, 1v1, 1v1, ffa, ffa -name "EklipZ_ai" -right [-noui]
+. .\run-bot.ps1  # note the . .\, this imports all functions in the file into the current powershell session
+run-bot -game 1v1, 1v1, 1v1, ffa, ffa -name "EklipZ_ai" -right
 ```
 Ask me questions in discord! @EklipZ#3166 https://discord.gg/tchBMdN
 

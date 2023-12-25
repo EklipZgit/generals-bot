@@ -2187,10 +2187,10 @@ class ArmyTracker(object):
                                     if abs(t.x - tile.x) + abs(t.y - tile.y) > 11:
                                         self.valid_general_positions_by_player[player.index][t] = False
 
-                                SearchUtils.breadth_first_foreach(self.map, [tile], 100, foreachFunc=limitSpawnAroundAllyGen)
+                                SearchUtils.breadth_first_foreach(self.map, [tile], 1000, foreachFunc=limitSpawnAroundAllyGen, bypassDefaultSkip=True)
                             continue
 
-                        SearchUtils.breadth_first_foreach(self.map, [tile], self.min_spawn_distance, foreachFunc=limitSpawnAroundOtherGen)
+                        SearchUtils.breadth_first_foreach(self.map, [tile], self.min_spawn_distance, foreachFunc=limitSpawnAroundOtherGen, bypassDefaultSkip=True)
 
                     for t in self.map.get_all_tiles():
                         if t != tile:
@@ -2353,7 +2353,7 @@ class ArmyTracker(object):
                     continue
 
                 for tile in self.map.get_all_tiles():
-                    if distances[tile] < self.min_spawn_distance:
+                    if abs(tile.x - general.x) + abs(tile.y - general.y) < self.min_spawn_distance:  # spawns are manhattan distance
                         self.valid_general_positions_by_player[player.index][tile] = False
                         continue
 

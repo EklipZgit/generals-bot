@@ -20,6 +20,7 @@ from ArmyEngine import ArmySimResult
 from ArmyTracker import Army
 from BoardAnalyzer import BoardAnalyzer
 from DataModels import Move
+from DistanceMapperImpl import DistanceMapperImpl
 from MapMatrix import MapMatrix
 from Path import Path
 from Sim.GameSimulator import GameSimulator, GameSimulatorHost
@@ -113,6 +114,8 @@ class TestBase(unittest.TestCase):
         map.player_index = general.player
         map.generals[general.player] = general
         map.resume_data = data
+
+        map.distance_mapper = DistanceMapperImpl(map)
 
         return map, general
 
@@ -488,7 +491,7 @@ class TestBase(unittest.TestCase):
         board.rebuild_intergeneral_analysis(analyzer.tileB)
         board.rescan_chokes()
 
-        viewInfo.add_targeted_tile(board.intergeneral_analysis.tileC, TargetStyle.YELLOW, radiusReduction=1)
+        # viewInfo.add_targeted_tile(board.intergeneral_analysis.tileC, TargetStyle.YELLOW, radiusReduction=1)
 
         for tile in map.get_all_tiles():
             tileData = []
@@ -506,7 +509,7 @@ class TestBase(unittest.TestCase):
                 # viewInfo.topRightGridText[tile.x][tile.y] = f'pc{len(pathWay.tiles)}'
             # viewInfo.midLeftGridText[tile.x][tile.y] = f'ad{analyzer.aMap[tile.x][tile.y]}'
             # viewInfo.bottomLeftGridText[tile.x][tile.y] = f'bd{analyzer.bMap[tile.x][tile.y]}'
-            viewInfo.bottomLeftGridText[tile.x][tile.y] = f'c{analyzer.cMap[tile.x][tile.y]}'
+            # viewInfo.bottomLeftGridText[tile.x][tile.y] = f'c{analyzer.cMap[tile.x][tile.y]}'
 
             if tile in analyzer.chokeWidths:
                 viewInfo.bottomMidRightGridText[tile.x][tile.y] = f'cw{analyzer.chokeWidths[tile]}'

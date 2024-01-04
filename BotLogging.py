@@ -49,7 +49,7 @@ def set_up_logger(logLevel: int, mainProcess: bool = False, queue = None):
     if mainProcess:
         import sys
         from logbook import StreamHandler
-        my_handler = StreamHandler(sys.stderr, logbook.INFO)  #  format_string=LOG_FORMATTER
+        my_handler = StreamHandler(sys.stderr, logLevel)  #  format_string=LOG_FORMATTER
         # from logbook.queues import ZeroMQSubscriber
         # subscriber = ZeroMQSubscriber(f'tcp://127.0.0.1:{LOGGING_PORT}')
         # # with my_handler:

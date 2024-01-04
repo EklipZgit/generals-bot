@@ -2666,3 +2666,50 @@ class ArmyTracker(object):
             for tile in self.map.pathableTiles:
                 if not tile.visible:
                     self.valid_general_positions_by_player[player][tile] = True
+
+
+    @classmethod
+    def get_expected_enemy_expansion_path(cls, map: MapBase, enTile: Tile, general: Tile) -> Path | None:
+        def valueFunc(curTile, prioObj):
+            dist, negCaps, negArmy, genDist = prioObj
+            if negArmy > 0:
+                return None
+            if dist == 0:
+                return None
+            val = (0 - negCaps / dist, dist)
+            # logbook.info(f'val {str(curTile)}: {str(val)}')
+            return val
+
+        def prioFunc(nextTile, prioObj):
+            dist, negCaps, negArmy, genDist = prioObj
+            if negArmy > 0:
+                return None
+
+            genDist = map.get_distance_between(general, nextTile)
+            # if genDist is None:
+            #     return None
+
+            if map.is_tile_on_team_with(nextTile, enTile.player):
+                negArmy -= nextTile.army
+            else:
+                negArmy += nextTile.army
+                if map.is_tile_on_team_with(nextTile, general.player):
+                    negCaps -= 2.2
+                else:
+                    negCaps -= 0.7
+
+            negCaps -= 0.000001 * dist
+            negArmy += 1
+
+            return dist+1, negCaps, negArmy, genDist
+
+        path = SearchUtils.breadth_first_dynamic_max(
+            map,
+            {enTile: ((0, 0, 0 - enTile.army + 1, map.get_distance_between(general, enTile)), 0)},
+            valueFunc=valueFunc,
+            priorityFunc=prioFunc,
+            searchingPlayer=enTile.player,
+            noNeutralCities=True,
+        )
+
+        return path

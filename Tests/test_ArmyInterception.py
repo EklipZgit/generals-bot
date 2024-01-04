@@ -8,6 +8,7 @@ import ExpandUtils
 import SearchUtils
 import base.viewer
 from ArmyAnalyzer import ArmyAnalyzer
+from ArmyTracker import ArmyTracker
 from Behavior.ArmyInterceptor import ArmyInterceptor, ArmyInterception
 from BoardAnalyzer import BoardAnalyzer
 from DangerAnalyzer import ThreatObj, DangerAnalyzer, ThreatType
@@ -56,8 +57,6 @@ class ArmyInterceptionTests(TestBase):
         if additionalPath is not None:
             addlPath = Path.from_string(map, additionalPath)
 
-        genDists = SearchUtils.build_distance_map_matrix(map, [general])
-
         if enTile is None:
             enTile = max(map.get_all_tiles(), key=lambda t: t.army if t.player == enemyGeneral.player else 0)
 
@@ -76,46 +75,14 @@ class ArmyInterceptionTests(TestBase):
         for target in targets:
             threatPath = SearchUtils.dest_breadth_first_target(map, [target], maxDepth=40, searchingPlayer=enemyGeneral.player, negativeTiles=negs)
 
-            if threatPath is not None:
+            if threatPath is not None and threatPath.start.tile == enTile:
                 analysis = ArmyAnalyzer(map, threatPath.tail.tile, threatPath.start.tile)
                 saveTile = None
                 if len(threatPath.tileList) > 1 and threatPath.tail.prev.tile in analysis.pathChokes:
                     saveTile = threatPath.tail.prev.tile
                 threats.append(ThreatObj(threatPath.length - 1, threatPath.value, threatPath, ThreatType.Kill, saveTile, analysis))
 
-        def valueFunc(curTile, prioObj):
-            dist, negCaps, negArmy, genDist = prioObj
-            if negArmy > 0:
-                return None
-            if dist == 0:
-                return None
-
-            return (0 - negCaps / dist, 0 - dist)
-
-        def prioFunc(nextTile, prioObj):
-            dist, negCaps, negArmy, genDist = prioObj
-            if negArmy > 0:
-                return None
-            if map.is_tile_on_team_with(nextTile, enemyGeneral.player):
-                negArmy -= nextTile.army
-            else:
-                negArmy += nextTile.army
-                if map.is_tile_on_team_with(nextTile, general.player):
-                    negCaps -= 2.2
-                else:
-                    negCaps -= 0.7
-
-            negArmy += 1
-
-            return dist+1, negCaps, negArmy, genDists[nextTile]
-
-        path = SearchUtils.breadth_first_dynamic_max(
-            map,
-            {enTile: ((0, 0, 0 - enTile.army + 1, genDists[enTile]), 0)},
-            valueFunc=valueFunc,
-            priorityFunc=prioFunc,
-            searchingPlayer=enemyGeneral.player
-        )
+        path = ArmyTracker.get_expected_enemy_expansion_path(map, enTile, general)
 
         if addlPath is not None:
             analysis = ArmyAnalyzer(map, addlPath.tail.tile, addlPath.start.tile)
@@ -236,7 +203,7 @@ class ArmyInterceptionTests(TestBase):
                 255,
                 155,
             ))
-        self.render_view_info(map, viewInfo, f'intercept {maxVal:.2f}/{maxTurn}={maxValPerTurn} - {str(maxValTurnPath)}')
+        self.render_view_info(map, viewInfo, f'intercept {maxVal:.2f}/{maxTurn}={maxValPerTurn:.2f} - {str(maxValTurnPath)}')
 
     def assertInterceptChokeTileMoves(self, plan: ArmyInterception, map: MapBase, x: int, y: int, w: int):
         tile = map.GetTile(x, y)
@@ -251,7 +218,7 @@ class ArmyInterceptionTests(TestBase):
             self.fail(f'Expected {str(tile)} NOT to be in chokes, instead found val {val}.')
 
     def test_should_intercept_army_that_is_one_tile_kill_and_city_threat_lol(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         for i in range(6):
             mapFile = 'GameContinuationEntries/should_see_city_as_forward_from_central_point___HgAyaVTVa---1--307.txtmap'
             map, general, enemyGeneral = self.load_map_and_generals(mapFile, 307, fill_out_tiles=True)
@@ -273,6 +240,32 @@ class ArmyInterceptionTests(TestBase):
             self.assertIsNone(winner)
 
             self.assertEqual(general.player, playerMap.GetTile(7, 14).player)
+
+    def test_should_intercept_army_that_is_one_tile_kill_and_city_threat_lol__unit_test(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_see_city_as_forward_from_central_point___HgAyaVTVa---1--307.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 307, fill_out_tiles=True)
+        enTile = map.GetTile(7, 14)
+
+        plan = self.get_interception_plan(map, general, enemyGeneral, enTile=enTile)
+
+        if debugMode:
+            self.render_intercept_plan(map, plan)
+
+        value, turns, bestOpt = self.get_best_intercept_option(plan)
+        self.assertEqual(1, bestOpt.length)
+        self.assertEqual(enTile, bestOpt.tail.tile)
+
+    def test_should_continue_to_intercept_army__unit_test_should_not_value_pointless_intercepts(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_value_pointless_intercepts___Human.exe-TEST__bee0a7ef-ea4e-4234-aba2-4d8c5384d938---0--141.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 141, fill_out_tiles=True)
+
+        plan = self.get_interception_plan(map, general, enemyGeneral)
+        opt = self.get_best_intercept_option(plan)
+
+        if debugMode:
+            self.render_intercept_plan(map, plan)
     
     def test_should_continue_to_intercept_army(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -355,6 +348,22 @@ class ArmyInterceptionTests(TestBase):
 
                 tileDiff = self.get_tile_differential(simHost)
                 self.assertGreater(tileDiff, -1, 'should not have allowed opp free reign :(')
+
+    def test_should_prevent_run_around_general__correctly_analyze_intercept_value_addons(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_correctly_analyze_intercept_values___Human.exe-TEST__3c8fbffc-3762-4a68-a059-27bf06366d28---1--137.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 137, fill_out_tiles=True)
+
+        # rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=137)
+
+        plan = self.get_interception_plan(map, general, enemyGeneral) #, additionalPath='7,9->7,10->6,10->6,11->5,11->5,9')
+
+        if debugMode:
+            self.render_intercept_plan(map, plan)
+
+        val, turns, bestOpt = self.get_best_intercept_option(plan)
+
+        self.assertEqual(general, bestOpt.start.tile)
     
     def test_should_split_and_cap_1s(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -376,14 +385,14 @@ class ArmyInterceptionTests(TestBase):
 
         tileDiff = self.get_tile_differential(simHost)
         self.assertGreater(tileDiff, -3, 'should split and cap up the line of 1s while defending at home with the split, uncomment general moves above for proof')
-    
+
     def test_should_intercept_with_large_tile(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_intercept_with_large_tile___qWwqozFbe---1--138.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 138, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=138)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '10,9->9,9z->7,9  10,9->10,11  12,9->14,9->14,12  7,9->7,11')
@@ -396,6 +405,35 @@ class ArmyInterceptionTests(TestBase):
 
         tileDiff = self.get_tile_differential(simHost)
         self.assertGreater(tileDiff, 1)
+
+    def test_should_intercept_with_large_tile__unit_test(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_intercept_with_large_tile___qWwqozFbe---1--138.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 138, fill_out_tiles=True)
+
+        # enTile = map.GetTile(12, 9)
+        enTile = map.GetTile(10, 9)
+
+        self.begin_capturing_logging()
+        analysis = ArmyAnalyzer(map, map.GetTile(10, 14), enTile)
+        if debugMode:
+            self.render_army_analyzer(map, analysis)
+
+        plan = self.get_interception_plan(map, general, enemyGeneral, enTile=enTile)
+        # plan = self.get_interception_plan(map, general, enemyGeneral, enTile=enTile)
+
+        if debugMode:
+            self.render_intercept_plan(map, plan)
+
+        path, value, turnsUsed = self.get_interceptor_path(plan, 10, 13, 10, 15)
+        if path is not None:
+            self.assertLess(value, 2, "should not have found a path just heading back to general")
+        path, value, turnsUsed = self.get_interceptor_path(plan, 10, 11, 10, 14)
+        if path is not None:
+            self.assertLess(value, 2, "should not have found a path just heading back to general")
+        path, value, turnsUsed = self.get_interceptor_path(plan, 10, 10, 10, 14)
+        if path is not None:
+            self.assertLess(value, 2, "should not have found a path just heading back to general")
 
     def test_should_split_when_chasing_threat_around_obstacle(self):
         for i in range(4):
@@ -579,7 +617,7 @@ class ArmyInterceptionTests(TestBase):
         self.assertEqual(map.GetTile(14, 6), plan.best_enemy_threat.path.tail.tile)
 
     def test_should_identify_best_meeting_point_in_intercept_options(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_intercept_inbound_army_on_edge_when_would_have_10_recapture_turns___l7Y-HnzES---0--181.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 181, fill_out_tiles=True)
         notCity = map.GetTile(14, 6)
@@ -587,7 +625,11 @@ class ArmyInterceptionTests(TestBase):
         map.players[general.player].cities.remove(notCity)
 
         plan = self.get_interception_plan(map, general, enemyGeneral)
-        self.assertEqual(1, len(plan.threats))
+
+        if debugMode:
+            self.render_intercept_plan(map, plan)
+
+        self.assertEqual(2, len(plan.threats))
 
         self.assertInterceptChokeTileMoves(plan, map, x=8, y=5, w=0)
         self.assertInterceptChokeTileMoves(plan, map, x=9, y=5, w=1)
@@ -687,6 +729,8 @@ class ArmyInterceptionTests(TestBase):
             self.render_intercept_plan(map, interception)
 
         path, val, turns = self.get_interceptor_path(interception, 2, 5, 2, 8)
+
+        self.assertEqual(1, interception.common_intercept_chokes[map.GetTile(2, 7)], 'all routes can be intercepted in one extra move from this point')
         self.assertIsNotNone(path)
         self.assertEqual(11, turns, 'max value per turn should be the full turns')
         # the raw econ differential from this play is +14 econ (-9 -> +5) however it prevents a huge amount of enemy damage as well, so should be calculated as blocking 20 additional econ damage from opponent
@@ -825,92 +869,6 @@ class ArmyInterceptionTests(TestBase):
 
         self.assertNotInterceptChoke(interception, map, 6, 6)
         self.assertNotInterceptChoke(interception, map, 7, 7)
-
-
-    def test_benchmark_bidir_a_star(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/should_kill_point_blank_army_lul___ffrBNaR9l---0--133.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 133, fill_out_tiles=False)
-        #
-        # points = [
-        #     map.GetTile(7, 6),
-        #     map.GetTile(16, 9),
-        #     map.GetTile(0, 4),
-        #     map.GetTile(7, 18),
-        #     map.GetTile(12, 11),
-        #     map.GetTile(9, 16),
-        #     map.GetTile(2, 1),
-        #     map.GetTile(11, 3),
-        #     map.GetTile(9, 10),
-        #     map.GetTile(5, 2),
-        #     map.GetTile(7, 2),
-        #     map.GetTile(13, 9),
-        #     map.GetTile(7, 2),
-        #     map.GetTile(11, 8),
-        # ]
-        points = list(map.pathableTiles)
-        random.shuffle(points)
-        points = points[0:50]
-
-        sumOgTime = 0.0
-        sumPQTime = 0.0
-        sumHQTime = 0.0
-        sumAStarTime = 0.0
-        sumBfsFindTime = 0.0
-        iters = 0
-
-        self.begin_capturing_logging()
-
-        for pointA in points:
-            for pointB in points:
-                if pointA == pointB:
-                    continue
-
-                iters += 1
-                start = time.perf_counter()
-                pOg = SearchUtils.bidirectional_a_star_orig(pointA, pointB)
-                sumOgTime += time.perf_counter() - start
-
-                start = time.perf_counter()
-                pPq = SearchUtils.bidirectional_a_star_pq(pointA, pointB)
-                sumPQTime += time.perf_counter() - start
-
-                start = time.perf_counter()
-                pHq = SearchUtils.bidirectional_a_star(pointA, pointB)
-                sumHQTime += time.perf_counter() - start
-
-                start = time.perf_counter()
-                pAStar = SearchUtils.a_star_find(map, [pointA], pointB, noLog=True)
-                sumAStarTime += time.perf_counter() - start
-
-                start = time.perf_counter()
-
-                def findFunc(tile: Tile, a: int, dist: int) -> bool:
-                    return tile == pointB
-
-                pFind = SearchUtils.breadth_first_find_queue(map, [pointA], findFunc, noNeutralCities=True, noLog=True)
-                sumBfsFindTime += time.perf_counter() - start
-
-                if pOg.length != pPq.length or pOg.length != pHq.length or pFind.length != pOg.length or pAStar.length != pOg.length:
-                    vi = self.get_renderable_view_info(map)
-                    vi.color_path(PathColorer(
-                        pOg, 255, 255, 0
-                    ))
-                    vi.color_path(PathColorer(
-                        pPq, 0, 255, 255
-                    ))
-                    vi.color_path(PathColorer(
-                        pHq, 255, 0, 255
-                    ))
-                    vi.color_path(PathColorer(
-                        pFind, 255, 255, 255
-                    ))
-                    vi.color_path(PathColorer(
-                        pAStar, 0, 0, 0
-                    ))
-                    self.render_view_info(map, vi, "mismatch")
-
-        logbook.info(f'iters {iters}: og {sumOgTime:.3f} vs PQ {sumPQTime:.3f} vs HQ {sumHQTime:.3f} vs find {sumBfsFindTime:.3f} vs aStar {sumAStarTime:.3f}')
 
     def test_should_not_blow_up(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1110,4 +1068,3 @@ class ArmyInterceptionTests(TestBase):
         self.assertIsNone(winner)
 
         self.assertTileDifferentialGreaterThan(19, simHost)
-

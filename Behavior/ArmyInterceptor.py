@@ -5,6 +5,7 @@ from collections import deque
 
 import logbook
 
+import DebugHelper
 import SearchUtils
 from ArmyAnalyzer import ArmyAnalyzer
 from BoardAnalyzer import BoardAnalyzer
@@ -68,10 +69,14 @@ class ArmyInterceptor(object):
 
     def get_shared_chokes(self, threats: typing.List[ThreatObj]):
         commonChokesCounts = {}
+        commonChokesVals = {}
         for threat in threats:
             for tile, interceptMoves in threat.armyAnalysis.interceptChokes.items():
                 curCount = commonChokesCounts.get(tile, 0)
+                curVal = commonChokesVals.get(tile, 0)
                 commonChokesCounts[tile] = curCount + 1
+                commonChokesVals[tile] = curVal + interceptMoves
+
         maxShared = 0
         for tile, num in commonChokesCounts.items():
             if num > maxShared:
@@ -93,9 +98,16 @@ class ArmyInterceptor(object):
             if maxWidth >= 0:
                 potentialSharedChokes[tile] = maxWidth
 
+        if self.log_debug:
+            for tile, chokeVal in sorted(commonChokesVals.items()):
+                logbook.info(f'chokeVals: {str(tile)} = count {commonChokesCounts[tile]} - chokeVal {chokeVal}')
+
+            for tile, dist in sorted(potentialSharedChokes.items()):
+                logbook.info(f'potential shared: {str(tile)} = dist {dist}')
+
         furthestPotentialCommon = max(potentialSharedChokes.keys(), key=lambda t: threats[0].armyAnalysis.bMap[t.x][t.y])
         furthestDist = threats[0].armyAnalysis.bMap[furthestPotentialCommon.x][furthestPotentialCommon.y]
-        dists = SearchUtils.build_distance_map_matrix(self.map, [furthestPotentialCommon])
+        dists = self.map.distance_mapper.get_tile_dist_matrix(furthestPotentialCommon)
 
         # bestClassVal = 0
         sharedChokes = {}
@@ -132,13 +144,22 @@ class ArmyInterceptor(object):
                 lastDepth = depth
                 lastVisited.update(visited)
                 visited.clear()
-            if dists[tile] > furthestDist:
-                logbook.info(f'skipping {str(tile)} because dists[tile] {dists[tile]} > furthestDist {furthestDist}')
+
+            curDist = dists[tile]
+            if curDist > furthestDist:
+                if self.log_debug:
+                    logbook.info(f'skipping {str(tile)} because dists[tile] {dists[tile]} > furthestDist {furthestDist}')
                 continue
+
             tilesAtDist = distLookups[depth]
+            # todo keep?
+            # if tile in threats[0].armyAnalysis.shortestPathWay.tiles:
+            #     tilesAtDist.append(tile)
             tilesAtDist.append(tile)
+
             if tile in visited:
                 continue
+
             visited.add(tile)
 
             # INCLUDE mountains, we need to treat them as fucked stuff. Dont path THROUGH them though.
@@ -156,6 +177,7 @@ class ArmyInterceptor(object):
             tiles = distLookups[i]
             if len(tiles) == 0:
                 continue
+
             # find the middle tile...?
             common.clear()
             fromCommon.clear()
@@ -175,7 +197,14 @@ class ArmyInterceptor(object):
                         break
                 if allCommon:
                     # sharedChokes[tile] = i + len(fromTiles) + len(toTiles)
-                    sharedChokes[tile] = potentialSharedChokes[tile]
+                    sharedInterceptVal = potentialSharedChokes[tile]
+                    if self.log_debug:
+                        logbook.info(f'common choke {str(tile)} was {sharedInterceptVal}')
+                    sharedChokes[tile] = sharedInterceptVal
+
+        # if self.log_debug:
+        #     for tile, dist in sorted(sharedChokes.items()):
+        #         logbook.info(f'potential shared: {str(tile)} = dist {dist}')
 
         if len(sharedChokes) == 1 and len(threats) > 1 and threats[0].path.start.tile in sharedChokes:
             logbook.info(f'No shared chokes found against {threats}, falling back to just first threat intercept...')
@@ -206,14 +235,14 @@ class ArmyInterceptor(object):
 
         return maxAmount
 
-    def _get_potential_intercept_table(self, turnsLeftInCycle: int, baseThreatArmy: int) -> typing.List[int]:
+    def _get_potential_intercept_table(self, turnsLeftInCycle: int, baseThreatArmy: int) -> typing.List[float]:
         """
         Returns a turn-offset lookup table of how much army we would want to intercept with at any given turn for a max recapture.
         We never need MORE army than this, but gathering 1 extra turn to move one up the intercept table is good ish.
         """
 
         potentialRecaptureArmyInterceptTable = [
-            baseThreatArmy + 2 * i for i in range(turnsLeftInCycle)
+            baseThreatArmy + 1.8 * i for i in range(turnsLeftInCycle)
         ]
 
         if turnsLeftInCycle < 15:
@@ -233,7 +262,7 @@ class ArmyInterceptor(object):
         for threat in threats:
             self.ensure_threat_army_analysis(threat)
             if threat.path.start.tile != threatTile:
-                raise AssertionError(f'Can only get an interception plan for threats from one tile at a time.')
+                raise AssertionError(f'Can only get an interception plan for threats from one tile at a time. {str(threat.path.start.tile)} vs {str(threatTile)}')
 
     def ensure_threat_army_analysis(self, threat):
         if threat.armyAnalysis is None:
@@ -273,7 +302,7 @@ class ArmyInterceptor(object):
             turnsLeftInCycle: int,
             interceptingArmy: int = 0,
             includeRecaptureEffectiveStartDist: int = -1
-    ) -> typing.Tuple[int, int]:
+    ) -> typing.Tuple[float, int]:
         """Returns (value, turnsUsed). turnsUsed is always the path length unless includeRecaptureEffectiveStartDist >= 0"""
         val = 0
         cityCaps = 0
@@ -295,7 +324,7 @@ class ArmyInterceptor(object):
                     if tile.isCity:
                         cityCaps += 1
                     if self.map.is_tile_on_team_with(tile, targetPlayer):
-                        val += 2
+                        val += 2.1
                     else:
                         val += 1
             else:
@@ -321,7 +350,7 @@ class ArmyInterceptor(object):
                 curTurn += includeRecaptureEffectiveStartDist
                 recaps = max(0, min(left, armyLeft // 2))
                 curTurn += recaps
-                val += recaps * 2
+                val += recaps * 1.8
 
         return val, curTurn - self.map.turn
 
@@ -343,13 +372,20 @@ class ArmyInterceptor(object):
         logbook.info(f'getting intercept paths at maxDepth {maxDepth}, threatDistFromCommon {threatDistFromCommon}')
         # TODO sort by earliest intercept + chokeWidth?
         for tile, interceptDist in interception.common_intercept_chokes.items():
+            if tile.isCity and tile.isNeutral:
+                continue
             # TODO for final tile in the path, if tile is recapturable (city, normal tile) then increase maxDepth to turnsLeftInCycle
-            turnsToIntercept = interception.best_enemy_threat.armyAnalysis.bMap[tile.x][tile.y] + 1 #- interceptDist
+            turnsToIntercept = interception.best_enemy_threat.armyAnalysis.bMap[tile.x][tile.y] - interceptDist + 3
+
+            depth = min(maxDepth, turnsToIntercept)
+
+            if self.log_debug:
+                logbook.info(f'Checking tile {str(tile)} with depth {depth} / threatDistFromCommon {threatDistFromCommon} / min(maxDepth={maxDepth}, turnsToIntercept={turnsToIntercept}) ')
 
             interceptPaths = self._get_intercept_paths(
                 tile,
                 interception,
-                maxDepth=min(maxDepth, turnsToIntercept),
+                maxDepth=depth,
                 turnsLeftInCycle=turnsLeftInCycle,
                 threatDistFromCommon=threatDistFromCommon,
                 searchingPlayer=self.map.player_index)
@@ -427,10 +463,11 @@ class ArmyInterceptor(object):
             (
                 dist,
                 negTileCapPoints,
-                negArmy
+                negArmy,
+                fromTile
             ) = prioObj
 
-            if curTile.player != self.map.player_index:
+            if curTile.player != searchingPlayer:
                 return None
 
             # if negArmy > 0:
@@ -448,11 +485,30 @@ class ArmyInterceptor(object):
             (
                 dist,
                 negTileCapPoints,
-                negArmy
+                negArmy,
+                fromTile
             ) = prioObj
 
             if interception.furthest_common_intercept_distances[nextTile] > threatDistFromCommon + 1:
                 return None
+
+            if nextTile.isCity and nextTile.isNeutral:
+                return None
+
+            if fromTile is not None:
+                distA = self.map.get_distance_between(tile, fromTile)
+                distB = self.map.get_distance_between(tile, nextTile)
+                if distA is None:
+                    # if not DebugHelper.IS_DEBUGGING:
+                    #     return None
+                    raise AssertionError(f'{repr(tile)}->{repr(fromTile)}: {distA}')
+                if distB is None:
+                    # if not DebugHelper.IS_DEBUGGING:
+                    #     return None
+                    raise AssertionError(f'{repr(tile)}->{repr(nextTile)}: {distB}')
+
+                if distA > distB:
+                    return None
 
             if self.map.is_tile_on_team_with(nextTile, searchingPlayer):
                 negArmy -= nextTile.army
@@ -467,10 +523,11 @@ class ArmyInterceptor(object):
             return (
                 dist + 1,
                 negTileCapPoints,
-                negArmy
+                negArmy,
+                nextTile
             )
 
-        startTiles = {tile: ((0, 0, startArmy), 0)}
+        startTiles = {tile: ((0, 0, startArmy, None), 0)}
         results = SearchUtils.breadth_first_dynamic_max_per_tile_per_distance(
             self.map,
             startTiles=startTiles,

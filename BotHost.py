@@ -321,7 +321,7 @@ def run_bothost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, ali
         import BotLogging
         mgr = ctx.Manager()
         queue = mgr.Queue(-1)
-        BotLogging.set_up_logger(logging.INFO, queue=queue)
+        BotLogging.set_up_logger(logbook.ERROR, queue=queue)
 
         loggingProc = ctx.Process(target=BotLogging.run_log_output_process, args=[BotLogging.LOGGING_QUEUE])
 

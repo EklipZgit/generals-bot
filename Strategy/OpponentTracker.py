@@ -1024,7 +1024,7 @@ class OpponentTracker(object):
                 else:
                     armyRisk += gatherOffset
 
-            logEntries.append(f't{turn}, usArmy {ourArmyNonIncrement}, theirArmy {armyRisk}')
+            # logEntries.append(f't{turn}, usArmy {ourArmyNonIncrement}, theirArmy {armyRisk}')
 
             if armyRisk > ourArmyNonIncrement:
                 logEntries.append(f'BROKE EVEN at t{turn}, usArmy {ourArmyNonIncrement}, theirArmy {armyRisk}. Returning.')

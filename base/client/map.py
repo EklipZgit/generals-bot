@@ -668,6 +668,18 @@ class Score(object):
         return f'p{self.player}{" DEAD" if self.dead else ""} {self.total} {self.tiles}t'
 
 
+class DistanceMapper:
+    def get_distance_between(self, tileA: Tile, tileB: Tile) -> int | None:
+        raise NotImplemented()
+
+    def get_tile_dist_matrix(self, tile: Tile) -> typing.Dict[Tile, int]:
+        """Actually returns mapmatrix, but they behave similarly and cant declare mapmatrix here because it uses map as a circular reference."""
+        raise NotImplemented()
+
+    def recalculate(self):
+        raise NotImplemented()
+
+
 class MapBase(object):
     def __init__(self,
                  player_index: int,
@@ -680,6 +692,7 @@ class MapBase(object):
                  ):
         # Start Data
         # self.USE_OLD_MOVEMENT_DETECTION = True
+        self.distance_mapper: DistanceMapper = DistanceMapper()
         self.last_player_index_submitted_move: typing.Tuple[Tile, Tile, bool] | None = None
         self.player_index: int = player_index  # Integer Player Index
         # TODO TEAMMATE
@@ -2583,6 +2596,9 @@ class MapBase(object):
 
     def get_tile_index(self, tile: Tile) -> int:
         return tile.y * self.cols + tile.x
+
+    def get_distance_between(self, tileA: Tile, tileB: Tile) -> int | None:
+        return self.distance_mapper.get_distance_between(tileA, tileB)
 
     def get_tile_by_tile_index(self, tileIndex: int) -> Tile:
         x, y = self.convert_tile_server_index_to_x_y(tileIndex)

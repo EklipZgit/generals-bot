@@ -275,6 +275,10 @@ class DangerAnalyzer(object):
                     added = set()
                     threatList = []
                     threatLookup[threatStart] = threatList
+                    if not SearchUtils.any_where(army.expectedPaths, lambda p: not p.tail.tile.isCity and not p.tail.tile.isGeneral):
+                        p = ArmyTracker.get_expected_enemy_expansion_path(self.map, army.tile, self.map.generals[self.map.player_index])
+                        if p is not None:
+                            army.expectedPaths.append(p)
                     for path in army.expectedPaths:
                         if path.start.tile == threatStart:
                             if path.tail.tile not in added:

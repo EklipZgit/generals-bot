@@ -318,7 +318,7 @@ class GeneralsViewer(object):
         termSec = 600
         if not self.noLog:
             import logging
-            BotLogging.set_up_logger(logging.INFO, mainProcess=False, queue=loggingQueue)
+            BotLogging.set_up_logger(logging.ERROR, mainProcess=False, queue=loggingQueue)
         while not self._receivedUpdate:  # Wait for first update
             try:
                 viewInfo, map, isComplete = self._inbound_update_queue.get(block=True, timeout=15.0)
@@ -1137,7 +1137,11 @@ class GeneralsViewer(object):
 
                     if divisionMatrix[tile] != divisionMatrix[move]:
                         self.draw_between_tiles(divisionLine, tile, move, alpha=alpha)
-            if len(self._viewInfo.board_analysis.intergeneral_analysis.shortestPathWay.tiles) > 0:
+            if (
+                    self._viewInfo.board_analysis.intergeneral_analysis is not None
+                    and self._viewInfo.board_analysis.intergeneral_analysis.shortestPathWay is not None
+                    and len(self._viewInfo.board_analysis.intergeneral_analysis.shortestPathWay.tiles) > 0
+            ):
                 startTiles = [t for t in self._viewInfo.board_analysis.intergeneral_analysis.shortestPathWay.tiles]
                 SearchUtils.breadth_first_foreach(self._map, startTiles, 1000, draw_border_func, noLog=True)
 

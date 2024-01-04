@@ -286,7 +286,7 @@ class GeneralsClient(object):
                 continue
 
             if msg[0] == "game_start":
-                logbook.info("Game info: {}".format(msg[1]))
+                logbook.info(f"Game info: {msg[1]}")
                 self._start_data = msg[1]
                 print("logging????")
                 # for handler in logging.root.handlers[:]:
@@ -295,7 +295,8 @@ class GeneralsClient(object):
                 self.logFile = f"{self.logFolder}\\{self.username}-{self.mode}-{self._start_data['replay_id']}.txt"
                 self.chatLogFile = f"{self.logFolder}\\_chat\\{self.username}-{self.mode}-{self._start_data['replay_id']}.txt"
 
-                logbook.info(f'replay_id:[{self._start_data["replay_id"]}]')
+                logbook.error(f'replay_id:[{self._start_data["replay_id"]}]')
+                print(f'replay_id:[{self._start_data["replay_id"]}]')
 
                 _spawn(self._delayed_chat_thread)
                 os.makedirs(f"{self.logFolder}\\_chat", exist_ok=True)

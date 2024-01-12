@@ -20,9 +20,8 @@ from base.client.generals import ChatUpdate
 from base.client.map import MapBase, Tile
 from bot_ek0x45 import EklipZBot
 
-FORCE_NO_VIEWER = True
+FORCE_NO_VIEWER = False
 FORCE_PRIVATE = False
-951-751-3051
 
 class BotHostBase(object):
     def __init__(

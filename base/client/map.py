@@ -264,7 +264,8 @@ class Tile(object):
         self.turn_captured: int = turnCapped
         """Integer Turn Tile Last Captured"""
 
-        self.army: int = army
+        self._army: int = army
+        # self.army: int = army
         """Integer Army Count"""
         # self._army: int = army
 
@@ -343,6 +344,7 @@ class Tile(object):
         """int player index"""
         return self._player
 
+
     @player.setter
     def player(self, value: int):
         if self.isGeneral and self._player != value and self._player != -1:
@@ -355,6 +357,15 @@ class Tile(object):
             self.tile = TILE_EMPTY # this whole thing seems wrong, needs to be updated carefully with tests as the delta logic seems to rely on it...
 
         self._player = value
+
+    @property
+    def army(self) -> int:
+        """int army for debugging"""
+        return self._army
+
+    @army.setter
+    def army(self, value: int):
+        self._army = value
 
     # @property
     # def army(self) -> int:

@@ -1762,7 +1762,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
             # if dist - 1 in maxValuesTMP[startTile]:
             #     shorterVal = maxValuesTMP[startTile][dist - 1]
             #     if maxValuesTMP[startTile][dist] <= shorterVal:
-            #         logbook.info(f"  PRUNED PATH TO {str(startTile)} at dist {dist} because its value {shorterVal} was same or less than shorter dists value")
+            #         logbook.info(f"  PRUNED PATH TO {str(startTile)} at dist {dist} because its value {shorterVal} was same or less than shorter _dists value")
             #         continue
 
             maxList = maxListsTMP[startTile][dist]

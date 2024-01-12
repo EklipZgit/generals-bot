@@ -52,8 +52,11 @@ class ArmyInterceptor(object):
         self,
         threats: typing.List[ThreatObj],
         turnsLeftInCycle: int
-    ) -> ArmyInterception:
-        self._validate_threats(threats)
+    ) -> ArmyInterception | None:
+        threats = self._validate_threats(threats)
+
+        if len(threats) == 0:
+            return None
 
         interception = ArmyInterception(threats)
 
@@ -255,14 +258,25 @@ class ArmyInterceptor(object):
 
         return potentialRecaptureArmyInterceptTable
 
-    def _validate_threats(self, threats: typing.List[ThreatObj]):
+    def _validate_threats(self, threats: typing.List[ThreatObj]) -> typing.List[ThreatObj]:
         if len(threats) == 0:
             raise AssertionError(f'Threat list was empty.')
+
+        outThreats = []
+
         threatTile = threats[0].path.start.tile
         for threat in threats:
+            if threat.turns > 24:
+                logbook.info(f'skipping long threat len {threat.turns} from {str(threat.path.start.tile)} to {str(threat.path.tail.tile)}')
+                continue
+
             self.ensure_threat_army_analysis(threat)
             if threat.path.start.tile != threatTile:
                 raise AssertionError(f'Can only get an interception plan for threats from one tile at a time. {str(threat.path.start.tile)} vs {str(threatTile)}')
+
+            outThreats.append(threat)
+
+        return outThreats
 
     def ensure_threat_army_analysis(self, threat):
         if threat.armyAnalysis is None:
@@ -354,7 +368,7 @@ class ArmyInterceptor(object):
 
         return val, curTurn - self.map.turn
 
-    def _get_intercept_plan(self, interception: ArmyInterception, turnsLeftInCycle: int) -> typing.Dict[int, typing.Tuple[int, Path]]:
+    def _get_intercept_plan(self, interception: ArmyInterception, turnsLeftInCycle: int) -> typing.Dict[int, typing.Tuple[float, Path]]:
         """turnsToIntercept -> econValueOfIntercept, interceptPath"""
 
         if len(interception.common_intercept_chokes) == 0:
@@ -368,7 +382,7 @@ class ArmyInterceptor(object):
 
         threatValueOffset = interception.best_threat_econ_value
 
-        bestInterceptTable: typing.Dict[int, typing.Tuple[int, Path]] = {}
+        bestInterceptTable: typing.Dict[int, typing.Tuple[float, Path]] = {}
         logbook.info(f'getting intercept paths at maxDepth {maxDepth}, threatDistFromCommon {threatDistFromCommon}')
         # TODO sort by earliest intercept + chokeWidth?
         for tile, interceptDist in interception.common_intercept_chokes.items():
@@ -470,8 +484,14 @@ class ArmyInterceptor(object):
             if curTile.player != searchingPlayer:
                 return None
 
-            # if negArmy > 0:
-            #     return None
+            if curTile.army <= 1:
+                return None
+
+            if self.map.turn > 626 and curTile.x == 13 and curTile.y == 0:
+                pass
+
+            if negArmy > 0:
+                return None
 
             recapVal = 0 - (negTileCapPoints + negArmy)
 

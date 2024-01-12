@@ -318,7 +318,7 @@ class GeneralsViewer(object):
         termSec = 600
         if not self.noLog:
             import logging
-            BotLogging.set_up_logger(logging.ERROR, mainProcess=False, queue=loggingQueue)
+            BotLogging.set_up_logger(logbook.INFO, mainProcess=False, queue=loggingQueue)
         while not self._receivedUpdate:  # Wait for first update
             try:
                 viewInfo, map, isComplete = self._inbound_update_queue.get(block=True, timeout=15.0)

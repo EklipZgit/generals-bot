@@ -20,9 +20,9 @@ from base.client.generals import ChatUpdate
 from base.client.map import MapBase, Tile
 from bot_ek0x45 import EklipZBot
 
-FORCE_NO_VIEWER = False
+FORCE_NO_VIEWER = True
 FORCE_PRIVATE = False
-
+951-751-3051
 
 class BotHostBase(object):
     def __init__(
@@ -120,6 +120,10 @@ class BotHostBase(object):
             teamChatMessages = self.eklipz_bot.get_queued_teammate_messages()
             for teamChatMessage in teamChatMessages:
                 self.send_chat_func(teamChatMessage, True)
+
+            allChatMessages = self.eklipz_bot.get_queued_all_chat_messages()
+            for allChatMessage in allChatMessages:
+                self.send_chat_func(allChatMessage, False)
 
             if not self.eklipz_bot.no_file_logging:
                 with moveTimer.begin_event(f'Dump {currentMap.turn}.txtmap to disk'):
@@ -321,7 +325,7 @@ def run_bothost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, ali
         import BotLogging
         mgr = ctx.Manager()
         queue = mgr.Queue(-1)
-        BotLogging.set_up_logger(logbook.ERROR, queue=queue)
+        BotLogging.set_up_logger(logbook.INFO, queue=queue)
 
         loggingProc = ctx.Process(target=BotLogging.run_log_output_process, args=[BotLogging.LOGGING_QUEUE])
 

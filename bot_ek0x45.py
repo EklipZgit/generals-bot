@@ -194,6 +194,7 @@ class EklipZBot(object):
         self.teammate_general: Tile | None = None
 
         self._outbound_team_chat: "Queue[str]" = queue.Queue()
+        self._outbound_all_chat: "Queue[str]" = queue.Queue()
         self._tile_ping_queue: "Queue[Tile]" = queue.Queue()
 
         self._chat_messages_received: "Queue[ChatUpdate]" = queue.Queue()
@@ -649,6 +650,9 @@ class EklipZBot(object):
         self.territories.needToUpdateAroundTiles.add(tile)
         if tile.isCity and tile.player != -1:
             self.board_analysis.should_rescan = True
+            self._map.distance_mapper.recalculate()
+        if tile.isCity and tile.player == -1 and tile.delta.oldOwner != -1:
+            self._map.distance_mapper.recalculate()
 
         if tile.player >= 0:
             player = self._map.players[tile.player]
@@ -701,6 +705,9 @@ class EklipZBot(object):
             if self.curPath is not None and self.curPath.tail.tile == tile:
                 self.viewInfo.add_info_line(f'reset curPath because gained vision of a city whose player is now different.')
                 self.curPath = None
+
+            if tile.delta.oldOwner == -1 or tile.player == -1:
+                self._map.distance_mapper.recalculate()
 
         if tile.delta.gainedSight and tile.player >= 0:
             self.opponent_tracker.notify_player_tile_revealed(tile)
@@ -3936,8 +3943,11 @@ class EklipZBot(object):
                     logbook.info(
                         f"~ ~ ~ ~ ~ ~ ~ giving up due to player {self.targetPlayer} (or team) with {enStats.tileCount} tiles and {enStats.score} army.")
                     self.viewInfo.add_info_line(f'surrendering')
+                    if not self._map.complete:
+                        self.send_all_chat_communication("gg")
+                    time.sleep(1)
                     self.surrender_func()
-                    time.sleep(2)
+                    time.sleep(1)
                     self._map.result = False
                     self._map.complete = True
             else:
@@ -6164,6 +6174,23 @@ class EklipZBot(object):
 
         return matrix
 
+    def check_defense_intercept_move(self, threat: ThreatObj) -> typing.Tuple[Move | None, Path | None]:
+        intercept = self.intercept_plans.get(threat.path.start.tile, None)
+        if intercept is None or not self.expansion_plan.includes_intercept:
+            return None, None
+
+        if self.expansion_plan.path.tail.tile not in threat.armyAnalysis.shortestPathWay.tiles:
+            return None, None
+
+        if self.expansion_plan.path.length > threat.turns and threat.path.tail.tile.isGeneral:
+            return None, None
+
+        self.viewInfo.color_path(PathColorer(
+            self.expansion_plan.path, 1, 1, 1
+        ))
+        self.info(f'threat intercept inclusion {str(self.expansion_plan.path)}')
+        return self.get_first_path_move(self.expansion_plan.path), self.expansion_plan.path
+
     def get_defense_moves(
             self,
             defenseCriticalTileSet: typing.Set[Tile],
@@ -6198,55 +6225,16 @@ class EklipZBot(object):
 
         for threat in threats:
             if threat is not None and threat.threatType == ThreatType.Kill:
-                # dict = {}
-                # dict[self.general] = (0, threat.threatValue, 0)
                 for tile in threat.path.tileSet:
                     negativeTilesIncludingThreat.add(tile)
-
-        gatherDepth = threats[0].path.length - 1
-        # if len(threats) > 0:
-        #     threatsByTile = self.dangerAnalyzer.get_threats_by_tile(threats[0].path.start.tile, armies=self.armyTracker.armies, includePotentialThreat=False, includeVisionThreat=False)
-        #     with self.perf_timer.begin_move_event(f'DEF INTERCEPT @{str(threatsByTile[0].path.start.tile)}'):
-        #         plan = self.army_interceptor.get_interception_plan(threatsByTile, turnsLeftInCycle=self.timings.get_turns_left_in_cycle(self._map.turn))
-        #         bestOpt = None
-        #         bestOptAmt = 0
-        #         bestTurn = 0
-        #         bestOptAmtPerTurn = 0
-        #         for turn, option in plan.intercept_options.items():
-        #             val, path = option
-        #             valPerTurn = val / max(1, turn)
-        #             # if path.length < gatherDepth and val > bestOptAmt:
-        #             if path.length < gatherDepth and valPerTurn > bestOptAmtPerTurn:
-        #                 logbook.info(f'DEF NEW BEST INTERCEPT OPT {val}v/{turn}t -- {str(path)}')
-        #                 bestOpt = path
-        #                 bestOptAmt = val
-        #                 bestTurn = turn
-        #                 bestOptAmtPerTurn = valPerTurn
-        #
-        #         if bestOpt is not None:
-        #             move = self.get_first_path_move(bestOpt)
-        #             if self.detect_repetition(move, turns=4, numReps=2):
-        #                 move.move_half = True
-        #             if not self.detect_repetition(move, turns=6, numReps=3):
-        #                 self.info(f'DEF INTERCEPT {bestOptAmt}v/{bestTurn}t @ {str(threats[0].path.start.tile)}: {str(move)} -- {str(bestOpt)}')
-        #                 if self.info_render_intercept_data:
-        #                     self.render_intercept_plan(plan)
-        #                     self.viewInfo.color_path(PathColorer(bestOpt, 80, 200, 0, alpha=150))
-        #                 return move, bestOpt
-        #             else:
-        #                 self.info(f'REP BYP DEF INTERCEPT {bestOptAmt}v/{bestTurn}t @ {str(threats[0].path.start.tile)}: {str(move)} -- {str(bestOpt)}')
 
         movesToMakeAnyway = []
 
         anyRealThreats = False
         for threat in threats:
-            intercept = self.intercept_plans.get(threat.path.start.tile, None)
-            if intercept is not None and self.expansion_plan.includes_intercept:
-                self.viewInfo.color_path(PathColorer(
-                    self.expansion_plan.path, 1, 1, 1
-                ))
-                self.info(f'threat intercept inclusion {str(self.expansion_plan.path)}')
-                return self.get_first_path_move(self.expansion_plan.path), self.expansion_plan.path
+            interceptMove, interceptPath = self.check_defense_intercept_move(threat)
+            if interceptMove is not None:
+                return interceptMove, interceptPath
 
             isRealThreat = True
             # tilecapture threats and city capture threats dont warrant all-in all-or-nothing defense behavior.
@@ -7562,28 +7550,29 @@ class EklipZBot(object):
                 if len(threats) > 0:
                     with self.perf_timer.begin_move_event(f'NEW INTERCEPT CONT @{str(self.targetingArmy)}'):
                         plan = self.army_interceptor.get_interception_plan(threats, turnsLeftInCycle=self.timings.get_turns_left_in_cycle(self._map.turn))
-                        bestOpt = None
-                        bestOptAmt = 0
-                        bestTurn = 0
-                        bestOptAmtPerTurn = 0
-                        for turn, option in plan.intercept_options.items():
-                            val, path = option
-                            valPerTurn = val / max(1, turn)
-                            # if path.length < gatherDepth and val > bestOptAmt:
-                            if path.length < gatherDepth and valPerTurn > bestOptAmtPerTurn:
-                                logbook.info(f'NEW BEST INTERCEPT OPT {val}v/{turn}t -- {str(path)}')
-                                bestOpt = path
-                                bestOptAmt = val
-                                bestTurn = turn
-                                bestOptAmtPerTurn = valPerTurn
+                        if plan is not None:
+                            bestOpt = None
+                            bestOptAmt = 0
+                            bestTurn = 0
+                            bestOptAmtPerTurn = 0
+                            for turn, option in plan.intercept_options.items():
+                                val, path = option
+                                valPerTurn = val / max(1, turn)
+                                # if path.length < gatherDepth and val > bestOptAmt:
+                                if path.length < gatherDepth and valPerTurn > bestOptAmtPerTurn:
+                                    logbook.info(f'NEW BEST INTERCEPT OPT {val}v/{turn}t -- {str(path)}')
+                                    bestOpt = path
+                                    bestOptAmt = val
+                                    bestTurn = turn
+                                    bestOptAmtPerTurn = valPerTurn
 
-                        if bestOpt is not None:
-                            move = self.get_first_path_move(bestOpt)
-                            self.info(f'INTERCEPT {bestOptAmt}v/{bestTurn}t @ {str(self.targetingArmy)}: {str(move)} -- {str(bestOpt)}')
-                            if self.info_render_intercept_data:
-                                self.render_intercept_plan(plan)
-                                self.viewInfo.color_path(PathColorer(bestOpt, 80, 200, 0, alpha=150))
-                            return move
+                            if bestOpt is not None:
+                                move = self.get_first_path_move(bestOpt)
+                                self.info(f'INTERCEPT {bestOptAmt}v/{bestTurn}t @ {str(self.targetingArmy)}: {str(move)} -- {str(bestOpt)}')
+                                if self.info_render_intercept_data:
+                                    self.render_intercept_plan(plan)
+                                    self.viewInfo.color_path(PathColorer(bestOpt, 80, 200, 0, alpha=150))
+                                return move
 
                 self.viewInfo.add_info_line(f'stopped targeting army {str(self.targetingArmy)} because not in expansion plan')
                 self.targetingArmy = None
@@ -7659,30 +7648,18 @@ class EklipZBot(object):
                 if len(threats) == 0:
                     continue
 
-                with self.perf_timer.begin_move_event(f'NEW INTERCEPT @{str(tile)}'):
-                    interceptions[tile] = self.army_interceptor.get_interception_plan(threats, turnsLeftInCycle=self.timings.get_turns_left_in_cycle(self._map.turn))
-                    # bestOpt = None
-                    # bestOptAmt = 0
-                    # bestTurn = 0
-                    # bestOptAmtPerTurn = 0
-                    # for turn, option in plan.intercept_options.items():
-                    #     val, path = option
-                    #     valPerTurn = val / max(1, turn)
-                    #     # if path.length < gatherDepth and val > bestOptAmt:
-                    #     if path.length < gatherDepth and valPerTurn > bestOptAmtPerTurn:
-                    #         logbook.info(f'NEW BEST INTERCEPT OPT {val}v/{turn}t -- {str(path)}')
-                    #         bestOpt = path
-                    #         bestOptAmt = val
-                    #         bestTurn = turn
-                    #         bestOptAmtPerTurn = valPerTurn
-                    #
-                    # if bestOpt is not None:
-                    #     move = self.get_first_path_move(bestOpt)
-                    #     self.info(f'INTERCEPT {bestOptAmt}v/{bestTurn}t @ {str(self.targetingArmy)}: {str(move)} -- {str(bestOpt)}')
-                    #     if self.info_render_intercept_data:
-                    #         self.render_intercept_plan(plan)
-                    #         self.viewInfo.color_path(PathColorer(bestOpt, 80, 200, 0, alpha=150))
-                    #     return move
+                if not self._map.is_player_on_team_with(threats[0].threatPlayer, self.targetPlayer) and self.targetPlayer != -1 and not self.territories.is_tile_in_friendly_territory(tile):
+                    continue
+
+                with self.perf_timer.begin_move_event(f'INTERCEPT @{str(tile)}'):
+                    army = self.get_army_at(tile)
+                    if army.last_seen_turn < self._map.turn - 6:
+                        self.viewInfo.add_info_line(f'bypass intcpt {str(tile)} due last move {army.last_seen_turn}')
+                        continue
+                    plan = self.army_interceptor.get_interception_plan(threats, turnsLeftInCycle=self.timings.get_turns_left_in_cycle(self._map.turn))
+                    if plan is not None:
+                        interceptions[tile] = plan
+
         return interceptions
 
     def try_find_counter_army_scrim_path_killpath(
@@ -9796,6 +9773,15 @@ class EklipZBot(object):
                 self.send_teammate_tile_ping(pingTile)
             self._communications_sent_cooldown_cache[detectionKey] = self._map.turn
 
+    def send_all_chat_communication(self, message: str):
+        """
+        Use this to send a chat message to team-chat only, as well as an optional tile ping.
+
+        @param message:
+        @return:
+        """
+        self._outbound_all_chat.put(message)
+
     def send_teammate_path_ping(self, path: Path, cooldown: int = 0, cooldownKey: str | None = None):
         """Pings all the tiles in a path"""
         for tile in path.tileList:
@@ -9889,6 +9875,13 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         outbound = []
         while self._outbound_team_chat.qsize() > 0:
             outbound.append(self._outbound_team_chat.get())
+
+        return outbound
+
+    def get_queued_all_chat_messages(self) -> typing.List[str]:
+        outbound = []
+        while self._outbound_all_chat.qsize() > 0:
+            outbound.append(self._outbound_all_chat.get())
 
         return outbound
 
@@ -12056,7 +12049,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
     def render_intercept_plan(self, plan: ArmyInterception, colorIndex: int = 0):
         for tile, iw in plan.common_intercept_chokes.items():
-            self.viewInfo.add_targeted_tile(tile, TargetStyle(colorIndex + 2), radiusReduction=11 - colorIndex)
+            self.viewInfo.add_targeted_tile(tile, TargetStyle(((colorIndex + 1) % 9) + 1), radiusReduction=11 - colorIndex)
             self.viewInfo.bottomMidRightGridText[tile.x][tile.y] = f'iw{iw}'
 
         for dist, (val, path) in plan.intercept_options.items():

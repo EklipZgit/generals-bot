@@ -136,22 +136,24 @@ class GeneralsClient(object):
             self.isPrivate = True
             mode = "custom"
 
+        supporterColorSelection = None
+
         if mode == "custom":
             force_start = True
             self._gameid = gameid  # Set Game ID
             if gameid is None:
                 raise ValueError("Gameid must be provided for private games")
             logbook.debug("CUSTOM GAME JOIN {}".format(gameid))
-            self._send(["join_private", gameid, userid, self.bot_key])
+            self._send(["join_private", gameid, userid, self.bot_key, supporterColorSelection])
         elif mode == "1v1":
-            self._send(["join_1v1", userid, self.bot_key])
+            self._send(["join_1v1", userid, self.bot_key, supporterColorSelection])
         elif mode == "team":
             self._gameid = gameid  # Set Game ID
             if self._gameid is None:
                 self._gameid = 'getRekt'
-            self._send(["join_team", self._gameid, userid, self.bot_key])
+            self._send(["join_team", self._gameid, userid, self.bot_key, supporterColorSelection])
         elif mode == "ffa":
-            self._send(["play", userid, self.bot_key])
+            self._send(["play", userid, self.bot_key, supporterColorSelection])
         else:
             raise ValueError("Invalid mode")
 

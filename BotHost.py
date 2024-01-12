@@ -20,8 +20,8 @@ from base.client.generals import ChatUpdate
 from base.client.map import MapBase, Tile
 from bot_ek0x45 import EklipZBot
 
-FORCE_NO_VIEWER = False
-FORCE_PRIVATE = False
+FORCE_NO_VIEWER = False  # if you want the bot GUI to stop distracting you from work but you dont want to stop and restart all the bot shells with noUI, flip this flag and it will force the GUI off :)
+FORCE_PRIVATE = False  # if you're making changes that are gonna break the bot and want to force it to only play in private rooms temporarily, flip this flag.
 
 class BotHostBase(object):
     def __init__(

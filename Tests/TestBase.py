@@ -709,6 +709,9 @@ class TestBase(unittest.TestCase):
             viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
             time.sleep(0.1)
 
+    def assertOwned(self, player: int, tile: Tile):
+        self.assertEqual(player, tile.player)
+
     def assertNoRepetition(
             self,
             simHost: GameSimulatorHost,
@@ -1251,7 +1254,7 @@ class TestBase(unittest.TestCase):
                 enemyGen = map.GetTile(int(x), int(y))
 
         if enemyGen is None:
-            enemyGens = list(filter(lambda gen: gen is not None and (gen.player == player or player is None), map.generals))
+            enemyGens = list(filter(lambda gen: gen is not None and (gen.player == player or (player is None and gen.player != map.player_index)), map.generals))
             if len(enemyGens) > 0:
                 enemyGen = enemyGens[0]
 

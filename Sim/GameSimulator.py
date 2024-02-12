@@ -536,7 +536,7 @@ class GameSimulatorHost(object):
                 continue
             player = self.sim.players[playerIndex]
             # this actually just initializes the bots viewers and stuff, we throw this first move away
-            botHost.eklipz_bot.initialize_map_for_first_time(player.map)
+            botHost.eklipz_bot.initialize_from_map_for_first_time(player.map)
             # botHost.eklipz_bot.player = (botHost.eklipz_bot.general.player + 1) % 2
             # botHost.eklipz_bot.targetPlayerObj = botHost.eklipz_bot._map.players[botHost.eklipz_bot.player]
             # botHost.eklipz_bot.init_turn()

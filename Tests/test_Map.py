@@ -1208,12 +1208,17 @@ C5
                                     # 133
                                     # 181
                                     # 0
+                                    # 145
+                                    # 17
                                     self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bArmyAdjacent=bArmyAdjacent)
 
     def test_run_one_off_fog_island_border_capture_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        # TODO!!
-        self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=8, bArmy=9, bMove=(-1, 0), turn=96, seenFog=False, bArmyAdjacent=True)
+        self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=12, bArmy=8, bMove=(0, -1), turn=96, seenFog=True, bArmyAdjacent=True)
+
+    def test_specific_non_prio_capture(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=20, bArmy=12, bMove=(-1, 0), turn=97, seenFog=True, bArmyAdjacent=True)
 
     def test_generate_all_fog_island_full_capture_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1238,6 +1243,7 @@ C5
                                     # 521
                                     # 161 after fixing move determinism assert detection
                                     # 0
+                                    # 209
                                     self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bHasNearbyVision=bHasNearbyVision)
 
     def test_run_one_off_fog_island_full_capture_test(self):
@@ -1258,6 +1264,7 @@ C5
                             for seenFog in [True, False]:
                                 with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn, seenFog=seenFog):
                                     # 0
+                                    # 69
                                     self.run_out_of_fog_collision_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn, seenFog=seenFog)
 
     def test_run_one_off_out_of_fog_collision_test(self):
@@ -1284,6 +1291,7 @@ C5
                                 # 163
                                 # 73  after fixing move determinism assert detection
                                 # 0
+                                # 77
                                 self.run_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_adj_test(self):
@@ -1306,8 +1314,8 @@ C5
                                 self.run_diag_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_diag_test(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
-        self.run_diag_test(debugMode=debugMode, aArmy=5, bArmy=15, aMove=(0, 1), bMove=(1, 0), turn=96)
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        self.run_diag_test(debugMode=debugMode, aArmy=11, bArmy=9, aMove=(1, 0), bMove=(0, -1), turn=96)
 
     def test_generate_all_team_adjacent_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1322,6 +1330,7 @@ C5
                             for turn in [96, 97]:
                                 with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, targetTileFriendly=targetTileFriendly, turn=turn):
                                     # 1667
+                                    # 4501
                                     self.run_team_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, targetTileFriendly=targetTileFriendly, turn=turn)
 
     def test_run_one_off_team_adj_test(self):

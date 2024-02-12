@@ -1217,7 +1217,7 @@ dur 0.3073, iter   109, nodesExplored   109, rollouts   109,
                                 #                             allAfkExceptMapPlayer=True)
                                 # bot = self.get_debug_render_bot(simHost, general.player)
                                 bot = EklipZBot()
-                                bot.initialize_map_for_first_time(map)
+                                bot.initialize_from_map_for_first_time(map)
                                 bot.targetPlayer = enemyGeneral.player
                                 bot.perf_timer.begin_move(42)
                                 bot.init_turn()

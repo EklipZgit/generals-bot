@@ -75,7 +75,12 @@ EXPANSION v2
 
 
 GENERAL-PREDICTION:
+   Stop doing a BFS of emergence values out from the emergence tile, and instead just store the emergence tiles. Weight emergences by the number of unknown cities the player had at that time.
+         Do prediction by building a minimum spanning tree that includes just all of the emergence tiles.
+         The closest valid general location to the center of the minimum spanning tree is the prediction.
+         Rank potential tiles by their proximity to parts of the spanning tree..?
 	In FFA, after a player capture, we end up hunting all the wrong places for the capturer even though we saw them ahead of them capping more stuff.
+
 	We need to maintain an early game prediction state that stops getting updated after a capture or a few cycles, and heavily weight that for exploration.
 		Kind of done, ish? We heavily weight early discoveries over late discoveries.
 	Likewise when a capture happens and we see tiles from capturer before and after, we should dual-BFS out from the captured player and mark all tiles encountered on the way to the capturer as 'not capturer general possible'
@@ -85,7 +90,7 @@ GENERAL-PREDICTION:
 		Use that if we encounter their army in the first 25 to limit their location. 
 		If they did an 11 start, and we saw a 4 tile, then we know their general is 6 tiles away from that 4 tile in the fog.
 			Put those tiles as very high emergence values.
-	General prediction should result in a gradient of likelihood values.
+	General prediction should result in a gradient of likelihood values that can be fed as win-percentage likelihood for an exploration path that factors in visible enemy intercepts + probable enemy fog amount.
 	Exploration attacks should change to maximize the sum of the gradient values explored, rather than trot back and forth between the highest emergence value.
 
 

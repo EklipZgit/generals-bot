@@ -3,8 +3,8 @@
 #>
 function Copy-Turn25StartResultsToUnitTest {
     Param(
-        $DestFolder = "C:\bot\generals-bot\Tests\EarlyExpandUtilsTestMaps\SampleTurn25MapsToTryToBeat",
-        $LogFolder = "C:\bot\bot_logs"
+        $DestFolder = "D:\2019_reformat_backup\generals-bot\Tests\EarlyExpandUtilsTestMaps\SampleTurn25MapsToTryToBeat",
+        $LogFolder = "D:\2019_reformat_backup\bot_logs"
     )
     
     $items = Get-ChildItem -Path $LogFolder -Recurse -Filter '50.txtmap'
@@ -31,8 +31,8 @@ function Copy-Turn25StartResultsToUnitTest {
 
 function Copy-WinMapsToWonMapsDirectory {
     Param(
-        $DestFolder = "C:\bot\generals-bot\Tests\WonFullMapVisionSampleMaps",
-        $LogFolder = "C:\bot\bot_logs"
+        $DestFolder = "D:\2019_reformat_backup\generals-bot\Tests\WonFullMapVisionSampleMaps",
+        $LogFolder = "D:\2019_reformat_backup\bot_logs"
     )
 
     if (-not (Test-Path $DestFolder))
@@ -130,8 +130,8 @@ function Create-ManyTestsByTurnFromFolders {
         $TestNamePrefix = "",
         $TestCategory = "",
         $Turn = 1,
-        $LogFolderRoot = "C:\bot\bot_logs\",
-        $DestFolderRoot = "C:\bot\generals-bot\Tests\"
+        $LogFolderRoot = "D:\2019_reformat_backup\bot_logs\",
+        $DestFolderRoot = "D:\2019_reformat_backup\generals-bot\Tests\"
     )
 
     $folders = foreach ($f in Get-ChildItem $LogFolderRoot -Directory)
@@ -159,7 +159,7 @@ function Create-TestContinuingGameFrom {
         [Parameter(Position=1)]
         $TestName = "shouldnt_die_in_some_scenario",
 
-        $DestFolderRoot = "C:\bot\generals-bot\Tests\"
+        $DestFolderRoot = "D:\2019_reformat_backup\generals-bot\Tests\"
     )
 
     $TestName = $TestName.Replace(' ', '_')

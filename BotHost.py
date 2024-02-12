@@ -1,6 +1,5 @@
 import argparse
 import gc
-import logging
 import signal
 from multiprocessing.context import DefaultContext, DefaultContext
 from multiprocessing.managers import SyncManager
@@ -82,7 +81,7 @@ class BotHostBase(object):
         timer.record_update(currentMap.turn, updateReceivedTime)
 
         if not self.eklipz_bot.isInitialized:
-            self.eklipz_bot.initialize_map_for_first_time(currentMap)
+            self.eklipz_bot.initialize_from_map_for_first_time(currentMap)
         self.eklipz_bot._map = currentMap
 
         with timer.begin_move(currentMap.turn) as moveTimer:
@@ -149,7 +148,7 @@ class BotHostBase(object):
         timer.record_update(currentMap.turn, updateReceivedTime)
 
         if not self.eklipz_bot.isInitialized:
-            self.eklipz_bot.initialize_map_for_first_time(currentMap)
+            self.eklipz_bot.initialize_from_map_for_first_time(currentMap)
         self.eklipz_bot._map = currentMap
 
         with timer.begin_move(currentMap.turn) as moveTimer:

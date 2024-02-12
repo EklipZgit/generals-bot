@@ -269,6 +269,7 @@ class ArmyTracker(object):
 
         if advancedTurn:
             self.move_fogged_army_paths()
+            self.increment_fogged_armies()
 
         for army in self.armies.values():
             if army.tile.visible:
@@ -277,6 +278,17 @@ class ArmyTracker(object):
         for player in self.map.players:
             if len(player.tiles) > 0:
                 self.seen_player_lookup[player.index] = True
+
+    def increment_fogged_armies(self):
+        if not self.map.is_army_bonus_turn:
+            return
+
+        for army in list(self.armies.values()):
+            if army.tile.visible:
+                continue
+
+            if army.tile.army > army.value + 1 > army.tile.army - 2:
+                army.value += 1
 
     def move_fogged_army_paths(self):
         for army in list(self.armies.values()):
@@ -913,6 +925,26 @@ class ArmyTracker(object):
 
     def notify_seen_player_tile(self, tile: Tile):
         self._flipped_tiles.add(tile)
+
+    def notify_concrete_emergence(self, maxDist: int, emergingTile: Tile, confidentFromGeneral: bool):
+        player = emergingTile.player
+        if confidentFromGeneral:
+            for tile in self.map.get_all_tiles():
+                self.emergenceLocationMap[player][tile.x][tile.y] /= 10.0
+
+        incTiles = []
+
+        def foreachFunc(curTile: Tile, dist: int):
+            if dist == 0:
+                return
+            incTiles.append((curTile, dist))
+
+        breadth_first_foreach_dist(self.map, [emergingTile], maxDepth=maxDist, foreachFunc=foreachFunc, skipFunc=lambda t: t.visible and t != emergingTile)
+
+        incAmount = 500 / len(incTiles)
+
+        for incTile, dist in incTiles:
+            self.emergenceLocationMap[player][incTile.x][incTile.y] += incAmount
 
     def find_fog_source(self, armyPlayer: int, tile: Tile, delta: int | None = None) -> Path | None:
         """

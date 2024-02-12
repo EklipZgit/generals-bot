@@ -14,6 +14,7 @@ ENABLE_DEBUG_ASSERTS = False
 
 class OpponentTracker(object):
     def __init__(self, map: MapBase, viewInfo: ViewInfo | None = None):
+        self.outbound_emergence_notifications: typing.List[typing.Callable[[int, Tile, bool], None]] = []
         self.map: MapBase = map
         self.team_score_data_history: typing.Dict[int, typing.Dict[int, TeamStats | None]] = {}
         self.targetPlayer: int = -1
@@ -210,7 +211,7 @@ class OpponentTracker(object):
                 data.append(f'ot_{team}_stats_approximate_fog_army_available_total={stats.approximate_fog_army_available_total}')
                 data.append(f'ot_{team}_stats_approximate_fog_city_army={stats.approximate_fog_city_army}')
 
-        tileCountsByPlayer = self.get_player_fog_tile_count_dict()
+        tileCountsByPlayer = self.get_all_player_fog_tile_count_dict()
 
         for player, tileCounts in tileCountsByPlayer.items():
             if player == self.map.player_index or player in self.map.teammates:
@@ -308,7 +309,7 @@ class OpponentTracker(object):
                             self._gather_queues_by_player[player.index].append(size)
 
         for team in self._team_indexes:
-            self.calculate_cycle_stats(team, self.map.get_team_stats_by_team_id(team))
+            self._set_cycle_stats_no_checks(team, self.map.get_team_stats_by_team_id(team), self.get_last_cycle_end_turn(), skipTurn=True)
 
         self.skip_this_turn = True
 
@@ -317,28 +318,10 @@ class OpponentTracker(object):
         if lastCycleEndTurn is None:
             return None
 
+        currentCycleStats, lastCycleScores = self._set_cycle_stats_no_checks(team, curTurnScores, lastCycleEndTurn)
+
         isCycleEnd = self.map.is_army_bonus_turn
         isCityBonus = self.map.is_city_bonus_turn
-
-        lastTurnScores = self.current_team_scores[team]
-        currentCycleStats = self.current_team_cycle_stats[team]
-
-        if currentCycleStats is None:
-            currentCycleStats = self.initialize_cycle_stats(team)
-
-        lastCycleScores = self.team_score_data_history[team].get(lastCycleEndTurn, None)
-        lastCycleStats = self.team_cycle_stats_history[team].get(lastCycleEndTurn, None)
-
-        self._handle_emergences(currentCycleStats)
-        self._handle_moves_into_fog(currentCycleStats)
-
-        self._update_team_cycle_stats_based_on_turn_deltas(currentCycleStats, currentTeamStats=curTurnScores, lastTurnTeamStats=lastTurnScores)
-
-        self._handle_reveals(currentCycleStats)
-        self._handle_vision_losses(currentCycleStats)
-
-        self._update_team_cycle_stats_relative_to_last_cycle(currentCycleStats, currentTeamStats=curTurnScores, lastCycleScores=lastCycleScores)
-
         if isCityBonus:
             self._include_city_bonus(currentCycleStats)
 
@@ -356,6 +339,26 @@ class OpponentTracker(object):
         self._validate_army_totals(curTurnScores, currentCycleStats)
 
         return currentCycleStats
+
+    def _set_cycle_stats_no_checks(self, team: int, curTurnScores: TeamStats, lastCycleEndTurn: int, skipTurn: bool = False):
+        lastTurnScores = self.current_team_scores[team]
+        currentCycleStats = self.current_team_cycle_stats[team]
+        if currentCycleStats is None:
+            currentCycleStats = self.initialize_cycle_stats(team)
+
+        lastCycleScores = self.team_score_data_history[team].get(lastCycleEndTurn, None)
+        # lastCycleStats = self.team_cycle_stats_history[team].get(lastCycleEndTurn, None)
+
+        if not skipTurn:
+            self._handle_emergences(currentCycleStats)
+            self._handle_moves_into_fog(currentCycleStats)
+            self._update_team_cycle_stats_based_on_turn_deltas(currentCycleStats, currentTeamStats=curTurnScores, lastTurnTeamStats=lastTurnScores)
+
+            self._handle_reveals(currentCycleStats)
+            self._handle_vision_losses(currentCycleStats)
+        self._update_team_cycle_stats_relative_to_last_cycle(currentCycleStats, currentTeamStats=curTurnScores, lastCycleScores=lastCycleScores)
+
+        return currentCycleStats, lastCycleScores
 
     def _update_team_cycle_stats_based_on_turn_deltas(self, currentCycleStats: CycleStatsData, currentTeamStats: TeamStats, lastTurnTeamStats: TeamStats):
         unexplainedTileDelta = 0
@@ -899,7 +902,7 @@ class OpponentTracker(object):
                     currentCycleStats.approximate_fog_army_available_total += armyPerFogCity
                     currentCycleStats.approximate_fog_city_army -= armyPerFogCity
 
-    def get_player_fog_tile_count_dict(self) -> typing.Dict[int, typing.Dict[int, int]]:
+    def get_all_player_fog_tile_count_dict(self) -> typing.Dict[int, typing.Dict[int, int]]:
         gatherValueCountsByPlayer = {}
         for player in self.map.players:
             playerGathValueCounts = {}
@@ -910,6 +913,16 @@ class OpponentTracker(object):
                 playerGathValueCounts[gatherTile] = curCount + 1
 
         return gatherValueCountsByPlayer
+
+    def get_player_fog_tile_count_dict(self, playerIndex: int) -> typing.Dict[int, int]:
+        player = self.map.players[playerIndex]
+        playerGathValueCounts = {}
+        queue = self.get_player_gather_queue(player.index)
+        for gatherTile in queue:
+            curCount = playerGathValueCounts.get(gatherTile, 0)
+            playerGathValueCounts[gatherTile] = curCount + 1
+
+        return playerGathValueCounts
 
     def _check_missing_fog_gather_tiles(self, currentCycleStats: CycleStatsData):
         for playerIdx in currentCycleStats.players:
@@ -932,9 +945,9 @@ class OpponentTracker(object):
             player = tile.player
 
         teamScores = self.current_team_scores[currentCycleStats.team]
-        teamTotalFogEmergenceEst = currentCycleStats.approximate_fog_army_available_total + currentCycleStats.approximate_fog_city_army - 5 * teamScores.cityCount
+        teamTotalFogEmergenceEst = currentCycleStats.approximate_fog_army_available_total + currentCycleStats.approximate_fog_city_army - max(0, 3 * (teamScores.cityCount - 1)) - max(0, 6 * (teamScores.cityCount - 2))
 
-        thresh = teamTotalFogEmergenceEst * 0.85
+        thresh = teamTotalFogEmergenceEst * 0.90
 
         fullFogReset = False
         if emergence > thresh:
@@ -947,6 +960,11 @@ class OpponentTracker(object):
                     self.view_info.add_info_line(f'UNDERESTIMATED BY {emergence - teamTotalFogEmergenceEst}! E+: fullFogReset - emergence {emergence} > thresh {thresh:.1f} (based on teamTotalFogEmergenceEst {teamTotalFogEmergenceEst})')
                     self.view_info.add_targeted_tile(tile, TargetStyle.ORANGE)
             fullFogReset = True
+            if emergence > teamTotalFogEmergenceEst - 4:
+                maxDist = max(1, teamTotalFogEmergenceEst - emergence - 1) * 2
+                self.view_info.add_info_line(f'DUE TO emergence {emergence} VS teamTotalFogEmergenceEst {teamTotalFogEmergenceEst}, CONFIDENT EMERGENCE {maxDist} FROM {str(tile)}')
+                self.send_general_distance_notification(maxDist, tile, generalConfidence=teamScores.cityCount == 1)
+
 
         logbook.info(
             f'E+: {repr(tile)} - p{player} team[{currentCycleStats.team}] emergence {emergence} reducing approximate_fog_army_available_total')
@@ -1236,3 +1254,7 @@ class OpponentTracker(object):
 
             if self.view_info:
                 self.view_info.add_info_line(f'FIXED OT {team} -> {sumWithFog}/{curTurnScores.score} - fog {currentCycleStats.approximate_fog_army_available_total}, city {currentCycleStats.approximate_fog_city_army}')
+
+    def send_general_distance_notification(self, maxDist: int, tile: Tile, generalConfidence: bool):
+        for notification in self.outbound_emergence_notifications:
+            notification(maxDist, tile, generalConfidence)

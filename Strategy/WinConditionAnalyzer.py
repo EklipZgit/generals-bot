@@ -10,6 +10,7 @@ from BoardAnalyzer import BoardAnalyzer
 from CityAnalyzer import CityAnalyzer
 from DataModels import GatherTreeNode
 from MapMatrix import MapMatrix
+from Path import Path
 from Territory import TerritoryClassifier
 from .OpponentTracker import OpponentTracker
 from base.client.map import MapBase, Tile
@@ -147,7 +148,7 @@ class WinConditionAnalyzer(object):
                 ourOffense = self.get_approximate_attack_against([city], inTurns=attackTime, asPlayer=self.map.player_index)
 
                 enDefense = self.opponent_tracker.get_approximate_fog_army_risk(self.target_player, cityLimit=4, inTurns=attackTime)
-                bestVisibleDefenseTurns, bestVisibleDefenseValue = self.get_dynamic_turns_visible_defense_against([city], attackTime, asPlayer=self.target_player)
+                bestVisibleDefenseTurns, bestVisibleDefenseValue = self.get_dynamic_turns_visible_defense_against([city], attackTime, asPlayer=self.target_player, minArmy=ourOffense)
                 if bestVisibleDefenseTurns > 0:
                     visibleVt = bestVisibleDefenseValue / bestVisibleDefenseTurns
                     fogVt = enDefense / attackTime
@@ -287,7 +288,7 @@ class WinConditionAnalyzer(object):
 
             approxThreatTurns, approxThreat = self.get_dynamic_turns_approximate_attack_against(city, maxTurns=threatAllowedTurns, asPlayer=self.target_player)
 
-            approxDefTurns, approxDef = self.get_dynamic_turns_visible_defense_against(tiles=[city], maxTurns=threatAllowedTurns, asPlayer=self.map.player_index)
+            approxDefTurns, approxDef = self.get_dynamic_turns_visible_defense_against(tiles=[city], maxTurns=threatAllowedTurns, asPlayer=self.map.player_index, minArmy=approxThreat)
 
             if approxThreat > approxDef + city.army:
                 self.defend_cities.add(city)
@@ -323,7 +324,8 @@ class WinConditionAnalyzer(object):
             inTurns: int,
             asPlayer: int,
             timeLimit: float = 0.005,
-            forceFogRisk: bool = False
+            forceFogRisk: bool = False,
+            negativeTiles: typing.Set[Tile] | None = None
     ) -> int:
         """
         Does NOT include the army ON the target tile.
@@ -332,20 +334,26 @@ class WinConditionAnalyzer(object):
         @param inTurns:
         @param asPlayer:
         @param timeLimit:
-        @param forceFogRisk:
+        @param forceFogRisk: If true, force a return of the fog risk
+        @param negativeTiles:
         @return:
         """
         if DebugHelper.IS_DEBUGGING:
             timeLimit *= 4
             timeLimit += 0.01
 
+        if negativeTiles is None:
+            negativeTiles = set(tiles)
+        else:
+            negativeTiles.update(tiles)
+
         value, gatherNodes = GatherUtils.knapsack_levels_backpack_gather_with_value(
             self.map,
             tiles,
-            inTurns,
+            inTurns - 1,
             negativeTiles=set(tiles),
             searchingPlayer=asPlayer,
-            # skipFunc=skipFunc,
+            # skipFunc=lambda t, o: not t.visible,
             # viewInfo=self.viewInfo if self.info_render_gather_values else None,
             # skipTiles=skipTiles,
             distPriorityMap=self.board_analysis.intergeneral_analysis.bMap,
@@ -359,20 +367,43 @@ class WinConditionAnalyzer(object):
             # priorityMatrix=priorityMatrix
         )
 
-        value += self.get_additional_fog_gather_risk(gatherNodes, asPlayer, inTurns, forceFogRisk=forceFogRisk)
-        logbook.info(f'concluded get_approximate_attack_against gather, value {value}')
+        fogRiskValue = value + self.get_additional_fog_gather_risk(gatherNodes, asPlayer, inTurns, forceFogRisk=forceFogRisk)
 
-        return max(0, value)
+        prunedGatherTurns, prunedValue, prunedGatherNodes = GatherUtils.prune_mst_to_max_army_per_turn_with_values(
+            gatherNodes,
+            minArmy=1,
+            searchingPlayer=asPlayer,
+            teams=MapBase.get_teams_array(self.map),
+            additionalIncrement=0,
+            # preferPrune=self.expansion_plan.preferred_tiles if self.expansion_plan is not None else None
+            )
 
-    def get_dynamic_turns_visible_defense_against(self, tiles: typing.List[Tile], maxTurns: int, asPlayer: int, timeLimit: float = 0.005) -> typing.Tuple[int, int]:
+        prunedFogRiskValue = prunedValue + self.get_additional_fog_gather_risk(prunedGatherNodes, asPlayer, inTurns, forceFogRisk=forceFogRisk)
+
+        attackPathRiskVal = 0
+        maxAttack = self.get_best_attack_path_from_fog(tiles, asPlayer, inTurns, negativeTiles=negativeTiles)
+        if maxAttack is not None:
+            attackPathRiskVal = maxAttack.value
+            fakeGathNodes = [maxAttack.convert_to_tree_nodes(self.map, asPlayer)]
+            attackPathRiskVal += self.get_additional_fog_gather_risk(fakeGathNodes, asPlayer, inTurns, forceFogRisk=forceFogRisk)
+
+        logbook.info(f'concluded get_approximate_attack_against gather, value {fogRiskValue} or {prunedFogRiskValue} or {attackPathRiskVal}')
+
+        return max(0, fogRiskValue, prunedFogRiskValue, attackPathRiskVal)
+
+    def get_dynamic_turns_visible_defense_against(self, tiles: typing.List[Tile], maxTurns: int, asPlayer: int, timeLimit: float = 0.05, minArmy: int = 1, negativeTiles: typing.Set[Tile] | None = None) -> typing.Tuple[int, int]:
         if DebugHelper.IS_DEBUGGING:
             timeLimit *= 4
+
+        negs = set([t for t in self.map.players[asPlayer].tiles if not t.visible])
+        if negativeTiles is not None:
+            negs.update(negativeTiles)
 
         value, gatherNodes = GatherUtils.knapsack_levels_backpack_gather_with_value(
             self.map,
             tiles,
             maxTurns,
-            negativeTiles = set([t for t in self.map.players[asPlayer].tiles if not t.visible]),
+            negativeTiles=negs,
             searchingPlayer=asPlayer,
             # skipFunc=skipFunc,
             # viewInfo=self.viewInfo if self.info_render_gather_values else None,
@@ -393,7 +424,7 @@ class WinConditionAnalyzer(object):
         if value > 0:
             prunedTurns, prunedValue, gatherNodes = GatherUtils.prune_mst_to_max_army_per_turn_with_values(
                 gatherNodes,
-                minArmy=1,
+                minArmy=minArmy,
                 searchingPlayer=asPlayer,
                 teams=MapBase.get_teams_array(self.map),
                 # viewInfo=self.viewInfo if self.info_render_gather_values else None,
@@ -490,13 +521,24 @@ class WinConditionAnalyzer(object):
 
         GatherUtils.iterate_tree_nodes(gatherNodes, forEachFunc=fogCounterFunc)
 
-        result = self.opponent_tracker.get_approximate_fog_army_risk(asPlayer, inTurns=inTurns) - fogValue.value
-        logbook.info(f'get_additional_fog_gather_risk fogValue {fogValue.value}, numFogTiles {numFogTiles.value}, inTurns {inTurns}, result {result}')
-        if numFogTiles.value > inTurns // 4:
-            return max(0, result)
+        turnsUsed = 0
+        for t in gatherNodes:
+            turnsUsed += t.gatherTurns
+
+        turnsLeft = inTurns - turnsUsed
+
+        result = self.opponent_tracker.get_approximate_fog_army_risk(asPlayer, inTurns=turnsLeft) - fogValue.value
+        distPenalty = max(0, 8 - turnsLeft)
+        logbook.info(f'get_additional_fog_gather_risk fogValue {fogValue.value}, numFogTiles {numFogTiles.value}, inTurns {turnsLeft} ({turnsUsed} used for attack of {inTurns}), result {result}')
+        if numFogTiles.value > inTurns // 7 + 1:
+            return max(0, result - distPenalty)
 
         if forceFogRisk:
-            return result - 20  # rough approximation of the cost to go through our territory. In reality we should use the worst case flank path, instead.
+            if numFogTiles.value > 0:
+                return max(0, result - distPenalty)
+
+            # TODO this is very wrong; rough approximation of the cost to go through our territory. In reality we should use the worst case flank path, instead.
+            return max(0, result - 10 - distPenalty)
 
         return 0
 
@@ -527,3 +569,56 @@ class WinConditionAnalyzer(object):
         enEcon = enScore.tileCount + (enScore.cityCount - enStats.cities_gained) * 25
 
         return frEcon - enEcon
+
+    def get_best_attack_path_from_fog(self, tiles: typing.List[Tile], asPlayer: int, inTurns: int, negativeTiles: typing.Set[Tile] | None) -> Path | None:
+        if negativeTiles is None:
+            negativeTiles = set()
+        negativeTiles.update(tiles)
+
+        def valueFunc(tile: Tile, prioVals) -> typing.Tuple | None:
+            if tile.visible:
+                return None
+            if tile.player != asPlayer:
+                return None
+
+            depth, negArmySum = prioVals
+            if negArmySum > 0:
+                return 0 - negArmySum
+            else:
+                return (0 - negArmySum) / depth
+
+        def prioFunc(nextTile: Tile, prioVals) -> typing.Tuple | None:
+            depth, negArmySum = prioVals
+
+            if (negativeTiles is None or nextTile not in negativeTiles) and nextTile.visible:
+                if self.map.is_player_on_team_with(nextTile.player, asPlayer):
+                    negArmySum -= nextTile.army
+                else:
+                    negArmySum += nextTile.army
+            # always leaving 1 army behind. + because this is negative.
+            negArmySum += 1
+
+            return depth + 1, negArmySum
+
+        startTiles = {}
+        for tile in tiles:
+            startTiles[tile] = ((0, 0), 0)
+
+        logbook.info(f'Looking for max path to fog from {str(tiles)}')
+        path = SearchUtils.breadth_first_dynamic_max(
+            self.map,
+            startTiles,
+            # goalFunc=lambda tile, armyAmt, dist: armyAmt + tile.army > 0 and tile in self.player_targets,  # + tile.army so that we find paths that reach tiles regardless of killing them.
+            valueFunc=valueFunc,
+            priorityFunc=prioFunc,
+            negativeTiles=negativeTiles,
+            # skipTiles=skip,
+            maxTime=0.1,
+            maxDepth=inTurns,
+            noNeutralCities=True,
+            searchingPlayer=asPlayer,
+            noLog=True)
+
+        if path is not None:
+            return path.get_reversed()
+        return None

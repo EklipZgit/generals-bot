@@ -153,6 +153,8 @@ class CityAnalyzer(object):
         """
 
         for adj in city.movable:
+            if adj.isObstacle:
+                continue
             score.distance_from_player_general = min(score.distance_from_player_general, board_analysis.intergeneral_analysis.aMap[adj.x][adj.y] + 1)
             score.distance_from_enemy_general = min(score.distance_from_enemy_general, board_analysis.intergeneral_analysis.bMap[adj.x][adj.y] + 1)
 
@@ -177,7 +179,7 @@ class CityAnalyzer(object):
         else:
             scaleOffset = max(0, tile.army - 34)
 
-        score.city_general_defense_score = 0.3 + 1.0 / max(1, score.distance_from_player_general + scaleOffset) / max(0.2, score.general_distances_ratio)
+        score.city_general_defense_score = 0.2 + 1.0 / max(1, score.distance_from_player_general + scaleOffset) / max(0.2, score.general_distances_ratio)
 
         tilesNearbyFriendlyCounter = Counter(3)
         tilesNearbyEnemyCounter = Counter(3)
@@ -195,7 +197,6 @@ class CityAnalyzer(object):
 
         score.city_defensability_score = (score.friendly_city_nearby_score + tilesNearbyFriendlyCounter.value // 2) / score.general_distances_ratio_squared_capped / tilesNearbyEnemyCounter.value
 
-
     def _calculate_nearby_city_scores(self, tile: Tile, board_analysis: BoardAnalyzer, score: CityScoreData):
         nearbyFriendlyCityScore = Counter(0)
         nearbyEnemyCityScore = Counter(0)
@@ -203,7 +204,7 @@ class CityAnalyzer(object):
         maxDist = board_analysis.intergeneral_analysis.shortestPathWay.distance // 3
 
         def scoreNearbyCitiesFunc(curTile: Tile, distance: int):
-            if curTile.isCity or curTile.isGeneral:
+            if curTile.isCity or curTile.isGeneral and curTile != tile:
                 if self.map.is_player_on_team_with(curTile.player, board_analysis.general.player):
                     nearbyFriendlyCityScore.add(maxDist - distance)
                 elif curTile.player == -1:

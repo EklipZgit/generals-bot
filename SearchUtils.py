@@ -31,6 +31,12 @@ class Counter(object):
     def add(self, value):
         self.value = self.value + value
 
+    def __repr__(self):
+        return str(self.value)
+
+    def __str__(self):
+        return str(self.value)
+
 
 def where(enumerable, filter_func):
     results = [item for item in enumerable if filter_func(item)]
@@ -962,7 +968,7 @@ def breadth_first_dynamic_max(
                 negEnemyTileCount -= 1
 
             if negativeTiles is None or next not in negativeTiles:
-                if nextTile.player == searchingPlayer:
+                if map.is_player_on_team_with(nextTile.player, searchingPlayer):
                     negArmySum -= nextTile.army
                 else:
                     negArmySum += nextTile.army
@@ -2205,8 +2211,16 @@ def breadth_first_find_dist_queue(
     return foundDist
 
 
-def breadth_first_foreach(map: MapBase, startTiles, maxDepth, foreachFunc, negativeFunc=None, skipFunc=None,
-                          skipTiles=None, noLog=False, bypassDefaultSkip: bool = False):
+def breadth_first_foreach(
+        map: MapBase,
+        startTiles: typing.List[Tile],
+        maxDepth: int,
+        foreachFunc: typing.Callable[[Tile], None],
+        negativeFunc: typing.Callable[[Tile], bool] | None = None,
+        skipFunc: typing.Callable[[Tile], bool] | None = None,
+        skipTiles=None,
+        noLog=False,
+        bypassDefaultSkip: bool = False):
     """
     WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
     (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
@@ -2283,7 +2297,7 @@ def breadth_first_foreach_dist(
         startTiles: typing.List[Tile],
         maxDepth: int,
         foreachFunc: typing.Callable[[Tile, int], None],
-        negativeFunc: typing.Callable[[Tile], bool] | None = None,
+        negativeFunc: typing.Callable[[Tile, int], bool] | None = None,
         skipFunc: typing.Callable[[Tile], bool] | None = None,
         skipTiles: typing.Set[Tile] = None,
         noLog=False,

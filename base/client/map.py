@@ -1632,6 +1632,10 @@ class MapBase(object):
         sourceDeltaMismatch = srcUnexpectedDelta != 0
 
         destUnexpectedDelta = actualDestDelta - expectedDestDelta
+        # necessary for test_should_not_dupe_army_to_the_side_on_collision
+        if dest.delta.oldOwner != dest.player and dest.player != self.player_index and dest.delta.oldOwner != self.player_index:
+            destUnexpectedDelta = (0 - actualDestDelta) - expectedDestDelta
+
         destDeltaMismatch = destUnexpectedDelta != 0
 
         weHadPriority = MapBase.player_had_priority_over_other(self.player_index, dest.delta.oldOwner, self.turn)
@@ -1652,8 +1656,8 @@ class MapBase(object):
                 logbook.info(f'   Mutual attack appears to have fully cancelled out our move, returning no move from us.')
                 # source.delta.armyMovedHere = True
                 self.last_player_index_submitted_move = None
-                source.delta.armyMovedHere = oldSourceMovedHere
-                dest.delta.armyMovedHere = oldDestMovedHere
+                source.delta.armyMovedHere = source.delta.unexplainedDelta != 0
+                dest.delta.armyMovedHere = dest.delta.unexplainedDelta != 0
                 return None
 
         sourceHasEnPriorityDeltasNearby = False
@@ -1682,16 +1686,19 @@ class MapBase(object):
             if sourceHasEnPriorityDeltasNearby:
                 sourceWasAttackedWithPriority = True
                 if source.player != self.player_index or not source.visible:
-                    sourceWasCaptured = True
+                    armyMovedToDest = True
                     logbook.info(
                         f'MOVE {str(last_player_index_submitted_move)} seems to have been captured with priority. Nuking our last move.')
-                    if destDeltaMismatch:
+                    if dest.delta.unexplainedDelta != 0:
                         logbook.error(
                             f'  ^ {str(last_player_index_submitted_move)} IS QUESTIONABLE THOUGH BECAUSE DEST DID HAVE AN UNEXPLAINED DIFF. NUKING ANYWAY.')
+                    else:
+                        armyMovedToDest = False
+
                     # self.unaccounted_tile_diffs[source] = srcUnexpectedDelta  # negative number
                     # source.delta.destUnexpectedDelta = srcUnexpectedDelta
                     source.delta.armyMovedHere = True
-                    dest.delta.armyMovedHere = True
+                    dest.delta.armyMovedHere = armyMovedToDest
                     self.last_player_index_submitted_move = None
                     return None
                 else:
@@ -1712,9 +1719,9 @@ class MapBase(object):
                     f'MOVE {str(last_player_index_submitted_move)} was capped WITHOUT priority..? Adding unexplained diff {srcUnexpectedDelta} based on actualSrcDelta {actualSrcDelta} - expectedSourceDelta {expectedSourceDelta}. Continuing with dest diff calc')
                 # self.unaccounted_tile_diffs[source] = srcUnexpectedDelta  # negative number
 
-                source.delta.unexplainedDelta = srcUnexpectedDelta
+                source.delta.unexplainedDelta = actualSrcDelta
                 if dest.visible:
-                    source.delta.unexplainedDelta -= actualDestDelta - expectedDestDelta
+                    source.delta.unexplainedDelta = srcUnexpectedDelta - actualDestDelta + expectedDestDelta
 
                 source.delta.armyMovedHere = True
                 # TODO this is wrong...? Need to account for the amount of dest delta we think made it...?
@@ -1851,6 +1858,9 @@ class MapBase(object):
         # TODO for debugging only
         tilesWithDiffsPreOwn = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
         tilesWithMovedHerePreOwn = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
+
+        for player in self.players:
+            logbook.info(f'p{player.index} - unexplainedTileDelta {player.unexplainedTileDelta}, tileDelta {player.tileDelta}')
 
         logbook.info(f'Tiles with diffs pre-own: {str([str(t) for t in tilesWithDiffsPreOwn])}')
         logbook.info(f'Tiles with MovedHere pre-own: {str([str(t) for t in tilesWithMovedHerePreOwn])}')

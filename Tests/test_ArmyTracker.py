@@ -1,3 +1,5 @@
+import random
+
 import logbook
 
 import GatherUtils
@@ -92,6 +94,32 @@ class ArmyTrackerTests(TestBase):
         army = bot.armyTracker.armies.get(tile, None)
         if army is not None and army.value > 0 and not army.scrapped:
             self.fail(f'Expected no army on {repr(tile)}, instead found {repr(army)}')
+
+    def run_generated_adj_test(self, aArmy, aMove, bArmy, bMove, data, debugMode):
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(data, 97, fill_out_tiles=False, player_index=0)
+        aTile = map.GetTile(1, 1)
+        bTile = map.GetTile(2, 1)
+        aTile.army = aArmy
+        bTile.army = bArmy
+        GatherUtils.USE_DEBUG_ASSERTS = False
+        mapVision = map
+        simHost = GameSimulatorHost(map, player_with_viewer=-2, playerMapVision=mapVision)
+        simHost.apply_map_vision(enemyGeneral.player, mapVision)
+        simHost.sim.ignore_illegal_moves = True
+        simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, excludeFogMoves=False))
+        if aMove is not None:
+            aX, aY = aMove
+            simHost.queue_player_moves_str(general.player, f'{aTile.x},{aTile.y}->{aTile.x + aX},{aTile.y + aY}')
+        else:
+            simHost.queue_player_moves_str(general.player, f'None')
+        if bMove is not None:
+            bX, bY = bMove
+            simHost.queue_player_moves_str(enemyGeneral.player, f'{bTile.x},{bTile.y}->{bTile.x + bX},{bTile.y + bY}')
+        else:
+            simHost.queue_player_moves_str(enemyGeneral.player, f'None')
+        if debugMode:
+            self.begin_capturing_logging()
+        simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=1)
 
     def test_small_gather_adj_to_fog_should_not_double_gather_from_fog(self):
         # SEE TEST WITH THE SAME NAME IN test_Map.py which proves that this bug is not the map engines fault, and is instead armytracker emergence as the cause.
@@ -1065,8 +1093,56 @@ class ArmyTrackerTests(TestBase):
                 winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=3)
                 self.assertIsNone(winner)
 
+    def test_does_not_do_funky_thinks_with_dest_tiles_with_vision_loss_source_that_were_not_captured_due_to_source_prio_cap(self):
+        # self.skipTest('takes too long right now, and currently passing')
+
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        # 4x4 map, with all fog scenarios covered.
+        data = """
+|    |    |    |
+aG1  a1   a1   b1
+a1   a1   b1   b1
+a1   a1   b1   b1
+a1   b1   b1   bG1
+|    |    |    |
+"""
+        aArmy = 12
+        bArmy = 5
+
+        aMove = (1, 0)
+        # aMove = None
+
+        bMove = (0, -1)
+        # bMove = None
+
+        self.run_generated_adj_test(aArmy, aMove, bArmy, bMove, data, debugMode)
+
+    def test_generate_all_adjacent_army_scenarios__one_off(self):
+        # self.skipTest('takes too long right now, and currently passing')
+
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        # 4x4 map, with all fog scenarios covered.
+        data = """
+|    |    |    |
+aG1  a1   a1   b1
+a1   a1   b1   b1
+a1   a1   b1   b1
+a1   b1   b1   bG1
+|    |    |    |
+"""
+        aArmy = 20
+        bArmy = 15
+
+        aMove = (1, 0)
+        # aMove = None
+
+        bMove = (-1, 0)
+        # bMove = None
+
+        self.run_generated_adj_test(aArmy, aMove, bArmy, bMove, data, debugMode)
+
     def test_generate_all_adjacent_army_scenarios(self):
-        self.skipTest('takes too long right now, and currently passing')
+        # self.skipTest('takes too long right now, and currently passing')
 
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         # 4x4 map, with all fog scenarios covered.
@@ -1078,42 +1154,20 @@ a1   a1   b1   b1
 a1   b1   b1   bG1
 |    |    |    |
 """
-        moveOpts = [None, (1, 0), (-1, 0), (0, 1), (0, -1)]
+        moveOpts = [(0, -1), (-1, 0), (0, 1), None, (1, 0)]
 
-        for aArmy in [10, 11, 12, 15, 20, 2, 5, 8, 9]:
-            for bArmy in [10, 11, 12, 15, 20, 2, 5, 8, 9]:
+        combos = []
+
+        for aArmy in [12, 10, 11, 15, 20, 2, 5, 8, 9]:
+            for bArmy in [5, 10, 11, 12, 15, 20, 2, 8, 9]:
                 for aMove in moveOpts:
                     for bMove in moveOpts:
-                        with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove):
-                            # rerun = True
-                            # debugMode = False
-                            # while rerun:
-                            #     rerun = False
-                            #
-                            map, general, enemyGeneral = self.load_map_and_generals_from_string(data, 97, fill_out_tiles=False, player_index=0)
+                        combos.append((aArmy, bArmy, aMove, bMove))
 
-                            aTile = map.GetTile(1, 1)
-                            bTile = map.GetTile(2, 1)
-
-                            aTile.army = aArmy
-                            bTile.army = bArmy
-                            GatherUtils.USE_DEBUG_ASSERTS = False
-                            simHost = GameSimulatorHost(map, player_with_viewer=-2)
-                            simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, excludeFogMoves=False))
-
-                            if aMove is not None:
-                                aX, aY = aMove
-                                simHost.queue_player_moves_str(general.player, f'None  {aTile.x},{aTile.y}->{aTile.x + aX},{aTile.y + aY}  None')
-                            else:
-                                simHost.queue_player_moves_str(general.player, f'None  None  None')
-
-                            if bMove is not None:
-                                bX, bY = bMove
-                                simHost.queue_player_moves_str(enemyGeneral.player, f'None  {bTile.x},{bTile.y}->{bTile.x + bX},{bTile.y + bY}  None')
-                            else:
-                                simHost.queue_player_moves_str(enemyGeneral.player, f'None  None  None')
-
-                            simHost.run_sim(run_real_time=debugMode, turn_time=5.5, turns=3)
+        random.shuffle(combos)
+        for aArmy, bArmy, aMove, bMove in combos:
+            with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove):
+                self.run_generated_adj_test(aArmy, aMove, bArmy, bMove, data, debugMode)
     
     def test_should_detect_armies_from_fog(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -2517,3 +2571,50 @@ a1   b1   b1   bG1
 
         city = playerMap.GetTile(19, 16)
         self.assertNotEqual(-1, city.player)
+    
+    def test_because_of_opponent_tracker_registering_max_possible_emergence_pulling_ALL_army_off_of_general_should_limit_gen_spawn(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/because_of_opponent_tracker_registering_max_possible__actual___AXNDhHg4Q---1--137.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 137, fill_out_tiles=True)
+
+        simMapFile = 'GameContinuationEntries/because_of_opponent_tracker_registering_max_possible___AXNDhHg4Q---1--137.txtmap'
+        rawMap, _ = self.load_map_and_general(simMapFile, respect_undiscovered=True, turn=137)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '8,16->9,16')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+
+        emergence = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][8][17]
+        self.assertGreater(emergence, 70, 'should have VERY high confidence here that the enemy general is right behind this because we had to reduce city army to 1')
+
+        emergence = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][8][16]
+        self.assertGreater(emergence, 70, 'should have VERY high confidence here that the enemy general is right behind this because we had to reduce city army to 1')
+
+        badEmergence = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][6][11]
+        self.assertLess(badEmergence, 2, 'should have dropped all other emergences for the most part')
+    
+    def test_should_not_dupe_army_to_the_side_on_collision(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_not_dupe_army_to_the_side_on_collision___8x8cAEcQl---1--79.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 79, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=79)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '6,8->6,7')
+        simHost.queue_player_moves_str(general.player, '6,6->6,7')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost))
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+

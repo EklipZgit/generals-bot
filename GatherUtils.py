@@ -1020,7 +1020,7 @@ def knapsack_levels_backpack_gather_with_value(
         skipTiles=None,
         searchingPlayer=-2,
         priorityFunc=None,
-        skipFunc=None,
+        skipFunc: typing.Callable[[Tile, typing.Any], bool] | None = None,
         priorityTiles=None,
         ignoreStartTile=False,
         incrementBackward=True,
@@ -2496,7 +2496,7 @@ def prune_mst_to_max_army_per_turn_with_values(
 
     def untilFunc(node: GatherTreeNode, _, turnsLeft: int, curValue: int):
         turnsLeftIfPruned = turnsLeft - node.gatherTurns
-        if turnsLeftIfPruned == 0:
+        if turnsLeftIfPruned <= 0:
             return True
         cityIncrementAmount = cityCounter.value * ((turnsLeftIfPruned - 1) // 2)
         cityIncrementAmount -= cityGatherDepthCounter.value // 2

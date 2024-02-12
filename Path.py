@@ -247,18 +247,32 @@ class Path(object):
     def __repr__(self) -> str:
         return str(self)
 
-    def convert_to_tree_nodes(self) -> GatherTreeNode:
+    def convert_to_tree_nodes(self, map: MapBase, forPlayer: int) -> GatherTreeNode:
         curGatherTreeNode = None
         curPathNode = self.start
         prevPathTile = None
         turn = 0
+        value = 0
         while curPathNode is not None:
             prevGatherTreeNode = curGatherTreeNode
-            curGatherTreeNode = GatherTreeNode(curPathNode.tile, prevPathTile, turn)
-            curGatherTreeNode.children.append(prevGatherTreeNode)
+            t = curPathNode.tile
+            curGatherTreeNode = GatherTreeNode(t, prevPathTile)
+            if prevGatherTreeNode is not None:
+                curGatherTreeNode.children.append(prevGatherTreeNode)
+
+            if map.is_tile_on_team_with(t, forPlayer):
+                value += t.army
+            else:
+                value -= t.army
+            value -= 1
+
+            curGatherTreeNode.gatherTurns = turn
+            curGatherTreeNode.value = value
+
             turn += 1
-            prevPathTile = curPathNode.tile
+            prevPathTile = t
             curPathNode = curPathNode.next
+
         return curGatherTreeNode
 
     def break_overflow_into_one_move_path_subsegments(self, lengthToKeepInOnePath: int = 1) -> typing.List[typing.Union[Path, None]]:

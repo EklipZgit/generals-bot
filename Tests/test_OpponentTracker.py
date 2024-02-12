@@ -62,7 +62,7 @@ class OpponentTrackerTests(TestBase):
         self.assertEqual(2, bot.opponent_tracker.team_score_data_history[1][100].cityCount)
 
         self.assertEqual(38, len(bot.opponent_tracker._gather_queues_by_player[1]))
-        counts = bot.opponent_tracker.get_player_fog_tile_count_dict()
+        counts = bot.opponent_tracker.get_all_player_fog_tile_count_dict()
         self.assertEqual(27, counts[1][2])
         self.assertEqual(11, counts[1][1])
     
@@ -325,7 +325,7 @@ class OpponentTrackerTests(TestBase):
         enStats = bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player)
         self.assertEqual(9, enStats.approximate_fog_city_army)
         self.assertEqual(0, enStats.approximate_fog_army_available_total)
-        counts = bot.opponent_tracker.get_player_fog_tile_count_dict()
+        counts = bot.opponent_tracker.get_all_player_fog_tile_count_dict()
         self.assertEqual(9, counts[enemyGeneral.player][2], "should have used 2's under the fog when expanding")
     
     def test_should_not_launch_instead_of_leaf_moves_when_opponent_hasnt_shown_intentions(self):
@@ -420,3 +420,26 @@ class OpponentTrackerTests(TestBase):
         with self.subTest(mainAsserts=False):
             # 2 on main city, 9 on new city, one 2 left on board see https://generals.io/replays/glKjUk9Yo turn 65.5
             self.assertEqual(12, stats.approximate_fog_army_available_total + stats.approximate_fog_city_army)
+
+    def test_should_not_load_map_and_double_increment_the_fog_tile_values(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_immediately_take_city_because_recognize_long_spawn_and_two_useful_cities___LjdcE2CJ9---1--100.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 100, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=100)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=0)
+        self.assertIsNone(winner)
+
+        lookup = bot.opponent_tracker.get_player_fog_tile_count_dict(enemyGeneral.player)
+        self.assertNotIn(3, lookup)
+        stats = bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player)
+        self.assertEqual(7, stats.approximate_fog_city_army)
+        self.assertEqual(5, stats.approximate_fog_army_available_total)

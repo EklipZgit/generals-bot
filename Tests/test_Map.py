@@ -88,8 +88,10 @@ class MapTests(TestBase):
                     simPlayerMove = simHost.sim.moves_history[-1][playerMapPlayer.index]
 
                     if simPlayerMove is None and playerMapPlayer.last_move is not None:
+                        src, dest, moveHalf = playerMapPlayer.last_move
+                        move = Move(src, dest, moveHalf)
                         failures.append(
-                            f'(pMap {player} had incorrect last move for player {playerMapPlayer.index}. Expected None, found {str(playerMapPlayer.last_move)}')
+                            f'(pMap {player} had incorrect last move for player {playerMapPlayer.index}. Expected None, found {str(move)}')
                     elif simPlayerMove is not None:
                         # ignore if the target players move got nuked with priority:
                         simDest = simHost.sim.sim_map.GetTile(simPlayerMove.dest.x, simPlayerMove.dest.y)
@@ -137,8 +139,10 @@ class MapTests(TestBase):
                                     or simPlayerMove.dest.y != pDest.y
                                     or simPlayerMove.move_half != movedHalf
                             ):
+                                src, dest, moveHalf = playerMapPlayer.last_move
+                                move = Move(src, dest, moveHalf)
                                 failures.append(
-                                    f'(pMap {player} had incorrect last move for player {playerMapPlayer.index}. Expected {str(simPlayerMove)}, found {str(playerMapPlayer.last_move)}')
+                                    f'(pMap {player} had incorrect last move for player {playerMapPlayer.index}. Expected {str(simPlayerMove)}, found {str(move)}')
 
         for player in players:
             playerMap = simHost.get_player_map(player)
@@ -701,6 +705,10 @@ aC5       b5        bG1
 
         self.assertEqual(1, len(map.army_emergences))  # should only be the one emergence in there.
 
+    def test_specific_non_prio_capture(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=20, bArmy=12, bMove=(-1, 0), turn=97, seenFog=True, bArmyAdjacent=True)
+
     def test_incorrect_city_fog_prediction_correct_but_wrong_army(self):
         mapRaw = """
 |    |    |    |    |
@@ -1210,15 +1218,12 @@ C5
                                     # 0
                                     # 145
                                     # 17
+                                    # 0
                                     self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bArmyAdjacent=bArmyAdjacent)
 
     def test_run_one_off_fog_island_border_capture_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=12, bArmy=8, bMove=(0, -1), turn=96, seenFog=True, bArmyAdjacent=True)
-
-    def test_specific_non_prio_capture(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=20, bArmy=12, bMove=(-1, 0), turn=97, seenFog=True, bArmyAdjacent=True)
+        self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=12, bArmy=11, bMove=(0, -1), turn=96, seenFog=True, bArmyAdjacent=True)
 
     def test_generate_all_fog_island_full_capture_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1244,12 +1249,15 @@ C5
                                     # 161 after fixing move determinism assert detection
                                     # 0
                                     # 209
+                                    # 161
+                                    # 209
+                                    # 145
                                     self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bHasNearbyVision=bHasNearbyVision)
 
     def test_run_one_off_fog_island_full_capture_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         # TODO
-        self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=5, bArmy=2, bMove=(1, 0), turn=96, seenFog=True, bHasNearbyVision=True)
+        self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=9, bArmy=15, bMove=(1, 0), turn=97, seenFog=False, bHasNearbyVision=True)
 
     def test_generate_all_out_of_fog_collision_army_scenarios(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1292,6 +1300,7 @@ C5
                                 # 73  after fixing move determinism assert detection
                                 # 0
                                 # 77
+                                # 73
                                 self.run_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_adj_test(self):

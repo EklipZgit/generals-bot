@@ -1356,9 +1356,6 @@ class MapBase(object):
 
         expectedDelta = self._get_expected_delta_amount_toward(fromTile, toTile)
 
-        if expectedDelta == 0 - fromTile.delta.oldArmy:
-            isMoveHalf = True
-
         # used to be if value greater than 75 or something
         if not fromTile.visible:
             if expectedDelta != toTile.delta.unexplainedDelta and toTile.visible:
@@ -1385,6 +1382,10 @@ class MapBase(object):
                     fromTile.army = 0
 
             self.set_fog_moved_from_army_incremented(fromTile, byPlayer, expectedDelta)
+        # else:
+        #     halfDiff = fromTile.delta.oldArmy // 2
+        #     if (expectedDelta == 0 - halfDiff or expectedDelta == halfDiff) and expectedDelta == 0 - fromTile.delta.unexplainedDelta and expectedDelta != 0:
+        #         isMoveHalf = True
 
         # only say the army is completely covered if the confidence was high, otherwise we can have two armies move here from diff players
         self.army_moved_grid[toTile.y][toTile.x] = self.army_moved_grid[toTile.y][toTile.x] and not fullToDiffCovered
@@ -1674,10 +1675,19 @@ class MapBase(object):
         for tile in dest.movable:
             if (
                     tile != source
-                    and (tile.delta.unexplainedDelta != 0 or not tile.visible)
+                    and ((tile.delta.unexplainedDelta != 0 and not tile.delta.gainedSight) or not tile.visible)
                     #and (tile.delta.oldOwner != self.player_index or tile.delta.newOwner != self.player_index)
             ):
                 destHasEnDeltasNearby = True
+
+        if not sourceHasEnPriorityDeltasNearby and not destHasEnDeltasNearby:
+            for tile in dest.movable:
+                if (
+                        tile != source
+                        and tile.delta.gainedSight
+                        #and (tile.delta.oldOwner != self.player_index or tile.delta.newOwner != self.player_index)
+                ):
+                    destHasEnDeltasNearby = True
 
         sourceWasCaptured = False
         sourceWasAttackedWithPriority = False
@@ -1715,17 +1725,29 @@ class MapBase(object):
                     # # source.delta.imperfectArmyDelta = destHasEnDeltasNearby
                     # # return source, dest
             elif source.player != self.player_index:
-                logbook.info(
-                    f'MOVE {str(last_player_index_submitted_move)} was capped WITHOUT priority..? Adding unexplained diff {srcUnexpectedDelta} based on actualSrcDelta {actualSrcDelta} - expectedSourceDelta {expectedSourceDelta}. Continuing with dest diff calc')
-                # self.unaccounted_tile_diffs[source] = srcUnexpectedDelta  # negative number
+                if not source.visible and not dest.visible and dest.delta.oldArmy + expectedDestDelta >= 0:
+                    # then we assume the army reached it with priority but since we didn't cap the tile we just don't see that it happened.
+                    logbook.info(
+                        f'MOVE {str(last_player_index_submitted_move)} was capped WITHOUT priority. Our move probably still executed though, as it would not have captured the dest tile.')
 
-                source.delta.unexplainedDelta = actualSrcDelta
-                if dest.visible:
-                    source.delta.unexplainedDelta = srcUnexpectedDelta - actualDestDelta + expectedDestDelta
+                    source.delta.armyMovedHere = True
+                    dest.delta.armyMovedHere = False
+                    # source.delta.unexplainedDelta = actualSrcDelta
+                    # if dest.visible:
+                    #     source.delta.unexplainedDelta = srcUnexpectedDelta - actualDestDelta + expectedDestDelta
+                    return source, dest, move_half
+                else:
+                    logbook.info(
+                        f'MOVE {str(last_player_index_submitted_move)} was capped WITHOUT priority..? Adding unexplained diff {srcUnexpectedDelta} based on actualSrcDelta {actualSrcDelta} - expectedSourceDelta {expectedSourceDelta}. Continuing with dest diff calc')
+                    # self.unaccounted_tile_diffs[source] = srcUnexpectedDelta  # negative number
 
-                source.delta.armyMovedHere = True
-                # TODO this is wrong...? Need to account for the amount of dest delta we think made it...?
-                # dest.delta.destUnexpectedDelta = 0
+                    source.delta.unexplainedDelta = actualSrcDelta
+                    if dest.visible:
+                        source.delta.unexplainedDelta = srcUnexpectedDelta - actualDestDelta + expectedDestDelta
+
+                    source.delta.armyMovedHere = True
+                    # TODO this is wrong...? Need to account for the amount of dest delta we think made it...?
+                    # dest.delta.destUnexpectedDelta = 0
             else:
                 # we can get here if the source tile was attacked with priority but not for full damage, OR if it was attacked without priority for non full damage...
                 destArmyInterferedToo = False
@@ -1770,12 +1792,15 @@ class MapBase(object):
                     dest.delta.armyMovedHere = True
                     dest.delta.imperfectArmyDelta = True
             else:
-                # dest.delta.destUnexpectedDelta = destUnexpectedDelta
-                # dest.delta.armyMovedHere = True
                 if destHasEnDeltasNearby:
                     dest.delta.unexplainedDelta = destUnexpectedDelta
                     dest.delta.armyMovedHere = True
                     # dest.delta.imperfectArmyDelta = sourceHasEnPriorityDeltasNearby
+
+                # if destHasEnDeltasNearby:
+                #     if not sourceHasEnPriorityDeltasNearby:
+                #         dest.delta.unexplainedDelta = destUnexpectedDelta
+                #     dest.delta.armyMovedHere = True
 
                 if sourceHasEnPriorityDeltasNearby:
                     logbook.info(
@@ -2136,6 +2161,9 @@ class MapBase(object):
 
     def _move_would_violate_known_player_deltas(self, source: Tile, dest: Tile):
         knowSourceOwner = source.was_visible_last_turn() or (self.remainingPlayers == 2 and source.discovered and source.player >= 0)
+        wouldCapture = source.delta.oldArmy > dest.delta.oldArmy - 1 and not self.is_player_on_team_with(source.delta.oldOwner, dest.delta.oldOwner)
+        wouldCapture = wouldCapture or (self.is_player_on_team_with(source.delta.oldOwner, dest.delta.oldOwner) and source.delta.oldOwner != dest.delta.oldOwner)
+
         if knowSourceOwner:
             sourceOwner = self.players[source.delta.oldOwner]
             if source.delta.gainedSight:
@@ -2168,7 +2196,7 @@ class MapBase(object):
                                  f'attacked by more than two players at once.')
                     return True
 
-                elif self.remainingPlayers == 2 and sourceOwner.unexplainedTileDelta == 0:
+                elif self.remainingPlayers == 2 and sourceOwner.unexplainedTileDelta == 0 and wouldCapture:
                     logbook.info(f'move {str(source)}->{str(dest)} by p{sourceOwner.index} is sketchy but allowed, '
                                  f'as it would have captured a tile and they did not gain tiles. TODO make this '
                                  f'more of a spectrum and weight these possible moves lower.')
@@ -2377,7 +2405,13 @@ class MapBase(object):
                     if potentialSource.delta.oldOwner == self.player_index:
                         # we already track our own moves successfully prior to this.
                         continue
-                    if not allowFogSource and not potentialSource.visible and not potentialSource.delta.lostSight:
+                    if (
+                            not allowFogSource
+                            and (
+                                    (not potentialSource.visible and not potentialSource.delta.lostSight)
+                                    or potentialSource.delta.gainedSight
+                            )
+                    ):
                         continue
                     if potentialSource.delta.oldOwner in skipPlayers:
                         continue

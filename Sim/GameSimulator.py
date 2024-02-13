@@ -462,7 +462,8 @@ class GameSimulatorHost(object):
             afkPlayers: None | typing.List[int] = None,
             allAfkExceptMapPlayer: bool = False,
             teammateNotAfk: bool = False,
-            respectTurnTimeLimitToDropMoves: bool = False):
+            respectTurnTimeLimitToDropMoves: bool = False,
+            botInitOnly: bool = False):
         """
 
         @param map:
@@ -471,11 +472,13 @@ class GameSimulatorHost(object):
         @param afkPlayers:
         @param allAfkExceptMapPlayer:
         @param respectTurnTimeLimitToDropMoves: Note that if capturing logging in pycharm unit tests, the logging makes the program REALLY slow so moves will drop like flies...
+        @param botInitOnly: Set to true if you don't need to call the make-move method in the bot, and will be queueing all its own moves. Calls missed-move func only.
         """
         self.queued_tile_pings: "Queue[typing.Tuple[int, Tile]]" = Queue()
         self.queued_chat_messages: "Queue[typing.Tuple[int, str, bool]]" = Queue()
         self.move_queue: typing.List[typing.List[Move | None]] = [[] for player in map.players]
-        self.sim = GameSimulator(map, ignore_illegal_moves=False)
+        self.sim: GameSimulator = GameSimulator(map, ignore_illegal_moves=False)
+        self.init_only: bool = botInitOnly
 
         self.bot_hosts: typing.List[BotHostBase | None] = [None for player in self.sim.players]
         self.dropped_move_counts_by_player: typing.List[int] = [0 for player in self.sim.players]
@@ -803,13 +806,17 @@ class GameSimulatorHost(object):
         logbook.info(f'sim starting turn {self.sim.turn}')
         start = time.perf_counter()
         winner = None
+        botHost: BotHostBase
         for playerIndex, botHost in enumerate(self.bot_hosts):
             player = self.sim.players[playerIndex]
 
             if not player.dead and not player.index in self.forced_afk_players:
                 moveStart = time.perf_counter()
                 try:
-                    botHost.make_move(player.map, updateReceivedTime=time.time_ns() / NS_CONVERTER)
+                    if not self.init_only:
+                        botHost.make_move(player.map, updateReceivedTime=time.time_ns() / NS_CONVERTER)
+                    else:
+                        botHost.receive_update_no_move(player.map, updateReceivedTime=time.time_ns() / NS_CONVERTER)
                 except:
                     raise AssertionError(f'{traceback.format_exc()}\r\n\r\nIMPORT TEST FILES FOR TURN {self.sim.turn} FROM @ {botHost.eklipz_bot.logDirectory}')
 

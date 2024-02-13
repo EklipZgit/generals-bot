@@ -1,0 +1,75 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                              M                                                                     M
+M                   M                                  M                   M         M
+     M    M              M    M                        M    M                   M    M         M
+          M              M                                            M
+                         M                             M                             M    M
+     M              M              M    M
+          M         M    M                                                           M              M
+                         M                                       M                        M
+     M                                       M              M         M                        M    M
+               M    M         M                                                                     M
+                    M              M    M         M
+                                             M                        M         M
+M              M              M              M    M                   M    M
+bG1                 C42            M                        M                        M              M
+                         M    M    M
+                              M         M                        M
+                    M                             M                   M              M
+                         M                                  M    M
+M         M              M    M    M    M                             M                             M
+                                        M              M    M                        M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=1
+player_index=1
+mode=1v1
+bot_target_player=0
+targetPlayerExpectedGeneralLocation=15,6
+bot_is_all_in_losing=False
+bot_all_in_losing_counter=0
+bot_is_winning_gather_cyclic=False
+bot_is_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_timings_launch_timing=2
+bot_timings_split_turns=2
+bot_timings_quick_expand_turns=0
+bot_timings_cycle_turns=50
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=True
+bot_cur_path=None
+aUsername=asxd
+aTiles=1
+aScore=1
+aStandingArmy=0
+aStars=44
+aCityCount=1
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=0
+aDelta25Score=0
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=0
+bUsername=Human.exe
+bTiles=1
+bScore=1
+bStandingArmy=0
+bStars=73
+bCityCount=1
+bGeneral=0,13
+bKnowsKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=0
+bDelta25Score=0
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=0
+b_bot_general_approx=0,13

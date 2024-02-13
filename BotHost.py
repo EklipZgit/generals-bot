@@ -173,6 +173,7 @@ class BotHostBase(object):
 
             if self.has_viewer and self._viewer is not None:
                 with moveTimer.begin_event(f'Sending turn {currentMap.turn} update to Viewer'):
+                    self.eklipz_bot.prep_view_info_for_render(None)
                     self.eklipz_bot.viewInfo.perfEvents.extend(moveTimer.get_events_organized_longest_to_shortest(limit=15, indentSize=2))
                     self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, currentMap, currentMap.complete)
 

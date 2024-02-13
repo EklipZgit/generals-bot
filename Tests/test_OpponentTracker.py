@@ -443,3 +443,21 @@ class OpponentTrackerTests(TestBase):
         stats = bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player)
         self.assertEqual(7, stats.approximate_fog_city_army)
         self.assertEqual(5, stats.approximate_fog_army_available_total)
+    
+    def test_should_play_defensively_immediately_and_gather_far_first(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_play_defensively_immediately_and_gather_far_first__actual___ccd80U77c---0--150.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 150, fill_out_tiles=True)
+
+        mapFile = 'GameContinuationEntries/should_play_defensively_immediately_and_gather_far_first___ccd80U77c---0--150.txtmap'
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=150)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None  None  None  None  None  None  None  None  None  5,0->5,1  6,0->6,1  1,1->6,1->6,2->8,2->8,9->9,9->9,13->12,13->12,14')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=36)
+        self.assertIsNone(winner)

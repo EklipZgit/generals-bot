@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import SearchUtils
 from DataModels import Move
+from PerformanceTimer import PerformanceTimer
 from SearchUtils import *
 from Path import Path
 from base.client.map import Tile, TILE_OBSTACLE, TileDelta
@@ -136,7 +137,10 @@ class PlayerAggressionTracker(object):
 
 
 class ArmyTracker(object):
-    def __init__(self, map: MapBase):
+    def __init__(self, map: MapBase, perfTimer: PerformanceTimer | None = None):
+        self.perf_timer: PerformanceTimer = perfTimer
+        if self.perf_timer is None:
+            self.perf_timer = PerformanceTimer()
         self.player_moves_this_turn: typing.Set[int] = set()
         self.map: MapBase = map
         self.armies: typing.Dict[Tile, Army] = {}
@@ -208,6 +212,9 @@ class ArmyTracker(object):
         if 'notify_army_moved' in state:
             del state['notify_army_moved']
 
+        if 'perf_timer' in state:
+            del state['perf_timer']
+
         return state
 
     def __setstate__(self, state):
@@ -229,7 +236,8 @@ class ArmyTracker(object):
                     else:
                         self.player_launch_timings[player.index] = self.map.turn - 1
 
-        self._handle_flipped_tiles()
+        with self.perf_timer.begin_move_event('ArmyTracker tile limit'):
+            self._handle_flipped_tiles()
 
         self.rescan_city_information()
 
@@ -2266,32 +2274,86 @@ class ArmyTracker(object):
 
             p = self.map.players[tile.player]
 
-            if p.tileCount > 75:
+            if p.tileCount > 75 or p.cityCount > 1:
                 continue
 
             # ok then this tile is a candidate for limiting distance from general...?
-            maxDist = self.map.turn - self.player_launch_timings[tile.player]
+            pLaunchTiming = self.player_launch_timings[tile.player]
+            maxDist = self.map.turn - pLaunchTiming
             playerVisibleTiles = [t for t in p.tiles if t.visible and not t.delta.gainedSight]
             maxDist = min(maxDist, p.tileCount - 1)
+
             # if not tile.delta.gainedSight:
             #     maxDist = min(maxDist, p.tileCount)
 
-            if self.map.turn <= 100 and self.player_launch_timings[tile.player] > 17:
+            if self.map.turn <= 100 and pLaunchTiming > 17:
                 # then, unless they did some real dumb stuff, they can't be further than than their launch timing dist, either
-                cycle1DistLimit = self.player_launch_timings[tile.player] // 2 + 1
-                if self.map.turn <= 50:
-                    maxDist = min(maxDist, cycle1DistLimit)
+                # THIS produces bad behavior
+                cycle1Trail1DistLimitAkaStartArmy = pLaunchTiming // 2 + 1
+                trail1EndTurn = pLaunchTiming + cycle1Trail1DistLimitAkaStartArmy - 1
+
+                if self.map.turn <= 65:
+                    if self.map.turn > trail1EndTurn + 1:
+                        # correct
+                        expectedSecondLaunchArmy = (pLaunchTiming + cycle1Trail1DistLimitAkaStartArmy) // 2 + 1 - cycle1Trail1DistLimitAkaStartArmy
+                        # correct
+                        tilesCapturedInAddlLaunches = p.tileCount - cycle1Trail1DistLimitAkaStartArmy
+                        # correct
+                        turnToRetraverseAndGetFurther = trail1EndTurn + cycle1Trail1DistLimitAkaStartArmy
+
+                        if tilesCapturedInAddlLaunches < expectedSecondLaunchArmy:
+                            # then we're still in second launch.
+
+                            # TODO if we recorded which turns they captured tiles on, we could subtract from this distance the count of tiles captured during second launch but BEFORE we reached cycle1Trail1DistLimitAkaStartArmy*2 turns from launch
+                            if self.map.turn >= turnToRetraverseAndGetFurther:
+                                # correct
+                                maxExtraDist = self.map.turn - turnToRetraverseAndGetFurther + 1
+                                maxExtraDist = min(maxExtraDist, tilesCapturedInAddlLaunches)
+                                maxDist = min(maxDist, cycle1Trail1DistLimitAkaStartArmy + maxExtraDist)
+                                # then they can be further away than their initial trail was as they could have retraversed.
+                            else:
+                                # then this is their second trail, but they don't have time to get further than original launch dist so, we can still limit by that..
+                                maxDist = min(maxDist, cycle1Trail1DistLimitAkaStartArmy)
+                        else:
+                            # otherwise, they've been capturing tiles, meaning we can limit by the max of either original launch limit or their max second launch limit
+                            maxDist = min(maxDist, tilesCapturedInAddlLaunches)
+
+                        # can never limit shorter than the original furthest tiles in case we just found that instead of a subsequent trail.
+                        maxDist = max(maxDist, cycle1Trail1DistLimitAkaStartArmy)
+                    else:
+                        maxDist = min(maxDist, cycle1Trail1DistLimitAkaStartArmy)
                 else:
-                    cycle2DistLimit = p.tileCount - 23 + cycle1DistLimit
+                    cycle2DistLimit = p.tileCount - 23 + cycle1Trail1DistLimitAkaStartArmy
                     maxDist = min(maxDist, cycle2DistLimit)
 
             logbook.info(f'running a gen position limiter for p{p.index} from {str(tile)} distance {maxDist}')
             self._limit_general_position_to_within_tile_and_distance(tile.player, tile, maxDist, alsoIncreaseEmergence=self.map.turn < 56)
 
+            if p.tileCount < 25:
+                with self.perf_timer.begin_move_event('extended tile dist limit by tile count'):
+                    totalTiles = p.tileCount
+                    limitDist = totalTiles
+                    tiles = list(p.tiles)
+                    for t in self.tiles_ever_owned_by_player[p.index]:
+                        if t.player != p.index:
+                            totalTiles += 1
+                            tiles.append(t)
+                        if t.visible:
+                            limitDist -= 1
+
+                    for t in self.tiles_ever_owned_by_player[p.index]:
+                        if t.visible:
+                            self._limit_general_position_to_within_tile_and_distance(tile.player, t, limitDist, alsoIncreaseEmergence=False, skipIfLongerThanExisting=True)
+
         self._flipped_tiles.clear()
 
-    def _limit_general_position_to_within_tile_and_distance(self, player: int, tile: Tile, maxDist: int, alsoIncreaseEmergence: bool = True):
+    def _limit_general_position_to_within_tile_and_distance(self, player: int, tile: Tile, maxDist: int, alsoIncreaseEmergence: bool = True, skipIfLongerThanExisting: bool = False):
         validSet = set()
+
+        existingLimit = self.uneliminated_emergence_events[player].get(tile, None)
+        if skipIfLongerThanExisting and existingLimit is not None and existingLimit <= maxDist:
+            logbook.info(f'bypassing {str(tile)} @ dist {maxDist} because it is longer or equal to existing limit for that tile at dist {existingLimit}')
+            return
 
         launchDist = self.player_launch_timings[player] // 2 + 1
         launchDist = max(9, launchDist)
@@ -2339,8 +2401,6 @@ class ArmyTracker(object):
                 self.valid_general_positions_by_player[player][t] = False
                 if elims < 5:
                     logbook.info(f'elim {elims} was {str(t)} (will stop logging at 5)')
-
-        existingLimit = self.uneliminated_emergence_events[player].get(tile, None)
 
         if elims > 0 and (existingLimit is None or existingLimit > maxDist):
             logbook.info(f'including new elim p{player} {str(tile)} at dist {maxDist} which eliminated {elims}')

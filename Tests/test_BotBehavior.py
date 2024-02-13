@@ -3,7 +3,6 @@ import logbook
 import SearchUtils
 from Directives import Timings
 from Path import Path
-from SearchUtils import Counter
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
 from base.client.map import Tile, MapBase, TILE_FOG
@@ -2555,3 +2554,33 @@ whoever has less extra troops will always get ahead
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
+    
+    def test_should_defend_inevitably_incoming_kill_threat_with_3s_from_right(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_defend_inevitably_incoming_kill_threat_with_3s_from_right___Ajj9uEj1c---0--325.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 325, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=325)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=16)
+        self.assertIsNone(winner)
+
+        numGathed = 0
+        for x in range(17, 19):
+            for y in range(10, 14):
+                tile = playerMap.GetTile(x, y)
+                if tile.army == 1:
+                    numGathed += 1
+
+        self.assertGreater(numGathed, 3)
+
+        self.assertEqual(1, playerMap.GetTile(13, 12).army)
+        self.assertEqual(1, playerMap.GetTile(14, 12).army)
+        self.assertEqual(1, playerMap.GetTile(15, 12).army)

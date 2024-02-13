@@ -264,8 +264,7 @@ class Tile(object):
         self.turn_captured: int = turnCapped
         """Integer Turn Tile Last Captured"""
 
-        self._army: int = army
-        # self.army: int = army
+        self.army: int = army
         """Integer Army Count"""
         # self._army: int = army
 
@@ -357,15 +356,15 @@ class Tile(object):
             self.tile = TILE_EMPTY # this whole thing seems wrong, needs to be updated carefully with tests as the delta logic seems to rely on it...
 
         self._player = value
-
-    @property
-    def army(self) -> int:
-        """int army for debugging"""
-        return self._army
-
-    @army.setter
-    def army(self, value: int):
-        self._army = value
+    #
+    # @property
+    # def army(self) -> int:
+    #     """int army for debugging"""
+    #     return self._army
+    #
+    # @army.setter
+    # def army(self, value: int):
+    #     self._army = value
 
     # @property
     # def army(self) -> int:
@@ -501,6 +500,8 @@ class Tile(object):
             if not self.discovered:
                 self.discovered = True
                 self.delta.discovered = True
+                if tile <= TILE_EMPTY:
+                    self.discoveredAsNeutral = True
             self.lastSeen = map.turn
             if not self.visible:
                 self.delta.gainedSight = True

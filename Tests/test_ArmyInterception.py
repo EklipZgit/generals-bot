@@ -162,7 +162,7 @@ class ArmyInterceptionTests(TestBase):
         viewInfo = self.get_renderable_view_info(map)
         targetStyle = TargetStyle(colorIndex + 2)
 
-        for tile, iw in plan.common_intercept_chokes.items():
+        for tile, iw in plan.common_intercept_choke_widths.items():
             viewInfo.add_targeted_tile(tile, targetStyle, radiusReduction=11 - colorIndex)
             viewInfo.bottomMidRightGridText[tile.x][tile.y] = f'iw{iw}'
 
@@ -208,18 +208,18 @@ class ArmyInterceptionTests(TestBase):
 
     def assertInterceptChokeTileMoves(self, plan: ArmyInterception, map: MapBase, x: int, y: int, w: int):
         tile = map.GetTile(x, y)
-        self.assertIn(tile, plan.common_intercept_chokes, f'Expected {str(tile)} to be in chokes, but wasnt.')
-        val = plan.common_intercept_chokes[tile]
+        self.assertIn(tile, plan.common_intercept_choke_widths, f'Expected {str(tile)} to be in chokes, but wasnt.')
+        val = plan.common_intercept_choke_widths[tile]
         self.assertEqual(w, val, f'Expected choke {str(tile)} to be {w} but was {val}')
 
     def assertNotInterceptChoke(self, plan: ArmyInterception, map: MapBase, x: int, y: int):
         tile = map.GetTile(x, y)
-        val = plan.common_intercept_chokes.get(tile, -10)
+        val = plan.common_intercept_choke_widths.get(tile, -10)
         if val != -10:
             self.fail(f'Expected {str(tile)} NOT to be in chokes, instead found val {val}.')
 
     def test_should_intercept_army_that_is_one_tile_kill_and_city_threat_lol(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         for i in range(6):
             mapFile = 'GameContinuationEntries/should_see_city_as_forward_from_central_point___HgAyaVTVa---1--307.txtmap'
             map, general, enemyGeneral = self.load_map_and_generals(mapFile, 307, fill_out_tiles=True)
@@ -258,7 +258,7 @@ class ArmyInterceptionTests(TestBase):
         self.assertEqual(enTile, bestOpt.tail.tile)
 
     def test_should_continue_to_intercept_army__unit_test_should_not_value_pointless_intercepts(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_value_pointless_intercepts___Human.exe-TEST__bee0a7ef-ea4e-4234-aba2-4d8c5384d938---0--141.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 141, fill_out_tiles=True)
 
@@ -417,8 +417,8 @@ class ArmyInterceptionTests(TestBase):
 
         self.begin_capturing_logging()
         analysis = ArmyAnalyzer(map, map.GetTile(10, 14), enTile)
-        if debugMode:
-            self.render_army_analyzer(map, analysis)
+        # if debugMode:
+        #     self.render_army_analyzer(map, analysis)
 
         plan = self.get_interception_plan(map, general, enemyGeneral, enTile=enTile)
         # plan = self.get_interception_plan(map, general, enemyGeneral, enTile=enTile)
@@ -435,6 +435,9 @@ class ArmyInterceptionTests(TestBase):
         path, value, turnsUsed = self.get_interceptor_path(plan, 10, 10, 10, 14)
         if path is not None:
             self.assertLess(value, 2, "should not have found a path just heading back to general")
+
+        val, turns, bestPath = self.get_best_intercept_option(plan)
+        self.assertLess(bestPath.tail.tile.y, 12)
 
     def test_should_split_when_chasing_threat_around_obstacle(self):
         for i in range(4):
@@ -731,7 +734,7 @@ class ArmyInterceptionTests(TestBase):
 
         path, val, turns = self.get_interceptor_path(interception, 2, 5, 2, 8)
 
-        self.assertEqual(1, interception.common_intercept_chokes[map.GetTile(2, 7)], 'all routes can be intercepted in one extra move from this point')
+        self.assertEqual(1, interception.common_intercept_choke_widths[map.GetTile(2, 7)], 'all routes can be intercepted in one extra move from this point')
         self.assertIsNotNone(path)
         self.assertEqual(11, turns, 'max value per turn should be the full turns')
         # the raw econ differential from this play is +14 econ (-9 -> +5) however it prevents a huge amount of enemy damage as well, so should be calculated as blocking 20 additional econ damage from opponent

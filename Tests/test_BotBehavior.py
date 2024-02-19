@@ -47,7 +47,7 @@ class BotBehaviorTests(TestBase):
                 self.begin_capturing_logging()
                 winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=50)
                 self.assertIsNone(winner)
-                self.assertNoRepetition(simHost, minForRepetition=2)
+                self.assertNoRepetition(simHost, minForRepetition=4)
 
     def test_should_not_sit_there_and_die_when_enemy_army_around_general(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -2584,3 +2584,24 @@ whoever has less extra troops will always get ahead
         self.assertEqual(1, playerMap.GetTile(13, 12).army)
         self.assertEqual(1, playerMap.GetTile(14, 12).army)
         self.assertEqual(1, playerMap.GetTile(15, 12).army)
+    
+    def test_should_not_loop_on_threat_killer_move_and_expansion(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_not_loop_on_threat_killer_move_and_expansion___zkv9Q0x9h---1--252.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 252, fill_out_tiles=True)
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 17, 17)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=252)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '15,16->14,16->15,16->15,15->15,16')
+        simHost.queue_player_moves_str(general.player, '14,15->14,14')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+        self.assertIsNone(winner)
+
+        self.assertNoRepetition(simHost, repetitionPlayer=general.player)

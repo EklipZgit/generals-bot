@@ -461,3 +461,44 @@ class OpponentTrackerTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=36)
         self.assertIsNone(winner)
+    
+    def test_should_infer_inbound_kill_attempt_and_defend_aggressively_after_taking_unmatched_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_infer_inbound_kill_attempt_and_defend_aggressively_after_taking_unmatched_city__attack_prepped___fMT8JMYpR---0--500.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 500, fill_out_tiles=True)
+
+        mapFile = 'GameContinuationEntries/should_infer_inbound_kill_attempt_and_defend_aggressively_after_taking_unmatched_city___fMT8JMYpR---0--500.txtmap'
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=500)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        for i in range(35):
+            simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        simHost.queue_player_moves_str(enemyGeneral.player, '3,9->3,13->4,13->4,14->5,14->5,16->6,16')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=45)
+        self.assertIsNone(winner)
+    
+    def test_should_prevent_city_capture_when_expecting_inbound_kill_threat(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_prevent_city_capture_when_expecting_inbound_kill_threat___fMT8JMYpR---0--484.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 484, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=484)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+        bot.locked_launch_point = playerMap.GetTile(9, 14)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=16)
+        self.assertIsNone(winner)
+
+        city = playerMap.GetTile(6, 13)
+        self.assertOwned(-1, city, "should not be taking cities with this sketchy inbound attack line.")

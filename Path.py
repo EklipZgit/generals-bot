@@ -195,6 +195,48 @@ class Path(object):
         self.value = val
         return val
 
+    def get_positive_subsegment(
+            self,
+            forPlayer: int,
+            teams: typing.List[int],
+            negativeTiles: None | typing.Set[Tile] | typing.Dict[Tile, typing.Any] = None,
+            ignoreIncrement: bool = False
+    ) -> Path | None:
+        # have to offset the first [val - 1] I guess since the first tile didn't get moved to
+        val = 1
+        node = self.start
+        i = 0
+        while node is not None:
+            tile = node.tile
+            oldVal = val
+            if negativeTiles is None or tile not in negativeTiles:
+                if tile.player != -1 and teams[tile.player] == teams[forPlayer]:
+                    val += tile.army
+                    if (tile.isCity or tile.isGeneral) and not ignoreIncrement:
+                        incVal = (i - 1)
+                        val += incVal // 2
+                else:
+                    val -= tile.army
+                    if (tile.isCity or tile.isGeneral) and tile.player != -1 and not ignoreIncrement:
+                        incVal = (i - 1)
+                        val -= incVal // 2
+
+            if not node.move_half:
+                val = val - 1
+            else:
+                val = (val + 1) // 2
+
+            if val <= 0:
+                val = oldVal
+                break
+
+            node = node.next
+            i += 1
+
+        sub = self.get_subsegment(i - 1)
+        sub.value = val
+        return sub
+
     def clone(self) -> Path:
         newPath = Path(self.value)
         node = self.start

@@ -1773,6 +1773,9 @@ class ArmyTracker(object):
         @param army:
         @return:
         """
+        if army.value <= 0:
+            return []
+
         pathA = self.get_army_expected_path_non_flank(army)
         pathB = self.get_army_expected_path_flank(army)
 
@@ -1814,6 +1817,9 @@ class ArmyTracker(object):
         @return:
         """
 
+        if army.value <= 0:
+            return None
+
         if army.tile.isCity and len(army.expectedPaths) == 0 and army.tile.lastMovedTurn < self.map.turn - 2:
             return None
 
@@ -1838,7 +1844,7 @@ class ArmyTracker(object):
                 for entangledPath in entangled.expectedPaths:
                     skip.update(entangledPath.tileList)
 
-        logbook.info(f'Looking for army {str(army)}s expected movement path:')
+        logbook.info(f'Looking for army {str(army)}s expected non-flank movement path:')
         path = SearchUtils.breadth_first_find_queue(
             self.map,
             [army.tile],
@@ -1852,7 +1858,9 @@ class ArmyTracker(object):
             searchingPlayer=army.player,
             noLog=True)
 
-        return path
+        if path is None:
+            return None
+        return path.get_positive_subsegment(forPlayer=army.player, teams=MapBase.get_teams_array(self.map))
 
     def get_army_expected_path_flank(self, army: Army, skipTiles: typing.List[Tile] | None = None) -> Path | None:
         """
@@ -1864,6 +1872,9 @@ class ArmyTracker(object):
         @param army:
         @return:
         """
+
+        if army.value <= 0:
+            return None
 
         if army.tile.isCity and len(army.expectedPaths) == 0 and army.tile.lastMovedTurn < self.map.turn - 2:
             return None
@@ -1900,7 +1911,7 @@ class ArmyTracker(object):
 
         startTiles = {army.tile: ((0, 0), 0)}
 
-        logbook.info(f'Looking for army {str(army)}s expected movement path:')
+        logbook.info(f'Looking for army {str(army)}s expected flank path:')
         path = SearchUtils.breadth_first_dynamic_max(
             self.map,
             startTiles,
@@ -1914,7 +1925,9 @@ class ArmyTracker(object):
             searchingPlayer=army.player,
             noLog=True)
 
-        return path
+        if path is None:
+            return None
+        return path.get_positive_subsegment(forPlayer=army.player, teams=MapBase.get_teams_array(self.map))
 
     def convert_fog_city_to_player_owned(self, tile: Tile, player: int):
         if player == -1:

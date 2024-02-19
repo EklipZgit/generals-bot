@@ -302,13 +302,16 @@ def extend_tree_node_lookup(
             curGatherTreeNode.gatherTurns += valuePerTurnPath.length
             if curGatherTreeNode.fromTile is None:
                 break
+
             nextGatherTreeNode = gatherTreeNodeLookup.get(curGatherTreeNode.fromTile, None)
-            if nextGatherTreeNode.fromTile == curGatherTreeNode.tile:
+            if nextGatherTreeNode is not None and nextGatherTreeNode.fromTile == curGatherTreeNode.tile:
                 logbook.error(f'found graph cycle in extend_tree_node_lookup, {str(curGatherTreeNode)}<-{str(curGatherTreeNode.fromTile)}  ({str(nextGatherTreeNode)}<-{str(nextGatherTreeNode.fromTile)}) setting curGatherTreeNode fromTile to None to break the cycle.')
                 curGatherTreeNode.fromTile = None
                 break
-            if iter > 600:
+
+            if iter > 600 and nextGatherTreeNode is not None:
                 raise AssertionError(f'Infinite looped in extend_tree_node_lookup, {str(curGatherTreeNode)}<-{str(curGatherTreeNode.fromTile)}  ({str(nextGatherTreeNode)}<-{str(nextGatherTreeNode.fromTile)})')
+
             if nextGatherTreeNode is None:
                 startTilesDictStringed = "\r\n      ".join([repr(t) for t in startTilesDict.items()])
                 gatherTreeNodeLookupStringed = "\r\n      ".join([repr(t) for t in gatherTreeNodeLookup.items()])

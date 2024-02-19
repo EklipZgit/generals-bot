@@ -185,3 +185,24 @@ class ExplorationTests(TestBase):
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_split_to_explore_full_fog_when_knows_opp_cant_defend_either_half_of_split")
+    
+    def test_should_all_in_general_hunt_efficiently_when_going_to_die(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_all_in_general_hunt_efficiently_when_going_to_die___d4rqG3XjS---1--297.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 297, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=297)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        self.assertIsNone(winner)
+
+        # TODO need to just run explore, take into account probable army on general based on opptracker gathers, and maximally explore the remaining general space in the time before death. Shouldn't be hard.
+
+        self.skipTest("TODO add asserts for should_all_in_general_hunt_efficiently_when_going_to_die")

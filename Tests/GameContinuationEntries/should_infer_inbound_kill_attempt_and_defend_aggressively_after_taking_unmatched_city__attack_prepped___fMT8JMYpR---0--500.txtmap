@@ -1,0 +1,198 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+                         M                                                 M
+M    M              b1   b1   b1   b1   b1   b1
+                    b1   M              M    b1   M         M                        M
+M                   b1        M    M    b1   b1                       M              M
+                    b1D  MD   b4   M    b3   b1        M         a3                  M    M
+          M         b1D  b1D  b6   a3   a3   M    M         M    a3   M
+                    b2D  b3D  b3   M    a3        M    M         a3                  M
+               M    b2        M         a3             M         a3        M
+          MD   b2D  b2D       b2   M    a3                  M    a3
+     MD   b2D  b158 MD        M    a3   a6   a2   M    a2   a4   a2
+D    MD   b2   b6   M    D    M    M    a3   a2   M    a2   a2   a2             M
+MD   b1D  b2   a2   b2   MD   C48  a4   a3   a5   a3   a3   a5   a2   M
+b2D  b1D  b2   a2   M         M    a2   a3   a3   M    a2   a2   a2   a2   a2        M
+D    b2D  M    a2   a5   M    aC11 a2   a2   a3   a3   M    M    a2   a2
+D    b2D  b2   a2   a2   a2   M    a2   a2   aC10 a3   C47  a3   a2   a2   M              M
+D    MD   b4   a5   a4   a2   a2   a2   a2   a2   a2   a2   a2   a2   a2                  M
+M         M    a5   a2   a2   aG11 M    a2   a4   M    a3   C50
+               M    a3   M    M         a2                  M              M    M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=500
+player_index=0
+mode=1v1
+bot_target_player=1
+targetPlayerExpectedGeneralLocation=3,2
+bot_is_all_in_losing=False
+bot_all_in_losing_counter=0
+bot_is_winning_gather_cyclic=False
+bot_is_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_timings_launch_timing=33
+bot_timings_split_turns=33
+bot_timings_quick_expand_turns=0
+bot_timings_cycle_turns=50
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=True
+bot_finishing_exploration=False
+bot_targeting_army=6,15
+bot_cur_path=None
+aUsername=Human.exe
+aTiles=78
+aScore=232
+aStandingArmy=154
+aStars=72
+aCityCount=3
+aGeneral=6,16
+aKnowsKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=4
+aDelta25Score=-39
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=500
+aEmergences=0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00
+aValidGeneralPos=000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+aTilesEverOwned=000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000011110000100000000000001000010000000000000100001000000000000010000100000000100011101110000000110000110111000000111100111111100000011100011101111100001011011111001100000111110111101110000000111111111111000000011110110100000000000100010000000000
+a_bot_general_approx=6,16
+bUsername=EklipZ
+bTiles=77
+bScore=270
+bStandingArmy=193
+bStars=72
+bCityCount=2
+bKnowsKingLocation=True
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=92
+bDelta25Tiles=-1
+bDelta25Score=2
+bCityGainedTurn=332
+bCityLostTurn=0
+bLastSeenMoveTurn=480
+bEmergences=3.50,4.60,4.70,4.80,7.50,4.80,4.70,4.70,3.70,1.80,1.70,1.50,1.30,1.20,1.20,0.20,0.10,0.10,0.10,4.60,4.70,4.80,8.50,9.20,7.50,4.90,4.80,4.80,3.90,1.80,1.70,1.50,1.30,1.20,1.20,0.20,0.10,0.10,4.70,4.80,8.50,10.20,9.00,5.10,4.70,4.70,5.10,4.00,2.90,1.80,1.70,1.40,1.20,0.20,0.20,0.20,0.10,4.80,8.50,10.20,9.00,8.70,6.20,5.60,5.10,4.20,4.10,4.00,2.90,0.70,0.60,0.40,0.20,0.20,0.10,0.10,8.50,10.20,9.00,8.70,3.90,3.80,3.70,3.60,3.30,3.20,4.10,3.90,0.50,0.30,0.20,0.20,0.20,0.20,0.10,9.00,8.90,6.50,6.90,4.30,4.00,3.80,1.00,1.00,1.00,3.90,0.00,0.30,0.20,0.20,0.20,0.20,0.10,0.10,8.90,8.50,6.50,7.00,4.30,4.30,4.00,0.30,0.20,0.20,0.30,0.20,0.20,0.20,0.20,0.20,0.10,0.10,0.10,9.00,6.10,6.30,10.10,7.20,5.30,5.30,0.10,0.20,0.10,0.20,0.30,0.20,0.20,0.20,0.10,0.10,0.10,0.10,4.90,4.90,1.70,1.90,251.80,7.20,2.90,0.40,0.10,0.00,0.20,0.30,0.30,0.20,0.10,0.10,0.10,0.10,0.00,4.80,0.80,0.90,251.10,1.90,4.90,2.80,0.00,0.00,0.00,0.00,0.20,0.10,0.10,0.10,0.10,0.10,0.00,0.00,0.20,0.90,1.10,1.20,1.10,0.70,0.00,0.00,0.00,0.00,0.00,0.10,0.10,0.10,0.10,0.10,0.00,0.00,0.00,0.80,1.00,1.20,1.20,1.20,1.10,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,1.00,1.10,1.00,1.00,1.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,1.00,1.10,1.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,1.00,1.10,1.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.90,1.00,1.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.70,0.00,1.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00
+bValidGeneralPos=000000000000000000000001000000000000000001100000000000000001110000000000000001110000000000000001100000000000000000110000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+bTilesEverOwned=000000000000000000000000000000000000000000000000000000000000000000000000000000001010110000000000000111110000000000000011101000000000000000000100000000000011101010000000000001100001000000000000111100110000000000111110111000000000111100010000000000011111000000000000001111110000000000000111111110000000000000000000000000000000000000000000000000
+b_bot_general_approx=6,1
+ot_0_stats_moves_spent_capturing_fog_tiles=0
+ot_0_stats_moves_spent_capturing_visible_tiles=0
+ot_0_stats_moves_spent_gathering_fog_tiles=0
+ot_0_stats_moves_spent_gathering_visible_tiles=0
+ot_0_stats_approximate_army_gathered_this_cycle=0
+ot_0_stats_army_annihilated_visible=0
+ot_0_stats_army_annihilated_fog=0
+ot_0_stats_army_annihilated_total=0
+ot_0_stats_approximate_fog_army_available_total=0
+ot_0_stats_approximate_fog_city_army=0
+ot_1_stats_moves_spent_capturing_fog_tiles=0
+ot_1_stats_moves_spent_capturing_visible_tiles=0
+ot_1_stats_moves_spent_gathering_fog_tiles=0
+ot_1_stats_moves_spent_gathering_visible_tiles=0
+ot_1_stats_approximate_army_gathered_this_cycle=0
+ot_1_stats_army_annihilated_visible=0
+ot_1_stats_army_annihilated_fog=0
+ot_1_stats_army_annihilated_total=0
+ot_1_stats_approximate_fog_army_available_total=49
+ot_1_stats_approximate_fog_city_army=33
+ot_b_tcs=23x3|39x2
+ot_0_c_450_tileCount=75
+ot_0_c_450_score=273
+ot_0_c_450_standingArmy=198
+ot_0_c_450_cityCount=2
+ot_0_c_450_fightingDiff=-39
+ot_0_c_450_unexplainedTileDelta=0
+ot_0_c_450_stats_moves_spent_capturing_fog_tiles=0
+ot_0_c_450_stats_moves_spent_capturing_visible_tiles=0
+ot_0_c_450_stats_moves_spent_gathering_fog_tiles=0
+ot_0_c_450_stats_moves_spent_gathering_visible_tiles=0
+ot_0_c_450_stats_approximate_army_gathered_this_cycle=0
+ot_0_c_450_stats_army_annihilated_visible=0
+ot_0_c_450_stats_army_annihilated_fog=0
+ot_0_c_450_stats_army_annihilated_total=0
+ot_0_c_450_stats_approximate_fog_army_available_total=0
+ot_0_c_450_stats_approximate_fog_city_army=0
+ot_1_c_450_tileCount=77
+ot_1_c_450_score=270
+ot_1_c_450_standingArmy=193
+ot_1_c_450_cityCount=2
+ot_1_c_450_fightingDiff=-39
+ot_1_c_450_unexplainedTileDelta=0
+ot_1_c_450_stats_moves_spent_capturing_fog_tiles=0
+ot_1_c_450_stats_moves_spent_capturing_visible_tiles=0
+ot_1_c_450_stats_moves_spent_gathering_fog_tiles=0
+ot_1_c_450_stats_moves_spent_gathering_visible_tiles=0
+ot_1_c_450_stats_approximate_army_gathered_this_cycle=0
+ot_1_c_450_stats_army_annihilated_visible=0
+ot_1_c_450_stats_army_annihilated_fog=0
+ot_1_c_450_stats_army_annihilated_total=0
+ot_1_c_450_stats_approximate_fog_army_available_total=28
+ot_1_c_450_stats_approximate_fog_city_army=62
+ot_0_c_400_tileCount=70
+ot_0_c_400_score=195
+ot_0_c_400_standingArmy=125
+ot_0_c_400_cityCount=2
+ot_0_c_400_fightingDiff=-1
+ot_0_c_400_unexplainedTileDelta=0
+ot_0_c_400_stats_moves_spent_capturing_fog_tiles=0
+ot_0_c_400_stats_moves_spent_capturing_visible_tiles=0
+ot_0_c_400_stats_moves_spent_gathering_fog_tiles=0
+ot_0_c_400_stats_moves_spent_gathering_visible_tiles=0
+ot_0_c_400_stats_approximate_army_gathered_this_cycle=0
+ot_0_c_400_stats_army_annihilated_visible=0
+ot_0_c_400_stats_army_annihilated_fog=0
+ot_0_c_400_stats_army_annihilated_total=0
+ot_0_c_400_stats_approximate_fog_army_available_total=0
+ot_0_c_400_stats_approximate_fog_city_army=0
+ot_1_c_400_tileCount=70
+ot_1_c_400_score=190
+ot_1_c_400_standingArmy=120
+ot_1_c_400_cityCount=2
+ot_1_c_400_fightingDiff=-1
+ot_1_c_400_unexplainedTileDelta=1
+ot_1_c_400_stats_moves_spent_capturing_fog_tiles=0
+ot_1_c_400_stats_moves_spent_capturing_visible_tiles=0
+ot_1_c_400_stats_moves_spent_gathering_fog_tiles=0
+ot_1_c_400_stats_moves_spent_gathering_visible_tiles=0
+ot_1_c_400_stats_approximate_army_gathered_this_cycle=0
+ot_1_c_400_stats_army_annihilated_visible=0
+ot_1_c_400_stats_army_annihilated_fog=0
+ot_1_c_400_stats_army_annihilated_total=0
+ot_1_c_400_stats_approximate_fog_army_available_total=24
+ot_1_c_400_stats_approximate_fog_city_army=10
+ot_0_c_350_tileCount=71
+ot_0_c_350_score=177
+ot_0_c_350_standingArmy=106
+ot_0_c_350_cityCount=2
+ot_0_c_350_fightingDiff=0
+ot_0_c_350_unexplainedTileDelta=0
+ot_0_c_350_stats_moves_spent_capturing_fog_tiles=0
+ot_0_c_350_stats_moves_spent_capturing_visible_tiles=0
+ot_0_c_350_stats_moves_spent_gathering_fog_tiles=0
+ot_0_c_350_stats_moves_spent_gathering_visible_tiles=0
+ot_0_c_350_stats_approximate_army_gathered_this_cycle=0
+ot_0_c_350_stats_army_annihilated_visible=0
+ot_0_c_350_stats_army_annihilated_fog=0
+ot_0_c_350_stats_army_annihilated_total=0
+ot_0_c_350_stats_approximate_fog_army_available_total=0
+ot_0_c_350_stats_approximate_fog_city_army=0
+ot_1_c_350_tileCount=65
+ot_1_c_350_score=172
+ot_1_c_350_standingArmy=107
+ot_1_c_350_cityCount=2
+ot_1_c_350_fightingDiff=0
+ot_1_c_350_unexplainedTileDelta=0
+ot_1_c_350_stats_moves_spent_capturing_fog_tiles=0
+ot_1_c_350_stats_moves_spent_capturing_visible_tiles=0
+ot_1_c_350_stats_moves_spent_gathering_fog_tiles=0
+ot_1_c_350_stats_moves_spent_gathering_visible_tiles=0
+ot_1_c_350_stats_approximate_army_gathered_this_cycle=0
+ot_1_c_350_stats_army_annihilated_visible=0
+ot_1_c_350_stats_army_annihilated_fog=0
+ot_1_c_350_stats_army_annihilated_total=0
+ot_1_c_350_stats_approximate_fog_army_available_total=5
+ot_1_c_350_stats_approximate_fog_city_army=23

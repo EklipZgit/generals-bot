@@ -174,6 +174,14 @@ function Create-TestContinuingGameFrom {
     {
         $TestMapFile = $TestMapFile.Replace(".png", ".txtmap")
     }
+    elseif ($TestMapFile.EndsWith('.txtmap'))
+    {
+        # no op
+    }
+    else 
+    {
+        $TestMapFile = "$($TestMapFile).txtmap"
+    }
     
     $map = Get-Item $TestMapFile -ErrorAction Ignore
     if ($null -eq $map)

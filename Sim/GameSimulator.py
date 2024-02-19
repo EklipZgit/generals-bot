@@ -479,6 +479,8 @@ class GameSimulatorHost(object):
         self.move_queue: typing.List[typing.List[Move | None]] = [[] for player in map.players]
         self.sim: GameSimulator = GameSimulator(map, ignore_illegal_moves=False)
         self.init_only: bool = botInitOnly
+        self.do_not_notify_bot_on_move_overrides: bool = False
+        """If set to True, the bot will not be notified when its move is updated by queue_player_moves allowing the simulation of laggy moves / dropped moves from the bots perspective."""
 
         self.bot_hosts: typing.List[BotHostBase | None] = [None for player in self.sim.players]
         self.dropped_move_counts_by_player: typing.List[int] = [0 for player in self.sim.players]
@@ -840,14 +842,16 @@ class GameSimulatorHost(object):
                         if move.move_half:
                             move.army_moved = fullArmy // 2
 
-                    self.bot_hosts[playerIndex].eklipz_bot.armyTracker.lastMove = move
-                    self.bot_hosts[playerIndex].eklipz_bot.curPath = None
-                    self.bot_hosts[playerIndex].eklipz_bot.history.move_history[self.sim.turn] = [move]
+                    if not self.do_not_notify_bot_on_move_overrides:
+                        self.bot_hosts[playerIndex].eklipz_bot.armyTracker.lastMove = move
+                        self.bot_hosts[playerIndex].eklipz_bot.curPath = None
+                        self.bot_hosts[playerIndex].eklipz_bot.history.move_history[self.sim.turn] = [move]
 
-                player = self.sim.players[playerIndex]
-                player.map.last_player_index_submitted_move = None
-                if move is not None:
-                    player.map.last_player_index_submitted_move = (move.source, move.dest, move.move_half)
+                if not self.do_not_notify_bot_on_move_overrides:
+                    player = self.sim.players[playerIndex]
+                    player.map.last_player_index_submitted_move = None
+                    if move is not None:
+                        player.map.last_player_index_submitted_move = (move.source, move.dest, move.move_half)
 
         for func in self._between_turns_funcs:
             self._run_between_turns_func(run_real_time, func)

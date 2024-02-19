@@ -35,6 +35,7 @@ class ArmyInterception(object):
         self.best_threat_econ_value: int = 0
 
         self.intercept_options: typing.Dict[int, typing.Tuple[int, Path]] = {}
+        """turnsToIntercept -> econValueOfIntercept, interceptPath"""
 
 
 class ArmyInterceptor(object):
@@ -51,7 +52,8 @@ class ArmyInterceptor(object):
     def get_interception_plan(
         self,
         threats: typing.List[ThreatObj],
-        turnsLeftInCycle: int
+        turnsLeftInCycle: int,
+        otherThreatsBlockingTiles: typing.Dict[Tile, int] | None = None
     ) -> ArmyInterception | None:
         threats = self._validate_threats(threats)
 
@@ -62,11 +64,14 @@ class ArmyInterceptor(object):
 
         interception.common_intercept_choke_widths = self.get_shared_chokes(threats)
 
+        if self.map.turn == 591:
+            pass
+
         self.determine_best_threat_value(interception, threats, turnsLeftInCycle)
 
         interception.base_threat_army = self._get_threats_army_amount(threats)
         # potentialRecaptureArmyInterceptTable = self._get_potential_intercept_table(turnsLeftInCycle, interception.base_threat_army)
-        interception.intercept_options = self._get_intercept_plan(interception, turnsLeftInCycle)
+        interception.intercept_options = self._get_intercept_plan(interception, turnsLeftInCycle, otherThreatsBlockingTiles)
 
         return interception
 
@@ -278,7 +283,7 @@ class ArmyInterceptor(object):
 
         return outThreats
 
-    def ensure_threat_army_analysis(self, threat):
+    def ensure_threat_army_analysis(self, threat: ThreatObj):
         if threat.armyAnalysis is None:
             dists = SearchUtils.build_distance_map_matrix(self.map, [threat.path.start.tile])
             furthestPoint = max(threat.path.tileList, key=lambda t: dists[t] if self.map.is_tile_friendly(t) else 0)
@@ -328,7 +333,9 @@ class ArmyInterceptor(object):
         curTurn = self.map.turn
         cycleEnd = self.map.turn + turnsLeftInCycle
         armyLeft = 0
-        for tile in path.tileList:
+        pathNode = path.start
+        while pathNode is not None:
+            tile = pathNode.tile
             if armyLeft <= 0 and curTurn > self.map.turn:
                 curTurn += 1
                 break
@@ -348,12 +355,17 @@ class ArmyInterceptor(object):
             else:
                 armyLeft += tile.army
 
+                if pathNode.move_half:
+                    armyLeft = armyLeft - armyLeft // 2
+
             armyLeft -= 1
 
             curTurn += 1
 
             if (curTurn & 1) == 0:
                 val += cityCaps
+
+            pathNode = pathNode.next
 
         # account for we considered the first tile in the list a move, when it is just the start tile
         curTurn -= 1
@@ -372,7 +384,12 @@ class ArmyInterceptor(object):
 
         return val, curTurn - self.map.turn
 
-    def _get_intercept_plan(self, interception: ArmyInterception, turnsLeftInCycle: int) -> typing.Dict[int, typing.Tuple[float, Path]]:
+    def _get_intercept_plan(
+            self,
+            interception: ArmyInterception,
+            turnsLeftInCycle: int,
+            otherThreatsBlockingTiles: typing.Dict[Tile, int] | None = None
+    ) -> typing.Dict[int, typing.Tuple[float, Path]]:
         """turnsToIntercept -> econValueOfIntercept, interceptPath"""
 
         if len(interception.common_intercept_choke_widths) == 0:
@@ -436,6 +453,18 @@ class ArmyInterceptor(object):
                 interceptArmy = interception.base_threat_army
                 if interception.target_tile in path.tileSet:
                     interceptArmy -= interception.target_tile.army - 1
+
+                if otherThreatsBlockingTiles is not None:
+                    for t in path.tileList:
+                        tileHold = otherThreatsBlockingTiles.get(t, 0)
+                        if tileHold > 0:
+                            # interceptArmy -= max(tileHold, t.army // 2)
+                            p = path.start
+                            while p is not None:
+                                if p.tile == t:
+                                    p.move_half = True
+                                    break
+                                p = p.next
 
                 newValue, turnsUsed = self._get_path_value(
                     path,

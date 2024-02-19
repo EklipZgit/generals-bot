@@ -709,8 +709,8 @@ class TestBase(unittest.TestCase):
             viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
             time.sleep(0.1)
 
-    def assertOwned(self, player: int, tile: Tile):
-        self.assertEqual(player, tile.player)
+    def assertOwned(self, player: int, tile: Tile, reason: str | None = None):
+        self.assertEqual(player, tile.player, reason)
 
     def assertNoRepetition(
             self,
@@ -1087,13 +1087,15 @@ class TestBase(unittest.TestCase):
 
         return pTiles - enTiles
 
-    def assertTileDifferentialGreaterThan(self, minimum, simHost):
+    def assertTileDifferentialGreaterThan(self, minimum: int, simHost):
         tileDiff = self.get_tile_differential(simHost)
         self.assertGreater(tileDiff, minimum, f'expected tile differential to be greater than {minimum}, instead found {tileDiff}')
+        logbook.info(f'tile differential was {tileDiff} (> {minimum})')
 
-    def assertTileDifferentialLessThan(self, maximum, simHost):
+    def assertTileDifferentialLessThan(self, maximum: int, simHost):
         tileDiff = self.get_tile_differential(simHost)
         self.assertLess(tileDiff, maximum, f'expected tile differential to be less than {maximum}, instead found {tileDiff}')
+        logbook.info(f'tile differential was {tileDiff} (> {maximum})')
 
     def move_enemy_general(
             self,
@@ -1112,6 +1114,18 @@ class TestBase(unittest.TestCase):
         oldGeneral.isGeneral = False
         oldGeneral.army = 1
         return enemyGeneral
+
+    def add_lag_on_turns(self, simHost: GameSimulatorHost, lagTurns: typing.List[int], forPlayer: int | None = None):
+        if forPlayer is None:
+            forPlayer = simHost.sim.sim_map.player_index
+
+        simHost.do_not_notify_bot_on_move_overrides = True
+
+        def lag_inserter():
+            if simHost.sim.sim_map.turn + 1 in lagTurns:
+                simHost.queue_player_moves_str(forPlayer, 'None')
+
+        simHost.run_between_turns(lag_inserter)
 
     def a_b_test(
             self,

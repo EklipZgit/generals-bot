@@ -788,12 +788,11 @@ class EarlyExpandUtilsTests(TestBase):
         
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
-        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=48)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
     def test_should_respect_time_limit_when_doing_city_exp_piggyback(self):
@@ -852,3 +851,48 @@ class EarlyExpandUtilsTests(TestBase):
         self.assertIsNone(winner)
 
         self.assertEqual(25, playerMap.players[general.player].tileCount)
+
+    def test_should_handle_lag_gracefully(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        # for lagTurn in [44, 48]:
+        for lagTurn in range(24, 50):
+            with self.subTest(lagTurn=lagTurn):
+                mapFile = 'GameContinuationEntries/should_branch_towards_multiple_possible_opp_spawns_1v1___SlGQiHT4p---1--20.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 16, fill_out_tiles=True)
+                self.reset_map_to_just_generals(map, turn=16)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, allAfkExceptMapPlayer=True)
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                self.add_lag_on_turns(simHost, [lagTurn])
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.05, turns=34)
+                self.assertIsNone(winner)
+
+                self.assertGreater(playerMap.players[general.player].tileCount, 23)
+
+    def test_should_be_capable_of_handling_2v2_lag(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        for lagTurn in range(24, 50):
+            with self.subTest(lagTurn=lagTurn):
+                mapFile = 'GameContinuationEntries/should_expand_away_from_allied_general_2v2__modified___z9F5n27D7---3--2.txtmap'
+                map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 16, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=16)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                self.add_lag_on_turns(simHost, [lagTurn], general.player)
+                self.add_lag_on_turns(simHost, [lagTurn], allyGen.player)
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=34)
+                self.assertNoFriendliesKilled(map, general, allyGen)
+
+                self.assertGreater(playerMap.players[general.player].tileCount, 21)
+                self.assertGreater(playerMap.players[allyGen.player].tileCount, 23)

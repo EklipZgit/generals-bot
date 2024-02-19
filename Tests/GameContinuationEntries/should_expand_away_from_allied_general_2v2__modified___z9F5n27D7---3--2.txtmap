@@ -1,0 +1,109 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+     M    M    M         M              M                        M
+          M                        M                        M    M    M
+                              M         M                   M    M    M    M
+     M    M                                                      M         M
+     M                        M              M                        M    M
+                         M                   M    M                                            M
+               M                   M         M                        M                   M    M
+M         M                                  M         M                   aG9
+dG9                 cG9       M                                       M
+     M    M                        M                             M    M                   M
+                    M    M         M    M         M         M         M         M    M
+M              M                        M                             M    M
+                    M         M                   M                             M              M
+                         M              M                             bG9
+                                                            M    M              M              M
+     M              M              M    M                             M              M
+     M                   M                        M         M         M    M              M
+                                        M         M                   M              M    M
+     M                                                                               M    M    M
+M    M                        M                   M                        M    M              M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+turn=2
+player_index=3
+teams=1,1,2,2
+mode=team
+bot_target_player=-1
+targetPlayerExpectedGeneralLocation=9,13
+bot_is_all_in_losing=False
+bot_all_in_losing_counter=0
+bot_is_all_in_army_advantage=False
+bot_all_in_army_advantage_counter=0
+bot_all_in_army_advantage_cycle=35
+bot_is_rapid_capturing_neut_cities=False
+bot_is_blocking_neutral_city_captures=False
+bot_finishing_exploration=True
+bot_cur_path=None
+aUsername=easontao
+aTiles=1
+aScore=9
+aStandingArmy=1
+aStars=37
+aCityCount=1
+aKnowsKingLocation=False
+aKnowsAllyKingLocation=False
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=0
+aDelta25Score=1
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=0
+bUsername=Jerrymao
+bTiles=1
+bScore=9
+bStandingArmy=1
+bStars=37
+bCityCount=1
+bKnowsKingLocation=False
+bKnowsAllyKingLocation=False
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=0
+bDelta25Score=1
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=0
+cUsername=Exe.human
+cTiles=1
+cScore=9
+cStandingArmy=1
+cStars=53
+cCityCount=1
+cGeneral=4,8
+cKnowsKingLocation=False
+cKnowsAllyKingLocation=False
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=0
+cDelta25Score=1
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=0
+c_bot_general_approx=4,8
+dUsername=Human.exe
+dTiles=1
+dScore=9
+dStandingArmy=1
+dStars=53
+dCityCount=1
+dGeneral=0,8
+dKnowsKingLocation=False
+dKnowsAllyKingLocation=False
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+dDelta25Tiles=0
+dDelta25Score=1
+dCityGainedTurn=0
+dCityLostTurn=0
+dLastSeenMoveTurn=0
+d_bot_general_approx=0,8

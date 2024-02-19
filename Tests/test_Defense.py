@@ -1877,3 +1877,23 @@ class DefenseTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
         self.assertIsNone(winner)
+    
+    def test_should_defend_city_efficiently_not_gather_extra_3s_over_1s(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_defend_city_efficiently_not_gather_extra_3s_over_1s___lc6hX8gL6---1--237.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 237, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=237)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '8,12->8,15->9,15')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+
+        city = playerMap.GetTile(9, 15)
+        self.assertOwned(general.player, city, 'should have defended the city')

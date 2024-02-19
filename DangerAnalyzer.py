@@ -448,7 +448,7 @@ class DangerAnalyzer(object):
 
             startTiles = {}
             startTiles[armyTile] = ((0, 0, 0, 0 - army.value, armyTile.x, armyTile.y, 0.5), 0)
-            goalFunc = lambda tile, prio: tile in targets
+            goalFunc = lambda tile, prio: tile in targets and prio[3] < 0
             path = breadth_first_dynamic(
                 self.map,
                 startTiles,

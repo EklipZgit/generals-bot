@@ -896,3 +896,45 @@ class EarlyExpandUtilsTests(TestBase):
 
                 self.assertGreater(playerMap.players[general.player].tileCount, 21)
                 self.assertGreater(playerMap.players[allyGen.player].tileCount, 23)
+
+    def test_should_handle_two_lag_turns_in_row_gracefully(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        # for lagTurn in [44, 48]:
+        for lagTurn in range(24, 50):
+            with self.subTest(lagTurn=lagTurn):
+                mapFile = 'GameContinuationEntries/should_branch_towards_multiple_possible_opp_spawns_1v1___SlGQiHT4p---1--20.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 16, fill_out_tiles=True)
+                self.reset_map_to_just_generals(map, turn=16)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, allAfkExceptMapPlayer=True)
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                self.add_lag_on_turns(simHost, [lagTurn, lagTurn + 1])
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.05, turns=34)
+                self.assertIsNone(winner)
+
+                self.assertGreater(playerMap.players[general.player].tileCount, 22)
+
+    def test_should_handle_three_lag_turns_in_row_gracefully(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        # for lagTurn in [44, 48]:
+        for lagTurn in range(24, 50):
+            with self.subTest(lagTurn=lagTurn):
+                mapFile = 'GameContinuationEntries/should_branch_towards_multiple_possible_opp_spawns_1v1___SlGQiHT4p---1--20.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 16, fill_out_tiles=True)
+                self.reset_map_to_just_generals(map, turn=16)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, allAfkExceptMapPlayer=True)
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                self.add_lag_on_turns(simHost, [lagTurn, lagTurn + 1, lagTurn + 2])
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.05, turns=34)
+                self.assertIsNone(winner)
+
+                self.assertGreater(playerMap.players[general.player].tileCount, 22)

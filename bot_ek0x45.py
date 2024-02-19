@@ -1339,6 +1339,7 @@ class EklipZBot(object):
         # the server before sending more moves to prevent moves from backing up and getting executed later.
         if self._map.turn - 1 in self.history.move_history:
             if self.droppedMove():
+                self.viewInfo.add_map_zone(MapMatrix(self._map, True), (255, 0, 0), alpha=60)
                 lastMove = self.history.move_history[self._map.turn - 1][0]
                 msg = "(Dropped move)... Sending clear_moves..."
                 self.viewInfo.add_info_line(msg)

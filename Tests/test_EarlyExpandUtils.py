@@ -898,7 +898,7 @@ class EarlyExpandUtilsTests(TestBase):
                 self.assertGreater(playerMap.players[allyGen.player].tileCount, 23)
 
     def test_should_handle_three_lag_turns_in_row_gracefully(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         # for lagTurn in [44, 48]:
         for lagTurn in range(24, 50):
             with self.subTest(lagTurn=lagTurn):

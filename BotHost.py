@@ -11,6 +11,7 @@ import traceback
 import typing
 
 from DataModels import Move
+from MapMatrix import MapMatrix
 from PerformanceTimer import PerformanceTimer, NS_CONVERTER
 from Sim.TextMapLoader import TextMapLoader
 from Viewer.ViewerProcessHost import ViewerHost
@@ -91,6 +92,9 @@ class BotHostBase(object):
             if gap > 0.15:
                 with moveTimer.begin_event(f'LAG GAP Init turn {currentMap.turn} - no move chance / dropped move'):
                     self.eklipz_bot.init_turn()
+                    self.eklipz_bot.viewInfo.add_info_line(f'LAG GAP OF {gap:.4f}, SKIPPING MOVE :(')
+                    matrix = MapMatrix(self.eklipz_bot._map, True, default=False)
+                    self.eklipz_bot.viewInfo.add_map_zone(matrix, (255, 140, 0), alpha=60)
             else:
                 try:
                     move = self.eklipz_bot.find_move(is_lag_move=quickTurn)
@@ -166,6 +170,8 @@ class BotHostBase(object):
             duration = timer.get_elapsed_since_update(currentMap.turn)
             self.eklipz_bot.viewInfo.lastMoveDuration = duration
             self.eklipz_bot.viewInfo.add_info_line(f'Missed move chance turn {currentMap.turn}')
+            matrix = MapMatrix(self.eklipz_bot._map, True, default=False)
+            self.eklipz_bot.viewInfo.add_map_zone(matrix, (255, 70, 0), alpha=60)
 
             if not self.eklipz_bot.no_file_logging:
                 with moveTimer.begin_event(f'Dump {currentMap.turn}.txtmap to disk'):

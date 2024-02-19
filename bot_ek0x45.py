@@ -1339,8 +1339,8 @@ class EklipZBot(object):
         # the server before sending more moves to prevent moves from backing up and getting executed later.
         if self._map.turn - 1 in self.history.move_history:
             if self.droppedMove():
-                self.viewInfo.add_map_zone(MapMatrix(self._map, True), (255, 0, 0), alpha=60)
-                lastMove = self.history.move_history[self._map.turn - 1][0]
+                matrix = MapMatrix(self._map, True, default=False)
+                self.viewInfo.add_map_zone(matrix, (255, 0, 0), alpha=40)
                 msg = "(Dropped move)... Sending clear_moves..."
                 self.viewInfo.add_info_line(msg)
                 logbook.info(
@@ -1370,6 +1370,8 @@ class EklipZBot(object):
 
         if is_lag_move:
             self.viewInfo.add_info_line(f'skipping some stuff because is_lag_move == True')
+            matrix = MapMatrix(self._map, True, default=False)
+            self.viewInfo.add_map_zone(matrix, (200, 150, 0), alpha=30)
 
         if self._map.turn <= 1:
             # bypass divide by 0 error instead of fixing it

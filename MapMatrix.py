@@ -7,8 +7,11 @@ T = TypeVar('T')
 
 
 class MapMatrix(Generic[T]):
-    def __init__(self, map: MapBase, initVal: T = None):
+    def __init__(self, map: MapBase, initVal: T = None, default: T | None | str = 'PLACEHOLDER'):
         self.init_val: T = initVal
+        if default != 'PLACEHOLDER':
+            self.init_val = default
+
         self.grid: typing.List[typing.List[T]] = new_value_grid(map, initVal)
         self.map: MapBase = map
 

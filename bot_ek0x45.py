@@ -1340,7 +1340,7 @@ class EklipZBot(object):
         if self._map.turn - 1 in self.history.move_history:
             if self.droppedMove():
                 matrix = MapMatrix(self._map, True, default=False)
-                self.viewInfo.add_map_zone(matrix, (255, 0, 0), alpha=40)
+                self.viewInfo.add_map_zone(matrix, (255, 200, 0), alpha=40)
                 msg = "(Dropped move)... Sending clear_moves..."
                 self.viewInfo.add_info_line(msg)
                 logbook.info(
@@ -1371,7 +1371,7 @@ class EklipZBot(object):
         if is_lag_move:
             self.viewInfo.add_info_line(f'skipping some stuff because is_lag_move == True')
             matrix = MapMatrix(self._map, True, default=False)
-            self.viewInfo.add_map_zone(matrix, (200, 150, 0), alpha=30)
+            self.viewInfo.add_map_zone(matrix, (250, 140, 0), alpha=25)
 
         if self._map.turn <= 1:
             # bypass divide by 0 error instead of fixing it

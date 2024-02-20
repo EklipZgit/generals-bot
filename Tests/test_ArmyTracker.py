@@ -1,4 +1,5 @@
 import random
+import typing
 
 import logbook
 
@@ -2159,7 +2160,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=25)
         self.assertIsNone(winner)
 
         city = playerMap.GetTile(19, 16)
@@ -2210,3 +2211,33 @@ a1   b1   b1   bG1
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost))
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
+    
+    def test_should_vanish_entangled_armies_after_city_cap(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_vanish_entangled_armies_after_city_cap___5aNl8LobL---0--133.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 133, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=133)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '4,14->3,14')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        realLocation = playerMap.GetTile(4, 14)
+        entangledLocations = [
+            playerMap.GetTile(5, 12),
+            playerMap.GetTile(4, 13),
+            playerMap.GetTile(4, 19),
+            playerMap.GetTile(7, 20),
+        ]
+        self.mark_armies_as_entangled(bot, realLocation, entangledLocations)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+
+        for tile in entangledLocations:
+            self.assertLess(tile.army, 5)
+

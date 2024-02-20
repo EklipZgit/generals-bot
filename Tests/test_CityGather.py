@@ -1443,3 +1443,66 @@ class CityGatherTests(TestBase):
 
         city = playerMap.GetTile(3, 6)
         self.assertOwned(general.player, city)
+    
+    def test_should_take_cities_deep_in_our_territory_even_though_far(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_take_cities_deep_in_our_territory_even_though_far___QiScniOcp---1--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=250)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=20)
+        self.assertIsNone(winner)
+
+        cityA = playerMap.GetTile(4, 5)
+        cityB = playerMap.GetTile(4, 4)
+        if cityB.player != general.player and cityA.player != general.player:
+            self.assertOwned(general.player, cityA)
+            self.assertOwned(general.player, cityB)
+    
+    def test_should_take_far_away_neutral_when_no_other_options(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_take_far_away_neutral_when_no_other_options___ajPs0-Z_w---1--350.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 350, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=350)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=20)
+        self.assertIsNone(winner)
+
+        city = playerMap.GetTile(10, 1)
+
+        self.assertOwned(general.player, city)
+    
+    def test_should_not_overkill_city_and_leave_general_defenseless(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_overkill_city_and_leave_general_defenseless___XWHQOYv7I---1--468.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 468, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=468)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+
+        self.skipTest("TODO add asserts for should_not_overkill_city_and_leave_general_defenseless")

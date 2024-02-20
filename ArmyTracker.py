@@ -1066,6 +1066,7 @@ class ArmyTracker(object):
                 if prioritizeCityWallSource:
                     if nextTile.isUndiscoveredObstacle:
                         negBonusScore -= undiscVal
+                        negBonusScore += self.genDistances[nextTile.x][nextTile.y] * 5
                         for t in nextTile.movable:
                             if not self.map.is_tile_on_team_with(t, armyPlayer) and t.visible and not t.isObstacle:
                                 negBonusScore += 1
@@ -1169,6 +1170,8 @@ class ArmyTracker(object):
         if missingCities == 0:
             return
 
+        gen = self.map.players[self.map.player_index].general
+
         def valFunc(
                 thisTile: Tile,
                 prioObject
@@ -1182,7 +1185,16 @@ class ArmyTracker(object):
             if not isPotentialFogCity:
                 return None
 
-            return (self.emergenceLocationMap[cityPlayer][thisTile.x][thisTile.y] + 1) / dist, True  # has to be tuple or logging blows up i guess
+            wallBreakBonus = 0
+            genSpan = self.map.get_distance_between(gen, tile)
+            thisDist = self.map.get_distance_between(tile, thisTile)
+            thisGenDist = self.map.get_distance_between(gen, thisTile)
+            if genSpan is not None and thisDist is not None and thisGenDist is not None:
+                wallBreakBonus = genSpan - thisDist - thisGenDist
+
+            emergenceVal = (self.emergenceLocationMap[cityPlayer][thisTile.x][thisTile.y] + 1 + wallBreakBonus) / (dist + 3)
+            val = emergenceVal
+            return val, True  # has to be tuple or logging blows up i guess
 
         def pathSortFunc(
                 nextTile: Tile,
@@ -2220,7 +2232,11 @@ class ArmyTracker(object):
                     if adj.delta.lostSight:
                         self.tiles_ever_owned_by_player[tile.player].add(adj)
 
+        recheckPlayers = set()
+
         for tile in self._flipped_tiles:
+            if tile.delta.discovered:
+                recheckPlayers.add(tile.player)
             logbook.info(f"AT Handling flipped {repr(tile)}")
             if tile.player != -1 and (tile.delta.oldOwner == -1 or not self.map.players[tile.delta.oldOwner].dead):
                 self.tiles_ever_owned_by_player[tile.player].add(tile)
@@ -2359,6 +2375,9 @@ class ArmyTracker(object):
                             self._limit_general_position_to_within_tile_and_distance(tile.player, t, limitDist, alsoIncreaseEmergence=False, skipIfLongerThanExisting=True)
 
         self._flipped_tiles.clear()
+
+        for player in recheckPlayers:
+            self._check_over_elimination(player)
 
     def _limit_general_position_to_within_tile_and_distance(self, player: int, tile: Tile, maxDist: int, alsoIncreaseEmergence: bool = True, skipIfLongerThanExisting: bool = False):
         validSet = set()
@@ -2726,7 +2745,7 @@ class ArmyTracker(object):
 
             possibleArmies.append(army)
 
-        possibleArmies = list(sorted(possibleArmies, key=lambda a: abs(annihilatedFogArmy - a.value)))
+        possibleArmies = list(sorted(possibleArmies, key=lambda a: abs(annihilatedFogArmy - a.value - 1) + self.genDistances[a.tile.x][a.tile.y]))
 
         # likelyArmy = None
 
@@ -2745,8 +2764,13 @@ class ArmyTracker(object):
                     army.update_tile(potentialCity)
                     potentialCity.army = max(1, army.value - annihilatedFogArmy)
                     army.value = max(0, army.value - annihilatedFogArmy)
+                    army.tile.army = army.value + 1
+                    for entangled in army.entangledArmies:
+                        entangled.value = max(0, entangled.value - annihilatedFogArmy)
+                        entangled.tile.army = entangled.value + 1
                     army.expectedPaths = self.get_army_expected_path(army)
                     self.armies[army.tile] = army
+                    army.last_moved_turn = self.map.turn
 
                     break
 
@@ -2760,17 +2784,23 @@ class ArmyTracker(object):
                 break
 
     def _check_over_elimination(self, player: int):
-        anyValid = False
+        numValid = 0
+        lastValid = None
         for tile in self.map.pathableTiles:
             if self.valid_general_positions_by_player[player][tile]:
-                anyValid = True
-                break
+                numValid += 1
+                lastValid = tile
 
-        if not anyValid:
+        if numValid == 0:
             logbook.error(f'having to reset general valid positions for p{player} due to over elimination')
             for tile in self.map.pathableTiles:
-                if not tile.visible:
+                if not tile.discovered:
                     self.valid_general_positions_by_player[player][tile] = True
+
+        if numValid == 1 and not lastValid.isGeneral:
+            lastValid.player = player
+            lastValid.isGeneral = True
+            self.map.generals[player] = lastValid
 
 
     @classmethod

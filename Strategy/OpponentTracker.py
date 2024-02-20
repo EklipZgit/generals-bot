@@ -947,7 +947,8 @@ class OpponentTracker(object):
         teamScores = self.current_team_scores[currentCycleStats.team]
         teamTotalFogEmergenceEst = currentCycleStats.approximate_fog_army_available_total + currentCycleStats.approximate_fog_city_army - max(0, 3 * (teamScores.cityCount - 1)) - max(0, 6 * (teamScores.cityCount - 2))
 
-        thresh = teamTotalFogEmergenceEst * 0.90
+        # .90 seemed high
+        thresh = teamTotalFogEmergenceEst * 0.85
 
         fullFogReset = False
         if emergence > thresh:

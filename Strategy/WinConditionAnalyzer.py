@@ -392,6 +392,7 @@ class WinConditionAnalyzer(object):
         return max(0, fogRiskValue, prunedFogRiskValue, attackPathRiskVal)
 
     def get_dynamic_turns_visible_defense_against(self, tiles: typing.List[Tile], maxTurns: int, asPlayer: int, timeLimit: float = 0.05, minArmy: int = 1, negativeTiles: typing.Set[Tile] | None = None) -> typing.Tuple[int, int]:
+        """returns turns, gatheredVal"""
         if DebugHelper.IS_DEBUGGING:
             timeLimit *= 4
 

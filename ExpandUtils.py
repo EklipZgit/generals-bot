@@ -423,7 +423,12 @@ def knapsack_multi_paths(
         f'EXP MULT KNAP {groupsWithPaths} grps, {len(allPaths)} paths, {remainingTurns} turns, combinedPathLengths {combinedTurnLengths}:')
     if DebugHelper.IS_DEBUGGING:
         for val, p in allPaths:
-            logbook.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
+            dist = p.length
+            if valueOverrides is not None:
+                tpl = valueOverrides.get(p, None)
+                if tpl is not None:
+                    floatVal, dist = tpl
+            logbook.info(f'    INPUT {val:.2f} dist {dist}: {str(p)}')
 
     def multiple_choice_knapsack_expansion_path_value_converter(p: Path) -> typing.Tuple[int, int]:
         floatVal = -10000
@@ -1103,7 +1108,7 @@ def get_optimal_expansion(
                 # for tile in path.tileList:
                 #     count = counts.get(tile, 0)
                 #     counts[tile] = count + 1
-                logEntries.append(f'including addl opt: {baseValueOverride:.2f}/{turnOverride}  {str(path)}')
+                logEntries.append(f'including addl opt: {baseValueOverride:.2f}/{turnOverride}t  {str(path)}')
 
                 _try_include_alt_sourced_path(
                     map,
@@ -1521,6 +1526,8 @@ def get_optimal_expansion(
             for tile in curPath.tileList:
                 tilesInKnapsackOtherThanCurrent.add(tile)
 
+        # for p in otherPaths:
+
         if path is None:
             logEntries.append(
                 f"No expansion plan.... :( iterations {iter[0]}, Duration {time.perf_counter() - startTime:.3f}")
@@ -1929,14 +1936,14 @@ def _try_include_alt_sourced_path(
     if value > existingMax:
         if logEntries is not None:
             logEntries.append(
-                f'leafMove {str(path.start.tile)} BETTER than existing:\r\n'
+                f'altOpt {str(path.start.tile)}@{turnOverride}t BETTER than existing:\r\n'
                 f'   new   {value} {str(path)}\r\n'
                 f'   exist {existingMax} {str(existingPath)}')
         curTileDict[path.length] = (value, path)
     else:
         if logEntries is not None:
             logEntries.append(
-                f'leafMove for {str(path.start.tile)} worse than existing:\r\n      bad {value} {str(path)}\r\n   exist {existingMax} {str(existingPath)}')
+                f'altOpt for {str(path.start.tile)}@{turnOverride}t worse than existing:\r\n      bad {value} {str(path)}\r\n   exist {existingMax} {str(existingPath)}')
     multiPathDict[path.start.tile] = curTileDict
 
 

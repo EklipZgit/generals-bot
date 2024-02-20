@@ -319,6 +319,20 @@ class TestBase(unittest.TestCase):
         bot.timing_cycle_ended()
         bot.target_player_gather_path = None
 
+    def mark_armies_as_entangled(self, bot: EklipZBot, realLocation: Tile, entangledLocations: typing.List[Tile]):
+        army = bot.armyTracker.armies.pop(realLocation)
+        army.tile.army = 1
+
+        entangleds = army.get_split_for_fog(entangledLocations)
+
+        for i, tile in enumerate(entangledLocations):
+            ent = entangleds[i]
+            ent.tile = tile
+            ent.expectedPaths = []
+            bot.armyTracker.armies[tile] = ent
+            tile.army = army.value + 1
+            tile.player = army.player
+
     def get_test_map(self, tiles: typing.List[typing.List[Tile]], turn: int = 1, player_index: int = 0, dont_set_seen_visible_discovered: bool = False, num_players: int = -1) -> MapBase:
         self._initialize()
         figureOutPlayerCount = num_players == -1
@@ -560,6 +574,9 @@ class TestBase(unittest.TestCase):
         GatherUtils.USE_DEBUG_ASSERTS = False
         BotHost.FORCE_NO_VIEWER = False
         base.client.map.ENABLE_DEBUG_ASSERTS = False
+
+    def enable_intercept_bypass_bad_plans(self):
+        ArmyInterceptor.DEBUG_BYPASS_BAD_INTERCEPTIONS = True
 
     def reset_general(self, rawMap, enemyGeneral):
         mapTile = rawMap.GetTile(enemyGeneral.x, enemyGeneral.y)
@@ -1087,14 +1104,22 @@ class TestBase(unittest.TestCase):
 
         return pTiles - enTiles
 
-    def assertTileDifferentialGreaterThan(self, minimum: int, simHost):
+    def assertTileDifferentialGreaterThan(self, minimum: int, simHost: GameSimulatorHost, reason: str | None = None):
         tileDiff = self.get_tile_differential(simHost)
-        self.assertGreater(tileDiff, minimum, f'expected tile differential to be greater than {minimum}, instead found {tileDiff}')
+        if reason is not None:
+            reason = f' {reason}'
+        else:
+            reason = ''
+        self.assertGreater(tileDiff, minimum, f'expected tile differential to be greater than {minimum}, instead found {tileDiff}. {reason}')
         logbook.info(f'tile differential was {tileDiff} (> {minimum})')
 
-    def assertTileDifferentialLessThan(self, maximum: int, simHost):
+    def assertTileDifferentialLessThan(self, maximum: int, simHost: GameSimulatorHost, reason: str | None = None):
         tileDiff = self.get_tile_differential(simHost)
-        self.assertLess(tileDiff, maximum, f'expected tile differential to be less than {maximum}, instead found {tileDiff}')
+        if reason is not None:
+            reason = f' {reason}'
+        else:
+            reason = ''
+        self.assertLess(tileDiff, maximum, f'expected tile differential to be less than {maximum}, instead found {tileDiff}. {reason}')
         logbook.info(f'tile differential was {tileDiff} (> {maximum})')
 
     def move_enemy_general(

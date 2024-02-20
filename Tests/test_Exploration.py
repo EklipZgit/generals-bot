@@ -206,3 +206,24 @@ class ExplorationTests(TestBase):
         # TODO need to just run explore, take into account probable army on general based on opptracker gathers, and maximally explore the remaining general space in the time before death. Shouldn't be hard.
 
         self.skipTest("TODO add asserts for should_all_in_general_hunt_efficiently_when_going_to_die")
+    
+    def test_should_not_interupt_king_safety_gather_with_crappy_explore_moves(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_interupt_king_safety_gather_with_crappy_explore_moves___o-nxZ1Aue---0--211.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 211, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=211)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=21)
+        self.assertIsNone(winner)
+
+        self.assertGreater(general.army, 55)
+
+

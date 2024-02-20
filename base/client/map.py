@@ -343,7 +343,6 @@ class Tile(object):
         """int player index"""
         return self._player
 
-
     @player.setter
     def player(self, value: int):
         if self.isGeneral and self._player != value and self._player != -1:

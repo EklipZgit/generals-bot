@@ -18,6 +18,21 @@ from base.client.map import MapBase, Tile
 DEBUG_BYPASS_BAD_INTERCEPTIONS = True
 
 
+class ThreatBlockInfo(object):
+    def __init__(self, tile: Tile, amount_needed_to_block: int):
+        self.tile: Tile = tile
+        self.amount_needed_to_block: int = amount_needed_to_block
+        # list, not set, because set is slower to check than list for small numbers of entries, and we can never have more than 4
+        self.blocked_destinations: typing.List[Tile] = []
+
+    def add_blocked_destination(self, tile: Tile):
+        if tile not in self.blocked_destinations:
+            self.blocked_destinations.append(tile)
+
+    def __str__(self) -> str:
+        return f'{str(self.tile)}:{str(self.amount_needed_to_block)}@{"|".join([str(t) for t in self.blocked_destinations])}'
+
+
 class ArmyInterception(object):
     def __init__(
         self,
@@ -37,6 +52,14 @@ class ArmyInterception(object):
         self.intercept_options: typing.Dict[int, typing.Tuple[int, Path]] = {}
         """turnsToIntercept -> econValueOfIntercept, interceptPath"""
 
+    def get_intercept_plan_by_path(self, path: Path) -> typing.Tuple[int | None, int | None]:
+        """returns distance, value"""
+        for dist, (val, p) in self.intercept_options.items():
+            if p == path:
+                return dist, val
+
+        return None, None
+
 
 class ArmyInterceptor(object):
     def __init__(
@@ -53,7 +76,7 @@ class ArmyInterceptor(object):
         self,
         threats: typing.List[ThreatObj],
         turnsLeftInCycle: int,
-        otherThreatsBlockingTiles: typing.Dict[Tile, int] | None = None
+        otherThreatsBlockingTiles: typing.Dict[Tile, ThreatBlockInfo] | None = None
     ) -> ArmyInterception | None:
         threats = self._validate_threats(threats)
 
@@ -388,7 +411,7 @@ class ArmyInterceptor(object):
             self,
             interception: ArmyInterception,
             turnsLeftInCycle: int,
-            otherThreatsBlockingTiles: typing.Dict[Tile, int] | None = None
+            otherThreatsBlockingTiles: typing.Dict[Tile, ThreatBlockInfo] | None = None
     ) -> typing.Dict[int, typing.Tuple[float, Path]]:
         """turnsToIntercept -> econValueOfIntercept, interceptPath"""
 
@@ -455,16 +478,14 @@ class ArmyInterceptor(object):
                     interceptArmy -= interception.target_tile.army - 1
 
                 if otherThreatsBlockingTiles is not None:
-                    for t in path.tileList:
-                        tileHold = otherThreatsBlockingTiles.get(t, 0)
-                        if tileHold > 0:
+                    pathNode = path.start
+                    while pathNode is not None:
+                        t = pathNode.tile
+                        tileHold = otherThreatsBlockingTiles.get(t, None)
+                        if tileHold is not None and pathNode.next is not None and pathNode.next.tile in tileHold.blocked_destinations:
                             # interceptArmy -= max(tileHold, t.army // 2)
-                            p = path.start
-                            while p is not None:
-                                if p.tile == t:
-                                    p.move_half = True
-                                    break
-                                p = p.next
+                            pathNode.move_half = True
+                        pathNode = pathNode.next
 
                 newValue, turnsUsed = self._get_path_value(
                     path,
@@ -669,3 +690,57 @@ class ArmyInterceptor(object):
             logbook.info(f'blocked {econValueBlocked} econ dmg, ({amountBlocked} army), at interceptDist {interceptDist} with {str(path)}')
 
         return econValueBlocked
+
+    def get_intercept_blocking_tiles_for_split_hinting(
+            self,
+            tile: Tile,
+            threatsByTile: typing.Dict[Tile, typing.List[ThreatObj]]
+    ) -> typing.Dict[Tile, ThreatBlockInfo]:
+        """
+        Returns a map from tile to the amount of army that should be left on them in order to block multiple threats.
+
+        @param tile:
+        @param threatsByTile:
+        @return:
+        """
+        blockingTiles = {}
+
+        for otherTile, otherThreats in threatsByTile.items():
+            # blockOnMultiple = False
+            # if otherTile == tile:
+            #     blockOnMultiple = True
+            #     # continue
+
+            # for chokeTile in plan.common_intercept_choke_widths.keys():
+            #     if not self._map.is_tile_friendly(chokeTile):
+            #         continue
+            #     if chokeTile.army < tile.army // 3:
+            #         continue
+            #
+            #     blockingTiles.add(chokeTile)
+            for threat in otherThreats:
+                for chokeTile in threat.path.tileList:
+                    if not self.map.is_tile_friendly(chokeTile):
+                        continue
+                    if chokeTile.army < otherTile.army // 3:
+                        continue
+
+                    # TODO wrong
+                    blockAmount = threat.threatValue
+                    existingBlockInfo = blockingTiles.get(chokeTile, None)
+                    if existingBlockInfo is None:
+                        existingBlockInfo = ThreatBlockInfo(chokeTile, blockAmount)
+                        blockingTiles[chokeTile] = existingBlockInfo
+
+                    for moveable in chokeTile.movable:
+                        # if moveable not in threat.armyAnalysis.shortestPathWay.tiles:
+                        if moveable not in threat.path.tileSet:
+                            existingBlockInfo.add_blocked_destination(moveable)
+
+                    if existingBlockInfo.amount_needed_to_block < blockAmount:
+                        existingBlockInfo.amount_needed_to_block = blockAmount
+                        # blockingTiles[chokeTile] = existingBlockInfo
+
+                        break
+
+        return blockingTiles

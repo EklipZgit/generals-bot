@@ -5,17 +5,6 @@
     EklipZ bot - Tries to play generals lol
 """
 
-import logbook
-import math
-import random
-import typing
-from copy import deepcopy
-import time
-import json
-from ArmyAnalyzer import *
-from collections import deque
-from queue import PriorityQueue
-from pprint import pprint, pformat
 from SearchUtils import *
 from DataModels import *
 from enum import Enum

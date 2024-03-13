@@ -62,11 +62,11 @@ class MoveTimer(object):
         return event
 
     def get_events_organized_longest_to_shortest(self, limit: int = 15, indentSize: int = 3) -> typing.List[str]:
-        largest15 = list(sorted(self.event_list, key=lambda e: e.get_duration(), reverse=True))[0:limit]
+        largestN = list(sorted(self.event_list, key=lambda e: e.get_duration(), reverse=True))[0:limit]
 
         byParent: typing.Dict[str, typing.List[MoveEvent]] = {}
 
-        for event in largest15:
+        for event in largestN:
             parentName = ''
             if event.parent is not None:
                 parentName = event.parent.event_name
@@ -97,7 +97,8 @@ class MoveTimer(object):
         nextIndentation = curIndentation + (' ' * indentSize)
 
         for event in eventLookupByParent[parentEventName]:
-            output.append(f'{curIndentation}{event.get_duration():.3f} {event.event_name}'.lstrip('0'))
+            dur = f'{event.get_duration():.3f}'.lstrip('0')
+            output.append(f'{curIndentation}{dur} {event.event_name}')
             output.extend(self._dump_events_recurse(event.event_name, eventLookupByParent, nextIndentation, indentSize))
 
         return output

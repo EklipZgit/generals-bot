@@ -100,10 +100,7 @@ class OpponentTracker(object):
                 curTurnTeamScore = self.map.get_team_stats_by_team_id(team)
 
             elif self.map.turn % 50 == 0:
-                # do the final pass on the current cycle data and then start a new cycle.
-                self.team_score_data_history[team][self.map.turn] = curTurnTeamScore
-                if teamStats is not None:
-                    self.team_cycle_stats_history[team][self.map.turn] = teamStats.clone()
+                self.begin_next_cycle(curTurnTeamScore, team, teamStats)
 
             self.last_team_scores[team] = self.current_team_scores[team]
             self.current_team_scores[team] = curTurnTeamScore
@@ -114,6 +111,16 @@ class OpponentTracker(object):
         self._vision_losses = set()
 
         self.recalculate_average_tile_values()
+
+    def begin_next_cycle(self, curTurnTeamScore: TeamStats, team: int, teamStats: CycleStatsData | None):
+        # do the final pass on the current cycle data and then start a new cycle.
+        self.team_score_data_history[team][self.map.turn] = curTurnTeamScore
+        if teamStats is not None:
+            self.team_cycle_stats_history[team][self.map.turn] = teamStats.clone()
+            if self.map.turn > 99:
+                oldTotal = teamStats.approximate_fog_army_available_total
+                teamStats.approximate_fog_army_available_total = int(0.95 * teamStats.approximate_fog_army_available_total - 1)
+                self.view_info.add_info_line(f'Updated team {team} approx fog army from {oldTotal} to {teamStats.approximate_fog_army_available_total}')
 
     def get_current_cycle_end_turn(self) -> int | None:
         """
@@ -665,10 +672,11 @@ class OpponentTracker(object):
         # fog cities also get army bonus, and this is cycle bonus turn.
         nextStats.approximate_fog_city_army += fogCityCount
 
+        # TODO no reason for these to be queues. Just make it a dict of counts by tile amount...
         for player in currentCycleStats.players:
             gatherQueue = self.get_player_gather_queue(player)
             newQueue = deque()
-            while len(gatherQueue) > 0:
+            while gatherQueue:
                 next = gatherQueue.popleft()
                 newQueue.append(next + 1)
 
@@ -781,7 +789,7 @@ class OpponentTracker(object):
             logbook.info(
                 f'RemoveGath: p{player} didnt have tile of tileAmount {tileAmount}, dropping {valAnnihilated} from queue instead...?')
 
-        while len(q) > 0:
+        while q:
             nextVal = q.popleft()
             newQ.append(nextVal)
 
@@ -806,7 +814,7 @@ class OpponentTracker(object):
             newQ.append(valAnnihilated)
             foundVal = False
 
-        while len(q) > 0:
+        while q:
             nextVal = q.popleft()
             newQ.append(nextVal)
 
@@ -827,7 +835,7 @@ class OpponentTracker(object):
 
         newQ.append(tileAmount)
 
-        while len(q) > 0:
+        while q:
             nextVal = q.popleft()
             newQ.append(nextVal)
 
@@ -962,7 +970,7 @@ class OpponentTracker(object):
                     self.view_info.add_targeted_tile(tile, TargetStyle.ORANGE)
             fullFogReset = True
             if emergence > teamTotalFogEmergenceEst - 4:
-                maxDist = max(1, teamTotalFogEmergenceEst - emergence - 1) * 2
+                maxDist = max(1, teamTotalFogEmergenceEst - emergence + 1) * 2
                 self.view_info.add_info_line(f'DUE TO emergence {emergence} VS teamTotalFogEmergenceEst {teamTotalFogEmergenceEst}, CONFIDENT EMERGENCE {maxDist} FROM {str(tile)}')
                 self.send_general_distance_notification(maxDist, tile, generalConfidence=teamScores.cityCount == 1)
 

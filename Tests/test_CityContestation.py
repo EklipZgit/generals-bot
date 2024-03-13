@@ -863,9 +863,29 @@ class CityContestationTests(TestBase):
 
         self.assertOwned(general.player, city)
 
+    def test_should_sit_on_economic_lead_city_contest(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_sit_on_economic_lead_city_contest___sw1XyL-vy---0--307.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 307, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=307)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+        city = playerMap.GetTile(13, 6)
+
+        self.assertGreater(city.army, 100)
 
 # 22f 18p
 # 21f 20p
 # 18f 23p
 # 21f 21p
 # 21f 22p
+# 28f 16p (interception breaking things probably)

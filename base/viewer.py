@@ -205,7 +205,7 @@ class GeneralsViewer(object):
         bottomPos, leftPos, rightPos, topPos = self.get_config_positions()
 
         self.infoLineHeight = 17
-        self.infoRowHeight = 250
+        self.infoRowHeight = 350
         self.statsWidth = 650
 
         if self.cellHeight is None:
@@ -979,26 +979,33 @@ class GeneralsViewer(object):
         if self._viewInfo.armyTracker is None:
             return
 
+        included = []
+
         for player in self._map.players:
             if self._map.is_player_on_team_with(self._map.player_index, player.index):
                 continue
             if player.dead:
                 continue
 
-            if len(player.tiles) == 0 and self._map.remainingPlayers > 4:
+            if len(player.tiles) == 0 and self._map.remainingPlayers > 3:
                 continue
 
-            self._viewInfo.add_map_division(self._viewInfo.armyTracker.valid_general_positions_by_player[player.index], PLAYER_COLORS[player.index], alpha=150)
+            included.append(player)
+
+        alphaScale = 180 // (len(included) + 1)
+
+        for player in included:
+            self._viewInfo.add_map_division(self._viewInfo.armyTracker.valid_general_positions_by_player[player.index], PLAYER_COLORS[player.index], alpha=190)
 
             whitenedPlayerColor = rescale_color(
-                valToScale=0.3,
+                valToScale=0.2,
                 valueMin=0.0,
                 valueMax=1.0,
                 colorMin=PLAYER_COLORS[player.index],
                 colorMax=GRAY,
             )
 
-            self._viewInfo.add_map_zone(self._viewInfo.armyTracker.valid_general_positions_by_player[player.index], whitenedPlayerColor, alpha=60)
+            self._viewInfo.add_map_zone(self._viewInfo.armyTracker.valid_general_positions_by_player[player.index], whitenedPlayerColor, alpha=alphaScale)
 
     def draw_emergences(self):
         alphaMin = 100
@@ -1077,7 +1084,7 @@ class GeneralsViewer(object):
             if pathWay.seed_tile is None:
                 logbook.info('WTF, pathway seed tile was none...?')
                 continue
-            while len(drawingFrontier) != 0:
+            while drawingFrontier:
                 tile = drawingFrontier.pop()
                 tile = self._map.GetTile(tile.x, tile.y)
                 if tile is None:
@@ -1198,7 +1205,7 @@ class GeneralsViewer(object):
         q = deque()
         for node in nodes:
             q.appendleft((node, True))
-        while len(q) > 0:
+        while q:
             node, unpruned = q.pop()
             for child in node.children:
                 q.appendleft((child, unpruned))
@@ -1284,9 +1291,9 @@ class GeneralsViewer(object):
                 colorG = colorG // 2 + 40
                 colorB = colorB // 2 + 40
                 if not tile.discovered:
-                    colorR = colorR // 3 + 50
-                    colorG = colorG // 3 + 50
-                    colorB = colorB // 3 + 50
+                    colorR = 2 * colorR // 5 + 30
+                    colorG = 2 * colorG // 5 + 30
+                    colorB = 2 * colorB // 5 + 30
             pColor = (colorR, colorG, colorB)
         elif tile.isNotPathable:  # Obstacle
             pColor = GRAY_DARK
@@ -1302,9 +1309,13 @@ class GeneralsViewer(object):
         elif tile.player == -1 and tile.army != 0:
             pColor = LIGHT_GRAY
             if not tile.visible:
-                colorR = pColor[0] // 2 + 50
-                colorG = pColor[1] // 2 + 50
-                colorB = pColor[2] // 2 + 50
+                colorR = pColor[0] // 2 + 40
+                colorG = pColor[1] // 2 + 40
+                colorB = pColor[2] // 2 + 40
+                if not tile.discovered:
+                    colorR = 2 * pColor[0] // 5 + 30
+                    colorG = 2 * pColor[1] // 5 + 30
+                    colorB = 2 * pColor[2] // 5 + 30
                 pColor = (colorR, colorB, colorG)
         elif not tile.visible:
             pColor = GRAY

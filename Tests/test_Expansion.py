@@ -1104,3 +1104,41 @@ bot_target_player=1
 
         tileDiff = self.get_tile_differential(simHost)
         self.assertGreater(tileDiff, 6)
+    
+    def test_should_just_cap_tiles_not_switch_to_f25(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_just_cap_tiles_not_switch_to_f25___jsIvQ7xFx---0--95.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 95, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=95)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+
+        self.assertTileDifferentialGreaterThan(-5, simHost)
+    
+    def test_should_pull_nearby_50_to_recap_many_tiles_in_row(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_pull_nearby_50_to_recap_many_tiles_in_row___F3sBBpuZL---1--285.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 285, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=285)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # simHost.queue_player_moves_str(general.player, '17,7->14,7->14,8->13,8->13,9->12,9->12,12->10,12->10,14->9,14')  # proof
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        self.assertIsNone(winner)
+
+        self.assertTileDifferentialGreaterThan(10, simHost)

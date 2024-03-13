@@ -5,17 +5,18 @@ from MapMatrix import MapMatrix
 from base.client.map import DistanceMapper, MapBase, Tile
 
 
+UNREACHABLE = 1000
+"""The placeholder distance value for unreachable land"""
+
+
 class DistanceMapperImpl(DistanceMapper):
     def __init__(self, map: MapBase):
         self.map: MapBase = map
         self._dists: MapMatrix[MapMatrix[int] | None] = MapMatrix(map, None)  # SearchUtils.dumbassDistMatrix(map)
 
-    def get_distance_between(self, tileA: Tile, tileB: Tile) -> int | None:
-        tileDists = self._dists[tileA]
-        if tileDists is None:
-            tileDists = self._get_tile_dist_matrix_internal(tileA)
+    def get_distance_between_or_none(self, tileA: Tile, tileB: Tile) -> int | None:
+        dist = self.get_distance_between(tileA, tileB)
 
-        dist = tileDists[tileB]
         if dist > 999:
             if tileB in self.map.reachableTiles and tileA in self.map.reachableTiles:
                 logbook.warn(f'tileA {str(tileA)} and tileB {str(tileB)} both in reachable, but had bad distance. Force recalculating all distances...')
@@ -24,6 +25,13 @@ class DistanceMapperImpl(DistanceMapper):
             return None
         else:
             return dist
+
+    def get_distance_between(self, tileA: Tile, tileB: Tile) -> int:
+        tileDists = self._dists[tileA]
+        if tileDists is None:
+            tileDists = self._get_tile_dist_matrix_internal(tileA)
+
+        return tileDists[tileB]
 
     def get_tile_dist_matrix(self, tile: Tile) -> MapMatrix[int]:
         tileDists = self._dists[tile]
@@ -38,7 +46,7 @@ class DistanceMapperImpl(DistanceMapper):
         return tileDists
 
     def build_distance_map_matrix_fast(self, startTile: Tile) -> MapMatrix[int]:
-        distanceMap = MapMatrix(self.map, 1000)
+        distanceMap = MapMatrix(self.map, UNREACHABLE)
 
         def bfs_dist_mapper(tile, dist):
             distanceMap[tile] = dist

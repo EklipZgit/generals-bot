@@ -1835,13 +1835,6 @@ class DefenseTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=25)
         self.assertEqual(general.player, winner)
 
-    # 36-69-5 as of tweaking chokes and honoring allowNonChoke
-    # 31-74-5 reverted chokeWidth reduction to -2 from -1, which i'm like 100% sure is wrong but it makes the 'one too far' tests pass, lmao.
-    # 50-55 if i switch to gathering to shortest pathway tiles with pathwidth offset
-    # 34-71
-    # 57-49 with chokewidth -1 instead of -2 and the choke defense changes in place
-    # 53-53
-
     def test_should_not_do_weird_flank_vision_thing_when_opp_clearly_going_to_nuke_up_the_middle(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_do_weird_flank_vision_thing_when_opp_clearly_going_to_nuke_up_the_middle___gbd4mui8Z---1--111.txtmap'
@@ -1897,3 +1890,12 @@ class DefenseTests(TestBase):
 
         city = playerMap.GetTile(9, 15)
         self.assertOwned(general.player, city, 'should have defended the city')
+
+
+    # 36-69-5 as of tweaking chokes and honoring allowNonChoke
+    # 31-74-5 reverted chokeWidth reduction to -2 from -1, which i'm like 100% sure is wrong but it makes the 'one too far' tests pass, lmao.
+    # 50-55 if i switch to gathering to shortest pathway tiles with pathwidth offset
+    # 34-71
+    # 57-49 with chokewidth -1 instead of -2 and the choke defense changes in place
+    # 53-53
+    # 63f-26p-9skip after everything fucked by intercept

@@ -154,7 +154,7 @@ class ArmyInterceptor(object):
         lastDepth = -1
         lastVisited = set()
         visited = set()
-        while len(queue) > 0:
+        while queue:
             depth, tile, fromTile = queue.popleft()
             if tile in lastVisited:
                 continue
@@ -719,6 +719,8 @@ class ArmyInterceptor(object):
             #
             #     blockingTiles.add(chokeTile)
             for threat in otherThreats:
+                self.ensure_threat_army_analysis(threat)
+
                 for chokeTile in threat.path.tileList:
                     if not self.map.is_tile_friendly(chokeTile):
                         continue
@@ -727,20 +729,18 @@ class ArmyInterceptor(object):
 
                     # TODO wrong
                     blockAmount = threat.threatValue
-                    existingBlockInfo = blockingTiles.get(chokeTile, None)
-                    if existingBlockInfo is None:
-                        existingBlockInfo = ThreatBlockInfo(chokeTile, blockAmount)
-                        blockingTiles[chokeTile] = existingBlockInfo
+                    blockInfo = blockingTiles.get(chokeTile, None)
+                    if blockInfo is None:
+                        blockInfo = ThreatBlockInfo(chokeTile, blockAmount)
+                        blockingTiles[chokeTile] = blockInfo
 
                     for moveable in chokeTile.movable:
                         # if moveable not in threat.armyAnalysis.shortestPathWay.tiles:
-                        if moveable not in threat.path.tileSet:
-                            existingBlockInfo.add_blocked_destination(moveable)
+                        if moveable not in threat.path.tileSet and (moveable not in threat.armyAnalysis.shortestPathWay.tiles or threat.armyAnalysis.bMap[moveable.x][moveable.y] >= threat.armyAnalysis.bMap[chokeTile.x][chokeTile.y]):
+                            blockInfo.add_blocked_destination(moveable)
 
-                    if existingBlockInfo.amount_needed_to_block < blockAmount:
-                        existingBlockInfo.amount_needed_to_block = blockAmount
-                        # blockingTiles[chokeTile] = existingBlockInfo
-
-                        break
+                    if blockInfo.amount_needed_to_block < blockAmount:
+                        blockInfo.amount_needed_to_block = blockAmount
+                        # blockingTiles[chokeTile] = blockInfo
 
         return blockingTiles

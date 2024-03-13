@@ -82,7 +82,7 @@ class TextMapLoader(object):
     @staticmethod
     def dump_map_to_string(map: MapBase, split_every: int = 5) -> str:
         outputToJoin = []
-        for i in range(len(map.grid[0])):
+        for i in range(map.cols):
             outputToJoin.append('|')
             for j in range(split_every - 1):
                 outputToJoin.append(' ')

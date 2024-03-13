@@ -2,7 +2,6 @@ import logbook
 import time
 import typing
 from collections import deque
-from queue import PriorityQueue
 
 import DebugHelper
 import KnapsackUtils
@@ -1086,7 +1085,7 @@ def knapsack_levels_backpack_gather_with_value(
 
     teams = MapBase.get_teams_array(map)
         # negativeTilesOrig = set()
-    # q = PriorityQueue()
+    # q = HeapQueue()
 
     # if isinstance(startTiles, dict):
     #    for tile in startTiles.keys():
@@ -1824,7 +1823,7 @@ def get_tree_move(
 
     # TODO this is just an iterate-all-leaves-and-keep-max function, why the hell are we using a priority queue?
     #  we don't call this often so who cares I guess, but wtf copy paste, normal queue would do fine.
-    q = PriorityQueue()
+    q = SearchUtils.HeapQueue()
 
     for gather in gathers:
         basePrio = priorityFunc(gather.tile, None)
@@ -1834,7 +1833,7 @@ def get_tree_move(
 
     highestValue = None
     highestValueNode = None
-    while q.qsize() > 0:
+    while q.queue:
         (curPrio, curGather) = q.get()
         lookup[curGather.tile] = curGather
         if len(curGather.children) == 0:
@@ -2625,7 +2624,7 @@ def prune_mst_until(
     start = time.perf_counter()
 
     nodeMap: typing.Dict[Tile, GatherTreeNode] = {}
-    pruneHeap = PriorityQueue()
+    pruneHeap = SearchUtils.HeapQueue()
 
     iter = 0
 
@@ -2662,7 +2661,7 @@ def prune_mst_until(
 
     try:
         # now we have all the leaves, smallest value first
-        while not pruneHeap.empty():
+        while pruneHeap.queue:
             validMove, isPreferPrune, prioObj, current = pruneHeap.get()
             iter += 1
             if iter > initialCount * 3:
@@ -2708,9 +2707,8 @@ def prune_mst_until(
                     continue
 
             # now remove this leaf from its parent and bubble the value change all the way up
-            parent = None
             curValue -= current.value
-            parent = nodeMap[current.fromTile]
+            parent = nodeMap.get(current.fromTile, None)
             realParent = parent
 
             if parent is not None:
@@ -2720,25 +2718,23 @@ def prune_mst_until(
                     pass
                 parent.pruned.append(current)
 
-            while True:
+            while parent is not None:
                 parent.value -= current.value
                 parent.gatherTurns -= current.gatherTurns
                 if parentPruneFunc is not None:
                     parentPruneFunc(parent.tile, current)
                 if parent.fromTile is None:
                     break
-                parent = nodeMap[parent.fromTile]
+                parent = nodeMap.get(parent.fromTile, None)
 
             childRecurseQueue.append(current)
             childIter = 0
-            while len(childRecurseQueue) > 0:
+            while childRecurseQueue:
                 toDropFromLookup = childRecurseQueue.popleft()
                 childIter += 1
                 if childIter > initialCount * 3:
                     logbook.error("PRUNE CHILD WENT INFINITE, BREAKING")
                     if viewInfo is not None:
-                        viewInfo.add_info_line('ERR PRUNE CHILD WENT INFINITE!!!!!!!!!')
-                        viewInfo.add_info_line('ERR PRUNE CHILD WENT INFINITE!!!!!!!!!')
                         viewInfo.add_info_line('ERR PRUNE CHILD WENT INFINITE!!!!!!!!!')
                     break
 
@@ -2810,7 +2806,7 @@ def iterate_tree_nodes(
     q: typing.Deque[GatherTreeNode] = deque()
     for n in gatherTreeNodes:
         q.append(n)
-    while len(q) > 0:
+    while q:
         i += 1
         cur = q.popleft()
         forEachFunc(cur)

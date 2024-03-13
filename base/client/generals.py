@@ -20,6 +20,7 @@ from websocket import create_connection, WebSocketConnectionClosedException
 
 import BotLogging
 from . import map
+from .map import MapBase
 
 _ENDPOINT_BOT = "://botws.generals.io/socket.io/?EIO=4"
 _ENDPOINT_PUBLIC = "://ws.generals.io/socket.io/?EIO=4"
@@ -68,7 +69,10 @@ class GeneralsClient(object):
         self.chatLogFile = None
         self.username = username
         self.server_username = username
-        self.mode = mode
+        self.mode: str = mode
+        if mode == "private":
+            self.isPrivate = True
+            mode = "custom"
         self.writingFile = False
         self._start_data = {}
         self.already_good_lucked = False
@@ -77,6 +81,13 @@ class GeneralsClient(object):
         self._gio_session_id = None
         self.public_server = public_server
         self.lastCommunicationTime = time.time_ns() / (10 ** 9)
+
+        self._seen_update = False
+        self._move_id = 1
+        self._stars = []
+        self.map: MapBase = None
+        """ffa, 1v1, team, or custom"""
+        self._cities = []
 
         self.bot_key = "sd09fjd203i0ejwi_changeme"
         self._lock = threading.RLock()
@@ -132,10 +143,6 @@ class GeneralsClient(object):
 
         logbook.debug("Joining game, userid: " + userid)
 
-        if mode == "private":
-            self.isPrivate = True
-            mode = "custom"
-
         supporterColorSelection = None
 
         if mode == "custom":
@@ -143,7 +150,7 @@ class GeneralsClient(object):
             self._gameid = gameid  # Set Game ID
             if gameid is None:
                 raise ValueError("Gameid must be provided for private games")
-            logbook.debug("CUSTOM GAME JOIN {}".format(gameid))
+            logbook.debug(f"CUSTOM GAME JOIN {gameid}")
             self._send(["join_private", gameid, userid, self.bot_key, supporterColorSelection])
         elif mode == "1v1":
             self._send(["join_1v1", userid, self.bot_key, supporterColorSelection])
@@ -160,13 +167,6 @@ class GeneralsClient(object):
         if force_start:
             _spawn(self._send_forcestart)
         logbook.debug("Starting heartbeat thread")
-
-        self._seen_update = False
-        self._move_id = 1
-        self._stars = []
-        self.map: map.Map = None
-        self.mode: str = mode
-        self._cities = []
 
     def get_endpoint_ws(self):
         return "wss" + (_ENDPOINT_BOT if not self.public_server else _ENDPOINT_PUBLIC) + "&transport=websocket"
@@ -522,8 +522,14 @@ class GeneralsClient(object):
         return "human" in message.lower() or " bot" in message.lower() or message.lower().startswith("bot ")
 
     def send_chat_broken_up_by_sentence(self, message: str):
-        for msgSplit in message.split('. '):
-            for msgSplitByQuestion in msgSplit.split('? '):
+        sentences = message.split('. ')
+        for i, msgSplit in enumerate(sentences):
+            if i < len(sentences) - 1:
+                msgSplit = msgSplit + '.'
+            questions = msgSplit.split('? ')
+            for j, msgSplitByQuestion in enumerate(questions):
+                if j < len(questions) - 1:
+                    msgSplitByQuestion = msgSplitByQuestion + '?'
                 self.chatQueued.append(msgSplitByQuestion)
 
     def _get_log_time(self) -> str:
@@ -712,9 +718,15 @@ class GeneralsClient(object):
                     "Nobody gets lucky all the time. Nobody can win all the time. Nobody is a robot. Nobody is perfect. ;)")
 
             sourceResponses = responses
-            randNum = random.choice(range(1, 7))
-            if randNum > 3:
-                sourceResponses = lessCommonResponses
+            if self.mode != 'ffa':
+                randNum = random.choice(range(0, 3))
+                if randNum == 2:
+                    sourceResponses = lessCommonResponses
+            else:
+                randNum = random.choice(range(0, 100))
+                if randNum > 95:
+                    sourceResponses = lessCommonResponses
+
             self.send_chat_broken_up_by_sentence(random.choice(sourceResponses))
             self.already_good_lucked = True
 

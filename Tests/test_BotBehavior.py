@@ -2605,3 +2605,28 @@ whoever has less extra troops will always get ahead
         self.assertIsNone(winner)
 
         self.assertNoRepetition(simHost, repetitionPlayer=general.player)
+    
+    def test_should_only_dive_when_knows_can_kill_in_time(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for inTime in [True, False]:
+            with self.subTest(inTime=inTime):
+                mapFile = 'GameContinuationEntries/should_only_dive_when_knows_can_kill_in_time____LU9dFErm---0--143.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 143, fill_out_tiles=True)
+                enemyGeneral = self.move_enemy_general(map, enemyGeneral, 15, 14)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=143)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, '11,10->10,10->10,6->8,6->8,2->7,2')
+                if not inTime:
+                    simHost.queue_player_moves_str(general.player, 'None  None')
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=12)
+                if not inTime:
+                    self.assertIsNone(winner)
+                else:
+                    self.assertEqual(map.player_index, winner)

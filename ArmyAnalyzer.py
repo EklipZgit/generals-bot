@@ -5,18 +5,10 @@
     EklipZ bot - Tries to play generals lol
 """
 
-import logbook
-import time
-import json
-
-import logbook
-
 import DebugHelper
 from ArmyTracker import *
 from SearchUtils import *
-from collections import deque 
-from queue import PriorityQueue 
-from Path import Path
+from collections import deque
 from base.client.map import Tile
 from MapMatrix import MapMatrix
 
@@ -188,7 +180,7 @@ class ArmyAnalyzer:
 
         shortestDist = pw.distance
 
-        while len(q) > 0:
+        while q:
             nextTile = q.popleft()
             if nextTile not in self.shortestPathWay.tiles:
                 continue

@@ -15,7 +15,7 @@ class MapMatrix(Generic[T]):
         self.grid: typing.List[typing.List[T]] = new_value_grid(map, initVal)
         self.map: MapBase = map
 
-    def add(self, item: Tile, value: T):
+    def add(self, item: Tile, value: T = True):
         self.grid[item.x][item.y] = value
 
     def __setitem__(self, key: Tile, item: T):

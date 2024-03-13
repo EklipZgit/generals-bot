@@ -32,7 +32,7 @@ from bot_ek0x45 import EklipZBot
 
 
 class TestBase(unittest.TestCase):
-    GLOBAL_BYPASS_REAL_TIME_TEST = False
+    GLOBAL_BYPASS_REAL_TIME_TEST = True
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -242,6 +242,13 @@ class TestBase(unittest.TestCase):
         if fill_out_tiles:
             chars = TextMapLoader.get_player_char_index_map()
 
+            if f'TempFogTiles' in gameData:
+                tiles = self.convert_string_to_tile_set(map, gameData[f'TempFogTiles'])
+                for tile in tiles:
+                    tile.isTempFogPrediction = True
+                    # if not tile.isGeneral:
+                    #     tile.reset_wrong_undiscovered_fog_guess()
+
             for player in map.players:
                 if player.dead:
                     continue
@@ -296,6 +303,37 @@ class TestBase(unittest.TestCase):
         map.scores = [Score(p.index, p.score, p.tileCount, p.dead) for p in map.players]
 
         return map, general, enemyGen
+
+    def convert_string_to_tile_set(self, map: MapBase, data: str) -> typing.Set[Tile]:
+        outputSet = set()
+        i = 0
+        for v in data:
+            if v == "1":
+                tile = self.get_tile_by_tile_index(map, i)
+                outputSet.add(tile)
+            i += 1
+
+        return outputSet
+
+    def convert_string_to_tile_int_dict(self, map: MapBase, data: str) -> typing.Dict[Tile, int]:
+        outputSet = {}
+        i = 0
+        for v in data.split(','):
+            if v != "N":
+                tile = self.get_tile_by_tile_index(map, i)
+                outputSet[tile] = int(v)
+            i += 1
+
+        return outputSet
+
+    def get_tile_by_tile_index(self, map: MapBase, tileIndex: int) -> Tile:
+        x, y = self.convert_tile_server_index_to_friendly_x_y(map, tileIndex)
+        return map.GetTile(x, y)
+
+    def convert_tile_server_index_to_friendly_x_y(self, map: MapBase, tileIndex: int) -> typing.Tuple[int, int]:
+        y = tileIndex // map.cols
+        x = tileIndex % map.cols
+        return x, y
 
     def set_general_emergence_around(
             self,
@@ -1033,9 +1071,15 @@ class TestBase(unittest.TestCase):
         if enemyGeneralTargetScore is not None and countScoreEnemy.value > enemyGeneralTargetScore:
             raise AssertionError(f"Enemy General {enemyGeneral.player} countScoreEnemy.value {countScoreEnemy.value} > enemyGeneralTargetScore {enemyGeneralTargetScore}. Have to implement reducing the army on non-visible tiles from the snapshot here")
 
+        newAndTemp = set(newTiles)
+        for tile in map.players[enemyGeneral.player].tiles:
+            if tile.player == enemyGeneral.player and tile.isTempFogPrediction and tile not in newAndTemp:
+                newAndTemp.add(tile)
+                # countScoreEnemy.value += tile.army
+
         iter = 0
         while enemyGeneralTargetScore is not None and countScoreEnemy.value < enemyGeneralTargetScore and iter < 100:
-            for tile in newTiles:
+            for tile in newAndTemp:
                 if tile.player == enemyGeneral.player and countScoreEnemy.value < enemyGeneralTargetScore:
                     countScoreEnemy.add(1)
                     tile.army += 1
@@ -1303,7 +1347,7 @@ class TestBase(unittest.TestCase):
                 if tile.player == player:
                     def incrementer(t, dist):
                         tileProx[t] += 1
-                    SearchUtils.breadth_first_foreach_dist(map, [tile], 4, incrementer)
+                    SearchUtils.breadth_first_foreach_dist_fast_incl_neut_cities(map, [tile], 4, incrementer)
             maxTile = None
             for tile in map.get_all_tiles():
                 if tile.player != player and tile.player != -1:

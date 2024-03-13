@@ -5,15 +5,16 @@
     EklipZ bot - Tries to play generals lol
 """
 import heapq
+import types
+from heapq import heappush, heappop
 
 import logbook
 import math
 import typing
 import time
 from collections import deque
-from queue import PriorityQueue
 
-from numba import jit, float32, int64
+# from numba import jit, float32, int64
 
 from DataModels import PathNode
 from Path import Path
@@ -22,6 +23,33 @@ from base.client.map import Tile, MapBase, new_value_grid
 from MapMatrix import MapMatrix
 
 BYPASS_TIMEOUTS_FOR_DEBUGGING = False
+
+
+T = typing.TypeVar('T')
+
+
+class HeapQueue(typing.Generic[T]):
+    """Create a Heap Priority Queue object."""
+
+    def __init__(self):
+        self.queue: typing.List[T] = []
+
+    def __bool__(self):
+        return len(self.queue) > 0
+
+    def put(self, item: T):
+        """Put an item into the queue."""
+        heappush(self.queue, item)
+
+    def get(self) -> T:
+        """Remove and return an item from the queue."""
+        return heappop(self.queue)
+
+    # Override these methods to implement other queue organizations
+    # (e.g. stack or priority queue).
+    # These will only be called with appropriate locks held
+
+    __class_getitem__ = classmethod(types.GenericAlias)
 
 
 class Counter(object):
@@ -84,7 +112,7 @@ def dest_breadth_first_target(
     """
     if searchingPlayer == -2:
         searchingPlayer = map.player_index
-    frontier = PriorityQueue()
+    frontier = HeapQueue()
     visited = [[None for _ in range(map.rows)] for _ in range(map.cols)]
     if isinstance(goalList, dict):
         for goal in goalList.keys():
@@ -140,7 +168,7 @@ def dest_breadth_first_target(
     foundDist = -1
     endNode = None
     depthEvaluated = 0
-    while not frontier.empty():
+    while frontier.queue:
         iter += 1
 
         (prioVals, current, dist, army, goalInc, fromTile) = frontier.get()
@@ -161,7 +189,7 @@ def dest_breadth_first_target(
 
         nextArmy = army - 1 - goalInc
 
-        if preferCapture and not map.is_player_on_team_with(searchingPlayer, current.player):
+        if preferCapture and not map.is_player_on_team_with(searchingPlayer, current.player):  # and army > current.army // 3
             negCaptures -= 1
 
         # nextArmy is effectively "you must bring this much army to the tile next to me for this to kill"
@@ -291,7 +319,7 @@ def a_star_kill(
         ignoreStartTile=False,
         requireExtraArmy=0,
         negativeTiles=None):
-    frontier = PriorityQueue()
+    frontier = HeapQueue()
     came_from = {}
     cost_so_far = {}
     if isinstance(startTiles, dict):
@@ -326,7 +354,7 @@ def a_star_kill(
     goal = False
     depthEvaluated = 0
 
-    while not frontier.empty():
+    while frontier.queue:
         iter += 1
         if iter & 64 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
             logbook.info("breaking A* early")
@@ -444,7 +472,7 @@ def a_star_find(
     foundDist = -1
     depthEvaluated = 0
 
-    while len(frontier) > 0:
+    while frontier:
         iter += 1
         prio, current = heapq.heappop(frontier)
         dist = cost_so_far[current]
@@ -532,7 +560,7 @@ def a_star_find_matrix(
     foundDist = -1
     depthEvaluated = 0
 
-    while len(frontier) > 0:
+    while frontier:
         iter += 1
         prio, current = heapq.heappop(frontier)
         dist = cost_so_far[current]
@@ -615,7 +643,7 @@ def a_star_find_dist(
     foundDist = -1
     depthEvaluated = 0
 
-    while len(frontier) > 0:
+    while frontier:
         iter += 1
         prio, current = heapq.heappop(frontier)
         dist = cost_so_far[current]
@@ -710,7 +738,7 @@ def breadth_first_dynamic(
         searchingPlayer = map.player_index
     if priorityFunc is None:
         priorityFunc = default_priority_func
-    frontier = PriorityQueue()
+    frontier = HeapQueue()
     visited = [[{} for x in range(map.rows)] for y in range(map.cols)]
     globalVisitedSet = set()
     if isinstance(startTiles, dict):
@@ -753,7 +781,7 @@ def breadth_first_dynamic(
     endNode = None
     depthEvaluated = 0
     foundVal = None
-    while not frontier.empty():
+    while frontier.queue:
         iter += 1
         if iter % 1000 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
             logbook.info("BFS-DYNAMIC BREAKING")
@@ -979,7 +1007,7 @@ def breadth_first_dynamic_max(
             return dist, negCityCount, negEnemyTileCount, negArmySum, sumX + nextTile.x, sumY + nextTile.y, goalIncrement
 
         priorityFunc = default_priority_func
-    frontier = PriorityQueue()
+    frontier = HeapQueue()
 
     globalVisitedSet = set()
     if isinstance(startTiles, dict):
@@ -1032,7 +1060,7 @@ def breadth_first_dynamic_max(
     current: Tile = None
     next: Tile = None
 
-    while not frontier.empty():
+    while frontier.queue:
         iter += 1
         if (iter & 128 == 0
             and time.perf_counter() - start > maxTime
@@ -1297,7 +1325,7 @@ def breadth_first_dynamic_max_per_tile(
         searchingPlayer = map.player_index
     if priorityFunc is None:
         priorityFunc = default_priority_func
-    frontier = PriorityQueue()
+    frontier = HeapQueue()
 
     globalVisitedSet = set()
     if isinstance(startTiles, dict):
@@ -1347,7 +1375,7 @@ def breadth_first_dynamic_max_per_tile(
     maxLists: typing.Dict[Tile, typing.List[typing.Tuple[Tile, typing.Any]]] = {}
     endNodes: typing.Dict[Tile, Tile] = {}
 
-    while not frontier.empty():
+    while frontier.queue:
         iter += 1
         if iter & 64 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING or iter > maxIterations:
             logbook.info(f"BFS-DYNAMIC-MAX-PER-TILE BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
@@ -1615,7 +1643,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
         searchingPlayer = map.player_index
     if priorityFunc is None:
         priorityFunc = default_priority_func
-    frontier = PriorityQueue()
+    frontier = HeapQueue()
 
     globalVisitedSet = set()
     if isinstance(startTiles, dict):
@@ -1665,7 +1693,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
     maxListsTMP: typing.Dict[Tile, typing.Dict[int, typing.List[typing.Tuple[Tile, typing.Any]]]] = {}
     endNodesTMP: typing.Dict[Tile, typing.Dict[int, Tile]] = {}
 
-    while not frontier.empty():
+    while frontier.queue:
         iter += 1
         if iter & 64 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING or iter > maxIterations:
             logbook.info(f"BFS-DYNAMIC-MAX-PER-TILE-PER-DIST BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
@@ -1877,7 +1905,7 @@ def bidirectional_breadth_first_dynamic(
         searchingPlayer = map.player_index
     if priorityFunc is None:
         priorityFunc = default_priority_func
-    frontier = PriorityQueue()
+    frontier = HeapQueue()
     visited = [[{} for x in range(map.rows)] for y in range(map.cols)]
     globalVisitedSet = set()
     if isinstance(startTiles, dict):
@@ -1920,7 +1948,7 @@ def bidirectional_breadth_first_dynamic(
     endNode = None
     depthEvaluated = 0
     foundVal = None
-    while not frontier.empty():
+    while frontier.queue:
         iter += 1
         if iter % 1000 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
             logbook.info("BI-DIR BREAKING")
@@ -2058,7 +2086,7 @@ def breadth_first_find_queue(
     foundDist = 1000
     endNode = None
     depthEvaluated = 0
-    while len(frontier) > 0:
+    while frontier:
         iter += 1
         (current, dist, army, goalInc) = frontier.pop()
         if current in visited or (skipTiles is not None and current in skipTiles):
@@ -2182,7 +2210,7 @@ def breadth_first_find_dist_queue(
     iter = 0
     start = time.perf_counter()
     foundDist = 1000
-    while len(frontier) > 0:
+    while frontier:
         iter += 1
         (current, dist) = frontier.pop()
         if current in visited or (skipTiles is not None and current in skipTiles):
@@ -2269,7 +2297,7 @@ def breadth_first_foreach(
     iter = 0
     depthEvaluated = 0
     dist = 0
-    while len(frontier) > 0:
+    while frontier:
         iter += 1
 
         (current, dist) = frontier.pop()
@@ -2314,10 +2342,10 @@ def breadth_first_foreach_dist(
     @param maxDepth:
     @param foreachFunc:
     @param negativeFunc:
-    @param skipFunc: Evaluated AFTER the foreach runs on a tile
-    @param skipTiles: Evaluated BEFORE the foreach runs on a tile
+    @param skipFunc: Evaluated AFTER the foreach runs on a tile to prevent reaching its neighbors.
+    @param skipTiles: Evaluated BEFORE the foreach runs on a tile, preventing the foreach from ever reaching it.
     @param noLog:
-    @param bypassDefaultSkip: If true, does NOT skip mountains / undiscovered obstacles
+    @param bypassDefaultSkip: If true, does NOT skip mountains / undiscovered obstacles unless you skip them yourself with skipTiles/skipFunc.
     @return:
     """
     if len(startTiles) == 0:
@@ -2344,17 +2372,18 @@ def breadth_first_foreach_dist(
 
         foreachFunc = newFunc
 
-    start = time.perf_counter()
+    if not noLog:
+        start = time.perf_counter()
     iter = 0
     dist = 0
-    while len(frontier) > 0:
+    while frontier:
         iter += 1
 
         (current, dist) = frontier.pop()
-        if dist > maxDepth:
-            break
         if globalVisited[current]:
             continue
+        if dist > maxDepth:
+            break
         globalVisited[current] = True
         if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)):
             continue
@@ -2368,6 +2397,101 @@ def breadth_first_foreach_dist(
     if not noLog:
         logbook.info(
             f"Completed breadth_first_foreach_dist. startTiles[0] {startTiles[0].x},{startTiles[0].y}: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
+
+def breadth_first_foreach_dist_fast_incl_neut_cities(
+        map: MapBase,
+        startTiles: typing.List[Tile],
+        maxDepth: int,
+        foreachFunc: typing.Callable[[Tile, int], None]):
+    """
+    WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
+    (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
+    Does NOT skip neutral cities by default.
+    Same as breath_first_foreach, except the foreach function also gets the distance parameter passed to it.
+
+    @param map:
+    @param startTiles:
+    @param maxDepth:
+    @param foreachFunc:
+    @return:
+    """
+    if len(startTiles) == 0:
+        return
+
+    frontier: typing.Deque[typing.Tuple[Tile, int]] = deque()
+
+    if maxDepth < map.rows // 3:
+        globalVisited = set()
+    else:
+        globalVisited = MapMatrix(map, False)
+
+    for tile in startTiles:
+        frontier.appendleft((tile, 0))
+
+    while frontier:
+        (current, dist) = frontier.pop()
+        if current.isNotPathable:
+            continue
+        if current in globalVisited:
+            continue
+        if dist > maxDepth:
+            break
+        globalVisited.add(current)
+        foreachFunc(current, dist)
+        # intentionally placed after the foreach func, skipped tiles are still foreached, they just aren't traversed
+        newDist = dist + 1
+        for next in current.movable:  # new spots to try
+            frontier.appendleft((next, newDist))
+
+
+def breadth_first_foreach_dist_fast_no_neut_cities(
+        map: MapBase,
+        startTiles: typing.List[Tile],
+        maxDepth: int,
+        foreachFunc: typing.Callable[[Tile, int], None]):
+    """
+    WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
+    (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
+    DOES skip neutral cities by default.
+    Same as breath_first_foreach, except the foreach function also gets the distance parameter passed to it.
+
+    @param map:
+    @param startTiles:
+    @param maxDepth:
+    @param foreachFunc:
+    @return:
+    """
+    if len(startTiles) == 0:
+        return
+
+    frontier: typing.Deque[typing.Tuple[Tile, int]] = deque()
+
+    if maxDepth < map.rows // 3:
+        globalVisited = set()
+    else:
+        globalVisited = MapMatrix(map, False)
+
+    for tile in startTiles:
+        if tile.isMountain:
+            # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
+            continue
+        frontier.appendleft((tile, 0))
+
+    while frontier:
+        (current, dist) = frontier.pop()
+        if current.isObstacle:
+            continue
+        if current in globalVisited:
+            continue
+        if dist > maxDepth:
+            break
+        globalVisited.add(current)
+
+        foreachFunc(current, dist)
+        # intentionally placed after the foreach func, skipped tiles are still foreached, they just aren't traversed
+        newDist = dist + 1
+        for next in current.movable:  # new spots to try
+            frontier.appendleft((next, newDist))
 
 
 
@@ -2405,10 +2529,10 @@ def breadth_first_foreach_dist_revisit_callback(
         return
 
     frontier = deque()
-    globalVisited = new_value_grid(map, False)
+    globalVisited = new_value_grid(map, None)
     if skipTiles is not None:
         for tile in skipTiles:
-            globalVisited[tile.x][tile.y] = True
+            globalVisited[tile.x][tile.y] = 1000
 
     for tile in startTiles:
         if tile.isMountain:
@@ -2428,11 +2552,14 @@ def breadth_first_foreach_dist_revisit_callback(
     start = time.perf_counter()
     iter = 0
     dist = 0
-    while len(frontier) > 0:
+    while frontier:
         iter += 1
 
         (current, dist) = frontier.pop()
-        if globalVisited[current.x][current.y]:
+        prevDist = globalVisited[current.x][current.y]
+        if prevDist:
+            if prevDist < dist:
+                revisitFunc(current, dist)
             continue
         if dist > maxDepth:
             break
@@ -2448,7 +2575,7 @@ def breadth_first_foreach_dist_revisit_callback(
             frontier.appendleft((next, newDist))
     if not noLog:
         logbook.info(
-            f"Completed breadth_first_foreach_dist. startTiles[0] {startTiles[0].x},{startTiles[0].y}: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
+            f"Completed breadth_first_foreach_dist_revisit_callback. startTiles[0] {startTiles[0].x},{startTiles[0].y}: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
 
 
 def build_distance_map_incl_mountains(map, startTiles, skipTiles=None) -> typing.List[typing.List[int]]:
@@ -2471,7 +2598,7 @@ def build_distance_map_incl_mountains(map, startTiles, skipTiles=None) -> typing
     return distanceMap
 
 
-def build_distance_map(map, startTiles, skipTiles=None) -> typing.List[typing.List[int]]:
+def build_distance_map(map: MapBase, startTiles: typing.List[Tile], skipTiles: typing.Set[Tile] | typing.Iterable[Tile] | None = None) -> typing.List[typing.List[int]]:
     distanceMap = new_value_grid(map, 1000)
 
     if skipTiles is None:
@@ -2482,7 +2609,7 @@ def build_distance_map(map, startTiles, skipTiles=None) -> typing.List[typing.Li
             newSkipTiles.add(tile)
         skipTiles = newSkipTiles
 
-    def bfs_dist_mapper(tile, dist):
+    def bfs_dist_mapper(tile: Tile, dist: int):
         # if dist < distanceMap[tile.x][tile.y]:
         distanceMap[tile.x][tile.y] = dist
 
@@ -2494,6 +2621,7 @@ def build_distance_map(map, startTiles, skipTiles=None) -> typing.List[typing.Li
         skipTiles=skipTiles,
         skipFunc=lambda tile: tile.isNeutral and tile.isCity,
         noLog=True)
+
     return distanceMap
 
 
@@ -2509,7 +2637,6 @@ def build_distance_map_matrix(map, startTiles, skipTiles=None) -> MapMatrix[int]
         skipTiles = newSkipTiles
 
     def bfs_dist_mapper(tile, dist):
-        # if dist < distanceMap[tile]:
         distanceMap[tile] = dist
 
     breadth_first_foreach_dist(
@@ -2533,8 +2660,8 @@ def bidirectional_a_star_pq(start: Tile, goal: Tile, allowNeutralCities: bool = 
 
     # pq_s = []
     # pq_t = []
-    pq_s = PriorityQueue()
-    pq_t = PriorityQueue()
+    pq_s = HeapQueue()
+    pq_t = HeapQueue()
     closed_s = dict()
     closed_t = dict()
     g_s = dict()
@@ -2558,8 +2685,8 @@ def bidirectional_a_star_pq(start: Tile, goal: Tile, allowNeutralCities: bool = 
     cameFrom1[start] = False
     cameFrom2[goal] = False
 
-    pq_s.put_nowait((h1(start), start))
-    pq_t.put_nowait((h2(goal), goal))
+    pq_s.put((h1(start), start))
+    pq_t.put((h2(goal), goal))
 
     done = False
     i = 0
@@ -2568,11 +2695,11 @@ def bidirectional_a_star_pq(start: Tile, goal: Tile, allowNeutralCities: bool = 
     connection = None
     stopping_distance = None
 
-    while not pq_s.empty() and not pq_t.empty() and not done:
+    while pq_s.queue and pq_t.queue and not done:
         i = i + 1
         if i & 1 == 1:  # alternate between forward and backward A*
             curTile: Tile
-            fu, curTile = pq_s.get_nowait()
+            fu, curTile = pq_s.get()
             closed_s[curTile] = True
             for v in curTile.movable:
                 if v.isMountain:
@@ -2594,9 +2721,9 @@ def bidirectional_a_star_pq(start: Tile, goal: Tile, allowNeutralCities: bool = 
                 else:
                     g_s[v] = g_s[curTile] + weight
                     cameFrom1[v] = curTile
-                    pq_s.put_nowait((g_s[v]+h1(v), v))
+                    pq_s.put((g_s[v]+h1(v), v))
         else:
-            fu, curTile = pq_t.get_nowait()
+            fu, curTile = pq_t.get()
             closed_t[curTile] = True
             for v in curTile.movable:
                 if v.isMountain:
@@ -2619,7 +2746,7 @@ def bidirectional_a_star_pq(start: Tile, goal: Tile, allowNeutralCities: bool = 
                 else:
                     g_t[v] = g_t[curTile] + weight
                     cameFrom2[v] = curTile
-                    pq_t.put_nowait((g_t[v]+h2(v), v))
+                    pq_t.put((g_t[v]+h2(v), v))
 
         if curTile in closed_s and curTile in closed_t:
             curMu = g_s[curTile] + g_t[curTile]
@@ -2707,7 +2834,7 @@ def bidirectional_a_star(start: Tile, goal: Tile, allowNeutralCities: bool = Fal
     connection = None
     weight = 1
 
-    while len(pq_s) > 0 and len(pq_t) > 0:
+    while pq_s and pq_t:
         i += 1
         if i & 1 == 1:  # alternate between forward and backward A*
             curTile: Tile
@@ -2884,77 +3011,77 @@ def dumbassDistMatrix(map: MapBase) -> MapMatrix[MapMatrix[int]]:
     return dist
 
 
-def johnson(map: MapBase) -> MapMatrix[MapMatrix[int]]:
-    """Return distance where distance[u][v] is the min distance from u to v.
+# def johnson(map: MapBase) -> MapMatrix[MapMatrix[int]]:
+#     """Return distance where distance[u][v] is the min distance from u to v.
+#
+#     distance[u][v] is the shortest distance from vertex u to v.
+#
+#     g is a Graph object which can have negative edge weights.
+#     """
+#
+#     dist: MapMatrix[MapMatrix[int]] = MapMatrix(map, None)
+#     for tile in map.get_all_tiles():
+#         dist[tile] = MapMatrix(map, 1000)
+#
+#     # add new vertex q
+#     g.add_vertex('q')
+#     # let q point to all other vertices in g with zero-weight edges
+#     for v in g:
+#         g.add_edge('q', v.get_key(), 0)
+#
+#     # compute shortest distance from vertex q to all other vertices
+#     bell_dist = bellman_ford(g, g.get_vertex('q'))
+#
+#     # set weight(u, v) = weight(u, v) + bell_dist(u) - bell_dist(v) for each
+#     # edge (u, v)
+#     for v in g:
+#         for n in v.get_neighbours():
+#             w = v.get_weight(n)
+#             v.set_weight(n, w + bell_dist[v] - bell_dist[n])
+#
+#     # remove vertex q
+#     # This implementation of the graph stores edge (u, v) in Vertex object u
+#     # Since no other vertex points back to q, we do not need to worry about
+#     # removing edges pointing to q from other vertices.
+#     del g.vertices['q']
+#
+#     # distance[u][v] will hold smallest distance from vertex u to v
+#     distance = {}
+#     # run dijkstra's algorithm on each source vertex
+#     for v in g:
+#         distance[v] = dijkstra(g, v)
+#
+#     # correct distances
+#     for v in g:
+#         for w in g:
+#             distance[v][w] += bell_dist[w] - bell_dist[v]
+#
+#     # correct weights in original graph
+#     for v in g:
+#         for n in v.get_neighbours():
+#             w = v.get_weight(n)
+#             v.set_weight(n, w + bell_dist[n] - bell_dist[v])
+#
+#     return distance
 
-    distance[u][v] is the shortest distance from vertex u to v.
-
-    g is a Graph object which can have negative edge weights.
-    """
-
-    dist: MapMatrix[MapMatrix[int]] = MapMatrix(map, None)
-    for tile in map.get_all_tiles():
-        dist[tile] = MapMatrix(map, 1000)
-
-    # add new vertex q
-    g.add_vertex('q')
-    # let q point to all other vertices in g with zero-weight edges
-    for v in g:
-        g.add_edge('q', v.get_key(), 0)
-
-    # compute shortest distance from vertex q to all other vertices
-    bell_dist = bellman_ford(g, g.get_vertex('q'))
-
-    # set weight(u, v) = weight(u, v) + bell_dist(u) - bell_dist(v) for each
-    # edge (u, v)
-    for v in g:
-        for n in v.get_neighbours():
-            w = v.get_weight(n)
-            v.set_weight(n, w + bell_dist[v] - bell_dist[n])
-
-    # remove vertex q
-    # This implementation of the graph stores edge (u, v) in Vertex object u
-    # Since no other vertex points back to q, we do not need to worry about
-    # removing edges pointing to q from other vertices.
-    del g.vertices['q']
-
-    # distance[u][v] will hold smallest distance from vertex u to v
-    distance = {}
-    # run dijkstra's algorithm on each source vertex
-    for v in g:
-        distance[v] = dijkstra(g, v)
-
-    # correct distances
-    for v in g:
-        for w in g:
-            distance[v][w] += bell_dist[w] - bell_dist[v]
-
-    # correct weights in original graph
-    for v in g:
-        for n in v.get_neighbours():
-            w = v.get_weight(n)
-            v.set_weight(n, w + bell_dist[n] - bell_dist[v])
-
-    return distance
-
-
-def bellman_ford(g, source):
-    """Return distance where distance[v] is min distance from source to v.
-
-    This will return a dictionary distance.
-
-    g is a Graph object which can have negative edge weights.
-    source is a Vertex object in g.
-    """
-    distance = dict.fromkeys(g, float('inf'))
-    distance[source] = 0
-
-    for _ in range(len(g) - 1):
-        for v in g:
-            for n in v.get_neighbours():
-                distance[n] = min(distance[n], distance[v] + v.get_weight(n))
-
-    return distance
+#
+# def bellman_ford(g, source):
+#     """Return distance where distance[v] is min distance from source to v.
+#
+#     This will return a dictionary distance.
+#
+#     g is a Graph object which can have negative edge weights.
+#     source is a Vertex object in g.
+#     """
+#     distance = dict.fromkeys(g, float('inf'))
+#     distance[source] = 0
+#
+#     for _ in range(len(g) - 1):
+#         for v in g:
+#             for n in v.get_neighbours():
+#                 distance[n] = min(distance[n], distance[v] + v.get_weight(n))
+#
+#     return distance
 
 
 def dijkstra(g, source):
@@ -2969,7 +3096,7 @@ def dijkstra(g, source):
     distance = dict.fromkeys(g, float('inf'))
     distance[source] = 0
 
-    while unvisited != set():
+    while unvisited:
         # find vertex with minimum distance
         closest = min(unvisited, key=lambda v: distance[v])
 

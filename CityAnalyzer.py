@@ -320,11 +320,10 @@ class CityAnalyzer(object):
             elif tile.player >= 0:
                 countEnemyNear.add(1)
 
-        SearchUtils.breadth_first_foreach_dist(
+        SearchUtils.breadth_first_foreach_dist_fast_no_neut_cities(
             self.map,
             [city],
             maxDepth=enemyTerritorySearchDepth,
-            noLog=True,
             foreachFunc=counterFunc,
         )
 

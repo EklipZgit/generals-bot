@@ -13,7 +13,6 @@ import uuid
 from collections import deque
 
 import BotLogging
-import DebugHelper
 
 ENABLE_DEBUG_ASSERTS = False
 
@@ -248,6 +247,7 @@ class TileDelta(object):
             state["toTile"] = Tile(int(x), int(y))
         self.__dict__.update(state)
 
+
 class Tile(object):
     def __init__(self, x, y, tile=TILE_EMPTY, army=0, isCity=False, isGeneral=False, player: typing.Union[None, int] = None, isMountain=False,
                  turnCapped=0):
@@ -273,6 +273,8 @@ class Tile(object):
 
         self.isGeneral: bool = isGeneral
         """Boolean isGeneral"""
+
+        self.isTempFogPrediction: bool = False
 
         self._player: int = -1
         if player is not None:
@@ -447,14 +449,14 @@ class Tile(object):
     """def __eq__(self, other):
             return (other != None and self.x==other.x and self.y==other.y)"""
 
-    def __lt__(self, other):
+    def __lt__(self, other: Tile | None):
         if other is None:
             return False
         if isinstance(other, str):
             return True
         return self.army < other.army
 
-    def __gt__(self, other):
+    def __gt__(self, other: Tile | None):
         if other is None:
             return True
         if isinstance(other, str):
@@ -462,10 +464,10 @@ class Tile(object):
         return self.army > other.army
 
     def __str__(self) -> str:
-        return self.toString()
+        return f"{self.x},{self.y}"
 
     def toString(self) -> str:
-        return f"{self.x},{self.y}"
+        return str(self)
 
     def __hash__(self):
         return hash((self.x, self.y))
@@ -496,11 +498,22 @@ class Tile(object):
         if not self.visible:
             self.delta.imperfectArmyDelta = True
         if tile >= TILE_MOUNTAIN:
+            self.isTempFogPrediction = False
             if not self.discovered:
                 self.discovered = True
                 self.delta.discovered = True
                 if tile <= TILE_EMPTY:
                     self.discoveredAsNeutral = True
+                if self.isGeneral and not isGeneral:
+                    self.isGeneral = False
+                    if map.generals[self.player] == self:
+                        map.generals[self.player] = None
+                        map.players[self.player].general = None
+                    try:
+                        idx = map.generals.index(self)
+                        map.generals[idx] = None
+                    except:
+                        pass
             self.lastSeen = map.turn
             if not self.visible:
                 self.delta.gainedSight = True
@@ -592,7 +605,7 @@ class Tile(object):
             playerObj.general = self
             self.isGeneral = True
             # TODO remove, this should NOT happen here
-            map.generals[tile] = self
+            # map.generals[tile] = self
 
         if self.delta.oldOwner != self.delta.newOwner:
             # TODO  and not self.delta.gainedSight ?
@@ -649,6 +662,7 @@ class Tile(object):
             self.isCity = False
         else:
             self.tile = TILE_FOG
+        self.isTempFogPrediction = False
         self.army = 0
         self._player = -1
         self.isGeneral = False
@@ -681,6 +695,9 @@ class Score(object):
 
 class DistanceMapper:
     def get_distance_between(self, tileA: Tile, tileB: Tile) -> int | None:
+        raise NotImplemented()
+
+    def get_distance_between_int(self, tileA: Tile, tileB: Tile) -> int:
         raise NotImplemented()
 
     def get_tile_dist_matrix(self, tile: Tile) -> typing.Dict[Tile, int]:
@@ -953,6 +970,8 @@ class MapBase(object):
             handler(captureeIdx, capturerIdx)
 
         capturedGen = self.generals[captureeIdx]
+        if capturedGen is None:
+            capturedGen = self.players[captureeIdx].general
         if capturedGen is not None:
             capturedGen.isGeneral = False
             capturedGen.isCity = True
@@ -1279,7 +1298,7 @@ class MapBase(object):
                 queue.append(gen)
                 self.players[gen.player].general = gen
 
-        while len(queue) > 0:
+        while queue:
             tile = queue.popleft()
             isNeutCity = tile.isCity and tile.isNeutral
             tileIsPathable = not tile.isNotPathable
@@ -2652,9 +2671,6 @@ class MapBase(object):
     def get_tile_index(self, tile: Tile) -> int:
         return tile.y * self.cols + tile.x
 
-    def get_distance_between(self, tileA: Tile, tileB: Tile) -> int | None:
-        return self.distance_mapper.get_distance_between(tileA, tileB)
-
     def get_tile_by_tile_index(self, tileIndex: int) -> Tile:
         x, y = self.convert_tile_server_index_to_x_y(tileIndex)
         return self.GetTile(x, y)
@@ -2663,6 +2679,43 @@ class MapBase(object):
         y = tileIndex // self.cols
         x = tileIndex % self.cols
         return x, y
+
+    def get_distance_between(self, tileA: Tile, tileB: Tile) -> int | None:
+        return self.distance_mapper.get_distance_between(tileA, tileB)
+
+    def get_distance_between_int(self, tileA: Tile, tileB: Tile) -> int:
+        return self.distance_mapper.get_distance_between_int(tileA, tileB)
+
+    def get_distance_2d_array_including_obstacles(self, tile: Tile) -> typing.List[typing.List[int]]:
+        """
+        Includes the distance to mountains / undiscovered obstacles (but does not path to the other side of them).
+        DO NOT MODIFY THE OUTPUT FROM THIS METHOD.
+
+        @param tile:
+        @return:
+        """
+        matrix = self.distance_mapper.get_tile_dist_matrix(tile)
+        # Because we know this will be mapmatrix, not dict, we hack this here and ignore the warning.
+        # noinspection PyUnresolvedReferences
+        return matrix.grid
+
+    def get_distance_matrix_including_obstacles(self, tile: Tile) -> typing.Dict[Tile, int]:
+        """
+        Includes the distance to mountains / undiscovered obstacles (but does not path to the other side of them).
+
+        @param tile:
+        @return:
+        """
+
+        return self.distance_mapper.get_tile_dist_matrix(tile)
+
+    def is_tile_visible_to(self, tile: Tile, player: int) -> bool:
+        team = self._teams[player]
+        for adj in tile.adjacents:
+            if self.is_tile_on_team(adj, team):
+                return True
+
+        return False
 
     @staticmethod
     def get_teams_array(map: MapBase) -> typing.List[int]:

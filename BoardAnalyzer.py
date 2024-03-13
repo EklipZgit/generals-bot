@@ -5,14 +5,8 @@
     EklipZ bot - Tries to play generals lol
 """
 
-import logbook
-import time
-import json
 from ArmyAnalyzer import *
 from SearchUtils import *
-from collections import deque
-from queue import PriorityQueue
-from Path import Path
 
 
 class BoardAnalyzer:

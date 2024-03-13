@@ -134,8 +134,10 @@ class BotHostBase(object):
 
             if self.has_viewer and self._viewer is not None:
                 with moveTimer.begin_event(f'Sending turn {currentMap.turn} update to Viewer'):
-                    self.eklipz_bot.viewInfo.perfEvents.extend(moveTimer.get_events_organized_longest_to_shortest(limit=15, indentSize=2))
+                    self.eklipz_bot.viewInfo.perfEvents.extend(moveTimer.get_events_organized_longest_to_shortest(limit=25, indentSize=2))
                     self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, currentMap, currentMap.complete)
+
+            logbook.info(f'MOVE {currentMap.turn} TIMINGS:\r\n' + '\r\n'.join(moveTimer.get_events_organized_longest_to_shortest(limit=100, indentSize=3)))
 
             with moveTimer.begin_event(f'Main thread check for pygame exit'):
                 if self.is_viewer_closed_by_user():

@@ -48,7 +48,9 @@ class WinConditionAnalyzer(object):
 
         self.most_forward_defense_city: Tile | None = None
         self.target_cities: typing.Set[Tile] = set()
+        """Cities that are easy to attack that we should consider attacking."""
         self.defend_cities: typing.Set[Tile] = set()
+        """Cities we own who are very likely to be attacked and should be defended."""
 
     def analyze(self, targetPlayer: int, targetPlayerExpectedGeneralLocation: Tile):
         self.last_viable_win_conditions = self.viable_win_conditions

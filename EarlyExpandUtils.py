@@ -56,7 +56,7 @@ def get_start_expand_value(
             pathComplete = True
             movingArmy = 0
         else:
-            move = curPath.made_move()
+            move = curPath.remove_start()
             if move.tile == general:
                 movingArmy = genArmy
                 movingGen = True

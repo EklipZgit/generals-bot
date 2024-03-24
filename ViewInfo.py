@@ -20,7 +20,6 @@ from Path import Path
 from StrategyModels import CycleStatsData
 from Territory import TerritoryClassifier
 from base.client.map import Tile
-from MapMatrix import MapMatrix
 
 
 class TargetStyle(Enum):
@@ -47,8 +46,8 @@ class PathColorer(object):
 class ViewInfo(object):
     def __init__(self, countHist, cols, rows):
         # list of true/false matrixes and the color to color the border
-        self._divisions: typing.List[typing.Tuple[MapMatrix[bool], typing.Tuple[int, int, int], int]] = []
-        self._zones: typing.List[typing.Tuple[MapMatrix[bool], typing.Tuple[int, int, int], int]] = []
+        self._divisions: typing.List[typing.Tuple[typing.Container, typing.Tuple[int, int, int], int]] = []
+        self._zones: typing.List[typing.Tuple[typing.Container, typing.Tuple[int, int, int], int]] = []
         # Draws the red target circles
 
         # self.ekBot.dump_turn_data_to_string()
@@ -167,14 +166,17 @@ class ViewInfo(object):
         logbook.info(additionalInfo)
         self.addlInfoLines.append(additionalInfo)
 
+    def add_info_line_no_log(self, additionalInfo: str):
+        self.addlInfoLines.append(additionalInfo)
+
     def add_stats_line(self, statsLine: str):
         logbook.info(statsLine)
         self.statsLines.append(statsLine)
 
-    def add_map_division(self, divisionMatrix: MapMatrix[bool], color: typing.Tuple[int, int, int], alpha: int = 128):
+    def add_map_division(self, divisionMatrix: typing.Container[Tile], color: typing.Tuple[int, int, int], alpha: int = 128):
         self._divisions.append((divisionMatrix, color, alpha))
 
-    def add_map_zone(self, zoneMatrix: MapMatrix[bool], color: typing.Tuple[int, int, int], alpha: int = 15):
+    def add_map_zone(self, zoneMatrix: typing.Container[Tile], color: typing.Tuple[int, int, int], alpha: int = 15):
         """Note this doesn't do pure alpha...?"""
         self._zones.append((zoneMatrix, color, alpha))
 

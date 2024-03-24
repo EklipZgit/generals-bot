@@ -452,12 +452,12 @@ class ABTests(TestBase):
             # Try in tweaking explore factor
             # 134-112, AGAIN but codified
             # 115-133, test again...?
-            # aBot.mcts_engine.utility_compression_ratio = 0.004  # default, just noting
+            # aBot.mcts_engine.utility_compression_ratio = 0.004  # emptyVal, just noting
             # aBot.mcts_engine.explore_factor = 1.0  # was 1.1 when starting this run
 
             # try 1.05...?
             # killed 81-75, codifying...? I'm bored of this
-            # aBot.mcts_engine.utility_compression_ratio = 0.004  # default, just noting
+            # aBot.mcts_engine.utility_compression_ratio = 0.004  # emptyVal, just noting
             # aBot.mcts_engine.explore_factor = 1.05  # was 1.0 when starting this run
 
             # TESTING B == 0.0
@@ -892,7 +892,7 @@ class ABTests(TestBase):
             # try more...?
             # 113-131
             # aBot.mcts_engine.biased_playouts_allowed_per_trial = 6
-            # aBot.mcts_engine.biased_move_ratio_while_available = 0.5  # default, just noting what it is right now.
+            # aBot.mcts_engine.biased_move_ratio_while_available = 0.5  # emptyVal, just noting what it is right now.
 
             # try adjusting the ratio
             # 118-130

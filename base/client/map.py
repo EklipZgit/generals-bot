@@ -89,16 +89,20 @@ _REPLAY_URLS = {
 
 
 class TeamStats(object):
-    def __init__(self, tileCount: int, score: int, standingArmy: int, cityCount: int, fightingDiff: int, unexplainedTileDelta: int):
+    def __init__(self, tileCount: int, score: int, standingArmy: int, cityCount: int, fightingDiff: int, unexplainedTileDelta: int, teamId: int, teamPlayers: typing.List[int], turn: int = 0):
         self.tileCount: int = tileCount
         self.score: int = score
         self.standingArmy: int = standingArmy
         self.cityCount: int = cityCount
         self.fightingDiff: int = fightingDiff
         self.unexplainedTileDelta: int = unexplainedTileDelta
+        self.teamId: int = teamId
+        self.teamPlayers: typing.List[int] = teamPlayers
+        self.turn: int = turn
 
     def __str__(self) -> str:
         return f'{self.score} {self.tileCount}t {self.cityCount}c  {self.standingArmy}standingArmy {self.fightingDiff}fightingDiff {self.unexplainedTileDelta}unexTileDelta'
+
 
 class Player(object):
     def __init__(self, player_index: int):
@@ -473,9 +477,9 @@ class Tile(object):
         return hash((self.x, self.y))
 
     def __eq__(self, other):
-        if isinstance(other, Tile):
-            return self.x == other.x and self.y == other.y
-        return False
+        if other is None:
+            return False
+        return self.x == other.x and self.y == other.y
 
     def was_not_visible_last_turn(self):
         return self.delta.gainedSight or (not self.visible and not self.delta.lostSight)
@@ -694,21 +698,24 @@ class Score(object):
 
 
 class DistanceMapper:
-    def get_distance_between(self, tileA: Tile, tileB: Tile) -> int | None:
-        raise NotImplemented()
+    def get_distance_between_or_none(self, tileA: Tile, tileB: Tile) -> int | None:
+        raise NotImplementedError()
 
-    def get_distance_between_int(self, tileA: Tile, tileB: Tile) -> int:
-        raise NotImplemented()
+    def get_distance_between(self, tileA: Tile, tileB: Tile) -> int:
+        raise NotImplementedError()
 
     def get_tile_dist_matrix(self, tile: Tile) -> typing.Dict[Tile, int]:
         """Actually returns mapmatrix, but they behave similarly and cant declare mapmatrix here because it uses map as a circular reference."""
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def recalculate(self):
-        raise NotImplemented()
+        raise NotImplementedError()
 
 
 class MapBase(object):
+    DO_NOT_RANDOMIZE: bool = False
+    """Static property to prevent randomizing the tile adjacency matrix."""
+
     def __init__(self,
                  player_index: int,
                  teams: typing.Union[None, typing.List[int]],  # the players index into this array gives the index of their teammate as the value.
@@ -741,10 +748,15 @@ class MapBase(object):
         self.usernames: typing.List[str] = user_names  # List of String Usernames
         self.players: typing.List[Player] = [Player(x) for x in range(len(self.usernames))]
 
-        self._teams = MapBase.get_teams_array(self)
+        self._teams = MapBase._build_teams_array(self)
         for p, t in enumerate(self._teams):
             if t != -1:
                 self.players[p].team = t
+        self._teammates_by_player = [[p.index for p in self.players if p.team == t] for t in self._teams]
+        self._teammates_by_player[-1].append(-1)  # neutrals only teammate is neutral
+        self._teammates_by_team = [[p.index for p in self.players if p.team == i] for i in range(max(self._teams) + 2)]  # +2 so we have an entry for each time ID AND -1
+        self._teammates_by_team[-1].append(-1)  # neutrals only teammate is neutral
+        self._team_stats: typing.List[TeamStats | None] = [None for i in range(max(self._teams) + 2)]  # +2 so we have an entry for each time ID AND -1
 
         self.pathableTiles: typing.Set[Tile] = set()
         """Tiles PATHABLE from the general spawn on the map, including neutral cities but not including mountains/undiscovered obstacles"""
@@ -753,6 +765,11 @@ class MapBase(object):
         """
         Tiles REACHABLE from the general spawn on the map, this includes EVERYTHING from pathableTiles but ALSO 
         includes mountains and undiscovered obstacles that are left/right/up/down adjacent to anything in pathableTiles
+        """
+
+        self.visible_tiles: typing.Set[Tile] = set()
+        """
+        All tiles that are currently visible on the map, as a set.
         """
 
         self.notify_tile_captures = []
@@ -1042,34 +1059,51 @@ class MapBase(object):
         self.scores = scores
 
     def get_team_stats_by_team_id(self, teamId: int) -> TeamStats:
-        examplePlayer = -1
-        for pIdx, currentTeamId in enumerate(self._teams):
-            if currentTeamId == teamId:
-                examplePlayer = pIdx
-                break
+        curStats = self._team_stats[teamId]
 
-        return self.get_team_stats(examplePlayer)
+        if teamId == -1 and curStats is not None:
+            curStats.turn = self.turn
+            return curStats
+
+        if curStats is None or curStats.turn != self.turn:
+            for curTeamId in self._teams:
+                tileCount = 0
+                score = 0
+                standingArmy = 0
+                cities = 0
+                fightingDiff = 0
+                unexplainedTileDelta = 0
+                teamPlayers = self._teammates_by_team[curTeamId]
+                for pIdx in teamPlayers:
+                    player = self.players[pIdx]
+
+                    tileCount += player.tileCount
+                    score += player.score
+                    standingArmy += player.standingArmy
+                    cities += player.cityCount
+                    fightingDiff += player.actualScoreDelta - player.expectedScoreDelta
+                    unexplainedTileDelta += player.unexplainedTileDelta
+
+                teamStats = TeamStats(tileCount=tileCount, score=score, standingArmy=standingArmy, cityCount=cities, fightingDiff=fightingDiff, unexplainedTileDelta=unexplainedTileDelta, teamId=curTeamId, teamPlayers=teamPlayers, turn=self.turn)
+
+                self._team_stats[curTeamId] = teamStats
+                if curTeamId == teamId:
+                    curStats = teamStats
+
+        return curStats
+
+    def get_team_stats_lookup_by_team_id(self) -> typing.List[TeamStats]:
+        if self._team_stats[0] is None or self._team_stats[0].turn != self.turn:
+            self.get_team_stats_by_team_id(-1)  # force build
+        return self._team_stats
 
     def get_team_stats(self, teamPlayer: int) -> TeamStats:
-        tileCount = 0
-        score = 0
-        standingArmy = 0
-        cities = 0
-        fightingDiff = 0
-        unexplainedTileDelta = 0
+        if teamPlayer == -1:
+            targetTeam = -1
+        else:
+            targetTeam = self.players[teamPlayer].team
 
-        for player in self.players:
-            if not self.is_player_on_team_with(player.index, teamPlayer):
-                continue
-
-            tileCount += player.tileCount
-            score += player.score
-            standingArmy += player.standingArmy
-            cities += player.cityCount
-            fightingDiff += player.actualScoreDelta - player.expectedScoreDelta
-            unexplainedTileDelta += player.unexplainedTileDelta
-
-        return TeamStats(tileCount=tileCount, score=score, standingArmy=standingArmy, cityCount=cities, fightingDiff=fightingDiff, unexplainedTileDelta=unexplainedTileDelta)
+        return self.get_team_stats_by_team_id(targetTeam)
 
     def is_tile_friendly(self, tile: Tile) -> bool:
         if self._teams[self.player_index] == self._teams[tile.player]:
@@ -1172,7 +1206,7 @@ class MapBase(object):
 
     def update(self, bypassDeltas: bool = False):
         """
-        Expects _applyUpdateDiff to have been run to update the hidden grid info first.
+        Expects _applyUpdateDiff to have been run to update the hidden _grid info first.
         Expects update_turn() to have been called with the new turn already.
         Expects update_visible_tile to have been called already for all tiles with updates.
         Expects scores to have been recreated from latest data.
@@ -1197,6 +1231,11 @@ class MapBase(object):
                     self.players[oldOwner].cityCount -= 1
 
                 self.players[newOwner].cityCount += 1
+
+            if curTile.delta.gainedSight:
+                self.visible_tiles.add(curTile)
+            elif curTile.delta.lostSight:
+                self.visible_tiles.discard(curTile)
 
         for i in range(len(self.scoreHistory) - 1, 0, -1):
             self.scoreHistory[i] = self.scoreHistory[i - 1]
@@ -1281,15 +1320,16 @@ class MapBase(object):
 
                 if tile.isGeneral:
                     self.generals[tile.player] = tile
-
-                random.shuffle(tile.adjacents)
-                random.shuffle(tile.movable)
+                if not MapBase.DO_NOT_RANDOMIZE:
+                    random.shuffle(tile.adjacents)
+                    random.shuffle(tile.movable)
 
         self.update_reachable()
 
     def update_reachable(self):
         pathableTiles = set()
         reachableTiles = set()
+        visibleTiles = set()
 
         queue = deque()
 
@@ -1300,6 +1340,8 @@ class MapBase(object):
 
         while queue:
             tile = queue.popleft()
+            if tile.visible:
+                visibleTiles.add(tile)
             isNeutCity = tile.isCity and tile.isNeutral
             tileIsPathable = not tile.isNotPathable
             if tile not in pathableTiles and tileIsPathable and not isNeutCity:
@@ -1310,6 +1352,7 @@ class MapBase(object):
 
         self.pathableTiles = pathableTiles
         self.reachableTiles = reachableTiles
+        self.visible_tiles = visibleTiles
 
     def clear_deltas_and_score_history(self):
         self.scoreHistory = [None for i in range(50)]
@@ -2680,11 +2723,11 @@ class MapBase(object):
         x = tileIndex % self.cols
         return x, y
 
-    def get_distance_between(self, tileA: Tile, tileB: Tile) -> int | None:
-        return self.distance_mapper.get_distance_between(tileA, tileB)
+    def get_distance_between_or_none(self, tileA: Tile, tileB: Tile) -> int | None:
+        return self.distance_mapper.get_distance_between_or_none(tileA, tileB)
 
-    def get_distance_between_int(self, tileA: Tile, tileB: Tile) -> int:
-        return self.distance_mapper.get_distance_between_int(tileA, tileB)
+    def get_distance_between(self, tileA: Tile, tileB: Tile) -> int:
+        return self.distance_mapper.get_distance_between(tileA, tileB)
 
     def get_distance_2d_array_including_obstacles(self, tile: Tile) -> typing.List[typing.List[int]]:
         """
@@ -2718,7 +2761,7 @@ class MapBase(object):
         return False
 
     @staticmethod
-    def get_teams_array(map: MapBase) -> typing.List[int]:
+    def _build_teams_array(map: MapBase) -> typing.List[int]:
         teams = [i for i in range(len(map.players))]
         if map.teams is not None:
             teams = [t for t in map.teams]
@@ -2726,6 +2769,13 @@ class MapBase(object):
         teams.append(-1)  # put -1 at the end so that if -1 gets passed as the array index, the team is -1 for -1.
 
         return teams
+
+    @staticmethod
+    def get_teams_array(map: MapBase) -> typing.List[int]:
+        return map._teams
+
+    def get_teammates(self, player: int) -> typing.List[int]:
+        return self._teammates_by_player[player]
 
 
 class Map(MapBase):
@@ -2835,10 +2885,12 @@ def new_map_grid(map, initialValueXYFunc):
 def new_tile_grid(map, initialValueTileFunc):
     return [[initialValueTileFunc(map.grid[y][x]) for y in range(map.rows)] for x in range(map.cols)]
 
+# cur fastest, 0.0185
+# def new_value_grid(map, initValue) -> typing.List[typing.List[int]]:
+#     return [[initValue] * map.rows for _ in range(map.cols)]
 
 def new_value_grid(map, initValue) -> typing.List[typing.List[int]]:
     return [[initValue] * map.rows for _ in range(map.cols)]
-
 
 def evaluate_island_fog_move(tile: Tile, candidateTile: Tile) -> bool:
     if tile.visible or candidateTile.visible:

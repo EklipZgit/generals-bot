@@ -1219,6 +1219,8 @@ dur 0.3073, iter   109, nodesExplored   109, rollouts   109,
                                 bot = EklipZBot()
                                 bot.initialize_from_map_for_first_time(map)
                                 bot.targetPlayer = enemyGeneral.player
+                                bot.targetPlayerObj = map.players[enemyGeneral.player]
+                                bot.opponent_tracker.targetPlayer = enemyGeneral.player
                                 bot.perf_timer.begin_move(42)
                                 bot.init_turn()
                                 bot.perform_move_prep()
@@ -1234,8 +1236,8 @@ dur 0.3073, iter   109, nodesExplored   109, rollouts   109,
                                 # bot.viewInfo.armyTracker = bot.armyTracker
                                 start = time.perf_counter()
                                 # self.begin_capturing_logging()
-                                result = bot.find_end_of_turn_sim_result(None, None, time_limit=0.3)
                                 duration = time.perf_counter() - start
+                                result = bot.find_end_of_turn_sim_result(None, None, time_limit=0.3)
                                 summary = bot.mcts_engine.last_summary
 
                                 key = allowedArmyCount, extraValuableTiles, valuableTileArmy, rolloutDepth, biasedMax

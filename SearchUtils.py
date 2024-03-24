@@ -66,19 +66,19 @@ class Counter(object):
         return str(self.value)
 
 
-def where(enumerable, filter_func):
+def where(enumerable: typing.Iterable[T], filter_func: typing.Callable[[T], bool]):
     results = [item for item in enumerable if filter_func(item)]
     return results
 
 
-def any_where(enumerable, filter_func) -> bool:
+def any_where(enumerable: typing.Iterable[T], filter_func: typing.Callable[[T], bool]) -> bool:
     for item in enumerable:
         if filter_func(item):
             return True
     return False
 
 
-def count(enumerable, filter_func) -> int:
+def count(enumerable: typing.Iterable[T], filter_func: typing.Callable[[T], bool]) -> int:
     countMatch = 0
     for item in enumerable:
         if filter_func(item):
@@ -122,7 +122,6 @@ def dest_breadth_first_target(
                 continue
 
             goalInc = goalIncModifier + additionalIncrement
-            startArmy = goalIncModifier
 
             # THE goalIncs below might be wrong, unit test.
             if searchingPlayer != goal.player:
@@ -168,6 +167,7 @@ def dest_breadth_first_target(
     foundDist = -1
     endNode = None
     depthEvaluated = 0
+    baseTurn = map.turn
     while frontier.queue:
         iter += 1
 
@@ -187,7 +187,8 @@ def dest_breadth_first_target(
 
         _, negCaptures, prioArmy = prioVals
 
-        nextArmy = army - 1 - goalInc
+        nextArmy = army - 1
+        isInc = (baseTurn + dist) & 1 == 0 and dist > 0
 
         if preferCapture and not map.is_player_on_team_with(searchingPlayer, current.player):  # and army > current.army // 3
             negCaptures -= 1
@@ -196,10 +197,12 @@ def dest_breadth_first_target(
         if (current.isCity and current.player != -1) or current.isGeneral:
             if current.player == searchingPlayer:
                 goalInc -= 0.5
-                nextArmy -= goalInc
+                if isInc:
+                    nextArmy -= int(goalInc * 2)
             else:
                 goalInc += 0.5
-                nextArmy += goalInc
+                if isInc:
+                    nextArmy += int(goalInc * 2)
 
         if negativeTiles is None or current not in negativeTiles:
             if searchingPlayer == current.player:
@@ -222,6 +225,10 @@ def dest_breadth_first_target(
                 logbook.info(
                     f"GOAL popped {current.toString()}, army {nextArmy}, goalInc {goalInc}, targetArmy {targetArmy}, processing")
             break
+
+        if isInc:  #(current.x == 2 and current.y == 7) or (current.x == 2 and current.y == 8) or (current.x == 2 and current.y == 9) or (current.x == 3 and current.y == 9) or (current.x == 4 and current.y == 9) or (current.x == 5 and current.y == 9)
+            nextArmy -= int(2 * goalInc)
+
         if newDist > depthEvaluated:
             depthEvaluated = newDist
         # targetArmy += goalInc
@@ -282,7 +289,7 @@ def dest_breadth_first_target(
             "IS THIS THE INC BUG? OMG I THINK I FOUND IT!!!!!! Finds path where waiting 1 move for city increment is superior, but then we skip the 'waiting' move and just move the 2 army off the city instead of 3 army?")
         logbook.info(f"stripping path node {str(path)}")
         path = path.parent
-        pathObject.made_move()
+        pathObject.remove_start()
 
     if pathObject.length <= 0:
         logbook.info("abandoned path")
@@ -883,6 +890,8 @@ def breadth_first_dynamic_max(
         maxIterations: int = INF,
         allowDoubleBacks=False,
         priorityMatrix: MapMatrix[float] | None = None,
+        priorityMatrixSkipStart: bool = False,
+        priorityMatrixSkipEnd: bool = False,
         includePath=False,
         ignoreNonPlayerArmy: bool = False,
         ignoreIncrement: bool = True
@@ -1094,7 +1103,7 @@ def breadth_first_dynamic_max(
                 else:
                     parentString = "None"
                 logbook.info(
-                    f"+Tile {current.toString()} from {parentString} is new max value: [{'], ['.join('{:.3f}'.format(x) for x in newValue)}]  (dist {dist})")
+                    f"+Tile {str(current)} from {parentString} is new max value: [{'], ['.join('{:.3f}'.format(x) for x in newValue)}]  (dist {dist})")
             maxValue = newValue
             maxPrio = prioVals
             endNode = current
@@ -1168,8 +1177,11 @@ def breadth_first_dynamic_max(
         incrementBackwards=incrementBackward,
         ignoreIncrement=ignoreIncrement)
 
+    matrixStart = 0 if not priorityMatrixSkipStart else 1
+    matrixEndOffset = -1 if not priorityMatrixSkipEnd else 0
+
     if priorityMatrix:
-        for tile in pathObject.tileList:
+        for tile in pathObject.tileList[matrixStart:pathObject.length - matrixEndOffset]:
             pathObject.value += priorityMatrix[tile]
 
     if pathObject.length == 0:
@@ -1213,6 +1225,8 @@ def breadth_first_dynamic_max_per_tile(
         allowDoubleBacks=False,
         includePath=False,
         priorityMatrix: MapMatrix[float] | None = None,
+        priorityMatrixSkipStart: bool = False,
+        priorityMatrixSkipEnd: bool = False,
         ignoreNonPlayerArmy: bool = False,
         ignoreIncrement: bool = True,
         useGlobalVisitedSet: bool = True
@@ -1408,7 +1422,7 @@ def breadth_first_dynamic_max_per_tile(
                     parentString = "None"
                 valStr = '], ['.join('{:.3f}'.format(x) for x in newValue)
                 logbook.info(
-                    f"+Tile {current.toString()} from {parentString} is new max value: [{valStr}]  (dist {dist})")
+                    f"+Tile {str(current)} from {parentString} is new max value: [{valStr}]  (dist {dist})")
             maxValues[startTile] = newValue
             maxPrios[startTile] = prioVals
             endNodes[startTile] = current
@@ -1454,12 +1468,14 @@ def breadth_first_dynamic_max_per_tile(
     if foundDist >= 1000:
         return {}
 
-
     pathNegs = negativeTiles
     negWithStart = negativeTiles.union(startTiles)
 
     if ignoreStartTile:
         pathNegs = negWithStart
+
+    matrixStart = 0 if not priorityMatrixSkipStart else 1
+    matrixEndOffset = -1 if not priorityMatrixSkipEnd else 0
 
     maxPaths: typing.Dict[Tile, Path] = {}
     for startTile in maxValues.keys():
@@ -1488,7 +1504,7 @@ def breadth_first_dynamic_max_per_tile(
             ignoreIncrement=ignoreIncrement)
 
         if priorityMatrix:
-            for tile in pathObject.tileList:
+            for tile in pathObject.tileList[matrixStart:pathObject.length - matrixEndOffset]:
                 pathObject.value += priorityMatrix[tile]
 
         if pathObject.length == 0:
@@ -1529,6 +1545,8 @@ def breadth_first_dynamic_max_per_tile_per_distance(
         allowDoubleBacks=False,
         includePath=False,
         priorityMatrix: MapMatrix[float] | None = None,
+        priorityMatrixSkipStart: bool = False,
+        priorityMatrixSkipEnd: bool = False,
         ignoreNonPlayerArmy: bool = False,
         ignoreIncrement: bool = True,
         useGlobalVisitedSet: bool = True
@@ -1647,9 +1665,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
 
     globalVisitedSet = set()
     if isinstance(startTiles, dict):
-        for tile in startTiles.keys():
-            (startPriorityObject, distance) = startTiles[tile]
-
+        for tile, (startPriorityObject, distance) in startTiles.items():
             startVal = startPriorityObject
             startList = list()
             startList.append((tile, startVal))
@@ -1693,6 +1709,15 @@ def breadth_first_dynamic_max_per_tile_per_distance(
     maxListsTMP: typing.Dict[Tile, typing.Dict[int, typing.List[typing.Tuple[Tile, typing.Any]]]] = {}
     endNodesTMP: typing.Dict[Tile, typing.Dict[int, Tile]] = {}
 
+    valuePrinter = None
+    if logResultValues:
+        valuePrinter = lambda val: f"[{'], ['.join('{:.3f}'.format(x) for x in val)}]"
+        try:
+            firstVal = startTiles
+            valuePrinter(startList[0])
+        except:
+            valuePrinter = lambda val: str(val)
+
     while frontier.queue:
         iter += 1
         if iter & 64 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING or iter > maxIterations:
@@ -1724,15 +1749,16 @@ def breadth_first_dynamic_max_per_tile_per_distance(
                 endNodesTMP[startTile] = {}
                 maxListsTMP[startTile] = {}
             maxMinusOne = maxValuesTMP[startTile].get(dist-1, None)
-            if (dist not in maxValuesTMP[startTile] or newValue > maxValuesTMP[startTile][dist]) and (maxMinusOne is None or maxMinusOne < newValue):
+            val = maxValuesTMP[startTile].get(dist, None)
+            if (val is None or newValue > val) and (maxMinusOne is None or maxMinusOne < newValue):
                 foundDist = min(foundDist, dist)
                 if logResultValues:
                     if parent is not None:
-                        parentString = parent.toString()
+                        parentString = str(parent)
                     else:
                         parentString = "None"
                     logbook.info(
-                        f"+Tile {current.toString()} from {parentString} for startTile {str(startTile)} at dist {dist} is new max value: [{'], ['.join('{:.3f}'.format(x) for x in newValue)}]")
+                        f"+Tile {str(current)} from {parentString} for startTile {str(startTile)} at dist {dist} is new max value: {valuePrinter(newValue)}")
                 maxValuesTMP[startTile][dist] = newValue
                 maxPriosTMP[startTile][dist] = prioVals
                 endNodesTMP[startTile][dist] = current
@@ -1766,7 +1792,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
 
                             if bounded:
                                 if not noLog:
-                                    logbook.info(f"Bounded off {next.toString()}")
+                                    logbook.info(f"Bounded off {str(next)}")
                                 continue
                 if skipFunc is not None:
                     skip = skipFunc(next, nextPrio) if not includePath else skipFunc(next, nextPrio, nodeList)
@@ -1786,6 +1812,9 @@ def breadth_first_dynamic_max_per_tile_per_distance(
     pathNegs = negativeTiles
     if ignoreStartTile:
         pathNegs = negWithStart
+
+    matrixStart = 0 if not priorityMatrixSkipStart else 1
+    matrixEndOffset = -1 if not priorityMatrixSkipEnd else 0
 
     for startTile in maxValuesTMP.keys():
         pathListForTile = []
@@ -1821,7 +1850,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
                 ignoreIncrement=ignoreIncrement)
 
             if priorityMatrix:
-                for tile in pathObject.tileList:
+                for tile in pathObject.tileList[matrixStart:pathObject.length - matrixEndOffset]:
                     pathObject.value += priorityMatrix[tile]
 
             if pathObject.length == 0:
@@ -2241,27 +2270,23 @@ def breadth_first_find_dist_queue(
 
 def breadth_first_foreach(
         map: MapBase,
-        startTiles: typing.List[Tile],
+        startTiles: typing.List[Tile] | typing.Set[Tile],
         maxDepth: int,
-        foreachFunc: typing.Callable[[Tile], None],
-        negativeFunc: typing.Callable[[Tile], bool] | None = None,
-        skipFunc: typing.Callable[[Tile], bool] | None = None,
+        foreachFunc: typing.Callable[[Tile], bool | None],
         skipTiles=None,
         noLog=False,
         bypassDefaultSkip: bool = False):
     """
     WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
     (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
-    Does NOT skip neutral cities by default.
-    Skip func runs AFTER the foreach func is evaluated.
+    Does NOT skip neutral cities by emptyVal.
+    Return True to skip.
     Same as breath_first_foreach_dist, except the foreach function does not get the distance parameter passed to it.
 
     @param map:
     @param startTiles:
     @param maxDepth:
-    @param foreachFunc:
-    @param negativeFunc:
-    @param skipFunc: Evaluated BEFORE the foreach runs on a tile
+    @param foreachFunc: ALSO the skip func. Return true to avoid adding neighbors to queue.
     @param skipTiles: Evaluated BEFORE the foreach runs on a tile
     @param noLog:
     @param bypassDefaultSkip: If true, does NOT skip mountains / undiscovered obstacles
@@ -2275,7 +2300,7 @@ def breadth_first_foreach(
     if skipTiles is not None:
         for tile in skipTiles:
             if not noLog:
-                logbook.info(f"    skipTiles contained {tile.toString()}")
+                logbook.info(f"    skipTiles contained {tile}")
             globalVisited[tile] = True
 
     for tile in startTiles:
@@ -2283,15 +2308,6 @@ def breadth_first_foreach(
             # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
             continue
         frontier.appendleft((tile, 0))
-
-    if negativeFunc is not None:
-        oldForeachFunc = foreachFunc
-
-        def newFunc(tile):
-            if not negativeFunc(tile):
-                oldForeachFunc(tile)
-
-        foreachFunc = newFunc
 
     start = time.perf_counter()
     iter = 0
@@ -2301,17 +2317,17 @@ def breadth_first_foreach(
         iter += 1
 
         (current, dist) = frontier.pop()
-        if globalVisited[current]:
+        if current in globalVisited:
             continue
         if dist > maxDepth:
             break
-        globalVisited[current] = True
+        globalVisited.add(current)
         if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)) and dist > 0:
             continue
-        foreachFunc(current)
-        # intentionally placed after the foreach func, skipped tiles are still foreached, they just aren't traversed
-        if skipFunc is not None and skipFunc(current):
+
+        if foreachFunc(current):
             continue
+
         newDist = dist + 1
         for next in current.movable:  # new spots to try
             frontier.appendleft((next, newDist))
@@ -2320,29 +2336,95 @@ def breadth_first_foreach(
             f"Completed breadth_first_foreach. startTiles[0] {startTiles[0].x},{startTiles[0].y}: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
 
 
+def breadth_first_foreach_with_state(
+        map: MapBase,
+        startTiles: typing.List[Tile] | typing.Set[Tile] | typing.Dict[Tile, typing.Any],
+        maxDepth: int,
+        foreachFunc: typing.Callable[[Tile, typing.Any | None], typing.Any | None],
+        skipTiles=None,
+        noLog=False,
+        bypassDefaultSkip: bool = False):
+    """
+    WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
+    (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
+    Does NOT skip neutral cities by emptyVal.
+    INVERSE of normal return of forceach, return None/False to skip. Return a state object to continue to the next neighbors.
+    Same as breath_first_foreach_dist, except the foreach function does not get the distance parameter passed to it.
+
+    @param map:
+    @param startTiles:
+    @param maxDepth:
+    @param foreachFunc: ALSO the skip func. Return true to avoid adding neighbors to queue.
+    @param skipTiles: Evaluated BEFORE the foreach runs on a tile
+    @param noLog:
+    @param bypassDefaultSkip: If true, does NOT skip mountains / undiscovered obstacles
+    @return:
+    """
+    if len(startTiles) == 0:
+        return
+
+    frontier = deque()
+    globalVisited = MapMatrix(map, False)
+    if skipTiles is not None:
+        for tile in skipTiles:
+            if not noLog:
+                logbook.info(f"    skipTiles contained {tile}")
+            globalVisited[tile] = True
+
+    if isinstance(startTiles, dict):
+        for tile, startVal in startTiles.items():
+            frontier.appendleft((tile, 0, startVal))
+
+    else:
+        for tile in startTiles:
+            frontier.appendleft((tile, 0, None))
+
+    start = time.perf_counter()
+    iter = 0
+    dist = 0
+    while frontier:
+        iter += 1
+
+        (current, dist, state) = frontier.pop()
+        if current in globalVisited:
+            continue
+        if dist > maxDepth:
+            break
+        globalVisited.add(current)
+        if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)) and dist > 0:
+            continue
+
+        nextState = foreachFunc(current, state)
+        if not nextState:
+            continue
+
+        newDist = dist + 1
+        for next in current.movable:  # new spots to try
+            frontier.appendleft((next, newDist, nextState))
+    if not noLog:
+        logbook.info(
+            f"Completed breadth_first_foreach_with_state. startTiles[0] {startTiles[0].x},{startTiles[0].y}: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
+
+
 def breadth_first_foreach_dist(
         map: MapBase,
-        startTiles: typing.List[Tile],
+        startTiles: typing.List[Tile] | typing.Set[Tile],
         maxDepth: int,
-        foreachFunc: typing.Callable[[Tile, int], None],
-        negativeFunc: typing.Callable[[Tile, int], bool] | None = None,
-        skipFunc: typing.Callable[[Tile], bool] | None = None,
+        foreachFunc: typing.Callable[[Tile, int], bool | None],
         skipTiles: typing.Set[Tile] = None,
         noLog=False,
         bypassDefaultSkip: bool = False):
     """
     WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
     (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
-    Does NOT skip neutral cities by default.
-    Skip func runs AFTER the foreach func is evaluated.
+    Does NOT skip neutral cities by emptyVal.
+    Return True to skip.
     Same as breath_first_foreach, except the foreach function also gets the distance parameter passed to it.
 
     @param map:
     @param startTiles:
     @param maxDepth:
-    @param foreachFunc:
-    @param negativeFunc:
-    @param skipFunc: Evaluated AFTER the foreach runs on a tile to prevent reaching its neighbors.
+    @param foreachFunc: ALSO the skip func. Return true to avoid adding neighbors to queue.
     @param skipTiles: Evaluated BEFORE the foreach runs on a tile, preventing the foreach from ever reaching it.
     @param noLog:
     @param bypassDefaultSkip: If true, does NOT skip mountains / undiscovered obstacles unless you skip them yourself with skipTiles/skipFunc.
@@ -2363,15 +2445,6 @@ def breadth_first_foreach_dist(
             continue
         frontier.appendleft((tile, 0))
 
-    if negativeFunc is not None:
-        oldForeachFunc = foreachFunc
-
-        def newFunc(tile, dist):
-            if not negativeFunc(tile):
-                oldForeachFunc(tile, dist)
-
-        foreachFunc = newFunc
-
     if not noLog:
         start = time.perf_counter()
     iter = 0
@@ -2380,17 +2453,17 @@ def breadth_first_foreach_dist(
         iter += 1
 
         (current, dist) = frontier.pop()
-        if globalVisited[current]:
+        if current in globalVisited:
             continue
         if dist > maxDepth:
             break
-        globalVisited[current] = True
+        globalVisited.add(current)
         if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)):
             continue
-        foreachFunc(current, dist)
-        # intentionally placed after the foreach func, skipped tiles are still foreached, they just aren't traversed
-        if skipFunc is not None and skipFunc(current):
+
+        if foreachFunc(current, dist):
             continue
+
         newDist = dist + 1
         for next in current.movable:  # new spots to try
             frontier.appendleft((next, newDist))
@@ -2398,21 +2471,22 @@ def breadth_first_foreach_dist(
         logbook.info(
             f"Completed breadth_first_foreach_dist. startTiles[0] {startTiles[0].x},{startTiles[0].y}: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
 
+
 def breadth_first_foreach_dist_fast_incl_neut_cities(
         map: MapBase,
-        startTiles: typing.List[Tile],
+        startTiles: typing.List[Tile] | typing.Set[Tile],
         maxDepth: int,
-        foreachFunc: typing.Callable[[Tile, int], None]):
+        foreachFunc: typing.Callable[[Tile, int], bool | None]):
     """
     WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
     (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
-    Does NOT skip neutral cities by default.
+    Does NOT skip neutral cities by emptyVal.
     Same as breath_first_foreach, except the foreach function also gets the distance parameter passed to it.
 
     @param map:
     @param startTiles:
     @param maxDepth:
-    @param foreachFunc:
+    @param foreachFunc: ALSO the skip func. Return true to avoid adding neighbors to queue.
     @return:
     """
     if len(startTiles) == 0:
@@ -2420,6 +2494,7 @@ def breadth_first_foreach_dist_fast_incl_neut_cities(
 
     frontier: typing.Deque[typing.Tuple[Tile, int]] = deque()
 
+    # TODO benchmark this...?
     if maxDepth < map.rows // 3:
         globalVisited = set()
     else:
@@ -2437,8 +2512,10 @@ def breadth_first_foreach_dist_fast_incl_neut_cities(
         if dist > maxDepth:
             break
         globalVisited.add(current)
-        foreachFunc(current, dist)
-        # intentionally placed after the foreach func, skipped tiles are still foreached, they just aren't traversed
+
+        if foreachFunc(current, dist):
+            continue
+
         newDist = dist + 1
         for next in current.movable:  # new spots to try
             frontier.appendleft((next, newDist))
@@ -2446,19 +2523,19 @@ def breadth_first_foreach_dist_fast_incl_neut_cities(
 
 def breadth_first_foreach_dist_fast_no_neut_cities(
         map: MapBase,
-        startTiles: typing.List[Tile],
+        startTiles: typing.List[Tile] | typing.Set[Tile],
         maxDepth: int,
-        foreachFunc: typing.Callable[[Tile, int], None]):
+        foreachFunc: typing.Callable[[Tile, int], bool | None]):
     """
     WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
     (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
-    DOES skip neutral cities by default.
+    DOES skip neutral cities by emptyVal.
     Same as breath_first_foreach, except the foreach function also gets the distance parameter passed to it.
 
     @param map:
     @param startTiles:
     @param maxDepth:
-    @param foreachFunc:
+    @param foreachFunc: ALSO the skip func. Return true to avoid adding neighbors to queue.
     @return:
     """
     if len(startTiles) == 0:
@@ -2466,6 +2543,7 @@ def breadth_first_foreach_dist_fast_no_neut_cities(
 
     frontier: typing.Deque[typing.Tuple[Tile, int]] = deque()
 
+    # TODO benchmark this...?
     if maxDepth < map.rows // 3:
         globalVisited = set()
     else:
@@ -2487,39 +2565,88 @@ def breadth_first_foreach_dist_fast_no_neut_cities(
             break
         globalVisited.add(current)
 
-        foreachFunc(current, dist)
+        if foreachFunc(current, dist):
+            continue
+
+        newDist = dist + 1
+        for next in current.movable:  # new spots to try
+            frontier.appendleft((next, newDist))
+
+
+def breadth_first_foreach_fast_no_neut_cities(
+        map: MapBase,
+        startTiles: typing.List[Tile] | typing.Set[Tile],
+        maxDepth: int,
+        foreachFunc: typing.Callable[[Tile], bool | None],
+):
+    """
+    WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
+    (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
+    DOES skip neutral cities.
+
+    @param map:
+    @param startTiles:
+    @param maxDepth:
+    @param foreachFunc: ALSO the skip func. Return true to avoid adding neighbors to queue.
+    @return:
+    """
+    if len(startTiles) == 0:
+        return
+
+    frontier: typing.Deque[typing.Tuple[Tile, int]] = deque()
+
+    # TODO benchmark this...?
+    if maxDepth < map.rows // 3:
+        globalVisited = set()
+    else:
+        globalVisited = MapMatrix(map, False)
+
+    for tile in startTiles:
+        if tile.isMountain:
+            # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
+            continue
+        frontier.appendleft((tile, 0))
+
+    while frontier:
+        (current, dist) = frontier.pop()
+        if current.isObstacle:
+            continue
+        if current in globalVisited:
+            continue
+        if dist > maxDepth:
+            break
+        globalVisited.add(current)
+
+        if foreachFunc(current):
+            continue
+
         # intentionally placed after the foreach func, skipped tiles are still foreached, they just aren't traversed
         newDist = dist + 1
         for next in current.movable:  # new spots to try
             frontier.appendleft((next, newDist))
 
 
-
 def breadth_first_foreach_dist_revisit_callback(
         map: MapBase,
-        startTiles: typing.List[Tile],
+        startTiles: typing.List[Tile] | typing.Set[Tile],
         maxDepth: int,
         foreachFunc: typing.Callable[[Tile, int], None],
         revisitFunc: typing.Callable[[Tile, int], None],
-        negativeFunc: typing.Callable[[Tile], bool] | None = None,
-        skipFunc: typing.Callable[[Tile], bool] | None = None,
         skipTiles: typing.Set[Tile] = None,
         noLog=False,
         bypassDefaultSkip: bool = False):
     """
     WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
     (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
-    Does NOT skip neutral cities by default.
-    Skip func runs AFTER the foreach func is evaluated.
+    Does NOT skip neutral cities by emptyVal.
+    Return True to skip.
     Same as breath_first_foreach, except the foreach function also gets the distance parameter passed to it.
 
     @param map:
     @param startTiles:
     @param maxDepth:
-    @param foreachFunc:
+    @param foreachFunc: ALSO the skip func. Return true to avoid adding neighbors to queue.
     @param revisitFunc: Called when a node is popped from the queue at a different dist than its original
-    @param negativeFunc:
-    @param skipFunc: Evaluated AFTER the foreach runs on a tile
     @param skipTiles: Evaluated BEFORE the foreach runs on a tile
     @param noLog:
     @param bypassDefaultSkip: If true, does NOT skip mountains / undiscovered obstacles
@@ -2540,15 +2667,6 @@ def breadth_first_foreach_dist_revisit_callback(
             continue
         frontier.appendleft((tile, 0))
 
-    if negativeFunc is not None:
-        oldForeachFunc = foreachFunc
-
-        def newFunc(tile, dist):
-            if not negativeFunc(tile):
-                oldForeachFunc(tile, dist)
-
-        foreachFunc = newFunc
-
     start = time.perf_counter()
     iter = 0
     dist = 0
@@ -2566,10 +2684,9 @@ def breadth_first_foreach_dist_revisit_callback(
         globalVisited[current.x][current.y] = True
         if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)):
             continue
-        foreachFunc(current, dist)
-        # intentionally placed after the foreach func, skipped tiles are still foreached, they just aren't traversed
-        if skipFunc is not None and skipFunc(current):
+        if foreachFunc(current, dist):
             continue
+
         newDist = dist + 1
         for next in current.movable:  # new spots to try
             frontier.appendleft((next, newDist))
@@ -2589,12 +2706,13 @@ def build_distance_map_incl_mountains(map, startTiles, skipTiles=None) -> typing
             newSkipTiles.add(tile)
         skipTiles = newSkipTiles
 
-    def bfs_dist_mapper(tile, dist):
+    def bfs_dist_mapper(tile, dist) -> bool:
         if dist < distanceMap[tile.x][tile.y]:
             distanceMap[tile.x][tile.y] = dist
 
-    breadth_first_foreach_dist(map, startTiles, 1000, bfs_dist_mapper, skipTiles=skipTiles,
-                               skipFunc=lambda tile: tile.isObstacle, bypassDefaultSkip=True)
+        return tile.isObstacle
+
+    breadth_first_foreach_dist(map, startTiles, 1000, bfs_dist_mapper, skipTiles=skipTiles, bypassDefaultSkip=True)
     return distanceMap
 
 
@@ -2609,9 +2727,11 @@ def build_distance_map(map: MapBase, startTiles: typing.List[Tile], skipTiles: t
             newSkipTiles.add(tile)
         skipTiles = newSkipTiles
 
-    def bfs_dist_mapper(tile: Tile, dist: int):
+    def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
         # if dist < distanceMap[tile.x][tile.y]:
         distanceMap[tile.x][tile.y] = dist
+
+        return tile.isNeutral and tile.isCity
 
     breadth_first_foreach_dist(
         map,
@@ -2619,7 +2739,6 @@ def build_distance_map(map: MapBase, startTiles: typing.List[Tile], skipTiles: t
         1000,
         bfs_dist_mapper,
         skipTiles=skipTiles,
-        skipFunc=lambda tile: tile.isNeutral and tile.isCity,
         noLog=True)
 
     return distanceMap
@@ -2636,8 +2755,9 @@ def build_distance_map_matrix(map, startTiles, skipTiles=None) -> MapMatrix[int]
             newSkipTiles.add(tile)
         skipTiles = newSkipTiles
 
-    def bfs_dist_mapper(tile, dist):
+    def bfs_dist_mapper(tile, dist) -> bool:
         distanceMap[tile] = dist
+        return tile.isNeutral and tile.isCity
 
     breadth_first_foreach_dist(
         map,
@@ -2645,8 +2765,43 @@ def build_distance_map_matrix(map, startTiles, skipTiles=None) -> MapMatrix[int]
         1000,
         bfs_dist_mapper,
         skipTiles=skipTiles,
-        skipFunc=lambda tile: tile.isNeutral and tile.isCity,
         noLog=True)
+    return distanceMap
+
+
+def build_distance_map_matrix_include_set(map, startTiles, containsSet: typing.Container[Tile]) -> MapMatrix[int]:
+    distanceMap = MapMatrix(map, 1000)
+
+    maxDepth = 1000
+
+    if len(startTiles) == 0:
+        return distanceMap
+
+    frontier = deque()
+    globalVisited = MapMatrix(map, False)
+
+    for tile in startTiles:
+        frontier.appendleft((tile, 0))
+
+    while frontier:
+        (current, dist) = frontier.pop()
+        if current in globalVisited:
+            continue
+        if dist > maxDepth:
+            break
+        globalVisited.add(current)
+        if current.isMountain or (not current.discovered and current.isNotPathable):
+            continue
+
+        distanceMap[current] = dist
+        if current.isNeutral and current.isCity:
+            continue
+
+        newDist = dist + 1
+        for nextTile in current.movable:  # new spots to try
+            if nextTile in containsSet:
+                frontier.appendleft((nextTile, newDist))
+
     return distanceMap
 
 
@@ -3111,3 +3266,31 @@ def dijkstra(g, source):
                     distance[neighbour] = new_distance
 
     return distance
+
+
+def get_player_tiles_near_up_to_army_amount(map: MapBase, fromTiles: typing.List[Tile], armyAmount: int, asPlayer: int = -1, tileAmountCutoff: int = 1) -> typing.List[Tile]:
+    if asPlayer == -1:
+        asPlayer = map.player_index
+
+    counter = Counter(0)
+    foundTiles = []
+
+    def foreachFunc(tile: Tile, dist: int, army: int) -> bool:
+        if counter.value >= armyAmount:
+            return True
+
+        if tile.player == asPlayer and tile.army > tileAmountCutoff:
+            counter.value += tile.army - 1
+            foundTiles.append(tile)
+
+        return False
+
+    found = breadth_first_find_queue(
+        map,
+        fromTiles,
+        goalFunc=foreachFunc,
+        noNeutralCities=True,
+        searchingPlayer=asPlayer
+    )
+
+    return foundTiles

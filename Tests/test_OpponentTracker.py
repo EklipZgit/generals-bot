@@ -284,7 +284,7 @@ class OpponentTrackerTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=39)
         self.assertIsNone(winner)
 
-        self.assertGreater(bot.sum_player_army_near_or_on_tiles(bot.target_player_gather_path.tileList, distance=3), 130)
+        self.assertGreater(bot.sum_player_standing_army_near_or_on_tiles(bot.target_player_gather_path.tileList, distance=3), 130)
     
     def test_should_acknowledge_serious_enemy_attack_path_threat_and_defense_gather(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -349,7 +349,7 @@ class OpponentTrackerTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
         self.assertIsNone(winner)
 
-        self.assertEqual(0, bot.sum_player_army_near_or_on_tiles([playerMap.GetTile(2, 11)], distance=6, player=general.player), "should have used all the tiles in the top left")
+        self.assertEqual(0, bot.sum_player_standing_army_near_or_on_tiles([playerMap.GetTile(2, 11)], distance=6, player=general.player), "should have used all the tiles in the top left")
     
     def test_should_be_greedy_when_recognizing_greedy_buffer_against_gathering_opponent(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -368,7 +368,7 @@ class OpponentTrackerTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=35)
         self.assertIsNone(winner)
 
-        self.assertGreater(bot.sum_player_army_near_or_on_tiles([general], distance=2), 60)
+        self.assertGreater(bot.sum_player_standing_army_near_or_on_tiles([general], distance=2), 60)
         self.assertPlayerTileCountGreater(simHost, general.player, 52)
         self.assertPlayerTileCountLess(simHost, general.player, 57)
 
@@ -389,7 +389,7 @@ class OpponentTrackerTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=35)
         self.assertIsNone(winner)
 
-        self.assertLess(bot.sum_player_army_near_or_on_tiles([general], distance=2), 45)
+        self.assertLess(bot.sum_player_standing_army_near_or_on_tiles([general], distance=2), 45)
         self.assertPlayerTileCountGreater(simHost, general.player, 60)
         self.assertPlayerTileCountLess(simHost, general.player, 70)
 

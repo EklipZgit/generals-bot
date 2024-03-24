@@ -365,7 +365,7 @@ class WinConditionAnalyzer(object):
             useTrueValueGathered=True,
             cutoffTime=time.perf_counter() + timeLimit,
             shouldLog=False,
-            fastMode=True
+            fastMode=True,
             # priorityMatrix=priorityMatrix
         )
 
@@ -549,7 +549,7 @@ class WinConditionAnalyzer(object):
         """
         Negative means we are losing. Positive means we are winning.
 
-        By default, returns the economic diff RIGHT NOW. If cyclesAgo > 0, checks that many cycles ago (where 1 means the start of this cycle).
+        By emptyVal, returns the economic diff RIGHT NOW. If cyclesAgo > 0, checks that many cycles ago (where 1 means the start of this cycle).
 
         @param cyclesAgo:
         @return:

@@ -574,7 +574,7 @@ class BotBehaviorTests(TestBase):
             self.assertLess(tile.army, 50, f'should have gathered {str(tile)}, instead found {tile.army} army')
 
         bot = self.get_debug_render_bot(simHost, general.player)
-        armyNear = bot.sum_player_army_near_or_on_tiles(bot.target_player_gather_path.tileList, distance=4)
+        armyNear = bot.sum_player_standing_army_near_or_on_tiles(bot.target_player_gather_path.tileList, distance=4)
         self.assertGreater(armyNear, 350)
 
     def test_should_not_vacate_general_with_army_scrim(self):
@@ -724,7 +724,7 @@ class BotBehaviorTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.7, turns=75)
         self.assertIsNone(winner)
 
-        sumArmyNear = bot.sum_player_army_near_or_on_tiles(bot.shortest_path_to_target_player.tileList, distance=3)
+        sumArmyNear = bot.sum_player_standing_army_near_or_on_tiles(bot.shortest_path_to_target_player.tileList, distance=3)
         self.assertGreater(sumArmyNear, 60)
 
     def test_set_all_in_to_hit_with_timings(self):
@@ -761,7 +761,7 @@ class BotBehaviorTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=75)
         self.assertIsNone(winner)
 
-        sumArmyNear = bot.sum_player_army_near_or_on_tiles(bot.shortest_path_to_target_player.tileList, distance=3)
+        sumArmyNear = bot.sum_player_standing_army_near_or_on_tiles(bot.shortest_path_to_target_player.tileList, distance=3)
         self.assertGreater(sumArmyNear, 60)
     
     def test_should_not_leave_large_tile_in_middle_of_territory__should_continue_attack__dies_to_completely_inefficient_flank_all_the_way_around_right_side_due_to_sitting_on_71_in_middle(self):
@@ -920,7 +920,7 @@ class BotBehaviorTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=100)
         self.assertIsNone(winner)
 
-        playerArmyNearAmt = bot.sum_player_army_near_or_on_tiles([general], distance=6, player=general.player)
+        playerArmyNearAmt = bot.sum_player_standing_army_near_or_on_tiles([general], distance=6, player=general.player)
         self.assertGreater(playerArmyNearAmt, 190)
     
     def test_should_not_failed_defense_altKingKillPath_unnecessarily(self):
@@ -2166,7 +2166,7 @@ whoever has less extra troops will always get ahead
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=75)
         self.assertIsNone(winner)
 
-        gatheredNear = bot.sum_player_army_near_or_on_tiles([playerMap.players[general.player].general], distance=10, player=general.player)
+        gatheredNear = bot.sum_player_standing_army_near_or_on_tiles([playerMap.players[general.player].general], distance=10, player=general.player)
         self.assertGreater(gatheredNear, 400)
     
     def test_should_not_infinite_gather_at_continue_army_kill(self):
@@ -2630,3 +2630,77 @@ whoever has less extra troops will always get ahead
                     self.assertIsNone(winner)
                 else:
                     self.assertEqual(map.player_index, winner)
+
+    def test_should_always_take_multi_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_always_take_multi_city___gGf9os0D9---1--402.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 402, fill_out_tiles=True)
+        self.update_tile_army_in_place(map, map.GetTile(13, 14), 1)
+        self.update_tile_army_in_place(map, map.GetTile(14, 13), 1)
+        self.update_tile_army_in_place(map, map.GetTile(14, 14), 1)
+        t = map.GetTile(12, 14)
+        t.player = enemyGeneral.player
+        self.update_tile_army_in_place(map, t, 3)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=402)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '13,13->12,13')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertIsNone(winner)
+
+        c1 = playerMap.GetTile(12, 13)
+        c2 = playerMap.GetTile(13, 13)
+
+        self.assertOwned(general.player, c1)
+        self.assertOwned(general.player, c2)
+
+    def test_should_not_greedy_when_need_to_out_of_play_gather(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_greedy_when_need_to_out_of_play_gather___Q_W0EM1f5---1--100.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 100, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=100)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=25)
+        self.assertIsNone(winner)
+
+        self.assertMinArmyNear(playerMap, playerMap.GetTile(6, 14), general.player, 30)
+        self.assertGatheredNear(simHost, general.player, 10, 18, 6, requiredAvgTileValue=1.15)
+        self.assertOwned(general.player, playerMap.GetTile(9, 10), 'should have taken this tile for flank defense by now.')
+
+# 101f, 70p, 16s    
+    def test_should_not_misplace_army_and_end_up_looping(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for path in [
+            '8,9->9,9->9,5->10,5->10,4z->10,2->12,2->12,1->16,1',
+            '8,9->9,9->9,5->10,5',
+            '8,9->9,9->9,5->10,5->10,4->10,2->12,2->12,1->16,1',
+        ]:
+            with self.subTest(path=path):
+                mapFile = 'GameContinuationEntries/should_not_misplace_army_and_end_up_looping___Na1UAThJE---0--274.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 274, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=274)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, path)
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+                self.assertIsNone(winner)

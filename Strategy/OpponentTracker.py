@@ -66,8 +66,9 @@ class OpponentTracker(object):
                         self.last_player_move_type[player.index] = PlayerMoveCategory.FogGather
 
                 self.team_score_data_history[team] = {}
-                turn0Stats = CycleStatsData(team, self.get_team_players(team))
-                self.team_score_data_history[team][0] = TeamStats(0, 0, 0, len(turn0Stats.players), 0, 0)
+                teamPlayers = self.get_team_players(team)
+                turn0Stats = CycleStatsData(team, teamPlayers)
+                self.team_score_data_history[team][0] = TeamStats(0, 0, 0, len(turn0Stats.players), 0, 0, team, teamPlayers, self.map.turn - 1)
                 self.current_team_cycle_stats[team] = turn0Stats
                 self.team_cycle_stats_history[team] = {}
                 self._team_indexes.append(team)
@@ -259,7 +260,7 @@ class OpponentTracker(object):
             if cycleTurn is None:
                 break
             for team in self._team_indexes:
-                teamScore = TeamStats(0, 0, 0, 0, 0, 0)
+                teamScore = TeamStats(0, 0, 0, 0, 0, 0, team, [], 0)
                 self.team_score_data_history[team][cycleTurn] = teamScore
                 if f'ot_{team}_c_{cycleTurn}_tileCount' in data:
                     teamScore.tileCount = int(data[f'ot_{team}_c_{cycleTurn}_tileCount'])
@@ -708,6 +709,7 @@ class OpponentTracker(object):
 
             stats = self.get_current_cycle_stats_by_player(army.player)
             stats.approximate_fog_army_available_total += army.value
+            used.add(army.name)
 
     def _handle_reveals(self, currentCycleStats: CycleStatsData):
         for tile in self._revealed:
@@ -969,11 +971,10 @@ class OpponentTracker(object):
                     self.view_info.add_info_line(f'UNDERESTIMATED BY {emergence - teamTotalFogEmergenceEst}! E+: fullFogReset - emergence {emergence} > thresh {thresh:.1f} (based on teamTotalFogEmergenceEst {teamTotalFogEmergenceEst})')
                     self.view_info.add_targeted_tile(tile, TargetStyle.ORANGE)
             fullFogReset = True
-            if emergence > teamTotalFogEmergenceEst - 4:
+            if emergence > teamTotalFogEmergenceEst - 4 and not (tile.delta.gainedSight and tile.army < emergence):
                 maxDist = max(1, teamTotalFogEmergenceEst - emergence + 1) * 2
                 self.view_info.add_info_line(f'DUE TO emergence {emergence} VS teamTotalFogEmergenceEst {teamTotalFogEmergenceEst}, CONFIDENT EMERGENCE {maxDist} FROM {str(tile)}')
                 self.send_general_distance_notification(maxDist, tile, generalConfidence=teamScores.cityCount == 1)
-
 
         logbook.info(
             f'E+: {repr(tile)} - p{player} team[{currentCycleStats.team}] emergence {emergence} reducing approximate_fog_army_available_total')
@@ -1090,8 +1091,9 @@ class OpponentTracker(object):
                     remainingCycleTime = 50
 
                 for p in stats.players:
-                    if i < len(self._gather_queues_by_player[p]):
-                        armyRisk += self._gather_queues_by_player[p][i] - 1 + gatherOffset
+                    q = self._gather_queues_by_player[p]
+                    if i < len(q):
+                        armyRisk += q[i] - 1 + gatherOffset
 
         return armyRisk
 
@@ -1129,7 +1131,7 @@ class OpponentTracker(object):
         """
 
         @param againstPlayer:
-        @param byNumber: default 1, the offset to subtract from our cities before comparing greater or equal.
+        @param byNumber: emptyVal 1, the offset to subtract from our cities before comparing greater or equal.
         So, 2 cities vs 2 cities returns False with byNumber 1, True for byNumber 0.
         @return:
         """
@@ -1145,7 +1147,7 @@ class OpponentTracker(object):
 
         return ourStats.cityCount - byNumber >= enStats.cityCount
 
-    def winning_on_economy(self, byRatio: float = 1.0, cityValue: int = 25, againstPlayer: int = -2, offset: int = 0):
+    def winning_on_economy(self, byRatio: float = 1.0, cityValue: int = 25, againstPlayer: int = -2, offset: int = 0) -> bool:
         """
 
         @param byRatio:
@@ -1167,7 +1169,7 @@ class OpponentTracker(object):
         oppEconValue = (enStats.tileCount + enStats.cityCount * cityValue) * byRatio
         return playerEconValue >= oppEconValue
 
-    def winning_on_tiles(self, byRatio: float = 1.0, againstPlayer: int = -2, offset: int = 0):
+    def winning_on_tiles(self, byRatio: float = 1.0, againstPlayer: int = -2, offset: int = 0) -> bool:
         """
 
         @param byRatio:
@@ -1178,7 +1180,19 @@ class OpponentTracker(object):
 
         return self.winning_on_economy(byRatio=byRatio, againstPlayer=againstPlayer, cityValue=0, offset=offset)
 
-    def winning_on_army(self, byRatio: float = 1.0, useFullArmy: bool = False, againstPlayer: int = -2, offset: int = 0):
+    def get_tile_differential(self, againstPlayer: int = -2) -> int:
+        if againstPlayer == -2:
+            againstPlayer = self.targetPlayer
+        if againstPlayer == -1:
+            return True
+
+        ourStats = self.map.get_team_stats(self.map.player_index)
+
+        enStats = self.map.get_team_stats(againstPlayer)
+
+        return ourStats.tileCount - enStats.tileCount
+
+    def winning_on_army(self, byRatio: float = 1.0, useFullArmy: bool = False, againstPlayer: int = -2, offset: int = 0) -> bool:
         if againstPlayer == -2:
             againstPlayer = self.targetPlayer
         if againstPlayer == -1:

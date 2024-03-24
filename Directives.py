@@ -8,15 +8,17 @@
 import logbook
 from enum import Enum
 
+
 class Timings(object):
     def __init__(self, cycleTurns, quickExpandSplitTurns, splitTurns, launchTiming, offsetTurns, recalcTurn, disallowEnemyGather):
-        self.cycleTurns = cycleTurns
-        self.quickExpandTurns = quickExpandSplitTurns
-        self.splitTurns = splitTurns
-        self.offsetTurns = offsetTurns
-        self.launchTiming = launchTiming
-        self.nextRecalcTurn = recalcTurn
-        self.disallowEnemyGather = disallowEnemyGather
+        self.cycleTurns: int = cycleTurns
+        self.quickExpandTurns: int = quickExpandSplitTurns
+        self.splitTurns: int = splitTurns
+        self.offsetTurns: int = offsetTurns
+        self.launchTiming: int = launchTiming
+        self.nextRecalcTurn: int = recalcTurn
+        self.disallowEnemyGather: bool = disallowEnemyGather
+        self.is_early_flank_launch: bool = False
 
     def should_recalculate(self, turn):
         return turn == self.nextRecalcTurn

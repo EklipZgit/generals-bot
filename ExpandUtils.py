@@ -430,6 +430,28 @@ def knapsack_multi_paths(
                     floatVal, dist = tpl
             logbook.info(f'    INPUT {val:.2f} dist {dist}: {str(p)}')
 
+    enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed = extract_paths_from_knapsack_groups(
+        map,
+        searchingPlayer,
+        friendlyPlayers,
+        targetPlayers,
+        remainingTurns,
+        tilePathGroupsRebuilt,
+        negativeTiles,
+        postPathEvalFunction,
+        territoryMap,
+        tryAvoidSet,
+        valueOverrides)
+
+    logbook.info(
+        f'MEXPX en{enemyCapped} neut{neutralCapped} {turnsUsed}/{remainingTurns} {totalValue}v num paths {len(maxPaths)}')
+
+    otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, negativeTiles) / pa.length, reverse=True)]
+
+    return path, otherPaths, turnsUsed, 2 * enemyCapped + neutralCapped
+
+
+def get_multiple_choice_expansion_knapsack_val_converter(valueOverrides, postPathEvalFunction, negativeTiles):
     def multiple_choice_knapsack_expansion_path_value_converter(p: Path) -> typing.Tuple[int, int]:
         floatVal = -10000
         dist = p.length
@@ -444,41 +466,8 @@ def knapsack_multi_paths(
         intVal = int(floatVal * 10000.0)
         return intVal, dist
 
-    totalValue, maxPaths = expansion_knapsack_gather_iteration(
-        remainingTurns,
-        tilePathGroupsRebuilt,
-        shouldLog=DebugHelper.IS_DEBUGGING,
-        valueFunc=multiple_choice_knapsack_expansion_path_value_converter
-    )
-
-    path = find_optimal_expansion_path_to_move_first(
-        map,
-        maxPaths,
-        tryAvoidSet,
-        negativeTiles,
-        postPathEvalFunction,
-        remainingTurns,
-        searchingPlayer,
-        friendlyPlayers,
-        territoryMap)
-
-    otherPaths = [p for p in maxPaths if p != path]
-
-    turnsUsed, enemyCapped, neutralCapped = _get_capture_counts(
-        searchingPlayer,
-        friendlyPlayers,
-        targetPlayers,
-        path,
-        otherPaths,
-        negativeTiles)
-
-    # viewInfo.add_info_line(
-    logbook.info(
-        f'MEXPC en{enemyCapped} neut{neutralCapped} {turnsUsed}/{remainingTurns} {totalValue}v num paths {len(maxPaths)}')
-
-    otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, negativeTiles) / pa.length, reverse=True)]
-
-    return path, otherPaths, turnsUsed, 2 * enemyCapped + neutralCapped
+    valFunc = multiple_choice_knapsack_expansion_path_value_converter
+    return valFunc
 
 
 def knapsack_multi_paths_no_crossover(
@@ -564,25 +553,47 @@ def knapsack_multi_paths_no_crossover(
         for val, p in allPaths:
             logbook.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
 
-    def multiple_choice_knapsack_expansion_path_value_converter(p: Path) -> typing.Tuple[int, int]:
-        floatVal = -10000
-        dist = p.length
-        if valueOverrides is not None:
-            tpl = valueOverrides.get(p, None)
-            if tpl is not None:
-                floatVal, dist = tpl
+    enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed = extract_paths_from_knapsack_groups(
+        map,
+        searchingPlayer,
+        friendlyPlayers,
+        targetPlayers,
+        remainingTurns,
+        groups,
+        negativeTiles,
+        postPathEvalFunction,
+        territoryMap,
+        tryAvoidSet,
+        valueOverrides)
 
-        if floatVal == -10000:
-            floatVal = postPathEvalFunction(p, negativeTiles)
+    logbook.info(
+        f'MEXPNX en{enemyCapped} neut{neutralCapped} {turnsUsed}/{remainingTurns} {totalValue}v num paths {len(maxPaths)}')
 
-        intVal = int(floatVal * 10000.0)
-        return intVal, dist
+    otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, negativeTiles) / pa.length, reverse=True)]
+
+    return path, otherPaths, turnsUsed, 2 * enemyCapped + neutralCapped
+
+
+def extract_paths_from_knapsack_groups(
+        map,
+        searchingPlayer,
+        friendlyPlayers,
+        targetPlayers,
+        remainingTurns,
+        groups,
+        negativeTiles,
+        postPathEvalFunction,
+        territoryMap,
+        tryAvoidSet,
+        valueOverrides
+):
+    valFunc = get_multiple_choice_expansion_knapsack_val_converter(valueOverrides, postPathEvalFunction, negativeTiles)
 
     totalValue, maxPaths = expansion_knapsack_gather_iteration(
         remainingTurns,
         groups,
         shouldLog=DebugHelper.IS_DEBUGGING,
-        valueFunc=multiple_choice_knapsack_expansion_path_value_converter
+        valueFunc=valFunc
     )
 
     path = find_optimal_expansion_path_to_move_first(
@@ -594,7 +605,8 @@ def knapsack_multi_paths_no_crossover(
         remainingTurns,
         searchingPlayer,
         friendlyPlayers,
-        territoryMap)
+        territoryMap,
+        valueOverrides)
 
     otherPaths = [p for p in maxPaths if p != path]
 
@@ -604,15 +616,10 @@ def knapsack_multi_paths_no_crossover(
         targetPlayers,
         path,
         otherPaths,
-        negativeTiles)
+        negativeTiles,
+        valueOverrides)
 
-    # viewInfo.add_info_line(
-    logbook.info(
-        f'MEXPN en{enemyCapped} neut{neutralCapped} {turnsUsed}/{remainingTurns} {totalValue}v num paths {len(maxPaths)}')
-
-    otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, negativeTiles) / pa.length, reverse=True)]
-
-    return path, otherPaths, turnsUsed, 2 * enemyCapped + neutralCapped
+    return enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed
 
 
 def _add_expansion_to_view_info(path: Path, otherPaths: typing.List[Path], viewInfo: ViewInfo, colors: typing.Tuple[int, int, int]):
@@ -689,6 +696,7 @@ def get_optimal_expansion(
         generalDistMap = boardAnalysis.intergeneral_analysis.aMap
 
         respectTerritoryMap = map.players[targetPlayer].tileCount // 2 > len(map.players[targetPlayer].tiles)
+        respectTerritoryMap = False
 
         ## The more turns remaining, the more we prioritize longer paths. Towards the end of expansion, we prioritize sheer captured tiles.
         ## This hopefully leads to finding more ideal expansion plans earlier on while being greedier later
@@ -805,14 +813,16 @@ def get_optimal_expansion(
                 # return ((value / (dist + wastedMoves)) - wastedMoves,
                 # return ((value / (dist + wastedMoves)) - wastedMoves / 10,
                 # return ((value / (dist + wastedMoves)),  # ACTUAL ORIG
-                return (value,
-                        valuePerTurn,
-                        # prioWeighted,
-                        # value,
-                        0 - negArmyRemaining,
-                        # 0 - enemyTiles / dist,
-                        # 0,
-                        0 - distSoFar)
+                return (
+                    value,  # this value is important, if we JUST use valuePerTurn then we wont take neutral tiles after strings of enemy tiles.
+                    valuePerTurn,
+                    # prioWeighted,
+                    # value,
+                    0 - negArmyRemaining,
+                    # 0 - enemyTiles / dist,
+                    # 0,
+                    0 - distSoFar
+                )
 
             valueFunc = value_priority_army_dist_basic
 
@@ -873,7 +883,7 @@ def get_optimal_expansion(
                 if negativeTiles is None or (nextTile not in negativeTiles):
                     if nextTile.player in friendlyPlayers:
                         armyRemaining += nextTile.army
-                    elif nextTile.player not in map.teammates:
+                    else:
                         armyRemaining -= nextTile.army
                 if armyRemaining <= 0:
                     return None
@@ -883,11 +893,11 @@ def get_optimal_expansion(
                 # negTileCapturePoints += tileModScaled
                 usefulMove = nextTile not in negativeTiles
                 # enemytiles or enemyterritory undiscovered tiles
-                isProbablyEnemyTile = (nextTile.isNeutral
-                                       and not nextTile.visible
-                                       and nextTerritory in targetPlayers)
-                if isProbablyEnemyTile:
-                    armyRemaining -= expectedUnseenEnemyTileArmy
+                # isProbablyEnemyTile = (nextTile.isNeutral
+                #                        and not nextTile.visible
+                #                        and nextTerritory in targetPlayers)
+                # if isProbablyEnemyTile:
+                #     armyRemaining -= expectedUnseenEnemyTileArmy
 
                 if (
                         nextTile in tryAvoidSet
@@ -912,6 +922,7 @@ def get_optimal_expansion(
                     addedPriority += 8
                     if nextTile.player != -1:
                         negTileCapturePoints -= 2.0
+                        distSoFar -= 0.99
                     else:
                         negTileCapturePoints -= 1.5
                     enemyTiles -= 1
@@ -1353,11 +1364,11 @@ def get_optimal_expansion(
                 noLog=True)
 
             newPaths = []
-            for tile in newPathDict.keys():
+            for tile, tilePaths in newPathDict.items():
                 curTileDict = multiPathDict.get(tile, {})
                 anyPathInc = False
                 values = {}
-                for path in newPathDict[tile]:
+                for path in tilePaths:
                     value = postPathEvalFunction(path, negativeTiles)
                     values[path] = value
                     vpt = value / path.length
@@ -1365,7 +1376,7 @@ def get_optimal_expansion(
                         anyPathInc = True
 
                 if anyPathInc:
-                    for path in newPathDict[tile]:
+                    for path in tilePaths:
                         visited = set()
                         value = values[path]
                         friendlyCityCount = 0
@@ -1474,7 +1485,7 @@ def get_optimal_expansion(
         valueOverrides = {}
         if additionalOptionValues is not None:
             for baseValueOverride, turnOverride, path in additionalOptionValues:
-                valueOverrides[path] = (baseValueOverride, turnOverride)
+                valueOverrides[path.clone()] = (baseValueOverride, turnOverride)
 
         path, otherPaths, totalTurns, totalValue = knapsack_multi_paths(
             map,
@@ -1505,6 +1516,9 @@ def get_optimal_expansion(
             tryAvoidSet,
             viewInfo,
             valueOverrides)
+
+        if map.turn == 242 and searchingPlayer == 0:
+            pass
 
         if totalTurns == 0 or (altTotalTurns > 0 and altTotalValue / altTotalTurns > totalValue / totalTurns):
             msg = f'EXP CROSS-KNAP WORSE THAN NON, v{altTotalValue}/{totalValue} t{altTotalTurns}/{totalTurns}'
@@ -1696,7 +1710,7 @@ def _execute_expansion_gather_to_borders(
     if valueFunc is None:
 
         if shouldLog:
-            logbook.info("Using default valueFunc")
+            logbook.info("Using emptyVal valueFunc")
 
         def default_value_func_max_gathered_per_turn(
                 currentTile,
@@ -1742,7 +1756,7 @@ def _execute_expansion_gather_to_borders(
 
     if priorityFunc is None:
         if shouldLog:
-            logbook.info("Using default priorityFunc")
+            logbook.info("Using emptyVal priorityFunc")
 
         def default_priority_func(nextTile, currentPriorityObject):
             (
@@ -1802,7 +1816,7 @@ def _execute_expansion_gather_to_borders(
 
     if baseCaseFunc is None:
         if shouldLog:
-            logbook.info("Using default baseCaseFunc")
+            logbook.info("Using emptyVal baseCaseFunc")
 
         def default_base_case_func(tile, startingDist):
             startArmy = tile.army
@@ -1953,7 +1967,8 @@ def _get_capture_counts(
         targetPlayers: typing.List[int],
         mainPath: Path | None,
         otherPaths: typing.List[Path],
-        negativeTiles: typing.Set[Tile]
+        negativeTiles: typing.Set[Tile],
+        valueOverrides: typing.Dict[Path, typing.Tuple[float, int]] | None = None,
 ) -> typing.Tuple[int, int, int]:
     """
     Returns (turnsUsed, enemyCaptured, neutralCaptured). Negative tiles dont count towards the sums but do count towards turns used.
@@ -1974,17 +1989,34 @@ def _get_capture_counts(
     neutralCapped = 0
     turnsUsed = 0
     for path in allPaths:
-        turnsUsed -= 1  # first tile in a path doesn't count
+        pTurnsUsed = -1  # first tile in a path doesn't count
+        pNeutCap = 0
+        pEnCap = 0
         for tile in path.tileList:
-            turnsUsed += 1
+            pTurnsUsed += 1
             if tile in visited:
                 continue
             visited.add(tile)
             if tile.player not in friendlyPlayers:
                 if tile.player not in targetPlayers:
-                    neutralCapped += 1
+                    pNeutCap += 1
                 else:
-                    enemyCapped += 1
+                    pEnCap += 1
+
+        if valueOverrides is not None:
+            overrides = valueOverrides.get(path, None)
+            if overrides is not None:
+                overVal, overTurns = overrides
+                totalCapSoFar = pEnCap * 2 + pNeutCap
+                missing = int(overVal - totalCapSoFar)
+                if missing > 0:
+                    pEnCap += missing // 2
+
+                pTurnsUsed = overTurns
+
+        turnsUsed += pTurnsUsed
+        neutralCapped += pNeutCap
+        enemyCapped += pEnCap
 
     return turnsUsed, enemyCapped, neutralCapped
 
@@ -2018,7 +2050,8 @@ def find_optimal_expansion_path_to_move_first(
         remainingTurns,
         searchingPlayer,
         friendlyPlayers,
-        territoryMap
+        territoryMap,
+        valueOverrides: typing.Dict[Path, typing.Tuple[float, int]] | None = None,
 ) -> Path | None:
 
     # playerCities = list(map.players[searchingPlayer].cities)
@@ -2027,6 +2060,8 @@ def find_optimal_expansion_path_to_move_first(
 
     waitingPaths = set()
     for p in maxPaths:
+        if valueOverrides is not None and p in valueOverrides:
+            continue
         shouldWaitDueToCities = path_has_cities_and_should_wait(
             p,
             friendlyPlayers,
@@ -2040,7 +2075,7 @@ def find_optimal_expansion_path_to_move_first(
     for waitingPath in waitingPaths:
         sumWaiting += waitingPath.length
 
-    if sumWaiting > remainingTurns:  # - 2
+    if sumWaiting > remainingTurns - 1:  # - 2
         logbook.info(f'bypassing {len(waitingPaths)} waiting city paths with total turns {sumWaiting} due to them covering most of the expansion plan remaining {remainingTurns}')
         waitingPaths = set()
 
@@ -2051,17 +2086,17 @@ def find_optimal_expansion_path_to_move_first(
     maxUncertainty = 0
     path: Path | None = None
     for p in maxPaths:
-        bonus = 0
-        # bonus = (p.start.tile.army * p.start.tile.army - 4)
-        thisVal = postPathEvalFunction(p, originalNegativeTiles) + bonus
+        thisVal = postPathEvalFunction(p, originalNegativeTiles)
         thisUncertainty = _get_uncertainty_capture_rating(friendlyPlayers, p, originalNegativeTiles)
-        # if p.start.tile.isCity or p.start.tile.isGeneral and len(wai)
-        # thisUncertainty = 0
 
-        # thisVal = thisVal / max(1, p.length)
         thisUncertainty = thisUncertainty / (p.length + 1)
 
-        if thisUncertainty > maxUncertainty or thisUncertainty == maxUncertainty and thisVal > maxVal:
+        if valueOverrides is not None:
+            overrides = valueOverrides.get(p, None)
+            if overrides is not None:
+                thisVal, overTurns = overrides
+
+        if thisUncertainty > maxUncertainty or (thisUncertainty == maxUncertainty and thisVal > maxVal):
             if p not in waitingPaths:
                 logbook.info(f'    path uncert{thisUncertainty:.2f} v{thisVal:.2f} > uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)} and is new best')
                 path = p
@@ -2123,7 +2158,7 @@ def expansion_knapsack_gather_iteration(
         attempts += 1
         try:
             # build knapsack weights and values
-            groupedPaths = [valuePerTurnPathPerTile[item] for item in valuePerTurnPathPerTile]
+            groupedPaths = [val for item, val in valuePerTurnPathPerTile.items()]
             groups = []
             paths = []
             values = []

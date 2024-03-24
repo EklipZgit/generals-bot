@@ -4,11 +4,18 @@
     Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
     EklipZ bot - Tries to play generals lol
 """
+import time
+import typing
+
+import logbook
+from numba.cpython.cmathimpl import INF
 
 import DebugHelper
-from ArmyTracker import *
-from SearchUtils import *
+
 from collections import deque
+
+import SearchUtils
+from ArmyTracker import Army
 from base.client.map import Tile
 from MapMatrix import MapMatrix
 
@@ -23,14 +30,18 @@ class PathWay:
         self.tiles.add(tile)
         if self.seed_tile == None:
             self.seed_tile = tile
+
+
 class InfPathWay:
     def __init__(self, tile):
         self.distance = INF
         self.tiles = set()
         self.tiles.add(tile)
         self.seed_tile = tile
-        
+
+
 SENTINAL = "~"
+
 
 class ArmyAnalyzer:
     def __init__(self, map, armyA: Tile | Army, armyB: Tile | Army, maxDist = 1000):
@@ -58,8 +69,8 @@ class ArmyAnalyzer:
         logbook.info(f"ArmyAnalyzer analyzing {self.tileA.toString()} and {self.tileB.toString()}")
 
         # self.distance: int = self.map.get_distance_between(self.tileA, self.tileB)
-        self.aMap = build_distance_map(self.map, [self.tileA], [])
-        self.bMap = build_distance_map(self.map, [self.tileB], [])
+        self.aMap = SearchUtils.build_distance_map(self.map, [self.tileA], [])
+        self.bMap = SearchUtils.build_distance_map(self.map, [self.tileB], [])
 
         self.scan()
 
@@ -101,10 +112,10 @@ class ArmyAnalyzer:
                 if width == 1:
                     # if DebugHelper.IS_DEBUGGING:
                     #     logbook.info(f"  (maybe) found choke at {tile.toString()}? Testing for shorter pathway joins")
-                    shorter = count(tile.movable, lambda adjTile: adjTile in self.pathWayLookupMatrix and self.pathWayLookupMatrix[adjTile].distance < path.distance)
-                    if shorter == 0:
+                    anyShorter = SearchUtils.any_where(tile.movable, lambda adjTile: adjTile in self.pathWayLookupMatrix and self.pathWayLookupMatrix[adjTile].distance < path.distance)
+                    if anyShorter:
                         if DebugHelper.IS_DEBUGGING:
-                            logbook.info(f"    OK WE DID FIND A CHOKEPOINT AT {tile.toString()}! adding to self.pathChokes")
+                            logbook.info(f"    OK WE DID FIND A CHOKEPOINT AT {str(tile)}! adding to self.pathChokes")
                         # Todo this should probably be on pathways lol
                         self.pathChokes.add(tile)
                 self.chokeWidths[tile] = width

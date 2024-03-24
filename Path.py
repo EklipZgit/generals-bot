@@ -12,6 +12,7 @@ import math
 from DataModels import GatherTreeNode, Move
 from collections import deque
 
+from Interfaces.TilePlanInterface import TilePlanInterface
 from base.client.map import Tile, MapBase
 
 
@@ -52,15 +53,18 @@ class PathMove(object):
         return str(self)
 
 
-class Path(object):
+class Path(TilePlanInterface):
     def __init__(self, value: int = 0):
         self.start: typing.Union[None, PathMove] = None
-        self._pathQueue = deque()
+        self._pathQueue: typing.Deque[PathMove] = deque()
         self.tail: typing.Union[None, PathMove] = None
-        self._tileList: typing.List[Tile] = None
+        self._tileList: typing.List[Tile] | None = None
+        self._tileSet: typing.Set[Tile] | None = None
+        self._adjacentSet: typing.Set[Tile] | None = None
         # The exact army tile number that will exist on the final tile at the end of the path run.
         # So for a path that exactly kills a tile with minimum kill army, this should be 1.
         self.value: int = value
+        self.requiredDelay: int = 0
 
     def __gt__(self, other) -> bool:
         if other is None:
@@ -78,7 +82,15 @@ class Path(object):
 
     @property
     def tileSet(self) -> typing.Set[Tile]:
-        return set(self.tileList)
+        if self._tileSet is None:
+            if self._tileList is not None:
+                self._tileSet = set(self._tileList)
+            else:
+                self._tileSet = set()
+                for t in self._pathQueue:
+                    self._tileSet.add(t.tile)
+
+        return self._tileSet
 
     @tileSet.setter
     def tileSet(self, value):
@@ -87,12 +99,17 @@ class Path(object):
     @property
     def tileList(self) -> typing.List[Tile]:
         if self._tileList is None:
-            self._tileList = list()
-            node = self.start
-            while node is not None:
-                self._tileList.append(node.tile)
-                node = node.next
-        return list(self._tileList)
+            self._tileList = [t.tile for t in self._pathQueue]
+        return self._tileList
+
+    @property
+    def adjacentSet(self) -> typing.Set[Tile]:
+        if self._adjacentSet is None:
+            self._adjacentSet = set()
+            for t in self._pathQueue:
+                self._adjacentSet.update(t.tile.adjacents)
+
+        return self._adjacentSet
 
     def add_next(self, nextTile, move_half=False):
         move = PathMove(nextTile)
@@ -104,6 +121,10 @@ class Path(object):
             self.tail.move_half = move_half
         if self._tileList is not None:
             self._tileList.append(nextTile)
+        if self._tileSet is not None:
+            self._tileSet.add(nextTile)
+        if self._adjacentSet is not None:
+            self._adjacentSet.update(nextTile.adjacents)
         self.tail = move
         self._pathQueue.append(move)
 
@@ -115,23 +136,45 @@ class Path(object):
         self.start = move
         if self._tileList is not None:
             self._tileList.insert(0, startTile)
+        if self._tileSet is not None:
+            self._tileSet.add(startTile)
+        if self._adjacentSet is not None:
+            self._adjacentSet.update(startTile.adjacents)
         self._pathQueue.appendleft(move)
 
-    def made_move(self) -> PathMove:
+    def remove_start(self) -> PathMove:
         if len(self._pathQueue) == 0:
-            raise ", bitch? Why you tryin to made_move when there aint no moves to made?"
+            raise ", bitch? Why you tryin to remove_start when there aint no moves to made?"
 
-        if self._tileList is not None:
-            self._tileList.remove(self.start.tile)
+        self._tileSet = None
+        self._tileList = None
+        self._adjacentSet = None
         self.start = self.start.next
         return self._pathQueue.popleft()
 
-    def remove_end(self) -> PathMove:
+    def get_first_move(self) -> Move:
+        if len(self._pathQueue) <= 1:
+            raise f", bitch? Path length {len(self._pathQueue)}: Why you tryin to get_first_move when there aint no moves to made?"
+
+        move = Move(self.start.tile, self.start.next.tile, self.start.move_half)
+        return move
+
+    def pop_first_move(self) -> Move:
+        move = self.get_first_move()
+        self._tileSet = None
+        self._tileList = None
+        self._adjacentSet = None
+        self.start = self.start.next
+        self._pathQueue.popleft()
+        return move
+
+    def remove_end(self) -> PathMove | None:
         if len(self._pathQueue) == 0:
             logbook.info(", bitch? Removing nothing??")
-            return
-        if self._tileList is not None:
-            self._tileList.remove(self.tail.tile)
+            return None
+        self._tileSet = None
+        self._tileList = None
+        self._adjacentSet = None
         move = self._pathQueue.pop()
         self.tail = self.tail.prev
         if self.tail is not None:
@@ -140,7 +183,7 @@ class Path(object):
 
     def convert_to_dist_dict(self, offset: int = 0) -> typing.Dict[Tile, int]:
         """
-        returns a dict[Tile, int] starting at offset(default 0) for path.start and working up from there.
+        returns a dict[Tile, int] starting at offset(emptyVal 0) for path.start and working up from there.
         @param offset:
         @return:
         """
@@ -257,7 +300,7 @@ class Path(object):
         newPath.value = self.value
         return newPath
 
-    def get_subsegment(self, count: int, end: bool=False) -> Path:
+    def get_subsegment(self, count: int, end: bool = False) -> Path:
         """
         The subsegment path will be count moves long, count+1 TILES long
         @param count:
@@ -267,24 +310,31 @@ class Path(object):
         newPath = self.clone()
         i = 0
 
-        while i < self.length - count:
-            i += 1
-            if end:
-                newPath.made_move()
-            else:
-                newPath.remove_end()
+        if end:
+            while i < self.length - count:
+                i += 1
+                newPath.start = newPath.start.next
+                newPath._pathQueue.popleft()
+        else:
+            while i < self.length - count:
+                i += 1
+                newPath._pathQueue.pop()
+                newPath.tail = newPath.tail.prev
+                if newPath.tail is not None:
+                    newPath.tail.next = None
+
         return newPath
 
     def __str__(self) -> str:
-        return self.toString()
-
-    def toString(self) -> str:
         node = self.start
         nodeStrs = []
         while node is not None:
             nodeStrs.append(f'{node.tile.x},{node.tile.y}')
             node = node.next
         return f"[{self.value} len {self.length}] {' -> '.join(nodeStrs)}"
+
+    def toString(self) -> str:
+        return str(self)
 
     def __repr__(self) -> str:
         return str(self)

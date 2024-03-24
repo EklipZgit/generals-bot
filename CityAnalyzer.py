@@ -290,12 +290,15 @@ class CityAnalyzer(object):
         #     score.city_expandability_score += 0.05
 
     def foreach_around_city(self, tile: Tile, board_analysis: BoardAnalyzer, maxDist: int, foreachFunc: typing.Callable[[Tile, int], None]):
+        def newForeach(t: Tile, dist: int) -> bool:
+            foreachFunc(t, dist)
+            return t.isObstacle and t != tile
+
         SearchUtils.breadth_first_foreach_dist(
             board_analysis.map,
             [tile],
             maxDist,
-            foreachFunc,
-            skipFunc=lambda t: t != tile and t.isObstacle,
+            newForeach,
             noLog=True,
             bypassDefaultSkip=True)
 

@@ -1,10 +1,12 @@
 import random
+import time
 import typing
 
 import logbook
 
 import GatherUtils
 import SearchUtils
+from Algorithms import MapSpanningUtils
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
@@ -2240,4 +2242,23 @@ a1   b1   b1   bG1
 
         for tile in entangledLocations:
             self.assertLess(tile.army, 5)
+    
+    def test_fog_land_builder_should_not_take_ages_to_build(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/fog_land_builder_should_not_take_ages_to_build___Sx5Tl3mwJ---2--880.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 880, fill_out_tiles=True)
 
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=880)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        start = time.perf_counter()
+        MapSpanningUtils.LOG_VERBOSE = True
+        bot.armyTracker.build_fog_prediction(enemyGeneral.player, bot.opponent_tracker.get_player_fog_tile_count_dict(enemyGeneral.player), bot.targetPlayerExpectedGeneralLocation, force=True)
+        duration = time.perf_counter() - start
+        self.assertLess(duration, 0.004, 'should not take ages to build fog land')

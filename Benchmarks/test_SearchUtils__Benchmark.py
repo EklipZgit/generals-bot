@@ -13,7 +13,7 @@ from ViewInfo import PathColorer
 from base.client.map import Tile
 
 
-class SearchUtilsTests(TestBase):
+class SearchUtilsBenchmarkTests(TestBase):
     def test_benchmark_distmap_algos_ranges(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_kill_point_blank_army_lul___ffrBNaR9l---0--133.txtmap'
@@ -139,6 +139,7 @@ class SearchUtilsTests(TestBase):
             sumAStarMatrixTime = 0.0
             sumBfsFindTime = 0.0
             sumBfsFindDistTime = 0.0
+            sumBfsFindDistNoNeutTime = 0.0
             iters = 0
 
             for pointA in points:
@@ -183,9 +184,9 @@ class SearchUtilsTests(TestBase):
                     pFindDist = SearchUtils.breadth_first_find_dist_queue([pointA], findFunc, noNeutralCities=True, noLog=True)
                     sumBfsFindDistTime += time.perf_counter() - start
 
-                    start = time.perf_counter()
-                    pFindDist = SearchUtils.breadth_first_foreach_dist_fast_incl_neut_cities([pointA], findFunc, noNeutralCities=True, noLog=True)
-                    sumBfsFindDistTime += time.perf_counter() - start
+                    # start = time.perf_counter()
+                    # SearchUtils.breadth_first_foreach_dist_fast_no_neut_cities(map, [pointA], 100, findFunc)
+                    # sumBfsFindDistNoNeutTime += time.perf_counter() - start
 
                     start = time.perf_counter()
                     distMapperDist = map.get_distance_between(pointA, pointB)

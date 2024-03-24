@@ -98,15 +98,31 @@ class ArmyInterceptor(object):
 
         return interception
 
-    def get_shared_chokes(self, threats: typing.List[ThreatObj]):
+    def get_shared_chokes(self, threats: typing.List[ThreatObj]) -> typing.Dict[Tile, int]:
         commonChokesCounts = {}
         commonChokesVals = {}
+        withinOneAdditionalChecks = {}
         for threat in threats:
+            withinOneAdditionalChecks.clear()
             for tile, interceptMoves in threat.armyAnalysis.interceptChokes.items():
                 curCount = commonChokesCounts.get(tile, 0)
                 curVal = commonChokesVals.get(tile, 0)
                 commonChokesCounts[tile] = curCount + 1
                 commonChokesVals[tile] = curVal + interceptMoves
+                for movable in tile.movable:
+                    if movable in threat.armyAnalysis.interceptChokes or movable.isObstacle:
+                        continue
+                    if threat.armyAnalysis.bMap[movable.x][movable.y] >= threat.turns + 1 or threat.armyAnalysis.aMap[movable.x][movable.y] > threat.turns + 1:
+                        continue
+                    existingMin = withinOneAdditionalChecks.get(movable, 10000)
+                    if existingMin > interceptMoves:
+                        withinOneAdditionalChecks[movable] = interceptMoves
+
+            for tile, interceptMoves in withinOneAdditionalChecks.items():
+                curCount = commonChokesCounts.get(tile, 0)
+                curVal = commonChokesVals.get(tile, 0)
+                commonChokesCounts[tile] = curCount + 1
+                commonChokesVals[tile] = curVal + interceptMoves + 1
 
         maxShared = 0
         for tile, num in commonChokesCounts.items():
@@ -487,6 +503,7 @@ class ArmyInterceptor(object):
                             pathNode.move_half = True
                         pathNode = pathNode.next
 
+                # TODO this is returning extra moves, see test_should_full_intercept_all_options
                 newValue, turnsUsed = self._get_path_value(
                     path,
                     searchingPlayer=self.map.player_index,
@@ -508,14 +525,14 @@ class ArmyInterceptor(object):
                     existing = bestInterceptTable.get(curDist, None)
                     if existing is None:
                         if self.log_debug:
-                            logbook.info(f'setting {curDist}.\n  new  {thisValue} {str(path)}')
+                            logbook.info(f'setting bestInterceptTable[dist {curDist}]:\n  new  {thisValue} {str(path)}')
                         bestInterceptTable[curDist] = thisValue, path
                         continue
 
                     existingValue, existingPath = existing
                     if thisValue > existingValue:
                         if self.log_debug:
-                            logbook.info(f'replacing prev best for {curDist}.\n  prev {existingValue} {str(existingPath)}\n  new  {thisValue} {str(path)}')
+                            logbook.info(f'replacing bestInterceptTable[dist {curDist}]:\n  prev {existingValue} {str(existingPath)}\n  new  {thisValue} {str(path)}')
                         bestInterceptTable[curDist] = thisValue, path
 
         # if self.log_debug:

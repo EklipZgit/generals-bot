@@ -315,6 +315,7 @@ class GeneralsViewer(object):
         return bottomPos, leftPos, rightPos, topPos
 
     def run_main_viewer_loop(self, alignTop=True, alignLeft=True, loggingQueue = None):
+        MapBase.DO_NOT_RANDOMIZE = True
         termSec = 600
         if not self.noLog:
             import logging
@@ -386,7 +387,7 @@ class GeneralsViewer(object):
                     done = True
 
                 if not self.noLog:
-                    logbook.info(f"GeneralsViewer received an event after {diff:.3f}! Updating grid")
+                    logbook.info(f"GeneralsViewer received an event after {diff:.3f}! Updating _grid")
 
                 if diff < medianUpdateTime * 4:
                     # ignore massively delayed updates
@@ -402,12 +403,12 @@ class GeneralsViewer(object):
 
                 start = time.perf_counter()
                 if not self.noLog:
-                    logbook.info("GeneralsViewer drawing grid:")
+                    logbook.info("GeneralsViewer drawing _grid:")
                 self._drawGrid()
                 self.last_render_time = start
 
                 if not self.noLog:
-                    logbook.info(f"GeneralsViewer drawing grid took {time.perf_counter() - start:.3f}")
+                    logbook.info(f"GeneralsViewer drawing _grid took {time.perf_counter() - start:.3f}")
 
                 if not self.noLog:
                     start = time.perf_counter()
@@ -421,7 +422,7 @@ class GeneralsViewer(object):
                 elapsed = time.perf_counter() - self.last_update_received
                 if not self.noLog:
                     logbook.info(f'No GeneralsViewer update received in {elapsed:.2f} seconds')
-                if elapsed > 180.0:
+                if elapsed > 600.0:
                     logbook.info(f'GeneralsViewer zombied, self-terminating after 10 seconds')
                     done = True
                     self.send_closed_event(killedByUserClose=False)
@@ -442,7 +443,7 @@ class GeneralsViewer(object):
 
                 elif event.type == pygame.MOUSEBUTTONDOWN:  # Mouse Click
                     pos = pygame.mouse.get_pos()
-                    # Convert screen to grid coordinates
+                    # Convert screen to _grid coordinates
                     column = pos[0] // (self.cellWidth + CELL_MARGIN)
                     row = pos[1] // (self.cellHeight + CELL_MARGIN)
 
@@ -1139,18 +1140,23 @@ class GeneralsViewer(object):
 
             def draw_border_func(tile):
                 for move in tile.movable:
-                    if move.isMountain or move.isNotPathable:
+                    if move.isNotPathable:
                         continue
 
-                    if divisionMatrix[tile] != divisionMatrix[move]:
+                    if (tile in divisionMatrix) != (move in divisionMatrix):
                         self.draw_between_tiles(divisionLine, tile, move, alpha=alpha)
+
+            startTiles = [self._map.generals[self._map.player_index]]
+
             if (
-                    self._viewInfo.board_analysis.intergeneral_analysis is not None
+                    self._viewInfo.board_analysis is not None
+                    and self._viewInfo.board_analysis.intergeneral_analysis is not None
                     and self._viewInfo.board_analysis.intergeneral_analysis.shortestPathWay is not None
                     and len(self._viewInfo.board_analysis.intergeneral_analysis.shortestPathWay.tiles) > 0
             ):
-                startTiles = [t for t in self._viewInfo.board_analysis.intergeneral_analysis.shortestPathWay.tiles]
-                SearchUtils.breadth_first_foreach(self._map, startTiles, 1000, draw_border_func, noLog=True)
+                startTiles = self._viewInfo.board_analysis.intergeneral_analysis.shortestPathWay.tiles
+
+            SearchUtils.breadth_first_foreach(self._map, startTiles, 1000, draw_border_func, noLog=True)
 
     def draw_path(self, pathObject, R, G, B, alphaStart, alphaDec, alphaMin):
         if pathObject is None:

@@ -175,7 +175,7 @@ class CityContestationTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=26)
         self.assertIsNone(winner)
 
-        self.assertGreater(bot.sum_player_army_near_or_on_tiles([playerMap.GetTile(3, 8)], distance=3, player=general.player), 120, "should pre-gather at least to the closest point in the fog to bait a recapture and keep gather-prepping")
+        self.assertGreater(bot.sum_player_standing_army_near_or_on_tiles([playerMap.GetTile(3, 8)], distance=3, player=general.player), 120, "should pre-gather at least to the closest point in the fog to bait a recapture and keep gather-prepping")
     
     def test_should_immediately_all_in_gather_hold_one_of_the_cities(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -199,7 +199,7 @@ class CityContestationTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=25)
         self.assertIsNone(winner)
 
-        self.assertGreater(bot.sum_player_army_near_or_on_tiles([playerMap.GetTile(3, 6)], distance=3, player=general.player), 80, "should pre-gather at least to the closest point in the fog to bait a recapture and keep gather-prepping")
+        self.assertGreater(bot.sum_player_standing_army_near_or_on_tiles([playerMap.GetTile(3, 6)], distance=3, player=general.player), 80, "should pre-gather at least to the closest point in the fog to bait a recapture and keep gather-prepping")
 
     def test_should_intercept_51_plus_42_at_the_target_city_not_defend_2_11(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -389,7 +389,7 @@ class CityContestationTests(TestBase):
         city = playerMap.GetTile(14, 10)
         city2 = playerMap.GetTile(19, 12)
         city3 = playerMap.GetTile(21, 10)
-        self.assertGreater(bot.sum_player_army_near_or_on_tiles([city, city2, city3], distance=4, player=general.player), 135)
+        self.assertGreater(bot.sum_player_standing_army_near_or_on_tiles([city, city2, city3], distance=4, player=general.player), 135)
         self.assertPlayerTileCountGreater(simHost, general.player, 100)
     
     def test_should_instantly_all_in_for_city_contestation(self):
@@ -435,7 +435,7 @@ class CityContestationTests(TestBase):
 
                 city = playerMap.GetTile(10, 14)
 
-                self.assertGreater(bot.sum_player_army_near_or_on_tiles([city], distance=7, player=general.player), expectedArmy)
+                self.assertGreater(bot.sum_player_standing_army_near_or_on_tiles([city], distance=7, player=general.player), expectedArmy)
     
     def test_should_not_play_city_defense_when_city_right_by_general_wtf(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -502,7 +502,7 @@ class CityContestationTests(TestBase):
                 self.assertIsNone(winner)
 
                 if not opponentExpands:
-                    self.assertGreater(bot.sum_player_army_near_or_on_tiles([playerMap.GetTile(7, 3)], distance=6, player=general.player), 45, "should have built up a 30 army defense of this city by this point.")
+                    self.assertGreater(bot.sum_player_standing_army_near_or_on_tiles([playerMap.GetTile(7, 3)], distance=6, player=general.player), 45, "should have built up a 30 army defense of this city by this point.")
                 else:
                     self.assertGreater(playerMap.players[general.player].tileCount, 55, "should have expanded to match")
     
@@ -567,7 +567,7 @@ class CityContestationTests(TestBase):
         self.assertIsNone(winner)
 
         city = playerMap.GetTile(10, 19)
-        self.assertGreater(bot.sum_player_army_near_or_on_tiles([city], distance=4), 250)
+        self.assertGreater(bot.sum_player_standing_army_near_or_on_tiles([city], distance=4), 250)
         self.assertIn(WinCondition.ContestEnemyCity, bot.win_condition_analyzer.viable_win_conditions)
         self.assertIn(city, bot.win_condition_analyzer.target_cities)
         self.assertPlayerTileCountGreater(simHost, general.player, 116)
@@ -685,7 +685,7 @@ class CityContestationTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=30)
         self.assertIsNone(winner)
-        self.assertGreater(bot.sum_player_army_near_or_on_tiles(cities), 300)
+        self.assertGreater(bot.sum_player_standing_army_near_or_on_tiles(cities), 300)
 
         self.assertNoRepetition(simHost)
 
@@ -714,7 +714,7 @@ class CityContestationTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=30)
         self.assertIsNone(winner)
-        self.assertGreater(bot.sum_player_army_near_or_on_tiles(cities), 300)
+        self.assertGreater(bot.sum_player_standing_army_near_or_on_tiles(cities), 300)
     
     def test_should_not_defend_preemptive_when_would_be_behind_on_econ(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -889,3 +889,22 @@ class CityContestationTests(TestBase):
 # 21f 21p
 # 21f 22p
 # 28f 16p (interception breaking things probably)
+    
+    def test_should_gather_to_potentially_holdable_contested_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_gather_to_potentially_holdable_contested_city___fgExr3xbL---0--536.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 536, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=536)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+
+        self.skipTest("TODO add asserts for should_gather_to_potentially_holdable_contested_city")

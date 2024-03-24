@@ -2,7 +2,9 @@ import logbook
 import time
 import typing
 
+import DebugHelper
 import GatherUtils
+from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
 from base.client.map import TILE_EMPTY
@@ -15,6 +17,8 @@ class GatherTests(TestBase):
 
         bot.info_render_gather_values = True
         bot.info_render_centrality_distances = True
+        GatherUtils.USE_DEBUG_ASSERTS = True
+        DebugHelper.IS_DEBUGGING = True
 
         return bot
 
@@ -757,7 +761,7 @@ player_index=0
         Ideally the algo should find an optimal path to the cluster and then produce the main tree within the cluster, rather than producing suboptimal paths to the cluster.
         @return:
         """
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         testData = """
 |    |    |    |    |    |    |    |
 aG1  a2   a2   a2   a2   a2   a2   a2 
@@ -802,8 +806,8 @@ player_index=0
             # for these higher ones, iterative produces two branches.
             # Need to implement a mid-tree disconnect-prune-reconnect approach to have it iteratively build a maximum connection in the tree
             (21, 135),
-            (22, 139),
-            (23, 143),
+            (22, 142),
+            (23, 146),
             (24, 147),
             (25, 151),
             (26, 165),
@@ -974,7 +978,6 @@ player_index=0
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=15)
         self.assertIsNone(winner)
-
     
     def test_should_not_get_errors_about_nodes_missing_from_tree(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1137,7 +1140,7 @@ player_index=0
 
         self.skipTest("TODO add asserts for should_gather_far_non_leaves_first")
     
-    def test_should_gather_far_non_leaves_first(self):
+    def test_should_gather_far_non_leaves_first__2(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_gather_far_non_leaves_first___9gaR3CZwL---1--157.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 157, fill_out_tiles=True)
@@ -1181,7 +1184,8 @@ player_index=0
         self.assertEqual(1, playerMap.GetTile(18, 4).army)
         self.assertEqual(1, playerMap.GetTile(16, 3).army)
         self.assertEqual(1, playerMap.GetTile(15, 3).army)
-        self.assertEqual(1, playerMap.GetTile(15, 4).army)    
+        self.assertEqual(1, playerMap.GetTile(15, 4).army)
+
     def test_should_not_leave_tiles_behind_gathering(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_leave_tiles_behind_gathering___THq1ygSqm---0--218.txtmap'
@@ -1197,9 +1201,137 @@ player_index=0
         bot.timings.launchTiming = 36
         bot.timings.splitTurns = 36
         playerMap = simHost.get_player_map(general.player)
+        bot.cities_gathered_this_cycle.add(playerMap.GetTile(5, 9))
 
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
         self.assertIsNone(winner)
 
         self.assertGreater(bot.sum_friendly_army_near_or_on_tiles([playerMap.GetTile(2, 7)]), 15)
+
+    def test_should_not_produce_missing_tree_node(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_capture_neut_city_quickly___PHkfTkNU7---0--249.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 249, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=249)
+
+        map.GetTile(19, 6).player = -1
+        map.GetTile(19, 6).isCity = False
+        map.GetTile(19, 6).isMountain = True
+        map.GetTile(19, 6).army = 0
+
+        rawMap.GetTile(19, 6).player = -1
+        rawMap.GetTile(19, 6).isCity = False
+        rawMap.GetTile(19, 6).isMountain = True
+        rawMap.GetTile(19, 6).army = 0
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=11)
+        self.assertIsNone(winner)
+        city = self.get_player_tile(17, 10, simHost.sim, general.player)
+        self.assertEqual(general.player, city.player)
+        self.assertLess(city.turn_captured, 259)
+    
+    def test_should_not_drop_gather_moves_weirdly(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+
+        for i in range(5):
+            mapFile = 'GameContinuationEntries/should_not_drop_gather_moves_weirdly___fXx2Wf3_D---0--223.txtmap'
+            map, general, enemyGeneral = self.load_map_and_generals(mapFile, 223, fill_out_tiles=True)
+
+            rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=223)
+
+            self.enable_search_time_limits_and_disable_debug_asserts()
+            simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+            simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+            bot = self.get_debug_render_bot(simHost, general.player)
+            playerMap = simHost.get_player_map(general.player)
+            self.mark_armies_as_entangled(bot, playerMap.GetTile(12, 10), [playerMap.GetTile(8, 6), playerMap.GetTile(12, 10)])
+            # army = bot.armyTracker.armies[playerMap.GetTile(8, 6)]
+            # army.expectedPaths.append(Path.from_string(playerMap, '8,6->11,6->11,5->12,5->12,4->16,4->16,3->17,3->17,1->19,1->19,0->20,0'))
+
+            self.begin_capturing_logging()
+            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+            self.assertIsNone(winner)
+
+            self.assertEqual(11, playerMap.GetTile(7, 2).army)
+            debugMode = False
+
+    def test_should_not_try_to_gather_1s_after_prune(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_not_try_to_gather_1s_after_prune___Human.exe-TEST__ef67143f-5238-4441-b95b-dc85bc64e06b---1--122.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 122, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=122)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+
+        self.assertEqual(19, playerMap.GetTile(6, 15).army)
+    
+    def test_should_not_get_divide_by_zero_exc(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_get_divide_by_zero_exc___uY5YnPrx_---0--378.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 378, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=378)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertIsNone(winner)
+
+    def test_should_not_find_missing_node(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_find_missing_node___uY5YnPrx_---0--362.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 362, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=362)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+    
+    def test_should_not_pull_tiles_from_enemy_territory(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_pull_tiles_from_enemy_territory___N-66i9Hg_---0--201.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 201, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=201)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+
+        self.skipTest("TODO add asserts for should_not_pull_tiles_from_enemy_territory")

@@ -76,7 +76,7 @@ class TerritoryClassifier(object):
 
             def countFunc(tile):
                 if tile.isObstacle:
-                    return
+                    return tile.player == -1 and tile.discovered
                 
                 currentTerritory = self.territoryMap[tile.x][tile.y]
                 if not evaluatingTile.discovered:
@@ -102,9 +102,10 @@ class TerritoryClassifier(object):
                         elif pIndex != -1: 
                             # weight our tiles less because we see more of them.
                             counts[evaluatingTile.x][evaluatingTile.y][pIndex] += 0.8
-                
-            skip = lambda tile: tile.player == -1 and tile.discovered
-            breadth_first_foreach(self.map, [evaluatingTile], undiscoveredCounterDepth, countFunc, skipFunc = skip, noLog = True)
+
+                return tile.player == -1 and tile.discovered
+
+            breadth_first_foreach(self.map, [evaluatingTile], undiscoveredCounterDepth, countFunc, noLog = True)
             maxPlayer = -1
             maxValue = 0
             for pIndex, value in enumerate(counts[evaluatingTile.x][evaluatingTile.y]):
@@ -123,9 +124,12 @@ class TerritoryClassifier(object):
                 logbook.info("Tile {} is in player {} {} territory".format(evaluatingTile.toString(), maxPlayer, userName))
 
             self.territoryMap[evaluatingTile.x][evaluatingTile.y] = maxPlayer
+
+            return evaluatingTile.isMountain
+
         startTiles = list(self.needToUpdateAroundTiles)
         logbook.info("  Scanning territory around {}".format(" - ".join([tile.toString() for tile in startTiles])))
-        breadth_first_foreach(self.map, startTiles, undiscoveredCounterDepth, foreach_near_updated_tiles, None, lambda tile: tile.isMountain, None, self.map.player_index)
+        breadth_first_foreach(self.map, startTiles, undiscoveredCounterDepth, foreach_near_updated_tiles)
         duration = time.perf_counter() - startTime
             
         logbook.info("Completed scanning territories in {:.3f}".format(duration))

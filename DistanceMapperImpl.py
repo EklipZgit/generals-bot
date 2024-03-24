@@ -48,8 +48,9 @@ class DistanceMapperImpl(DistanceMapper):
     def build_distance_map_matrix_fast(self, startTile: Tile) -> MapMatrix[int]:
         distanceMap = MapMatrix(self.map, UNREACHABLE)
 
-        def bfs_dist_mapper(tile, dist):
+        def bfs_dist_mapper(tile, dist) -> bool:
             distanceMap[tile] = dist
+            return tile.isObstacle and tile != startTile
 
         SearchUtils.breadth_first_foreach_dist(
             self.map,
@@ -57,7 +58,6 @@ class DistanceMapperImpl(DistanceMapper):
             1000,
             bfs_dist_mapper,
             skipTiles=None,
-            skipFunc=lambda tile: tile.isObstacle and tile != startTile,
             bypassDefaultSkip=True,
             noLog=True)
         return distanceMap

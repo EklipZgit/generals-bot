@@ -4,9 +4,16 @@
     Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
     EklipZ bot - Tries to play generals lol
 """
+import time
+import typing
 
-from ArmyAnalyzer import *
-from SearchUtils import *
+import logbook
+
+import SearchUtils
+from ArmyAnalyzer import ArmyAnalyzer
+from DataModels import Move
+from MapMatrix import MapMatrix
+from base.client.map import MapBase, Tile
 
 
 class BoardAnalyzer:
@@ -36,9 +43,13 @@ class BoardAnalyzer:
 
         self.extended_play_area_matrix: MapMatrix[bool] = None
 
+        self.flankable_fog_area_matrix: MapMatrix[bool] = None
+
         self.flank_danger_play_area_matrix: MapMatrix[bool] = None
 
         self.general_distances: typing.List[typing.List[int]] = []
+
+        self.all_possible_enemy_spawns: typing.Set[Tile] = set()
 
         self.friendly_general_distances: typing.List[typing.List[int]] = []
         """The distance map to any friendly general."""
@@ -78,10 +89,10 @@ class BoardAnalyzer:
         self.outerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
         cities = list(self.map.players[self.map.player_index].cities)
 
-        self.general_distances = build_distance_map(self.map, [self.general])
+        self.general_distances = SearchUtils.build_distance_map(self.map, [self.general])
         if self.teammate_general is not None and self.teammate_general.player in self.map.teammates:
-            self.teammate_distances = build_distance_map(self.map, [self.teammate_general])
-            self.friendly_general_distances = build_distance_map(self.map, [self.teammate_general, self.general])
+            self.teammate_distances = SearchUtils.build_distance_map(self.map, [self.teammate_general])
+            self.friendly_general_distances = SearchUtils.build_distance_map(self.map, [self.teammate_general, self.general])
             cities.extend(self.map.players[self.teammate_general.player].cities)
         else:
             self.friendly_general_distances = self.general_distances
@@ -93,7 +104,7 @@ class BoardAnalyzer:
 
         self.friendly_city_distances = {}
         for city in closestCities:
-            self.friendly_city_distances[city] = build_distance_map_matrix(self.map, [city])
+            self.friendly_city_distances[city] = SearchUtils.build_distance_map_matrix(self.map, [city])
         self.defense_centrality_sums = MapMatrix(self.map, 250)
 
         lowestAvgDist = 10000000
@@ -113,8 +124,8 @@ class BoardAnalyzer:
 
             self.defense_centrality_sums[tile] = distSum
 
-            movableInnerCount = count(tile.movable, lambda adj: tileDist == self.friendly_general_distances[adj.x][adj.y] - 1)
-            movableOuterCount = count(tile.movable, lambda adj: tileDist == self.friendly_general_distances[adj.x][adj.y] + 1)
+            movableInnerCount = SearchUtils.count(tile.movable, lambda adj: tileDist == self.friendly_general_distances[adj.x][adj.y] - 1)
+            movableOuterCount = SearchUtils.count(tile.movable, lambda adj: tileDist == self.friendly_general_distances[adj.x][adj.y] + 1)
             if movableInnerCount == 1:
                 self.outerChokes[tile.x][tile.y] = True
             # checking movableInner to avoid considering dead ends 'chokes'
@@ -133,7 +144,7 @@ class BoardAnalyzer:
         logbook.info(f'calculated central defense point to be {str(lowestAvgTile)} due to lowestAvgDist {lowestAvgDist}')
         self.central_defense_point = lowestAvgTile
 
-    def rebuild_intergeneral_analysis(self, opponentGeneral: Tile):
+    def rebuild_intergeneral_analysis(self, opponentGeneral: Tile, possibleSpawns: typing.List[MapMatrix[bool]]):
         self.intergeneral_analysis = ArmyAnalyzer(self.map, self.general, opponentGeneral)
 
         enemyDistMap = self.intergeneral_analysis.bMap
@@ -141,9 +152,18 @@ class BoardAnalyzer:
         general = self.general
 
         self.inter_general_distance = enemyDistMap[general.x][general.y]
+
+        if possibleSpawns is not None:
+            self.rescan_useful_fog(possibleSpawns)
+
+        # if len(self.all_possible_enemy_spawns) < 40 and not opponentGeneral.isGeneral:
+        #     enemyDistMap = SearchUtils.build_distance_map(self.map, list(self.all_possible_enemy_spawns))
+        #
+        #     self.inter_general_distance = enemyDistMap[general.x][general.y]
+
         self.within_core_play_area_threshold = int((self.inter_general_distance + 1) * 1.1)
         self.within_extended_play_area_threshold = int((self.inter_general_distance + 2) * 1.2)
-        self.within_flank_danger_play_area_threshold = int((self.inter_general_distance + 2) * 1.3)
+        self.within_flank_danger_play_area_threshold = int((self.inter_general_distance + 3) * 1.4)
         logbook.info(f'BOARD ANALYSIS THRESHOLDS:\r\n'
                      f'     board shortest dist: {self.inter_general_distance}\r\n'
                      f'     core area dist: {self.within_core_play_area_threshold}\r\n'
@@ -154,6 +174,11 @@ class BoardAnalyzer:
         self.extended_play_area_matrix: MapMatrix[bool] = MapMatrix(self.map, initVal=False)
         self.flank_danger_play_area_matrix: MapMatrix[bool] = MapMatrix(self.map, initVal=False)
 
+        self.build_play_area_matrices(enemyDistMap, generalDistMap)
+
+        self.rescan_chokes()
+
+    def build_play_area_matrices(self, enemyDistMap, generalDistMap):
         for tile in self.map.pathableTiles:
             enDist = enemyDistMap[tile.x][tile.y]
             frDist = generalDistMap[tile.x][tile.y]
@@ -165,13 +190,11 @@ class BoardAnalyzer:
                 self.core_play_area_matrix[tile] = True
 
             if (
-                    tileDistSum < self.within_flank_danger_play_area_threshold
+                    tileDistSum <= self.within_flank_danger_play_area_threshold
                     # and tileDistSum > self.within_core_play_area_threshold
                     and frDist / (enDist + 1) < 0.7  # prevent us from considering tiles more than 2/3rds into enemy territory as flank danger
             ):
                 self.flank_danger_play_area_matrix[tile] = True
-
-        self.rescan_chokes()
 
     def get_flank_pathways(
             self,
@@ -219,6 +242,31 @@ class BoardAnalyzer:
                             includedPathways.add(pathwaySource)
                             goodLeaves.append(move)
                     else:
-                        logbook.info("Pathway for tile {} was already included, skipping".format(move.source.toString()))
+                        logbook.info(f"Pathway for tile {str(move.source)} was already included, skipping")
 
         return goodLeaves
+
+    def rescan_useful_fog(self, possibleSpawns: typing.List[MapMatrix[bool]]):
+        self.flankable_fog_area_matrix = MapMatrix(self.map, False)
+
+        enPlayers = SearchUtils.where(self.map.players, lambda p: not self.map.is_player_on_team_with(self.general.player, p.index) and not p.dead)
+
+        startTiles = set()
+        indexes = [p.index for p in enPlayers]
+        for t in self.map.reachableTiles:
+            if t.visible:
+                continue
+
+            for player in indexes:
+                if possibleSpawns[player][t]:
+                    startTiles.add(t)
+
+        self.all_possible_enemy_spawns = startTiles
+
+        def foreachFunc(tile: Tile) -> bool:
+            if not tile.visible:
+                self.flankable_fog_area_matrix[tile] = True
+
+            return tile.isObstacle or tile.visible
+
+        SearchUtils.breadth_first_foreach(self.map, list(startTiles), int(self.inter_general_distance * 1.2), foreachFunc)

@@ -1,11 +1,13 @@
 import logbook
 import typing
 from collections import deque
+
 import SearchUtils
 from MapMatrix import MapMatrix
 from base.client.map import Tile, MapBase
 
 USE_DEBUG_ASSERTS = False
+LOG_VERBOSE = False
 
 
 T = typing.TypeVar('T')
@@ -65,9 +67,9 @@ def get_map_as_graph_from_tiles(
     @param requiredTiles:
     @return:
     """
+    if LOG_VERBOSE:
+        logbook.info('starting get_map_as_graph_from_tiles')
     table: MapMatrix[TileNode] = MapMatrix(map, None)
-
-    ourGen = map.generals[map.player_index]
 
     bannedSet = set(bannedTiles)
     includedSet = set()
@@ -98,23 +100,43 @@ def get_map_as_graph_from_tiles(
     graph.graph[requiredTiles[0]] = root
     usefulStartSet = set(includedSet)
 
+    if LOG_VERBOSE:
+        logbook.info('Completed sets setup')
+
     _include_all_adj_required(graph, root, includedSet, usefulStartSet, missingIncluded)
+
+    if LOG_VERBOSE:
+        logbook.info('Completed root _include_all_adj_required')
 
     def findFunc(t: Tile, depth: int, army: int) -> bool:
         # if depth > 1 and t in usefulStartSet:
         return t in missingIncluded
 
+    iter = 0
     while missingIncluded:
-        path = SearchUtils.breadth_first_find_queue(map, usefulStartSet, findFunc, skipTiles=bannedSet)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
+        # if LOG_VERBOSE:
+        #     logbook.info(f'missingIncluded iter {iter}')
+        path = SearchUtils.breadth_first_find_queue(map, usefulStartSet, findFunc, skipTiles=bannedSet, noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
         if path is None:
+            # if LOG_VERBOSE:
+            #     logbook.info(f'  Path NONE! Performing altBanned set')
             altBanned = set(bannedSet)
             altBanned.update([t for t in map.reachableTiles if t.isMountain])
-            path = SearchUtils.breadth_first_find_queue(map, includedSet, findFunc, skipTiles=altBanned, bypassDefaultSkipLogic=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
+            path = SearchUtils.breadth_first_find_queue(map, includedSet, findFunc, skipTiles=altBanned, bypassDefaultSkipLogic=True, noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
             if path is None:
+                # if LOG_VERBOSE:
+                #     logbook.info(f'  No AltPath, breaking')
                 break
                 # raise AssertionError(f'No MST building path found...? \r\nFrom {includedSet} \r\nto {missingIncluded}')
+            # else:
+            #     if LOG_VERBOSE:
+            #         logbook.info(f'  AltPath len {path.length}')
+        # else:
+        #     if LOG_VERBOSE:
+        #         logbook.info(f'  Path len {path.length}')
 
         lastNode: TileNode | None = None
+
         for tile in path.tileList:
             node = graph.graph[tile]
             if node is None:
@@ -135,12 +157,17 @@ def _include_all_adj_required(graph: TileGraph, node: TileNode, includedSet: typ
     q = deque()
     q.append((node, fromNode))
 
+    iter = 0
     while q:
+        iter += 1
         node, fromNode = q.popleft()
 
         if fromNode is not None:
             node.adjacents.append(fromNode)
             fromNode.adjacents.append(node)
+
+        if node.tile in includedSet:
+            continue
 
         includedSet.add(node.tile)
         usefulStartSet.add(node.tile)
@@ -149,6 +176,7 @@ def _include_all_adj_required(graph: TileGraph, node: TileNode, includedSet: typ
         for movable in node.tile.movable:
             if movable not in missingIncludedSet:
                 continue
+
             nextNode = graph.graph[movable]
             if nextNode is None:
                 nextNode = TileNode(movable)

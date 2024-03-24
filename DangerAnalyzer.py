@@ -6,6 +6,7 @@
 """
 
 from ArmyAnalyzer import *
+from ArmyTracker import ArmyTracker
 from SearchUtils import *
 from DataModels import *
 from enum import Enum
@@ -18,7 +19,7 @@ class ThreatType(Enum):
 
 
 class ThreatObj(object):
-    def __init__(self, moveCount, threatValue: float, path, type, saveTile=None, armyAnalysis=None):
+    def __init__(self, moveCount: int, threatValue: float, path, type: ThreatType, saveTile: Tile | None = None, armyAnalysis: ArmyAnalyzer | None = None):
         # this is the number of turns available to defend. So if the threat means 'we are dead in two turns', this will be 1
         self.turns: int = moveCount
         # the amount of army the threat currently calculates as killing the target by, so effectively the amount of
@@ -26,8 +27,8 @@ class ThreatObj(object):
         self.threatValue: int = math.ceil(threatValue)
         self.path: Path = path
         self.threatPlayer: int = path.start.tile.player
-        self.threatType = type
-        self.saveTile: typing.Union[None, Tile] = saveTile
+        self.threatType: ThreatType = type
+        self.saveTile: Tile | None = saveTile
         self.armyAnalysis: ArmyAnalyzer = armyAnalysis
 
     def convert_to_dist_dict(self, offset: int = -1, allowNonChoke: bool = False) -> typing.Dict[Tile, int]:

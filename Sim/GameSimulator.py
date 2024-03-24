@@ -161,7 +161,7 @@ class GameSimulator(object):
 
         # force the map to internalize the above changes
         map_raw.init_grid_movable()
-        map_raw.update()
+        map_raw.update(bypassDeltas=True)
 
         self.teams: typing.List[int] = map_raw.teams
         if self.teams is None:

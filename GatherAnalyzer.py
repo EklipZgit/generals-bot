@@ -31,12 +31,14 @@ class GatherAnalyzer(object):
                 continue
 
             def counter(nearbyTile: Tile):
+                if nearbyTile.isObstacle:
+                    return True
                 if nearbyTile.isCity or nearbyTile.isGeneral:
                     # Skip cities because we want to gather TILES not CITIES :|
                     return
                 if nearbyTile.player == self.map.player_index:
                     self.gather_locality_map[tile] += nearbyTile.army - 1
 
-            SearchUtils.breadth_first_foreach(self.map, [tile], maxDepth=4, foreachFunc=counter, skipFunc=lambda curTile: curTile.isNeutral and curTile.isCity, noLog=True)
+            SearchUtils.breadth_first_foreach(self.map, [tile], maxDepth=4, foreachFunc=counter, noLog=True)
 
 

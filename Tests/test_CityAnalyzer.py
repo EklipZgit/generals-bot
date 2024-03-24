@@ -254,3 +254,22 @@ class CityAnalyzerTests(TestBase):
 
         if debugMode:
             simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=30)
+
+    def test_should_never_take_indefensible_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_never_take_indefensible_city___Na1UAThJE---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=250)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '8,9->9,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=25)
+        self.assertIsNone(winner)
+
+        self.assertOwned(-1, playerMap.GetTile(10, 5), 'should not capture indefensible city, just all-in instead, realistically')

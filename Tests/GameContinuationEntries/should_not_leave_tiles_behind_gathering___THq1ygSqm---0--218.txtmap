@@ -30,6 +30,7 @@ bot_is_winning_gather_cyclic=False
 bot_is_all_in_army_advantage=False
 bot_all_in_army_advantage_counter=0
 bot_all_in_army_advantage_cycle=35
+bot_defend_economy=True
 bot_is_rapid_capturing_neut_cities=False
 bot_is_blocking_neutral_city_captures=False
 bot_finishing_exploration=False

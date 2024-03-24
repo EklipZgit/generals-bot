@@ -122,7 +122,7 @@ class GatherTreeNode(typing.Generic[T]):
         self.pruned = []
 
     def __str__(self):
-        return f'[{str(self.tile)}<-{str(self.fromTile)} t{str(self.gatherTurns)} v{self.value} tv{self.trunkValue}, ch{len(self.children)}]'
+        return f'[{str(self.tile)}<-{str(self.fromTile)} t{str(self.gatherTurns)} v{round(self.value, 6)} tv{round(self.trunkValue, 6)}, ch{len(self.children)}]'
 
     def __repr__(self):
         return str(self)

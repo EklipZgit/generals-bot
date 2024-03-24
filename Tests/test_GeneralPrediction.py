@@ -849,6 +849,93 @@ class GeneralPredictionTests(TestBase):
         self.assertIsNone(playerMap.generals[enemyGeneral.player])
         self.assertNotEqual(notGen, bot.targetPlayerExpectedGeneralLocation)
 
+    def test_should_make_reasonable_general_predictions_based_on_late_far_encounter(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_use_blocking_army_to_expand__actual___o0Re_00zz---1--88.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 88, fill_out_tiles=True)
+
+        mapFile = 'GameContinuationEntries/should_not_use_blocking_army_to_expand___o0Re_00zz---1--88.txtmap'
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=88)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '12,4->13,4  None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+        bot.armyTracker.player_launch_timings[enemyGeneral.player] = 24
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertIsNone(winner)
+
+        almostCertainlyNotGeneralEmVal = bot.armyTracker.get_prediction_value_x_y(enemyGeneral.player, 12, 4)
+        moreLikelyGeneral = bot.armyTracker.get_prediction_value_x_y(enemyGeneral.player, 4, 9)
+        self.assertGreater(moreLikelyGeneral, almostCertainlyNotGeneralEmVal, 'should have lower prediction for tile highly unlikely to be general')
+        self.assertGreater(moreLikelyGeneral, 10, 'should have good prediction for tile reasonably into the fog')
+        self.assertLess(almostCertainlyNotGeneralEmVal, 5, 'should have lower prediction for tile highly unlikely to be general')
+    
+    def test_should_keep_diving_wtf(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_keep_diving_wtf___77gwInmiz---0--375.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 375, fill_out_tiles=True)
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 16, 7)
+        enemyGeneral.army = 4
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '14,9->10,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertEqual(map.player_index, winner)
+
 # 11f, 65p
 # 7f, 72p
 # 9f, 70p
+# 9f, 71p
+# 8f, 73p
+    
+    def test_should_not_dive_few_fog_tiles_when_cannot_kill(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_dive_few_fog_tiles_when_cannot_kill__actual___Je4XxW4D9---1--77.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 77, fill_out_tiles=True)
+
+        mapFile = 'GameContinuationEntries/should_not_dive_few_fog_tiles_when_cannot_kill___Je4XxW4D9---1--77.txtmap'
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=77)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+
+        self.assertOwned(enemyGeneral.player, playerMap.GetTile(2, 6), 'should expand away from general, not into it')
+        self.assertOwned(enemyGeneral.player, playerMap.GetTile(3, 6), 'should expand away from general, not into it')
+    
+    def test_should_not_dive_few_fog_tiles_when_cannot_kill__pre_split(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_dive_few_fog_tiles_when_cannot_kill__actual___Je4XxW4D9---1--76.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 76, fill_out_tiles=True)
+
+        mapFile = 'GameContinuationEntries/should_not_dive_few_fog_tiles_when_cannot_kill___Je4XxW4D9---1--76.txtmap'
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=76)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '8,8->8,7z  8,8->12,8->12,6')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
+        self.assertIsNone(winner)
+        self.assertOwned(enemyGeneral.player, playerMap.GetTile(2, 6), 'should expand away from general, not into it')
+        self.assertOwned(enemyGeneral.player, playerMap.GetTile(3, 6), 'should expand away from general, not into it')

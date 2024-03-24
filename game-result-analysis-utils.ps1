@@ -164,7 +164,7 @@ function Create-TestContinuingGameFrom {
 
     $TestName = $TestName.Replace(' ', '_')
 
-    $destFolder = "$DestFolderRoot\GameContinuationEntries"
+    $destFolder = "$($DestFolderRoot.Replace("\UnitTests\", "\Tests\"))\GameContinuationEntries"
     if (-not (Test-Path $destFolder))
     {
         mkdir $destFolder -Force
@@ -267,4 +267,23 @@ function Create-TestContinuingGameFrom {
 "@
 
     $testFileContent | Set-Content $testFile -Encoding utf8
+}
+
+
+function Create-UnitTestContinuingGameFrom {
+    [Alias("cuc")]
+    Param(
+        [Parameter(ValueFromPipeline = $true)]
+        $TestMapFile = "path to test map file or log screenshot file",
+
+        [Parameter(Position=0)]
+        $TestCategory = "BotBehavior",
+        
+        [Parameter(Position=1)]
+        $TestName = "shouldnt_die_in_some_scenario",
+
+        $DestFolderRoot = "D:\2019_reformat_backup\generals-bot\UnitTests\"
+    )
+
+    Create-TestContinuingGameFrom -TestMapFile $TestMapFile -TestCategory $TestCategory -TestName $TestName -DestFolderRoot $DestFolderRoot
 }

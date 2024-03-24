@@ -32,7 +32,7 @@ from bot_ek0x45 import EklipZBot
 
 
 class TestBase(unittest.TestCase):
-    GLOBAL_BYPASS_REAL_TIME_TEST = True
+    GLOBAL_BYPASS_REAL_TIME_TEST = False
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -67,7 +67,7 @@ class TestBase(unittest.TestCase):
 
         self._logging_handler.level = logLevel
         # without force=True, the first time a logging.log* is called earlier in the code, the config gets set to
-        # default: WARN and basicConfig after that point has no effect without force=True
+        # emptyVal: WARN and basicConfig after that point has no effect without force=True
         # logging.basicConfig(format='%(message)s', level=logLevel, force=True)
 
         self._logging_handler.push_application()
@@ -348,17 +348,20 @@ class TestBase(unittest.TestCase):
 
         botTile = bot._map.GetTile(x, y)
 
-        def emergenceMarker(t: Tile, dist: int):
+        def emergenceMarker(t: Tile, dist: int) -> bool:
             bot.armyTracker.emergenceLocationMap[emergencePlayer][t.x][t.y] = (emergenceAmt * 5) // (dist + 5)
+            return t.discovered or t.visible
 
-        SearchUtils.breadth_first_foreach_dist(bot._map, [botTile], 5, emergenceMarker, skipFunc=lambda t: t.discovered or t.visible)
+        SearchUtils.breadth_first_foreach_dist(bot._map, [botTile], 5, emergenceMarker)
 
         bot.armyTracker.emergenceLocationMap[emergencePlayer][x][y] += emergenceAmt
         bot.timing_cycle_ended()
         bot.target_player_gather_path = None
 
     def mark_armies_as_entangled(self, bot: EklipZBot, realLocation: Tile, entangledLocations: typing.List[Tile]):
-        army = bot.armyTracker.armies.pop(realLocation)
+        army = bot.armyTracker.armies.pop(realLocation, None)
+        if army is None:
+            army = Army(realLocation)
         army.tile.army = 1
 
         entangleds = army.get_split_for_fog(entangledLocations)
@@ -370,6 +373,7 @@ class TestBase(unittest.TestCase):
             bot.armyTracker.armies[tile] = ent
             tile.army = army.value + 1
             tile.player = army.player
+            ent.expectedPaths = bot.armyTracker.get_army_expected_path(army)
 
     def get_test_map(self, tiles: typing.List[typing.List[Tile]], turn: int = 1, player_index: int = 0, dont_set_seen_visible_discovered: bool = False, num_players: int = -1) -> MapBase:
         self._initialize()
@@ -1020,7 +1024,7 @@ class TestBase(unittest.TestCase):
 
         def generateTilesFunc(tile: Tile, dist: int):
             if tile.isGeneral:
-                return
+                return tile.isObstacle
 
             tileToGen = genDistMap[tile.x][tile.y]
             tileToOp = enemyMap[tile.x][tile.y]
@@ -1036,7 +1040,7 @@ class TestBase(unittest.TestCase):
                     countTilesEnemy.add(1)
                     countCitiesEnemy.add(1)
                     newTiles.add(tile)
-                return
+                return tile.isObstacle
 
             if tile.isNeutral and not tile.isCity:
                 if tileToGen < tileToOp:
@@ -1056,12 +1060,13 @@ class TestBase(unittest.TestCase):
             if tile.player == enemyGeneral.player:
                 countScoreEnemy.add(tile.army)
 
+            return tile.isObstacle
+
         SearchUtils.breadth_first_foreach_dist(
             map,
             [general, enemyGeneral],
             100,
             generateTilesFunc,
-            skipFunc=lambda tile: tile.isObstacle,
             bypassDefaultSkip=True)
 
         if enemyGeneralTargetScore is not None and countScoreEnemy.value > enemyGeneralTargetScore:
@@ -1184,6 +1189,26 @@ class TestBase(unittest.TestCase):
         oldGeneral.army = 1
         return enemyGeneral
 
+    def update_tile_army_in_place(self, map: MapBase, tile: Tile, newArmy: int):
+        oldArmy = tile.army
+        diff = newArmy - oldArmy
+        inc = 1 if diff < 0 else -1
+
+        while diff != 0:
+            ogDiff = diff
+            for t in map.players[tile.player].tiles:
+                if diff == 0:
+                    break
+                if t == tile:
+                    continue
+                visible = SearchUtils.any_where(t.adjacents, lambda a: map.is_tile_friendly(a))
+                if (map.is_tile_friendly(tile) or not visible) and t.army > 1:
+                    t.army += inc
+                    diff += inc
+            if ogDiff == diff:
+                raise AssertionError(f'unable to manipulate tiles, no tiles were able to be altered.')
+        tile.army = newArmy
+
     def add_lag_on_turns(self, simHost: GameSimulatorHost, lagTurns: typing.List[int], forPlayer: int | None = None):
         if forPlayer is None:
             forPlayer = simHost.sim.sim_map.player_index
@@ -1219,7 +1244,7 @@ class TestBase(unittest.TestCase):
         @param configureB:
         @param debugMode:
         @param mapFile: If none, will cycle fairly between a set of symmetric maps.
-        @param noCities: If True, all cities will be converted to mountains. By default it will be 50-50 whether the map has cities or not.
+        @param noCities: If True, all cities will be converted to mountains. By emptyVal it will be 50-50 whether the map has cities or not.
         @return:
         """
         mapFiles = [

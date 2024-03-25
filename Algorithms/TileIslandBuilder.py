@@ -171,7 +171,9 @@ class TileIslandBuilder(object):
             # Ok, break the island up.
             island.child_islands = []
 
-            breakIntoSubCount = (island.tile_count // self.tile_island_size) + 1
+            breakIntoSubCount = round(island.tile_count / self.tile_island_size)
+            if breakIntoSubCount <= 1:
+                return [island]
 
             # tilesToSplit = island.tile_set.copy()
             brokenByBorders = []
@@ -190,7 +192,7 @@ class TileIslandBuilder(object):
 
             # distancesFromBorder = SearchUtils.build_distance_map_matrix_include_set(self.map, largestEnemyBorder.tile_set, island.tile_set)
             sets = bifurcate_set_into_n_contiguous(self.map, largestEnemyBorder.tile_set, island.tile_set, breakIntoSubCount)
-            logbook.info(f'bifurcated into {len(sets)} sets (desired {breakIntoSubCount})')
+            logbook.info(f'bifurcated into {len(sets)} sets (desired {breakIntoSubCount}, totalTiles {sum(itertools.chain(len(s.set) for s in sets))})')
             for namedTileSet in sets:
                 tileSet = namedTileSet.set
                 newIsland = TileIsland(tileSet, island.team)
@@ -296,7 +298,8 @@ def bifurcate_set_into_n_contiguous(
     fullStart = time.perf_counter()
 
     # Aim to over-break up the tile set so we can recombine back together
-    breakThreshold = max(3, int(len(setToBifurcate) / numBreaks / 2))
+    rawBreakThresh = len(setToBifurcate) / numBreaks / 2 - 1
+    breakThreshold = max(2, int(rawBreakThresh))
 
     bifurcationMatrix = MapMatrixSet(map, setToBifurcate)
     buildingNoOptionsTime = 0.0
@@ -322,7 +325,6 @@ def bifurcate_set_into_n_contiguous(
             frontier.appendleft((movable, tile, 0))
         if anyInc:
             fromIsland = SetHolder()
-            globalVisited[tile] = fromIsland
             allSets.add(fromIsland)
 
     current: Tile
@@ -364,16 +366,13 @@ def bifurcate_set_into_n_contiguous(
         fromIsland.add(current)
 
         globalVisited[current] = fromIsland
-        if current.isMountain or (not current.discovered and current.isNotPathable):
+        if current.isObstacle:
             continue
 
         if fromIsland.length >= breakThreshold:
             if not fromIsland.complete:
                 fromIsland.complete = True
                 # logbook.info(f'marking island {fromIsland.name} complete at length {fromIsland.length}/{breakThreshold}: {fromIsland.name} (deque {len(frontier)})')
-
-        if current.isNeutral and current.isCity:
-            continue
 
         newDist = dist + 1
         for nextTile in current.movable:  # new spots to try
@@ -385,8 +384,8 @@ def bifurcate_set_into_n_contiguous(
             # TODO TODO TODO
             # TODO TODO TODO
             # TODO TODO TODO
-            # if nextTile == fromTile:
-            #     continue
+            if nextTile == fromTile:
+                continue
             if nextTile in bifurcationMatrix:
                 frontier.appendleft((nextTile, current, newDist))
             # if nextTile in tilesWithNoOtherOptions:
@@ -402,15 +401,13 @@ def bifurcate_set_into_n_contiguous(
         if setHolder.joined_to or setHolder.length == 0:
             continue
         completedSets.append(setHolder)
+        # these need to be marked back to incomplete or else we can't join them back up again.
         setHolder.complete = False
 
     logbook.info(
         f'split {len(setToBifurcate)} tiles into {len(completedSets)} sets of rough size {breakThreshold} in {time.perf_counter() - fullStart:.5f}\r\nRECOMBINING SMALLEST:')
 
     # join small sets to larger
-    #
-    # problemSet = globalVisited[map.GetTile(7, 15)]
-    # problemSet2 = globalVisited[map.GetTile(7, 13)]
 
     finalSets = []
     while len(finalSets) + len(completedSets) > numBreaks and len(completedSets) > 0:

@@ -827,7 +827,7 @@ class GeneralPredictionTests(TestBase):
         # self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][playerMap.GetTile(20, 11)])
     
     def test_should_not_keep_bad_general_as_general_after_discovers_not_general(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_keep_bad_general_as_general_after_discovers_not_general___yEYQfURCl---0--94.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 94, fill_out_tiles=True)
         enemyGeneral = self.move_enemy_general(map, enemyGeneral, 4, 3)

@@ -9,6 +9,8 @@ import logbook
 import typing
 from collections import deque
 from enum import Enum
+
+from MapMatrix import MapMatrixSet
 from base.Colors import *
 
 from ArmyTracker import Army, ArmyTracker
@@ -173,10 +175,10 @@ class ViewInfo(object):
         logbook.info(statsLine)
         self.statsLines.append(statsLine)
 
-    def add_map_division(self, divisionMatrix: typing.Container[Tile], color: typing.Tuple[int, int, int], alpha: int = 128):
+    def add_map_division(self, divisionMatrix: typing.Container[Tile] | MapMatrixSet, color: typing.Tuple[int, int, int], alpha: int = 128):
         self._divisions.append((divisionMatrix, color, alpha))
 
-    def add_map_zone(self, zoneMatrix: typing.Container[Tile], color: typing.Tuple[int, int, int], alpha: int = 15):
+    def add_map_zone(self, zoneMatrix: typing.Container[Tile] | MapMatrixSet, color: typing.Tuple[int, int, int], alpha: int = 15):
         """Note this doesn't do pure alpha...?"""
         self._zones.append((zoneMatrix, color, alpha))
 

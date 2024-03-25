@@ -48,8 +48,8 @@ class MapMatrix(Generic[T]):
 
     def keys(self) -> typing.List[Tile]:
         allKeys: typing.List[Tile] = []
-        for y, row in enumerate(self._grid):
-            for x, item in enumerate(row):
+        for x, row in enumerate(self._grid):
+            for y, item in enumerate(row):
                 if item != self.init_val:
                     allKeys.append(self.map.GetTile(x, y))
         return allKeys
@@ -69,13 +69,13 @@ class MapMatrix(Generic[T]):
     def __delitem__(self, key: Tile):
         self._grid[key.x][key.y] = self.init_val
 
-    def __contains__(self, tile: Tile):
+    def __contains__(self, tile: Tile) -> bool:
         return self._grid[tile.x][tile.y] != self.init_val
 
-    def __str__(self):
+    def __str__(self) -> str:
         return repr(self._grid)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self)
 
 
@@ -120,8 +120,8 @@ class MapMatrixFlat(Generic[T]):
 
     def keys(self) -> typing.List[Tile]:
         allKeys: typing.List[Tile] = []
-        for y, row in enumerate(self._grid):
-            for x, item in enumerate(row):
+        for x, row in enumerate(self._grid):
+            for y, item in enumerate(row):
                 if item != self.init_val:
                     allKeys.append(self.map.GetTile(x, y))
         return allKeys
@@ -142,28 +142,28 @@ class MapMatrixFlat(Generic[T]):
     def __delitem__(self, key: Tile):
         self._grid[key.x * self._rows + key.y] = self.init_val
 
-    def __contains__(self, tile: Tile):
+    def __contains__(self, tile: Tile) -> bool:
         return self._grid[tile.x * self._rows + tile.y] != self.init_val
 
-    def __str__(self):
+    def __str__(self) -> str:
         return repr(self._grid)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self)
 
 
-class MapMatrixSet(object):
+class MapMatrixSet(typing.Protocol):
     """
-    if > 50 accesses to the set, or if more than 1/16th of the map will be IN the set, then this is faster than normal Set() object.
+    if > 50 accesses to the set, or if more than 1/16th of the map will added to the set, then this is faster than normal Set() object.
     Also if you're midway on either, like 100 accesses with 50 tiles in the set, this is faster.
     Only about 20% faster though or so, so not really worth a large investment.
     """
-    def __init__(self, map: MapBase, fromSet: typing.Set[Tile] | None = None):
-        # if fromSet is None or len(fromSet) < 100:
+    def __init__(self, map: MapBase, fromIterable: typing.Iterable[Tile] | None = None):
+        # if fromIterable is None or len(fromIterable) < 100:
         self._grid: typing.List[typing.List[bool]] = [[False] * map.rows for _ in range(map.cols)] if map is not None else None
         self.map: MapBase = map
-        if fromSet is not None:
-            for t in fromSet:
+        if fromIterable is not None:
+            for t in fromIterable:
                 self._grid[t.x][t.y] = True
 
     def add(self, item: Tile):
@@ -172,13 +172,15 @@ class MapMatrixSet(object):
     def __getitem__(self, key: Tile) -> bool:
         return self._grid[key.x][key.y]
 
-    def __iter__(self) -> typing.List[Tile]:
-        allKeys: typing.List[Tile] = []
-        for y, row in enumerate(self._grid):
-            for x, item in enumerate(row):
+    def __iter__(self) -> typing.Iterable[Tile]:
+        for x, row in enumerate(self._grid):
+            for y, item in enumerate(row):
                 if item:
-                    allKeys.append(self.map.GetTile(x, y))
-        return allKeys
+                    yield self.map.GetTile(x, y)
+
+    def update(self, tiles: typing.Iterable[Tile]):
+        for t in tiles:
+            self._grid[t.x][t.y] = True
 
     def copy(self) -> MapMatrixSet:
         """
@@ -197,13 +199,13 @@ class MapMatrixSet(object):
     def discard(self, key: Tile):
         self._grid[key.x][key.y] = False
 
-    def __contains__(self, tile: Tile):
+    def __contains__(self, tile: Tile) -> bool:
         return self._grid[tile.x][tile.y]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return repr(self._grid)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self)
 
 
@@ -233,13 +235,15 @@ class MapMatrixSetWithLength(object):
     def __getitem__(self, key: Tile) -> bool:
         return self._grid[key.x][key.y]
 
-    def __iter__(self) -> typing.List[Tile]:
-        allKeys: typing.List[Tile] = []
-        for y, row in enumerate(self._grid):
-            for x, item in enumerate(row):
+    def __iter__(self) -> typing.Iterable[Tile]:
+        for x, row in enumerate(self._grid):
+            for y, item in enumerate(row):
                 if item:
-                    allKeys.append(self.map.GetTile(x, y))
-        return allKeys
+                    yield self.map.GetTile(x, y)
+
+    def update(self, tiles: typing.Iterable[Tile]):
+        for t in tiles:
+            self._grid[t.x][t.y] = True
 
     def copy(self) -> MapMatrixSetWithLength:
         """
@@ -262,11 +266,47 @@ class MapMatrixSetWithLength(object):
             self._length -= 1
             self._grid[key.x][key.y] = False
 
-    def __contains__(self, tile: Tile):
+    def __contains__(self, tile: Tile) -> bool:
         return self._grid[tile.x][tile.y]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return repr(self._grid)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self)
+
+
+class MetaTileSet(typing.Protocol):
+
+    def add(self, item: Tile):
+        pass
+
+    def __getitem__(self, key: Tile) -> bool:
+        pass
+
+    def __iter__(self) -> typing.Iterable[Tile]:
+        pass
+
+    def update(self, tiles: typing.Iterable[Tile]):
+        pass
+
+    def copy(self) -> MetaTileSet:
+        pass
+
+    def __delitem__(self, key: Tile):
+        pass
+
+    def discard(self, key: Tile):
+        pass
+
+    def __contains__(self, tile: Tile) -> bool:
+        pass
+
+    def __str__(self) -> str:
+        pass
+
+    def __repr__(self) -> str:
+        pass
+
+
+TileSet = typing.Union[MetaTileSet | typing.Set[Tile]]

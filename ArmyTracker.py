@@ -7,9 +7,11 @@
 
 from __future__ import annotations
 
+import GatherSteiner
 import SearchUtils
 from Algorithms import MapSpanningUtils
 from DataModels import Move
+from MapMatrix import MapMatrixSet
 from PerformanceTimer import PerformanceTimer
 from SearchUtils import *
 from Path import Path
@@ -2913,7 +2915,8 @@ class ArmyTracker(object):
             playerExpectedFogTileCounts: typing.Dict[int, int],
             predictedGeneralLocation: Tile | None
     ):
-        bannedTiles = []
+        bannedTiles = MapMatrixSet(self.map)
+        bannedTileList = []
 
         ourGen = self.map.generals[self.map.player_index]
         tilesEverOwned = self.tiles_ever_owned_by_player[player]
@@ -2923,7 +2926,8 @@ class ArmyTracker(object):
 
         for tile in self.map.get_all_tiles():
             if tile not in uneliminated and tile not in tilesEverOwned and (tile.discoveredAsNeutral or tile.visible):
-                bannedTiles.append(tile)
+                bannedTiles.add(tile)
+                bannedTileList.append(tile)
 
         requiredTiles = []
         requiredIncluded = set()
@@ -2949,10 +2953,12 @@ class ArmyTracker(object):
             logbook.warn(f'ArmyTracker found no tiles to build fog land from for player {player}')
             return
 
-        with self.perf_timer.begin_move_event(f'ArmyTracker get_map_as_graph_from_tiles p{player} (num banned {len(bannedTiles)}, required {len(requiredTiles)})'):
-            mst, missingRequired = MapSpanningUtils.get_map_as_graph_from_tiles(self.map, bannedTiles, requiredTiles)
-        self.unconnectable_tiles[player] = missingRequired
-        connectedTiles = mst.get_connected_tiles()
+        with self.perf_timer.begin_move_event(f'ArmyTracker get_map_as_graph_from_tiles p{player} (num banned {len(bannedTileList)}, required {len(requiredTiles)})'):
+            mst, missingRequired = MapSpanningUtils.get_spanning_tree_from_tile_lists(self.map, bannedTileList, requiredTiles)
+            self.unconnectable_tiles[player] = missingRequired
+            connectedTiles = mst.get_connected_tiles()
+        # with self.perf_timer.begin_move_event(f'ArmyTracker build_network_x_steiner_tree p{player} (num banned {len(bannedTileList)}, required {len(requiredTiles)})'):
+        #     connectedTiles = GatherSteiner.build_network_x_steiner_tree(self.map, requiredTiles, bannedTiles=bannedTiles)
         connectedSet = set(connectedTiles)
 
         if self.map.players[player].cityCount == 1:
@@ -2960,10 +2966,10 @@ class ArmyTracker(object):
 
         pathToUnelim: Path | None = None
         if predictedGeneralLocation is not None:
-            pathToUnelim = SearchUtils.breadth_first_find_queue(self.map, connectedTiles, lambda t, _1, _2: t == predictedGeneralLocation, noNeutralCities=True, skipTiles=set(bannedTiles))  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
+            pathToUnelim = SearchUtils.breadth_first_find_queue(self.map, connectedTiles, lambda t, _1, _2: t == predictedGeneralLocation, noNeutralCities=True, skipTiles=bannedTiles)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
         # find the closest un-eliminated valid general location:
         if pathToUnelim is None:
-            pathToUnelim = SearchUtils.breadth_first_find_queue(self.map, connectedTiles, lambda t, _1, _2: validGenSpots[t], noNeutralCities=True, skipTiles=set(bannedTiles))  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
+            pathToUnelim = SearchUtils.breadth_first_find_queue(self.map, connectedTiles, lambda t, _1, _2: validGenSpots[t], noNeutralCities=True, skipTiles=bannedTiles)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
         if pathToUnelim is not None:
             for tile in pathToUnelim.tileList:
                 if tile not in connectedSet:
@@ -2973,7 +2979,7 @@ class ArmyTracker(object):
 
         keep = []
         for tile in self.map.players[player].tiles:
-            if tile.isTempFogPrediction and not tile.discovered and tile not in self.armies:
+            if tile.isTempFogPrediction and not tile.discovered and tile not in self.armies and not tile.isGeneral:
                 tile.reset_wrong_undiscovered_fog_guess()
             else:
                 keep.append(tile)
@@ -2995,8 +3001,9 @@ class ArmyTracker(object):
 
         with self.perf_timer.begin_move_event(f'ArmyTracker fill land p{player}'):
             if pathToUnelim is not None:
-                nearGenBan = set(bannedTiles)
-                nearGenBan.update(connectedDark)
+                nearGenBan = bannedTiles.copy()
+                for t in connectedDark:
+                    nearGenBan.add(t)
                 nearGenBan.discard(pathToUnelim.tail.tile)
                 self.determine_tiles_to_fill_in([pathToUnelim.tail.tile], nearGenBan, tilesToConvertToTempPlayer, numStartTilesToFill + 1)  # +1 because the final tile is already part of our connected set
 

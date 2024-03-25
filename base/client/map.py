@@ -275,7 +275,7 @@ class Tile(object):
         self.isCity: bool = isCity
         """Boolean isCity"""
 
-        self.isGeneral: bool = isGeneral
+        self._isGeneral: bool = isGeneral
         """Boolean isGeneral"""
 
         self.isTempFogPrediction: bool = False
@@ -371,14 +371,14 @@ class Tile(object):
     # def army(self, value: int):
     #     self._army = value
 
-    # @property
-    # def army(self) -> int:
-    #     """int army val for debugging"""
-    #     return self._army
-    #
-    # @army.setter
-    # def army(self, value):
-    #     self._army = value
+    @property
+    def isGeneral(self) -> bool:
+        """int isGeneral val for debugging"""
+        return self._isGeneral
+
+    @isGeneral.setter
+    def isGeneral(self, value: bool):
+        self._isGeneral = value
 
     @staticmethod
     def convert_player_to_char(player: int):

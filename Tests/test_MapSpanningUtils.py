@@ -34,7 +34,7 @@ class MapSpanningUtilsTests(TestBase):
         t2 = playerMap.GetTile(9, 3)
         required = [t1, t2]
 
-        graph = MapSpanningUtils.get_map_as_graph_from_tiles(playerMap, banned, required)
+        graph = MapSpanningUtils.get_spanning_tree_from_tile_lists(playerMap, banned, required)
 
         base1 = graph.graph[t1]
         base2 = graph.graph[t2]

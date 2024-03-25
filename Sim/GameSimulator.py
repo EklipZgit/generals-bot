@@ -108,7 +108,8 @@ class GamePlayer(object):
                 playerTile.isMountain = tile.discovered and tile.isMountain
                 playerTile.player = tile.player
                 playerTile.discovered = tile.discovered
-                playerTile.isGeneral = tile.isGeneral
+                if playerTile.isGeneral != tile.isGeneral:
+                    playerTile.isGeneral = tile.isGeneral
                 # playerTile.tile = tile.tile
             if playerTile.isGeneral:
                 self.map.players[playerTile.player].general = playerTile

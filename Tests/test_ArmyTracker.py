@@ -1607,6 +1607,28 @@ a1   b1   b1   bG1
         self.assertIsNone(winner)
 
         self.assertGreater(len(playerMap.players[enemyGeneral.player].tiles), 16)
+        self.assertOwned(enemyGeneral.player, playerMap.GetTile(10, 8))
+
+    def test_should_build_land_between_known_emergences__single_emergence(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_immediately_re_evaluate_target_path___Pmzuw7IAX---0--49_actual_spawn.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 49, fill_out_tiles=True)
+
+        ogFile = 'GameContinuationEntries/should_immediately_re_evaluate_target_path___Pmzuw7IAX---0--49.txtmap'
+        rawMap, _ = self.load_map_and_general(ogFile, respect_undiscovered=True, turn=49)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '8,3->9,3  5,11->6,11->7,11->8,11->9,11->10,11->11,11->12,11->13,11  5,11->5,10->5,9->4,9->4,8')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.armyTracker.player_launch_timings[enemyGeneral.player] = 34
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=3)
+        self.assertIsNone(winner)
+
+        self.assertGreater(len(playerMap.players[enemyGeneral.player].tiles), 10)
 
     def test_should_set_emergence_around_uncovered_initial_tiles(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -2215,7 +2237,7 @@ a1   b1   b1   bG1
         self.assertIsNone(winner)
     
     def test_should_vanish_entangled_armies_after_city_cap(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_vanish_entangled_armies_after_city_cap___5aNl8LobL---0--133.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 133, fill_out_tiles=True)
 

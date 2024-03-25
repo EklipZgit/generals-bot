@@ -63,7 +63,7 @@ Player information card readout:
 Information area:
 Top line
     -> The THING the bot is currently doing, basically the evaluation that led to a move selection.
-C{CycleInterval} Q{QuickExpandTurns} G{Gather/AttackSplitTurn} L{LaunchTiming} Off{Offset} ({CurrentCycleTurn})
+C{CycleInterval} Q{QuickExpandTurns} g{Gather/AttackSplitTurn} L{LaunchTiming} Off{Offset} ({CurrentCycleTurn})
 
 black arrows 
     -> intended gather lines
@@ -957,7 +957,7 @@ class GeneralsViewer(object):
         # playerB = (playerB + 256) // 2
         self.draw_square(tile, 1, playerR, playerG, playerB, min(255, int(alphaStart * 1.3)))
 
-        # self.draw_path(army.path, R, G, B, alphaStart, 0, 0)
+        # self.draw_path(army.path, R, g, B, alphaStart, 0, 0)
 
         for path in army.expectedPaths:
             self.draw_path(path, 255, 0, 0, 150, 10, 100)

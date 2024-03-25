@@ -8,4 +8,7 @@ numba
 scipy
 Logbook
 pyzmq
+pcst_fast
+networkx
+matplotlib
 # dill

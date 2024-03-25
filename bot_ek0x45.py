@@ -21,6 +21,7 @@ import EarlyExpandUtils
 import GatherUtils
 import SearchUtils
 import ExpandUtils
+from Algorithms import MapSpanningUtils
 from ArmyAnalyzer import ArmyAnalyzer
 from ArmyEngine import ArmyEngine, ArmySimResult
 from Behavior.ArmyInterceptor import ArmyInterceptor, ArmyInterception, ThreatBlockInfo
@@ -3332,8 +3333,6 @@ class EklipZBot(object):
 
         GatherUtils.iterate_tree_nodes(gathers, addToNodeLookupFunc)
 
-        # nonCityLeafCount = self.get_tree_move_non_city_leaf_count(gathers)
-        # logbook.info("G E T T R E E M O V E D E F A U L T ! ! ! nonCityLeafCount {}".format(nonCityLeafCount))
         if priorityFunc is None:
             # emptyVal priority func, gathers based on cityCount then distance from general
             def default_priority_func(nextTile, currentPriorityObject):
@@ -5903,19 +5902,21 @@ class EklipZBot(object):
 
                 # addlPath = SearchUtils.breadth_first_find_queue(self._map, [enemyGeneral], lambda t, _1, _2: t == furthestAlt, noNeutralCities=False)
                 if quickKill is not None and quickKill.length > 0:
-                    furthestAlt = None
-                    additionalKillDist = 0
-                    for tile in altEnGenPositions:
-                        if tile == quickKill.tail.tile:
-                            continue
-                        dist = min(
-                            self._map.get_distance_between(tile, quickKill.tail.tile),
-                            self._map.get_distance_between(tile, quickKill.tail.prev.tile),
-                            self._map.get_distance_between(tile, quickKill.tail.prev.prev.tile)
-                        )
-                        if furthestAlt is None or dist > additionalKillDist:
-                            additionalKillDist = dist
-                            furthestAlt = tile
+                    mst, missingRequired = MapSpanningUtils.get_spanning_tree_from_tile_lists(self._map, [], altEnGenPositions)
+                    connectedTiles = mst.get_connected_tiles()
+                    # furthestAlt = None
+                    additionalKillDist = len(connectedTiles)
+                    # for tile in altEnGenPositions:
+                    #     if tile == quickKill.tail.tile:
+                    #         continue
+                    #     dist = min(
+                    #         self._map.get_distance_between(tile, quickKill.tail.tile),
+                    #         self._map.get_distance_between(tile, quickKill.tail.prev.tile),
+                    #         self._map.get_distance_between(tile, quickKill.tail.prev.prev.tile)
+                    #     )
+                    #     if furthestAlt is None or dist > additionalKillDist:
+                    #         additionalKillDist = dist
+                    #         furthestAlt = tile
                     enemyNegTiles = []
                     if threat is not None:
                         enemyNegTiles.append(threat.path.start.tile)
@@ -5939,12 +5940,10 @@ class EklipZBot(object):
                                 for t in altEnGenPositions:
                                     self.viewInfo.add_targeted_tile(t, TargetStyle.RED, radiusReduction=0)
 
-                                if furthestAlt is not None:
-                                    p = SearchUtils.breadth_first_find_queue(self._map, [quickKill.tail.tile], lambda t, _1, _2: t == furthestAlt, noNeutralCities=True, searchingPlayer=self.general.player)
-                                    if p is None:
-                                        raise AssertionError(f'wtf, no path found from {str(quickKill.tail.tile)} to {str(furthestAlt)}')
-                                    for t in p.tileList[1:]:
+                                if connectedTiles:
+                                    for t in connectedTiles:
                                         quickKill.add_next(t)
+                                        self.viewInfo.add_targeted_tile(t, TargetStyle.RED, radiusReduction=8)
                                 self.viewInfo.infoText = f"QK {quickKill.value} > {bestDef} in {maxDefTurns}t {quickKill.length} :^)"
                                 return move, quickKill
 

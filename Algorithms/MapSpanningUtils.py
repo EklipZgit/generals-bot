@@ -3,7 +3,7 @@ import typing
 from collections import deque
 
 import SearchUtils
-from MapMatrix import MapMatrix
+from MapMatrix import MapMatrix, MapMatrixSet, TileSet
 from base.client.map import Tile, MapBase
 
 USE_DEBUG_ASSERTS = False
@@ -22,17 +22,17 @@ class TileNode(typing.Generic[T]):
 
 class TileGraph(typing.Generic[T]):
     def __init__(self, graph: MapMatrix[TileNode]):
-        self.graph: MapMatrix[TileNode[T]] = graph
+        self.nodes: MapMatrix[TileNode[T] | None] = graph
 
     def reduce_to_tiles(self, bannedTiles: typing.List[Tile], tiles: typing.List[Tile]):
         for tile in bannedTiles:
-            n = self.graph[tile]
+            n = self.nodes[tile]
             for adj in n.adjacents:
                 adj.adjacents.remove(n)
-            self.graph[tile] = None
+            self.nodes[tile] = None
 
     def get_connected_tiles(self) -> typing.List[Tile]:
-        return [t.tile for t in self.graph.values() if t is not None]
+        return [t.tile for t in self.nodes.values() if t is not None]
 
 
 def get_map_as_graph(map: MapBase) -> TileGraph:
@@ -54,7 +54,7 @@ def get_map_as_graph(map: MapBase) -> TileGraph:
     return graph
 
 
-def get_map_as_graph_from_tiles(
+def get_spanning_tree_from_tile_lists(
         map: MapBase,
         bannedTiles: typing.List[Tile],
         requiredTiles: typing.List[Tile]
@@ -71,10 +71,11 @@ def get_map_as_graph_from_tiles(
         logbook.info('starting get_map_as_graph_from_tiles')
     table: MapMatrix[TileNode] = MapMatrix(map, None)
 
-    bannedSet = set(bannedTiles)
-    includedSet = set()
+    bannedSet = MapMatrixSet(map, bannedTiles)
+    includedSet = MapMatrixSet(map)
     missingIncluded = set(requiredTiles)
-    bannedSet.difference_update(requiredTiles)
+    for req in requiredTiles:
+        bannedSet.discard(req)
 
     # for tile in map.reachableTiles:
     #     if tile in bannedSet:
@@ -97,8 +98,8 @@ def get_map_as_graph_from_tiles(
     graph = TileGraph(table)
 
     root = TileNode(requiredTiles[0])
-    graph.graph[requiredTiles[0]] = root
-    usefulStartSet = set(includedSet)
+    graph.nodes[requiredTiles[0]] = root
+    usefulStartSet = includedSet.copy()
 
     if LOG_VERBOSE:
         logbook.info('Completed sets setup')
@@ -114,13 +115,14 @@ def get_map_as_graph_from_tiles(
 
     iter = 0
     while missingIncluded:
+        # iter += 1
         # if LOG_VERBOSE:
         #     logbook.info(f'missingIncluded iter {iter}')
         path = SearchUtils.breadth_first_find_queue(map, usefulStartSet, findFunc, skipTiles=bannedSet, noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
         if path is None:
             # if LOG_VERBOSE:
             #     logbook.info(f'  Path NONE! Performing altBanned set')
-            altBanned = set(bannedSet)
+            altBanned = bannedSet.copy()
             altBanned.update([t for t in map.reachableTiles if t.isMountain])
             path = SearchUtils.breadth_first_find_queue(map, includedSet, findFunc, skipTiles=altBanned, bypassDefaultSkipLogic=True, noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
             if path is None:
@@ -138,10 +140,10 @@ def get_map_as_graph_from_tiles(
         lastNode: TileNode | None = None
 
         for tile in path.tileList:
-            node = graph.graph[tile]
+            node = graph.nodes[tile]
             if node is None:
                 node = TileNode(tile)
-                graph.graph[tile] = node
+                graph.nodes[tile] = node
 
             _include_all_adj_required(graph, node, includedSet, usefulStartSet, missingIncluded, lastNode)
             lastNode = node
@@ -153,7 +155,18 @@ def get_map_as_graph_from_tiles(
     return graph, missingIncluded
 
 
-def _include_all_adj_required(graph: TileGraph, node: TileNode, includedSet: typing.Set[Tile], usefulStartSet: typing.Set[Tile], missingIncludedSet: typing.Set[Tile], fromNode: TileNode | None = None):
+def _include_all_adj_required(graph: TileGraph, node: TileNode, includedSet: TileSet, usefulStartSet: TileSet, missingIncludedSet: TileSet, fromNode: TileNode | None = None):
+    """
+    Inlcudes all adjacent required tiles int the
+
+    @param graph:
+    @param node:
+    @param includedSet:
+    @param usefulStartSet:
+    @param missingIncludedSet:
+    @param fromNode:
+    @return:
+    """
     q = deque()
     q.append((node, fromNode))
 
@@ -177,10 +190,10 @@ def _include_all_adj_required(graph: TileGraph, node: TileNode, includedSet: typ
             if movable not in missingIncludedSet:
                 continue
 
-            nextNode = graph.graph[movable]
+            nextNode = graph.nodes[movable]
             if nextNode is None:
                 nextNode = TileNode(movable)
-                graph.graph[movable] = nextNode
+                graph.nodes[movable] = nextNode
 
             if nextNode is not None:
                 q.append((nextNode, node))

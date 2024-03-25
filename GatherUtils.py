@@ -7,7 +7,7 @@ import DebugHelper
 import KnapsackUtils
 import SearchUtils
 from DataModels import Move, GatherTreeNode
-from MapMatrix import MapMatrix
+from MapMatrix import MapMatrix, MapMatrixSet
 from Path import Path
 from SearchUtils import where
 from ViewInfo import ViewInfo
@@ -866,7 +866,7 @@ def _knapsack_levels_gather_iterative_prune(
             if USE_DEBUG_ASSERTS:
                 # rootNodes = [gatherTreeNodeLookup[tile] for tile in origStartTilesDict]
 
-                recalcTotalValue, recalcTotalTurns = recalculate_tree_values(
+                recalcTotalTurns, recalcTotalValue = recalculate_tree_values(
                     logEntries,
                     rootNodes,
                     negativeTiles,
@@ -931,7 +931,7 @@ def _knapsack_levels_gather_iterative_prune(
             )
 
             if USE_DEBUG_ASSERTS:
-                recalcTotalValue, recalcTotalTurns = recalculate_tree_values(
+                recalcTotalTurns, recalcTotalValue = recalculate_tree_values(
                     logEntries,
                     rootNodes,
                     negativeTiles,
@@ -1443,7 +1443,7 @@ def knapsack_levels_backpack_gather_with_value(
 
         rootNodes: typing.List[GatherTreeNode] = list(where(gatherTreeNodeLookup.values(), lambda treeNode: treeNode.fromTile is None))
 
-        totalValue, totalTurns = recalculate_tree_values(
+        totalTurns, totalValue = recalculate_tree_values(
             [],
             rootNodes,
             negativeTilesOrig,
@@ -1768,7 +1768,7 @@ def greedy_backpack_gather_values(
 
     rootNodes = list(where(gatherTreeNodeLookup.values(), lambda gatherTreeNode: gatherTreeNode.fromTile is None))
 
-    totalValue, turnsUsed = recalculate_tree_values(
+    turnsUsed, totalValue = recalculate_tree_values(
         [],
         rootNodes,
         negativeTilesOrig,
@@ -1795,6 +1795,21 @@ def recalculate_tree_values(
         viewInfo=None,
         shouldAssert=False
 ) -> typing.Tuple[int, int]:
+    """
+    Return totalTurns, totalValue
+
+    @param logEntries:
+    @param rootNodes:
+    @param negativeTiles:
+    @param startTilesDict:
+    @param searchingPlayer:
+    @param teams:
+    @param onlyCalculateFriendlyArmy:
+    @param priorityMatrix:
+    @param viewInfo:
+    @param shouldAssert:
+    @return:
+    """
     totalValue = 0
     totalTurns = 0
     logEntries.append('recalcing treenodes....')
@@ -1851,7 +1866,7 @@ def recalculate_tree_values(
             #     viewInfo.bottomLeftGridText[child.tile.x][child.tile.y] = child.trunkValue
             queue.appendleft(child)
 
-    return totalValue, totalTurns
+    return totalTurns, totalValue
 
 
 def _recalculate_tree_values_recurse(
@@ -2997,3 +3012,44 @@ def get_tree_leaves_further_than_distance(
             curArmy -= leafContribution
 
     return leavesToInclude
+
+
+def convert_contiguous_tiles_to_gather_tree_nodes_with_values(
+        map: MapBase,
+        rootTiles: typing.Iterable[Tile],
+        tiles: typing.Container[Tile],
+        negativeTiles: typing.Container[Tile] | None,
+        searchingPlayer: int,
+        priorityMatrix: MapMatrix[float] | None = None
+) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
+    visited = MapMatrix(map)
+
+    q = deque()
+    for tile in rootTiles:
+        q.appendleft((tile, None, None))
+
+    tile: Tile
+    fromTile: Tile | None
+    fromNode: GatherTreeNode | None
+    while q:
+        (tile, fromTile, fromNode) = q.pop()
+        if tile in visited:
+            continue
+
+        newNode = GatherTreeNode(tile, fromTile)
+        visited[tile] = newNode
+
+        if fromNode:
+            fromNode.children.append(newNode)
+
+        for t in tile.movable:
+            if t in tiles:
+                q.appendleft((t, tile, newNode))
+
+    rootNodes = [visited[t] for t in rootTiles]
+    logs = []
+    totalTurns, totalValue = recalculate_tree_values(logs, rootNodes, negativeTiles, {}, searchingPlayer, MapBase.get_teams_array(map), priorityMatrix=priorityMatrix, shouldAssert=False)
+
+    return totalTurns, totalValue, rootNodes
+
+

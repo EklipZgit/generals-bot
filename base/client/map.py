@@ -704,6 +704,12 @@ class DistanceMapper:
     def get_distance_between(self, tileA: Tile, tileB: Tile) -> int:
         raise NotImplementedError()
 
+    def get_distance_between_or_none_dual_cache(self, tileA: Tile, tileB: Tile) -> int | None:
+        raise NotImplementedError()
+
+    def get_distance_between_dual_cache(self, tileA: Tile, tileB: Tile) -> int:
+        raise NotImplementedError()
+
     def get_tile_dist_matrix(self, tile: Tile) -> typing.Dict[Tile, int]:
         """Actually returns mapmatrix, but they behave similarly and cant declare mapmatrix here because it uses map as a circular reference."""
         raise NotImplementedError()

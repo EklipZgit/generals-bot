@@ -1026,10 +1026,17 @@ class GeneralsViewer(object):
             # playerB = (playerB + 256) // 2
             self.draw_square(tile, 2, playerR, playerG, playerB, alpha=alpha)
 
-    def draw_army_analysis(self, analysis: ArmyAnalyzer, chokeColor=None, draw_pathways=True, outerChokeColor=None,
-                           innerChokeColor=None):
+    def draw_army_analysis(
+            self,
+            analysis: ArmyAnalyzer,
+            chokeColor=None,
+            draw_pathways=True,
+            outerChokeColor=None,
+            innerChokeColor=None):
         if chokeColor:
-            for choke in analysis.pathChokes:
+            for choke in self._map.get_all_tiles():
+                if not analysis.is_choke(choke):
+                    continue
                 # Poiple
                 self.draw_square(choke, 1, chokeColor[0], chokeColor[1], chokeColor[2], 230, self.square_inner_1)
 

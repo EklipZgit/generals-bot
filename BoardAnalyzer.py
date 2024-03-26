@@ -144,7 +144,7 @@ class BoardAnalyzer:
         logbook.info(f'calculated central defense point to be {str(lowestAvgTile)} due to lowestAvgDist {lowestAvgDist}')
         self.central_defense_point = lowestAvgTile
 
-    def rebuild_intergeneral_analysis(self, opponentGeneral: Tile, possibleSpawns: typing.List[MapMatrix[bool]]):
+    def rebuild_intergeneral_analysis(self, opponentGeneral: Tile, possibleSpawns: typing.List[MapMatrix[bool]] | None = None):
         self.intergeneral_analysis = ArmyAnalyzer(self.map, self.general, opponentGeneral)
 
         enemyDistMap = self.intergeneral_analysis.bMap

@@ -549,19 +549,23 @@ class GeneralsClient(object):
         isHumanMessage = "bot" not in fromUsername or self.public_server
         if self.is_message_talking_to_us(message) or self.is_not_ffa():
             if message.lower().find("kill human") != -1:
-                if self.map.turn < 50:
-                    self.send_chat_broken_up_by_sentence(
-                        "Teaming at game start is against the rules. This has been logged. My dad is a microsoft ur gonna get banned")
-                    self.send_chat_broken_up_by_sentence(
-                        "You may notice I'm a little bit friendlier recently, it may be worth NOT attacking me sometimes ;)")
-                elif random.choice(range(1, 5)) <= 3:
-                    self.send_chat(
-                        "Yo, you know I have feelings just like everyone else, right? I'm trying to get stars and have fun, just like you :(")
-                else:
-                    self.send_chat_broken_up_by_sentence(
-                        "Hey everyone who isn't this guy: just a heads up, my creator is working on my teaming capabilities.")
-                    self.send_chat_broken_up_by_sentence(
-                        "You may notice I'm a little bit friendlier recently, it may be worth NOT attacking me sometimes ;)")
+                try:
+                    if self.map.turn < 50:
+                        self.send_chat_broken_up_by_sentence(
+                            "Teaming at game start is against the rules. This has been logged. My dad is a microsoft ur gonna get banned")
+                        self.send_chat_broken_up_by_sentence(
+                            "You may notice I'm a little bit friendlier recently, it may be worth NOT attacking me sometimes ;)")
+                    elif random.choice(range(1, 5)) <= 3:
+                        self.send_chat(
+                            "Yo, you know I have feelings just like everyone else, right? I'm trying to get stars and have fun, just like you :(")
+                    else:
+                        self.send_chat_broken_up_by_sentence(
+                            "Hey everyone who isn't this guy: just a heads up, my creator is working on my teaming capabilities.")
+                        self.send_chat_broken_up_by_sentence(
+                            "You may notice I'm a little bit friendlier recently, it may be worth NOT attacking me sometimes ;)")
+                except Exception as ex:
+                    logbook.error(f'wtf kill human error? {traceback.format_exc()}')
+
             swore = False
             for curseword in self.cursewords:
                 if curseword in message:

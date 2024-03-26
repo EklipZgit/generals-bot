@@ -104,7 +104,10 @@ class ArmyInterceptor(object):
         withinOneAdditionalChecks = {}
         for threat in threats:
             withinOneAdditionalChecks.clear()
-            for tile, interceptMoves in threat.armyAnalysis.interceptChokes.items():
+            for tile in self.map.reachableTiles:
+                interceptMoves = threat.armyAnalysis.interceptChokes[tile]
+                if interceptMoves is None:
+                    continue
                 curCount = commonChokesCounts.get(tile, 0)
                 curVal = commonChokesVals.get(tile, 0)
                 commonChokesCounts[tile] = curCount + 1
@@ -236,7 +239,7 @@ class ArmyInterceptor(object):
                 toTiles = toSets.get(tile, None)
 
             for tile in tiles:
-                allCommon = True
+                allCommon = len(fromCommon) > 0
                 fromTiles = fromSets[tile]
                 for t in fromCommon:
                     if t not in fromTiles:
@@ -244,10 +247,14 @@ class ArmyInterceptor(object):
                         break
                 if allCommon:
                     # sharedChokes[tile] = i + len(fromTiles) + len(toTiles)
-                    sharedInterceptVal = potentialSharedChokes[tile]
-                    if self.log_debug:
-                        logbook.info(f'common choke {str(tile)} was {sharedInterceptVal}')
-                    sharedChokes[tile] = sharedInterceptVal
+                    sharedInterceptVal = potentialSharedChokes.get(tile, None)
+                    if not sharedInterceptVal:
+                        if self.log_debug:
+                            logbook.info(f'DEBUG: SHAREDINTERCEPTVAL WAS NONE FOR TILE {tile} IN INTERCEPT {threats[0].path.start.tile}')
+                    else:
+                        if self.log_debug:
+                            logbook.info(f'common choke {str(tile)} was {sharedInterceptVal}')
+                        sharedChokes[tile] = sharedInterceptVal
 
         # if self.log_debug:
         #     for tile, dist in sorted(sharedChokes.items()):
@@ -310,7 +317,7 @@ class ArmyInterceptor(object):
 
         threatTile = threats[0].path.start.tile
         for threat in threats:
-            if threat.turns > 24:
+            if threat.turns > 30:
                 logbook.info(f'skipping long threat len {threat.turns} from {str(threat.path.start.tile)} to {str(threat.path.tail.tile)}')
                 continue
 
@@ -322,12 +329,15 @@ class ArmyInterceptor(object):
 
         return outThreats
 
-    def ensure_threat_army_analysis(self, threat: ThreatObj):
+    def ensure_threat_army_analysis(self, threat: ThreatObj) -> bool:
+        """returns True if the army analysis was built"""
         if threat.armyAnalysis is None:
             dists = SearchUtils.build_distance_map_matrix(self.map, [threat.path.start.tile])
             furthestPoint = max(threat.path.tileList, key=lambda t: dists[t] if self.map.is_tile_friendly(t) else 0)
             logbook.info(f'backfilling threat army analysis from {str(threat.path.start.tile)}->{str(furthestPoint)}')
             threat.armyAnalysis = ArmyAnalyzer(self.map, armyA=furthestPoint, armyB=threat.path.start.tile)
+            return True
+        return False
 
     def determine_best_threat_value(self, interception: ArmyInterception, threats: typing.List[ThreatObj], turnsLeftInCycle: int):
         maxThreat = None

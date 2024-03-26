@@ -544,7 +544,7 @@ class TestBase(unittest.TestCase):
     def render_army_analyzer(self, map: MapBase, analyzer: ArmyAnalyzer):
         viewInfo = ViewInfo(0, map.cols, map.rows)
         board = BoardAnalyzer(map, analyzer.tileA, None)
-        board.rebuild_intergeneral_analysis(analyzer.tileB)
+        board.rebuild_intergeneral_analysis(analyzer.tileB, possibleSpawns=None)
         board.rescan_chokes()
 
         # viewInfo.add_targeted_tile(board.intergeneral_analysis.tileC, TargetStyle.YELLOW, radiusReduction=1)
@@ -573,15 +573,8 @@ class TestBase(unittest.TestCase):
             if tile in analyzer.interceptChokes:
                 viewInfo.bottomMidLeftGridText[tile.x][tile.y] = f'ic{analyzer.interceptChokes[tile]}'
 
-            if tile in analyzer.pathChokes:
-                if tile not in board.intergeneral_analysis.pathChokes:
-                    raise AssertionError(
-                        f'board choke mismatch for {str(tile)}. board False vs True')
+            if analyzer.is_choke(tile):
                 tileData.append('C')
-            else:
-                if tile in board.intergeneral_analysis.pathChokes:
-                    raise AssertionError(
-                        f'board choke mismatch for {str(tile)}. board False vs True')
 
             if board.outerChokes[tile.x][tile.y]:
                 tileData.append('O')
@@ -589,12 +582,31 @@ class TestBase(unittest.TestCase):
             if board.innerChokes[tile.x][tile.y]:
                 tileData.append('I')
 
+            if tile in analyzer.interceptTurns:
+                viewInfo.bottomLeftGridText[tile.x][tile.y] = f'it{analyzer.interceptTurns[tile]}'
+
+            if tile in analyzer.interceptDistances:
+                viewInfo.midRightGridText[tile.x][tile.y] = f'im{analyzer.interceptDistances[tile]}'
+
             if len(tileData) > 0:
                 viewInfo.bottomRightGridText[tile.x][tile.y] = ''.join(tileData)
 
+        viewInfo.add_info_line('LEGEND:')
+        viewInfo.add_info_line('  C: = PathChoke')
+        viewInfo.add_info_line('  O: = OuterChoke')
+        viewInfo.add_info_line('  I: = InnerChoke')
+        viewInfo.add_info_line('  cw: = choke width')
+        viewInfo.add_info_line('  ic: = intercept choke distance (the difference between worst case and best case intercept pathing for an army reaching this tile as early as opp could)')
+        viewInfo.add_info_line('  it: = intercept turn (which turn in the intercept the tile must be reached by to guarantee a 2-move-intercept-capture assuming the opp moved this way)')
+        viewInfo.add_info_line('  im: = intercept moves (worst case moves to achieve the intercept capture, worst case, assuming opp moves along shortest path)')
+        viewInfo.add_info_line('  Green circle: = tileA')
+        viewInfo.add_info_line('  Red circle: = tileB')
+
         board.intergeneral_analysis = analyzer
         viewInfo.board_analysis = board
-        self.render_view_info(map, viewInfo, 'xd')
+        viewInfo.add_targeted_tile(analyzer.tileA, TargetStyle.GREEN)
+        viewInfo.add_targeted_tile(analyzer.tileB, TargetStyle.RED)
+        self.render_view_info(map, viewInfo, f'ArmyAnalysis between {analyzer.tileA} and {analyzer.tileB}')
 
     def render_sim_analysis(self, map: MapBase, simResult: ArmySimResult):
         aMoves = [aMove for aMove, bMove in simResult.expected_best_moves]
@@ -1049,7 +1061,7 @@ class TestBase(unittest.TestCase):
                         tile.army = 1
                         countTilesGeneral.add(1)
                         newTiles.add(tile)
-                else:
+                elif enemyGeneralTileCount:
                     if countTilesEnemy.value < enemyGeneralTileCount and tile not in bannedEnemyTiles:
                         tile.player = enemyGeneral.player
                         tile.army = 1

@@ -1,3 +1,5 @@
+import time
+
 import logbook
 import typing
 from collections import deque
@@ -56,9 +58,9 @@ def get_map_as_graph(map: MapBase) -> TileGraph:
 
 def get_spanning_tree_from_tile_lists(
         map: MapBase,
+        requiredTiles: typing.List[Tile],
         bannedTiles: typing.List[Tile],
-        requiredTiles: typing.List[Tile]
-) -> typing.Tuple[TileGraph, typing.Set[Tile]]:
+) -> typing.Tuple[typing.List[Tile], typing.Set[Tile]]:
     """
     Returns the graph of all those connected, as well as the set of any required that couldn't be connected to the first required tile.
 
@@ -67,26 +69,43 @@ def get_spanning_tree_from_tile_lists(
     @param requiredTiles:
     @return:
     """
+    includedSet, missingIncluded = get_spanning_tree_matrix_from_tile_lists(map, requiredTiles, bannedTiles)
+
+    return [t for t in includedSet], missingIncluded
+
+
+def get_spanning_tree_matrix_from_tile_lists(
+        map: MapBase,
+        requiredTiles: typing.List[Tile],
+        bannedTiles: typing.List[Tile],
+        # oneOfTiles: typing.Iterable[Tile] | None = None,
+) -> typing.Tuple[MapMatrixSet, typing.Set[Tile]]:
+    """
+    Returns the graph of all those connected, as well as the set of any required that couldn't be connected to the first required tile.
+
+    @param map:
+    @param bannedTiles:
+    @param requiredTiles:
+    @return:
+    """
+    start = time.perf_counter()
     if LOG_VERBOSE:
         logbook.info('starting get_map_as_graph_from_tiles')
-    table: MapMatrix[TileNode] = MapMatrix(map, None)
-
     bannedSet = MapMatrixSet(map, bannedTiles)
     includedSet = MapMatrixSet(map)
     missingIncluded = set(requiredTiles)
+    # oneOfSet
+    # table: MapMatrixSet = MapMatrixSet(map)
     for req in requiredTiles:
         bannedSet.discard(req)
-
     # for tile in map.reachableTiles:
     #     if tile in bannedSet:
     #         continue
     #     node = TileNode(tile)
     #     table[tile] = node
-
     # for tile in requiredTiles:
     #     node = TileNode(tile)
     #     table[tile] = node
-
     # for tile in requiredTiles:
     #     node = table[tile]
     #     for moveable in tile.movable:
@@ -95,17 +114,11 @@ def get_spanning_tree_from_tile_lists(
     #         adjNode = table[moveable]
     #         if adjNode is not None:
     #             node.adjacents.append(adjNode)
-    graph = TileGraph(table)
-
-    root = TileNode(requiredTiles[0])
-    graph.nodes[requiredTiles[0]] = root
+    root = requiredTiles[0]
     usefulStartSet = includedSet.copy()
-
     if LOG_VERBOSE:
         logbook.info('Completed sets setup')
-
-    _include_all_adj_required(graph, root, includedSet, usefulStartSet, missingIncluded)
-
+    _include_all_adj_required(root, includedSet, usefulStartSet, missingIncluded)
     if LOG_VERBOSE:
         logbook.info('Completed root _include_all_adj_required')
 
@@ -116,18 +129,18 @@ def get_spanning_tree_from_tile_lists(
     iter = 0
     while missingIncluded:
         # iter += 1
-        # if LOG_VERBOSE:
-        #     logbook.info(f'missingIncluded iter {iter}')
+        if LOG_VERBOSE:
+            logbook.info(f'missingIncluded iter {iter}')
         path = SearchUtils.breadth_first_find_queue(map, usefulStartSet, findFunc, skipTiles=bannedSet, noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
         if path is None:
-            # if LOG_VERBOSE:
-            #     logbook.info(f'  Path NONE! Performing altBanned set')
+            if LOG_VERBOSE:
+                logbook.info(f'  Path NONE! Performing altBanned set')
             altBanned = bannedSet.copy()
             altBanned.update([t for t in map.reachableTiles if t.isMountain])
             path = SearchUtils.breadth_first_find_queue(map, includedSet, findFunc, skipTiles=altBanned, bypassDefaultSkipLogic=True, noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
             if path is None:
-                # if LOG_VERBOSE:
-                #     logbook.info(f'  No AltPath, breaking')
+                if LOG_VERBOSE:
+                    logbook.info(f'  No AltPath, breaking early with {len(missingIncluded)} left missing')
                 break
                 # raise AssertionError(f'No MST building path found...? \r\nFrom {includedSet} \r\nto {missingIncluded}')
             # else:
@@ -137,29 +150,24 @@ def get_spanning_tree_from_tile_lists(
         #     if LOG_VERBOSE:
         #         logbook.info(f'  Path len {path.length}')
 
-        lastNode: TileNode | None = None
+        lastTile: Tile | None = None
 
         for tile in path.tileList:
-            node = graph.nodes[tile]
-            if node is None:
-                node = TileNode(tile)
-                graph.nodes[tile] = node
+            # table.add(tile)
 
-            _include_all_adj_required(graph, node, includedSet, usefulStartSet, missingIncluded, lastNode)
-            lastNode = node
+            _include_all_adj_required(tile, includedSet, usefulStartSet, missingIncluded, lastTile)
+            lastTile = tile
 
-    # for tile in map.reachableTiles:
-    #     if tile not in includedSet:
-    #         table[tile] = None
+    if LOG_VERBOSE:
+        logbook.info(f'get_spanning_tree_matrix_from_tile_lists completed in {time.perf_counter() - start:.5f}s with {len(missingIncluded)} missing')
 
-    return graph, missingIncluded
+    return includedSet, missingIncluded
 
 
-def _include_all_adj_required(graph: TileGraph, node: TileNode, includedSet: TileSet, usefulStartSet: TileSet, missingIncludedSet: TileSet, fromNode: TileNode | None = None):
+def _include_all_adj_required(node: Tile, includedSet: TileSet, usefulStartSet: TileSet, missingIncludedSet: TileSet, fromNode: Tile | None = None):
     """
     Inlcudes all adjacent required tiles int the
 
-    @param graph:
     @param node:
     @param includedSet:
     @param usefulStartSet:
@@ -168,32 +176,37 @@ def _include_all_adj_required(graph: TileGraph, node: TileNode, includedSet: Til
     @return:
     """
     q = deque()
-    q.append((node, fromNode))
+    q.append(node)
 
     iter = 0
+    included = 0
     while q:
         iter += 1
-        node, fromNode = q.popleft()
+        tile = q.popleft()
 
-        if fromNode is not None:
-            node.adjacents.append(fromNode)
-            fromNode.adjacents.append(node)
+        # if fromNode is not None:
+        #     node.adjacents.append(fromNode)
+        #     fromNode.adjacents.append(node)
 
-        if node.tile in includedSet:
+        if tile in includedSet:
             continue
 
-        includedSet.add(node.tile)
-        usefulStartSet.add(node.tile)
-        missingIncludedSet.discard(node.tile)
+        included += 1
 
-        for movable in node.tile.movable:
+        includedSet.add(tile)
+        usefulStartSet.add(tile)
+        missingIncludedSet.discard(tile)
+
+        for movable in tile.movable:
             if movable not in missingIncludedSet:
                 continue
 
-            nextNode = graph.nodes[movable]
-            if nextNode is None:
-                nextNode = TileNode(movable)
-                graph.nodes[movable] = nextNode
+            # nextNode = graph.nodes[movable]
+            # if nextNode is None:
+            #     nextNode = TileNode(movable)
+            #     graph.nodes[movable] = nextNode
+            #
+            # else:
+            q.append(movable)
 
-            if nextNode is not None:
-                q.append((nextNode, node))
+    logbook.info(f'_include_all_adj_required, iter {iter} included {included}')

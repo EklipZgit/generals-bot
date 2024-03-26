@@ -174,7 +174,7 @@ def dest_breadth_first_target(
         (prioVals, current, dist, army, goalInc, fromTile) = frontier.get()
         if visited[current.x][current.y] is not None:
             continue
-        if skipTiles is not None and current in skipTiles:
+        if skipTiles and current in skipTiles:
             if not noLog and iter < 100: logbook.info(
                 f"PopSkipped skipTile current {current.toString()}, army {army}, goalInc {goalInc}, targetArmy {targetArmy}")
             continue
@@ -798,7 +798,7 @@ def breadth_first_dynamic(
         if dist not in visited[current.x][current.y] or visited[current.x][current.y][dist][0] > prioVals:
             visited[current.x][current.y][dist] = (prioVals, parent)
         # TODO no globalVisitedSet
-        if current in globalVisitedSet or (skipTiles is not None and current in skipTiles):
+        if current in globalVisitedSet or (skipTiles and current in skipTiles):
             continue
         globalVisitedSet.add(current)
         if goalFunc(current, prioVals) and (foundVal is None or prioVals < foundVal):
@@ -1085,7 +1085,7 @@ def breadth_first_dynamic_max(
             if current in globalVisitedSet:
                 continue
             globalVisitedSet.add(current)
-        if skipTiles is not None and current in skipTiles:
+        if skipTiles and current in skipTiles:
             continue
 
         newValue = valueFunc(current, prioVals) if not includePath else valueFunc(current, prioVals, nodeList)
@@ -1402,7 +1402,7 @@ def breadth_first_dynamic_max_per_tile(
             if current in globalVisitedSet:
                 continue
             globalVisitedSet.add(current)
-        if skipTiles is not None and current in skipTiles:
+        if skipTiles and current in skipTiles:
             continue
 
         newValue = valueFunc(current, prioVals) if not includePath else valueFunc(current, prioVals, nodeList)
@@ -1731,7 +1731,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
             if current in globalVisitedSet:
                 continue
             globalVisitedSet.add(current)
-            if skipTiles is not None and current in skipTiles:
+            if skipTiles and current in skipTiles:
                 continue
 
         newValue = valueFunc(current, prioVals) if not includePath else valueFunc(current, prioVals, nodeList)
@@ -1987,7 +1987,7 @@ def bidirectional_breadth_first_dynamic(
         if dist not in visited[current.x][current.y] or visited[current.x][current.y][dist][0] > prioVals:
             visited[current.x][current.y][dist] = (prioVals, parent)
         # TODO no globalVisitedSet
-        if current in globalVisitedSet or (skipTiles is not None and current in skipTiles):
+        if current in globalVisitedSet or (skipTiles and current in skipTiles):
             continue
         globalVisitedSet.add(current)
         if goalFunc(current, prioVals) and (foundVal is None or prioVals < foundVal):
@@ -2118,7 +2118,7 @@ def breadth_first_find_queue(
     while frontier:
         iter += 1
         (current, dist, army, goalInc) = frontier.pop()
-        if current in visited or (skipTiles is not None and current in skipTiles):
+        if current in visited or (skipTiles and current in skipTiles):
             continue
         visited.add(current)
         if goalFunc(current, army, dist) and (dist < foundDist or (dist == foundDist and army > foundArmy)):
@@ -2242,7 +2242,7 @@ def breadth_first_find_dist_queue(
     while frontier:
         iter += 1
         (current, dist) = frontier.pop()
-        if current in visited or (skipTiles is not None and current in skipTiles):
+        if current in visited or (skipTiles and current in skipTiles):
             continue
         visited.add(current)
         if goalFunc(current, dist):
@@ -2297,7 +2297,7 @@ def breadth_first_foreach(
 
     frontier = deque()
     globalVisited = MapMatrix(map, False)
-    if skipTiles is not None:
+    if skipTiles:
         for tile in skipTiles:
             if not noLog:
                 logbook.info(f"    skipTiles contained {tile}")
@@ -2365,7 +2365,7 @@ def breadth_first_foreach_with_state(
 
     frontier = deque()
     globalVisited = MapMatrix(map, False)
-    if skipTiles is not None:
+    if skipTiles:
         for tile in skipTiles:
             if not noLog:
                 logbook.info(f"    skipTiles contained {tile}")
@@ -2403,7 +2403,76 @@ def breadth_first_foreach_with_state(
             frontier.appendleft((next, newDist, nextState))
     if not noLog:
         logbook.info(
-            f"Completed breadth_first_foreach_with_state. startTiles[0] {startTiles[0].x},{startTiles[0].y}: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
+            f"Completed breadth_first_foreach_with_state: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
+
+
+def breadth_first_foreach_with_state_and_start_dist(
+        map: MapBase,
+        startTiles: typing.Dict[Tile, typing.Tuple[int, typing.Any]],
+        maxDepth: int,
+        foreachFunc: typing.Callable[[Tile, typing.Any | None], typing.Any | None],
+        skipTiles=None,
+        noLog=False,
+        bypassDefaultSkip: bool = False):
+    """
+    WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
+    (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
+    Does NOT skip neutral cities by emptyVal.
+    INVERSE of normal return of forceach, return None/False to skip. Return a state object to continue to the next neighbors.
+    Same as breath_first_foreach_dist, except the foreach function does not get the distance parameter passed to it.
+
+    @param map:
+    @param startTiles:
+    @param maxDepth:
+    @param foreachFunc: ALSO the skip func. Return true to avoid adding neighbors to queue.
+    @param skipTiles: Evaluated BEFORE the foreach runs on a tile
+    @param noLog:
+    @param bypassDefaultSkip: If true, does NOT skip mountains / undiscovered obstacles
+    @return:
+    """
+    if len(startTiles) == 0:
+        return
+
+    frontier = HeapQueue()
+    globalVisited = MapMatrix(map, False)
+    if skipTiles:
+        for tile in skipTiles:
+            if not noLog:
+                logbook.info(f"    skipTiles contained {tile}")
+            globalVisited[tile] = True
+
+    if isinstance(startTiles, dict):
+        for tile, (startDist, startVal) in startTiles.items():
+            frontier.put((startDist, startVal, tile))
+
+    else:
+        raise AssertionError('startTiles must be dict here')
+
+    start = time.perf_counter()
+    iter = 0
+    dist = 0
+    while frontier:
+        iter += 1
+
+        (dist, state, current) = frontier.get()
+        if current in globalVisited:
+            continue
+        if dist > maxDepth:
+            break
+        globalVisited.add(current)
+        if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)) and dist > 0:
+            continue
+
+        nextState = foreachFunc(current, state)
+        if not nextState:
+            continue
+
+        newDist = dist + 1
+        for next in current.movable:  # new spots to try
+            frontier.put((newDist, nextState, next))
+    if not noLog:
+        logbook.info(
+            f"Completed breadth_first_foreach_with_state_and_start_dist: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
 
 
 def breadth_first_foreach_dist(
@@ -2435,7 +2504,7 @@ def breadth_first_foreach_dist(
 
     frontier = deque()
     globalVisited = MapMatrix(map, False)
-    if skipTiles is not None:
+    if skipTiles:
         for tile in skipTiles:
             globalVisited[tile] = True
 
@@ -2657,7 +2726,7 @@ def breadth_first_foreach_dist_revisit_callback(
 
     frontier = deque()
     globalVisited = new_value_grid(map, None)
-    if skipTiles is not None:
+    if skipTiles:
         for tile in skipTiles:
             globalVisited[tile.x][tile.y] = 1000
 

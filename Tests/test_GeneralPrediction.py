@@ -369,7 +369,7 @@ class GeneralPredictionTests(TestBase):
             self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][tile], f'{str(tile)} should not be allowed')
     
     def test_should_set_emergence_around_uncovered_initial_tiles(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_set_emergence_around_uncovered_initial_tiles___gUX8yTL0J---1--194.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 194, fill_out_tiles=True)
 
@@ -389,7 +389,7 @@ class GeneralPredictionTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
-        self.assertTrue(bot.euclidDist(20, 14, bot.targetPlayerExpectedGeneralLocation.x, bot.targetPlayerExpectedGeneralLocation.y) < 5)
+        self.assertTrue(bot.euclidDist(17, 7, bot.targetPlayerExpectedGeneralLocation.x, bot.targetPlayerExpectedGeneralLocation.y) < 5, 'should pick somewhere pretty central to the players tile-mass')
 
     def test_should_not_over_emerge_initial_trail(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -609,8 +609,8 @@ class GeneralPredictionTests(TestBase):
             'None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  18,12->16,12  None  None  None  None  ',
         ]:
             for finalPath, longDist in [
-                ('18,12->16,12->16,13->13,13->13,14->11,14->11,13->8,13', True),
                  ('18,12->16,12->16,13->13,13->13,14->8,14->8,12', False),
+                 ('18,12->16,12->16,13->13,13->13,14->11,14->11,13->8,13', True),
             ]:
                 with self.subTest(finalPath=finalPath, enStart=enStart):
                     mapFile = 'GameContinuationEntries/should_not_mis_predict_general_location_for_weird_start__actual___n5lR2mrz----1--44.txtmap'
@@ -754,15 +754,38 @@ class GeneralPredictionTests(TestBase):
         self.assertTrue(expectedToBeGeneral.isGeneral)
         self.assertEqual(enemyGeneral.player, expectedToBeGeneral.player)
     
-    def test_should_dive_corner_for_near_100_percent_kill_chance_instead_of_dying(self):
+    def test_should_dive_corner_for_near_100_percent_kill_chance_instead_of_dying__first_moves_instant(self):
+        # TODO actually what the fuck, the bot totally CAN save here by intercepting one move behind at 9,10->10,9???
+        # Bot needs to comprehend that moving down wins the race
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        for genFar in [True, False, None]:
-            with self.subTest(genFar=genFar):
+        mapFile = 'GameContinuationEntries/should_dive_corner_for_near_100_percent_kill_chance_instead_of_dying___XWHQOYv7I---1--480.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 480, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=480)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None  5,14->7,14->7,10->10,10->10,9->11,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertOwned(general.player, playerMap.GetTile(2, 14), 'should instantly dive the gen when dead')
+
+    def test_should_dive_corner_for_near_100_percent_kill_chance_instead_of_dying(self):
+        # TODO actually what the fuck, the bot totally CAN save here by intercepting one move behind at 9,10->10,9???
+        # Bot needs to comprehend that moving down wins the race
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for genDist in ['short', 'shortPocket', 'medium', 'worstCase']:
+            with self.subTest(genDist=genDist):
                 mapFile = 'GameContinuationEntries/should_dive_corner_for_near_100_percent_kill_chance_instead_of_dying___XWHQOYv7I---1--480.txtmap'
                 map, general, enemyGeneral = self.load_map_and_generals(mapFile, 480, fill_out_tiles=True)
-                if genFar == False:
+                if genDist == 'shortPocket':
                     enemyGeneral = self.move_enemy_general(map, enemyGeneral, 0, 13)
-                elif genFar == True:
+                elif genDist == 'medium':
+                    enemyGeneral = self.move_enemy_general(map, enemyGeneral, 0, 19)
+                elif genDist == 'worstCase':
                     enemyGeneral = self.move_enemy_general(map, enemyGeneral, 3, 19)
 
                 rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=480)

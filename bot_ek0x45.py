@@ -4448,7 +4448,7 @@ class EklipZBot(object):
                 # bonus points for avoiding oChokes
                 points += 0.05
 
-            if dest in self.board_analysis.intergeneral_analysis.pathChokes:
+            if self.board_analysis.intergeneral_analysis.is_choke(dest):
                 points += 0.15
 
             towardsEnemy = distPriorityMap[dest.x][dest.y] < distPriorityMap[source.x][source.y]
@@ -4529,7 +4529,7 @@ class EklipZBot(object):
             logbook.info('DONE building distmap after rebuilding intergen analysis')
 
         fromTile = self.general
-        if self.locked_launch_point is None and self._map.is_2v2 and self.teammate_general is not None:
+        if self.locked_launch_point is None and self._map.is_2v2 and self.teammate_general is not None and self.targetPlayerObj is not None:
             fromTile = self.get_2v2_launch_point()
             self.locked_launch_point = fromTile
 
@@ -5487,9 +5487,8 @@ class EklipZBot(object):
         if move.dest == self.threat.path.start.tile or move.dest == self.threat.path.start.next.tile:
             return True
 
-        chokes = self.threat.armyAnalysis.pathChokes
         # if moving out of a choke, dont
-        if move.source in chokes and move.dest not in chokes:
+        if self.threat.armyAnalysis.is_choke(move.source) and not self.threat.armyAnalysis.is_choke(move.dest):
             self.viewInfo.add_info_line(f'not allowing army move out of threat choke {str(move.source)}')
             return False
 
@@ -5902,8 +5901,7 @@ class EklipZBot(object):
 
                 # addlPath = SearchUtils.breadth_first_find_queue(self._map, [enemyGeneral], lambda t, _1, _2: t == furthestAlt, noNeutralCities=False)
                 if quickKill is not None and quickKill.length > 0:
-                    mst, missingRequired = MapSpanningUtils.get_spanning_tree_from_tile_lists(self._map, [], altEnGenPositions)
-                    connectedTiles = mst.get_connected_tiles()
+                    connectedTiles, missingRequired = MapSpanningUtils.get_spanning_tree_from_tile_lists(self._map, altEnGenPositions, [])
                     # furthestAlt = None
                     additionalKillDist = len(connectedTiles)
                     # for tile in altEnGenPositions:
@@ -6394,7 +6392,7 @@ class EklipZBot(object):
 
             with self.perf_timer.begin_move_event('Searching for a threat killer move...'):
                 move = self.get_threat_killer_move(threat, searchTurns, outputDefenseCriticalTileSet)
-            if move is not None and (move.dest in threat.armyAnalysis.pathChokes or threat.armyAnalysis.chokeWidths[move.dest] < 3):
+            if move is not None and threat.armyAnalysis.chokeWidths[move.dest] < 3:
                 self.viewInfo.infoText = f"threat killer move! {move.source.x},{move.source.y} -> {move.dest.x},{move.dest.y}"
                 if self.curPath is not None and move.source.tile == self.curPath.start.tile:
                     self.curPath.add_start(move.dest)
@@ -6549,7 +6547,7 @@ class EklipZBot(object):
 
                                 if sumPrunedTurns >= threat.turns - 2:
                                     def addPrunedDefenseToDefenseNegatives(tn: GatherTreeNode):
-                                        if tn.tile in self.board_analysis.intergeneral_analysis.pathChokes or tn.tile in threat.armyAnalysis.pathChokes:
+                                        if self.board_analysis.intergeneral_analysis.is_choke(tn.tile) or threat.armyAnalysis.is_choke(tn.tile):
                                             logbook.info(f'    outputDefenseCriticalTileSet SKIPPING CHOKE {str(tn.tile)}')
                                         else:
                                             logbook.info(f'    outputDefenseCriticalTileSet adding {str(tn.tile)}')
@@ -7779,20 +7777,20 @@ class EklipZBot(object):
                 move = self.get_euclid_shortest_from_tile_towards_target(expPath.start.tile, self.targetingArmy.tile)
                 self.info(f'continue killing target in exp plan, move {str(move)}, plan was {str(expPath)}')
                 return move
-
-            if army.tile.delta.toTile is not None:
-                moveHalfArmy = self.armyTracker.armies.get(army.tile.delta.toTile, None)
-                if moveHalfArmy is not None and moveHalfArmy.player == self.targetingArmy.player:
-                    army = moveHalfArmy
-            if army != self.targetingArmy:
-                if army.player == self.targetingArmy.player:
-                    logbook.info(
-                        f"Switched targetingArmy from {str(self.targetingArmy)} to {str(army)} because it is a different army now?")
-                    self.targetingArmy = army
-                else:
-                    logbook.info(
-                        f"Stopped targetingArmy {str(self.targetingArmy)} because its tile is owned by the wrong player in armyTracker now")
-                    self.targetingArmy = None
+            #
+            # if army.tile.delta.toTile is not None:
+            #     moveHalfArmy = self.armyTracker.armies.get(army.tile.delta.toTile, None)
+            #     if moveHalfArmy is not None and moveHalfArmy.player == self.targetingArmy.player:
+            #         army = moveHalfArmy
+            # if army != self.targetingArmy:
+            #     if army.player == self.targetingArmy.player:
+            #         logbook.info(
+            #             f"Switched targetingArmy from {str(self.targetingArmy)} to {str(army)} because it is a different army now?")
+            #         self.targetingArmy = army
+            #     else:
+            #         logbook.info(
+            #             f"Stopped targetingArmy {str(self.targetingArmy)} because its tile is owned by the wrong player in armyTracker now")
+            #         self.targetingArmy = None
         else:
             self.targetingArmy = None
             logbook.info(
@@ -7835,33 +7833,87 @@ class EklipZBot(object):
 
         self.blocking_tile_info: typing.Dict[Tile, typing.List[ThreatBlockInfo]] = {}
 
-        threatsByTile = self.dangerAnalyzer.get_threats_grouped_by_tile(
-            self.armyTracker.armies,
-            includePotentialThreat=True,
-            includeVisionThreat=False,
-            alwaysIncludeArmy=self.targetingArmy,
-            includeArmiesWithThreats=True,
-            alwaysIncludeRecentlyMoved=True)
+        with self.perf_timer.begin_move_event('INTERCEPTIONS (will be overridden below)') as interceptionsEvent:
+            with self.perf_timer.begin_move_event('dangerAnalyzer.get_threats_grouped_by_tile'):
+                threatsByTile = self.dangerAnalyzer.get_threats_grouped_by_tile(
+                    self.armyTracker.armies,
+                    includePotentialThreat=True,
+                    includeVisionThreat=False,
+                    alwaysIncludeArmy=self.targetingArmy,
+                    includeArmiesWithThreats=True,
+                    alwaysIncludeRecentlyMoved=True)
 
-        with self.perf_timer.begin_move_event(f'INTERCEPTIONS'):
-            for tile, threats in threatsByTile.items():
+            threatsSorted = sorted(threatsByTile.items(), key=lambda tuple: (
+                        SearchUtils.any_where(tuple[1], lambda t: t.threatType == ThreatType.Kill),
+                        self.get_army_at(tuple[0]).last_seen_turn if not tuple[0].visible else 100000,
+                        self.get_army_at(tuple[0]).last_moved_turn,
+                        tuple[0].army
+                    ), reverse=True
+                )
+
+            threatsWeCareAbout = []
+            threatsWeCareAboutByTile = {}
+
+            limit = 4
+            skippedIntercepts = []
+
+            with self.perf_timer.begin_move_event(f'INTERCEPT Ensure analysis'''):
+                for tile, threats in threatsSorted:
+                    if len(threats) == 0:
+                        continue
+
+                    if not self._map.is_player_on_team_with(threats[0].threatPlayer, self.targetPlayer) and self.targetPlayer != -1 and not self.territories.is_tile_in_friendly_territory(tile):
+                        continue
+
+                    if len(threatsWeCareAbout) >= limit:
+                        skippedIntercepts.append(tile)
+                        continue
+
+                    with self.perf_timer.begin_move_event(f'INTERCEPT Ensure threat army analysis @{str(tile)}') as moveEvent:
+                        num = 0
+                        for threat in threats:
+                            if self.army_interceptor.ensure_threat_army_analysis(threat):
+                                num += 1
+                        moveEvent.event_name = f'INTERCEPT Ensure threat army analysis rebuild of {num} threats @{str(tile)}'
+
+                    threatsWeCareAbout.append((tile, threats))
+                    threatsWeCareAboutByTile[tile] = threats
+
+            for tile, threats in threatsWeCareAbout:
                 if len(threats) == 0:
                     continue
 
-                blockingTiles = self.get_intercept_blocking_tiles_for_split_hinting(tile, threatsByTile)
-                if SearchUtils.any_where(threats, lambda t: t.threatType == ThreatType.Kill):
-                    self.blocking_tile_info = blockingTiles
-
                 if not self._map.is_player_on_team_with(threats[0].threatPlayer, self.targetPlayer) and self.targetPlayer != -1 and not self.territories.is_tile_in_friendly_territory(tile):
                     continue
+
+                with self.perf_timer.begin_move_event(f'INTERCEPT Blocking tiles @{str(tile)}'):
+                    blockingTiles = self.get_intercept_blocking_tiles_for_split_hinting(tile, threatsWeCareAboutByTile)
+                    if SearchUtils.any_where(threats, lambda t: t.threatType == ThreatType.Kill):
+                        self.blocking_tile_info = blockingTiles
 
                 with self.perf_timer.begin_move_event(f'INTERCEPT @{str(tile)}'):
                     shouldBypass = self.should_bypass_army_danger(tile)
                     if shouldBypass:
                         continue
-                    plan = self.army_interceptor.get_interception_plan(threats, turnsLeftInCycle=self.timings.get_turns_left_in_cycle(self._map.turn), otherThreatsBlockingTiles=blockingTiles)
+                    blocks = blockingTiles
+                    if blocks is None:
+                        blocks = self.blocking_tile_info
+                    elif blocks != self.blocking_tile_info:
+                        for t, values in self.blocking_tile_info.items():
+                            existing = blocks.get(t, None)
+                            if not existing:
+                                blocks[t] = values
+                            else:
+                                for blockedDest in values.blocked_destinations:
+                                    existing.add_blocked_destination(blockedDest)
+                    plan = self.army_interceptor.get_interception_plan(threats, turnsLeftInCycle=self.timings.get_turns_left_in_cycle(self._map.turn), otherThreatsBlockingTiles=blocks)
                     if plan is not None:
                         interceptions[tile] = plan
+
+            interceptionsEvent.event_name = f'INTERCEPTIONS ({len(threatsByTile)}, skipped {len(skippedIntercepts)})'
+
+        if len(skippedIntercepts) > 0:
+            self.viewInfo.add_info_line(f'SKIPPED {len(skippedIntercepts)} INTERCEPTS OVER LIMIT {limit}! Skipped: {" - ".join([str(t) for t in skippedIntercepts])}')
 
         return interceptions
 
@@ -11080,7 +11132,6 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
     def get_standard_expansion_capture_weight_matrix(self) -> MapMatrix[float]:
         matrix = MapMatrix(self._map, 0.0)
 
-        pathChokes = self.board_analysis.intergeneral_analysis.pathChokes
         innerChokes = self.board_analysis.innerChokes
 
         dontRevealCities = self.targetPlayer != -1 and self.opponent_tracker.winning_on_economy(byRatio=1.05) and not self.opponent_tracker.winning_on_army(byRatio=1.10)
@@ -11147,7 +11198,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             if enExpVal is not None:
                 bonus += enExpVal / 2
 
-            if tile in pathChokes:
+            if self.board_analysis.intergeneral_analysis.is_choke(tile):
                 # bonus points for retaking iChokes
                 bonus += 0.02
 

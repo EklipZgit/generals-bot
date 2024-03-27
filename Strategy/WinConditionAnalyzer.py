@@ -120,7 +120,7 @@ class WinConditionAnalyzer(object):
 
         currentlyOwnedContestedEnCities = [c for c in self.city_analyzer.owned_contested_cities if not self.territories.is_tile_in_friendly_territory(c)]
         for city in self.map.players[self.map.player_index].cities:
-            if city not in currentlyOwnedContestedEnCities and self.board_analysis.intergeneral_analysis.bMap[city.x][city.y] * 2 < self.board_analysis.intergeneral_analysis.aMap[city.x][city.y]:
+            if city not in currentlyOwnedContestedEnCities and self.board_analysis.intergeneral_analysis.bMap[city] * 2 < self.board_analysis.intergeneral_analysis.aMap[city]:
                 currentlyOwnedContestedEnCities.append(city)
 
         baseFrCities = frScores.cityCount - len(currentlyOwnedContestedEnCities)
@@ -278,7 +278,7 @@ class WinConditionAnalyzer(object):
         maxThreat = 0
         maxThreatTurns = 0
         for city in self.map.players[self.map.player_index].cities:
-            isEnemySide = self.board_analysis.intergeneral_analysis.bMap[city.x][city.y] * 1.2 < self.board_analysis.intergeneral_analysis.aMap[city.x][city.y]
+            isEnemySide = self.board_analysis.intergeneral_analysis.bMap[city] * 1.2 < self.board_analysis.intergeneral_analysis.aMap[city]
             isContested = city in self.city_analyzer.owned_contested_cities
 
             if not isEnemySide and not isContested:
@@ -504,7 +504,7 @@ class WinConditionAnalyzer(object):
         return False
 
     def get_tile_dist_to_enemy(self, tile: Tile) -> int:
-        return self.board_analysis.intergeneral_analysis.bMap[tile.x][tile.y]
+        return self.board_analysis.intergeneral_analysis.bMap[tile]
 
     def get_additional_fog_gather_risk(self, gatherNodes: typing.List[GatherTreeNode], asPlayer: int, inTurns: int, forceFogRisk: bool = False) -> int:
         if self.map.is_player_on_team_with(asPlayer, self.map.player_index):

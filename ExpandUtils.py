@@ -22,9 +22,9 @@ def get_expansion_single_knapsack_path_trimmed(
         paths: typing.List[typing.Tuple[int, int, Path]],
         targetPlayers: typing.List[int],
         turns: int,
-        enemyDistMap: typing.List[typing.List[int]],
+        enemyDistMap: MapMatrix[int],
         calculateTrimmable: bool,
-        territoryMap: typing.List[typing.List[int]],
+        territoryMap: MapMatrix[int],
         viewInfo: ViewInfo,
 ) -> typing.Tuple[Path | None, typing.List[Path]]:
     """
@@ -45,15 +45,14 @@ def get_expansion_single_knapsack_path_trimmed(
         for friendlyCityCount, tilesCaptured, path in paths:
             tailNode = path.tail
             trimCount = 0
-            while tailNode.tile.player == -1 and territoryMap[tailNode.tile.x][
-                tailNode.tile.y] not in targetPlayers and tailNode.tile.discovered:
+            while tailNode.tile.player == -1 and territoryMap[tailNode.tile] not in targetPlayers and tailNode.tile.discovered:
                 trimCount += 1
                 tailNode = tailNode.prev
             if trimCount > 0:
                 trimmable[path.start.tile] = (path, trimCount)
 
             if viewInfo:
-                viewInfo.bottomRightGridText[path.start.tile.x][path.start.tile.y] = f'cap{tilesCaptured:.1f}'
+                viewInfo.bottomRightGridText[path.start.tile] = f'cap{tilesCaptured:.1f}'
                 # viewInfo.paths.appendleft(PathColorer(path, 180, 51, 254, alpha, alphaDec, minAlpha))
 
     intFactor = 100
@@ -143,7 +142,7 @@ def path_has_cities_and_should_wait(
         path: Path | None,
         friendlyPlayers,
         negativeTiles: typing.Set[Tile],
-        territoryMap: typing.List[typing.List[int]],
+        territoryMap: MapMatrix[int],
         remainingTurns: int
 ) -> bool:
     cityCount = 0
@@ -174,7 +173,7 @@ def path_has_cities_and_should_wait(
             tileRealArmyCost = 0 - tile.army
         elif tile.isNeutral:
             tileArmyCost = tileRealArmyCost
-            tileProbPlayer = territoryMap[tile.x][tile.y]
+            tileProbPlayer = territoryMap[tile]
             if tileProbPlayer == -1:
                 for m in tile.adjacents:
                     if not m.isNeutral:
@@ -294,9 +293,9 @@ def _get_tile_path_value(
 
         if tile.player in targetPlayers:
             value += 2.1
-        elif not tile.discovered and territoryMap[tile.x][tile.y] in targetPlayers:
+        elif not tile.discovered and territoryMap[tile] in targetPlayers:
             value += 1.45
-        elif not tile.visible and territoryMap[tile.x][tile.y] in targetPlayers:
+        elif not tile.visible and territoryMap[tile] in targetPlayers:
             value += 1.2
         elif tile.player == -1:
             value += 1.0
@@ -314,10 +313,10 @@ def _get_tile_path_value(
         # elif lastTile is not None and tile.player == searchingPlayer:
         #     value -= 0.05
 
-        sourceEnDist = enemyDistMap[lastTile.x][lastTile.y]
-        destEnDist = enemyDistMap[tile.x][tile.y]
-        sourceGenDist = generalDistMap[lastTile.x][lastTile.y]
-        destGenDist = generalDistMap[tile.x][tile.y]
+        sourceEnDist = enemyDistMap[lastTile]
+        destEnDist = enemyDistMap[tile]
+        sourceGenDist = generalDistMap[lastTile]
+        destGenDist = generalDistMap[tile]
 
         sourceDistSum = sourceEnDist + sourceGenDist
         destDistSum = destEnDist + destGenDist
@@ -378,7 +377,7 @@ def knapsack_multi_paths(
         remainingTurns: int,
         pathsCrossingTiles,
         multiPathDict,
-        territoryMap: typing.List[typing.List[int]],
+        territoryMap: MapMatrix[int],
         postPathEvalFunction: typing.Callable[[Path, typing.Set[Tile]], float],
         negativeTiles: typing.Set[Tile],
         tryAvoidSet: typing.Set[Tile],
@@ -478,7 +477,7 @@ def knapsack_multi_paths_no_crossover(
         remainingTurns: int,
         pathsCrossingTiles,
         multiPathDict: typing.Dict[Tile, typing.Dict[int, typing.Tuple[int, Path]]],
-        territoryMap: typing.List[typing.List[int]],
+        territoryMap: MapMatrix[int],
         postPathEvalFunction: typing.Callable[[Path, typing.Set[Tile]], float],
         negativeTiles: typing.Set[Tile],
         tryAvoidSet: typing.Set[Tile],
@@ -647,7 +646,7 @@ def get_optimal_expansion(
         targetPlayer: int,
         turns: int,
         boardAnalysis: BoardAnalyzer,
-        territoryMap: typing.List[typing.List[int]],
+        territoryMap: MapMatrix[int],
         negativeTiles: typing.Set[Tile] = None,
         leafMoves: typing.Union[None, typing.List[Move]] = None,
         viewInfo: ViewInfo = None,
@@ -852,7 +851,7 @@ def get_optimal_expansion(
                     # enemyExpansionValue,
                     # enemyExpansionTileSet
                 ) = currentPriorityObject
-                nextTerritory = territoryMap[nextTile.x][nextTile.y]
+                nextTerritory = territoryMap[nextTile]
                 armyRemaining = 0 - negArmyRemaining
                 distSoFar += 1
                 fakeDistSoFar += 1
@@ -869,11 +868,11 @@ def get_optimal_expansion(
                 nextTileSet.add(nextTile)
 
                 # only reward closeness to enemy up to a point then penalize it
-                cutoffEnemyDist = abs(enemyDistMap[nextTile.x][nextTile.y] - enemyDistPenaltyPoint)
+                cutoffEnemyDist = abs(enemyDistMap[nextTile] - enemyDistPenaltyPoint)
                 addedPriority = 3 * (0 - cutoffEnemyDist ** 0.5 + 1)
 
                 # reward away from our general but not THAT far away
-                cutoffGenDist = abs(generalDistMap[nextTile.x][nextTile.y])
+                cutoffGenDist = abs(generalDistMap[nextTile])
                 addedPriority += 3 * (cutoffGenDist ** 0.5 - 1)
 
                 # negTileCapturePoints += cutoffEnemyDist / 100
@@ -913,7 +912,7 @@ def get_optimal_expansion(
                         targetPlayer != -1
                         and (
                                 nextTile.player in targetPlayers
-                                or (not nextTile.visible and respectTerritoryMap and territoryMap[nextTile.x][nextTile.y] in targetPlayers)
+                                or (not nextTile.visible and respectTerritoryMap and territoryMap[nextTile] in targetPlayers)
                         )
                 ):
                     # if nextTile.player == -1:
@@ -1063,11 +1062,11 @@ def get_optimal_expansion(
         tileMinValueCutoff = 2
         remainingTurns = turns
         sortedTiles = sorted(list(where(generalPlayer.tiles, lambda tile: tile.army > tileMinValueCutoff and tile not in negativeTiles)),
-                             key=lambda tile: (0 - tile.army, enemyDistMap[tile.x][tile.y]))
+                             key=lambda tile: (0 - tile.army, enemyDistMap[tile]))
         if len(sortedTiles) <= 4:
             tileMinValueCutoff = 1
             sortedTiles = sorted(list(where(generalPlayer.tiles, lambda tile: tile.army > tileMinValueCutoff and tile not in negativeTiles)),
-                                 key=lambda tile: (0 - tile.army, enemyDistMap[tile.x][tile.y]))
+                                 key=lambda tile: (0 - tile.army, enemyDistMap[tile]))
 
         if len(sortedTiles) == 0:
             return None, []
@@ -1343,13 +1342,15 @@ def get_optimal_expansion(
             for tile in negativeTiles:
                 startCopy.pop(tile, None)
 
+            maxDepth = 25
+
             newPathDict = SearchUtils.breadth_first_dynamic_max_per_tile_per_distance(
                 map,
                 startCopy,
                 valueFunc,
                 searchTime,  # TODO not timeCap because we should find lots at once...?
                 remainingTurns,
-                maxDepth=min(remainingTurns, 15),
+                maxDepth=min(remainingTurns, maxDepth),
                 # maxDepth=remainingTurns,
                 noNeutralCities=True,
                 negativeTiles=negativeTiles,
@@ -1361,7 +1362,7 @@ def get_optimal_expansion(
                 fullOnly=False,
                 # fullOnlyArmyDistFunc=fullOnly_func,
                 # boundFunc=boundFunc,
-                noLog=True)
+                noLog=not DebugHelper.IS_DEBUGGING)
 
             newPaths = []
             for tile, tilePaths in newPathDict.items():
@@ -1829,7 +1830,7 @@ def _execute_expansion_gather_to_borders(
 
             initialDistance = 0
             if distPriorityMap is not None:
-                initialDistance = distPriorityMap[tile.x][tile.y]
+                initialDistance = distPriorityMap[tile]
             prioObj = (
                 0 - initialDistance,
                 startingDist,
@@ -2205,8 +2206,8 @@ def should_consider_path_move_half(
         path: Path,
         negativeTiles: typing.Set[Tile],
         player: int,
-        playerDistMap: typing.List[typing.List[int]],
-        enemyDistMap: typing.List[typing.List[int]],
+        playerDistMap: MapMatrix[int],
+        enemyDistMap: MapMatrix[int],
         withinGenPathThreshold: int,
         tilesOnMainPathDist: int):
     # if is perfect amount to capture dest but not other dest
@@ -2250,7 +2251,7 @@ def should_consider_path_move_half(
         max(16, map.players[player].standingArmy) ** 0.5)  # no smaller than sqrt(16) (4) can move half.
 
     pathTile: Tile = path.start.tile
-    pathTileDistSum = enemyDistMap[pathTile.x][pathTile.y] + playerDistMap[pathTile.x][pathTile.y]
+    pathTileDistSum = enemyDistMap[pathTile] + playerDistMap[pathTile]
 
     def filter_alternate_movables(tile: Tile):
         if tile.isMountain:
@@ -2264,7 +2265,7 @@ def should_consider_path_move_half(
         if tile.player == player:
             return False
 
-        tileDistSum = enemyDistMap[tile.x][tile.y] + playerDistMap[tile.x][tile.y]
+        tileDistSum = enemyDistMap[tile] + playerDistMap[tile]
         tileNotTooFarToFlank = tileDistSum < withinGenPathThreshold
         tileShouldTakeEverything = tileDistSum < tilesOnMainPathDist
 
@@ -2295,7 +2296,7 @@ def should_consider_path_move_half(
             if altTile == tile:
                 return
 
-            altTileDistSum = enemyDistMap[altTile.x][altTile.y] + playerDistMap[altTile.x][altTile.y]
+            altTileDistSum = enemyDistMap[altTile] + playerDistMap[altTile]
             movingTowardPath = altTileDistSum < tileDistSum
             movingParallelToPath = altTileDistSum == tileDistSum
             if movingTowardPath or tileShouldTakeEverything or (tileNotTooFarToFlank and movingParallelToPath):

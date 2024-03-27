@@ -14,7 +14,7 @@ from collections import deque
 
 import SearchUtils
 from ArmyTracker import Army
-from base.client.map import Tile, MapBase
+from base.client.map import Tile, MapBase, TILE_OBSTACLE
 from MapMatrix import MapMatrix, MapMatrixSet
 
 
@@ -39,7 +39,7 @@ class ArmyAnalyzer:
     TimeSpentInInit: float = 0.0
     NumAnalysisBuilt: int = 0
 
-    def __init__(self, map, armyA: Tile | Army, armyB: Tile | Army):
+    def __init__(self, map: MapBase, armyA: Tile | Army, armyB: Tile | Army):
         startTime = time.perf_counter()
         self.map: MapBase = map
         if type(armyA) is Army:
@@ -71,9 +71,8 @@ class ArmyAnalyzer:
 
         logbook.info(f"ArmyAnalyzer analyzing {self.tileA} and {self.tileB}")
 
-        # self.distance: int = self.map.get_distance_between(self.tileA, self.tileB)
-        self.aMap = SearchUtils.build_distance_map(self.map, [self.tileA], None)
-        self.bMap = SearchUtils.build_distance_map(self.map, [self.tileB], None)
+        self.aMap: MapMatrix[int] = map.distance_mapper.get_tile_dist_matrix(self.tileA)
+        self.bMap: MapMatrix[int] = map.distance_mapper.get_tile_dist_matrix(self.tileB)
         ArmyAnalyzer.TimeSpentInInit += time.perf_counter() - startTime
 
         self.scan()
@@ -114,62 +113,127 @@ class ArmyAnalyzer:
         self.build_intercept_chokes()
         ArmyAnalyzer.TimeSpentBuildingInterceptChokes += time.perf_counter() - start
 
+    # This is heavily optimized at this point.
     def build_chokes_and_pathways(self):
-        chokeCounterMap = {}
         minPath = INF_PATH_WAY
         for tile in self.map.pathableTiles:
             # build the pathway
-            path = self.pathWayLookupMatrix[tile]
-            if path is None:
-                path = self.build_pathway(tile)
-                self.pathWays.append(path)
-                if path.distance < minPath.distance:
-                    minPath = path
+            path = self.pathWayLookupMatrix._grid[tile.x][tile.y]
+            if path:
+                continue
 
-            # map out choke counts. TODO i don't think this pathChoke stuff works :/ make sure to visualize it well and debug.
-            chokeKey = self._get_choke_key(path, tile)
+            path = self.build_pathway(tile)
+            self.pathWays.append(path)
+            if path.distance < minPath.distance:
+                minPath = path
 
-            existingChokeCount = chokeCounterMap.get(chokeKey, 0)
-            chokeCounterMap[chokeKey] = existingChokeCount + 1
+            chokeCounterMap = {}
+            for pathTile in path.tiles:
+                if pathTile.isMountain or (pathTile.tile == TILE_OBSTACLE and not pathTile.discovered and not pathTile.isCity) or (pathTile.isCity and pathTile.player == -1):
+                    continue
+
+                chokeKey = self._get_choke_key(pathTile)
+                chokeCounterMap[chokeKey] = chokeCounterMap.get(chokeKey, 0) + 1
+
+            for pathTile in path.tiles:
+                if pathTile.isMountain or (pathTile.tile == TILE_OBSTACLE and not pathTile.discovered and not pathTile.isCity) or (pathTile.isCity and pathTile.player == -1):
+                    continue
+                self.chokeWidths._grid[pathTile.x][pathTile.y] = chokeCounterMap[self._get_choke_key(pathTile)]
 
         self.shortestPathWay = minPath
+    # # stack
+    # def build_pathway(self, tile) -> PathWay:
+    #     aMap = self.aMap
+    #     bMap = self.bMap
+    #     lookupMatrix = self.pathWayLookupMatrix
+    #
+    #     distance = aMap[tile] + bMap[tile]
+    #     # logbook.info("  building pathway from tile {} distance {}".format(tile.toString(), distance))
+    #     path = PathWay(distance=distance)
+    #     pathTiles = path.tiles
+    #     path.seed_tile = tile
+    #
+    #     queue = deque()
+    #     queue.appendleft(tile)
+    #     while queue:
+    #         currentTile = queue.pop()
+    #         if lookupMatrix._grid[currentTile.x][currentTile.y]:
+    #             continue
+    #         currentTileDistance = aMap[currentTile] + bMap[currentTile]
+    #         if currentTileDistance != distance:
+    #             continue
+    #
+    #         # logbook.info("    adding tile {}".format(currentTile.toString()))
+    #         pathTiles.add(currentTile)
+    #         lookupMatrix[currentTile] = path
+    #
+    #         for adjacentTile in currentTile.movable:
+    #             queue.append(adjacentTile)
+    #     return path
 
-        for path in self.pathWays:
-            for tile in path.tiles:
-                if tile.isObstacle:
-                    continue
-                chokeKey = self._get_choke_key(path, tile)
-                width = chokeCounterMap[chokeKey]
-                self.chokeWidths[tile] = width
+    # def build_pathway(self, tile) -> PathWay:
+    #     aMap = self.aMap
+    #     bMap = self.bMap
+    #     lookupMatrix = self.pathWayLookupMatrix
+    #
+    #     distance = aMap[tile] + bMap[tile]
+    #     # logbook.info("  building pathway from tile {} distance {}".format(tile.toString(), distance))
+    #     path = PathWay(distance=distance)
+    #     pathTiles = path.tiles
+    #     path.seed_tile = tile
+    #
+    #     queue = deque()
+    #     queue.appendleft(tile)
+    #     while queue:
+    #         currentTile = queue.pop()
+    #         currentTileDistance = aMap[currentTile] + bMap[currentTile]
+    #         if currentTileDistance != distance:
+    #             continue
+    #         if currentTile in lookupMatrix:
+    #             continue
+    #
+    #         # logbook.info("    adding tile {}".format(currentTile.toString()))
+    #         pathTiles.add(currentTile)
+    #         lookupMatrix[currentTile] = path
+    #
+    #         for adjacentTile in currentTile.movable:
+    #             queue.appendleft(adjacentTile)
+    #     return path
 
+
+    # recurse
     def build_pathway(self, tile) -> PathWay:
-        distance = self.aMap[tile.x][tile.y] + self.bMap[tile.x][tile.y]
+        distance = self.aMap._grid[tile.x][tile.y] + self.bMap._grid[tile.x][tile.y]
         #logbook.info("  building pathway from tile {} distance {}".format(tile.toString(), distance))
         path = PathWay(distance=distance)
         path.seed_tile = tile
 
-        queue = deque()
-        queue.appendleft(tile)
-        while queue:
-            currentTile = queue.pop()
-            if currentTile in self.pathWayLookupMatrix:
-                continue
-            currentTileDistance = self.aMap[currentTile.x][currentTile.y] + self.bMap[currentTile.x][currentTile.y]
-            if currentTileDistance == distance:
-                #logbook.info("    adding tile {}".format(currentTile.toString()))
-                path.add_tile(currentTile)
-                self.pathWayLookupMatrix[currentTile] = path
+        self._build_pathway_recurse(path, tile)
 
-                for adjacentTile in currentTile.movable:
-                    queue.appendleft(adjacentTile)
         return path
 
-    def _get_choke_key(self, path: PathWay, tile: Tile) -> typing.Tuple:
-        # including path in the key forces the 'chokes' to be part of the same pathway.
-        return path, self.aMap[tile.x][tile.y], self.bMap[tile.x][tile.y]
+    # I hate all of these .grid hacks, but they are like 30% faster sadly..
+    def _build_pathway_recurse(self, path: PathWay, currentTile: Tile):
+        if self.pathWayLookupMatrix._grid[currentTile.x][currentTile.y]:
+            return
+        if self.aMap._grid[currentTile.x][currentTile.y] + self.bMap._grid[currentTile.x][currentTile.y] != path.distance:
+            return
 
-        # return self.aMap[tile.x][tile.y], self.bMap[tile.x][tile.y]
-        # return path.distance, self.aMap[tile.x][tile.y], self.bMap[tile.x][tile.y]
+        #logbook.info("    adding tile {}".format(currentTile.toString()))
+        path.tiles.add(currentTile)
+        self.pathWayLookupMatrix._grid[currentTile.x][currentTile.y] = path
+
+        for adjacentTile in currentTile.movable:
+            if self.pathWayLookupMatrix._grid[adjacentTile.x][adjacentTile.y]:
+                continue
+            self._build_pathway_recurse(path, adjacentTile)
+
+    def _get_choke_key(self, tile: Tile) -> typing.Tuple:
+        # including path in the key forces the 'chokes' to be part of the same pathway.
+        return self.aMap._grid[tile.x][tile.y], self.bMap._grid[tile.x][tile.y]
+
+        # return self.aMap[tile], self.bMap[tile]
+        # return path.distance, self.aMap[tile], self.bMap[tile]
 
     def _get_tile_middle_width(self, tile: Tile, path: PathWay, width: int) -> int:
         # if width == 1:
@@ -185,7 +249,7 @@ class ArmyAnalyzer:
         q.append(self.tileB)
 
         visited = MapMatrixSet(self.map)
-        pw = self.pathWayLookupMatrix[self.tileA]
+        pw = self.pathWayLookupMatrix._grid[self.tileA.x][self.tileA.y]
         if pw is None:
             return
 
@@ -199,7 +263,7 @@ class ArmyAnalyzer:
                 continue
 
             visited.add(nextTile)
-            nextBDist = self.bMap[nextTile.x][nextTile.y]
+            nextBDist = self.bMap[nextTile]
 
             pw = self.pathWayLookupMatrix[nextTile]
 
@@ -235,22 +299,30 @@ class ArmyAnalyzer:
             if len(curSet) == 1:
                 # then this is a primary choke
                 zeroChokes.append(curSet[0])
+                # for t in curSet[0].movable:
+                #     if not t.isObstacle:
+                #         oneChokes.add(t)
                 continue
             if len(curSet) == 2:
                 first = curSet[0]
-                if curSet[1] in first.adjacents:
-                    firstDist = self.bMap[first.x][first.y]
-                    # then this is likely a 1-away choke, verify and find common one-choke tiles
-                    anyOne = False
-                    for t in curSet[0].movable:
-                        # this forces us to be directional with the save, you can only claim this chase-intercept when arriving from the front, not the back, of a choke.
-                        if self.bMap[t.x][t.y] < firstDist:
-                            continue
-                        if t in curSet[1].movable:
-                            oneChokes.add(t)
-                            anyOne = True
-                    if anyOne:
+                firstDist = self.bMap[first]
+                # then this is likely a 1-away choke, verify and find common one-choke tiles
+                anyOne = False
+                for t in curSet[0].movable:
+                    # this forces us to be directional with the save, you can only claim this chase-intercept when arriving from the front, not the back, of a choke.
+                    # TODO this breaks test_should_see_split_path_blocker_as_mid_choke, we need to intercept with a one-tile from behind, there.
+                    # if self.bMap[t] < firstDist:
+                    #     continue
+                    if t.isObstacle:
                         continue
+                    if t in curSet[1].movable:
+                        oneChokes.add(t)
+                        anyOne = True
+                if anyOne:
+                    continue
+
+            # TODO there is a split if we cannot build a chain of adjacents..?
+
             # logbook.info(f'at dist {r}, found {len(curSet)} tiles')
             #
             # for tile in curSet:
@@ -277,12 +349,27 @@ class ArmyAnalyzer:
                 return None
             return dist + 1, interceptMoves + 1, tile
 
-        startTiles = {}
+        startTiles: typing.Dict[Tile, typing.Tuple[int, typing.Tuple[int, int, Tile | None]]] = {}
+        """Tile -> (startDist, (prioStartDist, interceptMoves, fromTile))"""
+
         # oneChokes come first because we must overwrite them with zeroChokes, if the zeroChoke is also a oneChoke
         for oneChoke in oneChokes:
             # oneChoke can guaranteed intercept
             startTiles[oneChoke] = 1, (1, 0, None)
+
+        # for zeroChoke in zeroChokes:
+        #     #... this does nothing except lie about the intercept moves
+        #     for tile in zeroChoke.movable:
+        #         if tile.isObstacle:
+        #             continue
+        #         startTiles[tile] = 0, (0, 0, None)
+
+        furthestZeroChoke = 0
         for zeroChoke in zeroChokes:
+            if zeroChoke != self.tileA:
+                dist = self.bMap[zeroChoke]
+                if dist > furthestZeroChoke:
+                    furthestZeroChoke = dist
             # normally we can reach a zero choke one turn behind our opponent and be safe.
             turn = -1
             # if zeroChoke.isGeneral:
@@ -304,10 +391,13 @@ class ArmyAnalyzer:
                     if existingVal is not None:
                         self.interceptChokes[tile] = existingVal + 1
 
-        for icTile in self.map.pathableTiles:
+        for icTile in self.map.reachableTiles:
             chokeDist = self.interceptChokes[icTile]
             if chokeDist is not None:
-                bDist = self.bMap[icTile.x][icTile.y]
+                bDist = self.bMap[icTile]
+                # anything above our closest choke, we can move in by 1
+                # if bDist < furthestZeroChoke:
+                #     bDist += 1
                 interceptWorstCaseDist = self.interceptDistances[icTile]
                 interceptTurns = bDist - chokeDist - interceptWorstCaseDist
                 self.interceptTurns[icTile] = interceptTurns

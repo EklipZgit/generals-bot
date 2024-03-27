@@ -10,7 +10,7 @@ import typing
 from collections import deque
 from enum import Enum
 
-from MapMatrix import MapMatrixSet
+from MapMatrix import MapMatrixSet, MapMatrix
 from base.Colors import *
 
 from ArmyTracker import Army, ArmyTracker
@@ -21,7 +21,7 @@ from Directives import Timings
 from Path import Path
 from StrategyModels import CycleStatsData
 from Territory import TerritoryClassifier
-from base.client.map import Tile
+from base.client.map import Tile, MapBase
 
 
 class TargetStyle(Enum):
@@ -46,10 +46,11 @@ class PathColorer(object):
 
 
 class ViewInfo(object):
-    def __init__(self, countHist, cols, rows):
+    def __init__(self, countHist, map: MapBase):
         # list of true/false matrixes and the color to color the border
         self._divisions: typing.List[typing.Tuple[typing.Container, typing.Tuple[int, int, int], int]] = []
         self._zones: typing.List[typing.Tuple[typing.Container, typing.Tuple[int, int, int], int]] = []
+        self.map: MapBase = map
         # Draws the red target circles
 
         # self.ekBot.dump_turn_data_to_string()
@@ -87,16 +88,16 @@ class ViewInfo(object):
         # per-tile int that darkens the red 'evaluated' X drawn on evaluated tiles.
         self.evaluatedGrid: typing.List[typing.List[int]] = []
         self.infoText = "(replace with whatever text here)"
-        self.cols = cols
-        self.rows = rows
+        self.cols = map.cols
+        self.rows = map.rows
         self.paths: typing.Deque[PathColorer] = deque()
-        self.topRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
-        self.midRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
-        self.bottomMidRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
-        self.bottomRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
-        self.bottomLeftGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
-        self.bottomMidLeftGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
-        self.midLeftGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
+        self.topRightGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
+        self.midRightGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
+        self.bottomMidRightGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
+        self.bottomRightGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
+        self.bottomLeftGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
+        self.bottomMidLeftGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
+        self.midLeftGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
         self.lastMoveDuration = 0.0
         self.addlTimingsLineText: str = ""
         self.addlInfoLines: typing.List[str] = []
@@ -144,13 +145,13 @@ class ViewInfo(object):
         self.timings: Timings | None = None
         self.allInCounter: int = 0
         self.targetPlayer: int = -1
-        self.topRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
-        self.midRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
-        self.bottomMidRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
-        self.bottomRightGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
-        self.bottomLeftGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
-        self.bottomMidLeftGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
-        self.midLeftGridText = [[None for y in range(self.rows)] for x in range(self.cols)]
+        self.topRightGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
+        self.midRightGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
+        self.bottomMidRightGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
+        self.bottomRightGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
+        self.bottomLeftGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
+        self.bottomMidLeftGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
+        self.midLeftGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
         # countHist = len(self.redTargetedTileHistory)
         # for i in range(countHist):
         #     if (i == countHist - 2):

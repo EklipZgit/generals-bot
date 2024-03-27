@@ -250,7 +250,7 @@ class GeneralPredictionTests(TestBase):
 
         targPath = bot.shortest_path_to_target_player
         endTile = targPath.tail.tile
-        emergenceVal = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][endTile.x][endTile.y]
+        emergenceVal = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][endTile]
 
         self.assertGreater(emergenceVal, 10, f'target player path ending in {str(endTile)} did not end at the high emergence new prediction.')
 
@@ -297,7 +297,7 @@ class GeneralPredictionTests(TestBase):
 
             targPath = bot.shortest_path_to_target_player
             endTile = targPath.tail.tile
-            emergenceVal = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][endTile.x][endTile.y]
+            emergenceVal = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][endTile]
 
             self.assertGreater(emergenceVal, 10, f'target player path ending in {str(endTile)} did not end at the high emergence new prediction.')
 
@@ -425,9 +425,9 @@ class GeneralPredictionTests(TestBase):
         self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][closerTile])
         self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][impossibleTile])
 
-        emergenceValFar = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][farTile.x][farTile.y]
-        emergenceValReal = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][realEnGenSpawn.x][realEnGenSpawn.y]
-        emergenceValClose = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][closerTile.x][closerTile.y]
+        emergenceValFar = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][farTile]
+        emergenceValReal = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][realEnGenSpawn]
+        emergenceValClose = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][closerTile]
 
         self.assertLess(emergenceValReal, 70)
         self.assertLess(emergenceValFar, 70)
@@ -469,9 +469,9 @@ class GeneralPredictionTests(TestBase):
         self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][closerTile])
         self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][impossibleTile])
 
-        emergenceValFar = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][farTile.x][farTile.y]
-        emergenceValReal = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][realEnGenSpawn.x][realEnGenSpawn.y]
-        emergenceValClose = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][closerTile.x][closerTile.y]
+        emergenceValFar = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][farTile]
+        emergenceValReal = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][realEnGenSpawn]
+        emergenceValClose = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][closerTile]
 
         self.assertLess(emergenceValReal, 70)
         self.assertLess(emergenceValFar, 70)
@@ -513,9 +513,9 @@ class GeneralPredictionTests(TestBase):
         self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][closerTile])
         self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][impossibleTile])
 
-        emergenceValFar = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][farTile.x][farTile.y]
-        emergenceValReal = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][realEnGenSpawn.x][realEnGenSpawn.y]
-        emergenceValClose = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][closerTile.x][closerTile.y]
+        emergenceValFar = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][farTile]
+        emergenceValReal = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][realEnGenSpawn]
+        emergenceValClose = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][closerTile]
 
         self.assertLess(emergenceValReal, 70)
         self.assertLess(emergenceValFar, 70)
@@ -532,7 +532,7 @@ class GeneralPredictionTests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         bot = self.get_debug_render_bot(simHost, general.player)
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][enemyGeneral.x][enemyGeneral.y] = 0
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][enemyGeneral] = 0
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()

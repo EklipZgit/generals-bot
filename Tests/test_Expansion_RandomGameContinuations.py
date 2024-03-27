@@ -18,7 +18,7 @@ class ExpansionTests(TestBase):
     ) -> typing.Tuple[Path | None, typing.List[Path]]:
         targetPlayer = enemyGeneral.player
 
-        # self.render_view_info(map, ViewInfo("h", map.cols, map.rows))
+        # self.render_view_info(map, ViewInfo("h", map))
         # self.begin_capturing_logging()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=mapVision, allAfkExceptMapPlayer=True)
         bot = self.get_debug_render_bot(simHost, general.player)

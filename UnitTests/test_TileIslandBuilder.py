@@ -141,10 +141,10 @@ class TileIslandBuilderUnitTests(TestBase):
             viewInfo.add_map_division(island.tile_set, color, alpha=200)
             if island.name:
                 for tile in island.tile_set:
-                    if viewInfo.bottomRightGridText[tile.x][tile.y]:
-                        viewInfo.midRightGridText[tile.x][tile.y] = island.name
+                    if viewInfo.bottomRightGridText[tile]:
+                        viewInfo.midRightGridText[tile] = island.name
                     else:
-                        viewInfo.bottomRightGridText[tile.x][tile.y] = island.name
+                        viewInfo.bottomRightGridText[tile] = island.name
 
             viewInfo.add_info_line_no_log(f'{island.team}: island {island.name} - {island.sum_army}a/{island.tile_count}t ({island.sum_army_all_adjacent_friendly}a/{island.tile_count_all_adjacent_friendly}t) {str(island.tile_set)}')
 

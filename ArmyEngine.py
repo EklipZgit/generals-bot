@@ -553,8 +553,8 @@ class ArmyEngine(object):
         closestFrSaveTile = None
         closestFrThreatTile = None
         for tile, simTile in boardState.friendly_living_armies.items():
-            distToEnemy = self.board_analysis.intergeneral_analysis.bMap[tile.x][tile.y]
-            distToGen = self.board_analysis.intergeneral_analysis.aMap[tile.x][tile.y]
+            distToEnemy = self.board_analysis.intergeneral_analysis.bMap[tile]
+            distToGen = self.board_analysis.intergeneral_analysis.aMap[tile]
             if distToGen < closestFrSave:
                 closestFrSave = distToGen
                 closestFrSaveTile = tile
@@ -568,8 +568,8 @@ class ArmyEngine(object):
         closestEnSaveTile = None
         closestEnThreatTile = None
         for tile, simTile in boardState.enemy_living_armies.items():
-            distToEnemy = self.board_analysis.intergeneral_analysis.bMap[tile.x][tile.y]
-            distToGen = self.board_analysis.intergeneral_analysis.aMap[tile.x][tile.y]
+            distToEnemy = self.board_analysis.intergeneral_analysis.bMap[tile]
+            distToGen = self.board_analysis.intergeneral_analysis.aMap[tile]
             if distToEnemy < closestEnSave:
                 closestEnSave = distToEnemy
                 closestEnSaveTile = tile
@@ -673,15 +673,15 @@ class ArmyEngine(object):
         # friendlyArmySizes = 0
         # enemyArmySizes = 0
         # for frArmyTile, frSimArmy in boardState.friendly_living_armies.items():
-        #     distToEnemy = self.board_analysis.intergeneral_analysis.bMap[frSimArmy.source_tile.x][frSimArmy.source_tile.y]
-        #     distToGen = self.board_analysis.intergeneral_analysis.aMap[frSimArmy.source_tile.x][frSimArmy.source_tile.y]
+        #     distToEnemy = self.board_analysis.intergeneral_analysis.bMap[frSimArmy.source_tile]
+        #     distToGen = self.board_analysis.intergeneral_analysis.aMap[frSimArmy.source_tile]
         #     if distToGen - 3 > distToEnemy:
         #         friendlyArmySizes += frSimArmy.army
         #     elif distToGen + 3 > distToEnemy:
         #         friendlyArmySizes += frSimArmy.army // 2
         # for enArmyTile, enSimArmy in boardState.enemy_living_armies.items():
-        #     distToEnemy = self.board_analysis.intergeneral_analysis.bMap[enSimArmy.source_tile.x][enSimArmy.source_tile.y]
-        #     distToGen = self.board_analysis.intergeneral_analysis.aMap[enSimArmy.source_tile.x][enSimArmy.source_tile.y]
+        #     distToEnemy = self.board_analysis.intergeneral_analysis.bMap[enSimArmy.source_tile]
+        #     distToGen = self.board_analysis.intergeneral_analysis.aMap[enSimArmy.source_tile]
         #     if distToEnemy - 3 > distToGen:
         #         enemyArmySizes += enSimArmy.army
         #     elif distToEnemy + 3 > distToGen:

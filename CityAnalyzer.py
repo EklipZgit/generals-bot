@@ -4,6 +4,7 @@ import typing
 import DebugHelper
 import SearchUtils
 from BoardAnalyzer import BoardAnalyzer
+from MapMatrix import MapMatrix
 from SearchUtils import Counter
 from base.client.map import MapBase, Tile, Player
 
@@ -103,7 +104,7 @@ class CityAnalyzer(object):
         if self.map.is_2v2:
             teammate = self.map.players[[t for t in self.map.teammates][0]]
             if not teammate.dead:
-                allyDistMap = SearchUtils.build_distance_map(self.map, [teammate.general])
+                allyDistMap = self.map.distance_mapper.get_tile_dist_matrix(teammate.general)
 
         for tile in self.map.reachableTiles:
             # TODO calculate predicted enemy city locations in fog and explore mountains more in places we would WANT cities to be
@@ -155,8 +156,8 @@ class CityAnalyzer(object):
         for adj in city.movable:
             if adj.isObstacle:
                 continue
-            score.distance_from_player_general = min(score.distance_from_player_general, board_analysis.intergeneral_analysis.aMap[adj.x][adj.y] + 1)
-            score.distance_from_enemy_general = min(score.distance_from_enemy_general, board_analysis.intergeneral_analysis.bMap[adj.x][adj.y] + 1)
+            score.distance_from_player_general = min(score.distance_from_player_general, board_analysis.intergeneral_analysis.aMap[adj] + 1)
+            score.distance_from_enemy_general = min(score.distance_from_enemy_general, board_analysis.intergeneral_analysis.bMap[adj] + 1)
 
         currentShortest = board_analysis.intergeneral_analysis.shortestPathWay.distance
 
@@ -246,7 +247,7 @@ class CityAnalyzer(object):
                 return
 
             tileNewDist = distance + cityDist
-            oldDist = min(tileNewDist + cap, board_analysis.intergeneral_analysis.aMap[curTile.x][curTile.y])
+            oldDist = min(tileNewDist + cap, board_analysis.intergeneral_analysis.aMap[curTile])
             # if positive, we open this tile up, if negative ignore
             tileExplorabilityDifferential = oldDist - tileNewDist
             if tileExplorabilityDifferential >= 0:
@@ -264,13 +265,13 @@ class CityAnalyzer(object):
             self,
             tile: Tile,
             board_analysis: BoardAnalyzer,
-            ally_dist_map: typing.List[typing.List[int]],
+            ally_dist_map: MapMatrix[int],
             teammate: Player,
             score: CityScoreData):
 
-        usDistFromCity = board_analysis.intergeneral_analysis.aMap[tile.x][tile.y]
-        allyDistFromUs = board_analysis.intergeneral_analysis.aMap[teammate.general.x][teammate.general.y]
-        allyDistFromCity = ally_dist_map[tile.x][tile.y]
+        usDistFromCity = board_analysis.intergeneral_analysis.aMap[tile]
+        allyDistFromUs = board_analysis.intergeneral_analysis.aMap[teammate.general]
+        allyDistFromCity = ally_dist_map[tile]
 
         cityDistSum = usDistFromCity + allyDistFromCity
         if DebugHelper.IS_DEBUGGING:

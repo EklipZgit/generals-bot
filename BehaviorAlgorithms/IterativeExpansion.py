@@ -148,7 +148,7 @@ class ArmyFlowExpander(object):
         #     #     # enemyExpansionValue,
         #     #     # enemyExpansionTileSet
         #     # ) = currentPriorityObject
-        #     # nextTerritory = territoryMap[nextTile.x][nextTile.y]
+        #     # nextTerritory = territoryMap[nextTile]
         #
         #     nextPrio.army_gathered -= 1
         #     #

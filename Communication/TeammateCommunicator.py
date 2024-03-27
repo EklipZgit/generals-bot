@@ -211,12 +211,12 @@ class TeammateCommunicator(object):
 
     def determine_leads(
             self,
-            gen_distance_map: typing.List[typing.List[int]],
-            ally_distances: typing.List[typing.List[int]],
+            gen_distance_map: MapMatrix[int],
+            ally_distances: MapMatrix[int],
             targetPlayerExpectedGeneralLocation: Tile
     ):
-        usDist = gen_distance_map[targetPlayerExpectedGeneralLocation.x][targetPlayerExpectedGeneralLocation.y]
-        allyDist = ally_distances[targetPlayerExpectedGeneralLocation.x][targetPlayerExpectedGeneralLocation.y]
+        usDist = gen_distance_map[targetPlayerExpectedGeneralLocation]
+        allyDist = ally_distances[targetPlayerExpectedGeneralLocation]
         if usDist > allyDist + 2:
             if not self.is_defense_lead or not self.coordinated_defense.is_defense_lead:
                 self.is_defense_lead = True

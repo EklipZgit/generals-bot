@@ -10,6 +10,7 @@ import sys
 import traceback
 import typing
 
+from ArmyAnalyzer import ArmyAnalyzer
 from DataModels import Move
 from MapMatrix import MapMatrix
 from PerformanceTimer import PerformanceTimer, NS_CONVERTER
@@ -138,6 +139,8 @@ class BotHostBase(object):
                     self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, currentMap, currentMap.complete)
 
             logbook.info(f'MOVE {currentMap.turn} TIMINGS:\r\n' + '\r\n'.join(moveTimer.get_events_organized_longest_to_shortest(limit=100, indentSize=3)))
+            ArmyAnalyzer.dump_times()
+            ArmyAnalyzer.reset_times()
 
             with moveTimer.begin_event(f'Main thread check for pygame exit'):
                 if self.is_viewer_closed_by_user():

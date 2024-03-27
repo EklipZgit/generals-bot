@@ -10,15 +10,17 @@ import unittest
 from logbook import StreamHandler
 
 import BotHost
+import DebugHelper
 from ArmyAnalyzer import ArmyAnalyzer
-from Behavior import ArmyInterceptor
 import EarlyExpandUtils
 import GatherUtils
 import SearchUtils
 import base
 from ArmyEngine import ArmySimResult
-from ArmyTracker import Army
+from ArmyTracker import Army, ArmyTracker
+from Behavior.ArmyInterceptor import ArmyInterception, ArmyInterceptor
 from BoardAnalyzer import BoardAnalyzer
+from DangerAnalyzer import ThreatType, ThreatObj
 from DataModels import Move
 from DistanceMapperImpl import DistanceMapperImpl
 from MapMatrix import MapMatrix
@@ -349,12 +351,12 @@ class TestBase(unittest.TestCase):
         botTile = bot._map.GetTile(x, y)
 
         def emergenceMarker(t: Tile, dist: int) -> bool:
-            bot.armyTracker.emergenceLocationMap[emergencePlayer][t.x][t.y] = (emergenceAmt * 5) // (dist + 5)
+            bot.armyTracker.emergenceLocationMap[emergencePlayer][t] = (emergenceAmt * 5) // (dist + 5)
             return t.discovered or t.visible
 
         SearchUtils.breadth_first_foreach_dist(bot._map, [botTile], 5, emergenceMarker)
 
-        bot.armyTracker.emergenceLocationMap[emergencePlayer][x][y] += emergenceAmt
+        bot.armyTracker.emergenceLocationMap[emergencePlayer][bot._map.GetTile(x, y)] += emergenceAmt
         bot.timing_cycle_ended()
         bot.target_player_gather_path = None
 
@@ -373,7 +375,7 @@ class TestBase(unittest.TestCase):
             bot.armyTracker.armies[tile] = ent
             tile.army = army.value + 1
             tile.player = army.player
-            ent.expectedPaths = bot.armyTracker.get_army_expected_path(army)
+            ent.expectedPaths = ArmyTracker.get_army_expected_path(bot._map, army, bot.general, bot.armyTracker.player_targets)
 
     def get_test_map(self, tiles: typing.List[typing.List[Tile]], turn: int = 1, player_index: int = 0, dont_set_seen_visible_discovered: bool = False, num_players: int = -1) -> MapBase:
         self._initialize()
@@ -400,27 +402,23 @@ class TestBase(unittest.TestCase):
         map.update_scores(fakeScores)
         map.update_turn(turn)
         map.update(bypassDeltas=True)
+        map.distance_mapper = DistanceMapperImpl(map)
         return map
 
-    def get_empty_weight_map(self, map: MapBase, empty_value = 0):
-        return [[empty_value for y in map.grid] for x in map.grid[0]]
-
-    def get_from_general_weight_map(self, map: MapBase, general: Tile, negate: bool = False):
-        distMap = SearchUtils.build_distance_map_incl_mountains(map, [general])
+    def get_from_general_weight_map(self, map: MapBase, general: Tile, negate: bool = False) -> MapMatrix[int]:
+        distMap = map.distance_mapper.get_tile_dist_matrix(general)
         if negate:
-            for x in range(len(distMap)):
-                for y in range(len(distMap[0])):
-                    distMap[x][y] = 0 - distMap[x][y]
+            for tile in map.get_all_tiles():
+                distMap[tile] = 0 - distMap[tile]
         return distMap
 
-    def get_opposite_general_distance_map(self, map: MapBase, general: Tile, negate: bool = False):
+    def get_opposite_general_distance_map(self, map: MapBase, general: Tile, negate: bool = False) -> MapMatrix[int]:
         furthestTile = self.get_furthest_tile_from_general(map, general)
 
-        furthestMap = SearchUtils.build_distance_map_incl_mountains(map, [furthestTile])
+        furthestMap = map.distance_mapper.get_tile_dist_matrix(furthestTile)
         if negate:
-            for x in range(len(furthestMap)):
-                for y in range(len(furthestMap[0])):
-                    furthestMap[x][y] = 0 - furthestMap[x][y]
+            for tile in map.get_all_tiles():
+                furthestMap[tile] = 0 - furthestMap[tile]
 
         return furthestMap
 
@@ -542,7 +540,7 @@ class TestBase(unittest.TestCase):
         self.render_view_info(map, viewInfo, infoStr)
 
     def render_army_analyzer(self, map: MapBase, analyzer: ArmyAnalyzer):
-        viewInfo = ViewInfo(0, map.cols, map.rows)
+        viewInfo = ViewInfo(0, map)
         board = BoardAnalyzer(map, analyzer.tileA, None)
         board.rebuild_intergeneral_analysis(analyzer.tileB, possibleSpawns=None)
         board.rescan_chokes()
@@ -556,40 +554,40 @@ class TestBase(unittest.TestCase):
             if pathWay is None:
                 if baPw is not None:
                     raise AssertionError(f'board pathway for {str(tile)} did not match og analysis pathway. board {str(baPw)} vs {str(pathWay)}')
-                viewInfo.topRightGridText[tile.x][tile.y] = 'NONE'
-                viewInfo.midRightGridText[tile.x][tile.y] = 'NONE'
+                viewInfo.topRightGridText[tile] = 'NONE'
+                viewInfo.midRightGridText[tile] = 'NONE'
             else:
                 if baPw is None:
                     raise AssertionError(f'board pathway for {str(tile)} did not match og analysis pathway. board {str(baPw)} vs {str(pathWay)}')
-                # viewInfo.midRightGridText[tile.x][tile.y] = f'pd{pathWay.distance}'
-                # viewInfo.topRightGridText[tile.x][tile.y] = f'pc{len(pathWay.tiles)}'
-            # viewInfo.midLeftGridText[tile.x][tile.y] = f'ad{analyzer.aMap[tile.x][tile.y]}'
-            # viewInfo.bottomLeftGridText[tile.x][tile.y] = f'bd{analyzer.bMap[tile.x][tile.y]}'
-            # viewInfo.bottomLeftGridText[tile.x][tile.y] = f'c{analyzer.cMap[tile.x][tile.y]}'
+                # viewInfo.midRightGridText[tile] = f'pd{pathWay.distance}'
+                # viewInfo.topRightGridText[tile] = f'pc{len(pathWay.tiles)}'
+            # viewInfo.midLeftGridText[tile] = f'ad{analyzer.aMap[tile]}'
+            # viewInfo.bottomLeftGridText[tile] = f'bd{analyzer.bMap[tile]}'
+            # viewInfo.bottomLeftGridText[tile] = f'c{analyzer.cMap[tile]}'
 
             if tile in analyzer.chokeWidths:
-                viewInfo.bottomMidRightGridText[tile.x][tile.y] = f'cw{analyzer.chokeWidths[tile]}'
+                viewInfo.bottomMidRightGridText[tile] = f'cw{analyzer.chokeWidths[tile]}'
 
             if tile in analyzer.interceptChokes:
-                viewInfo.bottomMidLeftGridText[tile.x][tile.y] = f'ic{analyzer.interceptChokes[tile]}'
+                viewInfo.bottomMidLeftGridText[tile] = f'ic{analyzer.interceptChokes[tile]}'
 
             if analyzer.is_choke(tile):
                 tileData.append('C')
 
-            if board.outerChokes[tile.x][tile.y]:
+            if board.outerChokes[tile]:
                 tileData.append('O')
 
-            if board.innerChokes[tile.x][tile.y]:
+            if board.innerChokes[tile]:
                 tileData.append('I')
 
             if tile in analyzer.interceptTurns:
-                viewInfo.bottomLeftGridText[tile.x][tile.y] = f'it{analyzer.interceptTurns[tile]}'
+                viewInfo.bottomLeftGridText[tile] = f'it{analyzer.interceptTurns[tile]}'
 
             if tile in analyzer.interceptDistances:
-                viewInfo.midRightGridText[tile.x][tile.y] = f'im{analyzer.interceptDistances[tile]}'
+                viewInfo.midRightGridText[tile] = f'im{analyzer.interceptDistances[tile]}'
 
             if len(tileData) > 0:
-                viewInfo.bottomRightGridText[tile.x][tile.y] = ''.join(tileData)
+                viewInfo.bottomRightGridText[tile] = ''.join(tileData)
 
         viewInfo.add_info_line('LEGEND:')
         viewInfo.add_info_line('  C: = PathChoke')
@@ -616,7 +614,7 @@ class TestBase(unittest.TestCase):
         self.render_moves(map, str(simResult), aMoves, bMoves, addlLines)
 
     def disable_search_time_limits_and_enable_debug_asserts(self):
-        SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING = True
+        SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING = DebugHelper.IS_DEBUGGING
         EarlyExpandUtils.DEBUG_ASSERTS = True
         GatherUtils.USE_DEBUG_ASSERTS = True
         BotHost.FORCE_NO_VIEWER = False
@@ -678,7 +676,7 @@ class TestBase(unittest.TestCase):
         maxDist = 0
         furthestTile: Tile = None
         for tile in map.pathableTiles:
-            tileDist = distMap[tile.x][tile.y]
+            tileDist = distMap[tile]
             if tileDist > maxDist:
                 maxDist = tileDist
                 furthestTile = tile
@@ -743,7 +741,7 @@ class TestBase(unittest.TestCase):
         return enemyGeneral
 
     def get_renderable_view_info(self, map: MapBase) -> ViewInfo:
-        viewInfo = ViewInfo(1, map.cols, map.rows)
+        viewInfo = ViewInfo(1, map)
         viewInfo.playerTargetScores = [0 for p in map.players]
         return viewInfo
 
@@ -896,6 +894,9 @@ class TestBase(unittest.TestCase):
                 countTiles.add(1)
         SearchUtils.breadth_first_foreach(map, [sourceTile], radius, countFunc)
 
+        if countTiles.value == 0:
+            self.fail(f'there were no tiles for player {player} near {sourceTile} ...?')
+
         armyPerTile = sumArmy.value / countTiles.value
         if armyPerTile > requiredAvgTileValue:
             self.fail(f'dist {radius} from {str(sourceTile)} had avg {armyPerTile:.1f} army per tile which exceeded {requiredAvgTileValue}. Had {sumArmy.value} army on {countTiles.value} tiles.')
@@ -955,10 +956,10 @@ class TestBase(unittest.TestCase):
         return largest
 
     def render_sim_map_from_all_perspectives(self, sim):
-        simMapViewInfo = ViewInfo(3, sim.sim_map.cols, sim.sim_map.rows)
+        simMapViewInfo = ViewInfo(3, sim.sim_map)
         self.render_view_info(sim.sim_map, simMapViewInfo, 'Sim Map Raw')
         for player in sim.players:
-            playerViewInfo = ViewInfo(3, player.map.cols, player.map.rows)
+            playerViewInfo = ViewInfo(3, player.map)
             self.render_view_info(player.map, playerViewInfo, f'p{player.index} view')
 
     def ensure_player_tiles_and_scores(
@@ -1038,8 +1039,8 @@ class TestBase(unittest.TestCase):
             if tile.isGeneral:
                 return tile.isObstacle
 
-            tileToGen = genDistMap[tile.x][tile.y]
-            tileToOp = enemyMap[tile.x][tile.y]
+            tileToGen = genDistMap[tile]
+            tileToOp = enemyMap[tile]
 
             if tile.isObstacle and tile not in bannedEnemyTiles:
                 countPlayerAdj = SearchUtils.count(tile.adjacents, lambda t: t.player == general.player)
@@ -1294,7 +1295,10 @@ class TestBase(unittest.TestCase):
                 winner = -1
                 simHost: GameSimulatorHost = None
                 while lastWinTurns < minGameDurationToCount:
-                    self.stop_capturing_logging()
+                    try:
+                        self.stop_capturing_logging()
+                    except:
+                        pass
                     map, general, enemyGen = self.load_map_and_generals(curMapFile, 1, fill_out_tiles=False)
                     map.usernames[a] = 'a'
                     map.usernames[b] = 'b'
@@ -1346,7 +1350,10 @@ class TestBase(unittest.TestCase):
             except:
                 self.begin_capturing_logging()
                 logbook.info(f'error: {traceback.format_exc()}')
-                self.stop_capturing_logging()
+                try:
+                    self.stop_capturing_logging()
+                except:
+                    pass
                 pass
 
         aIndicator = 'A--'
@@ -1399,8 +1406,8 @@ class TestBase(unittest.TestCase):
             raise AssertionError("Unable to produce an enemy general from given map data file...")
 
         if not enemyGen.isGeneral:
-            enemyGen.isGeneral = True
             enemyGen.player = player
+            enemyGen.isGeneral = True
             if enemyGen.army == 0:
                 enemyGen.army = 1
 
@@ -1408,3 +1415,220 @@ class TestBase(unittest.TestCase):
         map.players[enemyGen.player].general = enemyGen
 
         return enemyGen
+
+    def get_interceptor(self, map: MapBase, general: Tile, enemyGeneral: Tile, useDebugLogging: bool = True) -> ArmyInterceptor:
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral)
+
+        self.begin_capturing_logging()
+        interceptor = ArmyInterceptor(map, analysis, useDebugLogging=useDebugLogging)
+        return interceptor
+
+    def get_interception_plan(self, map: MapBase, general: Tile, enemyGeneral: Tile, enTile: Tile | None = None, turnsLeftInCycle: int = -1, useDebugLogging: bool = True, additionalPath: str | None = None, justCityAndGeneralThreats: bool = False) -> ArmyInterception:
+        if turnsLeftInCycle == -1:
+            turnsLeftInCycle = 50 - map.turn % 50
+
+        addlPath = None
+        if additionalPath is not None:
+            addlPath = Path.from_string(map, additionalPath)
+
+        if enTile is None:
+            enTile = max(map.get_all_tiles(), key=lambda t: t.army if t.player == enemyGeneral.player else 0)
+
+        # dangerAnalyzer = DangerAnalyzer(map)
+        # dangerAnalyzer.analyze([general], 40, {})
+
+        targets = [general]
+        targets.extend(map.players[general.player].cities)
+        threats = []
+        negs = set(targets)
+        # allow pathing through our tiles
+        for tile in map.get_all_tiles():
+            if map.is_tile_friendly(tile) and tile.army > 10:
+                negs.add(tile)
+
+        paths = ArmyTracker.get_army_expected_path(map, Army(enTile), general, targets)
+
+        self.begin_capturing_logging()
+
+        if addlPath is not None:
+            analysis = ArmyAnalyzer(map, addlPath.tail.tile, addlPath.start.tile)
+            saveTile = None
+            if len(addlPath.tileList) > 1 and analysis.is_choke(addlPath.tail.prev.tile):
+                saveTile = addlPath.tail.prev.tile
+            threats.append(ThreatObj(addlPath.length - 1, addlPath.value, addlPath, ThreatType.Econ, saveTile, analysis))
+
+        if paths:
+            for path in paths:
+                threatType = ThreatType.Econ
+                if path.tail.tile in targets:
+                    threatType = ThreatType.Kill
+                elif justCityAndGeneralThreats:
+                    continue
+                analysis = ArmyAnalyzer(map, path.tail.tile, path.start.tile)
+                saveTile = None
+                if len(path.tileList) > 1 and analysis.is_choke(path.tail.prev.tile):
+                    saveTile = path.tail.prev.tile
+                threats.append(ThreatObj(path.length - 1, path.value, path, threatType, saveTile, analysis))
+
+        self.assertGreater(len(threats), 0)
+
+        interceptor = self.get_interceptor(
+            map,
+            general,
+            enemyGeneral,
+            useDebugLogging)
+
+        plan = interceptor.get_interception_plan(threats, turnsLeftInCycle=turnsLeftInCycle)
+
+        return plan
+
+    def get_best_intercept_option(self, plan: ArmyInterception, maxDepth=200) -> typing.Tuple[int, int, Path]:
+        """Returns value, effectiveTurns, path"""
+        res = self.get_best_intercept_option_or_none(plan, maxDepth)
+
+        if res is None:
+            self.fail(f'Expected an intercept option to be found, but none was found.')
+
+        return res
+
+    def get_best_intercept_option_or_none(self, plan: ArmyInterception, maxDepth=200) -> typing.Tuple[int, int, Path] | None:
+        """Returns value, effectiveTurns, path"""
+        bestOpt = None
+        bestOptAmt = 0
+        bestOptDist = 0
+        bestVt = 0
+        for dist, option in plan.intercept_options.items():
+            if dist > maxDepth:
+                continue
+            val, path = option
+            vt = val/dist
+            if vt > bestVt:
+                logbook.info(f'NEW BEST INTERCEPT OPT {val}/{dist} -- {str(path)}')
+                bestOpt = path
+                bestOptAmt = val
+                bestOptDist = dist
+                bestVt = vt
+
+        if bestOpt is None:
+            return None
+
+        return bestOptAmt, bestOptDist, bestOpt
+
+    def assert_no_best_intercept_option(self, plan: ArmyInterception, maxDepth=200):
+        """Returns value, effectiveTurns, path"""
+        res = self.get_best_intercept_option_or_none(plan, maxDepth)
+
+        if res is not None:
+            bestOptAmt, bestOptDist, bestOpt = res
+            self.fail(f'Expected NO best intercept option, instead found bestOptAmt {bestOptAmt}, bestOptDist {bestOptDist}, bestOpt {bestOpt}')
+
+    def get_interceptor_path_by_coords(self, plan: ArmyInterception, xStart: int, yStart: int, xEnd: int, yEnd: int) -> typing.Tuple[Path | None, int, int]:
+        """
+        Returns Path, value, turnsUsed if a path is found that starts and ends at those positions
+
+        @param plan:
+        @param xStart:
+        @param yStart:
+        @param xEnd:
+        @param yEnd:
+        @return:
+        """
+
+        bestOpt = None
+        bestOptAmt = 0
+        bestOptDist = 0
+        maxVt = -1000
+
+        for dist, option in plan.intercept_options.items():
+            val, path = option
+            if path.start.tile.x == xStart and path.start.tile.y == yStart and path.tail.tile.x == xEnd and path.tail.tile.y == yEnd:
+                vt = val/dist
+                if vt > maxVt:
+                    logbook.info(f'NEW BEST INTERCEPT OPT {val}/{dist} -- {str(path)}')
+                    bestOpt = path
+                    bestOptAmt = val
+                    bestOptDist = dist
+                    maxVt = vt
+
+        if bestOpt is None:
+            self.fail(f'No intercept option found for xStart {xStart}, yStart {yStart}, xEnd {xEnd}, yEnd {yEnd}')
+
+        return bestOpt, bestOptAmt, bestOptDist
+
+    def render_intercept_plan(self, map: MapBase, plan: ArmyInterception, colorIndex: int = 0, renderIndividualAnalysis: bool = False):
+        viewInfo = self.get_renderable_view_info(map)
+        targetStyle = TargetStyle(colorIndex + 2)
+
+        if renderIndividualAnalysis:
+            for threat in plan.threats:
+                self.render_army_analyzer(map, threat.armyAnalysis)
+
+        for tile, interceptInfo in plan.common_intercept_chokes.items():
+            viewInfo.add_targeted_tile(tile, targetStyle, radiusReduction=11 - colorIndex)
+
+            viewInfo.bottomMidRightGridText[tile] = f'cw{interceptInfo.max_choke_width}'
+
+            viewInfo.bottomMidLeftGridText[tile] = f'ic{interceptInfo.max_intercept_turn_offset}'
+
+            viewInfo.bottomLeftGridText[tile] = f'it{interceptInfo.max_delay_turns}'
+
+            viewInfo.midRightGridText[tile] = f'im{interceptInfo.max_extra_moves_to_capture}'
+
+        viewInfo.add_info_line('LEGEND:')
+        viewInfo.add_info_line('  cw: = choke width')
+        viewInfo.add_info_line('  ic: = intercept choke distance (the difference between worst case and best case intercept pathing for an army reaching this tile as early as opp could)')
+        viewInfo.add_info_line('  it: = intercept turn (which turn in the intercept the tile must be reached by to guarantee a 2-move-intercept-capture assuming the opp moved this way)')
+        viewInfo.add_info_line('  im: = intercept moves (worst case moves to achieve the intercept capture, worst case, assuming opp moves along shortest path)')
+
+        for i, threat in enumerate(plan.threats):
+            color = ViewInfo.get_color_from_target_style(TargetStyle.YELLOW)
+            viewInfo.color_path(PathColorer(
+                threat.path,
+                color[0] + 20 * i,
+                90 - 10 * i,
+                121 + 15 * i,
+            ))
+
+        maxValPerTurn = 0
+        maxValTurnPath = None
+        maxVal = 0
+        maxTurn = 0
+        for dist, (val, path) in plan.intercept_options.items():
+            valPerTurn = val / dist
+            maxStr = ''
+            if valPerTurn > maxValPerTurn:
+                maxValPerTurn = valPerTurn
+                maxValTurnPath = path
+                maxStr = 'NEW MAX '
+                maxVal = val
+                maxTurn = dist
+            viewInfo.color_path(PathColorer(
+                path,
+                255,
+                255,
+                255,
+            ))
+
+            logbook.info(f'{maxStr}intercept plan {plan.target_tile} dist {dist}: {val:.2f} {path}')
+
+        if maxValTurnPath is not None:
+            viewInfo.color_path(PathColorer(
+                maxValTurnPath,
+                155,
+                255,
+                155,
+            ))
+        self.render_view_info(map, viewInfo, f'intercept {maxVal:.2f}/{maxTurn}={maxValPerTurn:.2f} - {str(maxValTurnPath)}')
+
+    def assertInterceptChokeTileMoves(self, plan: ArmyInterception, map: MapBase, x: int, y: int, w: int):
+        tile = map.GetTile(x, y)
+        self.assertIn(tile, plan.common_intercept_chokes, f'Expected {str(tile)} to be in chokes, but wasnt.')
+        val = plan.common_intercept_chokes[tile]
+        self.assertEqual(w, val, f'Expected choke {str(tile)} to be {w} but was {val}')
+
+    def assertNotInterceptChoke(self, plan: ArmyInterception, map: MapBase, x: int, y: int):
+        tile = map.GetTile(x, y)
+        val = plan.common_intercept_chokes.get(tile, -10)
+        if val != -10:
+            self.fail(f'Expected {str(tile)} NOT to be in chokes, instead found val {val}.')

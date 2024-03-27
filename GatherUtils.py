@@ -318,7 +318,7 @@ def extend_tree_node_lookup(
             distanceLookup[pathNode.tile] = newDist
             # skipTiles.add(pathNode.tile)
             # if viewInfo:
-            #    viewInfo.bottomRightGridText[pathNode.tile.x][pathNode.tile.y] = newDist
+            #    viewInfo.bottomRightGridText[pathNode.tile] = newDist
             nextGatherTreeNode = GatherTreeNode(pathNode.tile, currentGatherTreeNode.tile, newDist)
 
             tileEffect = 1
@@ -1331,7 +1331,7 @@ def knapsack_levels_backpack_gather_with_value(
 
             initialDistance = 0
             if distPriorityMap is not None:
-                initialDistance = distPriorityMap[tile.x][tile.y]
+                initialDistance = distPriorityMap[tile]
             prioObj = (
                 0 - initialDistance,
                 startingDist,
@@ -1634,7 +1634,7 @@ def greedy_backpack_gather_values(
             #    negDistanceSum -= 1
             # hacks us prioritizing further away tiles
             if distPriorityMap is not None:
-                negDistanceSum -= distPriorityMap[nextTile.x][nextTile.y]
+                negDistanceSum -= distPriorityMap[nextTile]
             if priorityTiles is not None and nextTile in priorityTiles:
                 numPrioTiles += 1
             realDist += 1
@@ -1656,7 +1656,7 @@ def greedy_backpack_gather_values(
 
             initialDistance = 0
             if distPriorityMap is not None:
-                initialDistance = distPriorityMap[tile.x][tile.y]
+                initialDistance = distPriorityMap[tile]
 
             logbook.info(
                 f"tile {tile.toString()} got base case startArmy {startArmy}, startingDist {startingDist}")
@@ -1732,7 +1732,7 @@ def greedy_backpack_gather_values(
                 logbook.info(
                     f"Including tile {node.tile.x},{node.tile.y} in startTilesDict at newDist {newDist}  (distance {distance} addlDist {addlDist})")
                 # if viewInfo:
-                #    viewInfo.bottomRightGridText[node.tile.x][node.tile.y] = newDist
+                #    viewInfo.bottomRightGridText[node.tile] = newDist
                 nextGatherTreeNode = GatherTreeNode(node.tile, currentGatherTreeNode.tile, newDist)
                 nextGatherTreeNode.value = runningValue
                 nextGatherTreeNode.gatherTurns = 1
@@ -1863,7 +1863,7 @@ def recalculate_tree_values(
             child.trunkDistance = trunkDistance
 
             # if viewInfo is not None:
-            #     viewInfo.bottomLeftGridText[child.tile.x][child.tile.y] = child.trunkValue
+            #     viewInfo.bottomLeftGridText[child.tile] = child.trunkValue
             queue.appendleft(child)
 
     return totalTurns, totalValue
@@ -1888,15 +1888,15 @@ def _recalculate_tree_values_recurse(
     sum = -1
     currentTile = currentNode.tile
     if viewInfo:
-        viewInfo.midRightGridText[currentTile.x][currentTile.y] = f'v{currentNode.value:.0f}'
-        viewInfo.bottomMidRightGridText[currentTile.x][currentTile.y] = f'tv{currentNode.trunkValue:.0f}'
-        viewInfo.bottomRightGridText[currentTile.x][currentTile.y] = f'td{currentNode.trunkDistance}'
+        viewInfo.midRightGridText[currentTile] = f'v{currentNode.value:.0f}'
+        viewInfo.bottomMidRightGridText[currentTile] = f'tv{currentNode.trunkValue:.0f}'
+        viewInfo.bottomRightGridText[currentTile] = f'td{currentNode.trunkDistance}'
 
         if currentNode.trunkDistance > 0:
             rawValPerTurn = currentNode.value / currentNode.trunkDistance
             trunkValPerTurn = currentNode.trunkValue / currentNode.trunkDistance
-            viewInfo.bottomMidLeftGridText[currentTile.x][currentTile.y] = f'tt{trunkValPerTurn:.1f}'
-            viewInfo.bottomLeftGridText[currentTile.x][currentTile.y] = f'vt{rawValPerTurn:.1f}'
+            viewInfo.bottomMidLeftGridText[currentTile] = f'tt{trunkValPerTurn:.1f}'
+            viewInfo.bottomLeftGridText[currentTile] = f'vt{rawValPerTurn:.1f}'
 
     if currentNode.fromTile is None:
         isStartNode = True
@@ -1932,7 +1932,7 @@ def _recalculate_tree_values_recurse(
         turns += child.gatherTurns
 
     # if viewInfo:
-    #     viewInfo.bottomRightGridText[currentNode.tile.x][currentNode.tile.y] = sum
+    #     viewInfo.bottomRightGridText[currentNode.tile] = sum
 
     if shouldAssert:
         if round(currentNode.value, 6) != round(sum, 6):
@@ -2100,12 +2100,12 @@ def prune_mst_to_turns_with_values(
             if USE_DEBUG_ASSERTS:
                 raise AssertionError(f'divide by zero exception for {str(node)} with value {round(node.value, 6)} turns {node.gatherTurns}')
         if viewInfo is not None:
-            viewInfo.midRightGridText[node.tile.x][node.tile.y] = f'v{node.value:.0f}'
-            viewInfo.bottomMidRightGridText[node.tile.x][node.tile.y] = f'tv{node.trunkValue:.0f}'
-            viewInfo.bottomRightGridText[node.tile.x][node.tile.y] = f'td{node.trunkDistance}'
+            viewInfo.midRightGridText[node.tile] = f'v{node.value:.0f}'
+            viewInfo.bottomMidRightGridText[node.tile] = f'tv{node.trunkValue:.0f}'
+            viewInfo.bottomRightGridText[node.tile] = f'td{node.trunkDistance}'
 
-            # viewInfo.bottomMidLeftGridText[node.tile.x][node.tile.y] = f'tt{trunkValPerTurn:.1f}'
-            viewInfo.bottomLeftGridText[node.tile.x][node.tile.y] = f'vt{rawValPerTurn:.1f}'
+            # viewInfo.bottomMidLeftGridText[node.tile] = f'tt{trunkValPerTurn:.1f}'
+            viewInfo.bottomLeftGridText[node.tile] = f'vt{rawValPerTurn:.1f}'
 
         return rawValPerTurn, node.value, 0 - node.trunkDistance
 
@@ -2225,12 +2225,12 @@ def prune_mst_to_tiles_with_values(
                 raise AssertionError(f'divide by zero exception for {str(node)} with value {round(node.value, 6)} turns {node.gatherTurns}')
 
         if viewInfo is not None:
-            viewInfo.midRightGridText[node.tile.x][node.tile.y] = f'v{node.value:.1f}'
-            viewInfo.bottomMidRightGridText[node.tile.x][node.tile.y] = f'tv{node.trunkValue:.1f}'
-            viewInfo.bottomRightGridText[node.tile.x][node.tile.y] = f'td{node.trunkDistance}'
+            viewInfo.midRightGridText[node.tile] = f'v{node.value:.1f}'
+            viewInfo.bottomMidRightGridText[node.tile] = f'tv{node.trunkValue:.1f}'
+            viewInfo.bottomRightGridText[node.tile] = f'td{node.trunkDistance}'
 
-            # viewInfo.bottomMidLeftGridText[node.tile.x][node.tile.y] = f'tt{trunkValPerTurn:.1f}'
-            viewInfo.bottomLeftGridText[node.tile.x][node.tile.y] = f'vt{rawValPerTurn:.1f}'
+            # viewInfo.bottomMidLeftGridText[node.tile] = f'tt{trunkValPerTurn:.1f}'
+            viewInfo.bottomLeftGridText[node.tile] = f'vt{rawValPerTurn:.1f}'
 
         return rawValPerTurn, node.value, 0 - node.trunkDistance
 
@@ -2992,13 +2992,13 @@ def get_tree_leaves(gathers: typing.List[GatherTreeNode]) -> typing.List[GatherT
 
 def get_tree_leaves_further_than_distance(
         gatherNodes: typing.List[GatherTreeNode],
-        distMap: typing.List[typing.List[int]],
+        distMap: MapMatrix[int],
         dist: int,
         minArmy: int = 1,
         curArmy: int = 0
 ) -> typing.List[GatherTreeNode]:
     leaves = get_tree_leaves(gatherNodes)
-    leavesGreaterThanDistance = SearchUtils.where(leaves, lambda g: distMap[g.tile.x][g.tile.y] >= dist)
+    leavesGreaterThanDistance = SearchUtils.where(leaves, lambda g: distMap[g.tile] >= dist)
 
     if minArmy > curArmy:
         return leavesGreaterThanDistance

@@ -41,7 +41,7 @@ class ThreatObj(object):
         for tile in self.path.tileList:
             dist = dict.pop(tile, None)
             # if dist is None:
-            dist = self.armyAnalysis.aMap[tile.x][tile.y] + offset
+            dist = self.armyAnalysis.aMap[tile] + offset
             if allowNonChoke:
                 dict[tile] = dist
             if tile.isGeneral:
@@ -49,7 +49,7 @@ class ThreatObj(object):
                 dict[tile] = dist + 1
             else:  # and not self.path.start.next.tile in tile.movable:
                 # pathWay = self.armyAnalysis.pathWayLookupMatrix[tile]
-                # neighbors = where(pathWay.tiles, lambda t: t != tile and self.armyAnalysis.aMap[t.x][t.y] == self.armyAnalysis.aMap[tile.x][tile.y] and self.armyAnalysis.bMap[t.x][t.y] == self.armyAnalysis.bMap[tile.x][tile.y])
+                # neighbors = where(pathWay.tiles, lambda t: t != tile and self.armyAnalysis.aMap[t] == self.armyAnalysis.aMap[tile] and self.armyAnalysis.bMap[t] == self.armyAnalysis.bMap[tile])
                 chokeWidth = self.armyAnalysis.chokeWidths.get(tile, None)
                 interceptChoke = self.armyAnalysis.interceptChokes.get(tile, None)
                 if allowNonChoke or (interceptChoke is not None and interceptChoke < 4):
@@ -379,6 +379,20 @@ class DangerAnalyzer(object):
                 dupeThreshold=3,
                 noLog=True)
 
+            if path:
+                armiesAlreadyInPath = []
+                skipPath = False
+                for tile in path.tileList:
+                    armyInPath = armies.get(tile, None)
+                    if armyInPath and armyInPath.entangledArmies and tile not in curNegs:
+                        armyKey = armyInPath.name, armyInPath.player
+                        if armyKey in armiesAlreadyInPath:
+                            curNegs.add(tile)
+                            skipPath = True
+                        armiesAlreadyInPath.append(armyKey)
+                if skipPath:
+                    path = None
+
             if (path is not None
                     and (curThreat is None
                          or path.length < curThreat.length
@@ -397,6 +411,20 @@ class DangerAnalyzer(object):
                     dontEvacCities=False,
                     dupeThreshold=5,
                     skipTiles=[lastTile])
+
+                if altPath:
+                    armiesAlreadyInPath = []
+                    skipPath = False
+                    for tile in altPath.tileList:
+                        armyInPath = armies.get(tile, None)
+                        if armyInPath and armyInPath.entangledArmies and tile not in curNegs:
+                            armyKey = armyInPath.name, armyInPath.player
+                            if armyKey in armiesAlreadyInPath:
+                                curNegs.add(tile)
+                                skipPath = True
+                            armiesAlreadyInPath.append(armyKey)
+                    if skipPath:
+                        altPath = None
                 if altPath is None or altPath.length > path.length:
                     saveTile = lastTile
                     logbook.info(f"saveTile blocks path to our king: {saveTile.x},{saveTile.y}")
@@ -440,13 +468,24 @@ class DangerAnalyzer(object):
                 noNeutralCities=army.value < 150,
                 searchingPlayer=army.player,
                 incrementBackward=True)
-            if path is not None:
-                logbook.info(
-                    f"Army tile mismatch threat searcher found a path! Army {str(army)}, path {str(path)}")
-                if path.value > 0 and (
-                        curThreat is None or path.length < curThreat.length or (path.value > curThreat.value and path.length == curThreat.length)):
-                    curThreat = path
-                army.expectedPaths.append(path)
+
+            if path:
+                armiesAlreadyInPath = []
+                skipPath = False
+                for tile in path.tileList:
+                    armyInPath = armies.get(tile, None)
+                    if armyInPath and armyInPath.entangledArmies:
+                        armyKey = armyInPath.name, armyInPath.player
+                        if armyKey in armiesAlreadyInPath:
+                            skipPath = True
+                        armiesAlreadyInPath.append(armyKey)
+                if not skipPath:
+                    logbook.info(
+                        f"Army tile mismatch threat searcher found a path! Army {str(army)}, path {str(path)}")
+                    if path.value > 0 and (
+                            curThreat is None or path.length < curThreat.length or (path.value > curThreat.value and path.length == curThreat.length)):
+                        curThreat = path
+                    army.expectedPaths.append(path)
 
         if curThreat is not None:
             army = curThreat.start.tile

@@ -430,7 +430,7 @@ class EarlyExpandUtilsTests(TestBase):
         map = self.get_test_map(board, turn=turn)
         weightMap = self.get_opposite_general_distance_map(map, general)
 
-        distToGenMap = SearchUtils.build_distance_map(map, [general])
+        distToGenMap = map.distance_mapper.get_tile_dist_matrix(general)
 
         paths = EarlyExpandUtils._sub_optimize_remaining_cycle_expand_from_cities(
             map,
@@ -441,7 +441,8 @@ class EarlyExpandUtilsTests(TestBase):
             turn=turn,
             prune_below=0,
             allow_wasted_moves=6,
-            no_log=True)
+            no_log=True,
+            cutoff_time=time.perf_counter() + 4.0)
 
         value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, map.turn, paths, noLog=True)
         if debugMode:
@@ -460,7 +461,7 @@ class EarlyExpandUtilsTests(TestBase):
         map = self.get_test_map(board, turn=turn)
         weightMap = self.get_opposite_general_distance_map(map, general)
 
-        distToGenMap = SearchUtils.build_distance_map(map, [general])
+        distToGenMap = map.distance_mapper.get_tile_dist_matrix(general)
 
         paths = EarlyExpandUtils._sub_optimize_remaining_cycle_expand_from_cities(
             map,
@@ -472,7 +473,8 @@ class EarlyExpandUtilsTests(TestBase):
             prune_below=0,
             allow_wasted_moves=8,
             dont_force_first=True,
-            no_log=True)
+            no_log=True,
+            cutoff_time=time.perf_counter() + 4.0)
 
         value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, map.turn, paths, noLog=False)
 
@@ -495,7 +497,7 @@ class EarlyExpandUtilsTests(TestBase):
                     map = self.get_test_map(board, turn=turn)
                     weightMap = self.get_opposite_general_distance_map(map, general)
 
-                    distToGenMap = SearchUtils.build_distance_map(map, [general])
+                    distToGenMap = map.distance_mapper.get_tile_dist_matrix(general)
 
                     launchTurn = 20
 
@@ -507,7 +509,8 @@ class EarlyExpandUtilsTests(TestBase):
                         weightMap,
                         prune_below=0,
                         turn=launchTurn,
-                        allow_wasted_moves=6)
+                        allow_wasted_moves=6,
+                        cutoff_time=time.perf_counter() + 4.0)
 
                     for _ in range(map.turn, launchTurn):
                         paths.insert(0, None)
@@ -648,7 +651,7 @@ class EarlyExpandUtilsTests(TestBase):
 
         # TODO this one fails because it doesn't preserve contiguous space adjacent to general.
         #  If the 3rd arm went down along the mountains, I think it could get 25 easily.
-        distToGenMap = SearchUtils.build_distance_map(map, [general])
+        distToGenMap = map.distance_mapper.get_tile_dist_matrix(general)
 
         launchTurn = 20
 
@@ -661,7 +664,8 @@ class EarlyExpandUtilsTests(TestBase):
             prune_below=0,
             turn=launchTurn,
             allow_wasted_moves=6,
-            no_log=False)
+            no_log=False,
+            cutoff_time=time.perf_counter() + 4.0)
 
         for _ in range(map.turn, launchTurn):
             paths.insert(0, None)

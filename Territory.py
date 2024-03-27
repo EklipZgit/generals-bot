@@ -21,7 +21,7 @@ class TerritoryClassifier(object):
     def __init__(self, map: MapBase):
         self.map: MapBase = map
         self.lastCalculatedTurn = -1
-        self.territoryMap = new_value_grid(self.map, -1)
+        self.territoryMap: MapMatrix[int] = MapMatrix(self.map, -1)
         self.needToUpdateAroundTiles = set()
         self.team_indexes: typing.List[int] = list(set(MapBase.get_teams_array(self.map)))
         self.territoryDistances: typing.List[MapMatrix[int]] = [MapMatrix(map, 1000) for p in map.players]
@@ -51,11 +51,11 @@ class TerritoryClassifier(object):
         Note that this gets immediately overwritten by the actual territory value for this tile,
         it is just used to weight the tiles around it during that cycle.
         """
-        self.territoryMap[tile.x][tile.y] = tile.player
+        self.territoryMap[tile] = tile.player
         if tile.player != -1 and tile.player != self.map.player_index:
             for movable in tile.movable:
                 if not movable.discovered and not movable.isObstacle:
-                    self.territoryMap[movable.x][movable.y] = tile.player
+                    self.territoryMap[movable] = tile.player
 
     def scan(self):
         logbook.info("Scanning map for territories, aww geez")
@@ -70,7 +70,7 @@ class TerritoryClassifier(object):
             if evaluatingTile.player != -1 and evaluatingTile.player != self.map.player_index:  # and not evaluatingTile.discoveredAsNeutral (territories track live territory, not general prediction)
                 for movable in evaluatingTile.movable:
                     if not movable.discovered and not movable.isObstacle:
-                        self.territoryMap[movable.x][movable.y] = evaluatingTile.player
+                        self.territoryMap[movable] = evaluatingTile.player
                         counts[evaluatingTile.x][evaluatingTile.y][evaluatingTile.player] += 3
                         counts[movable.x][movable.y][evaluatingTile.player] += 5
 
@@ -78,7 +78,7 @@ class TerritoryClassifier(object):
                 if tile.isObstacle:
                     return tile.player == -1 and tile.discovered
                 
-                currentTerritory = self.territoryMap[tile.x][tile.y]
+                currentTerritory = self.territoryMap[tile]
                 if not evaluatingTile.discovered:
                     # weight based on territory already owned, making it harder to flip a territory (and hopefully better encapsulate who owns what)
                     if currentTerritory != -1:
@@ -123,7 +123,7 @@ class TerritoryClassifier(object):
             if evaluatingTile.player != maxPlayer and evaluatingTile.player != -1:
                 logbook.info("Tile {} is in player {} {} territory".format(evaluatingTile.toString(), maxPlayer, userName))
 
-            self.territoryMap[evaluatingTile.x][evaluatingTile.y] = maxPlayer
+            self.territoryMap[evaluatingTile] = maxPlayer
 
             return evaluatingTile.isMountain
 
@@ -141,7 +141,7 @@ class TerritoryClassifier(object):
 
             startTiles = []
             for tile in self.map.get_all_tiles():
-                if self.territoryMap[tile.x][tile.y] == player.index:
+                if self.territoryMap[tile] == player.index:
                     startTiles.append(tile)
 
             self.territoryDistances[player.index] = SearchUtils.build_distance_map_matrix(self.map, startTiles)
@@ -149,7 +149,7 @@ class TerritoryClassifier(object):
         for team in self.team_indexes:
             startTiles = []
             for tile in self.map.pathableTiles:
-                if self.map.is_player_on_team(self.territoryMap[tile.x][tile.y], team):
+                if self.map.is_player_on_team(self.territoryMap[tile], team):
                     startTiles.append(tile)
 
             self.territoryTeamDistances[team] = SearchUtils.build_distance_map_matrix(self.map, startTiles)
@@ -175,4 +175,4 @@ class TerritoryClassifier(object):
         return self.map.is_player_on_team_with(territory, player)
 
     def get_tile_territory(self, tile: Tile) -> int:
-        return self.territoryMap[tile.x][tile.y]
+        return self.territoryMap[tile]

@@ -3,6 +3,7 @@ import time
 import typing
 
 import SearchUtils
+from MapMatrix import MapMatrix, MapMatrixSet
 from Path import Path
 from SearchUtils import breadth_first_foreach, breadth_first_dynamic_max
 from ViewInfo import ViewInfo
@@ -26,7 +27,7 @@ def get_start_expand_value(
         generalArmy: int,
         curTurn: int,
         expandPaths: typing.List[typing.Union[None, Path]],
-        visitedSet: typing.Set[Tile] = None,
+        visitedSet: typing.Set[Tile] | None = None,
         noLog: bool = False) -> int:
 
     if len(expandPaths) == 0:
@@ -113,8 +114,8 @@ def __evaluate_plan_value(
         general_army: int,
         cur_turn: int,
         path_list: typing.List[typing.Union[None, Path]],
-        dist_to_gen_map: typing.List[typing.List[int]],
-        tile_weight_map: typing.List[typing.List[int]],
+        dist_to_gen_map: MapMatrix[int],
+        tile_weight_map: MapMatrix[int],
         already_visited: typing.Set[Tile],
         no_log: bool = False
 ) -> typing.Tuple[int, int, int, int]:
@@ -124,7 +125,7 @@ def __evaluate_plan_value(
     adjAvailable = SearchUtils.Counter(0)
 
     pathTileSet = set()
-    visibleTileSet = set(already_visited)
+    visibleTileSet = already_visited.copy()
     for tile in already_visited:
         visibleTileSet.update(tile.adjacents)
 
@@ -136,13 +137,13 @@ def __evaluate_plan_value(
     visibilityValue = SearchUtils.Counter(0.0)
 
     for tile in pathTileSet:
-        tileWeightSum += tile_weight_map[tile.x][tile.y]
-        genDistSum += dist_to_gen_map[tile.x][tile.y]
+        tileWeightSum += tile_weight_map[tile]
+        genDistSum += dist_to_gen_map[tile]
         for adj in tile.adjacents:
             if adj not in visibleTileSet:
                 visibleTileSet.add(adj)
                 if not adj.isNotPathable:
-                    reward = 8 - tile_weight_map[adj.x][adj.y]
+                    reward = 8 - tile_weight_map[adj]
                     if reward > 0:
                         visibilityValue.value += reward
 
@@ -154,8 +155,6 @@ def __evaluate_plan_value(
                 and tile.player == -1
                 and tile.army == 0):
             adjAvailable.value += 1
-            # if not tile.visible:
-            #     visibilityValue.value -= tile_weight_map[adj.x][adj.y]
 
     breadth_first_foreach(map, pathTileSet, 3, count_func, noLog=True)
 
@@ -203,7 +202,7 @@ def max_plan(plan1: ExpansionPlan, plan2: ExpansionPlan, map: MapBase, distToGen
 def optimize_first_25(
         map: MapBase,
         general: Tile,
-        tile_minimization_map: typing.List[typing.List[int]],
+        tile_minimization_map: MapMatrix[int],
         debug_view_info: typing.Union[None, ViewInfo] = None,
         no_recurse: bool = False,
         skipTiles: typing.Set[Tile] | None = None,
@@ -223,7 +222,7 @@ def optimize_first_25(
     @return:
     """
 
-    distToGenMap = SearchUtils.build_distance_map(map, [general])
+    distToGenMap = map.distance_mapper.get_tile_dist_matrix(general)
     if debug_view_info:
         debug_view_info.bottomLeftGridText = distToGenMap
 
@@ -325,8 +324,8 @@ def _sub_optimize_first_25_specific_wasted(
         map: MapBase,
         general: Tile,
         gen_army: int,
-        dist_to_gen_map: typing.List[typing.List[int]],
-        tile_weight_map: typing.List[typing.List[int]],
+        dist_to_gen_map: MapMatrix[int],
+        tile_weight_map: MapMatrix[int],
         turn: int,
         force_wasted_moves: int,
         allow_wasted_moves: int,
@@ -491,8 +490,8 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
         map: MapBase,
         general: Tile,
         gen_army: int,
-        dist_to_gen_map: typing.List[typing.List[int]],
-        tile_weight_map: typing.List[typing.List[int]],
+        dist_to_gen_map: MapMatrix[int],
+        tile_weight_map: MapMatrix[int],
         turn: int,
         allow_wasted_moves: int,
         prune_below: int,
@@ -594,9 +593,9 @@ def _optimize_25_launch_segment(
         general: Tile,
         gen_army: int,
         turns_left: int,
-        distance_to_gen_map: typing.List[typing.List[int]],
+        distance_to_gen_map: MapMatrix[int],
         force_wasted_moves: int,
-        tile_weight_map: typing.List[typing.List[int]],
+        tile_weight_map: MapMatrix[int],
         visited_set: typing.Set[Tile],
         skip_tiles: typing.Set[Tile] = None,
         debug_view_info: typing.Union[None, ViewInfo] = None,
@@ -614,7 +613,7 @@ def _optimize_25_launch_segment(
         _, currentGenDist, _, pathCappedNeg, negAdjWeight, repeats, cappedAdj, maxGenDist = priorityObject
         # currentGenDist = 0 - negCurrentGenDist
         # higher better
-        tileValue = 0 - tile_weight_map[currentTile.x][currentTile.y]
+        tileValue = 0 - tile_weight_map[currentTile]
 
         if repeats - force_wasted_moves > 0:
             return None
@@ -650,18 +649,18 @@ def _optimize_25_launch_segment(
 
         if debug_view_info:
             i.add(1)
-            debug_view_info.bottomRightGridText[nextTile.x][nextTile.y] = i.value
+            debug_view_info.bottomRightGridText[nextTile] = i.value
 
         #
         # if pathCappedNeg + genArmy <= 0:
         #     logbook.info(f'tile {str(nextTile)} ought to be skipped...?')
         #     return None
 
-        closerToEnemyNeg = tile_weight_map[nextTile.x][nextTile.y]
+        closerToEnemyNeg = tile_weight_map[nextTile]
 
         # 0 is best value we'll get, after which more repeat tiles become 'bad' again
         repeatAvoider = abs(force_wasted_moves - repeats)
-        distToGen = min(1000, distance_to_gen_map[nextTile.x][nextTile.y])
+        distToGen = min(1000, distance_to_gen_map[nextTile])
         adjWeight = 0 - negAdjWeight
 
         remainingArmy = pathCappedNeg + gen_army
@@ -669,7 +668,7 @@ def _optimize_25_launch_segment(
             adjWeight += SearchUtils.count(
                 nextTile.movable,
                 lambda tile: tile not in visited_set
-                             and distance_to_gen_map[tile.x][tile.y] >= distToGen  #and tile is further from general
+                             and distance_to_gen_map[tile] >= distToGen  #and tile is further from general
                              and tile.player == -1
                              and not tile.isNotPathable
                              and not tile.isCity)
@@ -677,7 +676,7 @@ def _optimize_25_launch_segment(
             adjWeight += SearchUtils.count(
                 nextTile.movable,
                 lambda tile: tile not in visited_set
-                             and distance_to_gen_map[tile.x][tile.y] > distToGen  #and tile is further from general
+                             and distance_to_gen_map[tile] > distToGen  #and tile is further from general
                              and tile.player == -1
                              and not tile.isNotPathable
                              and not tile.isCity)
@@ -687,7 +686,7 @@ def _optimize_25_launch_segment(
             repeatAvoider += cappedAdj
 
         if debug_view_info:
-            debug_view_info.midRightGridText[nextTile.x][nextTile.y] = adjWeight
+            debug_view_info.midRightGridText[nextTile] = adjWeight
 
         maxGenDist = max(maxGenDist, distToGen)
 

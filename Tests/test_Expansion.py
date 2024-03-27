@@ -1,5 +1,9 @@
 import time
 import typing
+
+import DebugHelper
+import ExpandUtils
+import SearchUtils
 from ExpandUtils import get_optimal_expansion
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
@@ -28,8 +32,9 @@ class ExpansionTests(TestBase):
             debugMode: bool = False,
             timeLimit: float | None = None,
     ) -> typing.Tuple[Path | None, typing.List[Path]]:
-        # self.render_view_info(map, ViewInfo("h", map.cols, map.rows))
+        # self.render_view_info(map, ViewInfo("h", map))
         # self.begin_capturing_logging()
+        # SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING = DebugHelper.IS_DEBUGGING
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=mapVision, allAfkExceptMapPlayer=True)
         bot = self.get_debug_render_bot(simHost, general.player)
         bot.viewInfo.turnInc()
@@ -128,7 +133,8 @@ class ExpansionTests(TestBase):
             otherPaths: typing.List[Path],
             minEnemyCaptures: int,
             minNeutralCaptures: int = 0,
-            assertNoDuplicates: bool = True):
+            assertNoDuplicates: bool = True
+    ):
         allPaths = [firstPath]
         allPaths.extend(otherPaths)
         visited = set()
@@ -267,6 +273,7 @@ bot_target_player=1
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         map, general, enemyGeneral = self.load_map_and_generals_from_string(rawMapData, 400 - remainingTurns, fill_out_tiles=False)
 
+        self.begin_capturing_logging()
         path, otherPaths = self.run_expansion(
             map,
             general,

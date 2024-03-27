@@ -698,8 +698,7 @@ def breadth_first_dynamic(
         skipFunc=None,
         ignoreStartTile=False,
         incrementBackward=False,
-        preferNeutral=False,
-        allowDoubleBacks=False):
+        preferNeutral=False):
     """
     startTiles dict is (startPriorityObject, distance) = startTiles[tile]
     goalFunc is (currentTile, priorityObject) -> True or False
@@ -812,7 +811,7 @@ def breadth_first_dynamic(
                 break
         if dist <= maxDepth and not foundGoal:
             for next in current.movable:  # new spots to try
-                if next == parent and not allowDoubleBacks:
+                if next == parent:
                     continue
                 if (next.isMountain
                         or (noNeutralCities and next.player == -1 and next.isCity)
@@ -888,7 +887,6 @@ def breadth_first_dynamic_max(
         fullOnlyArmyDistFunc=None,
         boundFunc=None,
         maxIterations: int = INF,
-        allowDoubleBacks=False,
         priorityMatrix: MapMatrix[float] | None = None,
         priorityMatrixSkipStart: bool = False,
         priorityMatrixSkipEnd: bool = False,
@@ -919,7 +917,6 @@ def breadth_first_dynamic_max(
     @param fullOnlyArmyDistFunc:
     @param boundFunc: boundFunc is (currentTile, currentPiorityObject, maxPriorityObject) -> True (prune) False (continue)
     @param maxIterations:
-    @param allowDoubleBacks:
     @param includePath:  if True, all the functions take a path object param as third tuple entry
     @param ignoreNonPlayerArmy: if True, the paths returned will be calculated on the basis of just the searching players army and ignore enemy (or neutral city!) army they pass through.
     @param ignoreIncrement: if True, do not have paths returned include the city increment in their path calculation for any cities or generals in the path.
@@ -1117,7 +1114,7 @@ def breadth_first_dynamic_max(
             continue
         dist += 1
         for next in current.movable:  # new spots to try
-            if next == parent and not allowDoubleBacks:
+            if next == parent:
                 continue
             if (next.isMountain
                     or (noNeutralCities and next.player == -1 and next.isCity)
@@ -1222,7 +1219,6 @@ def breadth_first_dynamic_max_per_tile(
         fullOnlyArmyDistFunc=None,
         boundFunc=None,
         maxIterations: int = INF,
-        allowDoubleBacks=False,
         includePath=False,
         priorityMatrix: MapMatrix[float] | None = None,
         priorityMatrixSkipStart: bool = False,
@@ -1254,7 +1250,6 @@ def breadth_first_dynamic_max_per_tile(
     @param fullOnlyArmyDistFunc:
     @param boundFunc: boundFunc is (currentTile, currentPiorityObject, maxPriorityObject) -> True (prune) False (continue)
     @param maxIterations:
-    @param allowDoubleBacks:
     @param includePath:  if True, all the functions take a path object param as third tuple entry
     @param ignoreNonPlayerArmy: if True, the paths returned will be calculated on the basis of just the searching players army and ignore enemy (or neutral city!) army they pass through.
     @param ignoreIncrement: if True, do not have paths returned include the city increment in their path calculation for any cities or generals in the path.
@@ -1435,7 +1430,7 @@ def breadth_first_dynamic_max_per_tile(
             continue
         dist += 1
         for next in current.movable:  # new spots to try
-            if next == parent and not allowDoubleBacks:
+            if next == parent:
                 continue
             if (next.isMountain
                     or (noNeutralCities and next.player == -1 and next.isCity)
@@ -1542,7 +1537,6 @@ def breadth_first_dynamic_max_per_tile_per_distance(
         fullOnlyArmyDistFunc=None,
         boundFunc=None,
         maxIterations: int = INF,
-        allowDoubleBacks=False,
         includePath=False,
         priorityMatrix: MapMatrix[float] | None = None,
         priorityMatrixSkipStart: bool = False,
@@ -1576,7 +1570,6 @@ def breadth_first_dynamic_max_per_tile_per_distance(
     @param fullOnlyArmyDistFunc:
     @param boundFunc: boundFunc is (currentTile, currentPiorityObject, maxPriorityObject) -> True (prune) False (continue)
     @param maxIterations:
-    @param allowDoubleBacks:
     @param includePath:  if True, all the functions take a path object param as third tuple entry
     @param ignoreNonPlayerArmy: if True, the paths returned will be calculated on the basis of just the searching players army and ignore enemy (or neutral city!) army they pass through.
     @param ignoreIncrement: if True, do not have paths returned include the city increment in their path calculation for any cities or generals in the path.
@@ -1720,9 +1713,11 @@ def breadth_first_dynamic_max_per_tile_per_distance(
 
     while frontier.queue:
         iter += 1
-        if iter & 64 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING or iter > maxIterations:
-            logbook.info(f"BFS-DYNAMIC-MAX-PER-TILE-PER-DIST BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
-            break
+        if iter & 64 == 0:
+            elapsed = time.perf_counter() - start
+            if elapsed > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING or iter > maxIterations:
+                logbook.info(f"BFS-DYNAMIC-MAX-PER-TILE-PER-DIST BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
+                break
 
         (prioVals, dist, current, parent, nodeList, startTile) = frontier.get()
         # if dist not in visited[current.x][current.y] or visited[current.x][current.y][dist][0] > prioVals:
@@ -1770,7 +1765,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
             continue
         dist += 1
         for next in current.movable:  # new spots to try
-            if next == parent and not allowDoubleBacks:
+            if next == parent:
                 continue
             if (next.isMountain
                     or (noNeutralCities and next.player == -1 and next.isCity)
@@ -1880,8 +1875,7 @@ def bidirectional_breadth_first_dynamic(
         skipFunc=None,
         ignoreStartTile=False,
         incrementBackward=False,
-        preferNeutral=False,
-        allowDoubleBacks=False):
+        preferNeutral=False):
     """
     THIS isn't implemented yet...?
 
@@ -2001,7 +1995,7 @@ def bidirectional_breadth_first_dynamic(
                 break
         if dist <= maxDepth and not foundGoal:
             for next in current.movable:  # new spots to try
-                if next == parent and not allowDoubleBacks:
+                if next == parent:
                     continue
                 if (next.isMountain
                         or (noNeutralCities and next.player == -1 and next.isCity)

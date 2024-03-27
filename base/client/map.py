@@ -710,7 +710,7 @@ class DistanceMapper:
     def get_distance_between_dual_cache(self, tileA: Tile, tileB: Tile) -> int:
         raise NotImplementedError()
 
-    def get_tile_dist_matrix(self, tile: Tile) -> typing.Dict[Tile, int]:
+    def get_tile_dist_matrix(self, tile: Tile):
         """Actually returns mapmatrix, but they behave similarly and cant declare mapmatrix here because it uses map as a circular reference."""
         raise NotImplementedError()
 
@@ -2887,6 +2887,9 @@ class Map(MapBase):
 def new_map_grid(map, initialValueXYFunc):
     return [[initialValueXYFunc(x, y) for y in range(map.rows)] for x in range(map.cols)]
 
+
+def new_tile_grid(map, initialValueTileFunc):
+    return [[initialValueTileFunc(map.grid[y][x]) for y in range(map.rows)] for x in range(map.cols)]
 
 def new_tile_grid(map, initialValueTileFunc):
     return [[initialValueTileFunc(map.grid[y][x]) for y in range(map.rows)] for x in range(map.cols)]

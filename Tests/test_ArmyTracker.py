@@ -807,8 +807,8 @@ class ArmyTrackerTests(TestBase):
         # should also run army emergence to indicate that the player is probably behind the wall if broken through a wall
         emergeTile1 = self.get_player_tile(3, 9, simHost.sim, general.player)
         emergeTile2 = self.get_player_tile(4, 8, simHost.sim, general.player)
-        self.assertGreater(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][emergeTile1.x][emergeTile1.y], 1.9)
-        self.assertGreater(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][emergeTile2.x][emergeTile2.y], 1.9)
+        self.assertGreater(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][emergeTile1], 1.9)
+        self.assertGreater(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][emergeTile2], 1.9)
     
     def test_should_not_think_fog_city_when_reasonable_fog_move(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1827,7 +1827,7 @@ a1   b1   b1   bG1
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         bot = self.get_debug_render_bot(simHost, general.player)
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][enemyGeneral.x][enemyGeneral.y] = 0
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][enemyGeneral] = 0
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -2223,3 +2223,27 @@ a1   b1   b1   bG1
 
         for tile in entangledLocations:
             self.assertLess(tile.army, 5)
+    
+    def test_should_not_find_danger_path_that_includes_two_entangled_armies(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_not_find_danger_path_that_includes_two_entangled_armies___mOcf4pW00---0--287.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 287, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=287)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+
+        self.assertIsNone(bot.dangerAnalyzer.fastestThreat)
+        self.assertIsNotNone(bot.dangerAnalyzer.fastestPotentialThreat)
+        self.assertIsNotNone(bot.dangerAnalyzer.fastestCityThreat)
+        self.assertEqual(playerMap.GetTile(7, 13), bot.dangerAnalyzer.fastestPotentialThreat.path.start.tile)
+        self.assertEqual(playerMap.GetTile(7, 13), bot.dangerAnalyzer.fastestCityThreat.path.start.tile)
+

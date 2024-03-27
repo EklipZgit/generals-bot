@@ -139,12 +139,12 @@ class CityAnalyzerTests(TestBase):
 
         for i, ts in enumerate(tileScores):
             tile, cityScore = ts
-            viewInfo.midLeftGridText[tile.x][tile.y] = f'c{i}'
+            viewInfo.midLeftGridText[tile] = f'c{i}'
             EklipZBot.add_city_score_to_view_info(cityScore, viewInfo)
 
         for i, ts in enumerate(enemyTileScores):
             tile, cityScore = ts
-            viewInfo.midLeftGridText[tile.x][tile.y] = f'm{i}'
+            viewInfo.midLeftGridText[tile] = f'm{i}'
             EklipZBot.add_city_score_to_view_info(cityScore, viewInfo)
 
         self.render_view_info(map, viewInfo, 'whatever')

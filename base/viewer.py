@@ -539,7 +539,7 @@ class GeneralsViewer(object):
                     # mark tile territories
                     if self._viewInfo.territories is not None:
                         territoryMarkerSize = 5
-                        tileTerritoryPlayer = self._viewInfo.territories.territoryMap[tile.x][tile.y]
+                        tileTerritoryPlayer = self._viewInfo.territories.territoryMap[tile]
                         if tile.player != tileTerritoryPlayer:
                             territoryColor = None
                             if tileTerritoryPlayer != -1:
@@ -701,7 +701,7 @@ class GeneralsViewer(object):
                     #                           (pos_left + self.cellWidth / 3, pos_top + 2.2 * self.cellHeight / 3))
 
                     if self._viewInfo.topRightGridText is not None:
-                        text = self._viewInfo.topRightGridText[column][row]
+                        text = self._viewInfo.topRightGridText[self._map.GetTile(column, row)]
                         if text is not None:
                             textVal = clean_up_possible_float(text)
                             if text == -1000000:  # then was skipped
@@ -713,7 +713,7 @@ class GeneralsViewer(object):
                             self._screen.blit(text, r)
 
                     if self._viewInfo.midRightGridText is not None:
-                        text = self._viewInfo.midRightGridText[column][row]
+                        text = self._viewInfo.midRightGridText[self._map.GetTile(column, row)]
                         if text is not None:
                             textVal = clean_up_possible_float(text)
                             if text == -1000000:  # then was skipped
@@ -725,7 +725,7 @@ class GeneralsViewer(object):
                             self._screen.blit(text, r)
 
                     if self._viewInfo.bottomMidRightGridText is not None:
-                        text = self._viewInfo.bottomMidRightGridText[column][row]
+                        text = self._viewInfo.bottomMidRightGridText[self._map.GetTile(column, row)]
                         if text is not None:
                             textVal = clean_up_possible_float(text)
                             if text == -1000000:  # then was skipped
@@ -737,7 +737,7 @@ class GeneralsViewer(object):
                             self._screen.blit(text, r)
 
                     if self._viewInfo.bottomRightGridText is not None:
-                        text = self._viewInfo.bottomRightGridText[column][row]
+                        text = self._viewInfo.bottomRightGridText[self._map.GetTile(column, row)]
                         if text is not None:
                             textVal = clean_up_possible_float(text)
                             if text == -1000000:  # then was skipped
@@ -749,7 +749,7 @@ class GeneralsViewer(object):
                             self._screen.blit(text, r)
 
                     if self._viewInfo.bottomLeftGridText is not None:
-                        text = self._viewInfo.bottomLeftGridText[column][row]
+                        text = self._viewInfo.bottomLeftGridText[self._map.GetTile(column, row)]
                         if text is not None:
                             textVal = clean_up_possible_float(text)
                             if text == -1000000:  # then was skipped
@@ -758,7 +758,7 @@ class GeneralsViewer(object):
                                               (pos_left + 2, pos_top + 2.2 * self.cellHeight / 3))
 
                     if self._viewInfo.bottomMidLeftGridText is not None:
-                        text = self._viewInfo.bottomMidLeftGridText[column][row]
+                        text = self._viewInfo.bottomMidLeftGridText[self._map.GetTile(column, row)]
                         if text is not None:
                             textVal = clean_up_possible_float(text)
                             if text == -1000000:  # then was skipped
@@ -767,7 +767,7 @@ class GeneralsViewer(object):
                                               (pos_left + 2, pos_top + 1.6 * self.cellHeight / 3))
 
                     if self._viewInfo.midLeftGridText is not None:
-                        text = self._viewInfo.midLeftGridText[column][row]
+                        text = self._viewInfo.midLeftGridText[self._map.GetTile(column, row)]
                         if text is not None:
                             textVal = clean_up_possible_float(text)
                             if text == -1000000:  # then was skipped
@@ -1133,11 +1133,11 @@ class GeneralsViewer(object):
                                     draw_pathways=True)
 
         for tile in self._map.pathableTiles:
-            if self._viewInfo.board_analysis.innerChokes[tile.x][tile.y]:
+            if self._viewInfo.board_analysis.innerChokes[tile]:
                 (r, g, b) = innerChokeColor
                 self.draw_square(tile, 1, r, g, b, 255, self.square_inner_2)
 
-            if self._viewInfo.board_analysis.outerChokes[tile.x][tile.y]:
+            if self._viewInfo.board_analysis.outerChokes[tile]:
                 (r, g, b) = outerChokeColor
                 self.draw_square(tile, 1, r, g, b, 255, self.square_inner_3)
 

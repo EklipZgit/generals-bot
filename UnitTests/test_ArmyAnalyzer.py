@@ -4,7 +4,7 @@ from TestBase import TestBase
 
 class ArmyAnalyzerUnitTests(TestBase):
     def test_builds_correct_pathways(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/242.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 242, player_index=1)
 
@@ -170,3 +170,71 @@ b1   b1   b1   M    b1   b1   bG20
         self.assertEqual(1, analyzer.interceptChokes[map.GetTile(1, 2)], 'Like 5,4, 1,2 should be 1 because a runby on 2,2 gets away if we reach 1,3 the same turn the opp could.')
 
 # 0f 5p 0s
+
+    def test_should_meet_to_defend_multi_choke__when_can_reach_not_one_behind(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        data = """
+|    |    |    |    |    |    |
+a1   a1   a1   aG1  a1   a1   a1
+a1   a1   a1   a1   a1   a1   a1
+a1   a1   a1   a1   a1   a1   a1
+a1   a1   M    a1   M    a1   a1
+a1   a1   M    a1   M    a1   a1
+a1   a1   M    a1   M    a1   a1
+b1   b1   M    b1   M    b1   b1
+b1   b1   M    b1   M    b1   b1
+b1   b1   M    b1   M    b1   b1
+b1   a40  b1   b1   b1   b1   b1
+b1   b1   b1   b1   b1   b1   b1
+b1   b1   b1   b40  b1   b1   bG1
+|    |    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(data, 181)
+        enTile = map.GetTile(3, 11)
+        analyzer = ArmyAnalyzer(map, general, enTile)
+
+        if debugMode:
+            self.render_army_analyzer(map, analyzer)
+        for y in range(12):
+            tile = map.GetTile(3, y)
+            self.assertTrue(analyzer.is_choke(tile), 'all tiles down the middle should be full chokes')
+            expectedChoke = -1
+            if y == 0:
+                expectedChoke = 1
+            if y == 1:
+                expectedChoke = 0
+
+            self.assertEqual(expectedChoke, analyzer.interceptChokes[tile], 'all tiles down the middle should be full chokes. Near gen should be 0, and gen should be 1.')
+
+    def test_should_understand_can_intercept_event_against_corner(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        data = """
+|    |    |    |    |    |    |
+a1   a1   a1   aG1  a1   a1   a1
+a1   a1   a1   a1   a1   a1   a1
+a1   a1   a1   a1   a1   a1   a1
+a1   a1   M    a1   M    a1   a1
+a1   a1   M    a1   M    a1   a1
+a1   a1   M    a1   M    a1   a1
+b1   b1   M    b1   M    b1   b1
+b1   b1   M    b1   M    b1   b1
+b1   b1   M    b1   M    b1   b1
+b1   a40  b1   b1   b1   b1   b1
+b1   b1   b1   b1   b1   b1   b1
+b1   b1   b1   b40  b1   b1   bG1
+|    |    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(data, 181)
+        enTile = map.GetTile(3, 11)
+        frTile = map.GetTile(6, 0)
+        analyzer = ArmyAnalyzer(map, frTile, enTile)
+
+        if debugMode:
+            self.render_army_analyzer(map, analyzer)
+
+        canInterceptStillTile = map.GetTile(2, 9)
+        self.assertEqual(1, analyzer.interceptTurns[canInterceptStillTile], 'can intercept from this tile 1 turn from now by chasing to the right for 4 moves max')
+        self.assertEqual(4, analyzer.interceptDistances[canInterceptStillTile], 'can intercept from this tile by chasing to the right for 4 moves max')
+        self.assertEqual(4, analyzer.interceptDistances[canInterceptStillTile], 'can intercept from this tile by chasing to the right for 4 moves max')

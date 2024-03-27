@@ -5,7 +5,6 @@ from collections import deque
 
 import logbook
 
-import DebugHelper
 import SearchUtils
 from ArmyAnalyzer import ArmyAnalyzer
 from BoardAnalyzer import BoardAnalyzer
@@ -33,6 +32,29 @@ class ThreatBlockInfo(object):
         return f'{str(self.tile)}:{str(self.amount_needed_to_block)}@{"|".join([str(t) for t in self.blocked_destinations])}'
 
 
+class InterceptPointTileInfo(object):
+    def __init__(self, tile: Tile, minDelayTurns: int, maxExtraMoves: int, maxChokeWidth: int, maxInterceptTurnOffset: int):
+        self.tile: Tile = tile
+
+        self.max_delay_turns: int = minDelayTurns
+        """The latest turns in the future that this tile must be reached in order to prevent subsequent damage in the worst case scenarios."""
+
+        self.max_extra_moves_to_capture: int = maxExtraMoves
+        """The maximum worst case number of moves that will be wasted to complete an intercept capture from this tile if reached by the min_delay_turns turn."""
+
+        self.max_choke_width: int = maxChokeWidth
+        """The width of the max choke. Informational only?"""
+
+        self.max_intercept_turn_offset: int = maxInterceptTurnOffset
+        """Mostly useless? The max offset based on chokewidths and distances to chokes, used to calculate the min_delay_turns"""
+
+    def __str__(self) -> str:
+        return f'{self.tile} - it{self.max_delay_turns}, cw{self.max_choke_width}, ic{self.max_intercept_turn_offset}, im{self.max_extra_moves_to_capture}'
+
+    def __repr__(self) -> str:
+        return str(self)
+
+
 class ArmyInterception(object):
     def __init__(
         self,
@@ -40,7 +62,7 @@ class ArmyInterception(object):
     ):
         self.threats: typing.List[ThreatObj] = threats
         self.base_threat_army: int = 0
-        self.common_intercept_choke_widths: typing.Dict[Tile, int] = {}
+        self.common_intercept_chokes: typing.Dict[Tile, InterceptPointTileInfo] = {}
         self.furthest_common_intercept_distances: MapMatrix[int] = None
         self.target_tile: Tile = threats[0].path.start.tile
 
@@ -85,10 +107,7 @@ class ArmyInterceptor(object):
 
         interception = ArmyInterception(threats)
 
-        interception.common_intercept_choke_widths = self.get_shared_chokes(threats)
-
-        if self.map.turn == 591:
-            pass
+        interception.common_intercept_chokes = self.get_shared_chokes(threats)
 
         self.determine_best_threat_value(interception, threats, turnsLeftInCycle)
 
@@ -98,163 +117,80 @@ class ArmyInterceptor(object):
 
         return interception
 
-    def get_shared_chokes(self, threats: typing.List[ThreatObj]) -> typing.Dict[Tile, int]:
-        commonChokesCounts = {}
-        commonChokesVals = {}
-        withinOneAdditionalChecks = {}
+    def get_shared_chokes(self, threats: typing.List[ThreatObj]) -> typing.Dict[Tile, InterceptPointTileInfo]:
+        commonChokesCounts: typing.Dict[Tile, int] = {}
+        # commonChokesCombinedTurnOffsets: typing.Dict[Tile, int] = {}
+        commonMinDelayTurns = {}
+        commonMaxExtraMoves = {}
+        # withinOneAdditionalChecks = {}
         for threat in threats:
-            withinOneAdditionalChecks.clear()
+            # withinOneAdditionalChecks.clear()
             for tile in self.map.reachableTiles:
                 interceptMoves = threat.armyAnalysis.interceptChokes[tile]
-                if interceptMoves is None:
-                    continue
-                curCount = commonChokesCounts.get(tile, 0)
-                curVal = commonChokesVals.get(tile, 0)
-                commonChokesCounts[tile] = curCount + 1
-                commonChokesVals[tile] = curVal + interceptMoves
-                for movable in tile.movable:
-                    if movable in threat.armyAnalysis.interceptChokes or movable.isObstacle:
-                        continue
-                    if threat.armyAnalysis.bMap[movable.x][movable.y] >= threat.turns + 1 or threat.armyAnalysis.aMap[movable.x][movable.y] > threat.turns + 1:
-                        continue
-                    existingMin = withinOneAdditionalChecks.get(movable, 10000)
-                    if existingMin > interceptMoves:
-                        withinOneAdditionalChecks[movable] = interceptMoves
+                delayTurns = threat.armyAnalysis.interceptTurns[tile]
+                worstCaseExtraMoves = threat.armyAnalysis.interceptDistances[tile]
 
-            for tile, interceptMoves in withinOneAdditionalChecks.items():
+                if interceptMoves is None or delayTurns > 800:
+                    continue
+
                 curCount = commonChokesCounts.get(tile, 0)
-                curVal = commonChokesVals.get(tile, 0)
+                # curVal = commonChokesCombinedTurnOffsets.get(tile, 0)
+                curExtraMoves = commonMaxExtraMoves.get(tile, 0)
+                curMinDelayTurns = commonMinDelayTurns.get(tile, 1000)
                 commonChokesCounts[tile] = curCount + 1
-                commonChokesVals[tile] = curVal + interceptMoves + 1
+                # commonChokesCombinedTurnOffsets[tile] = curVal + interceptMoves + 1
+                commonMaxExtraMoves[tile] = max(worstCaseExtraMoves, curExtraMoves)
+                commonMinDelayTurns[tile] = min(curMinDelayTurns, delayTurns)
+            #     for movable in tile.movable:
+            #         if movable in threat.armyAnalysis.interceptChokes or movable.isObstacle:
+            #             continue
+            #         if threat.armyAnalysis.bMap[movable] >= threat.turns + 1 or threat.armyAnalysis.aMap[movable] > threat.turns + 1:
+            #             continue
+            #         existingMin = withinOneAdditionalChecks.get(movable, 10000)
+            #         if existingMin > interceptMoves:
+            #             withinOneAdditionalChecks[movable] = interceptMoves
+            #
+            # for tile, interceptMoves in withinOneAdditionalChecks.items():
+            #     curCount = commonChokesCounts.get(tile, 0)
+            #     curVal = commonChokesVals.get(tile, 0)
+            #     commonChokesCounts[tile] = curCount + 1
+            #     commonChokesVals[tile] = curVal + interceptMoves + 1
 
         maxShared = 0
         for tile, num in commonChokesCounts.items():
             if num > maxShared:
                 maxShared = num
 
-        potentialSharedChokes = {}
+        potentialSharedChokes = set()
         for tile, num in commonChokesCounts.items():
             if num != maxShared:
                 continue
 
-            maxWidth = -1
-            for threat in threats:
-                interceptMoves = threat.armyAnalysis.interceptChokes.get(tile, -1)
-                if interceptMoves == -1:
-                    continue
-
-                if interceptMoves > maxWidth:
-                    maxWidth = interceptMoves
-            if maxWidth >= 0:
-                potentialSharedChokes[tile] = maxWidth
+            potentialSharedChokes.add(tile)
+            # maxWidth = -1
+            # for threat in threats:
+            #     interceptMoves = threat.armyAnalysis.interceptChokes.get(tile, -1)
+            #     if interceptMoves == -1:
+            #         continue
+            #
+            #     if interceptMoves > maxWidth:
+            #         maxWidth = interceptMoves
+            # if maxWidth >= 0:
+            #     potentialSharedChokes[tile] = maxWidth
 
         if self.log_debug:
-            for tile, chokeVal in sorted(commonChokesVals.items()):
-                logbook.info(f'chokeVals: {str(tile)} = count {commonChokesCounts[tile]} - chokeVal {chokeVal}')
+            # for tile, chokeVal in sorted(commonChokesCombinedTurnOffsets.items()):
+            #     logbook.info(f'chokeVals: {str(tile)} = count {commonChokesCounts[tile]} - chokeVal {chokeVal}')
 
-            for tile, dist in sorted(potentialSharedChokes.items()):
+            for tile in potentialSharedChokes:
+                dist = commonMinDelayTurns[tile]
                 logbook.info(f'potential shared: {str(tile)} = dist {dist}')
 
-        furthestPotentialCommon = max(potentialSharedChokes.keys(), key=lambda t: threats[0].armyAnalysis.bMap[t.x][t.y])
-        furthestDist = threats[0].armyAnalysis.bMap[furthestPotentialCommon.x][furthestPotentialCommon.y]
-        dists = self.map.distance_mapper.get_tile_dist_matrix(furthestPotentialCommon)
-
-        # bestClassVal = 0
-        sharedChokes = {}
-        distLookups = {}
-        for i in range(40):
-            distLookups[i] = []
-
-        queue = deque()
-        queue.append((0, threats[0].path.start.tile, None))
-
-        fromSets = {}
-        toSets = {}
-        lastDepth = -1
-        lastVisited = set()
-        visited = set()
-        while queue:
-            depth, tile, fromTile = queue.popleft()
-            if tile in lastVisited:
-                continue
-
-            fSet = fromSets.get(tile, None)
-            if fSet is None:
-                fSet = set()
-                fromSets[tile] = fSet
-            fSet.add(fromTile)
-
-            tSet = toSets.get(fromTile, None)
-            if tSet is None:
-                tSet = set()
-                toSets[fromTile] = tSet
-            tSet.add(tile)
-
-            if depth > lastDepth:
-                lastDepth = depth
-                lastVisited.update(visited)
-                visited.clear()
-
-            curDist = dists[tile]
-            if curDist > furthestDist:
-                if self.log_debug:
-                    logbook.info(f'skipping {str(tile)} because dists[tile] {dists[tile]} > furthestDist {furthestDist}')
-                continue
-
-            tilesAtDist = distLookups[depth]
-            # todo keep?
-            # if tile in threats[0].armyAnalysis.shortestPathWay.tiles:
-            #     tilesAtDist.append(tile)
-            tilesAtDist.append(tile)
-
-            if tile in visited:
-                continue
-
-            visited.add(tile)
-
-            # INCLUDE mountains, we need to treat them as fucked stuff. Dont path THROUGH them though.
-            if tile.isObstacle:
-                continue
-
-            for adj in tile.movable:
-                if adj in potentialSharedChokes:
-                    queue.append((depth + 1, adj, tile))
-
-        common = {}
-        fromCommon = set()
-        prevTiles = []
-        for i in range(40):
-            tiles = distLookups[i]
-            if len(tiles) == 0:
-                continue
-
-            # find the middle tile...?
-            common.clear()
-            fromCommon.clear()
-
-            for tile in tiles:
-                tile2 = tile
-                fromTiles = fromSets[tile]
-                fromCommon.update(fromTiles)
-                toTiles = toSets.get(tile, None)
-
-            for tile in tiles:
-                allCommon = len(fromCommon) > 0
-                fromTiles = fromSets[tile]
-                for t in fromCommon:
-                    if t not in fromTiles:
-                        allCommon = False
-                        break
-                if allCommon:
-                    # sharedChokes[tile] = i + len(fromTiles) + len(toTiles)
-                    sharedInterceptVal = potentialSharedChokes.get(tile, None)
-                    if not sharedInterceptVal:
-                        if self.log_debug:
-                            logbook.info(f'DEBUG: SHAREDINTERCEPTVAL WAS NONE FOR TILE {tile} IN INTERCEPT {threats[0].path.start.tile}')
-                    else:
-                        if self.log_debug:
-                            logbook.info(f'common choke {str(tile)} was {sharedInterceptVal}')
-                        sharedChokes[tile] = sharedInterceptVal
+        sharedChokes = self._build_shared_chokes(
+            potentialSharedChokes,
+            commonMaxExtraMoves,
+            commonMinDelayTurns,
+            threats)
 
         # if self.log_debug:
         #     for tile, dist in sorted(sharedChokes.items()):
@@ -265,6 +201,154 @@ class ArmyInterceptor(object):
             return self.get_shared_chokes(threats[0:1])
 
         return sharedChokes
+
+    def _build_shared_chokes(
+            self,
+            potentialSharedChokes: typing.Concatenate[typing.Iterable[Tile], typing.Container[Tile]],
+            commonMaxExtraMoves: typing.Dict[Tile, int],
+            commonMinDelayTurns: typing.Dict[Tile, int],
+            threats: typing.List[ThreatObj]
+    ) -> typing.Dict[Tile, InterceptPointTileInfo]:
+        sharedChokes = {}
+        for tile in potentialSharedChokes:
+            minDelayTurns = commonMinDelayTurns[tile]
+            maxExtraMoves = commonMaxExtraMoves[tile]
+            maxChokeWidth = 0
+            maxInterceptTurnOffset = 0
+            for threat in threats:
+                ito = threat.armyAnalysis.interceptChokes[tile]
+                cw = threat.armyAnalysis.chokeWidths[tile]
+                if cw is not None:
+                    maxChokeWidth = max(cw, maxChokeWidth)
+                if ito is not None:
+                    maxInterceptTurnOffset = max(ito, maxInterceptTurnOffset)
+            if self.log_debug:
+                logbook.info(f'common choke {str(tile)} was '
+                             f'minDelayTurns {minDelayTurns}, '
+                             f'maxExtraMoves {maxExtraMoves}, '
+                             f'maxChokeWidth {maxChokeWidth}, '
+                             f'maxInterceptTurnOffset {maxInterceptTurnOffset}')
+            sharedChokes[tile] = InterceptPointTileInfo(tile, minDelayTurns, maxExtraMoves, maxChokeWidth, maxInterceptTurnOffset)
+
+        return sharedChokes
+
+    # OLD
+    # def _build_shared_chokes(
+    #         self,
+    #         potentialSharedChokes: typing.Concatenate[typing.Iterable[Tile], typing.Container[Tile]],
+    #         commonMaxExtraMoves: typing.Dict[Tile, int],
+    #         commonMinDelayTurns: typing.Dict[Tile, int],
+    #         threats: typing.List[ThreatObj]
+    # ) -> typing.Dict[Tile, InterceptPointTileInfo]:
+    #     furthestPotentialCommon = max(potentialSharedChokes, key=lambda t: threats[0].armyAnalysis.bMap[t])
+    #     furthestDist = threats[0].armyAnalysis.bMap[furthestPotentialCommon]
+    #     dists = self.map.distance_mapper.get_tile_dist_matrix(furthestPotentialCommon)
+    #
+    #     sharedChokes = {}
+    #     distLookups = {}
+    #     for i in range(40):
+    #         distLookups[i] = []
+    #
+    #     queue = deque()
+    #     queue.append((0, threats[0].path.start.tile, None))
+    #     fromSets = {}
+    #     toSets = {}
+    #     lastDepth = -1
+    #     lastVisited = set()
+    #     visited = set()
+    #     while queue:
+    #         depth, tile, fromTile = queue.popleft()
+    #         if tile in lastVisited:
+    #             continue
+    #
+    #         fSet = fromSets.get(tile, None)
+    #         if fSet is None:
+    #             fSet = set()
+    #             fromSets[tile] = fSet
+    #         fSet.add(fromTile)
+    #
+    #         tSet = toSets.get(fromTile, None)
+    #         if tSet is None:
+    #             tSet = set()
+    #             toSets[fromTile] = tSet
+    #         tSet.add(tile)
+    #
+    #         if depth > lastDepth:
+    #             lastDepth = depth
+    #             lastVisited.update(visited)
+    #             visited.clear()
+    #
+    #         curDist = dists[tile]
+    #         if curDist > furthestDist:
+    #             if self.log_debug:
+    #                 logbook.info(f'skipping {str(tile)} because dists[tile] {dists[tile]} > furthestDist {furthestDist}')
+    #             continue
+    #
+    #         tilesAtDist = distLookups[depth]
+    #         tilesAtDist.append(tile)
+    #
+    #         if tile in visited:
+    #             continue
+    #
+    #         visited.add(tile)
+    #
+    #         # INCLUDE mountains, we need to treat them as fucked stuff. Dont path THROUGH them though.
+    #         if tile.isObstacle:
+    #             continue
+    #
+    #         for adj in tile.movable:
+    #             if adj in potentialSharedChokes:
+    #                 queue.append((depth + 1, adj, tile))
+    #
+    #     common = {}
+    #     fromCommon = set()
+    #     for i in range(40):
+    #         tiles = distLookups[i]
+    #         if len(tiles) == 0:
+    #             continue
+    #
+    #         # find the middle tile...?
+    #         common.clear()
+    #         fromCommon.clear()
+    #
+    #         for tile in tiles:
+    #             fromTiles = fromSets[tile]
+    #             fromCommon.update(fromTiles)
+    #             # toTiles = toSets.get(tile, None)
+    #
+    #         for tile in tiles:
+    #             allCommon = len(fromCommon) > 0
+    #             fromTiles = fromSets[tile]
+    #             for t in fromCommon:
+    #                 if t not in fromTiles:
+    #                     allCommon = False
+    #                     break
+    #             if allCommon:
+    #                 # sharedChokes[tile] = i + len(fromTiles) + len(toTiles)
+    #                 if tile not in potentialSharedChokes:
+    #                     if self.log_debug:
+    #                         logbook.info(f'DEBUG: SHAREDINTERCEPTVAL WAS NONE FOR TILE {tile} IN INTERCEPT {threats[0].path.start.tile}')
+    #                 else:
+    #                     minDelayTurns = commonMinDelayTurns[tile]
+    #                     maxExtraMoves = commonMaxExtraMoves[tile]
+    #                     maxChokeWidth = 0
+    #                     maxInterceptTurnOffset = 0
+    #                     for threat in threats:
+    #                         ito = threat.armyAnalysis.interceptChokes[tile]
+    #                         cw = threat.armyAnalysis.chokeWidths[tile]
+    #                         if cw is not None:
+    #                             maxChokeWidth = max(cw, maxChokeWidth)
+    #                         if ito is not None:
+    #                             maxInterceptTurnOffset = max(ito, maxInterceptTurnOffset)
+    #                     if self.log_debug:
+    #                         logbook.info(f'common choke {str(tile)} was '
+    #                                      f'minDelayTurns {minDelayTurns}, '
+    #                                      f'maxExtraMoves {maxExtraMoves}, '
+    #                                      f'maxChokeWidth {maxChokeWidth}, '
+    #                                      f'maxInterceptTurnOffset {maxInterceptTurnOffset}')
+    #                     sharedChokes[tile] = InterceptPointTileInfo(tile, minDelayTurns, maxExtraMoves, maxChokeWidth, maxInterceptTurnOffset)
+    #
+    #     return sharedChokes
 
     def _get_threats_army_amount(self, threats: typing.List[ThreatObj]) -> int:
         maxAmount = 0
@@ -332,7 +416,7 @@ class ArmyInterceptor(object):
     def ensure_threat_army_analysis(self, threat: ThreatObj) -> bool:
         """returns True if the army analysis was built"""
         if threat.armyAnalysis is None:
-            dists = SearchUtils.build_distance_map_matrix(self.map, [threat.path.start.tile])
+            dists = self.map.distance_mapper.get_tile_dist_matrix(threat.path.start.tile)
             furthestPoint = max(threat.path.tileList, key=lambda t: dists[t] if self.map.is_tile_friendly(t) else 0)
             logbook.info(f'backfilling threat army analysis from {str(threat.path.start.tile)}->{str(furthestPoint)}')
             threat.armyAnalysis = ArmyAnalyzer(self.map, armyA=furthestPoint, armyB=threat.path.start.tile)
@@ -441,11 +525,11 @@ class ArmyInterceptor(object):
     ) -> typing.Dict[int, typing.Tuple[float, Path]]:
         """turnsToIntercept -> econValueOfIntercept, interceptPath"""
 
-        if len(interception.common_intercept_choke_widths) == 0:
+        if len(interception.common_intercept_chokes) == 0:
             return {}
 
-        furthestBackCommonIntercept = max(interception.common_intercept_choke_widths.keys(), key=lambda t: interception.threats[0].armyAnalysis.bMap[t.x][t.y])
-        interception.furthest_common_intercept_distances = SearchUtils.build_distance_map_matrix(self.map, [furthestBackCommonIntercept])
+        furthestBackCommonIntercept = max(interception.common_intercept_chokes.keys(), key=lambda t: interception.threats[0].armyAnalysis.bMap[t])
+        interception.furthest_common_intercept_distances = self.map.distance_mapper.get_tile_dist_matrix(furthestBackCommonIntercept)
         threatDistFromCommon = interception.furthest_common_intercept_distances[interception.target_tile]
         longestThreat = max(interception.threats, key=lambda t: t.turns)
         maxDepth = longestThreat.turns + 1
@@ -455,14 +539,16 @@ class ArmyInterceptor(object):
         bestInterceptTable: typing.Dict[int, typing.Tuple[float, Path]] = {}
         logbook.info(f'getting intercept paths at maxDepth {maxDepth}, threatDistFromCommon {threatDistFromCommon}')
         # TODO sort by earliest intercept + chokeWidth?
-        for tile, interceptWorstCaseDistance in interception.common_intercept_choke_widths.items():
+        tile: Tile
+        interceptInfo: InterceptPointTileInfo
+        for tile, interceptInfo in interception.common_intercept_chokes.items():
             if tile.isCity and tile.isNeutral:
                 continue
-            # TODO where does this 3 come from...? I think this lets the intercept chase, slightly...?
-            # THE 3 is necessary to chase 1 tile behind. I'm not sure why, though...
-            arbitraryOffset = 3
-            # TODO for final tile in the path, if tile is recapturable (city, normal tile) then increase maxDepth to turnsLeftInCycle
-            turnsToIntercept = interception.best_enemy_threat.armyAnalysis.bMap[tile.x][tile.y] - interceptWorstCaseDistance + arbitraryOffset
+            # # TODO where does this 3 come from...? I think this lets the intercept chase, slightly...?
+            # # THE 3 is necessary to chase 1 tile behind. I'm not sure why, though...
+            # arbitraryOffset = 3
+            # # TODO for final tile in the path, if tile is recapturable (city, normal tile) then increase maxDepth to turnsLeftInCycle
+            turnsToIntercept = interceptInfo.max_delay_turns
 
             depth = min(maxDepth, turnsToIntercept)
 
@@ -480,7 +566,7 @@ class ArmyInterceptor(object):
             debugBadCutoff = max(1, interception.base_threat_army // 10)
 
             for dist, path in interceptPaths.items():
-                interceptPointDist = interception.threats[0].armyAnalysis.bMap[path.tail.tile.x][path.tail.tile.y]
+                interceptPointDist = interception.threats[0].armyAnalysis.bMap[path.tail.tile]
                 """The distance from the threat to the intercept point"""
 
                 if DEBUG_BYPASS_BAD_INTERCEPTIONS and path.start.tile.army <= debugBadCutoff:
@@ -490,14 +576,15 @@ class ArmyInterceptor(object):
                 addlTurns = interceptPointDist
                 """The number of additional turns beyond the path length that will need to be travelled to recoup our current tile-differential...? to reach the threat tile."""
                 if not interception.target_tile.isCity:
-                    interceptRemaining = max(0, interceptPointDist - path.length)
+                    # interceptRemaining = max(0, interceptPointDist - path.length)
                     # where the opponents army will ideally have moved to while we are moving to this position
                     # addlTurns = max(0, interceptRemaining - interceptRemaining // 2)
                     addlTurns = max(0, interceptPointDist - path.length)
                     # addlTurns = max(0, interceptRemaining // 2)
 
-                effectiveDist = path.length + addlTurns + interceptWorstCaseDistance
-                """The effective distance that we need to travel """
+                # effectiveDist = path.length + addlTurns + interceptWorstCaseDistance
+                effectiveDist = path.length + addlTurns + interceptInfo.max_extra_moves_to_capture
+                """The effective distance that we need to travel before recapture starts"""
 
                 interceptArmy = interception.base_threat_army
                 if interception.target_tile in path.tileSet:
@@ -509,6 +596,7 @@ class ArmyInterceptor(object):
                         t = pathNode.tile
                         tileHold = otherThreatsBlockingTiles.get(t, None)
                         if tileHold is not None and pathNode.next is not None and pathNode.next.tile in tileHold.blocked_destinations:
+                            # TODO
                             # interceptArmy -= max(tileHold, t.army // 2)
                             pathNode.move_half = True
                         pathNode = pathNode.next
@@ -577,9 +665,6 @@ class ArmyInterceptor(object):
 
             if curTile.army <= 1:
                 return None
-
-            if self.map.turn > 626 and curTile.x == 13 and curTile.y == 0:
-                pass
 
             if negArmy > 0:
                 return None
@@ -678,7 +763,7 @@ class ArmyInterceptor(object):
                     amountBlocked -= tile.army + 1
 
         enArmy = best_enemy_threat.path.value
-        interceptDist = best_enemy_threat.armyAnalysis.bMap[path.tail.tile.x][path.tail.tile.y]
+        interceptDist = best_enemy_threat.armyAnalysis.bMap[path.tail.tile]
         # This assumes the intercept is moving towards the threat, pretty sure
         # interceptDist = frDist - path.length
         # interceptDist =
@@ -763,7 +848,7 @@ class ArmyInterceptor(object):
 
                     for moveable in chokeTile.movable:
                         # if moveable not in threat.armyAnalysis.shortestPathWay.tiles:
-                        if moveable not in threat.path.tileSet and (moveable not in threat.armyAnalysis.shortestPathWay.tiles or threat.armyAnalysis.bMap[moveable.x][moveable.y] >= threat.armyAnalysis.bMap[chokeTile.x][chokeTile.y]):
+                        if moveable not in threat.path.tileSet and (moveable not in threat.armyAnalysis.shortestPathWay.tiles or threat.armyAnalysis.bMap[moveable] >= threat.armyAnalysis.bMap[chokeTile]):
                             blockInfo.add_blocked_destination(moveable)
 
                     if blockInfo.amount_needed_to_block < blockAmount:

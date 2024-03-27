@@ -127,8 +127,21 @@ class SearchUtilsBenchmarkTests(TestBase):
         dumbassDistTime = time.perf_counter() - start
 
         start = time.perf_counter()
-        map.distance_mapper = DistanceMapperImpl(map)
+        distance_mapper = DistanceMapperImpl(map)
         sumDistMapperTime = time.perf_counter() - start
+
+        start = time.perf_counter()
+        distance_mapper_dual_cache = DistanceMapperImpl(map)
+        sumDualCacheDistMapperTime = time.perf_counter() - start
+
+        totalSumPQTime = 0.0
+        totalSumHQTime = 0.0
+        totalSumAStarTime = 0.0
+        totalSumAStarDistTime = 0.0
+        totalSumAStarMatrixTime = 0.0
+        totalSumBfsFindTime = 0.0
+        totalSumBfsFindDistTime = 0.0
+        totalSumBfsFindDistNoNeutTime = 0.0
 
         lastRange = 0
         for r in ranges:
@@ -153,13 +166,13 @@ class SearchUtilsBenchmarkTests(TestBase):
 
                     iters += 1
 
-                    start = time.perf_counter()
-                    pPq = SearchUtils.bidirectional_a_star_pq(pointA, pointB)
-                    sumPQTime += time.perf_counter() - start
+                    # start = time.perf_counter()
+                    # pPq = SearchUtils.bidirectional_a_star_pq(pointA, pointB)
+                    # sumPQTime += time.perf_counter() - start
 
-                    start = time.perf_counter()
-                    pHq = SearchUtils.bidirectional_a_star(pointA, pointB)
-                    sumHQTime += time.perf_counter() - start
+                    # start = time.perf_counter()
+                    # pHq = SearchUtils.bidirectional_a_star(pointA, pointB)
+                    # sumHQTime += time.perf_counter() - start
 
                     start = time.perf_counter()
                     pAStar = SearchUtils.a_star_find([pointA], pointB, noLog=True)
@@ -189,25 +202,29 @@ class SearchUtilsBenchmarkTests(TestBase):
                     # sumBfsFindDistNoNeutTime += time.perf_counter() - start
 
                     start = time.perf_counter()
-                    distMapperDist = map.get_distance_between(pointA, pointB)
+                    distMapperDist = distance_mapper.get_distance_between(pointA, pointB)
                     sumDistMapperTime += time.perf_counter() - start
 
+                    start = time.perf_counter()
+                    dualCacheDistMapperDist = distance_mapper_dual_cache.get_distance_between_dual_cache(pointA, pointB)
+                    sumDualCacheDistMapperTime += time.perf_counter() - start
+
                     if (
-                            pHq.length != pPq.length
-                            or pHq.length != pHq.length
-                            or pFind.length != pHq.length
-                            or pAStar.length != pHq.length
-                            or pAStarDist != pHq.length
-                            or pFindDist != pHq.length
-                            or pAStarMatrix.length != pHq.length
+                            # pHq.length != pPq.length
+                            # or pHq.length != pAStar.length
+                            pFind.length != pAStar.length
+                            or pAStar.length != pAStar.length
+                            or pAStarDist != pAStar.length
+                            or pFindDist != pAStar.length
+                            or pAStarMatrix.length != pAStar.length
                     ):
                         vi = self.get_renderable_view_info(map)
-                        vi.color_path(PathColorer(
-                            pPq, 0, 255, 255
-                        ))
-                        vi.color_path(PathColorer(
-                            pHq, 255, 0, 255
-                        ))
+                        # vi.color_path(PathColorer(
+                        #     pPq, 0, 255, 255
+                        # ))
+                        # vi.color_path(PathColorer(
+                        #     pHq, 255, 0, 255
+                        # ))
                         vi.color_path(PathColorer(
                             pFind, 255, 255, 255
                         ))
@@ -219,33 +236,52 @@ class SearchUtilsBenchmarkTests(TestBase):
                         ))
                         self.render_view_info(map, vi, "mismatch")
 
-                    if not skipFloyd and pHq.length != floydDists[pointA][pointB]:
+                    if not skipFloyd and pAStar.length != floydDists[pointA][pointB]:
                         vi = self.get_renderable_view_info(map)
 
                         vi.color_path(PathColorer(
-                            pHq, 0, 255, 255
+                            pAStar, 0, 255, 255
                         ))
-                        self.render_view_info(map, vi, f"mismatch floyd {floydDists[pointA][pointB]} vs {pHq.length}")
+                        self.render_view_info(map, vi, f"mismatch floyd {floydDists[pointA][pointB]} vs {pAStar.length}")
 
-                    if pHq.length != dumbassDistDists[pointA][pointB]:
+                    if pAStar.length != dumbassDistDists[pointA][pointB]:
                         vi = self.get_renderable_view_info(map)
 
                         vi.color_path(PathColorer(
-                            pHq, 0, 255, 255
+                            pAStar, 0, 255, 255
                         ))
-                        self.render_view_info(map, vi, f"mismatch dumbass {dumbassDistDists[pointA][pointB]} vs {pHq.length}")
+                        self.render_view_info(map, vi, f"mismatch dumbass {dumbassDistDists[pointA][pointB]} vs {pAStar.length}")
 
-                    if pHq.length != distMapperDist:
+                    if pAStar.length != distMapperDist:
                         vi = self.get_renderable_view_info(map)
 
                         vi.color_path(PathColorer(
-                            pHq, 0, 255, 255
+                            pAStar, 0, 255, 255
                         ))
-                        self.render_view_info(map, vi, f"mismatch distmapper {distMapperDist} vs {pHq.length}")
+                        self.render_view_info(map, vi, f"mismatch distmapper {distMapperDist} vs {pAStar.length}")
+
+                    if pAStar.length != dualCacheDistMapperDist:
+                        vi = self.get_renderable_view_info(map)
+
+                        vi.color_path(PathColorer(
+                            pAStar, 0, 255, 255
+                        ))
+                        self.render_view_info(map, vi, f"mismatch distmapper (dual cache) {dualCacheDistMapperDist} vs {pAStar.length}")
 
             logbook.info(
-                f'{lastRange}-{r}, iters {iters}: floyd {floydTime:.3f} vs dumbass {dumbassDistTime:.3f} vs distMapper {sumDistMapperTime:.3f} vs PQ {sumPQTime:.3f} vs HQ {sumHQTime:.3f} vs find {sumBfsFindTime:.3f} vs aStar {sumAStarTime:.3f} vs aStarMatrix {sumAStarMatrixTime:.3f} vs aStarDist {sumAStarDistTime:.3f}, vs bfsFindDist {sumBfsFindDistTime:.3f}')
+                f'{lastRange}-{r}, iters {iters}: floyd {floydTime:.5f} vs dumbass {dumbassDistTime:.5f} vs distMapper {sumDistMapperTime:.5f} vs distMapperDual {sumDualCacheDistMapperTime:.5f} vs PQ {sumPQTime:.5f} vs HQ {sumHQTime:.5f} vs find {sumBfsFindTime:.5f} vs aStar {sumAStarTime:.5f} vs aStarMatrix {sumAStarMatrixTime:.5f} vs aStarDist {sumAStarDistTime:.5f}, vs bfsFindDist {sumBfsFindDistTime:.5f}')
             lastRange = r
+
+            totalSumPQTime += sumPQTime
+            totalSumHQTime += sumHQTime
+            totalSumAStarTime += sumAStarTime
+            totalSumAStarDistTime += sumAStarDistTime
+            totalSumAStarMatrixTime += sumAStarMatrixTime
+            totalSumBfsFindTime += sumBfsFindTime
+            totalSumBfsFindDistTime += sumBfsFindDistTime
+            totalSumBfsFindDistNoNeutTime += sumBfsFindDistNoNeutTime
+        logbook.info(
+            f'FINAL RESULTS floyd {floydTime:.5f} vs dumbass {dumbassDistTime:.5f} vs distMapper {sumDistMapperTime:.5f} vs distMapperDual {sumDualCacheDistMapperTime:.5f} vs PQ {totalSumPQTime:.5f} vs HQ {totalSumHQTime:.5f} vs find {totalSumBfsFindTime:.5f} vs aStar {totalSumAStarTime:.5f} vs aStarMatrix {totalSumAStarMatrixTime:.5f} vs aStarDist {totalSumAStarDistTime:.5f}, vs bfsFindDist {totalSumBfsFindDistTime:.5f}')
 
         def test_bench_set_empty_checking_perf(self):
             numPops = 500000000

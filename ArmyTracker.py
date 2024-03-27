@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import itertools
+
 import SearchUtils
 from Algorithms import MapSpanningUtils
 from DataModels import Move
@@ -204,8 +206,8 @@ class ArmyTracker(object):
         self._flipped_tiles: typing.Set[Tile] = set()
 
         self.fogPaths = []
-        self.emergenceLocationMap: typing.List[typing.List[typing.List[float]]] = [
-            [[0 for x in range(self.map.rows)] for y in range(self.map.cols)] for z in range(len(self.map.players))]
+        # TODO replace me with mapmatrix, emergenceLocationMap\[([^\]]+).x\]\[[^\]]+.y\]  -> emergenceLocationMap[$1]
+        self.emergenceLocationMap: typing.List[MapMatrix[float]] = [MapMatrix(self.map, 0.0) for z in range(len(self.map.players))]
         """List by player of emergence values."""
 
         self.player_targets: typing.List[Tile] = []
@@ -288,9 +290,7 @@ class ArmyTracker(object):
         # if we have perfect info about a players general / cities, we don't need to track emergence, clear the emergence map
         for player in self.map.players:
             if self.has_perfect_information_of_player_cities_and_general(player.index):
-                self.emergenceLocationMap[player.index] = [
-                    [0 for x in range(self.map.rows)] for y in range(self.map.cols)
-                ]
+                self.emergenceLocationMap[player.index] = MapMatrix(self.map, 0.0)
 
         self.fogPaths = []
 
@@ -718,7 +718,7 @@ class ArmyTracker(object):
         else:
             # Ok then we need to recalculate the expected path.
             # TODO detect if enemy army is likely trying to defend
-            army.expectedPaths = self.get_army_expected_path(army)
+            army.expectedPaths = ArmyTracker.get_army_expected_path(self.map, army, self.general, self.player_targets)
             logbook.info(f'set army {str(army)} expected paths to {str(army.expectedPaths)}')
 
         army.last_moved_turn = self.map.turn - 1
@@ -943,10 +943,11 @@ class ArmyTracker(object):
                     distCapped = max(4, dist)
                     emergeValue = 4 * armyEmergenceScaledToTurns // distCapped
                     # if self.valid_general_positions_by_player[emergingPlayer][tile]:
-                    self.emergenceLocationMap[emergedTile.player][tile.x][tile.y] += max(1, emergeValue)
-                    # if largest[0] < self.emergenceLocationMap[emergedTile.player][tile.x][tile.y]:
+                    # TODO this is doing the weird +1 emergence every turn thing
+                    self.emergenceLocationMap[emergedTile.player][tile] += max(1, emergeValue)
+                    # if largest[0] < self.emergenceLocationMap[emergedTile.player][tile]]:
                     #     largestTile[0] = tile
-                    #     largest[0] = self.emergenceLocationMap[emergedTile.player][tile.x][tile.y]
+                    #     largest[0] = self.emergenceLocationMap[emergedTile.player][tile]]
                 visibleOrDiscNeut = (tile.was_visible_last_turn() or (tile.discoveredAsNeutral and self.map.turn <= 100))
                 return (tile.isObstacle or visibleOrDiscNeut) and tile != emergedTile
 
@@ -986,7 +987,7 @@ class ArmyTracker(object):
         player = emergingTile.player
         if confidentFromGeneral:
             for tile in self.map.get_all_tiles():
-                self.emergenceLocationMap[player][tile.x][tile.y] /= 5.0
+                self.emergenceLocationMap[player][tile] /= 5.0
 
         incTiles = []
 
@@ -999,10 +1000,13 @@ class ArmyTracker(object):
 
         breadth_first_foreach_dist(self.map, [emergingTile], maxDepth=maxDist, foreachFunc=foreachFunc)
 
-        incAmount = 500 / len(incTiles)
+        if len(incTiles) == 0:
+            incAmount = 20
+        else:
+            incAmount = 500 / len(incTiles)
 
         for incTile, dist in incTiles:
-            self.emergenceLocationMap[player][incTile.x][incTile.y] += incAmount
+            self.emergenceLocationMap[player][incTile] += incAmount
 
     def find_fog_source(self, armyPlayer: int, tile: Tile, delta: int | None = None) -> Path | None:
         """
@@ -1074,7 +1078,7 @@ class ArmyTracker(object):
                         f"using moveHalfVal {moveHalfVal:.1f} over val {val:.1f} for tile {str(thisTile)} turn {self.map.turn}")
                     val = moveHalfVal
             elif not thisTile.discovered:
-                undiscValOffset = 3 - 3 / max(1.0, self.emergenceLocationMap[armyPlayer][thisTile.x][thisTile.y])
+                undiscValOffset = 3 - 3 / max(1.0, self.emergenceLocationMap[armyPlayer][thisTile])
                 logbook.debug(f'new val @ {str(thisTile)} val {val:.3f}, negArmy {negArmy}, undiscValOffset {undiscValOffset:.3f}, negBonusScore {negBonusScore}')
                 val += undiscValOffset
 
@@ -1108,7 +1112,7 @@ class ArmyTracker(object):
                 if citiesConverted > missingCities:
                     return None
 
-                undiscVal = self.emergenceLocationMap[armyPlayer][nextTile.x][nextTile.y]
+                undiscVal = self.emergenceLocationMap[armyPlayer][nextTile]
 
                 if nextTile.discovered:
                     negBonusScore -= 5
@@ -1135,7 +1139,7 @@ class ArmyTracker(object):
             else:
                 if not nextTile.discovered:
                     consecutiveUndiscovered += 1
-                    undiscVal = self.emergenceLocationMap[armyPlayer][nextTile.x][nextTile.y]
+                    undiscVal = self.emergenceLocationMap[armyPlayer][nextTile]
                     negBonusScore -= undiscVal
                     # if nextTile.player == -1:
                     #     if undiscVal > 0:
@@ -1242,7 +1246,7 @@ class ArmyTracker(object):
             if genSpan is not None and thisDist is not None and thisGenDist is not None:
                 wallBreakBonus = genSpan - thisDist - thisGenDist
 
-            emergenceVal = (self.emergenceLocationMap[cityPlayer][thisTile.x][thisTile.y] + 1 + wallBreakBonus) / (dist + 3)
+            emergenceVal = (self.emergenceLocationMap[cityPlayer][thisTile] + 1 + wallBreakBonus) / (dist + 3)
             val = emergenceVal
             return val, True  # has to be tuple or logging blows up i guess
 
@@ -1675,7 +1679,7 @@ class ArmyTracker(object):
                 army.value = tile.army - 1
 
             if not skip_expected_path:
-                army.expectedPaths = self.get_army_expected_path(army)
+                army.expectedPaths = ArmyTracker.get_army_expected_path(self.map, army, self.general, self.player_targets)
                 logbook.info(f'set army {str(army)} expected path to {str(army.expectedPaths)}')
 
             self.armies[tile] = army
@@ -1789,7 +1793,7 @@ class ArmyTracker(object):
 
             if convertedCity:
                 increase = 1 + sourceFogArmyPath.length - dist
-                self.emergenceLocationMap[player][tile.x][tile.y] += increase
+                self.emergenceLocationMap[player][tile] += increase
 
             dist += 1
 
@@ -1828,7 +1832,14 @@ class ArmyTracker(object):
             if army.last_moved_turn < self.map.turn - 1:
                 self.check_for_should_scrap_unmoved_army(army)
 
-    def get_army_expected_path(self, army: Army) -> typing.List[Path]:
+    @classmethod
+    def get_army_expected_path(
+            cls,
+            map: MapBase,
+            army: Army,
+            general: Tile,
+            playerTargets: typing.List[Tile]
+    ) -> typing.List[Path]:
         """
         Returns none if asked to predict a friendly army path.
 
@@ -1838,29 +1849,21 @@ class ArmyTracker(object):
         @param army:
         @return:
         """
+        if isinstance(army, Tile):
+            raise AssertionError('Dont call this with tiles instead of army')
+
+        if map.is_tile_friendly(army.tile):
+            # Why would we be using this for friendly armies...?
+            return []
+
         if army.value <= 0:
             if army.tile.army > 1:
                 army.value = army.tile.army - 1
             else:
                 return []
 
-        pathA = self.get_army_expected_path_non_flank(army)
-        pathB = self.get_army_expected_path_flank(army)
-
-        # paths = []
-        #
-        # if pathB is not None and (pathA is None or pathB.length >= pathA.length // 2):
-        #     paths.append(pathB)
-        #     if pathA is not None:
-        #         paths.append(pathA)
-        # elif pathA is not None:
-        #     paths.append(pathA)
-        #     if pathB is not None and pathB.tail.tile != pathA.tail.tile:
-        #         paths.append(pathB)
-        # elif pathB is not None:
-        #     paths.append(pathB)
-        #
-        # return paths
+        pathA = ArmyTracker.get_army_expected_path_non_flank(map, army, general, playerTargets)
+        pathB = ArmyTracker.get_army_expected_path_flank(map, army, general)
 
         paths = []
         if pathA is not None:
@@ -1868,13 +1871,26 @@ class ArmyTracker(object):
         if pathB is not None and not SearchUtils.any_where(paths, lambda p: p.tail.tile == pathB.tail.tile):
             paths.append(pathB)
             if pathB.length > 2:
-                pathC = self.get_army_expected_path_flank(army, skipTiles=pathB.tileList[3:])
+                pathC = ArmyTracker.get_army_expected_path_flank(map, army, general, skipTiles=pathB.tileList[3:])
                 if pathC is not None and pathC.tail.tile != pathB.tail.tile:
                     paths.append(pathC)
+        pathD = ArmyTracker.get_expected_enemy_expansion_path(map, army.tile, general, negativeTiles=set(itertools.chain.from_iterable(p.tileList for p in paths)))
+        if pathD is not None:
+            paths.append(pathD)
+            pathE = ArmyTracker.get_expected_enemy_expansion_path(map, army.tile, general, negativeTiles=set(itertools.chain.from_iterable(p.tileList for p in paths)), distPrioTile=pathD.tail.tile)
+            if pathE is not None:
+                paths.append(pathE)
 
         return paths
 
-    def get_army_expected_path_non_flank(self, army: Army) -> Path | None:
+    @classmethod
+    def get_army_expected_path_non_flank(
+            cls,
+            map: MapBase,
+            army: Army,
+            general: Tile,
+            player_targets: typing.List[Tile]
+    ) -> Path | None:
         """
         Returns none if asked to predict a friendly army path.
 
@@ -1888,31 +1904,30 @@ class ArmyTracker(object):
         if army.value <= 0:
             return None
 
-        if army.tile.isCity and len(army.expectedPaths) == 0 and army.tile.lastMovedTurn < self.map.turn - 2:
+        if army.tile.isCity and len(army.expectedPaths) == 0 and army.tile.lastMovedTurn < map.turn - 2:
             return None
 
-        if army.player == self.map.player_index or army.player in self.map.teammates:
+        if army.player == map.player_index or army.player in map.teammates:
             return None
 
-        armyDistFromGen = self.map.get_distance_between(self.general, army.tile)
+        armyDistFromGen = map.get_distance_between(general, army.tile)
 
         skip = set()
         skipCutoff = 3 * army.value // 4
 
-        for player in self.map.players:
-            if not self.map.is_player_on_team_with(player.index, self.map.player_index):
+        for player in map.players:
+            if not map.is_player_on_team_with(player.index, map.player_index):
                 continue
 
             for tile in player.tiles:
-                if tile.army > skipCutoff and not tile.isCity and not tile.isGeneral and self.map.is_tile_visible_to(tile, army.player):
+                if tile.army > skipCutoff and not tile.isCity and not tile.isGeneral and map.is_tile_visible_to(tile, army.player):
                     skip.add(tile)
-
 
         def goalFunc(tile: Tile, armyAmt: int, dist: int) -> bool:
             # don't pick cities over general as tiles when they're basically the same distance from gen, pick gen if its within 2 tiles of other tiles.
-            if dist + 2 < armyDistFromGen and tile in self.player_targets:
+            if dist + 2 < armyDistFromGen and tile in player_targets:
                 return True
-            if tile == self.map.generals[self.map.player_index]:
+            if tile == map.generals[map.player_index]:
                 return True
             return False
 
@@ -1924,9 +1939,9 @@ class ArmyTracker(object):
 
         logbook.info(f'Looking for army {str(army)}s expected non-flank movement path:')
         path = SearchUtils.breadth_first_find_queue(
-            self.map,
+            map,
             [army.tile],
-            # goalFunc=lambda tile, armyAmt, dist: armyAmt + tile.army > 0 and tile in self.player_targets,  # + tile.army so that we find paths that reach tiles regardless of killing them.
+            # goalFunc=lambda tile, armyAmt, dist: armyAmt + tile.army > 0 and tile in player_targets,  # + tile.army so that we find paths that reach tiles regardless of killing them.
             goalFunc=goalFunc,
             prioFunc=lambda t: (not t.visible, t.player == army.player, t.army if t.player == army.player else 0 - t.army),
             skipTiles=skip,
@@ -1938,9 +1953,16 @@ class ArmyTracker(object):
 
         if path is None:
             return None
-        return path.get_positive_subsegment(forPlayer=army.player, teams=MapBase.get_teams_array(self.map))
+        return path.get_positive_subsegment(forPlayer=army.player, teams=MapBase.get_teams_array(map))
 
-    def get_army_expected_path_flank(self, army: Army, skipTiles: typing.List[Tile] | None = None) -> Path | None:
+    @classmethod
+    def get_army_expected_path_flank(
+            cls,
+            map: MapBase,
+            army: Army,
+            general: Tile,
+            skipTiles: typing.List[Tile] | None = None,
+    ) -> Path | None:
         """
         Returns none if asked to predict a friendly army path.
 
@@ -1954,27 +1976,27 @@ class ArmyTracker(object):
         if army.value <= 0:
             return None
 
-        if army.tile.isCity and len(army.expectedPaths) == 0 and army.tile.lastMovedTurn < self.map.turn - 2:
+        if army.tile.isCity and len(army.expectedPaths) == 0 and army.tile.lastMovedTurn < map.turn - 2:
             return None
 
-        if army.player == self.map.player_index or army.player in self.map.teammates:
+        if army.player == map.player_index or army.player in map.teammates:
             return None
 
         def valueFunc(tile: Tile, prioVals) -> typing.Tuple | None:
             if tile.visible:
                 return None
 
-            return 0 - self.map.get_distance_between(self.general, tile), 0
+            return 0 - map.get_distance_between(general, tile), 0
 
         def prioFunc(tile: Tile, prioVals) -> typing.Tuple | None:
             if tile.visible:
                 return None
 
-            return self.map.get_distance_between(self.general, tile), 0
+            return map.get_distance_between(general, tile), 0
 
-        skip = set()
+        skip = MapMatrixSet(map)
 
-        for tile in self.map.get_all_tiles():
+        for tile in map.get_all_tiles():
             if tile.visible:
                 skip.add(tile)
 
@@ -1991,9 +2013,9 @@ class ArmyTracker(object):
 
         logbook.info(f'Looking for army {str(army)}s expected flank path:')
         path = SearchUtils.breadth_first_dynamic_max(
-            self.map,
+            map,
             startTiles,
-            # goalFunc=lambda tile, armyAmt, dist: armyAmt + tile.army > 0 and tile in self.player_targets,  # + tile.army so that we find paths that reach tiles regardless of killing them.
+            # goalFunc=lambda tile, armyAmt, dist: armyAmt + tile.army > 0 and tile in player_targets,  # + tile.army so that we find paths that reach tiles regardless of killing them.
             valueFunc=valueFunc,
             priorityFunc=prioFunc,
             skipTiles=skip,
@@ -2005,7 +2027,7 @@ class ArmyTracker(object):
 
         if path is None:
             return None
-        return path.get_positive_subsegment(forPlayer=army.player, teams=MapBase.get_teams_array(self.map))
+        return path.get_positive_subsegment(forPlayer=army.player, teams=MapBase.get_teams_array(map))
 
     def convert_fog_city_to_player_owned(self, tile: Tile, player: int):
         if player == -1:
@@ -2094,7 +2116,7 @@ class ArmyTracker(object):
         def reasonablePathDetector(sourceTile: Tile, armyAmt: int, dist: int) -> bool:
             if sourceTile.isObstacle:
                 return False
-            if self.emergenceLocationMap[armyPlayer][sourceTile.x][sourceTile.y] <= 0:
+            if self.emergenceLocationMap[armyPlayer][sourceTile] <= 0:
                 return False
             if sourceTile.visible:
                 return False
@@ -2131,14 +2153,14 @@ class ArmyTracker(object):
 
             if actualTileCount < mapTileCount:
                 logbook.info(f'reducing player {player.index} over-tiles')
-                realDists = SearchUtils.build_distance_map(self.map, list(self.tiles_ever_owned_by_player[player.index]))
+                realDists = SearchUtils.build_distance_map_matrix(self.map, list(self.tiles_ever_owned_by_player[player.index]))
 
                 # strip extra tiles
                 tilesAsEncountered = SearchUtils.HeapQueue()
                 for tile in player.tiles:
                     if not tile.discovered:
-                        dist = realDists[tile.x][tile.y]
-                        emergenceBonus = max(0.0, self.emergenceLocationMap[player.index][tile.x][tile.y])
+                        dist = realDists[tile]
+                        emergenceBonus = max(0.0, self.emergenceLocationMap[player.index][tile])
                         tilesAsEncountered.put((emergenceBonus / (dist + 1) - 3 * dist + tile.army, tile))
 
                 while mapTileCount > actualTileCount and tilesAsEncountered.queue:
@@ -2186,7 +2208,7 @@ class ArmyTracker(object):
                     tileArmy = self.armies.get(tile, None)
                     if not tile.visible and (tileArmy is None or len(tileArmy.entangledArmies) == 0):
                         dist = self.map.get_distance_between(self.general, tile)
-                        emergenceBonus = max(0.0, self.emergenceLocationMap[player.index][tile.x][tile.y])
+                        emergenceBonus = max(0.0, self.emergenceLocationMap[player.index][tile])
                         tilesAsEncountered.put((emergenceBonus - tile.lastSeen + genCityDePriority - dist / 10, tile))
 
                 while mapScore > actualScore and tilesAsEncountered.queue:
@@ -2215,7 +2237,7 @@ class ArmyTracker(object):
         if player == -1:
             return 0
 
-        return self.emergenceLocationMap[player][tile.x][tile.y]
+        return self.emergenceLocationMap[player][tile]
 
     def drop_incorrect_player_fog_around(self, neutralTile: Tile, forPlayer: int):
         logbook.info(f'drop_incorrect_player_fog_around for player {forPlayer} wrong tile {str(neutralTile)}')
@@ -2272,18 +2294,13 @@ class ArmyTracker(object):
                             self.map.players[curTile.player].cities.remove(curTile)
                         curTile.reset_wrong_undiscovered_fog_guess()
                     if curPlayer == -1:
-                        self.emergenceLocationMap[forPlayer][curTile.x][curTile.y] = 0
+                        self.emergenceLocationMap[forPlayer][curTile] = 0
                 else:
                     if curTile.player != -1 and curPlayer != curTile.player and curTile not in forPlayerRequiredConnected:
                         logbook.info(f'resetting wrong undisc fog guess {str(curTile)}')
                         curTile.reset_wrong_undiscovered_fog_guess()
                         if curTile.isCity and curTile in self.map.players[curTile.player].cities:
                             self.map.players[curTile.player].cities.remove(curTile)
-
-                    # for p, playerEmergences in enumerate(self.emergenceLocationMap):
-                    #     if p == curPlayer:
-                    #         continue
-                    #     playerEmergences[curTile.x][curTile.y] = max(0, playerEmergences[curTile.x][curTile.y] - 2)
 
             if curTile.visible and curTile.discoveredAsNeutral and not curTile.delta.gainedSight and curTile != neutralTile:
                 if isDroppingChainedBadFog:
@@ -2329,13 +2346,13 @@ class ArmyTracker(object):
 
                 for player in self.map.players:
                     # if not self.valid_general_positions_by_player[player.index]
-                    emergence = self.emergenceLocationMap[player.index][tile.x][tile.y]
+                    emergence = self.emergenceLocationMap[player.index][tile]
                     for movable in tile.movable:
-                        movableEmergence = self.emergenceLocationMap[player.index][movable.x][movable.y]
+                        movableEmergence = self.emergenceLocationMap[player.index][movable]
                         if movable.discovered:
                             continue
                         if emergence > movableEmergence:
-                            self.emergenceLocationMap[player.index][movable.x][movable.y] = movableEmergence + emergence // 2
+                            self.emergenceLocationMap[player.index][movable] = movableEmergence + emergence // 2
 
             elif tile.player >= 0 and SearchUtils.any_where(tile.movable, lambda t: not t.discovered):
                 reFogLandPlayers.add(tile.player)
@@ -2528,7 +2545,7 @@ class ArmyTracker(object):
                 launchDistDiff = abs(launchDist - dist)
                 launchDistFactor = (divOffset + launchDistDiff)
                 launchEmergence = emFactor // launchDistFactor
-                self.emergenceLocationMap[player][t.x][t.y] += launchEmergence
+                self.emergenceLocationMap[player][t] += launchEmergence
             if t.discoveredAsNeutral and t not in self.tiles_ever_owned_by_player[player]:  # and (t.visible or self.map.turn < 50)   # should be solved without the visible check by adding the lost-sight-ever-owned-by-player hack to allow pathing through the fog now.
                 return True
             if (t.isCity and t.player == -1 and (t.visible or hasPerfectInfoOfPlayerCities)) or t.isMountain or (t.isUndiscoveredObstacle and hasPerfectInfoOfPlayerCities) or t.isGeneral:
@@ -2596,7 +2613,7 @@ class ArmyTracker(object):
             if general is None:
                 continue
 
-            distances = SearchUtils.build_distance_map_matrix(self.map, [general])
+            distances = self.map.distance_mapper.get_tile_dist_matrix(general)
 
             for player in self.map.players:
                 if self.map.is_player_on_team_with(general.player, player.index):
@@ -2896,7 +2913,7 @@ class ArmyTracker(object):
                     for entangled in army.entangledArmies:
                         entangled.value = max(0, entangled.value - annihilatedFogArmy)
                         entangled.tile.army = entangled.value + 1
-                    army.expectedPaths = self.get_army_expected_path(army)
+                    army.expectedPaths = ArmyTracker.get_army_expected_path(self.map, army, self.general, self.player_targets)
                     self.armies[army.tile] = army
                     army.last_moved_turn = self.map.turn
 
@@ -3143,44 +3160,56 @@ class ArmyTracker(object):
 
 
     @classmethod
-    def get_expected_enemy_expansion_path(cls, map: MapBase, enTile: Tile, general: Tile) -> Path | None:
+    def get_expected_enemy_expansion_path(
+            cls,
+            map: MapBase,
+            enTile: Tile,
+            general: Tile,
+            negativeTiles: typing.Container[Tile] | None = None,
+            maxTurns: int = 45,
+            distPrioTile: Tile | None = None
+    ) -> Path | None:
+        if distPrioTile is None:
+            distPrioTile = general
+
         def valueFunc(curTile, prioObj):
-            dist, negCaps, negArmy, genDist = prioObj
+            dist, negCaps, negArmy, negPrioDist = prioObj
             if negArmy > 0:
                 return None
             if dist == 0:
                 return None
-            val = (0 - negCaps / dist, dist)
+            val = (0 - negCaps / dist, 0-negPrioDist, dist)
             # logbook.info(f'val {str(curTile)}: {str(val)}')
             return val
 
         def prioFunc(nextTile, prioObj):
-            dist, negCaps, negArmy, genDist = prioObj
+            dist, negCaps, negArmy, negPrioDist = prioObj
             if negArmy > 0:
                 return None
 
-            genDist = map.get_distance_between(general, nextTile)
-            # if genDist is None:
+            prioDist = map.get_distance_between(distPrioTile, nextTile)
+            # if prioDist is None:
             #     return None
 
             if map.is_tile_on_team_with(nextTile, enTile.player):
                 negArmy -= nextTile.army
             else:
                 negArmy += nextTile.army
-                if map.is_tile_on_team_with(nextTile, general.player):
-                    negCaps -= 2.2
-                else:
-                    negCaps -= 0.7
+                if negativeTiles is None or nextTile not in negativeTiles:
+                    if map.is_tile_on_team_with(nextTile, general.player):
+                        negCaps -= 2.2
+                    else:
+                        negCaps -= 0.7
 
             negCaps -= 0.000001 * dist
             negArmy += 1
 
-            return dist+1, negCaps, negArmy, genDist
+            return dist+1, negCaps, negArmy, 0-prioDist
 
         path = SearchUtils.breadth_first_dynamic_max(
             map,
-            {enTile: ((0, 0, 0 - enTile.army + 1, map.get_distance_between(general, enTile)), 0)},
-            maxDepth=45,
+            {enTile: ((0, 0, 0 - enTile.army + 1, map.get_distance_between(distPrioTile, enTile)), 0)},
+            maxDepth=maxTurns,
             valueFunc=valueFunc,
             priorityFunc=prioFunc,
             searchingPlayer=enTile.player,
@@ -3214,7 +3243,7 @@ class ArmyTracker(object):
 
         def foreachFunc(tile: Tile):
             if validMap[tile]:
-                emergeMap[tile.x][tile.y] += factor
+                emergeMap[tile] += factor
 
         SearchUtils.breadth_first_foreach(self.map, connectedTiles, depth, foreachFunc, noLog=True)
 
@@ -3228,7 +3257,7 @@ class ArmyTracker(object):
         @return:
         """
 
-        return self.emergenceLocationMap[player][x][y]
+        return self.emergenceLocationMap[player][self.map.GetTile(x, y)]
 
     def get_prediction_value(self, player: int, tile: Tile) -> float:
         """
@@ -3239,8 +3268,8 @@ class ArmyTracker(object):
         @return:
         """
 
-        return self.emergenceLocationMap[player][tile.x][tile.y]
+        return self.emergenceLocationMap[player][tile]
 
     def _reset_player_emergences(self, player: int):
         for t in self.map.pathableTiles:
-            self.emergenceLocationMap[player][t.x][t.y] = 0.0
+            self.emergenceLocationMap[player] = MapMatrix(self.map, 0.0)

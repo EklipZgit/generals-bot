@@ -12,7 +12,7 @@ import logbook
 import SearchUtils
 from ArmyAnalyzer import ArmyAnalyzer
 from DataModels import Move
-from MapMatrix import MapMatrix
+from MapMatrix import MapMatrix, MapMatrixSet
 from base.client.map import MapBase, Tile
 
 
@@ -25,10 +25,10 @@ class BoardAnalyzer:
         self.should_rescan = True
 
         # TODO probably calc these chokes for the enemy, too?
-        self.innerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
+        self.innerChokes: MapMatrixSet = MapMatrixSet(map)
         """Tiles that only have one outward path away from our general."""
 
-        self.outerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
+        self.outerChokes: MapMatrixSet = MapMatrixSet(map)
         """Tiles that only have a single inward path towards our general."""
 
         self.central_defense_point: Tile = map.players[map.player_index].general
@@ -47,14 +47,14 @@ class BoardAnalyzer:
 
         self.flank_danger_play_area_matrix: MapMatrix[bool] = None
 
-        self.general_distances: typing.List[typing.List[int]] = []
+        self.general_distances: MapMatrix[int] = MapMatrix(self.map)
 
         self.all_possible_enemy_spawns: typing.Set[Tile] = set()
 
-        self.friendly_general_distances: typing.List[typing.List[int]] = []
+        self.friendly_general_distances: MapMatrix[int] = MapMatrix(self.map)
         """The distance map to any friendly general."""
 
-        self.teammate_distances: typing.List[typing.List[int]] = []
+        self.teammate_distances: MapMatrix[int] = MapMatrix(self.map)
 
         self.inter_general_distance: int = 10
         """The (possibly estimated) distance between our gen and target player gen."""
@@ -84,15 +84,15 @@ class BoardAnalyzer:
         self.should_rescan = False
         oldInner = self.innerChokes
         oldOuter = self.outerChokes
-        self.innerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
+        self.innerChokes = MapMatrixSet(self.map)
 
-        self.outerChokes = [[False for x in range(self.map.rows)] for y in range(self.map.cols)]
+        self.outerChokes = MapMatrixSet(self.map)
         cities = list(self.map.players[self.map.player_index].cities)
 
-        self.general_distances = SearchUtils.build_distance_map(self.map, [self.general])
+        self.general_distances = self.map.distance_mapper.get_tile_dist_matrix(self.general)
         if self.teammate_general is not None and self.teammate_general.player in self.map.teammates:
-            self.teammate_distances = SearchUtils.build_distance_map(self.map, [self.teammate_general])
-            self.friendly_general_distances = SearchUtils.build_distance_map(self.map, [self.teammate_general, self.general])
+            self.teammate_distances = self.map.distance_mapper.get_tile_dist_matrix(self.teammate_general)
+            self.friendly_general_distances = SearchUtils.build_distance_map_matrix(self.map, [self.teammate_general, self.general])
             cities.extend(self.map.players[self.teammate_general.player].cities)
         else:
             self.friendly_general_distances = self.general_distances
@@ -100,11 +100,11 @@ class BoardAnalyzer:
         closestCities = cities
         if self.intergeneral_analysis is not None:
             # only consider the closest 3 cities to enemy...?
-            closestCities = list(sorted(cities, key=lambda c: self.intergeneral_analysis.bMap[c.x][c.y]))[0:3]
+            closestCities = list(sorted(cities, key=lambda c: self.intergeneral_analysis.bMap[c]))[0:3]
 
         self.friendly_city_distances = {}
         for city in closestCities:
-            self.friendly_city_distances[city] = SearchUtils.build_distance_map_matrix(self.map, [city])
+            self.friendly_city_distances[city] = self.map.distance_mapper.get_tile_dist_matrix(city)
         self.defense_centrality_sums = MapMatrix(self.map, 250)
 
         lowestAvgDist = 10000000
@@ -112,34 +112,34 @@ class BoardAnalyzer:
 
         for tile in self.map.pathableTiles:
             # logbook.info("Rescanning chokes for {}".format(tile.toString()))
-            tileDist = self.friendly_general_distances[tile.x][tile.y]
+            tileDist = self.friendly_general_distances[tile]
 
             distSum = tileDist
             for city, distances in self.friendly_city_distances.items():
                 distSum += distances[tile]
 
-            if distSum < lowestAvgDist or (distSum == lowestAvgDist and self.intergeneral_analysis is not None and self.intergeneral_analysis.bMap[tile.x][tile.y] < self.intergeneral_analysis.bMap[lowestAvgTile.x][lowestAvgTile.y]):
+            if distSum < lowestAvgDist or (distSum == lowestAvgDist and self.intergeneral_analysis is not None and self.intergeneral_analysis.bMap[tile] < self.intergeneral_analysis.bMap[lowestAvgTile]):
                 lowestAvgTile = tile
                 lowestAvgDist = distSum
 
             self.defense_centrality_sums[tile] = distSum
 
-            movableInnerCount = SearchUtils.count(tile.movable, lambda adj: tileDist == self.friendly_general_distances[adj.x][adj.y] - 1)
-            movableOuterCount = SearchUtils.count(tile.movable, lambda adj: tileDist == self.friendly_general_distances[adj.x][adj.y] + 1)
+            movableInnerCount = SearchUtils.count(tile.movable, lambda adj: tileDist == self.friendly_general_distances[adj] - 1)
+            movableOuterCount = SearchUtils.count(tile.movable, lambda adj: tileDist == self.friendly_general_distances[adj] + 1)
             if movableInnerCount == 1:
-                self.outerChokes[tile.x][tile.y] = True
+                self.outerChokes.add(tile)
             # checking movableInner to avoid considering dead ends 'chokes'
             if (movableOuterCount == 1
                     # and movableInnerCount >= 1
             ):
-                self.innerChokes[tile.x][tile.y] = True
+                self.innerChokes.add(tile)
             if self.map.turn > 4:
-                if oldInner[tile.x][tile.y] != self.innerChokes[tile.x][tile.y]:
+                if oldInner[tile] != self.innerChokes[tile]:
                     logbook.info(
-                        f"  inner choke change: tile {str(tile)}, old {oldInner[tile.x][tile.y]}, new {self.innerChokes[tile.x][tile.y]}")
-                if oldOuter[tile.x][tile.y] != self.outerChokes[tile.x][tile.y]:
+                        f"  inner choke change: tile {str(tile)}, old {oldInner[tile]}, new {self.innerChokes[tile]}")
+                if oldOuter[tile] != self.outerChokes[tile]:
                     logbook.info(
-                        f"  outer choke change: tile {str(tile)}, old {oldOuter[tile.x][tile.y]}, new {self.outerChokes[tile.x][tile.y]}")
+                        f"  outer choke change: tile {str(tile)}, old {oldOuter[tile]}, new {self.outerChokes[tile]}")
 
         logbook.info(f'calculated central defense point to be {str(lowestAvgTile)} due to lowestAvgDist {lowestAvgDist}')
         self.central_defense_point = lowestAvgTile
@@ -151,7 +151,7 @@ class BoardAnalyzer:
         generalDistMap = self.intergeneral_analysis.aMap
         general = self.general
 
-        self.inter_general_distance = enemyDistMap[general.x][general.y]
+        self.inter_general_distance = enemyDistMap[general]
 
         if possibleSpawns is not None:
             self.rescan_useful_fog(possibleSpawns)
@@ -159,11 +159,11 @@ class BoardAnalyzer:
         # if len(self.all_possible_enemy_spawns) < 40 and not opponentGeneral.isGeneral:
         #     enemyDistMap = SearchUtils.build_distance_map(self.map, list(self.all_possible_enemy_spawns))
         #
-        #     self.inter_general_distance = enemyDistMap[general.x][general.y]
+        #     self.inter_general_distance = enemyDistMap[general]
 
-        self.within_core_play_area_threshold = int((self.inter_general_distance + 1) * 1.1)
-        self.within_extended_play_area_threshold = int((self.inter_general_distance + 2) * 1.2)
-        self.within_flank_danger_play_area_threshold = int((self.inter_general_distance + 3) * 1.4)
+        self.within_core_play_area_threshold: int = int((self.inter_general_distance + 1) * 1.1)
+        self.within_extended_play_area_threshold: int = int((self.inter_general_distance + 2) * 1.2)
+        self.within_flank_danger_play_area_threshold: int = int((self.inter_general_distance + 3) * 1.4)
         logbook.info(f'BOARD ANALYSIS THRESHOLDS:\r\n'
                      f'     board shortest dist: {self.inter_general_distance}\r\n'
                      f'     core area dist: {self.within_core_play_area_threshold}\r\n'
@@ -178,10 +178,10 @@ class BoardAnalyzer:
 
         self.rescan_chokes()
 
-    def build_play_area_matrices(self, enemyDistMap, generalDistMap):
+    def build_play_area_matrices(self, enemyDistMap: MapMatrix[int], generalDistMap: MapMatrix[int]):
         for tile in self.map.pathableTiles:
-            enDist = enemyDistMap[tile.x][tile.y]
-            frDist = generalDistMap[tile.x][tile.y]
+            enDist = enemyDistMap[tile]
+            frDist = generalDistMap[tile]
             tileDistSum = enDist + frDist
             if tileDistSum < self.within_extended_play_area_threshold:
                 self.extended_play_area_matrix[tile] = True
@@ -233,10 +233,10 @@ class BoardAnalyzer:
                     if pathwaySource.distance > pathwayDest.distance or pathwaySource.distance == pathwayDest.distance:
                         # moving to a shorter path or moving along same distance path
                         # If getting further from our general (and by extension closer to opp since distance is equal)
-                        gettingFurtherFromOurGen = self.intergeneral_analysis.aMap[move.source.x][move.source.y] < self.intergeneral_analysis.aMap[move.dest.x][move.dest.y]
+                        gettingFurtherFromOurGen = self.intergeneral_analysis.aMap[move.source] < self.intergeneral_analysis.aMap[move.dest]
                         # not more than cutoffDist tiles behind our general, effectively
 
-                        reasonablyCloseToTheirGeneral = self.intergeneral_analysis.bMap[move.dest.x][move.dest.y] < cutoffDist + self.intergeneral_analysis.aMap[self.intergeneral_analysis.tileB.x][self.intergeneral_analysis.tileB.y]
+                        reasonablyCloseToTheirGeneral = self.intergeneral_analysis.bMap[move.dest] < cutoffDist + self.intergeneral_analysis.aMap[self.intergeneral_analysis.tileB]
 
                         if gettingFurtherFromOurGen and reasonablyCloseToTheirGeneral:
                             includedPathways.add(pathwaySource)

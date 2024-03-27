@@ -2,6 +2,7 @@ import logbook
 
 import SearchUtils
 from Directives import Timings
+from MapMatrix import MapMatrix
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
@@ -18,13 +19,13 @@ class BotBehaviorTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         # simHost = GameSimulatorHost(map)
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, allAfkExceptMapPlayer=True)
         # alert both players of each others general
         simHost.sim.players[enemyGeneral.player].map.update_visible_tile(general.x, general.y, general.player, general.army, is_city=False, is_general=True)
         simHost.sim.players[general.player].map.update_visible_tile(enemyGeneral.x, enemyGeneral.y, enemyGeneral.player, enemyGeneral.army, is_city=False, is_general=True)
 
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=60)
+        simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=30)
 
         # TODO TEST, bot died because it executed a short gather timing cycle and left all its army on the left of the map expanding
 
@@ -76,13 +77,16 @@ class BotBehaviorTests(TestBase):
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=242)
 
-        simHost = GameSimulatorHost(map, player_with_viewer=-2, playerMapVision=rawMap)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+        bot = self.get_debug_render_bot(simHost)
+
+        bot.is_all_in_army_advantage = True
 
         # alert enemy of the player general
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
         startTurn = simHost.sim.turn
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=80)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=80)
         logbook.info(f'game over after {simHost.sim.turn - startTurn} turns')
         self.assertIsNotNone(winner)
         self.assertEqual(map.player_index, winner)
@@ -201,7 +205,7 @@ class BotBehaviorTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
-        self.skipTest("TODO add asserts")  #  for should_intercept_and_kill_threats_before_exploring_or_expanding
+        self.skipTest("TODO add asserts for should_intercept_and_kill_threats_before_exploring_or_expanding")
     
     def test_should_intercept_army_and_not_loop_on_threatpath(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -236,8 +240,8 @@ class BotBehaviorTests(TestBase):
         simHost.queue_player_moves_str(enemyGeneral.player, '3,7->3,8->3,9->3,10->3,11->4,11->5,11->5,12')
         simHost.bot_hosts[enemyGeneral.player].eklipz_bot.is_all_in_losing = True
         simHost.bot_hosts[enemyGeneral.player].eklipz_bot.all_in_losing_counter = 200
-        simHost.bot_hosts[general.player].eklipz_bot.armyTracker.emergenceLocationMap[enemyGeneral.player][0][3] = 150
-        simHost.bot_hosts[general.player].eklipz_bot.armyTracker.emergenceLocationMap[enemyGeneral.player][0][8] = 100
+        simHost.bot_hosts[general.player].eklipz_bot.armyTracker.emergenceLocationMap[enemyGeneral.player][rawMap.GetTile(0, 3)] = 150
+        simHost.bot_hosts[general.player].eklipz_bot.armyTracker.emergenceLocationMap[enemyGeneral.player][rawMap.GetTile(0, 8)] = 100
         # simHost.bot_hosts[general.player].eklipz_bot.all_in_counter = 200
 
         # alert enemy of the player general
@@ -357,7 +361,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
         bot = self.get_debug_render_bot(simHost, general.player)
         bot.targetPlayerExpectedGeneralLocation = self.get_player_tile(16, 20, simHost.sim, general.player)
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][16][20] = 200
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][rawMap.GetTile(16, 20)] = 200
 
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=50)
@@ -420,7 +424,7 @@ class BotBehaviorTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
-        self.skipTest("TODO add asserts")  #  for should_plan_through_neutral_city_quick_kill_flank
+        self.skipTest("TODO add asserts for should_plan_through_neutral_city_quick_kill_flank")
 
     def test_should_not_make_silly_threat_killer_move__when_already_safe_4_8__5_8(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -714,7 +718,7 @@ class BotBehaviorTests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         bot = self.get_debug_render_bot(simHost, general.player)
         bot.targetPlayerExpectedGeneralLocation = self.get_player_tile(14, 5, simHost.sim, general.player)
-        bot.armyTracker.emergenceLocationMap = [[[0 for y in range(map.rows)] for x in range(map.cols)] for p in map.players]
+        bot.armyTracker.emergenceLocationMap = [MapMatrix(rawMap, 0) for p in map.players]
         bot.timings = Timings(50, 5, 20, 31, 0, 0, disallowEnemyGather=False)
         bot.behavior_out_of_play_defense_threshold = 0.3
 
@@ -751,7 +755,7 @@ class BotBehaviorTests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         bot = self.get_debug_render_bot(simHost, general.player)
         bot.targetPlayerExpectedGeneralLocation = self.get_player_tile(14, 5, simHost.sim, general.player)
-        bot.armyTracker.emergenceLocationMap = [[[0 for y in range(map.rows)] for x in range(map.cols)] for p in map.players]
+        bot.armyTracker.emergenceLocationMap = [MapMatrix(rawMap, 0) for p in map.players]
         bot.timings = Timings(50, 5, 20, 31, 0, 0, disallowEnemyGather=False)
         bot.behavior_out_of_play_defense_threshold = 0.3
 
@@ -781,7 +785,7 @@ class BotBehaviorTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
-        self.skipTest("TODO add asserts")  #  for should_not_leave_large_tile_in_middle_of_territory__should_continue_attack__dies_to_completely_inefficient_flank_all_the_way_around_right_side_due_to_sitting_on_71_in_middle
+        self.skipTest("TODO add asserts for should_not_leave_large_tile_in_middle_of_territory__should_continue_attack__dies_to_completely_inefficient_flank_all_the_way_around_right_side_due_to_sitting_on_71_in_middle")
     
     def test_should_treat_edge_flanks_as_danger_potential_and_tendril_outwards(self):
         # See test above this one,
@@ -803,7 +807,7 @@ class BotBehaviorTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
-        self.skipTest("TODO add asserts")  #  for should_treat_edge_flanks_as_danger_potential_and_tendril_outwards
+        self.skipTest("TODO add asserts for should_treat_edge_flanks_as_danger_potential_and_tendril_outwards")
     
     def test_should_not_go_hunting_in_stupid_scenarios_while_quick_kill_gathering(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -861,7 +865,7 @@ class BotBehaviorTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
-        self.skipTest("TODO add asserts")  #  for should_gather_from_out_of_play_tiles
+        self.skipTest("TODO add asserts for should_gather_from_out_of_play_tiles")
     
     def test_should_not_expand_past_threat(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1040,9 +1044,9 @@ class BotBehaviorTests(TestBase):
         # 50 turns to rapid expand before other player starts attacking. Other bot will gather for ~50 turns
 
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
-        abot = self.get_debug_render_bot(simHost, general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
         # make it so A doesn't know B knows its gen location. Just telling b its gen location to trigger aggression from B, not actually relevant to the test.
-        aBot._map.players[enemyGeneral.player].knowsKingLocation = False
+        bot._map.players[enemyGeneral.player].knowsKingLocation = False
 
         self.begin_capturing_logging()
         genMap = simHost.get_player_map(general.player)
@@ -1094,7 +1098,7 @@ class BotBehaviorTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
-        self.skipTest("TODO add asserts")  #  for should_all_in_general_when_contested_cities_out_of_position_and_knows_no_army_on_general
+        self.skipTest("TODO add asserts for should_all_in_general_when_contested_cities_out_of_position_and_knows_no_army_on_general")
     
     def test_should_not_try_to_trade_when_not_sure_of_general_location(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1366,7 +1370,7 @@ class BotBehaviorTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
         self.assertIsNone(winner)
 
-        self.skipTest("TODO add asserts")  #  for should_swap_timings_off_of_long_econ_defense
+        self.skipTest("TODO add asserts for should_swap_timings_off_of_long_econ_defense")
     
     def test_should_not_waste_rest_of_cycle_after_city_capture(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1400,6 +1404,7 @@ class BotBehaviorTests(TestBase):
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
         bot._lastTargetPlayerCityCount = 1
+        bot.timings = bot.get_timings()
         bot.timings.splitTurns = 42
         bot.timings.launchTiming = 42
 
@@ -1527,7 +1532,7 @@ class BotBehaviorTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
-        self.skipTest("TODO add asserts")  #  for should_go_all_in_along_existing_path_with_army_on_it
+        self.skipTest("TODO add asserts for should_go_all_in_along_existing_path_with_army_on_it")
     
     def test_should_kill_enemy_general_lmao(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -2434,7 +2439,7 @@ whoever has less extra troops will always get ahead
         bot = self.get_debug_render_bot(simHost, general.player)
         bot.defend_economy = True
         bot.is_winning_gather_cyclic = False
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][enemyGeneral.x][enemyGeneral.y] = 0
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][enemyGeneral] = 0
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()

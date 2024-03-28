@@ -8,6 +8,7 @@ import KnapsackUtils
 import SearchUtils
 from BoardAnalyzer import BoardAnalyzer
 from DataModels import Move
+from Interfaces import TilePlanInterface
 from KnapsackUtils import solve_knapsack
 from MapMatrix import MapMatrix
 from Path import Path
@@ -257,10 +258,10 @@ def _group_expand_paths_by_crossovers(
 
 def _merge_path_groups_recurse(
         groupNumber: int,
-        path: Path,
+        path: TilePlanInterface,
         pathGroupLookup: typing.Dict[Path, int],
         pathsCrossingTiles: typing.Dict[Tile, typing.List[Path]]):
-    for tile in path.tileList:
+    for tile in path.tileSet:
         for crossedPath in pathsCrossingTiles[tile]:
             if crossedPath == path:
                 continue
@@ -339,13 +340,13 @@ def _get_tile_path_value(
 
 
 def add_path_to_try_avoid_paths_crossing_tiles(
-        path: Path,
+        path: TilePlanInterface,
         negativeTiles: typing.Set[Tile],
         tryAvoidSet: typing.Set[Tile],
-        pathsCrossingTiles: typing.Dict[Tile, typing.List[Path]],
+        pathsCrossingTiles: typing.Dict[Tile, typing.List[TilePlanInterface]],
         addToNegativeTiles = False,
 ):
-    for t in path.tileList:
+    for t in path.tileSet:
         tryAvoidSet.add(t)
         if addToNegativeTiles:
             negativeTiles.add(t)
@@ -382,8 +383,8 @@ def knapsack_multi_paths(
         negativeTiles: typing.Set[Tile],
         tryAvoidSet: typing.Set[Tile],
         viewInfo: ViewInfo | None,
-        valueOverrides: typing.Dict[Path, typing.Tuple[float, int]] | None = None,
-) -> typing.Tuple[Path | None, typing.List[Path], int, float]:
+        valueOverrides: typing.Dict[TilePlanInterface, typing.Tuple[float, int]] | None = None,
+) -> typing.Tuple[TilePlanInterface | None, typing.List[TilePlanInterface], int, float]:
     """
     Returns firstPath, allPaths, totalTurns, totalValue
 
@@ -402,7 +403,7 @@ def knapsack_multi_paths(
     @param valueOverrides: path->(value, dist)
     @return:
     """
-    tilePathGroupsRebuilt: typing.Dict[int, typing.List[Path]] = _group_expand_paths_by_crossovers(
+    tilePathGroupsRebuilt: typing.Dict[int, typing.List[TilePlanInterface]] = _group_expand_paths_by_crossovers(
         pathsCrossingTiles,
         multiPathDict)
 
@@ -451,7 +452,7 @@ def knapsack_multi_paths(
 
 
 def get_multiple_choice_expansion_knapsack_val_converter(valueOverrides, postPathEvalFunction, negativeTiles):
-    def multiple_choice_knapsack_expansion_path_value_converter(p: Path) -> typing.Tuple[int, int]:
+    def multiple_choice_knapsack_expansion_path_value_converter(p: TilePlanInterface) -> typing.Tuple[int, int]:
         floatVal = -10000
         dist = p.length
         if valueOverrides is not None:
@@ -476,14 +477,14 @@ def knapsack_multi_paths_no_crossover(
         targetPlayers: typing.List[int],
         remainingTurns: int,
         pathsCrossingTiles,
-        multiPathDict: typing.Dict[Tile, typing.Dict[int, typing.Tuple[int, Path]]],
+        multiPathDict: typing.Dict[Tile, typing.Dict[int, typing.Tuple[int, TilePlanInterface]]],
         territoryMap: MapMatrix[int],
         postPathEvalFunction: typing.Callable[[Path, typing.Set[Tile]], float],
         negativeTiles: typing.Set[Tile],
         tryAvoidSet: typing.Set[Tile],
         viewInfo: ViewInfo | None,
-        valueOverrides: typing.Dict[Path, typing.Tuple[float, int]] | None = None,
-) -> typing.Tuple[Path | None, typing.List[Path], int, float]:
+        valueOverrides: typing.Dict[TilePlanInterface, typing.Tuple[float, int]] | None = None,
+) -> typing.Tuple[TilePlanInterface | None, typing.List[TilePlanInterface], int, float]:
     """
     Returns firstPath, allPaths, totalTurns, totalValue
 
@@ -524,7 +525,7 @@ def knapsack_multi_paths_no_crossover(
             if (tile.isCity or tile.isGeneral) and dist < remainingTurns // 2:
                 # if coming from a city, group by the first tile captured instead of by the city itself...?
                 groupTile = tile
-                for t in p.tileList:
+                for t in p.tileSet:
                     if not map.is_player_on_team_with(tile.player, t.player):
                         groupTile = t
                         break
@@ -621,7 +622,7 @@ def extract_paths_from_knapsack_groups(
     return enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed
 
 
-def _add_expansion_to_view_info(path: Path, otherPaths: typing.List[Path], viewInfo: ViewInfo, colors: typing.Tuple[int, int, int]):
+def _add_expansion_to_view_info(path: TilePlanInterface, otherPaths: typing.List[TilePlanInterface], viewInfo: ViewInfo, colors: typing.Tuple[int, int, int]):
     r, g, b = colors
     for curPath in otherPaths:
         if viewInfo:
@@ -670,9 +671,9 @@ def get_optimal_expansion(
         useCutoff: bool = True,
         bonusCapturePointMatrix: MapMatrix[float] | None = None,
         colors: typing.Tuple[int, int, int] = (235, 240, 50),
-        additionalOptionValues: typing.List[typing.Tuple[float, int, Path]] | None = None,
+        additionalOptionValues: typing.List[TilePlanInterface] | None = None,
         perfTimer: PerformanceTimer | None = None,
-) -> typing.Tuple[Path | None, typing.List[Path]]:
+) -> typing.Tuple[TilePlanInterface | None, typing.List[TilePlanInterface]]:
     """
     Does 3 phases of knapsacking expansion paths:
     First, large tile plans.
@@ -1037,20 +1038,23 @@ def get_optimal_expansion(
             initFunc = initial_value_func_default
 
         # Switch this up to use more tiles at the start, just removing the first tile in each path at a time. Maybe this will let us find more 'maximal' paths?
-        def postPathEvalFunction(path, negativeTiles):
-            value = 0
-            last = path.start.tile
-            # if bonusCapturePointMatrix:
-            #     value += bonusCapturePointMatrix[path.start.tile]
-            nextNode = path.start.next
-            while nextNode is not None:
-                tile = nextNode.tile
-                val = _get_tile_path_value(map, tile, last, negativeTiles, targetPlayers, searchingPlayer, enemyDistMap, generalDistMap, territoryMap, enemyDistPenaltyPoint, bonusCapturePointMatrix)
-                value += val
+        def postPathEvalFunction(path: TilePlanInterface, negativeTiles):
+            if isinstance(path, Path):
+                value = 0
+                last = path.start.tile
+                # if bonusCapturePointMatrix:
+                #     value += bonusCapturePointMatrix[path.start.tile]
+                nextNode = path.start.next
+                while nextNode is not None:
+                    tile = nextNode.tile
+                    val = _get_tile_path_value(map, tile, last, negativeTiles, targetPlayers, searchingPlayer, enemyDistMap, generalDistMap, territoryMap, enemyDistPenaltyPoint, bonusCapturePointMatrix)
+                    value += val
 
-                last = tile
-                nextNode = nextNode.next
-            return value
+                    last = tile
+                    nextNode = nextNode.next
+                return value
+            else:
+                return path.value
 
         if turns <= 0:
             raise AssertionError(f"turns {turns} <= 0 in optimal_expansion...")
@@ -1114,11 +1118,11 @@ def get_optimal_expansion(
             addlPaths = additionalOptionValues
 
             # counts = {}
-            for baseValueOverride, turnOverride, path in sorted(addlPaths, key=lambda p: p[0]/p[1], reverse=True):
+            for option in sorted(addlPaths, key=lambda p: p.value / p.length, reverse=True):
                 # for tile in path.tileList:
                 #     count = counts.get(tile, 0)
                 #     counts[tile] = count + 1
-                logEntries.append(f'including addl opt: {baseValueOverride:.2f}/{turnOverride}t  {str(path)}')
+                logEntries.append(f'including addl opt: {option}')
 
                 _try_include_alt_sourced_path(
                     map,
@@ -1126,14 +1130,14 @@ def get_optimal_expansion(
                     defaultNoPathValue,
                     multiPathDict,
                     negativeTiles,
-                    path,
+                    option,
                     paths,
                     pathsCrossingTiles,
                     postPathEvalFunction,
                     tryAvoidSet,
                     useIterativeNegTiles=False,
-                    baseValueOverride=baseValueOverride,
-                    turnOverride=turnOverride,
+                    baseValueOverride=option.value,
+                    turnOverride=option.length,
                     logEntries=logEntries)
             logEntries.append(f"Completed additional option inclusion.... elapsed {time.perf_counter() - startTime:.4f}")
 
@@ -1479,14 +1483,15 @@ def get_optimal_expansion(
                     multiPathDict[leafMove.source] = curTileDict
 
         if logStuff:
+            logbook.info(f'THE FOLLOWING WILL BE INPUT INTO KNAPSACK:')
             for t, pathsByDist in multiPathDict.items():
                 for dist, (val, p) in pathsByDist.items():
                     logEntries.append(f'input tile {str(t)} val {val:.3f} @ dist {dist}: {str(p)}')
 
         valueOverrides = {}
         if additionalOptionValues is not None:
-            for baseValueOverride, turnOverride, path in additionalOptionValues:
-                valueOverrides[path.clone()] = (baseValueOverride, turnOverride)
+            for opt in additionalOptionValues:
+                valueOverrides[opt] = (opt.value, opt.length)
 
         path, otherPaths, totalTurns, totalValue = knapsack_multi_paths(
             map,
@@ -1538,7 +1543,7 @@ def get_optimal_expansion(
         tilesInKnapsackOtherThanCurrent = set()
 
         for curPath in otherPaths:
-            for tile in curPath.tileList:
+            for tile in curPath.tileSet:
                 tilesInKnapsackOtherThanCurrent.add(tile)
 
         # for p in otherPaths:
@@ -1564,13 +1569,14 @@ def get_optimal_expansion(
         if not shouldConsiderMoveHalf:
             return path, otherPaths
 
-        path.start.move_half = True
-        value = path.calculate_value(searchingPlayer, map._teams, originalNegativeTiles)
-        if viewInfo:
-            viewInfo.add_info_line(f'path move_half value was {value} (path {str(path)})')
-        if value <= 0:
-            path.start.move_half = False
+        if isinstance(path, Path):
+            path.start.move_half = True
             value = path.calculate_value(searchingPlayer, map._teams, originalNegativeTiles)
+            if viewInfo:
+                viewInfo.add_info_line(f'path move_half value was {value} (path {str(path)})')
+            if value <= 0:
+                path.start.move_half = False
+                value = path.calculate_value(searchingPlayer, map._teams, originalNegativeTiles)
 
         return path, otherPaths
 
@@ -1913,8 +1919,8 @@ def _try_include_alt_sourced_path(
         defaultNoPathValue,
         multiPathDict,
         negativeTiles,
-        path,
-        paths,
+        planOption: TilePlanInterface,
+        planOptions: typing.List[typing.Tuple[int, float, TilePlanInterface]],  # cityCount, value, plan/path
         pathsCrossingTiles,
         postPathEvalFunction,
         tryAvoidSet,
@@ -1926,50 +1932,51 @@ def _try_include_alt_sourced_path(
     value = baseValueOverride
     if value is None:
         # TODO override here
-        value = postPathEvalFunction(path, negativeTiles)
+        value = postPathEvalFunction(planOption, negativeTiles)
 
     if value <= 0:
         return
 
     cityCount = 0
-    for tile in path.tileList:
+    for tile in planOption.tileSet:
         if (tile.isGeneral or tile.isCity) and map.is_player_on_team_with(tile.player, searchingPlayer):
             cityCount += 1
 
-    paths.append((cityCount, value, path))
+    planOptions.append((cityCount, value, planOption))
     add_path_to_try_avoid_paths_crossing_tiles(
-        path,
+        planOption,
         negativeTiles,
         tryAvoidSet,
         pathsCrossingTiles,
         addToNegativeTiles=useIterativeNegTiles)
 
-    curTileDict = multiPathDict.get(path.start.tile, {})
+    startTile = planOption.get_first_move().source
+    curTileDict = multiPathDict.get(startTile, {})
     if turnOverride == -1:
-        turnOverride = path.length
+        turnOverride = planOption.length
     existingMax, existingPath = curTileDict.get(turnOverride, defaultNoPathValue)
     if value > existingMax:
         if logEntries is not None:
             logEntries.append(
-                f'altOpt {str(path.start.tile)}@{turnOverride}t BETTER than existing:\r\n'
-                f'   new   {value} {str(path)}\r\n'
+                f'altOpt {str(startTile)}@{turnOverride}t BETTER than existing:\r\n'
+                f'   new   {value} {str(planOption)}\r\n'
                 f'   exist {existingMax} {str(existingPath)}')
-        curTileDict[path.length] = (value, path)
+        curTileDict[planOption.length] = (value, planOption)
     else:
         if logEntries is not None:
             logEntries.append(
-                f'altOpt for {str(path.start.tile)}@{turnOverride}t worse than existing:\r\n      bad {value} {str(path)}\r\n   exist {existingMax} {str(existingPath)}')
-    multiPathDict[path.start.tile] = curTileDict
+                f'altOpt for {str(startTile)}@{turnOverride}t worse than existing:\r\n      bad {value} {str(planOption)}\r\n   exist {existingMax} {str(existingPath)}')
+    multiPathDict[startTile] = curTileDict
 
 
 def _get_capture_counts(
         searchingPlayer: int,
         friendlyPlayers: typing.List[int],
         targetPlayers: typing.List[int],
-        mainPath: Path | None,
-        otherPaths: typing.List[Path],
+        mainPath: TilePlanInterface | None,
+        otherPaths: typing.List[TilePlanInterface],
         negativeTiles: typing.Set[Tile],
-        valueOverrides: typing.Dict[Path, typing.Tuple[float, int]] | None = None,
+        valueOverrides: typing.Dict[TilePlanInterface, typing.Tuple[float, int]] | None = None,
 ) -> typing.Tuple[int, int, int]:
     """
     Returns (turnsUsed, enemyCaptured, neutralCaptured). Negative tiles dont count towards the sums but do count towards turns used.
@@ -1993,7 +2000,7 @@ def _get_capture_counts(
         pTurnsUsed = -1  # first tile in a path doesn't count
         pNeutCap = 0
         pEnCap = 0
-        for tile in path.tileList:
+        for tile in path.tileSet:
             pTurnsUsed += 1
             if tile in visited:
                 continue
@@ -2025,7 +2032,10 @@ def _get_capture_counts(
 def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: Path, originalNegativeTiles: typing.Set[Tile]) -> float:
     # rating = max(0, path.value) ** 0.5
     rating = 0
-    for t in path.tileList[1:]:
+    first = path.get_first_move().source
+    for t in path.tileSet:
+        if t == first:
+            continue
         if t.player not in friendlyPlayers:
             rating += 0.5
             if t.player >= 0:
@@ -2203,16 +2213,21 @@ def expansion_knapsack_gather_iteration(
 
 def should_consider_path_move_half(
         map: MapBase,
-        path: Path,
+        path: TilePlanInterface,
         negativeTiles: typing.Set[Tile],
         player: int,
         playerDistMap: MapMatrix[int],
         enemyDistMap: MapMatrix[int],
         withinGenPathThreshold: int,
-        tilesOnMainPathDist: int):
+        tilesOnMainPathDist: int
+) -> bool:
     # if is perfect amount to capture dest but not other dest
-    src = path.start.tile
-    dest = path.start.next.tile
+    firstMove = path.get_first_move()
+    if firstMove.move_half:
+        return True
+
+    src = firstMove.source
+    dest = firstMove.dest
     if src.player != dest.player:
         capAmt = src.army - 1 - dest.army
         halfCapAmt = Tile.get_move_half_amount(src.army) - dest.army
@@ -2250,7 +2265,7 @@ def should_consider_path_move_half(
     largeTileThreshold = int(
         max(16, map.players[player].standingArmy) ** 0.5)  # no smaller than sqrt(16) (4) can move half.
 
-    pathTile: Tile = path.start.tile
+    pathTile: Tile = path.get_first_move().source
     pathTileDistSum = enemyDistMap[pathTile] + playerDistMap[pathTile]
 
     def filter_alternate_movables(tile: Tile):
@@ -2274,8 +2289,7 @@ def should_consider_path_move_half(
             return False
 
         # a 4 move-half leaves 2 behind, a 5 move_half leaves 3 behind. +1 because path.value is already -1
-        movingTile = path.start.tile
-        capArmy = movingTile.army // 2
+        capArmy = pathTile.army // 2
         pathValueWithoutCapArmy = path.value - capArmy
 
         altCappable = set()
@@ -2314,8 +2328,8 @@ def should_consider_path_move_half(
 
         altPathSplitThresh = largeTileThreshold * 2
 
-        if ((canCapTile and canProbablyCaptureNearbyTiles and movingTile.army < altPathSplitThresh)
-                or (isEnemyTileThatCanRecapture and movingTile.army < largeTileThreshold)):
+        if ((canCapTile and canProbablyCaptureNearbyTiles and pathTile.army < altPathSplitThresh)
+                or (isEnemyTileThatCanRecapture and pathTile.army < largeTileThreshold)):
             return True
 
         return False

@@ -34,7 +34,7 @@ from bot_ek0x45 import EklipZBot
 
 
 class TestBase(unittest.TestCase):
-    GLOBAL_BYPASS_REAL_TIME_TEST = False
+    GLOBAL_BYPASS_REAL_TIME_TEST = True
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -539,7 +539,7 @@ class TestBase(unittest.TestCase):
 
         self.render_view_info(map, viewInfo, infoStr)
 
-    def render_army_analyzer(self, map: MapBase, analyzer: ArmyAnalyzer):
+    def render_army_analyzer(self, map: MapBase, analyzer: ArmyAnalyzer, alsoRenderPaths: typing.List[Path] | None = None):
         viewInfo = ViewInfo(0, map)
         board = BoardAnalyzer(map, analyzer.tileA, None)
         board.rebuild_intergeneral_analysis(analyzer.tileB, possibleSpawns=None)
@@ -584,10 +584,23 @@ class TestBase(unittest.TestCase):
                 viewInfo.bottomLeftGridText[tile] = f'it{analyzer.interceptTurns[tile]}'
 
             if tile in analyzer.interceptDistances:
-                viewInfo.midRightGridText[tile] = f'im{analyzer.interceptDistances[tile]}'
+                viewInfo.midLeftGridText[tile] = f'im{analyzer.interceptDistances[tile]}'
+
+            if tile in analyzer.interceptDistances:
+                viewInfo.topRightGridText[tile] = f'a{analyzer.aMap[tile]}'
+
+            if tile in analyzer.interceptDistances:
+                viewInfo.midRightGridText[tile] = f'b{analyzer.bMap[tile]}'
 
             if len(tileData) > 0:
                 viewInfo.bottomRightGridText[tile] = ''.join(tileData)
+
+        if alsoRenderPaths:
+            for path in alsoRenderPaths:
+                viewInfo.color_path(PathColorer(
+                    path,
+                    175, 0, 255, 255
+                ))
 
         viewInfo.add_info_line('LEGEND:')
         viewInfo.add_info_line('  C: = PathChoke')
@@ -746,9 +759,9 @@ class TestBase(unittest.TestCase):
         return viewInfo
 
     def render_view_info(self, map: MapBase, viewInfo: ViewInfo, infoString: str | None = None):
-        titleString = infoString
-        if titleString is None:
-            titleString = self._testMethodName
+        # titleString = infoString
+        # if titleString is None:
+        titleString = self._testMethodName.replace('test_', '')
         viewer = ViewerHost(titleString, cell_width=45, cell_height=45, alignTop=True, alignLeft=False, noLog=True)
         viewer.noLog = True
         if infoString is not None:
@@ -1440,7 +1453,6 @@ class TestBase(unittest.TestCase):
 
         targets = [general]
         targets.extend(map.players[general.player].cities)
-        threats = []
         negs = set(targets)
         # allow pathing through our tiles
         for tile in map.get_all_tiles():
@@ -1452,24 +1464,38 @@ class TestBase(unittest.TestCase):
         self.begin_capturing_logging()
 
         if addlPath is not None:
-            analysis = ArmyAnalyzer(map, addlPath.tail.tile, addlPath.start.tile)
-            saveTile = None
-            if len(addlPath.tileList) > 1 and analysis.is_choke(addlPath.tail.prev.tile):
-                saveTile = addlPath.tail.prev.tile
-            threats.append(ThreatObj(addlPath.length - 1, addlPath.value, addlPath, ThreatType.Econ, saveTile, analysis))
+            paths.append(addlPath)
 
-        if paths:
-            for path in paths:
-                threatType = ThreatType.Econ
-                if path.tail.tile in targets:
-                    threatType = ThreatType.Kill
-                elif justCityAndGeneralThreats:
-                    continue
-                analysis = ArmyAnalyzer(map, path.tail.tile, path.start.tile)
-                saveTile = None
-                if len(path.tileList) > 1 and analysis.is_choke(path.tail.prev.tile):
-                    saveTile = path.tail.prev.tile
-                threats.append(ThreatObj(path.length - 1, path.value, path, threatType, saveTile, analysis))
+        actualPaths = []
+        for path in paths:
+            if path.tail.tile not in targets and justCityAndGeneralThreats:
+                continue
+            actualPaths.append(path)
+
+        plan = self._get_interception_plan_from_paths(enemyGeneral, general,  map, actualPaths, turnsLeftInCycle, useDebugLogging)
+
+        return plan
+
+    def get_interception_plan_from_paths(self, map: MapBase, general: Tile, enemyGeneral: Tile, paths: typing.List[str], turnsLeftInCycle: int = -1, useDebugLogging: bool = True) -> ArmyInterception:
+        if turnsLeftInCycle == -1:
+            turnsLeftInCycle = 50 - map.turn % 50
+
+        addlPaths = []
+        for path in paths:
+            realPath = Path.from_string(map, path)
+            addlPaths.append(realPath)
+
+        plan = self._get_interception_plan_from_paths(enemyGeneral, general, map, addlPaths, turnsLeftInCycle, useDebugLogging)
+
+        return plan
+
+    def _get_interception_plan_from_paths(self, enemyGeneral, general, map, paths, turnsLeftInCycle, useDebugLogging):
+        threats = []
+        for path in paths:
+            if SearchUtils.any_where(threats, lambda t: str(t.path) == str(path)):
+                continue
+            threat = self.build_threat(map, path)
+            threats.append(threat)
 
         self.assertGreater(len(threats), 0)
 
@@ -1479,7 +1505,14 @@ class TestBase(unittest.TestCase):
             enemyGeneral,
             useDebugLogging)
 
-        plan = interceptor.get_interception_plan(threats, turnsLeftInCycle=turnsLeftInCycle)
+        threatTile = threats[0].path.start.tile
+
+        blockingTiles = interceptor.get_intercept_blocking_tiles_for_split_hinting(threatTile, {threatTile: threats})
+
+        if len(blockingTiles) > 0:
+            logbook.info(f'for threat {str(threatTile)}, blocking tiles were {"  ".join([str(v) for v in blockingTiles.values()])}')
+
+        plan = interceptor.get_interception_plan(threats, turnsLeftInCycle=turnsLeftInCycle, otherThreatsBlockingTiles=blockingTiles)
 
         return plan
 
@@ -1501,10 +1534,11 @@ class TestBase(unittest.TestCase):
         for dist, option in plan.intercept_options.items():
             if dist > maxDepth:
                 continue
-            val, path = option
+            val = option.value
+            path = option.path
             vt = val/dist
             if vt > bestVt:
-                logbook.info(f'NEW BEST INTERCEPT OPT {val}/{dist} -- {str(path)}')
+                logbook.info(f'NEW BEST INTERCEPT OPT {val:.2f}/{dist} -- {str(path)}')
                 bestOpt = path
                 bestOptAmt = val
                 bestOptDist = dist
@@ -1523,7 +1557,50 @@ class TestBase(unittest.TestCase):
             bestOptAmt, bestOptDist, bestOpt = res
             self.fail(f'Expected NO best intercept option, instead found bestOptAmt {bestOptAmt}, bestOptDist {bestOptDist}, bestOpt {bestOpt}')
 
-    def get_interceptor_path_by_coords(self, plan: ArmyInterception, xStart: int, yStart: int, xEnd: int, yEnd: int) -> typing.Tuple[Path | None, int, int]:
+    def assert_no_intercept_option_by_coords(
+            self,
+            plan: ArmyInterception,
+            xStart: int | None = None,
+            yStart: int | None = None,
+            xEnd: int | None = None,
+            yEnd: int | None = None,
+            message: str | None = None):
+        bestOpt = None
+        bestOptAmt = 0
+        bestOptDist = 0
+        maxVt = -1000
+
+        for dist, option in plan.intercept_options.items():
+            val = option.value
+            path = option.path
+            if xStart is not None and path.start.tile.x != xStart:
+                continue
+            if yStart is not None and path.start.tile.y != yStart:
+                continue
+            if xEnd is not None and path.tail.tile.x != xEnd:
+                continue
+            if yEnd is not None and path.tail.tile.y != yEnd:
+                continue
+
+            vt = val/dist
+            if vt > maxVt:
+                logbook.info(f'FOUND BEST INTERCEPT OPT {val}/{dist} -- {str(path)}')
+                bestOpt = path
+                bestOptAmt = val
+                bestOptDist = dist
+                maxVt = vt
+
+        if bestOpt is not None:
+            self.fail(f'Expected NO best intercept option starting {xStart | "any"},{yStart | "any"}-->{xEnd | "any"},{yEnd | "any"}, instead found bestOptAmt {bestOptAmt}, bestOptDist {bestOptDist}, bestOpt {bestOpt}')
+
+    def get_interceptor_path_by_coords(
+            self,
+            plan: ArmyInterception,
+            xStart: int | None = None,
+            yStart: int | None = None,
+            xEnd: int | None = None,
+            yEnd: int | None = None,
+    ) -> typing.Tuple[Path | None, int, int]:
         """
         Returns Path, value, turnsUsed if a path is found that starts and ends at those positions
 
@@ -1541,15 +1618,24 @@ class TestBase(unittest.TestCase):
         maxVt = -1000
 
         for dist, option in plan.intercept_options.items():
-            val, path = option
-            if path.start.tile.x == xStart and path.start.tile.y == yStart and path.tail.tile.x == xEnd and path.tail.tile.y == yEnd:
-                vt = val/dist
-                if vt > maxVt:
-                    logbook.info(f'NEW BEST INTERCEPT OPT {val}/{dist} -- {str(path)}')
-                    bestOpt = path
-                    bestOptAmt = val
-                    bestOptDist = dist
-                    maxVt = vt
+            val = option.value
+            path = option.path
+            if xStart is not None and path.start.tile.x != xStart:
+                continue
+            if yStart is not None and path.start.tile.y != yStart:
+                continue
+            if xEnd is not None and path.tail.tile.x != xEnd:
+                continue
+            if yEnd is not None and path.tail.tile.y != yEnd:
+                continue
+
+            vt = val/dist
+            if vt > maxVt:
+                logbook.info(f'NEW BEST INTERCEPT OPT {val:.2f}/{dist} -- {str(path)}')
+                bestOpt = path
+                bestOptAmt = val
+                bestOptDist = dist
+                maxVt = vt
 
         if bestOpt is None:
             self.fail(f'No intercept option found for xStart {xStart}, yStart {yStart}, xEnd {xEnd}, yEnd {yEnd}')
@@ -1562,7 +1648,7 @@ class TestBase(unittest.TestCase):
 
         if renderIndividualAnalysis:
             for threat in plan.threats:
-                self.render_army_analyzer(map, threat.armyAnalysis)
+                self.render_army_analyzer(map, threat.armyAnalysis, [threat.path])
 
         for tile, interceptInfo in plan.common_intercept_chokes.items():
             viewInfo.add_targeted_tile(tile, targetStyle, radiusReduction=11 - colorIndex)
@@ -1594,7 +1680,10 @@ class TestBase(unittest.TestCase):
         maxValTurnPath = None
         maxVal = 0
         maxTurn = 0
-        for dist, (val, path) in plan.intercept_options.items():
+        maxOpt = None
+        for dist, opt in plan.intercept_options.items():
+            val = opt.value
+            path = opt.path
             valPerTurn = val / dist
             maxStr = ''
             if valPerTurn > maxValPerTurn:
@@ -1603,6 +1692,7 @@ class TestBase(unittest.TestCase):
                 maxStr = 'NEW MAX '
                 maxVal = val
                 maxTurn = dist
+                maxOpt = opt
             viewInfo.color_path(PathColorer(
                 path,
                 255,
@@ -1610,7 +1700,7 @@ class TestBase(unittest.TestCase):
                 255,
             ))
 
-            logbook.info(f'{maxStr}intercept plan {plan.target_tile} dist {dist}: {val:.2f} {path}')
+            logbook.info(f'{maxStr}intercept plan {plan.target_tile} dist {dist}: {opt}')
 
         if maxValTurnPath is not None:
             viewInfo.color_path(PathColorer(
@@ -1619,7 +1709,7 @@ class TestBase(unittest.TestCase):
                 255,
                 155,
             ))
-        self.render_view_info(map, viewInfo, f'intercept {maxVal:.2f}/{maxTurn}={maxValPerTurn:.2f} - {str(maxValTurnPath)}')
+        self.render_view_info(map, viewInfo, f'intercept {maxOpt}')
 
     def assertInterceptChokeTileMoves(self, plan: ArmyInterception, map: MapBase, x: int, y: int, w: int):
         tile = map.GetTile(x, y)
@@ -1632,3 +1722,18 @@ class TestBase(unittest.TestCase):
         val = plan.common_intercept_chokes.get(tile, -10)
         if val != -10:
             self.fail(f'Expected {str(tile)} NOT to be in chokes, instead found val {val}.')
+
+    def build_threat(self, map: MapBase, path: Path) -> ThreatObj:
+        threatType = ThreatType.Econ
+
+        if path.tail.tile.isCity or path.tail.tile.isGeneral:  # ) and path.value > 0
+            threatType = ThreatType.Kill
+        analysis = ArmyAnalyzer.build_from_path(map, path)
+
+        saveTile = None
+        if len(path.tileList) > 1 and analysis.is_choke(path.tail.prev.tile):
+            saveTile = path.tail.prev.tile
+
+        threat = ThreatObj(path.length - 1, path.value, path, threatType, saveTile, analysis)
+
+        return threat

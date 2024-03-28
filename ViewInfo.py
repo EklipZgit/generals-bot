@@ -183,8 +183,9 @@ class ViewInfo(object):
         """Note this doesn't do pure alpha...?"""
         self._zones.append((zoneMatrix, color, alpha))
 
-    def color_path(self, pathColorer: PathColorer, start: bool = False):
-        if not start:
+    def color_path(self, pathColorer: PathColorer, renderOnBottom: bool = False):
+        """Last path added = last path drawn, so later paths cover up earlier paths. If renderOnBottom = True, this path will be added to the bottom of the stack instead of the top."""
+        if not renderOnBottom:
             self.paths.append(pathColorer)
         else:
             self.paths.insert(0, pathColorer)

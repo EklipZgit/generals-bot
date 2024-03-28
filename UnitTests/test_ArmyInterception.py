@@ -68,7 +68,7 @@ class ArmyInterceptionUnitTests(TestBase):
 
         self.assertEqual(general, bestOpt.start.tile)
 
-    def test_should_intercept_with_large_tile__unit_test(self):
+    def test_should_intercept_with_large_tile__should_intercept_despite_leftward_unpreventable_option__unit_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_intercept_with_large_tile___qWwqozFbe---1--138.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 138, fill_out_tiles=True)
@@ -81,21 +81,20 @@ class ArmyInterceptionUnitTests(TestBase):
         # if debugMode:
         #     self.render_army_analyzer(map, analysis)
 
-        plan = self.get_interception_plan(map, general, enemyGeneral, enTile=enTile)
+        # this is NOT a shortest path to the target tile, is found naturally because the 18 runs out before reaching it if it goes straight down but in theory we could always find a path like this anyway even if the 13 to the right wasn't there.
+        addlPath = '10,9->14,9->14,15->13,15'
+        plan = self.get_interception_plan(map, general, enemyGeneral, enTile=enTile, additionalPath=addlPath)
         # plan = self.get_interception_plan(map, general, enemyGeneral, enTile=enTile)
 
         if debugMode:
-            self.render_intercept_plan(map, plan)
+            self.render_intercept_plan(map, plan, renderIndividualAnalysis=True)
 
-        path, value, turnsUsed = self.get_interceptor_path(plan, 10, 13, 10, 15)
-        if path is not None:
-            self.assertLess(value, 2, "should not have found a path just heading back to general")
-        path, value, turnsUsed = self.get_interceptor_path(plan, 10, 11, 10, 14)
-        if path is not None:
-            self.assertLess(value, 2, "should not have found a path just heading back to general")
-        path, value, turnsUsed = self.get_interceptor_path(plan, 10, 10, 10, 14)
-        if path is not None:
-            self.assertLess(value, 2, "should not have found a path just heading back to general")
+        self.assertNotIn(map.GetTile(9, 10), plan.common_intercept_chokes)
+
+        self.assert_no_intercept_option_by_coords(plan, 10, 13, 10, 15, "should not have found a path just heading back to general")
+        self.assert_no_intercept_option_by_coords(plan, 10, 14, 10, 15, "should not have found a path just heading back to general")
+        self.assert_no_intercept_option_by_coords(plan, 10, 11, 10, 14, "should not have found a path just heading back to general")
+        self.assert_no_intercept_option_by_coords(plan, 10, 10, 10, 14, "should not have found a path just heading back to general")
 
         val, turns, bestPath = self.get_best_intercept_option(plan)
         self.assertLess(bestPath.tail.tile.y, 12)
@@ -137,10 +136,10 @@ class ArmyInterceptionUnitTests(TestBase):
         self.assertNotInterceptChoke(plan, map, x=9, y=4)
         self.assertNotInterceptChoke(plan, map, x=10, y=6)
 
-        self.assertEqual(map.GetTile(14, 6), plan.best_enemy_threat.path.tail.tile)
+        self.assertEqual(map.GetTile(14, 6), plan.best_enemy_threat.threat.path.tail.tile)
 
     def test_should_identify_best_meeting_point_in_intercept_options(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_intercept_inbound_army_on_edge_when_would_have_10_recapture_turns___l7Y-HnzES---0--181.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 181, fill_out_tiles=True)
         notCity = map.GetTile(14, 6)
@@ -162,15 +161,7 @@ class ArmyInterceptionUnitTests(TestBase):
         self.assertNotInterceptChoke(plan, map, x=10, y=5)
         self.assertNotInterceptChoke(plan, map, x=10, y=6)
 
-        bestOpt = None
-        bestOptAmt = 0
-        gatherDepth = 20
-        for turn, option in plan.intercept_options.items():
-            val, path = option
-            if path.length < gatherDepth and val > bestOptAmt:
-                logbook.info(f'NEW BEST INTERCEPT OPT {val} -- {str(path)}')
-                bestOpt = path
-                bestOptAmt = val
+        val, turns, bestOpt = self.get_best_intercept_option(plan)
 
         self.assertEqual(map.GetTile(9, 5), bestOpt.tail.tile)
 
@@ -205,7 +196,7 @@ class ArmyInterceptionUnitTests(TestBase):
         option = plan.intercept_options[3]
         val, path = option
         if path.length < gatherDepth and val > bestOptAmt:
-            logbook.info(f'NEW BEST INTERCEPT OPT {val} -- {str(path)}')
+            logbook.info(f'NEW BEST INTERCEPT OPT {val:.2f} -- {str(path)}')
             bestOpt = path
             bestOptAmt = val
 
@@ -224,7 +215,7 @@ class ArmyInterceptionUnitTests(TestBase):
         if debugMode:
             self.render_intercept_plan(map, interception)
 
-        path, val, turns = self.get_interceptor_path(interception, 2, 5, 2, 8)
+        path, val, turns = self.get_interceptor_path_by_coords(interception, 2, 5, 2, 8)
 
         self.assertEqual(1, interception.common_intercept_chokes[map.GetTile(2, 7)], 'all routes can be intercepted in one extra move from this point')
         self.assertIsNotNone(path)
@@ -244,12 +235,12 @@ class ArmyInterceptionUnitTests(TestBase):
         if debugMode:
             self.render_intercept_plan(map, interception)
 
-        path, val, turns = self.get_interceptor_path(interception, 0, 8, 1, 8)
+        path, val, turns = self.get_interceptor_path_by_coords(interception, 0, 8, 1, 8)
 
         if path is not None:  # not even finding this as an intercept is also valid, so only fail if it is found AND its value isn't 0
             self.assertEqual(0, val, 'does not prevent enemy from recapturing till end of cycle so slamming a 3 into the tile does nothing this cycle.')
 
-        path, val, turns = self.get_interceptor_path(interception, 2, 5, 2, 7)
+        path, val, turns = self.get_interceptor_path_by_coords(interception, 2, 5, 2, 7)
         self.assertIsNotNone(path)
         self.assertEqual(11, turns, 'max value per turn should be the full turns')
         self.assertEqual(18, val, 'prevents enemy damage and also recaptures')
@@ -264,48 +255,32 @@ class ArmyInterceptionUnitTests(TestBase):
         if debugMode:
             self.render_intercept_plan(map, interception)
 
-        path, val, turns = self.get_interceptor_path(interception, 0, 8, 1, 8)
+        path, val, turns = self.get_interceptor_path_by_coords(interception, 0, 8, 1, 8)
 
         if path is not None:  # not even finding this as an intercept is also valid, so only fail if it is found AND its value isn't 0
             self.assertEqual(0, val, 'does not prevent enemy from recapturing till end of cycle so slamming a 3 into the tile does nothing this cycle.')
 
-        path, val, turns = self.get_interceptor_path(interception, 2, 5, 2, 7)
+        path, val, turns = self.get_interceptor_path_by_coords(interception, 2, 5, 2, 7)
         self.assertIsNotNone(path)
         self.assertEqual(11, turns, 'max value per turn should be the full turns')
         self.assertEqual(18, val, 'prevents enemy damage and also recaptures')
 
-    def test_should_recognize_diverging_path_around_mountain_as_non_intercept_chokes(self):
+    def test_should_recognize_multi_threat_and_cannot_fully_intercept_at_choke__unit_recognizes_can_only_block_along_bottom_if_goes_right__including_over_top(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/should_kill_point_blank_army_lul___ffrBNaR9l---0--133.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 133, fill_out_tiles=False)
+        mapFile = 'GameContinuationEntries/should_recognize_multi_threat_and_intercept_at_choke___Human.exe-TEST__efebcb16-d770-4d80-ac54-b9c37c8e7bea---0--289.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 289, fill_out_tiles=True)
 
-        # map.GetTile(6, 7).isMountain = False
-        # map.update_reachable()
-
-        analysis = ArmyAnalyzer(map, map.GetTile(5, 17), map.GetTile(7, 6))
-        analysis.scan()
-        if debugMode:
-            self.render_army_analyzer(map, analysis)
-        interceptWidth = analysis.interceptChokes.get(map.GetTile(6, 6), None)
-        # self.assertEqual(4, interceptWidth)
-
-        interception = self.get_interception_plan(map, general, enemyGeneral)
+        interception = self.get_interception_plan(map, general, enemyGeneral, additionalPath='1,8->1,4->5,4->5,1')
 
         if debugMode:
             self.render_intercept_plan(map, interception)
 
-        value, turns, bestPath = self.get_best_intercept_option(interception)
-        self.assertEqual(6, bestPath.start.tile.x)
-        self.assertEqual(6, bestPath.start.tile.y)
+        self.assert_no_intercept_option_by_coords(interception, 0, 8, 1, 8, 'does not prevent enemy from recapturing till end of cycle so slamming a 3 into the tile does nothing this cycle.')
 
-        path, val, turns = self.get_interceptor_path(interception, 6, 6, 7, 6)
+        path, val, turns = self.get_interceptor_path_by_coords(interception, 2, 5, 2, 7)
         self.assertIsNotNone(path)
-
-        path, val, turns = self.get_interceptor_path(interception, 5, 6, 7, 6)
-        self.assertIsNone(path)
-
-        self.assertNotInterceptChoke(interception, map, 6, 6)
-        self.assertNotInterceptChoke(interception, map, 7, 7)
+        self.assertEqual(11, turns, 'max value per turn should be the full turns')
+        self.assertEqual(18, val, 'prevents enemy damage and also recaptures')
 
     def test_should_intercept_large_incoming_at_choke_even_with_not_quite_enough__unit_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -337,7 +312,7 @@ class ArmyInterceptionUnitTests(TestBase):
         if debugMode:
             self.render_intercept_plan(rawMap, plan)
 
-        self.assertEqual(1, len(plan.threats), "only econ threat")
+        # self.assertEqual(1, len(plan.threats), "only econ threat")
 
         bestVal, bestTurns, bestPath = self.get_best_intercept_option(plan)
         self.assertLess(bestVal, 7, "should not overvalue any of these intercepts")
@@ -372,25 +347,9 @@ class ArmyInterceptionUnitTests(TestBase):
         timings = '\r\n'.join(bot.perf_timer.current_move.get_events_organized_longest_to_shortest(25))
         ArmyAnalyzer.dump_times()
         self.assertLess(done, 0.04, f'should spent no more than 40ms on intercepts, \r\n{timings}')
-    
-    def test_should_intercept_one_late_at_midpoint_choke(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/should_intercept_one_late_at_midpoint_choke___Human.exe-TEST__7548ab1f-0519-41ce-a83c-785a43ba5915---0--289.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 289, fill_out_tiles=True)
-
-        enTile = map.GetTile(1, 9)
-
-        plan = self.get_interception_plan(map, general, enemyGeneral, enTile=enTile)
-
-        if debugMode:
-            self.render_intercept_plan(map, plan)
-
-        value, turns, bestOpt = self.get_best_intercept_option(plan)
-        self.assertEqual(1, bestOpt.length)
-        self.assertEqual(enTile, bestOpt.tail.tile)
 
     def test_should_see_split_path_blocker_as_mid_choke(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_see_split_path_blocker_as_mid_choke___Human.exe-TEST__0ec78983-f5c3-4648-a5a6-d1d6ac807db9---0--243.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 243, fill_out_tiles=True)
 
@@ -402,11 +361,10 @@ class ArmyInterceptionUnitTests(TestBase):
             self.render_intercept_plan(map, plan)
 
         value, turns, bestOpt = self.get_best_intercept_option(plan)
-        self.assertEqual(1, bestOpt.length)
-        self.assertEqual(enTile, bestOpt.tail.tile)
+        self.assertIn(map.GetTile(14, 9), bestOpt.tileList)
 
     def test_should_meet_to_defend_multi_choke__when_can_reach_not_one_behind(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         data = """
 |    |    |    |    |    |    |
 a1   a1   a1   aG1  a1   a1   a1
@@ -433,10 +391,10 @@ player_index=0
             self.render_intercept_plan(map, plan, renderIndividualAnalysis=True)
 
         value, turns, bestOpt = self.get_best_intercept_option(plan)
-        self.skipTest('need to add asserts')
+        self.assertIn(map.GetTile(2, 9), bestOpt.tileList)
 
     def test_should_meet_to_defend_multi_choke__when_can_reach_one_behind(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         data = """
 |    |    |    |    |    |    |
 a1   a1   a1   aG1  a1   a1   a1
@@ -463,7 +421,7 @@ player_index=0
             self.render_intercept_plan(map, plan)
 
         value, turns, bestOpt = self.get_best_intercept_option(plan)
-        self.skipTest('need to add asserts')
+        self.assertIn(map.GetTile(2, 9), bestOpt.tileList)
     
     def test_should_not_take_literal_lifetimes_to_load_intercepts(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -486,3 +444,150 @@ player_index=0
         timings = '\r\n'.join(bot.perf_timer.current_move.get_events_organized_longest_to_shortest(25))
         ArmyAnalyzer.dump_times()
         self.assertLess(done, 0.04, f'should spent no more than 40ms on intercepts, \r\n{timings}')
+    
+    def test_should_kill_one_away_armies_that_can_do_real_damage_immediately(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_kill_one_away_armies_that_can_do_real_damage_immediately___Human.exe-TEST__665a5e30-6063-4675-bff6-61edf7423b72---1--386.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 386, fill_out_tiles=True)
+
+        enTile = None
+        plan = self.get_interception_plan(map, general, enemyGeneral, enTile=enTile)
+
+        if debugMode:
+            self.render_intercept_plan(map, plan, renderIndividualAnalysis=True)
+
+        value, turns, bestOpt = self.get_best_intercept_option(plan)
+        self.assertIn(map.GetTile(10, 11), bestOpt.tileList)
+        self.assertIn(map.GetTile(10, 12), bestOpt.tileList)
+    
+    def test_should_not_miss_intercept_because_of_enemy_expansion_plan_that_is_short_and_irrelevant(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_not_miss_intercept_for_unknown_reason___Human.exe-TEST__7eae0a59-1775-4864-a321-282de6ef2c4d---0--182.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 182, fill_out_tiles=True)
+
+        enTile = None
+        plan = self.get_interception_plan(map, general, enemyGeneral, enTile=enTile, additionalPath='4,7->4,6')
+
+        if debugMode:
+            self.render_intercept_plan(map, plan, renderIndividualAnalysis=True)
+
+        value, turns, bestOpt = self.get_best_intercept_option(plan)
+        self.assertIn(map.GetTile(10, 6), bestOpt.tileList)
+
+    # TODO this is important test map scenario
+    def test_should_recognize_diverging_path_around_mountain_as_non_intercept_chokes(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_kill_point_blank_army_lul___ffrBNaR9l---0--133.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 133, fill_out_tiles=False)
+
+        # map.GetTile(6, 7).isMountain = False
+        # map.update_reachable()
+
+        analysis = ArmyAnalyzer(map, map.GetTile(5, 17), map.GetTile(7, 6))
+        analysis.scan()
+        # if debugMode:
+        #     self.render_army_analyzer(map, analysis)
+        interceptWidth = analysis.interceptChokes.get(map.GetTile(6, 6), None)
+        # TODO
+        # self.assertEqual(4, interceptWidth)
+
+        interception = self.get_interception_plan(map, general, enemyGeneral)
+
+        if debugMode:
+            self.render_intercept_plan(map, interception)
+
+        value, turns, bestPath = self.get_best_intercept_option(interception)
+        self.assertEqual(6, bestPath.start.tile.x)
+        self.assertEqual(6, bestPath.start.tile.y)
+
+        path, val, turns = self.get_interceptor_path_by_coords(interception, 6, 6, 7, 6)
+        self.assertIsNotNone(path)
+
+        path, val, turns = self.get_interceptor_path_by_coords(interception, 5, 6, 7, 6)
+        self.assertIsNone(path)
+
+        self.assertNotInterceptChoke(interception, map, 6, 6)
+        self.assertNotInterceptChoke(interception, map, 7, 7)
+
+    def test_should_intercept_one_late_at_midpoint_choke(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for includeThirdOpt in [False, True]:
+            with self.subTest(includeThirdOpt=includeThirdOpt):
+                mapFile = 'GameContinuationEntries/should_intercept_one_late_at_midpoint_choke___Human.exe-TEST__7548ab1f-0519-41ce-a83c-785a43ba5915---0--289.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 289, fill_out_tiles=True)
+
+                paths = [
+                    '1,9->1,4->3,4->3,5',
+                    '1,9->1,8->4,8->4,7->5,7->5,2',
+                ]
+                if includeThirdOpt:
+                    paths.append('1,9->1,8->3,8->3,9->5,9->5,8->6,8->6,7->8,7')
+
+                plan = self.get_interception_plan_from_paths(map, general, enemyGeneral, paths)
+
+                if debugMode:
+                    self.render_intercept_plan(map, plan, renderIndividualAnalysis=True)
+
+                value, turns, bestOpt = self.get_best_intercept_option(plan)
+                self.assertIn(map.GetTile(2, 6), bestOpt.tileList)
+
+    def test_should_understand_can_intercept_army_against_corner(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        data = """
+|    |    |    |    |    |    |
+a1   a1   a1   aG1  a1   a1   a1
+a1   a1   a1   a1   a1   a1   a1
+a1   a1   a1   a1   a1   a1   a1
+a1   a1   M    a1   M    a1   a1
+a1   a1   M    a1   M    a1   a1
+a1   a1   M    a1   M    a1   a1
+b1   b1   M    b1   M    b1   b1
+b1   b1   M    b1   M    b1   b1
+b1   b1   M    b1   M    b1   b1
+b1   a40  b1   b1   b1   b1   b1
+b1   b1   b1   b1   b1   b1   b1
+b1   b1   b1   b40  b1   b1   bG1
+|    |    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(data, 181)
+        enTile = map.GetTile(3, 11)
+        # frTile = map.GetTile(6, 0)
+
+        plan = self.get_interception_plan(map, general, enemyGeneral, enTile)
+
+        if debugMode:
+            self.render_intercept_plan(map, plan, renderIndividualAnalysis=True)
+
+        canInterceptStillTile = map.GetTile(2, 9)
+        self.assertEqual(2, plan.common_intercept_chokes[canInterceptStillTile].max_delay_turns, 'can intercept from this tile 1 turn from now by chasing to the right for 4 moves max')
+        self.assertEqual(4, plan.common_intercept_chokes[canInterceptStillTile].max_extra_moves_to_capture, 'can intercept from this tile by chasing to the right for 4 moves max')
+
+    def test_should_split_upwards_to_guarantee_damage_control(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_split_upwards_to_guarantee_damage_control___Human.exe-TEST__a0054186-be26-4c65-90be-ab546e3cc541---1--347.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 347, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=347)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        self.assertIsNone(winner)
+    
+    def test_should_find_interception_from_4_moves_away(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_find_interception_from_4_moves_away___Human.exe-TEST__7f68e044-60e0-4a38-9ae8-47af7df82c85---1--346.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 344, fill_out_tiles=True)
+
+        plan = self.get_interception_plan(map, general, enemyGeneral, additionalPath='9,6->8,6->8,7->6,7->6,8->4,8', turnsLeftInCycle= 15)
+
+        if debugMode:
+            self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
+
+

@@ -1862,6 +1862,8 @@ class ArmyTracker(object):
             else:
                 return []
 
+        remainingCycleTurns = 50 - map.turn % 50
+
         pathA = ArmyTracker.get_army_expected_path_non_flank(map, army, general, playerTargets)
         pathB = ArmyTracker.get_army_expected_path_flank(map, army, general)
 
@@ -1874,10 +1876,10 @@ class ArmyTracker(object):
                 pathC = ArmyTracker.get_army_expected_path_flank(map, army, general, skipTiles=pathB.tileList[3:])
                 if pathC is not None and pathC.tail.tile != pathB.tail.tile:
                     paths.append(pathC)
-        pathD = ArmyTracker.get_expected_enemy_expansion_path(map, army.tile, general, negativeTiles=set(itertools.chain.from_iterable(p.tileList for p in paths)))
+        pathD = ArmyTracker.get_expected_enemy_expansion_path(map, army.tile, general, negativeTiles=set(itertools.chain.from_iterable(p.tileList for p in paths)), maxTurns=remainingCycleTurns)
         if pathD is not None:
             paths.append(pathD)
-            pathE = ArmyTracker.get_expected_enemy_expansion_path(map, army.tile, general, negativeTiles=set(itertools.chain.from_iterable(p.tileList for p in paths)), distPrioTile=pathD.tail.tile)
+            pathE = ArmyTracker.get_expected_enemy_expansion_path(map, army.tile, general, negativeTiles=set(itertools.chain.from_iterable(p.tileList for p in paths)), distPrioTile=pathD.tail.tile, maxTurns=remainingCycleTurns)
             if pathE is not None:
                 paths.append(pathE)
 
@@ -3178,7 +3180,14 @@ class ArmyTracker(object):
                 return None
             if dist == 0:
                 return None
-            val = (0 - negCaps / dist, 0-negPrioDist, dist)
+
+            # prefer one or two negative tiles if they get us to larger patches of capturable material (finds longer more realistic paths)
+            weightedDist = dist + 2
+            distDiff = maxTurns - dist
+            if distDiff < 4 and negArmy < -10:  # and negPrioDist > -6
+                weightedDist = dist
+
+            val = (0 - negCaps / weightedDist, 0-negPrioDist, dist)
             # logbook.info(f'val {str(curTile)}: {str(val)}')
             return val
 

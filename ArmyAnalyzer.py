@@ -4,6 +4,10 @@
     Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
     EklipZ bot - Tries to play generals lol
 """
+
+from __future__ import  annotations
+
+import itertools
 import time
 import typing
 
@@ -14,6 +18,7 @@ from collections import deque
 
 import SearchUtils
 from ArmyTracker import Army
+from Path import Path
 from base.client.map import Tile, MapBase, TILE_OBSTACLE
 from MapMatrix import MapMatrix, MapMatrixSet
 
@@ -30,7 +35,7 @@ class PathWay:
 
 SENTINAL = "~"
 
-INF_PATH_WAY = PathWay(distance=INF)
+INF_PATH_WAY = PathWay(distance=1000)
 
 
 class ArmyAnalyzer:
@@ -64,10 +69,13 @@ class ArmyAnalyzer:
         """The value in here for a tile represents the number of additional moves necessary for worst case intercept, for an army that reaches this tile on the earliest turn the bTile army could reach this. It is effectively the difference between the best case and worst case intercept turns for an intercept reaching this tile."""
 
         self.interceptTurns: MapMatrix[int] = MapMatrix(map)
-        """This represents the raw turns into the intercept of an army that another army army must reach this tile to successfully achieve an 2-move-capture-intercept, ASSUMING the enemy army goes this way."""
+        """This represents the raw turns into the intercept of an army that another army army must reach this tile to successfully achieve an intercept, ASSUMING the enemy army goes this way."""
 
         self.interceptDistances: MapMatrix[int] = MapMatrix(map)
         """The number of moves you will waste to achieve the intercept, worst case, regardless of which way the enemy army goes."""
+
+        self.tileDistancesLookup: typing.Dict[int, typing.List[Tile]] = {}
+        """A lookup from the number of turns into the intercept, to which tiles the enemy army could have reached by that point (shorted path only)."""
 
         logbook.info(f"ArmyAnalyzer analyzing {self.tileA} and {self.tileB}")
 
@@ -138,7 +146,8 @@ class ArmyAnalyzer:
             for pathTile in path.tiles:
                 if pathTile.isMountain or (pathTile.tile == TILE_OBSTACLE and not pathTile.discovered and not pathTile.isCity) or (pathTile.isCity and pathTile.player == -1):
                     continue
-                self.chokeWidths._grid[pathTile.x][pathTile.y] = chokeCounterMap[self._get_choke_key(pathTile)]
+                cw = chokeCounterMap[self._get_choke_key(pathTile)]
+                self.chokeWidths._grid[pathTile.x][pathTile.y] = cw
 
         self.shortestPathWay = minPath
     # # stack
@@ -226,6 +235,10 @@ class ArmyAnalyzer:
         for adjacentTile in currentTile.movable:
             if self.pathWayLookupMatrix._grid[adjacentTile.x][adjacentTile.y]:
                 continue
+
+            if adjacentTile.isMountain or (adjacentTile.tile == TILE_OBSTACLE and not adjacentTile.discovered and not adjacentTile.isCity) or (adjacentTile.isCity and adjacentTile.player == -1):
+                continue
+
             self._build_pathway_recurse(path, adjacentTile)
 
     def _get_choke_key(self, tile: Tile) -> typing.Tuple:
@@ -241,10 +254,59 @@ class ArmyAnalyzer:
 
         return width // 2
 
+    def build_intercept_points(self):
+        q = deque()
+        # TODO this can just be array of arrays, just need to know min and max values...?
+        distancesLookup = {}
+        closedBy = {}
+        visitedByLookup = {}
+
+        q.append((self.tileB, set()))
+
+        visited = MapMatrixSet(self.map)
+        pw = self.pathWayLookupMatrix._grid[self.tileA.x][self.tileA.y]
+        if pw is None:
+            return
+
+        shortestDist = pw.distance
+
+        while q:
+            nextTile, fromClosed = q.popleft()
+            if nextTile not in self.shortestPathWay.tiles:
+                continue
+            if nextTile in visited:
+                continue
+
+            visited.add(nextTile)
+            nextBDist = self.bMap[nextTile]
+
+            pw = self.pathWayLookupMatrix[nextTile]
+
+            offsetDist = nextBDist + pw.distance - shortestDist
+
+            curSet = distancesLookup.get(offsetDist, None)
+            if not curSet:
+                curSet = []
+                distancesLookup[offsetDist] = curSet
+
+            curSet.append(nextTile)
+
+            for t in nextTile.movable:
+                if t.isObstacle:
+                    continue  # TODO ??
+                if t not in visited:  # and t in self.shortestPathWay.tiles
+                    nPw = self.pathWayLookupMatrix[t]
+                    if nPw is None:
+                        continue
+                    if nPw.distance >= pw.distance:
+                        q.append(t)
+
     def build_intercept_chokes(self):
         q = deque()
         # TODO this can just be array of arrays, just need to know min and max values...?
         distancesLookup = {}
+        closedBy = {}
+        visitedByLookup = {}
 
         q.append(self.tileB)
 
@@ -339,12 +401,15 @@ class ArmyAnalyzer:
             #     # logbook.info(f'ic {str(tile)} = {maxDist}')
             #     self.interceptChokes[tile] = maxDist
 
+        self.tileDistancesLookup = distancesLookup
+
         shortestSet = self.shortestPathWay.tiles
 
         def foreachFunc(tile: Tile, stateObj: typing.Tuple[int, int, Tile | None]) -> typing.Tuple[int, int, Tile | None]:
             dist, interceptMoves, fromTile = stateObj
             self.interceptChokes[tile] = dist
             self.interceptDistances[tile] = interceptMoves
+            # This is what lets us include the tiles 1 away from shortest path, which is good for finding common one-tile-away shared split intercept points
             if tile not in shortestSet:
                 return None
             return dist + 1, interceptMoves + 1, tile
@@ -391,16 +456,39 @@ class ArmyAnalyzer:
                     if existingVal is not None:
                         self.interceptChokes[tile] = existingVal + 1
 
-        for icTile in self.map.reachableTiles:
+        for icTile in self.map.pathableTiles:
             chokeDist = self.interceptChokes[icTile]
             if chokeDist is not None:
-                bDist = self.bMap[icTile]
+                aDist = self.aMap[icTile]
                 # anything above our closest choke, we can move in by 1
                 # if bDist < furthestZeroChoke:
                 #     bDist += 1
                 interceptWorstCaseDist = self.interceptDistances[icTile]
-                interceptTurns = bDist - chokeDist - interceptWorstCaseDist
+                interceptTurns = self.shortestPathWay.distance - aDist + 1  # - chokeDist - interceptWorstCaseDist
                 self.interceptTurns[icTile] = interceptTurns
+
+        self.fix_choke_widths(self.shortestPathWay.tiles)
+
+    def fix_choke_widths(self, shortestTiles: typing.Set[Tile]):
+        # TODO this isn't right either
+        def foreachFunc(tile: Tile, stateObj: typing.Tuple[int, int]) -> typing.Tuple[int, int] | None:
+            if tile in shortestTiles:
+                return None
+            prevCw, _ = stateObj
+            newCw = prevCw + 1
+            self.chokeWidths[tile] = newCw
+            # This is what lets us include the tiles 1 away from shortest path, which is good for finding common one-tile-away shared split intercept points
+            return newCw, 0
+
+        startTiles: typing.Dict[Tile, typing.Tuple[int, typing.Tuple[int, int]]] = {}
+        for tile in shortestTiles:
+            ourDist = self.chokeWidths[tile]
+            for adj in tile.movable:
+                existing = startTiles.get(adj, None)
+                if not existing or existing[0] > ourDist:
+                    startTiles[adj] = (ourDist, (ourDist, 0))
+
+        SearchUtils.breadth_first_foreach_with_state_and_start_dist(self.map, startTiles, maxDepth=20, foreachFunc=foreachFunc, noLog=True)
 
     def is_choke(self, tile: Tile) -> bool:
         # chokeVal = self.interceptChokes[tile]
@@ -415,3 +503,32 @@ class ArmyAnalyzer:
     def is_two_move_capture_choke(self, tile: Tile) -> bool:
         chokeMoves = self.interceptDistances[tile]
         return chokeMoves is not None and chokeMoves <= 2
+
+    @classmethod
+    def build_from_path(cls, map: MapBase, path: Path) -> ArmyAnalyzer:
+
+        tileA = path.tail.tile
+        tileB = path.start.tile
+        if path.length != map.distance_mapper.get_distance_between(tileB, tileA):
+            # then we have a mid-point non-shortest-path scenario
+            i = 0
+            node = path.start
+            prev = None
+            while node is not None and map.distance_mapper.get_distance_between(tileB, node.tile) == i:
+                i += 1
+                prev = node
+                node = node.next
+
+            logbook.info(f'ArmyAnalyzer.build_from_path was non-shortest, shortest segment ending at {prev.tile} for path {tileB}-->{tileA}  ({path})')
+            tileA = prev.tile
+
+        # # old furthest point logic, picked the furthest FRIENDLY tile in the path
+        # dists = map.distance_mapper.get_tile_dist_matrix(path.start.tile)
+        # furthestPoint = max(path.tileList, key=lambda t: dists[t] if map.is_tile_friendly(t) else 0)
+        # logbook.info(f'backfilling threat army analysis from {str(path.start.tile)}->{str(furthestPoint)}')
+        # if furthestPoint != tileA:
+        #     raise AssertionError(f'old logic picked {furthestPoint}, new logic picked {tileA}')
+
+        analyzer = ArmyAnalyzer(map, tileA, tileB)
+
+        return analyzer

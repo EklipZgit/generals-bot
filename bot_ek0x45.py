@@ -24,11 +24,12 @@ import ExpandUtils
 from Algorithms import MapSpanningUtils
 from ArmyAnalyzer import ArmyAnalyzer
 from ArmyEngine import ArmyEngine, ArmySimResult
-from Behavior.ArmyInterceptor import ArmyInterceptor, ArmyInterception, ThreatBlockInfo
+from Behavior.ArmyInterceptor import ArmyInterceptor, ArmyInterception, ThreatBlockInfo, InterceptionOptionInfo
 from CityAnalyzer import CityAnalyzer, CityScoreData
 from Communication import TeammateCommunicator, TileCompressor
 from DistanceMapperImpl import DistanceMapperImpl
 from GatherAnalyzer import GatherAnalyzer
+from Interfaces import TilePlanInterface
 from KnapsackUtils import solve_knapsack
 from MapMatrix import MapMatrix, MapMatrixSet
 from MctsLudii import MctsDUCT
@@ -72,13 +73,17 @@ class ExpansionPotential(object):
         self.turns_used: int = turnsUsed
         self.en_tiles_captured: int = enTilesCaptured
         self.neut_tiles_captured: int = neutTilesCaptured
-        self.path: Path = path
-        self.all_paths: typing.List[Path] = allPaths
+        self.selected_option: TilePlanInterface = path
+        self.all_paths: typing.List[TilePlanInterface] = allPaths
         self.plan_tiles: typing.Set[Tile] = set()
         self.preferred_tiles: typing.Set[Tile] = set()
+        self.blocking_tiles: typing.Set[Tile] = set()
+        self.intercept_waiting: typing.List[InterceptionOptionInfo] = []
+        """Tiles who are part of the required plan, but which have a required delay on them."""
+
         self.includes_intercept: bool = False
         for path in allPaths:
-            self.plan_tiles.update(path.tileList)
+            self.plan_tiles.update(path.tileSet)
 
         self.path_scores: typing.Dict[Path, int] = scores
 
@@ -1551,6 +1556,8 @@ class EklipZBot(object):
                     else:
                         self.viewInfo.add_info_line(f'BYPASSING DEF REP {str(defenseMove)} :(')
 
+        defenseCriticalTileSet.update(self.expansion_plan.blocking_tiles)
+
         if kingKillPath is not None and threat.threatType == ThreatType.Kill:
             if defenseSavePath is None or defenseSavePath.start.tile != kingKillPath.start.tile:
                 if defenseSavePath is not None:
@@ -1626,6 +1633,11 @@ class EklipZBot(object):
         #     self.targetingArmy = None
 
         self.check_fog_risk()
+
+        if self.expansion_plan.includes_intercept and not self.is_all_in_losing:  # TODO GET PATH SCORES AND MAKE SURE THIS IS WORTH DOING  and self.expansion_plan.path_scores[self.expansion_plan.path]
+            move = self.expansion_plan.selected_option.get_first_move()
+            self.info(f'Passing through Expansion Plan intercept move! {move}')
+            return move
 
         if WinCondition.DefendContestedFriendlyCity in self.win_condition_analyzer.viable_win_conditions:
             with self.perf_timer.begin_move_event(f'Getting city preemptive defense {str(self.win_condition_analyzer.defend_cities)}'):
@@ -2027,7 +2039,7 @@ class EklipZBot(object):
             return False
 
         if not analysis:
-            analysis = ArmyAnalyzer(self._map, threatPath.start.tile, threatPath.tail.tile, threatPath.length)
+            analysis = ArmyAnalyzer.build_from_path(self._map, threatPath)
         lastTile = pathKill.tail.tile
         if pathKill.start.next.next is not None:
             lastTile = pathKill.start.next.next.tile
@@ -2145,7 +2157,7 @@ class EklipZBot(object):
 
         with self.perf_timer.begin_move_event('Kill Enemy Path ArmyAnalyzer'):
             for threatPath in threatPaths:
-                armyAnalysis = ArmyAnalyzer(self._map, self.get_army_at(threatPath.tail.tile), self.get_army_at(threatPath.start.tile))
+                armyAnalysis = ArmyAnalyzer.build_from_path(self._map, threatPath)
                 threat = ThreatObj(threatPath.length, threatPath.value, threatPath, ThreatType.Vision, armyAnalysis=armyAnalysis)
                 threats.append(threat)
                 threatPath.value = threatPath.calculate_value(self.get_army_at(threatPath.start.tile).player, self._map._teams, negativeTiles)
@@ -2305,7 +2317,7 @@ class EklipZBot(object):
         #         f"kill_enemy_path {threatPath.start.tile.toString()} completed in {endTime:.3f}, No path found :(")
         # return gatherToThreatPath
 
-    def kill_threat(self, threat, allowGeneral=False):
+    def kill_threat(self, threat: ThreatObj, allowGeneral=False):
         return self.kill_enemy_path(threat.path.get_subsegment(threat.path.length // 2), allowGeneral)
 
     def get_gather_to_target_tile(
@@ -3449,7 +3461,7 @@ class EklipZBot(object):
         source = None
         for threatSource in killTiles:
             for tile in threatSource.movable:
-                if tile.player == self._map.player_index and tile not in threat.path.tileSet:
+                if tile.player == self._map.player_index and tile not in threat.path.tileSet and tile not in self.expansion_plan.blocking_tiles:
                     if tile.army > 1 and (largestTile is None or tile.army > largestTile.army):
                         largestTile = tile
                         source = threatSource
@@ -5580,7 +5592,7 @@ class EklipZBot(object):
 
     def try_threat_gather(
             self,
-            threats,
+            threats: typing.List[ThreatObj],
             distDict,
             gatherDepth,
             force_turns_up_threat_path,
@@ -6258,11 +6270,11 @@ class EklipZBot(object):
 
         # TODO get actual expansion plan value/turn into the expansion plan and prioritize according to those.
         if self.expansion_plan is not None:
-            if self.expansion_plan.path is not None:
-                for tile in self.expansion_plan.path.tileList:
+            if self.expansion_plan.selected_option is not None:
+                for tile in self.expansion_plan.selected_option.tileSet:
                     matrix[tile] -= 0.2
             for path in self.expansion_plan.all_paths:
-                for tile in path.tileList:
+                for tile in path.tileSet:
                     matrix[tile] -= 0.1
 
         leaves = set()
@@ -6303,27 +6315,47 @@ class EklipZBot(object):
 
         return matrix
 
-    def check_defense_intercept_move(self, threat: ThreatObj) -> typing.Tuple[Move | None, Path | None]:
-        intercept = self.intercept_plans.get(threat.path.start.tile, None)
-        if intercept is None or not self.expansion_plan.includes_intercept:
-            return None, None
+    def check_defense_intercept_move(self, threat: ThreatObj) -> typing.Tuple[Move | None, Path | None, bool]:
+        interceptionPlan = self.intercept_plans.get(threat.path.start.tile, None)
+        isDelayed = False
+        if interceptionPlan is None or not self.expansion_plan.includes_intercept and not self.expansion_plan.intercept_waiting:
+            return None, None, isDelayed
+
+        interceptPath = self.expansion_plan.selected_option
+        if interceptPath is not None and isinstance(interceptPath, InterceptionOptionInfo):
+            interceptPath = interceptPath.path
+        interceptingOption = None
 
         includesIntercept = False
-        for tile in self.expansion_plan.path.tileList:
-            if tile == threat.path.start.tile:
+        for delayedInterceptOption in self.expansion_plan.intercept_waiting:
+            if threat in interceptionPlan.threats and delayedInterceptOption in interceptionPlan.intercept_options.values():
+                interceptPath = delayedInterceptOption.path
                 includesIntercept = True
+                interceptingOption = delayedInterceptOption
+                # these are always delayed
+                isDelayed = True
                 break
-        if self.expansion_plan.path.tail.tile not in threat.armyAnalysis.shortestPathWay.tiles and not includesIntercept:
-            return None, None
 
-        if self.expansion_plan.path.length > threat.turns and threat.path.tail.tile.isGeneral:
-            return None, None
+        if not includesIntercept:
+            for tile in interceptPath.tileSet:
+                if tile == threat.path.start.tile:
+                    includesIntercept = True
+                    interceptingOption = interceptionPlan.get_intercept_option_by_path(interceptPath)
+                    if interceptingOption is not None:
+                        isDelayed = interceptingOption.requiredDelay > 0
+                    break
+
+        if interceptPath.tail.tile not in threat.armyAnalysis.shortestPathWay.tiles and not includesIntercept:
+            return None, None, isDelayed
+
+        if interceptPath.length > threat.turns and threat.path.tail.tile.isGeneral:
+            return None, None, False
 
         self.viewInfo.color_path(PathColorer(
-            self.expansion_plan.path, 1, 1, 1
+            interceptPath, 1, 1, 1
         ))
-        self.info(f'threat intercept inclusion {str(self.expansion_plan.path)}')
-        return self.get_first_path_move(self.expansion_plan.path), self.expansion_plan.path
+        self.info(f'threat intercept inclusion, delayed {isDelayed}, {str(interceptPath)}')
+        return self.get_first_path_move(interceptPath), interceptPath, isDelayed
 
     def get_defense_moves(
             self,
@@ -6366,7 +6398,11 @@ class EklipZBot(object):
 
         anyRealThreats = False
         for threat in threats:
-            interceptMove, interceptPath = self.check_defense_intercept_move(threat)
+            interceptMove, interceptPath, interceptDelayed = self.check_defense_intercept_move(threat)
+            if interceptDelayed:
+                self.viewInfo.add_info_line(f'DEFENSE INTERCEPT SAID DELAYED AGAINST THREAT, NO OPPING DEFENSE')
+                negativeTilesIncludingThreat.update(interceptPath.tileList)
+                continue
             if interceptMove is not None:
                 return interceptMove, interceptPath
 
@@ -7096,7 +7132,7 @@ class EklipZBot(object):
                     alpha=255,
                     alphaDecreaseRate=0
                 ),
-                start=True)
+                renderOnBottom=True)
 
         if self.armyTracker is not None:
             if self.info_render_army_emergence_values:
@@ -7752,11 +7788,12 @@ class EklipZBot(object):
                             bestTurn = 0
                             bestOptAmtPerTurn = 0
                             for turn, option in plan.intercept_options.items():
-                                val, path = option
+                                val = option.value
+                                path = option.path
                                 valPerTurn = val / max(1, turn)
                                 # if path.length < gatherDepth and val > bestOptAmt:
                                 if path.length < gatherDepth and valPerTurn > bestOptAmtPerTurn:
-                                    logbook.info(f'NEW BEST INTERCEPT OPT {val}v/{turn}t -- {str(path)}')
+                                    logbook.info(f'NEW BEST INTERCEPT OPT {str(option)}')
                                     bestOpt = path
                                     bestOptAmt = val
                                     bestTurn = turn
@@ -7774,7 +7811,7 @@ class EklipZBot(object):
                 self.targetingArmy = None
                 return None
             else:
-                move = self.get_euclid_shortest_from_tile_towards_target(expPath.start.tile, self.targetingArmy.tile)
+                move = self.get_euclid_shortest_from_tile_towards_target(expPath.get_first_move().source, self.targetingArmy.tile)
                 self.info(f'continue killing target in exp plan, move {str(move)}, plan was {str(expPath)}')
                 return move
             #
@@ -7887,14 +7924,14 @@ class EklipZBot(object):
                     continue
 
                 with self.perf_timer.begin_move_event(f'INT @{str(tile)} Tile Block'):
-                    blockingTiles = self.get_intercept_blocking_tiles_for_split_hinting(tile, threatsWeCareAboutByTile)
+                    blockingTiles = self.army_interceptor.get_intercept_blocking_tiles_for_split_hinting(tile, threatsWeCareAboutByTile)
+
+                    if len(blockingTiles) > 0:
+                        self.viewInfo.add_info_line(f'for threat {str(tile)}, blocking tiles were {"  ".join([str(v) for v in blockingTiles.values()])}')
+
                     if SearchUtils.any_where(threats, lambda t: t.threatType == ThreatType.Kill):
                         self.blocking_tile_info = blockingTiles
 
-                with self.perf_timer.begin_move_event(f'INT @{str(tile)} Calc'):
-                    shouldBypass = self.should_bypass_army_danger(tile)
-                    if shouldBypass:
-                        continue
                     blocks = blockingTiles
                     if blocks is None:
                         blocks = self.blocking_tile_info
@@ -7906,6 +7943,11 @@ class EklipZBot(object):
                             else:
                                 for blockedDest in values.blocked_destinations:
                                     existing.add_blocked_destination(blockedDest)
+
+                with self.perf_timer.begin_move_event(f'INT @{str(tile)} Calc'):
+                    shouldBypass = self.should_bypass_army_danger(tile)
+                    if shouldBypass:
+                        continue
                     plan = self.army_interceptor.get_interception_plan(threats, turnsLeftInCycle=self.timings.get_turns_left_in_cycle(self._map.turn), otherThreatsBlockingTiles=blocks)
                     if plan is not None:
                         interceptions[tile] = plan
@@ -7916,25 +7958,6 @@ class EklipZBot(object):
             self.viewInfo.add_info_line(f'SKIPPED {len(skippedIntercepts)} INTERCEPTS OVER LIMIT {limit}! Skipped: {" - ".join([str(t) for t in skippedIntercepts])}')
 
         return interceptions
-
-    def get_intercept_blocking_tiles_for_split_hinting(
-            self,
-            tile: Tile,
-            threatsByTile: typing.Dict[Tile, typing.List[ThreatObj]]
-    ) -> typing.Dict[Tile, ThreatBlockInfo]:
-        """
-        Returns a map from tile to the amount of army that should be left on them in order to block multiple threats.
-
-        @param tile:
-        @param threatsByTile:
-        @return:
-        """
-        blockingTiles = self.army_interceptor.get_intercept_blocking_tiles_for_split_hinting(tile, threatsByTile)
-
-        if len(blockingTiles) > 0:
-            self.viewInfo.add_info_line(f'for threat {str(tile)}, blocking tiles were {"  ".join([str(v) for v in blockingTiles.values()])}')
-
-        return blockingTiles
 
     def should_bypass_army_danger(self, tile: Tile) -> bool:
         army = self.get_army_at(tile)
@@ -10834,21 +10857,23 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         self.expansion_plan = self.build_expansion_plan(timeLimit, expansionNegatives, pathColor=(50, 30, 255), overrideTurns=overrideTurns)
 
-        path = self.expansion_plan.path
+        path = self.expansion_plan.selected_option
         allPaths = self.expansion_plan.all_paths
 
         expansionNegStr = f'({"), (".join([str(t) for t in expansionNegatives])})'
         if path:
+            pathMove = path.get_first_move()
             inLaunchSplit = self.timings.in_launch_split(self._map.turn)
-            if path.start.tile.isGeneral and not inLaunchSplit and len(allPaths) > 1 and not self.expansion_plan.includes_intercept:
+            if pathMove.source.isGeneral and not inLaunchSplit and len(allPaths) > 1 and not self.expansion_plan.includes_intercept:
                 # TODO hack to prevent gen from launching early? Why do we care?
                 path = allPaths[1]
-            # if path.start.tile.isGeneral or path.start.tile.isCity and not self.expansion_plan.includes_intercept:
+            # if pathMove.source.isGeneral or path.start.tile.isCity and not self.expansion_plan.includes_intercept:
             #     # TODO is this really even necessary anymore?
             #     self.curPath = path.get_subsegment(max(1, path.length // 2 + 1))
 
-            move = self.get_first_path_move(path)
+            move = pathMove
             if self.is_all_in() and move.move_half:
+                self.viewInfo.add_info_line(f'because we''re all in, will NOT move-half...')
                 move.move_half = False
             if self.is_move_safe_valid(move):
                 self.info(
@@ -11207,6 +11232,9 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                 # bonus points for retaking iChokes
                 bonus += 0.02
 
+            if self._map.is_tile_friendly(tile) and tile.army < 2:
+                bonus -= 0.25
+
             if tile.isCity:
                 isCloserToEn = self.board_analysis.intergeneral_analysis.aMap[tile] > self.board_analysis.intergeneral_analysis.bMap[tile]
                 cityScore = self.cityAnalyzer.city_scores.get(tile, None)
@@ -11253,14 +11281,13 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             if excessDist > 0:
                 bonus -= 0.05 * excessDist
 
-            matrix[tile] += bonus
-
-        for tile in self._map.get_all_tiles():
             if self._map.is_tile_friendly(tile):
-                matrix[tile] = 0.0
                 if tile.army < 2:
-                    matrix[tile] = -0.05
-            elif self.info_render_expansion_matrix_values:
+                    bonus -= -0.05
+                matrix[tile] = min(bonus, 0.0)
+            else:
+                matrix[tile] += bonus
+            if self.info_render_expansion_matrix_values:
                 self.viewInfo.bottomLeftGridText[tile] = f'x{matrix[tile]:0.3f}'
         return matrix
 
@@ -11389,16 +11416,16 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                     # teammate might defend us, don't throw it all away
                     expansionNegatives.add(self.general)
 
-            interceptOptionsSet = set()
+            interceptOptionsSet: typing.Set[TilePlanInterface] = set()
             # interceptThreatTiles = {}
-            interceptOptions: typing.List[typing.Tuple[float, int, Path]] = []
+            interceptOptions: typing.List[TilePlanInterface] = []
             """approxEconValue, approxTurns, path"""
             for threatTile, interceptPlan in self.intercept_plans.items():
-                for turns, (value, path) in interceptPlan.intercept_options.items():
-                    interceptOptions.append((value, turns, path))
-                    interceptOptionsSet.add(path)
+                for turns, option in interceptPlan.intercept_options.items():
+                    interceptOptions.append(option)
+                    interceptOptionsSet.add(option)
 
-                    logbook.info(f'intOpt turns {turns}, value {value:.2f}, {str(path)}')
+                    logbook.info(f'intOpt {str(option)}')
 
                 # interceptThreatTiles[threatTile] =
 
@@ -11438,7 +11465,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
             for otherPath in otherPaths:
                 expansionTurnsAvailable += otherPath.length
-                for tile in otherPath.tileList:
+                for tile in otherPath.tileSet:
                     if tile in visited:
                         continue
 
@@ -11469,33 +11496,50 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                 if otherPath in interceptOptionsSet:
                     # TODO figure out if better to wait for intercept, maybe...?
                     for planOpt in self.intercept_plans.values():
-                        planDist, planValue = planOpt.get_intercept_plan_by_path(otherPath)
-                        if planValue is not None and planValue / planDist > interceptVtCutoff:
-                            self.viewInfo.add_info_line(f'EXP PLAN INCLUDED INTERCEPT {str(otherPath)}')
-                            plan.path = otherPath
-                            anyIntercept = True
-                            plan.includes_intercept = True
+                        interceptOption = planOpt.get_intercept_option_by_path(otherPath)
+                        if interceptOption is not None:
+                            isOneMoveLargeIntercept = interceptOption.length < 2 or otherPath.length == 1
+                            if isOneMoveLargeIntercept or interceptOption.value / interceptOption.length > interceptVtCutoff:
+                                self.viewInfo.add_info_line(f'EXP PLAN INCLUDED INTERCEPT {interceptOption}')
+                                if interceptOption.requiredDelay > 0:
+                                    logbook.info(f'    HAD DELAY {interceptOption}')
+                                    plan.blocking_tiles.update(interceptOption.tileSet)
+                                    plan.intercept_waiting.append(interceptOption)
+                                else:
+                                    plan.includes_intercept = True
+                                    anyIntercept = True
+                                    plan.selected_option = otherPath
+                                    break
+
+                if not anyIntercept:
+                    i = 0
+                    for t in otherPath.tileSet:
+                        planOpt = self.intercept_plans.get(t, None)
+                        if planOpt is not None:
+                            intPath = None
+                            for turns, option in planOpt.intercept_options.items():
+                                econValue = option.value
+                                p = option.path
+                                isOneMoveLargeIntercept = p.length == 1 or turns < 2
+                                if p.start.tile == otherPath.start.tile and (isOneMoveLargeIntercept or econValue / turns > interceptVtCutoff):
+                                    self.viewInfo.add_info_line(f'EXP PLAN INC INTERCEPT ON {str(t)} INDIRECTLY W {str(otherPath)}')
+
+                                    if option.requiredDelay > 0:
+                                        self.viewInfo.add_info_line(f'   HAD DELAY {option}')
+                                        plan.blocking_tiles.update(option.tileSet)
+                                        plan.intercept_waiting.append(option)
+                                    else:
+                                        plan.includes_intercept = True
+                                        self.viewInfo.add_info_line(f'   REPLACING WITH {option}')
+                                        anyIntercept = True
+                                        plan.selected_option = p
+                                        plan.all_paths[plan.all_paths.index(otherPath)] = p
+                                        break
+
+                        if anyIntercept:
                             break
 
-                i = 0
-                for t in otherPath.tileList:
-                    planOpt = self.intercept_plans.get(t, None)
-                    if planOpt is not None:
-                        intPath = None
-                        for turns, (econValue, p) in planOpt.intercept_options.items():
-                            if p.start.tile == otherPath.start.tile and econValue / turns > interceptVtCutoff:
-                                self.viewInfo.add_info_line(f'EXP PLAN INC INTERCEPT ON {str(t)} INDIRECTLY W {str(otherPath)}')
-                                self.viewInfo.add_info_line(f'   REPLACING WITH {str(p)}')
-                                plan.path = p
-                                plan.all_paths[plan.all_paths.index(otherPath)] = p
-                                anyIntercept = True
-                                plan.includes_intercept = True
-                                break
-
-                    if anyIntercept:
-                        break
-
-                    i += 1
+                        i += 1
 
                 if anyIntercept:
                     break
@@ -11507,7 +11551,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             plan = self.check_launch_against_expansion_plan(plan, expansionNegatives)
 
         for path in plan.all_paths:
-            plan.preferred_tiles.update(path.tileList)
+            plan.preferred_tiles.update(path.tileSet)
 
         return plan
 
@@ -11580,26 +11624,27 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
             scores = {}
             for otherPath in otherPaths:
-                army = self.armyTracker.armies.get(otherPath.start.tile, None)
-                if army is not None:
-                    army.expectedPaths.append(otherPath)
-                expansionTurnsAvailable += otherPath.length
-                pathCaps = 0
-                for tile in otherPath.tileList:
-                    if tile in visited:
-                        continue
+                army = self.armyTracker.armies.get(otherPath.get_first_move().source, None)
+                if isinstance(otherPath, Path):
+                    if army is not None:
+                        army.expectedPaths.append(otherPath)
+                    expansionTurnsAvailable += otherPath.length
+                    pathCaps = 0
+                    for tile in otherPath.tileList:
+                        if tile in visited:
+                            continue
 
-                    if self._map.is_tile_friendly(tile):
-                        frCaps += 1
-                        pathCaps += 2
-                    elif tile.isNeutral:
-                        neutCaps += 1
-                        pathCaps += 1
+                        if self._map.is_tile_friendly(tile):
+                            frCaps += 1
+                            pathCaps += 2
+                        elif tile.isNeutral:
+                            neutCaps += 1
+                            pathCaps += 1
 
-                    visited.add(tile)
-                scores[otherPath] = frCaps * 2 + neutCaps
+                        visited.add(tile)
+                    scores[otherPath] = frCaps * 2 + neutCaps
 
-                self.enemy_expansion_plan_tile_path_cap_values[otherPath.start.tile] = pathCaps
+                    self.enemy_expansion_plan_tile_path_cap_values[otherPath.start.tile] = pathCaps
 
             self.viewInfo.add_stats_line(f'EN EXP AVAIL {expansionTurnsAvailable} fr{frCaps} neut{neutCaps}')
 
@@ -12298,7 +12343,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         if checkFlank:
             negs = coreNegs.copy()
-            negs.update([p.start.tile for p in self.expansion_plan.all_paths if p.start.tile.delta.armyDelta == 0])
+            negs.update([p.get_first_move().source for p in self.expansion_plan.all_paths if p.get_first_move().source.delta.armyDelta == 0])
             flankDefMove = self._get_flank_vision_defense_move_internal(
                 self.sketchiest_potential_inbound_flank_path,
                 negs,
@@ -12706,7 +12751,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                     move_closest_priority_func = None
                     move_closest_value_func = None
                     if enAttackPath is not None:
-                        analysis = ArmyAnalyzer(self._map, enAttackPath.tail.tile, enAttackPath.start.tile)
+                        analysis = ArmyAnalyzer.build_from_path(self._map, enAttackPath)
                         fakeThreat = ThreatObj(enAttackPath.length, 1, enAttackPath, ThreatType.Vision, armyAnalysis=analysis)
                         move_closest_priority_func, move_closest_value_func = self.get_defense_tree_move_prio_funcs(fakeThreat)
                     move, valueGathered, turnsUsed, gatherNodes = self.get_gather_to_target_tiles(
@@ -12763,17 +12808,17 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
     def _get_expansion_plan_exploration_move(self, armyCutoff: int, negativeTiles: typing.Set[Tile]) -> Move | None:
         move = None
-        maxPath: Path | None = None
+        maxPath: TilePlanInterface | None = None
         for path in self.expansion_plan.all_paths:
             # if self.territories.is_tile_in_friendly_territory(path.start.tile):
             #     continue
 
-            if path.start.tile.army < armyCutoff:
+            if path.get_first_move().source.army < armyCutoff:
                 continue
 
             containsFogCount = 0
             skip = False
-            for tile in path.tileList:
+            for tile in path.tileSet:
                 if tile in negativeTiles:
                     skip = True
                     break
@@ -12788,11 +12833,11 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             if skip or containsFogCount < path.length:
                 continue
 
-            if maxPath is None or maxPath.start.tile.army < path.start.tile.army:
+            if maxPath is None or maxPath.get_first_move().source.army < path.get_first_move().source.army:
                 maxPath = path
 
         if maxPath is not None:
-            move = self.get_first_path_move(maxPath)
+            move = maxPath.get_first_move()
 
         return move
 
@@ -12892,8 +12937,8 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         self.viewInfo.add_info_line(f'  intChokes @{plan.target_tile} = {targetStyle}')
 
-        for dist, (val, path) in plan.intercept_options.items():
-            logbook.info(f'intercept plan opt {plan.target_tile} dist {dist}: {val:.2f} {path}')
+        for dist, opt in plan.intercept_options.items():
+            logbook.info(f'intercept plan opt {plan.target_tile} dist {dist}: {str(opt)}')
 
     def check_fog_risk(self):
         self.high_fog_risk = False

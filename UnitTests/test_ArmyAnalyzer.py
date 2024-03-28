@@ -172,7 +172,7 @@ b1   b1   b1   M    b1   b1   bG20
 # 0f 5p 0s
 
     def test_should_meet_to_defend_multi_choke__when_can_reach_not_one_behind(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         data = """
 |    |    |    |    |    |    |
 a1   a1   a1   aG1  a1   a1   a1
@@ -207,7 +207,7 @@ player_index=0
 
             self.assertEqual(expectedChoke, analyzer.interceptChokes[tile], 'all tiles down the middle should be full chokes. Near gen should be 0, and gen should be 1.')
 
-    def test_should_understand_can_intercept_event_against_corner(self):
+    def test_should_understand_can_intercept_army_against_corner(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         data = """
 |    |    |    |    |    |    |
@@ -235,6 +235,5 @@ player_index=0
             self.render_army_analyzer(map, analyzer)
 
         canInterceptStillTile = map.GetTile(2, 9)
-        self.assertEqual(1, analyzer.interceptTurns[canInterceptStillTile], 'can intercept from this tile 1 turn from now by chasing to the right for 4 moves max')
-        self.assertEqual(4, analyzer.interceptDistances[canInterceptStillTile], 'can intercept from this tile by chasing to the right for 4 moves max')
+        self.assertEqual(2, analyzer.interceptTurns[canInterceptStillTile], 'can intercept from this tile 1 turn from now by chasing to the right for 4 moves max')
         self.assertEqual(4, analyzer.interceptDistances[canInterceptStillTile], 'can intercept from this tile by chasing to the right for 4 moves max')

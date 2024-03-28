@@ -6,6 +6,9 @@
 """
 
 from __future__ import annotations
+
+import queue
+
 import logbook
 import typing
 import math
@@ -63,18 +66,25 @@ class Path(TilePlanInterface):
         self._adjacentSet: typing.Set[Tile] | None = None
         # The exact army tile number that will exist on the final tile at the end of the path run.
         # So for a path that exactly kills a tile with minimum kill army, this should be 1.
-        self.value: int = value
-        self.requiredDelay: int = 0
+        self._value: int = value
 
-    def __gt__(self, other) -> bool:
-        if other is None:
-            return True
-        return self.length > other.length
+    # def __gt__(self, other) -> bool:
+    #     if other is None:
+    #         return True
+    #     return self.length > other.length
+    #
+    # def __lt__(self, other) -> bool:
+    #     if other is None:
+    #         return True
+    #     return self.length < other.length
 
-    def __lt__(self, other) -> bool:
-        if other is None:
-            return True
-        return self.length < other.length
+    @property
+    def value(self) -> float:
+        return self._value
+
+    @value.setter
+    def value(self, val: float):
+        self._value = val
 
     @property
     def length(self) -> int:
@@ -110,6 +120,10 @@ class Path(TilePlanInterface):
                 self._adjacentSet.update(t.tile.adjacents)
 
         return self._adjacentSet
+
+    @property
+    def requiredDelay(self) -> int:
+        return 0
 
     def add_next(self, nextTile, move_half=False):
         move = PathMove(nextTile)
@@ -154,7 +168,7 @@ class Path(TilePlanInterface):
 
     def get_first_move(self) -> Move:
         if len(self._pathQueue) <= 1:
-            raise f", bitch? Path length {len(self._pathQueue)}: Why you tryin to get_first_move when there aint no moves to made?"
+            raise queue.Empty(f", bitch? Path length {len(self._pathQueue)}: Why you tryin to get_first_move when there aint no moves to made?")
 
         move = Move(self.start.tile, self.start.next.tile, self.start.move_half)
         return move

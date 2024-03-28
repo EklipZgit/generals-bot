@@ -1168,31 +1168,32 @@ class GeneralsViewer(object):
     def draw_path(self, pathObject, R, G, B, alphaStart, alphaDec, alphaMin):
         if pathObject is None:
             return
-        path = pathObject.start
         alpha = alphaStart
         key = WHITE
         color = (R, G, B)
-        while path is not None and path.next is not None:
+        while pathObject.length:
             try:
-                s = pygame.Surface((self.cellWidth, self.cellHeight))
-                s.set_colorkey(key)
-                # first, "erase" the surface by filling it with a color and
-                # setting this color as colorkey, so the surface is empty
-                s.fill(key)
+                move = pathObject.pop_first_move()
+            except queue.Empty:
+                break
+            # try:
+            s = pygame.Surface((self.cellWidth, self.cellHeight))
+            s.set_colorkey(key)
+            # first, "erase" the surface by filling it with a color and
+            # setting this color as colorkey, so the surface is empty
+            s.fill(key)
 
-                tile = path.tile
-                toTile = path.next.tile
-                pygame.draw.polygon(s, color, self.Arrow)
-                pygame.draw.polygon(s, BLACK, self.Arrow, 2)
-                self.draw_between_tiles(DirectionalShape(s), tile, toTile, alpha)
-
-                path = path.next
-                alpha -= alphaDec
-                if alpha < alphaMin:
-                    alpha = alphaMin
-            except:
-                logbook.error(f'wtf, couldnt draw path {str(path)}')
-                path = path.next
+            tile = move.source
+            toTile = move.dest
+            pygame.draw.polygon(s, color, self.Arrow)
+            pygame.draw.polygon(s, BLACK, self.Arrow, 2)
+            self.draw_between_tiles(DirectionalShape(s), tile, toTile, alpha)
+            alpha -= alphaDec
+            if alpha < alphaMin:
+                alpha = alphaMin
+            # except:
+            #     logbook.error(f'wtf, couldnt draw path {str(path)}')
+            #     path = path.next
 
     def get_delta_arrow(self):
         key = WHITE
@@ -1253,8 +1254,11 @@ class GeneralsViewer(object):
             pos_left = (CELL_MARGIN + self.cellWidth) * sourceTile.x + CELL_MARGIN
             pos_top = (CELL_MARGIN + self.cellHeight) * sourceTile.y - self.cellHeight // 2 + CELL_MARGIN
             s = shape.downShape
-        s.set_alpha(alpha)
-        self._screen.blit(s, (pos_left - 1, pos_top - 1))
+        if s is None:
+            logbook.error(f'tried drawing shape between {sourceTile} and {destTile} but they dont appear adjacent...?')
+        else:
+            s.set_alpha(alpha)
+            self._screen.blit(s, (pos_left - 1, pos_top - 1))
 
     def getCenter(self, tile):
         left, top = self.getTopLeft(tile)

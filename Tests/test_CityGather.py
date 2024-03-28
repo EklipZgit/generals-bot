@@ -1087,7 +1087,6 @@ class CityGatherTests(TestBase):
         city = playerMap.GetTile(10, 17)
         self.assertEqual(general.player, city.player)
 
-    # 14 fail - 38 pass - 6 skip
     
     def test_should_keep_expanding_until_cycle_end(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1585,6 +1584,8 @@ class CityGatherTests(TestBase):
         city = playerMap.GetTile(12, 13)
         self.assertOwned(general.player, city)
 
+# 14f 38p 6s
 # 21f 36p 6s
 # 28f 32p
 # 30f 44p 9s
+# 32f 41p 9s (after removing prioFunc from get_tree_move and switching to MaxHeap and friends)

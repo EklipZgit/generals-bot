@@ -1,3 +1,5 @@
+from __future__ import  annotations
+
 import logbook
 import time
 import typing
@@ -7,6 +9,7 @@ import DebugHelper
 import KnapsackUtils
 import SearchUtils
 from DataModels import Move, GatherTreeNode
+from Interfaces import TilePlanInterface
 from MapMatrix import MapMatrix, MapMatrixSet
 from Path import Path
 from SearchUtils import where
@@ -27,6 +30,109 @@ class TreeBuilder(typing.Generic[T]):
 
         self.tree_knapsacker_valuator: typing.Callable[[Path], int] = None
         """For getting the values of tree nodes to shove in the knapsack to build the subtree iteration"""
+
+
+class GatherCapturePlan(TilePlanInterface):
+    def __init__(
+            self,
+            rootNodes: typing.List[GatherTreeNode],
+            econValue: float,
+            turnsTotalInclCap: int,
+            gatherValue: int,
+            gatherPoints: float,
+            gatherTurns: int,
+            requiredDelay: int,
+            priorityFunc: typing.Callable[[Tile, typing.Tuple | None], typing.Tuple],
+            valueFunc: typing.Callable[[Tile, typing.Tuple], typing.Tuple | None],
+            cityCount: int | None = None,
+    ):
+        self.root_nodes: typing.List[GatherTreeNode] = rootNodes
+        self.gathered_army: int = gatherValue
+        self.gathered_points: float = gatherPoints
+        self._value: float = econValue
+        self._turns: int = turnsTotalInclCap
+        self.gather_turns: int = gatherTurns
+        self._requiredDelay: int = requiredDelay
+        self._tileList: typing.List[Tile] | None = None
+        self._tileSet: typing.Set[Tile] | None = None
+        self.priority_func: typing.Callable[[Tile, typing.Tuple | None], typing.Tuple] = priorityFunc
+        self.value_func: typing.Callable[[Tile, typing.Tuple], typing.Tuple | None] = valueFunc
+        self.city_count: int = cityCount
+        if self.city_count is None:
+            self.city_count = 0
+
+            def incrementer(node: GatherTreeNode):
+                if node.tile.isCity:
+                    self.city_count += 1
+
+            iterate_tree_nodes(self.root_nodes, incrementer)
+
+    def clone(self) -> GatherCapturePlan:
+        clone = GatherCapturePlan(
+            rootNodes=[n.deep_clone() for n in self.root_nodes],
+            econValue=self._value,
+            turnsTotalInclCap=self._turns,
+            gatherValue=self.gathered_army,
+            gatherPoints=self.gathered_points,
+            gatherTurns=self.gather_turns,
+            cityCount=self.city_count,
+            requiredDelay=self._requiredDelay,
+            priorityFunc=self.priority_func,
+            valueFunc=self.value_func,
+        )
+
+        if self._tileList is not None:
+            clone._tileList = self._tileList.copy()
+        if self._tileSet is not None:
+            clone._tileSet = self._tileSet.copy()
+
+        return clone
+
+    @property
+    def length(self) -> int:
+        return self._turns
+
+    @property
+    def value(self) -> float:
+        return self._value
+
+    @property
+    def tileSet(self) -> typing.Set[Tile]:
+        if self._tileSet is None:
+            if self._tileList is not None:
+                self._tileSet = set(self._tileList)
+            else:
+                self._tileSet = set()
+                iterate_tree_nodes(self.root_nodes, lambda n: self._tileSet.add(n.tile))
+
+        return self._tileSet
+
+    @tileSet.setter
+    def tileSet(self, value):
+        raise AssertionError("NO SETTING!")
+
+    @property
+    def tileList(self) -> typing.List[Tile]:
+        if self._tileList is None:
+            self._tileList = []
+            iterate_tree_nodes(self.root_nodes, lambda n: self._tileList.append(n.tile))
+        return self._tileList
+
+    @property
+    def requiredDelay(self) -> int:
+        return self._requiredDelay
+
+    def get_first_move(self) -> Move:
+        return get_tree_move(self.root_nodes, None, self.value_func)
+
+    def pop_first_move(self) -> Move:
+        return get_tree_move(self.root_nodes, None, self.value_func, pop=True)
+
+    def __str__(self):
+        return f'{self.value:.2f}v/{self._turns}t ({self._value / max(1, self._turns):.2f}vt), armyGath {self.gather_turns}, bM {self.best_case_intercept_moves}, del {self.requiredDelay}, path {self.path}'
+
+    def __repr__(self):
+        return str(self)
 
 
 def knapsack_gather_iteration(
@@ -1948,54 +2054,110 @@ def _recalculate_tree_values_recurse(
 
 def get_tree_move(
         gathers: typing.List[GatherTreeNode],
-        priorityFunc: typing.Callable[[Tile, typing.Tuple | None], typing.Tuple],
         valueFunc: typing.Callable[[Tile, typing.Tuple], typing.Tuple | None],
         pop: bool = False
 ) -> typing.Union[None, Move]:
-    if len(gathers) == 0:
-        logbook.info("get_tree_move... len(gathers) == 0?")
-        return None
+    moves = get_tree_moves(gathers, valueFunc, pop=pop, limit=1)
+    if moves:
+        return moves[0]
+    return None
+    # if len(gathers) == 0:
+    #     logbook.info("get_tree_move... len(gathers) == 0?")
+    #     return None
+    #
+    # # TODO this is just an iterate-all-leaves-and-keep-max function, why the hell are we using a priority queue?
+    # #  we don't call this often so who cares I guess, but wtf copy paste, normal queue would do fine.
+    # q = SearchUtils.HeapQueue()
+    #
+    # for gather in gathers:
+    #     basePrio = priorityFunc(gather.tile, None)
+    #     q.put((basePrio, gather))
+    #
+    # lookup = {}
+    #
+    # highestValue = None
+    # highestValueNode = None
+    # while q.queue:
+    #     (curPrio, curGather) = q.get()
+    #     lookup[curGather.tile] = curGather
+    #     if len(curGather.children) == 0:
+    #         # WE FOUND OUR FIRST MOVE!
+    #         thisValue = valueFunc(curGather.tile, curPrio)
+    #         if (thisValue is not None
+    #                 and curGather.fromTile is not None
+    #                 and (highestValue is None or thisValue > highestValue)
+    #         ):
+    #             highestValue = thisValue
+    #             highestValueNode = curGather
+    #             logbook.info(f"new highestValueNode {str(highestValueNode)}!")
+    #     for gather in curGather.children:
+    #         nextPrio = priorityFunc(gather.tile, curPrio)
+    #         q.put((nextPrio, gather))
+    #
+    # if highestValueNode is None:
+    #     return None
+    #
+    # if pop:
+    #     if highestValueNode.fromTile is not None:
+    #         parent = lookup[highestValueNode.fromTile]
+    #         parent.children.remove(highestValueNode)
+    #
+    # highestValueMove = Move(highestValueNode.tile, highestValueNode.fromTile)
+    # logbook.info(f"highestValueMove in get_tree_move was {highestValueMove.toString()}!")
+    # return highestValueMove
 
-    # TODO this is just an iterate-all-leaves-and-keep-max function, why the hell are we using a priority queue?
-    #  we don't call this often so who cares I guess, but wtf copy paste, normal queue would do fine.
-    q = SearchUtils.HeapQueue()
+
+def get_tree_moves(
+        gathers: typing.List[GatherTreeNode],
+        valueFunc: typing.Callable[[Tile, typing.Tuple | None], typing.Tuple | None],
+        limit: int = 10000,
+        pop: bool = False
+) -> typing.List[Move]:
+    if len(gathers) == 0:
+        logbook.info("get_tree_moves... len(gathers) == 0?")
+        return []
+
+    q = deque()
+
+    if not pop:
+        gathers = [g.deep_clone() for g in gathers]
 
     for gather in gathers:
-        basePrio = priorityFunc(gather.tile, None)
-        q.put((basePrio, gather))
+        basePrio = valueFunc(gather.tile, None)
+        q.append((basePrio, gather))
 
-    lookup = {}
+    moveQ = SearchUtils.HeapQueueMax()
 
-    highestValue = None
-    highestValueNode = None
-    while q.queue:
-        (curPrio, curGather) = q.get()
-        lookup[curGather.tile] = curGather
-        if len(curGather.children) == 0:
-            # WE FOUND OUR FIRST MOVE!
-            thisValue = valueFunc(curGather.tile, curPrio)
-            if (thisValue is not None
-                    and curGather.fromTile is not None
-                    and (highestValue is None or thisValue > highestValue)
-            ):
-                highestValue = thisValue
-                highestValueNode = curGather
-                logbook.info(f"new highestValueNode {str(highestValueNode)}!")
-        for gather in curGather.children:
-            nextPrio = priorityFunc(gather.tile, curPrio)
-            q.put((nextPrio, gather))
+    fromPrioLookup = {}
 
-    if highestValueNode is None:
-        return None
+    while q:
+        (curPrio, curGather) = q.popleft()
+        if not curGather.children:
+            moveQ.put((curPrio, curGather))
+        else:
+            fromPrioLookup[curGather.tile] = curPrio
+            for gather in curGather.children:
+                nextPrio = valueFunc(gather.tile, curPrio)
+                q.append((nextPrio, gather))
 
-    if pop:
-        if highestValueNode.fromTile is not None:
-            parent = lookup[highestValueNode.fromTile]
-            parent.children.remove(highestValueNode)
+    moves = []
+    iter = 0
+    while moveQ.queue:
+        (curPrio, curGather) = moveQ.get()
+        fromGather = curGather.fromGather
+        if fromGather is not None:
+            moves.append(Move(curGather.tile, curGather.fromTile))
+            fromGather.children.remove(curGather)
+            iter += 1
+            if iter >= limit:
+                break
 
-    highestValueMove = Move(highestValueNode.tile, highestValueNode.fromTile)
-    logbook.info(f"highestValueMove in get_tree_move was {highestValueMove.toString()}!")
-    return highestValueMove
+            if not fromGather.children:
+                fromPrio = fromPrioLookup.get(fromGather.fromTile, None)
+                curPrio = valueFunc(fromGather.tile, fromPrio)
+                moveQ.put((curPrio, fromGather))
+
+    return moves
 
 
 def prune_mst_to_turns(

@@ -4,6 +4,7 @@ from collections import deque
 from queue import PriorityQueue
 from timeit import timeit
 
+import heap_class
 import logbook
 
 import SearchUtils
@@ -687,7 +688,12 @@ from SearchUtils import HeapQueue
                 # report the result
                 logbook.info(f'{numChecks}: HeapQueue {result:.3f} seconds')
 
-
+    """
+    [2024-03-28 19:44:36.552731] INFO: Generic: 20: PriorityQueue 6.436 seconds
+    [2024-03-28 19:44:41.952864] INFO: Generic: 100: PriorityQueue 5.399 seconds
+    [2024-03-28 19:44:47.422303] INFO: Generic: 500: PriorityQueue 5.469 seconds
+    [2024-03-28 19:44:53.048489] INFO: Generic: 2000: PriorityQueue 5.626 seconds
+    """
     def test_bench_priority_queue_insert_pop_checking_perf__interspersed_gets(self):
         numPops = 5000000
         self.begin_capturing_logging()
@@ -719,6 +725,12 @@ from queue import PriorityQueue
                 # report the result
                 logbook.info(f'{numChecks}: PriorityQueue {result:.3f} seconds')
 
+    """
+    20: HeapQueue 0.646 seconds (250000 runs of 20 pushes + pops)
+    100: HeapQueue 0.707 seconds (50000 runs of 100 pushes + pops)
+    500: HeapQueue 0.912 seconds (10000 runs of 500 pushes + pops)
+    2000: HeapQueue 1.034 seconds (2500 runs of 2000 pushes + pops)
+    """
     def test_bench_heap_queue_insert_pop_checking_perf__interspersed_gets(self):
         numPops = 5000000
         self.begin_capturing_logging()
@@ -748,4 +760,220 @@ from SearchUtils import HeapQueue
                     globals=locals())
 
                 # report the result
-                logbook.info(f'{numChecks}: HeapQueue {result:.3f} seconds')
+                logbook.info(f'{numChecks}: HeapQueue {result:.3f} seconds ({numRuns} runs of {numChecks} pushes + pops)')
+
+    """
+    20: HeapQueueMax 1.306 seconds (250000 runs of 20 pushes + pops)
+    100: HeapQueueMax 1.707 seconds (50000 runs of 100 pushes + pops)
+    500: HeapQueueMax 2.026 seconds (10000 runs of 500 pushes + pops)
+    2000: HeapQueueMax 2.411 seconds (2500 runs of 2000 pushes + pops)
+    """
+    def test_bench_heap_queue_max_insert_pop_checking_perf__interspersed_gets(self):
+        numPops = 5000000
+        self.begin_capturing_logging()
+        for numChecks in [20, 100, 500, 2000]:
+            with self.subTest(numChecks=numChecks):
+                numRuns = numPops // numChecks
+                # q.qsize()
+                import random
+                toInsert = list(range(0, numChecks))
+                random.shuffle(toInsert)
+
+                # benchmark the task
+                result = timeit(
+                    '''
+myDeque = HeapQueueMax()
+for i in toInsert:
+    myDeque.put(i)
+    if i & 1 == 0:
+        myDeque.get()
+while myDeque.queue:
+    myDeque.get()
+                    ''',
+                    setup=f'''
+from SearchUtils import HeapQueueMax
+                    ''',
+                    number=numRuns,
+                    globals=locals())
+
+                # report the result
+                logbook.info(f'{numChecks}: HeapQueueMax {result:.3f} seconds ({numRuns} runs of {numChecks} pushes + pops)')
+
+    """
+    20: HeapQueue 0.727 seconds (250000 runs of 20 pushes + pops)
+    100: HeapQueue 0.898 seconds (50000 runs of 100 pushes + pops)
+    500: HeapQueue 1.264 seconds (10000 runs of 500 pushes + pops)
+    2000: HeapQueue 1.551 seconds (2500 runs of 2000 pushes + pops)
+    """
+    def test_bench_heap_queue_insert_pop_checking_perf__interspersed_gets__complex_objects(self):
+        numPops = 5000000
+        self.begin_capturing_logging()
+        for numChecks in [20, 100, 500, 2000]:
+            with self.subTest(numChecks=numChecks):
+                numRuns = numPops // numChecks
+                # q.qsize()
+                import random
+                toInsert1 = list(i for i in range(0, numChecks))
+                toInsert2 = list(i for i in range(0, numChecks))
+                random.shuffle(toInsert1)
+                random.shuffle(toInsert2)
+
+                toInsert = []
+                for i in range(0, numChecks - 1):
+                    toInsert.append(((toInsert2[i] & 1) == 0, toInsert1[i] ^ toInsert2[i], toInsert1[i] * 0.1 + toInsert2[i - 1], toInsert1[i]))
+
+                # benchmark the task
+                result = timeit(
+                    '''
+myDeque = HeapQueue()
+val = None
+for i in toInsert:
+    myDeque.put(i)
+    if i[0]:
+        val = myDeque.get()
+while myDeque.queue:
+    val = myDeque.get()
+                    ''',
+                    setup=f'''
+from SearchUtils import HeapQueue
+                    ''',
+                    number=numRuns,
+                    globals=locals())
+
+                # report the result
+                logbook.info(f'{numChecks}: HeapQueue {result:.3f} seconds ({numRuns} runs of {numChecks} pushes + pops)')
+
+    """
+    20: HeapQueueMax 1.498 seconds (250000 runs of 20 pushes + pops)
+    100: HeapQueueMax 1.975 seconds (50000 runs of 100 pushes + pops)
+    500: HeapQueueMax 2.494 seconds (10000 runs of 500 pushes + pops)
+    2000: HeapQueueMax 3.026 seconds (2500 runs of 2000 pushes + pops)
+    """
+    def test_bench_heap_queue_max_insert_pop_checking_perf__interspersed_gets__complex_objects(self):
+        numPops = 5000000
+        self.begin_capturing_logging()
+        for numChecks in [20, 100, 500, 2000]:
+            with self.subTest(numChecks=numChecks):
+                numRuns = numPops // numChecks
+                # q.qsize()
+                import random
+                toInsert1 = list(i for i in range(0, numChecks))
+                toInsert2 = list(i for i in range(0, numChecks))
+                random.shuffle(toInsert1)
+                random.shuffle(toInsert2)
+
+                toInsert = []
+                for i in range(0, numChecks - 1):
+                    toInsert.append(((toInsert2[i] & 1) == 0, toInsert1[i] ^ toInsert2[i], toInsert1[i] * 0.1 + toInsert2[i - 1], toInsert1[i]))
+
+                # benchmark the task
+                result = timeit(
+                    '''
+myDeque = HeapQueueMax()
+val = None
+for i in toInsert:
+    myDeque.put(i)
+    if i[0]:
+        val = myDeque.get()
+while myDeque.queue:
+    val = myDeque.get()
+                    ''',
+                    setup=f'''
+from SearchUtils import HeapQueueMax
+                    ''',
+                    number=numRuns,
+                    globals=locals())
+
+                # report the result
+                logbook.info(f'{numChecks}: HeapQueueMax {result:.3f} seconds ({numRuns} runs of {numChecks} pushes + pops)')
+
+
+    """
+    Sadly, slower than even the python impl heapmax even though this is supposed to be full C
+    20: HeapClass(min) 1.309 seconds (250000 runs of 20 pushes + pops)
+    100: HeapClass(min) 1.569 seconds (50000 runs of 100 pushes + pops)
+    500: HeapClass(min) 1.852 seconds (10000 runs of 500 pushes + pops)
+    2000: HeapClass(min) 2.129 seconds (2500 runs of 2000 pushes + pops)
+    """
+    def test_bench_heap_class_insert_pop_checking_perf__interspersed_gets__complex_objects(self):
+        numPops = 5000000
+        self.begin_capturing_logging()
+        for numChecks in [20, 100, 500, 2000]:
+            with self.subTest(numChecks=numChecks):
+                numRuns = numPops // numChecks
+                # q.qsize()
+                import random
+                toInsert1 = list(i for i in range(0, numChecks))
+                toInsert2 = list(i for i in range(0, numChecks))
+                random.shuffle(toInsert1)
+                random.shuffle(toInsert2)
+
+                toInsert = []
+                for i in range(0, numChecks - 1):
+                    toInsert.append(((toInsert2[i] & 1) == 0, toInsert1[i] ^ toInsert2[i], toInsert1[i] * 0.1 + toInsert2[i - 1], toInsert1[i]))
+                # h = heap_class.Heap()
+                # benchmark the task
+                result = timeit(
+                    '''
+myDeque = Heap(max=False)
+val = None
+for i in toInsert:
+    myDeque.push(i)
+    if i[0]:
+        val = myDeque.pop()
+while len(myDeque):
+    val = myDeque.pop()
+                    ''',
+                    setup=f'''
+from heap_class import Heap
+                    ''',
+                    number=numRuns,
+                    globals=locals())
+
+                # report the result
+                logbook.info(f'{numChecks}: HeapClass(min) {result:.3f} seconds ({numRuns} runs of {numChecks} pushes + pops)')
+
+    """
+    Sadly, slower than even the python impl heapmax even though this is supposed to be full C
+    20: HeapClass(max) 2.141 seconds (250000 runs of 20 pushes + pops)
+    100: HeapClass(max) 2.552 seconds (50000 runs of 100 pushes + pops)
+    500: HeapClass(max) 3.051 seconds (10000 runs of 500 pushes + pops)
+    2000: HeapClass(max) 3.652 seconds (2500 runs of 2000 pushes + pops)
+    """
+    def test_bench_heap_class_max_insert_pop_checking_perf__interspersed_gets__complex_objects(self):
+        numPops = 5000000
+        self.begin_capturing_logging()
+        for numChecks in [20, 100, 500, 2000]:
+            with self.subTest(numChecks=numChecks):
+                numRuns = numPops // numChecks
+                # q.qsize()
+                import random
+                toInsert1 = list(i for i in range(0, numChecks))
+                toInsert2 = list(i for i in range(0, numChecks))
+                random.shuffle(toInsert1)
+                random.shuffle(toInsert2)
+
+                toInsert = []
+                for i in range(0, numChecks - 1):
+                    toInsert.append(((toInsert2[i] & 1) == 0, toInsert1[i] ^ toInsert2[i], toInsert1[i] * 0.1 + toInsert2[i - 1], toInsert1[i]))
+
+                # benchmark the task
+                result = timeit(
+                    '''
+myDeque = Heap(max=True)
+val = None
+for i in toInsert:
+    myDeque.push(i)
+    if i[0]:
+        val = myDeque.pop()
+while len(myDeque) > 0:
+    val = myDeque.pop()
+                    ''',
+                    setup=f'''
+from heap_class import Heap
+                    ''',
+                    number=numRuns,
+                    globals=locals())
+
+                # report the result
+                logbook.info(f'{numChecks}: HeapClass(max) {result:.3f} seconds ({numRuns} runs of {numChecks} pushes + pops)')

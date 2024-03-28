@@ -5,6 +5,9 @@ from DataModels import Move
 from base.client.map import Tile
 
 
+T = typing.TypeVar('T', bound='Parent')  # use string
+
+
 class TilePlanInterface(ABC):
     @property
     @abstractmethod
@@ -23,6 +26,11 @@ class TilePlanInterface(ABC):
 
     @property
     @abstractmethod
+    def tileList(self) -> typing.List[Tile]:
+        raise NotImplementedError()
+
+    @property
+    @abstractmethod
     def requiredDelay(self) -> int:
         raise NotImplementedError()
 
@@ -33,6 +41,11 @@ class TilePlanInterface(ABC):
     @abstractmethod
     def pop_first_move(self) -> Move:
         """Should update the length, value, and tileset."""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def clone(self: typing.Self) -> typing.Self:
+        """should be a deep clone of the original"""
         raise NotImplementedError()
 
     def __gt__(self, other) -> bool:

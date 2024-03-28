@@ -188,4 +188,4 @@ class ViewInfo(object):
         if not renderOnBottom:
             self.paths.append(pathColorer)
         else:
-            self.paths.insert(0, pathColorer)
+            self.paths.appendleft(pathColorer)

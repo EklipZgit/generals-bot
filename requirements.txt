@@ -11,4 +11,6 @@ pyzmq
 pcst_fast
 networkx
 matplotlib
+heapq_max
+# heap-class  this performed poorly
 # dill

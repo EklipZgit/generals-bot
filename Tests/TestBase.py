@@ -18,7 +18,7 @@ import SearchUtils
 import base
 from ArmyEngine import ArmySimResult
 from ArmyTracker import Army, ArmyTracker
-from Behavior.ArmyInterceptor import ArmyInterception, ArmyInterceptor
+from Behavior.ArmyInterceptor import ArmyInterception, ArmyInterceptor, InterceptionOptionInfo
 from BoardAnalyzer import BoardAnalyzer
 from DangerAnalyzer import ThreatType, ThreatObj
 from DataModels import Move
@@ -34,7 +34,7 @@ from bot_ek0x45 import EklipZBot
 
 
 class TestBase(unittest.TestCase):
-    GLOBAL_BYPASS_REAL_TIME_TEST = True
+    GLOBAL_BYPASS_REAL_TIME_TEST = False
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -1207,8 +1207,8 @@ class TestBase(unittest.TestCase):
         oldArm = oldGeneral.army
         enemyGeneral = map.GetTile(newX, newY)
         enemyGeneral.army = oldArm
-        enemyGeneral.isGeneral = True
         enemyGeneral.player = oldGeneral.player
+        enemyGeneral.isGeneral = True
         map.players[enemyGeneral.player].general = enemyGeneral
         map.generals[enemyGeneral.player] = enemyGeneral
         oldGeneral.isGeneral = False
@@ -1516,16 +1516,16 @@ class TestBase(unittest.TestCase):
 
         return plan
 
-    def get_best_intercept_option(self, plan: ArmyInterception, maxDepth=200) -> typing.Tuple[int, int, Path]:
+    def get_best_intercept_option_path_values(self, plan: ArmyInterception, maxDepth=200) -> typing.Tuple[int, int, Path]:
         """Returns value, effectiveTurns, path"""
-        res = self.get_best_intercept_option_or_none(plan, maxDepth)
+        res = self.get_best_intercept_option_path_values_or_none(plan, maxDepth)
 
         if res is None:
             self.fail(f'Expected an intercept option to be found, but none was found.')
 
         return res
 
-    def get_best_intercept_option_or_none(self, plan: ArmyInterception, maxDepth=200) -> typing.Tuple[int, int, Path] | None:
+    def get_best_intercept_option_path_values_or_none(self, plan: ArmyInterception, maxDepth=200) -> typing.Tuple[int, int, Path] | None:
         """Returns value, effectiveTurns, path"""
         bestOpt = None
         bestOptAmt = 0
@@ -1549,9 +1549,25 @@ class TestBase(unittest.TestCase):
 
         return bestOptAmt, bestOptDist, bestOpt
 
+    def get_best_intercept_option(self, plan: ArmyInterception, maxDepth=200) -> InterceptionOptionInfo:
+        """Returns value, effectiveTurns, path"""
+        bestOpt = None
+        bestVt = 0
+        for dist, option in plan.intercept_options.items():
+            if dist > maxDepth:
+                continue
+            val = option.value
+            path = option.path
+            vt = val/dist
+            if vt > bestVt:
+                logbook.info(f'NEW BEST INTERCEPT OPT {val:.2f}/{dist} -- {str(path)}')
+                bestOpt = option
+
+        return bestOpt
+
     def assert_no_best_intercept_option(self, plan: ArmyInterception, maxDepth=200):
         """Returns value, effectiveTurns, path"""
-        res = self.get_best_intercept_option_or_none(plan, maxDepth)
+        res = self.get_best_intercept_option_path_values_or_none(plan, maxDepth)
 
         if res is not None:
             bestOptAmt, bestOptDist, bestOpt = res
@@ -1678,8 +1694,6 @@ class TestBase(unittest.TestCase):
 
         maxValPerTurn = 0
         maxValTurnPath = None
-        maxVal = 0
-        maxTurn = 0
         maxOpt = None
         for dist, opt in plan.intercept_options.items():
             val = opt.value
@@ -1690,25 +1704,27 @@ class TestBase(unittest.TestCase):
                 maxValPerTurn = valPerTurn
                 maxValTurnPath = path
                 maxStr = 'NEW MAX '
-                maxVal = val
-                maxTurn = dist
                 maxOpt = opt
+
+            opt1, opt2 = str(opt).split(', path ')
+            viewInfo.add_info_line(f'dist {dist} @{plan.target_tile}: {opt1}')
+            viewInfo.add_info_line(f'   {maxStr} {opt2}')
             viewInfo.color_path(PathColorer(
                 path,
                 255,
+                10,
                 255,
-                255,
+                alpha=10
             ))
 
-            logbook.info(f'{maxStr}intercept plan {plan.target_tile} dist {dist}: {opt}')
-
-        if maxValTurnPath is not None:
+        if maxOpt is not None:
             viewInfo.color_path(PathColorer(
                 maxValTurnPath,
                 155,
                 255,
                 155,
-            ))
+                alpha=255
+            ), renderOnBottom=False)
         self.render_view_info(map, viewInfo, f'intercept {maxOpt}')
 
     def assertInterceptChokeTileMoves(self, plan: ArmyInterception, map: MapBase, x: int, y: int, w: int):

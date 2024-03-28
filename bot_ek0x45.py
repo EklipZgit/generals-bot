@@ -69,12 +69,20 @@ def scale(inValue, inBottom, inTop, outBottom, outTop):
 
 
 class ExpansionPotential(object):
-    def __init__(self, turnsUsed: int, enTilesCaptured: int, neutTilesCaptured: int, path: Path | None, allPaths: typing.List[Path], scores: typing.Dict[Path, int]):
+    def __init__(
+            self,
+            turnsUsed: int,
+            enTilesCaptured: int,
+            neutTilesCaptured: int,
+            selectedOption: TilePlanInterface | None,
+            allOptions: typing.List[TilePlanInterface],
+            scores: typing.Dict[TilePlanInterface, int]
+    ):
         self.turns_used: int = turnsUsed
         self.en_tiles_captured: int = enTilesCaptured
         self.neut_tiles_captured: int = neutTilesCaptured
-        self.selected_option: TilePlanInterface = path
-        self.all_paths: typing.List[TilePlanInterface] = allPaths
+        self.selected_option: TilePlanInterface = selectedOption
+        self.all_paths: typing.List[TilePlanInterface] = allOptions
         self.plan_tiles: typing.Set[Tile] = set()
         self.preferred_tiles: typing.Set[Tile] = set()
         self.blocking_tiles: typing.Set[Tile] = set()
@@ -82,10 +90,10 @@ class ExpansionPotential(object):
         """Tiles who are part of the required plan, but which have a required delay on them."""
 
         self.includes_intercept: bool = False
-        for path in allPaths:
-            self.plan_tiles.update(path.tileSet)
+        for selectedOption in allOptions:
+            self.plan_tiles.update(selectedOption.tileSet)
 
-        self.path_scores: typing.Dict[Path, int] = scores
+        self.path_scores: typing.Dict[TilePlanInterface, int] = scores
 
 
 class EklipZBot(object):
@@ -357,14 +365,14 @@ class EklipZBot(object):
         self.behavior_pre_gather_greedy_leaves_offset: int = 0
         """Negative means capture that many extra tiles after hitting the 1.05 ratio. Positive means let them stay a little ahead on tiles."""
 
-        self.info_render_gather_values: bool = False
+        self.info_render_gather_values: bool = True
         self.info_render_centrality_distances: bool = False
         self.info_render_leaf_move_values: bool = False
         self.info_render_army_emergence_values: bool = True
-        self.info_render_board_analysis_choke_widths: bool = True
+        self.info_render_board_analysis_choke_widths: bool = False
         self.info_render_city_priority_debug_info: bool = False
         self.info_render_general_undiscovered_prediction_values: bool = False
-        self.info_render_tile_deltas: bool = True
+        self.info_render_tile_deltas: bool = False
         self.info_render_gather_locality_values: bool = False
         self.info_render_expansion_matrix_values: bool = True
         self.info_render_intercept_data: bool = True
@@ -1102,7 +1110,7 @@ class EklipZBot(object):
         if self.target_player_gather_path is not None:
             subsegment: Path = self.target_player_gather_path.get_subsegment(int(self.target_player_gather_path.length // 2))
             subsegment.calculate_value(self.general.player, teams=self._map._teams)
-            pathValueWeight = max(pathValueWeight, int(max(1, subsegment.value) ** 0.75))
+            pathValueWeight = max(pathValueWeight, int(max(1.0, subsegment.value) ** 0.75))
             pathLength = max(pathLength, self.target_player_gather_path.length)
 
         launchTiming = cycleDuration - pathValueWeight - pathLength - 4 + self.behavior_launch_timing_offset
@@ -1115,7 +1123,7 @@ class EklipZBot(object):
             # if launchTiming > gatherSplit:
             #     launchTiming = gatherSplit
 
-        if self.target_player_gather_path is not None and self.target_player_gather_path.start.tile == self.teammate_general:
+        if self.teammate_path is not None and self.target_player_gather_path is not None and self.target_player_gather_path.start.tile == self.teammate_general:
             gatherSplit -= self.teammate_path.length // 2 + 2
             launchTiming = gatherSplit
 
@@ -2374,7 +2382,6 @@ class EklipZBot(object):
             negativeSet=None,
             targetArmy=-1,
             useTrueValueGathered=False,
-            leafMoveSelectionPriorityFunc=None,
             leafMoveSelectionValueFunc=None,
             includeGatherTreeNodesThatGatherNegative=False,
             maximizeArmyGatheredPerTurn: bool = False,
@@ -2403,7 +2410,6 @@ class EklipZBot(object):
          to tiles without killing them. Use this for defense for example, when you dont need to fully kill the threat tile with each gather move.
          Use includeGatherTreeNodesThatGatherNegative to allow a gather to return gather nodes in the final result that fail to flip an enemy node in the path to friendly.
          Use useTrueValueGathered to make sure the gatherValue returned by the gather matches the actual amount of army you will have on the gather target tiles at the end of the gather execution.
-        @param leafMoveSelectionPriorityFunc:
         @param leafMoveSelectionValueFunc:
         @param shouldLog:
         @param priorityMatrix:
@@ -2437,7 +2443,7 @@ class EklipZBot(object):
                     preferPrune=self.expansion_plan.preferred_tiles if self.expansion_plan is not None else None,
                     viewInfo=self.viewInfo if self.info_render_gather_values else None)
 
-            gatherMove = self.get_tree_move_default(gatherNodes, priorityFunc=leafMoveSelectionPriorityFunc, valueFunc=leafMoveSelectionValueFunc)
+            gatherMove = self.get_tree_move_default(gatherNodes, valueFunc=leafMoveSelectionValueFunc)
             value = 0
             turns = 0
             for node in gatherNodes:
@@ -2487,7 +2493,7 @@ class EklipZBot(object):
             logbook.info(
                 f"gather_to_target_tiles totalValue was {totalValue}. Setting gatherNodes for visual debugging regardless of using them")
             if totalValue > targetArmy - gatherTurns // 2:
-                move = self.get_tree_move_default(gatherNodes, priorityFunc=leafMoveSelectionPriorityFunc, valueFunc=leafMoveSelectionValueFunc)
+                move = self.get_tree_move_default(gatherNodes, valueFunc=leafMoveSelectionValueFunc)
                 if move is not None:
                     self.gatherNodes = gatherNodes
                     return self.move_half_on_repetition(move, 4), totalValue, turns, gatherNodes
@@ -3319,8 +3325,7 @@ class EklipZBot(object):
     def get_tree_move_default(
             self,
             gathers: typing.List[GatherTreeNode],
-            priorityFunc=None,
-            valueFunc=None,
+            valueFunc: typing.Callable[[Tile, typing.Tuple], typing.Tuple | None] | None = None,
             pop: bool = False
     ) -> Move | None:
         """
@@ -3328,12 +3333,12 @@ class EklipZBot(object):
         Gathers furthest tiles first.
 
         @param gathers:
-        @param priorityFunc:
             def default_priority_func(nextTile, currentPriorityObject):
                 cityCount = distFromPlayArea = negArmy = negUnfriendlyTileCount = 0
                 if currentPriorityObject is not None:
                     (cityCount, negUnfriendlyTileCount, distFromPlayArea, negArmy) = currentPriorityObject
         @param valueFunc:
+        @param pop: if true, modify the gather plan popping the move off.
         @return:
         """
 
@@ -3344,98 +3349,38 @@ class EklipZBot(object):
 
         GatherUtils.iterate_tree_nodes(gathers, addToNodeLookupFunc)
 
-        if priorityFunc is None:
-            # emptyVal priority func, gathers based on cityCount then distance from general
-            def default_priority_func(nextTile, currentPriorityObject):
-                cityCount = distFromPlayArea = negArmy = negUnfriendlyTileCount = 0
-                # i don't think this does anything...?
-                curIsNotOurCity = False
-                if currentPriorityObject is not None:
-                    (nextIsNotOurCity, cityCount, negUnfriendlyTileCount, distFromPlayArea, negArmy, curIsNotOurCity) = currentPriorityObject
-                    negArmy += 1
-                nextIsNotOurCity = curIsNotOurCity
-                curIsNotOurCity = False
-                if self._map.is_tile_friendly(nextTile):
-                    if nextTile.isGeneral or nextTile.isCity:
-                        cityCount += 1
-                else:
-                    if nextTile.isGeneral or nextTile.isCity and 0 - negArmy - 2 <= nextTile.army:
-                        curIsNotOurCity = True
-                        # cityCount += 1
-                    negUnfriendlyTileCount -= 1
-
-                distFromPlayArea = self.shortest_path_to_target_player_distances[nextTile]
-
-                if self._map.is_tile_friendly(nextTile):
-                    negArmy -= nextTile.army
-                else:
-                    negArmy += nextTile.army
-                # heuristicVal = negArmy / distFromPlayArea
-                return nextIsNotOurCity, cityCount, negUnfriendlyTileCount, distFromPlayArea, negArmy, curIsNotOurCity
-
-            # use 0 citycount to gather cities as needed instead of last. Should prevent the never-gathering-cities behavior
-            # player = self._map.players[self.general.player]
-            # def default_high_cities_func(nextTile, currentPriorityObject):
-            #     cityCount = distFromPlayArea = negArmy = negUnfriendlyTileCount = 0
-            #     if currentPriorityObject is not None:
-            #         (cityCount, negUnfriendlyTileCount, distFromPlayArea, negArmy) = currentPriorityObject
-            #         negArmy += 1
-            #
-            #     if nextTile.player != self.general.player:
-            #         negUnfriendlyTileCount -= 1
-            #
-            #     distFromPlayArea = 0 - enemyDistanceMap[nextTile]
-            #     if nextTile.player == self.general.player:
-            #         negArmy -= nextTile.army
-            #     else:
-            #         negArmy += nextTile.army
-            #     return cityCount, negUnfriendlyTileCount, distFromPlayArea, negArmy
-
-            # shitty hack to stop dropping city gathers when gathers are interrupted. Really, timings should store that info and delaying a gather should still complete the critical tiles on the primary gather
-            # if nonCityLeafCount < 3 * player.cityCount:
-            #     logbook.info("Using default_high_cities_func for gather prio. player.cityCount {} > 4 or nonCityLeafCount {} < 4".format(player.cityCount, nonCityLeafCount))
-            #     priorityFunc = default_high_cities_func
-            # else:
-            priorityFunc = default_priority_func
-
         if valueFunc is None:
             # emptyVal value func, gathers based on cityCount then distance from general
             def default_value_func(currentTile, currentPriorityObject):
-                cityCount = distFromPlayArea = negArmy = negUnfriendlyTileCount = 0
-                nextIsNotOurCity = False
-                # Stupid hack because of the MST gathers leaving bad moves on the leaves....
-                isGoodMove = 0
-                if currentTile.player == self.general.player and currentTile.army > 1:
-                    isGoodMove = 1
+                negCityCount = negDistFromPlayArea = army = unfriendlyTileCount = 0
+                # i don't think this does anything...?
+                curIsOurCity = True
                 if currentPriorityObject is not None:
-                    (nextIsNotOurCity, cityCount, negUnfriendlyTileCount, distFromPlayArea, negArmy, curIsNotOurCity) = currentPriorityObject
+                    (nextIsOurCity, negCityCount, unfriendlyTileCount, negDistFromPlayArea, army, curIsOurCity) = currentPriorityObject
+                    army -= 1
+                nextIsOurCity = curIsOurCity
+                curIsOurCity = True
+                if self._map.is_tile_friendly(currentTile):
+                    if currentTile.isGeneral or currentTile.isCity:
+                        negCityCount -= 1
+                else:
+                    if currentTile.isGeneral or currentTile.isCity and army + 2 <= currentTile.army:
+                        curIsOurCity = False
+                        # cityCount += 1
+                    unfriendlyTileCount += 1
 
-                # hack to not gather cities themselves until last, but still gather other leaves to cities
-                if not (currentTile.isCity or currentTile.isGeneral):
-                    cityCount = 0
+                negDistFromPlayArea = 0 - self.shortest_path_to_target_player_distances[currentTile]
 
-                # distFromPlayArea can be INF in some cases
-                distFromPlayArea = min(1000, distFromPlayArea)
-                node: GatherTreeNode = nodeLookup[currentTile]
-                # gather the furthest from play area by
-                # because these are all negated in the priorityFunc we need to negate them here for making them 'positive' weights for value
-                return not nextIsNotOurCity, 0 - cityCount, distFromPlayArea, node.value / max(1, node.trunkDistance), 0 - negArmy  #distFromPlayArea added to fix not gathering furthest tiles first: test_should_not_leave_tiles_behind_gathering
-                # return not nextIsNotOurCity, 0 - cityCount, node.value / max(1, node.trunkDistance), 0 - negArmy
-                # return isGoodMove, 0 - cityCount, 0 - negUnfriendlyTileCount, (0 - negArmy) * distFromPlayArea, 0 - negArmy  #492
-                # return isGoodMove, 0 - cityCount, 0 - negUnfriendlyTileCount, distFromPlayArea, 0 - negArmy  #492
-                # return isGoodMove, 0 - cityCount, 0 - negUnfriendlyTileCount, node.trunkDistance, 0 - negArmy  #493
-                # return isGoodMove, not cityCount > 0, 0 - negUnfriendlyTileCount, node.trunkDistance // (cityCount + 1), 0 - negArmy  #493
-                # return isGoodMove, not cityCount > 0, 0 - negUnfriendlyTileCount, node.trunkDistance, 0 - negArmy  #488
-                # return isGoodMove, not cityCount > 0, 0 - negUnfriendlyTileCount, (0 - negArmy) * (node.trunkDistance - 10), 0 - negArmy  #492
-                # return isGoodMove, not cityCount > 0, 0 - negUnfriendlyTileCount, (0 - negArmy) * distFromPlayArea, 0 - negArmy  #490
-                # return isGoodMove, not cityCount > 0, 0 - negUnfriendlyTileCount, distFromPlayArea, 0 - negArmy  #484
-                # return isGoodMove, not cityCount > 0, 0 - negUnfriendlyTileCount, (0 - negArmy) * node.trunkDistance, 0 - negArmy  #492
-                # return isGoodMove, not cityCount > 0, 0 - negUnfriendlyTileCount, (0 - negArmy) * (node.trunkDistance - 5), 0 - negArmy  #492
-                # return (0 - cityCount, 0 - distFromPlayArea, 0 - negArmy)
+                if self._map.is_tile_friendly(currentTile):
+                    army += currentTile.army
+                else:
+                    army -= currentTile.army
+                # heuristicVal = negArmy / distFromPlayArea
+                return nextIsOurCity, negCityCount, unfriendlyTileCount, negDistFromPlayArea, army, curIsOurCity
 
             valueFunc = default_value_func
 
-        return GatherUtils.get_tree_move(gathers, priorityFunc, valueFunc, pop=pop)
+        return GatherUtils.get_tree_move(gathers, valueFunc, pop=pop)
 
     def get_threat_killer_move(self, threat: ThreatObj, searchTurns, negativeTiles) -> Move | None:
         """
@@ -5627,7 +5572,7 @@ class EklipZBot(object):
         move_closest_priority_func = None
         move_closest_value_func = None
         if force_turns_up_threat_path == 0:
-            move_closest_priority_func, move_closest_value_func = self.get_defense_tree_move_prio_funcs(threats[0])
+            move_closest_value_func = self.get_defense_tree_move_prio_func(threats[0])
 
         survivalThreshold = requiredContribution
 
@@ -5664,7 +5609,6 @@ class EklipZBot(object):
             targetArmy=targetArmy,
             useTrueValueGathered=False,
             negativeSet=negatives,
-            leafMoveSelectionPriorityFunc=move_closest_priority_func,
             leafMoveSelectionValueFunc=move_closest_value_func,
             includeGatherTreeNodesThatGatherNegative=True,
             priorityMatrix=prioMatrix,
@@ -6264,7 +6208,8 @@ class EklipZBot(object):
 
         matrix = MapMatrix(self._map, 0.0)
 
-        prioritized = [t.source for t in self.prioritize_expansion_leaves(self.leafMoves) if self.board_analysis.extended_play_area_matrix[t.source]]
+        prioritized = self.prioritize_expansion_leaves(self.leafMoves)
+        # prioritized = [t.source for t in self.prioritize_expansion_leaves(self.leafMoves) if self.board_analysis.extended_play_area_matrix[t.source]]
 
         # for now just deprio 15
 
@@ -6272,16 +6217,22 @@ class EklipZBot(object):
         if self.expansion_plan is not None:
             if self.expansion_plan.selected_option is not None:
                 for tile in self.expansion_plan.selected_option.tileSet:
-                    matrix[tile] -= 0.2
+                    matrix[tile] -= 0.1
             for path in self.expansion_plan.all_paths:
                 for tile in path.tileSet:
-                    matrix[tile] -= 0.1
+                    matrix[tile] -= 0.05
 
-        leaves = set()
-        for i, leafMove in enumerate(prioritized):
-            if i < 10:
-                matrix[leafMove] += -5.0 / (i + 10)
-            leaves.add(leafMove)
+        i = 0
+        for leafMove in prioritized:
+            if i > 15:
+                break
+
+            armyLeft = leafMove.source.army - leafMove.dest.army
+            if armyLeft > 5:
+                continue
+
+            matrix[leafMove.source] += -5.0 / (i + 4)
+            i += armyLeft - 1
 
         for tile in self._map.get_all_tiles():
             # if self._map.is_tile_friendly(tile) and tile not in leaves:
@@ -6498,8 +6449,8 @@ class EklipZBot(object):
                     if gatherNodes is not None:
                         leavesGreaterThanDistance = GatherUtils.get_tree_leaves_further_than_distance(gatherNodes, threat.armyAnalysis.aMap, threat.turns - distOffset)
                         anyLeafIsSameDistAsThreat = len(leavesGreaterThanDistance) > 0
-                        move_closest_priority_func, move_closest_value_func = self.get_defense_tree_move_prio_funcs(threat, anyLeafIsSameDistAsThreat)
-                        move = self.get_tree_move_default(gatherNodes, move_closest_priority_func, move_closest_value_func)
+                        move_closest_value_func = self.get_defense_tree_move_prio_func(threat, anyLeafIsSameDistAsThreat)
+                        move = self.get_tree_move_default(gatherNodes, move_closest_value_func)
                 if move:
                     with self.perf_timer.begin_move_event(f'Def prun @ {str(threat.path.start.tile)}->{str(threat.path.tail.tile)}'):
                         if valueGathered > survivalThreshold:
@@ -6566,11 +6517,11 @@ class EklipZBot(object):
                                     preferPrune=self.expansion_plan.preferred_tiles if self.expansion_plan is not None else None,
                                     viewInfo=self.viewInfo)
 
-                                move_closest_priority_func, move_closest_value_func = self.get_defense_tree_move_prio_funcs(threat, anyLeafIsSameDistAsThreat)
+                                move_closest_value_func = self.get_defense_tree_move_prio_func(threat, anyLeafIsSameDistAsThreat)
                                 self.redGatherTreeNodes = gatherNodes
 
                                 self.gatherNodes = pruned
-                                move = self.get_tree_move_default(pruned, move_closest_priority_func, move_closest_value_func)
+                                move = self.get_tree_move_default(pruned, move_closest_value_func)
                                 self.communicate_threat_to_ally(threat, sumPruned, pruned)
                                 self.info(
                                     f'{flags}GathDef-{str(threat.path.start.tile)}@{str(threat.path.tail.tile)}:  {str(move)} val {valueGathered:.1f}/p{sumPruned:.1f}/{survivalThreshold} turns {turnsUsed}/p{sumPrunedTurns}/{threat.turns}')
@@ -6656,8 +6607,8 @@ class EklipZBot(object):
                                 viewInfo=self.viewInfo,
                                 preferPrune=self.expansion_plan.preferred_tiles if self.expansion_plan is not None else None,
                                 noLog=False)
-                            prioFunc, valFunc = self.get_defense_tree_move_prio_funcs(threat, anyLeafIsSameDistAsThreat=False)
-                            altMove = self.get_tree_move_default(altGatherNodes, prioFunc, valFunc)
+                            valFunc = self.get_defense_tree_move_prio_func(threat, anyLeafIsSameDistAsThreat=False)
+                            altMove = self.get_tree_move_default(altGatherNodes, valFunc)
                     if altMove is not None:
                         directlyAttacksDest = altMove.dest == threat.path.start.tile
                         if directlyAttacksDest or gatherNodes is None or not self.is_2v2_teammate_still_alive():  # or valueGathered / turnsUsed < survivalThreshold / (2 * threat.turns) ?
@@ -6814,7 +6765,7 @@ class EklipZBot(object):
                 viewInfo=self.viewInfo
             )
 
-        if newPath is not None:
+        if newPath is not None and isinstance(newPath, Path):
             segments = newPath.break_overflow_into_one_move_path_subsegments(
                 lengthToKeepInOnePath=lengthToReplaceCurrentPlan)
             self.city_expand_plan.plan_paths[0] = None
@@ -10480,65 +10431,43 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return armies
 
-    def get_defense_tree_move_prio_funcs(
+    def get_defense_tree_move_prio_func(
             self,
             threat: ThreatObj,
             anyLeafIsSameDistAsThreat: bool = False
-    ) -> typing.Tuple[typing.Callable[[Tile, typing.Any], typing.Any], typing.Callable[[Tile, typing.Any], typing.Any]]:
+    ) -> typing.Callable[[Tile, typing.Any], typing.Any]:
         # threatenedTileDistMap = SearchUtils.build_distance_map(self._map, [threat.path.tail.tile])
         threatenedTileDistMap = threat.armyAnalysis.aMap
 
         # moveClosestMap = SearchUtils.build_distance_map(self._map, [threat.path.start.tile])
 
-        def move_closest_priority_func(nextTile: Tile, currentPriorityObject):
-            lastTile = None
-            if currentPriorityObject:
-                (_, _, _, lastTile) = currentPriorityObject
-            # closenessToThreat = moveClosestMap[nextTile] - threatenedTileDistMap[nextTile]
-            closenessToThreat = 0 - threatenedTileDistMap[nextTile]
-            return (
-                anyLeafIsSameDistAsThreat or nextTile.isCity,
-                # lastTile is None or (lastTile not in threat.armyAnalysis.shortestPathWay.tiles and closenessToThreat >= -1),
-                # nextTile in threat.armyAnalysis.shortestPathWay.tiles,
-                closenessToThreat,
-                0 - nextTile.army,
-                nextTile
-            )
-
         def move_closest_value_func(curTile: Tile, currentPriorityObject):
-            (_, _, _, lastTile) = currentPriorityObject
-            # closenessToThreat = threatenedTileDistMap[curTile] - moveClosestMap[curTile]
             closenessToThreat = 0 - threatenedTileDistMap[curTile]
+
             return (
                 not (anyLeafIsSameDistAsThreat or curTile.isCity),
-                # lastTile in threat.armyAnalysis.shortestPathWay.tiles or closenessToThreat >= -1,
                 0 - closenessToThreat,
                 curTile.army
             )
 
-        return move_closest_priority_func, move_closest_value_func
+        return move_closest_value_func
 
-    def get_capture_first_tree_move_prio_funcs(
+    def get_capture_first_tree_move_prio_func(
             self
-    ) -> typing.Tuple[typing.Callable[[Tile, typing.Any], typing.Any], typing.Callable[[Tile, typing.Any], typing.Any]]:
-        def capture_first_priority_func(nextTile: Tile, currentPriorityObject):
-            lastTile = None
-            if currentPriorityObject:
-                (_, lastTile) = currentPriorityObject
-            return (
-                lastTile is not None and lastTile.player == self.general.player,
-                nextTile
-            )
+    ) -> typing.Callable[[Tile, typing.Any], typing.Any]:
 
         def capture_first_value_func(curTile: Tile, currentPriorityObject):
-            (_, lastTile) = currentPriorityObject
+            lastTile = None
+            if currentPriorityObject:
+                (_, _, lastTile) = currentPriorityObject
             # closenessToThreat = threatenedTileDistMap[curTile] - moveClosestMap[curTile]
             return (
                 lastTile is None or lastTile.player != self.general.player,
-                True
+                True,
+                curTile
             )
 
-        return capture_first_priority_func, capture_first_value_func
+        return capture_first_value_func
 
     def hunt_for_fog_neutral_city(self, negativeTiles: typing.Set[Tile], maxTurns: int) -> typing.Tuple[Path | None, Move | None]:
         fogObstacleAdjacents = MapMatrix(self._map, 0)
@@ -11521,7 +11450,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                                 econValue = option.value
                                 p = option.path
                                 isOneMoveLargeIntercept = p.length == 1 or turns < 2
-                                if p.start.tile == otherPath.start.tile and (isOneMoveLargeIntercept or econValue / turns > interceptVtCutoff):
+                                if p.start.tile == otherPath.get_first_move().source and (isOneMoveLargeIntercept or econValue / turns > interceptVtCutoff):
                                     self.viewInfo.add_info_line(f'EXP PLAN INC INTERCEPT ON {str(t)} INDIRECTLY W {str(otherPath)}')
 
                                     if option.requiredDelay > 0:
@@ -11850,8 +11779,8 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                 turnsUsed=max(turns, existingPlan.turns_used),
                 enTilesCaptured=enCaps,
                 neutTilesCaptured=neutCaps,
-                path=launchSubsegmentToEn,
-                allPaths=paths,
+                selectedOption=launchSubsegmentToEn,
+                allOptions=paths,
                 scores=scores
             )
 
@@ -12447,7 +12376,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         if len(flankThreatTiles) < flankThreatPath.length // 5 + 1:
             return None
 
-        capture_first_priority_func, capture_first_value_func = self.get_capture_first_tree_move_prio_funcs()
+        capture_first_value_func = self.get_capture_first_tree_move_prio_func()
 
         move = None
         offset = 0
@@ -12462,7 +12391,6 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                 maximizeArmyGatheredPerTurn=True,
                 targetArmy=0,
                 leafMoveSelectionValueFunc=capture_first_value_func,
-                leafMoveSelectionPriorityFunc=capture_first_priority_func,
                 useTrueValueGathered=True,
                 includeGatherTreeNodesThatGatherNegative=False,
                 negativeSet=negativeTiles)
@@ -12748,12 +12676,11 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                             enAttackPath = None
 
                 with self.perf_timer.begin_move_event(f'{reason}gather cyclic {remainingTurns}'):
-                    move_closest_priority_func = None
                     move_closest_value_func = None
                     if enAttackPath is not None:
                         analysis = ArmyAnalyzer.build_from_path(self._map, enAttackPath)
                         fakeThreat = ThreatObj(enAttackPath.length, 1, enAttackPath, ThreatType.Vision, armyAnalysis=analysis)
-                        move_closest_priority_func, move_closest_value_func = self.get_defense_tree_move_prio_funcs(fakeThreat)
+                        move_closest_value_func = self.get_defense_tree_move_prio_func(fakeThreat)
                     move, valueGathered, turnsUsed, gatherNodes = self.get_gather_to_target_tiles(
                         targets,
                         maxTime=0.1,
@@ -12761,7 +12688,6 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                         negativeSet=negatives,
                         # targetArmy=self.player.standingArmy,
                         useTrueValueGathered=False,
-                        leafMoveSelectionPriorityFunc=move_closest_priority_func,
                         leafMoveSelectionValueFunc=move_closest_value_func,
                         includeGatherTreeNodesThatGatherNegative=True,
                         maximizeArmyGatheredPerTurn=not self.defend_economy,

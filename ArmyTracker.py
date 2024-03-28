@@ -311,6 +311,13 @@ class ArmyTracker(object):
             if len(player.tiles) > 0:
                 self.seen_player_lookup[player.index] = True
 
+        for player in self.map.players:
+            general = self.map.generals[player.index]
+            if general and general.player != player.index and general.isGeneral:
+                self.map.generals[player.index] = None
+                general.isGeneral = False
+                logbook.info(f'   RESET BAD GENERAL {general}')
+
     def build_fog_prediction(
             self,
             playerIndex: int,
@@ -2982,9 +2989,10 @@ class ArmyTracker(object):
         #     connectedTiles = GatherSteiner.build_network_x_steiner_tree(self.map, requiredTiles, bannedTiles=bannedTiles)
         self.player_connected_tiles[player] = connectedSet
 
-        if self.map.players[player].cityCount == 1:
-            with self.perf_timer.begin_move_event(f'Fog land build add_emergence_around_minimum_connected_tree p{player}'):
-                self.add_emergence_around_minimum_connected_tree(connectedTiles, requiredTiles, player)
+        # TODO this was just bad, why did I add it?
+        # if self.map.players[player].cityCount == 1:
+        #     with self.perf_timer.begin_move_event(f'Fog land build add_emergence_around_minimum_connected_tree p{player}'):
+        #         self.add_emergence_around_minimum_connected_tree(connectedTiles, requiredTiles, player)
 
         with self.perf_timer.begin_move_event(f'Fog land build connecting to valid gen spawn p{player}'):
             pathToUnelim: Path | None = None

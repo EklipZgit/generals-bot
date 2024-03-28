@@ -14,6 +14,8 @@ import typing
 import time
 from collections import deque
 
+from heapq_max import heappush_max, heappop_max
+
 # from numba import jit, float32, int64
 
 from DataModels import PathNode
@@ -44,6 +46,60 @@ class HeapQueue(typing.Generic[T]):
     def get(self) -> T:
         """Remove and return an item from the queue."""
         return heappop(self.queue)
+
+    # Override these methods to implement other queue organizations
+    # (e.g. stack or priority queue).
+    # These will only be called with appropriate locks held
+
+    __class_getitem__ = classmethod(types.GenericAlias)
+
+
+class HeapQueueMax(typing.Generic[T]):
+    """
+    Create a Heap Priority Queue object.
+
+    Fastest way to empty check is
+    while myHeapQMax.queue:
+       ...
+
+    Note the Min HeapQueue is much faster than this Max heapqueue.
+
+    With integers only:
+    20: HeapQueue 0.646 seconds (250000 runs of 20 pushes + pops)
+    100: HeapQueue 0.707 seconds (50000 runs of 100 pushes + pops)
+    500: HeapQueue 0.912 seconds (10000 runs of 500 pushes + pops)
+    2000: HeapQueue 1.034 seconds (2500 runs of 2000 pushes + pops)
+
+    20: HeapQueueMax 1.306 seconds (250000 runs of 20 pushes + pops)
+    100: HeapQueueMax 1.707 seconds (50000 runs of 100 pushes + pops)
+    500: HeapQueueMax 2.026 seconds (10000 runs of 500 pushes + pops)
+    2000: HeapQueueMax 2.411 seconds (2500 runs of 2000 pushes + pops)
+
+    With 5 pair tuple objects of bool, float, int, int, int:
+    20: HeapQueue 0.727 seconds (250000 runs of 20 pushes + pops)
+    100: HeapQueue 0.898 seconds (50000 runs of 100 pushes + pops)
+    500: HeapQueue 1.264 seconds (10000 runs of 500 pushes + pops)
+    2000: HeapQueue 1.551 seconds (2500 runs of 2000 pushes + pops)
+
+    20: HeapQueueMax 1.498 seconds (250000 runs of 20 pushes + pops)
+    100: HeapQueueMax 1.975 seconds (50000 runs of 100 pushes + pops)
+    500: HeapQueueMax 2.494 seconds (10000 runs of 500 pushes + pops)
+    2000: HeapQueueMax 3.026 seconds (2500 runs of 2000 pushes + pops)
+    """
+
+    def __init__(self):
+        self.queue: typing.List[T] = []
+
+    def __bool__(self):
+        return len(self.queue) > 0
+
+    def put(self, item: T):
+        """Put an item into the queue."""
+        heappush_max(self.queue, item)
+
+    def get(self) -> T:
+        """Remove and return an item from the queue."""
+        return heappop_max(self.queue)
 
     # Override these methods to implement other queue organizations
     # (e.g. stack or priority queue).

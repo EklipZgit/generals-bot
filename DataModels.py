@@ -69,6 +69,7 @@ class GatherTreeNode(typing.Generic[T]):
     ):
         self.tile: Tile = tile
         self.fromTile: Tile | None = fromTile
+        self.fromGather: GatherTreeNode | None = None
         self.value: int = 0
         self.trunkValue: int = 0
         """
@@ -113,8 +114,20 @@ class GatherTreeNode(typing.Generic[T]):
         newNode.gatherTurns = self.gatherTurns
         newNode.trunkDistance = self.trunkDistance
         newNode.children = [node.deep_clone() for node in self.children]
+        for child in newNode.children:
+            child.fromGather = newNode
         newNode.pruned = [node.deep_clone() for node in self.pruned]
+        for child in newNode.pruned:
+            child.fromGather = newNode
         return newNode
+
+    def populate_from_nodes(self):
+        for child in self.children:
+            child.fromGather = self
+            child.populate_from_nodes()
+        for child in self.pruned:
+            child.fromGather = self
+            child.populate_from_nodes()
 
     def strip_all_prunes(self):
         for c in self.children:

@@ -64,7 +64,7 @@ class ArmyInterceptionTests(TestBase):
         if debugMode:
             self.render_intercept_plan(map, plan)
 
-        value, turns, bestOpt = self.get_best_intercept_option(plan)
+        value, turns, bestOpt = self.get_best_intercept_option_path_values(plan)
         self.assertEqual(1, bestOpt.length)
         self.assertEqual(enTile, bestOpt.tail.tile)
 
@@ -74,7 +74,7 @@ class ArmyInterceptionTests(TestBase):
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 141, fill_out_tiles=True)
 
         plan = self.get_interception_plan(map, general, enemyGeneral)
-        opt = self.get_best_intercept_option(plan)
+        opt = self.get_best_intercept_option_path_values(plan)
 
         if debugMode:
             self.render_intercept_plan(map, plan)
@@ -171,7 +171,7 @@ class ArmyInterceptionTests(TestBase):
         if debugMode:
             self.render_intercept_plan(map, plan)
 
-        val, turns, bestOpt = self.get_best_intercept_option(plan)
+        val, turns, bestOpt = self.get_best_intercept_option_path_values(plan)
 
         self.assertEqual(general, bestOpt.start.tile)
 
@@ -223,7 +223,7 @@ class ArmyInterceptionTests(TestBase):
         if path is not None:
             self.assertLess(value, 2, "should not have found a path just heading back to general")
 
-        val, turns, bestPath = self.get_best_intercept_option(plan)
+        val, turns, bestPath = self.get_best_intercept_option_path_values(plan)
         self.assertLess(bestPath.tail.tile.y, 12)
 
     def test_should_intercept_at_inbound_choke(self):
@@ -621,7 +621,7 @@ class ArmyInterceptionTests(TestBase):
         if debugMode:
             self.render_intercept_plan(map, interception)
 
-        value, turns, bestPath = self.get_best_intercept_option(interception)
+        value, turns, bestPath = self.get_best_intercept_option_path_values(interception)
         self.assertEqual(6, bestPath.start.tile.x)
         self.assertEqual(6, bestPath.start.tile.y)
 
@@ -782,7 +782,7 @@ class ArmyInterceptionTests(TestBase):
 
         # self.assertEqual(3, len(plan.threats), "only econ threat")
 
-        bestVal, bestTurns, bestPath = self.get_best_intercept_option(plan)
+        bestVal, bestTurns, bestPath = self.get_best_intercept_option_path_values(plan)
         self.assertLess(bestVal, 7, "should not overvalue any of these intercepts")
         self.assertLess(bestVal/bestTurns, 0.5, 'should not think any of these have great value per turn.')
 
@@ -1053,10 +1053,10 @@ class ArmyInterceptionTests(TestBase):
 
         for includeEstimatedUpwardExpansion in [False, True]:
             for enPath in [
-                '9,10->9,11z  9,11->9,12->7,12  9,10->6,10->6,9->5,9',  # So ideally here, we should split from 7,12->8,12 so we can immediately run up and intercept the other 70 with the 7,12 after capping the 8,12
-                '9,10->9,11z  9,11->9,12->7,12  9,10->6,10->6,11->3,11->3,14->4,14->4,13  7,12->7,14->8,14->8,15',
                 '9,10->9,11z  9,10->6,10->6,11->3,11->3,14->4,14->4,13  9,11->9,13->11,13->11,14->13,14',
                 '9,10->9,11z  9,10->6,10->6,11->3,11->3,14->4,14->4,13  9,11->9,12->7,12->7,14->8,14->8,15',
+                '9,10->9,11z  9,11->9,12->7,12  9,10->6,10->6,9->5,9',  # So ideally here, we should split from 7,12->8,12 so we can immediately run up and intercept the other 70 with the 7,12 after capping the 8,12
+                '9,10->9,11z  9,11->9,12->7,12  9,10->6,10->6,11->3,11->3,14->4,14->4,13  7,12->7,14->8,14->8,15',
             ]:
                 with self.subTest(enPath=enPath, includeEstimatedUpwardExpansion=includeEstimatedUpwardExpansion):
                     map, general, enemyGeneral = self.load_map_and_generals(mapFile, 588, fill_out_tiles=True)
@@ -1573,7 +1573,7 @@ class ArmyInterceptionTests(TestBase):
         if debugMode:
             self.render_intercept_plan(map, plan)
 
-        value, turns, bestOpt = self.get_best_intercept_option(plan)
+        value, turns, bestOpt = self.get_best_intercept_option_path_values(plan)
         self.assertEqual(1, bestOpt.length)
         self.assertEqual(enTile, bestOpt.tail.tile)
 
@@ -1628,4 +1628,25 @@ class ArmyInterceptionTests(TestBase):
 # 10-20 with defense -1 instead of -2
 # 17f 18p - initial intercept/expand impl
 # 43f 38p
-# 56f 63p 1s, lots are only failing by 1-2 econ dropped, too, instead of 10-20
+# 56f 63p 1s, lots are only failing by 1-2 econ dropped, too, instead of 10-20    
+    def test_should_split_to_defend_opponent_expansion_split(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_split_to_defend_opponent_expansion_split___ZusMFqFXI---1--184.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 184, fill_out_tiles=True)
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 7, 16)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=184)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '10,6->11,6->11,7->12,7  11,9->12,9->12,10->18,10->18,12')
+        # proof
+        simHost.queue_player_moves_str(general.player, '14,7->14,8z->13,8->13,9->11,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=16)
+        self.assertIsNone(winner)
+
+        self.assertTileDifferentialGreaterThan(9, simHost)

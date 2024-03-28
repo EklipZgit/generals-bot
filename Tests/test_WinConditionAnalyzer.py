@@ -232,3 +232,4 @@ class WinConditionAnalyzerTests(TestBase):
 
         self.assertEqual(90, playerMap.players[general.player].tileCount)
 
+# 3f, 8p, 0s

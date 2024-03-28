@@ -90,6 +90,10 @@ class InterceptionOptionInfo(TilePlanInterface):
         return self.path.tileSet
 
     @property
+    def tileList(self) -> typing.List[Tile]:
+        return self.path.tileList
+
+    @property
     def requiredDelay(self) -> int:
         return self._requiredDelay
 
@@ -104,6 +108,16 @@ class InterceptionOptionInfo(TilePlanInterface):
 
     def __repr__(self):
         return str(self)
+
+    def clone(self) -> InterceptionOptionInfo:
+        clone = InterceptionOptionInfo(
+            self.path.clone(),
+            self.value, self._turns,
+            self.damage_blocked,
+            self.intercepting_army_remaining,
+            self.best_case_intercept_moves,
+            self._requiredDelay)
+        return clone
 
 
 class ArmyInterception(object):

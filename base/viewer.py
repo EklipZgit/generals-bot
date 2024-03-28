@@ -11,6 +11,8 @@ import queue
 import sys
 import traceback
 from multiprocessing import Queue
+
+from Interfaces import TilePlanInterface
 from base.Colors import *
 
 import pygame
@@ -1165,15 +1167,16 @@ class GeneralsViewer(object):
 
             SearchUtils.breadth_first_foreach(self._map, startTiles, 1000, draw_border_func, noLog=True)
 
-    def draw_path(self, pathObject, R, G, B, alphaStart, alphaDec, alphaMin):
-        if pathObject is None:
+    def draw_path(self, tilePlanObj: TilePlanInterface, R, G, B, alphaStart, alphaDec, alphaMin):
+        if tilePlanObj is None:
             return
         alpha = alphaStart
         key = WHITE
         color = (R, G, B)
-        while pathObject.length:
+        tilePlanObj = tilePlanObj.clone()
+        while tilePlanObj.length:
             try:
-                move = pathObject.pop_first_move()
+                move = tilePlanObj.pop_first_move()
             except queue.Empty:
                 break
             # try:

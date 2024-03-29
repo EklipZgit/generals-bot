@@ -546,12 +546,12 @@ class ArmyInterceptor(object):
             elif threat.path.tail.tile.isCity:
                 countCity += 1
                 if countCity > 2:
-                    logbook.info(f'bypassing {countGen}+ city threat {threat.path}')
+                    logbook.info(f'bypassing {countCity}+ city threat {threat.path}')
                     continue
             else:
                 countExpansion += 1
                 if countExpansion > 3:
-                    logbook.info(f'bypassing {countGen}+ expansion threat {threat.path}')
+                    logbook.info(f'bypassing {countExpansion}+ expansion threat {threat.path}')
                     continue
 
             self.ensure_threat_army_analysis(threat)

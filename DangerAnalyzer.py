@@ -243,12 +243,12 @@ class DangerAnalyzer(object):
                         elif path.tail.tile.isCity:
                             countCity += 1
                             if countCity > 2:
-                                logbook.info(f'bypassing {countGen}+ city threat {path}')
+                                logbook.info(f'bypassing {countCity}+ city threat {path}')
                                 continue
                         else:
                             countExpansion += 1
                             if countExpansion > 3:
-                                logbook.info(f'bypassing {countGen}+ expansion threat {path}')
+                                logbook.info(f'bypassing {countExpansion}+ expansion threat {path}')
                                 continue
 
                         added.add(path.tail.tile)
@@ -296,12 +296,12 @@ class DangerAnalyzer(object):
                                 elif path.tail.tile.isCity:
                                     countCity += 1
                                     if countCity > 3:
-                                        logbook.info(f'bypassing {countGen}+ city threat {path}')
+                                        logbook.info(f'bypassing {countCity}+ city threat {path}')
                                         continue
                                 else:
                                     countExpansion += 1
                                     if countExpansion > 5:
-                                        logbook.info(f'bypassing {countGen}+ expansion threat {path}')
+                                        logbook.info(f'bypassing {countExpansion}+ expansion threat {path}')
                                         continue
                                 added.add(path.tail.tile)
                                 threat = ThreatObj(path.length - 1, path.value, path, ThreatType.Econ, None)

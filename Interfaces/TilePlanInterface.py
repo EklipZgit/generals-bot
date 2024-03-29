@@ -48,6 +48,11 @@ class TilePlanInterface(ABC):
         """should be a deep clone of the original"""
         raise NotImplementedError()
 
+    @abstractmethod
+    def get_move_list(self) -> typing.List[Move]:
+        """Does not need to be cached, can be generated on the fly. Must have at least 1 move in it. Does NOT need to have as many moves in it as there is length (the length may imply inferred other moves that are not yet calculated)."""
+        raise NotImplementedError()
+
     def __gt__(self, other) -> bool:
         if other is None:
             return True

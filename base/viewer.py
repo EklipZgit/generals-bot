@@ -406,7 +406,11 @@ class GeneralsViewer(object):
                 start = time.perf_counter()
                 if not self.noLog:
                     logbook.info("GeneralsViewer drawing _grid:")
-                self._drawGrid()
+                try:
+                    self._drawGrid()
+                except Exception as ex:
+                    logbook.error(f'VIEWER ERROR {ex}')
+
                 self.last_render_time = start
 
                 if not self.noLog:
@@ -1173,13 +1177,7 @@ class GeneralsViewer(object):
         alpha = alphaStart
         key = WHITE
         color = (R, G, B)
-        tilePlanObj = tilePlanObj.clone()
-        while tilePlanObj.length:
-            try:
-                move = tilePlanObj.pop_first_move()
-            except queue.Empty:
-                break
-            # try:
+        for move in tilePlanObj.get_move_list():
             s = pygame.Surface((self.cellWidth, self.cellHeight))
             s.set_colorkey(key)
             # first, "erase" the surface by filling it with a color and
@@ -1194,9 +1192,6 @@ class GeneralsViewer(object):
             alpha -= alphaDec
             if alpha < alphaMin:
                 alpha = alphaMin
-            # except:
-            #     logbook.error(f'wtf, couldnt draw path {str(path)}')
-            #     path = path.next
 
     def get_delta_arrow(self):
         key = WHITE

@@ -7,7 +7,7 @@ import logbook
 import SearchUtils
 from ArmyAnalyzer import ArmyAnalyzer
 from BoardAnalyzer import BoardAnalyzer
-from DangerAnalyzer import ThreatObj
+from DangerAnalyzer import ThreatObj, ThreatType
 from DataModels import Move
 from Interfaces import TilePlanInterface
 from MapMatrix import MapMatrix
@@ -24,6 +24,12 @@ class ThreatValueInfo(object):
         self.econ_value: float = value
         self.turns_used_by_enemy: int = turns
         self.econ_value_per_turn: float = value / max(1, turns)
+
+    def __str__(self):
+        return f'Threat {self.threat.path.start.tile}->{self.threat.path.tail.tile} (val {self.econ_value:.2f}, turns {self.turns_used_by_enemy}, vt {self.econ_value_per_turn:.2f}) {self.threat}'
+
+    def __repr__(self):
+        return str(self)
 
 
 class ThreatBlockInfo(object):
@@ -65,6 +71,7 @@ class InterceptPointTileInfo(object):
 
 
 class InterceptionOptionInfo(TilePlanInterface):
+
     def __init__(self, path: Path, value: float, turns: int, damageBlocked: float, interceptingArmyRemaining: int, bestCaseInterceptMoves: int, requiredDelay: int):
         self.path: Path = path
         self._value: float = value
@@ -97,6 +104,9 @@ class InterceptionOptionInfo(TilePlanInterface):
     def requiredDelay(self) -> int:
         return self._requiredDelay
 
+    def get_move_list(self) -> typing.List[Move]:
+        return self.path.get_move_list()
+
     def get_first_move(self) -> Move:
         return self.path.get_first_move()
 
@@ -104,7 +114,7 @@ class InterceptionOptionInfo(TilePlanInterface):
         return self.path.pop_first_move()
 
     def __str__(self):
-        return f'{self.value:.2f}v/{self._turns}t ({self._value / max(1, self._turns):.2f}vt) blk {self.damage_blocked:.2f}, armyLeft {self.intercepting_army_remaining}, bM {self.best_case_intercept_moves}, del {self.requiredDelay}, path {self.path}'
+        return f'{self.value:.2f}v/{self._turns}t ({self._value / max(1, self._turns):.2f}vt) dBlk {self.damage_blocked:.2f}, armyLeft {self.intercepting_army_remaining}, bcm {self.best_case_intercept_moves}, del {self.requiredDelay}, path {self.path}'
 
     def __repr__(self):
         return str(self)
@@ -204,6 +214,17 @@ class ArmyInterceptor(object):
         interception.base_threat_army = self._get_threats_army_amount(threats)
         # potentialRecaptureArmyInterceptTable = self._get_potential_intercept_table(turnsLeftInCycle, interception.base_threat_army)
         interception.intercept_options = self._get_intercept_plan_options(interception, turnsLeftInCycle, otherThreatsBlockingTiles)
+        if len(interception.intercept_options) == 0:
+            # try again, more friendly
+            altThreatValues = [t for t in threatValues if t.threat.path.get_first_move().dest.lastMovedTurn < self.map.turn]
+            if len(altThreatValues) < len(threatValues) and len(altThreatValues) > 0:
+                interception = ArmyInterception(altThreatValues)
+                threats = [t.threat for t in altThreatValues]
+                interception.common_intercept_chokes = self.get_shared_chokes(interception.threat_values)
+
+                interception.base_threat_army = self._get_threats_army_amount(interception.threats)
+                # potentialRecaptureArmyInterceptTable = self._get_potential_intercept_table(turnsLeftInCycle, interception.base_threat_army)
+                interception.intercept_options = self._get_intercept_plan_options(interception, turnsLeftInCycle, otherThreatsBlockingTiles)
 
         return interception
 
@@ -212,6 +233,11 @@ class ArmyInterceptor(object):
         # commonChokesCombinedTurnOffsets: typing.Dict[Tile, int] = {}
         commonMinDelayTurns = {}
         commonMaxExtraMoves = {}
+
+        isThreatNotMoving = threats[0].threat.path.start.tile.lastMovedTurn < self.map.turn - 1
+        # additionalOffset = 0
+        # if isThreatNotMoving:
+        #     additionalOffset = 2
 
         # withinOneAdditionalChecks = {}
         for threatValueInfo in threats:
@@ -501,11 +527,32 @@ class ArmyInterceptor(object):
         outThreats = []
 
         threatTile = threats[0].path.start.tile
+        countCity = 0
+        countGen = 0
+        countExpansion = 0
         for threat in threats:
+            if threat.path.length <= 0:
+                continue
             # Why was this here?
             # if threat.turns > 30:
             #     logbook.info(f'skipping long threat len {threat.turns} from {str(threat.path.start.tile)} to {str(threat.path.tail.tile)}')
             #     continue
+
+            if threat.path.tail.tile.isGeneral:
+                countGen += 1
+                if countGen > 2:
+                    logbook.info(f'bypassing {countGen}+ general threat {threat.path}')
+                    continue
+            elif threat.path.tail.tile.isCity:
+                countCity += 1
+                if countCity > 2:
+                    logbook.info(f'bypassing {countGen}+ city threat {threat.path}')
+                    continue
+            else:
+                countExpansion += 1
+                if countExpansion > 3:
+                    logbook.info(f'bypassing {countGen}+ expansion threat {threat.path}')
+                    continue
 
             self.ensure_threat_army_analysis(threat)
             if threat.path.start.tile != threatTile:
@@ -548,7 +595,7 @@ class ArmyInterceptor(object):
         for threat in threats:
             enPlayer = threat.threatPlayer
             frPlayer = self.map.player_index
-            val, threatLen = self._get_path_value(threat.path, enPlayer, frPlayer, turnsLeftInCycle)
+            val, threatLen = self._get_path_econ_values_for_player(threat.path, enPlayer, frPlayer, turnsLeftInCycle)
             threatInfo = ThreatValueInfo(threat, val, threatLen)
             valPerTurn = threatInfo.econ_value_per_turn
             if valPerTurn == maxValPerTurn and threat.path.length > maxThreatInfo.threat.path.length:
@@ -561,10 +608,10 @@ class ArmyInterceptor(object):
 
             threatValues.append(threatInfo)
 
-        logbook.info(f'best_enemy_threat was val {str(maxVal)} v/t {maxValPerTurn:.2f} - {str(maxThreatInfo)}')
+        logbook.info(f'best_enemy_threat was val {maxVal:.2f} v/t {maxValPerTurn:.2f} - {str(maxThreatInfo)}')
         return threatValues
 
-    def _get_path_value(
+    def _get_path_econ_values_for_player(
             self,
             interceptionPath: Path,
             searchingPlayer: int,
@@ -621,6 +668,9 @@ class ArmyInterceptor(object):
 
             pathNode = pathNode.next
 
+            if curTurn > cycleEnd:
+                break
+
         # account for we considered the first tile in the list a move, when it is just the start tile
         curTurn -= 1
         armyLeft -= interceptingArmy
@@ -654,8 +704,6 @@ class ArmyInterceptor(object):
         threatDistFromCommon = interception.furthest_common_intercept_distances[interception.target_tile]
         longestThreat = max(interception.threats, key=lambda t: t.turns)
         maxDepth = longestThreat.turns + 1
-
-        threatValueOffset = interception.best_enemy_threat.econ_value
 
         averageEnemyPositionByTurn: typing.Dict[int, typing.Tuple[float, float]] = {}
         for i in range(0, interception.best_enemy_threat.threat.path.length):
@@ -715,7 +763,9 @@ class ArmyInterceptor(object):
                 turnsLeftInCycle=turnsLeftInCycle,
                 threatDistFromCommon=threatDistFromCommon,
                 searchingPlayer=self.map.player_index,
-                positionsByTurn=averageEnemyPositionByTurn)
+                positionsByTurn=averageEnemyPositionByTurn,
+                otherThreatsBlockingTiles=otherThreatsBlockingTiles,
+            )
 
             debugBadCutoff = max(1, interception.base_threat_army // 10)
 
@@ -752,6 +802,7 @@ class ArmyInterceptor(object):
                         if tileHold is not None and pathNode.next is not None and pathNode.next.tile in tileHold.blocked_destinations:
                             # TODO
                             # interceptArmy -= max(tileHold, t.army // 2)
+                            logbook.info(f'forcing {pathNode.tile} move half due to blocked destinations in {path}')
                             pathNode.move_half = True
                         pathNode = pathNode.next
 
@@ -763,13 +814,13 @@ class ArmyInterceptor(object):
                     logbook.info(f'DETERMINED SHOULD DELAY FOR {tile} {path}')
 
                 # TODO this is returning extra moves, see test_should_full_intercept_all_options
-                newValue, turnsUsed = self._get_path_value(
+                newValue, turnsUsed = self._get_path_econ_values_for_player(
                     path,
                     searchingPlayer=self.map.player_index,
                     targetPlayer=interception.threats[0].threatPlayer,
                     turnsLeftInCycle=turnsLeftInCycle,
                     interceptingArmy=interceptArmy,
-                    includeRecaptureEffectiveStartDist=addlTurns)  # + (1 if shouldDelay else 0)
+                    includeRecaptureEffectiveStartDist=addlTurns)  #+ (1 if shouldDelay else 0)
                 turnsUsed += interceptInfo.max_extra_moves_to_capture
                 blockedDamage, enemyArmyLeftAtIntercept, bestCaseInterceptMoves, worstCaseInterceptMoves = self._get_value_of_threat_blocked(path, interception.best_enemy_threat, turnsLeftInCycle)
 
@@ -822,7 +873,8 @@ class ArmyInterceptor(object):
             turnsLeftInCycle: int,
             threatDistFromCommon: int,
             searchingPlayer: int,
-            positionsByTurn: typing.Dict[int, typing.Tuple[float, float]]
+            positionsByTurn: typing.Dict[int, typing.Tuple[float, float]],
+            otherThreatsBlockingTiles: typing.Dict[Tile, ThreatBlockInfo] | None = None
     ) -> typing.Dict[int, Path]:
         # negs = set()
         # if not self.map.is_tile_friendly(tile):
@@ -877,6 +929,12 @@ class ArmyInterceptor(object):
                 return None
 
             if fromTile is not None:
+                # TODO needs to switch to negative tiles, and only be supplied when in actual danger and need to intercept with OTHER tiles than the negative tiles, EG last second defense
+                threatBlock = otherThreatsBlockingTiles.get(nextTile, None)
+                # if threatBlock and threatBlock.amount_needed_to_block > nextTile.army:
+                if threatBlock and fromTile in threatBlock.blocked_destinations:
+                    return None
+                    # if fromTile in threatBlock.blocked_destinations:
                 distA = self.map.get_distance_between(threatTile, fromTile)
                 distB = self.map.get_distance_between(threatTile, nextTile)
                 if distA is None:
@@ -918,7 +976,7 @@ class ArmyInterceptor(object):
                 nextTile
             )
 
-        startTiles = {interceptAtTile: ((0, 0, 0, startArmy, None), 0)}
+        startTiles = {interceptAtTile: ((0, 0, 0, startArmy, interceptAtTile), 0)}
         results = SearchUtils.breadth_first_dynamic_max_per_tile_per_distance(
             self.map,
             startTiles=startTiles,
@@ -1000,14 +1058,15 @@ class ArmyInterceptor(object):
         enemyArmyLeftAtInterceptPointBeforeRemainingCapture = enArmy
         econValueBlocked = 0
 
-        while node is not None and enArmy < 0 and enLen > interceptDist:
+        while node is not None and enArmy < 0 and enLen > interceptDist and turnsLeft > 0:
             if self.map.is_tile_on_team_with(node.tile, best_enemy_threat.threatPlayer):
                 enArmy -= node.tile.army
             else:
                 enArmy += node.tile.army
                 if self.map.is_tile_friendly(node.tile):
                     if node.tile.isCity or node.tile.isGeneral:
-                        econValueBlocked += 20
+                        # TODO model this better
+                        econValueBlocked += 5
                     econValueBlocked += 2
                 else:
                     econValueBlocked += 1
@@ -1015,6 +1074,7 @@ class ArmyInterceptor(object):
             enArmy += 1
             node = node.prev
             enLen -= 1
+            turnsLeft -= 1
 
         if self.log_debug:
             logbook.info(f'blocked {econValueBlocked} econ dmg, ({amountBlocked} army), at interceptDist {interceptDist}. enemy army at intercept {initialEnArmyAtCapStartOrIntercept}, enemy army left at intercept {enemyArmyLeftAtInterceptPointBeforeRemainingCapture}: path {str(interceptPath)}')
@@ -1049,7 +1109,12 @@ class ArmyInterceptor(object):
             #
             #     blockingTiles.add(chokeTile)
             for threat in otherThreats:
+                realThreatVal = threat.path.calculate_value(threat.threatPlayer, self.map._teams, doNotSaveToPath=True)
                 self.ensure_threat_army_analysis(threat)
+                gen = self.map.generals[self.map.player_index]
+                towardsUs = self.map.get_distance_between(gen, threat.path.start.tile) - self.map.get_distance_between(gen, threat.path.tail.tile) > 0
+                if not towardsUs:
+                    continue
 
                 for chokeTile in threat.path.tileList:
                     if not self.map.is_tile_friendly(chokeTile):
@@ -1057,16 +1122,18 @@ class ArmyInterceptor(object):
                     if chokeTile.army < otherTile.army // 3:
                         continue
 
-                    # TODO wrong
-                    blockAmount = threat.threatValue
+                    # blockAmount = threat.threatValue
+                    blockAmount = realThreatVal + chokeTile.army
                     blockInfo = blockingTiles.get(chokeTile, None)
                     if blockInfo is None:
                         blockInfo = ThreatBlockInfo(chokeTile, blockAmount)
                         blockingTiles[chokeTile] = blockInfo
 
+                    canDie = realThreatVal > 0 and threat.threatType == ThreatType.Kill
+
                     for moveable in chokeTile.movable:
                         # if moveable not in threat.armyAnalysis.shortestPathWay.tiles:
-                        if moveable not in threat.path.tileSet and (moveable not in threat.armyAnalysis.shortestPathWay.tiles or threat.armyAnalysis.bMap[moveable] >= threat.armyAnalysis.bMap[chokeTile]):
+                        if canDie or (moveable not in threat.path.tileSet and (moveable not in threat.armyAnalysis.shortestPathWay.tiles or threat.armyAnalysis.bMap[moveable] >= threat.armyAnalysis.bMap[chokeTile])):
                             blockInfo.add_blocked_destination(moveable)
 
                     if blockInfo.amount_needed_to_block < blockAmount:
@@ -1105,10 +1172,10 @@ class ArmyInterceptor(object):
                     usNexts.add(threatNext)
 
             if len(threatNexts) > 1 and len(usNexts) > 1:
-                if interceptionPath.start.tile.army * 2 - 2 < threatArmy:
-                    shouldSplit = True
-                else:
+                if interceptionPath.start.tile.army // 2 - 2 < threatArmy:
                     shouldDelay = True
+                else:
+                    shouldSplit = True
 
         return shouldDelay, shouldSplit
 

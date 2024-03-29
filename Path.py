@@ -57,6 +57,7 @@ class PathMove(object):
 
 
 class Path(TilePlanInterface):
+
     def __init__(self, value: float = 0):
         self.start: typing.Union[None, PathMove] = None
         self._pathQueue: typing.Deque[PathMove] = deque()
@@ -124,6 +125,15 @@ class Path(TilePlanInterface):
     @property
     def requiredDelay(self) -> int:
         return 0
+
+    def get_move_list(self) -> typing.List[Move]:
+        moves = []
+        node = self.start
+        while node.next is not None:
+            moves.append(Move(node.tile, node.next.tile, node.move_half))
+            node = node.next
+
+        return moves
 
     def add_next(self, nextTile, move_half=False):
         move = PathMove(nextTile)
@@ -217,7 +227,8 @@ class Path(TilePlanInterface):
             negativeTiles: None | typing.Set[Tile] | typing.Dict[Tile, typing.Any] = None,
             ignoreNonPlayerArmy: bool = False,
             ignoreIncrement: bool = False,
-            incrementBackwards: bool = False
+            incrementBackwards: bool = False,
+            doNotSaveToPath: bool = False
     ) -> int:
         # have to offset the first [val - 1] I guess since the first tile didn't get moved to
         val = 1
@@ -249,7 +260,9 @@ class Path(TilePlanInterface):
             node = node.next
             i += 1
 
-        self.value = val
+        if not doNotSaveToPath:
+            self.value = val
+
         return val
 
     def get_positive_subsegment(
@@ -342,8 +355,10 @@ class Path(TilePlanInterface):
     def __str__(self) -> str:
         node = self.start
         nodeStrs = []
+        half = False
         while node is not None:
-            nodeStrs.append(f'{node.tile.x},{node.tile.y}')
+            nodeStrs.append(f'{node.tile.x},{node.tile.y}{"" if not half else "z"}')
+            half = node.move_half
             node = node.next
         return f"[{self.value} len {self.length}] {' -> '.join(nodeStrs)}"
 

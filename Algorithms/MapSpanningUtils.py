@@ -209,4 +209,4 @@ def _include_all_adj_required(node: Tile, includedSet: TileSet, usefulStartSet: 
             # else:
             q.append(movable)
 
-    logbook.info(f'_include_all_adj_required, iter {iter} included {included}')
+    # logbook.info(f'_include_all_adj_required, iter {iter} included {included}')

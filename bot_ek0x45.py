@@ -1546,7 +1546,12 @@ class EklipZBot(object):
 
         if not is_lag_move:
             with self.perf_timer.begin_move_event('Expansion quick check'):
-                self.expansion_plan = self.build_expansion_plan(timeLimit=0.025, expansionNegatives=defenseCriticalTileSet, pathColor=(150, 100, 150))
+                negs = defenseCriticalTileSet.copy()
+                if self.threat is not None and self.threat.threatType == ThreatType.Kill:
+                    negs.update(self.threat.path.tileList)
+                if self.dangerAnalyzer.fastestPotentialThreat is not None and self.dangerAnalyzer.fastestPotentialThreat.threatType == ThreatType.Kill:
+                    negs.update(self.dangerAnalyzer.fastestPotentialThreat.path.tileList)
+                self.expansion_plan = self.build_expansion_plan(timeLimit=0.025, expansionNegatives=negs, pathColor=(150, 100, 150))
 
         defenseSavePath: Path | None = None
         if not self.is_all_in_losing and threat is not None and threat.threatType != ThreatType.Vision:
@@ -5253,6 +5258,7 @@ class EklipZBot(object):
             data.append(f'{char}ValidGeneralPos={self.convert_bool_map_matrix_to_string(self.armyTracker.valid_general_positions_by_player[player.index])}')
             data.append(f'{char}TilesEverOwned={self.convert_tile_set_to_string(self.armyTracker.tiles_ever_owned_by_player[player.index])}')
             data.append(f'{char}UneliminatedEmergences={self.convert_tile_int_dict_to_string(self.armyTracker.uneliminated_emergence_events[player.index])}')
+            data.append(f'{char}UneliminatedEmergenceCityPerfectInfo={self.convert_tile_set_to_string(self.armyTracker.uneliminated_emergence_event_city_perfect_info[player.index])}')
             if len(self.generalApproximations) > player.index:
                 if self.generalApproximations[player.index][3] is not None:
                     data.append(f'{char}_bot_general_approx={str(self.generalApproximations[player.index][3])}')
@@ -5361,6 +5367,10 @@ class EklipZBot(object):
                 self.armyTracker.tiles_ever_owned_by_player[player.index] = self.convert_string_to_tile_set(resume_data[f'{char}TilesEverOwned'])
             if f'{char}UneliminatedEmergences' in resume_data:
                 self.armyTracker.uneliminated_emergence_events[player.index] = self.convert_string_to_tile_int_dict(resume_data[f'{char}UneliminatedEmergences'])
+            if f'{char}UneliminatedEmergenceCityPerfectInfo' in resume_data:
+                self.armyTracker.uneliminated_emergence_event_city_perfect_info[player.index] = self.convert_string_to_tile_set(resume_data[f'{char}UneliminatedEmergenceCityPerfectInfo'])
+            else:
+                self.armyTracker.uneliminated_emergence_event_city_perfect_info[player.index] = {t for t in self.armyTracker.uneliminated_emergence_events[player.index].keys()}
 
         if f'TempFogTiles' in resume_data:
             tiles = self.convert_string_to_tile_set(resume_data[f'TempFogTiles'])
@@ -5520,7 +5530,7 @@ class EklipZBot(object):
             requiredContribution = threats[0].threatValue
 
         gatherDepth = threats[0].path.length - 1 + addlTurns
-        distDict = threats[0].convert_to_dist_dict(allowNonChoke=force_turns_up_threat_path != 0)
+        distDict = threats[0].convert_to_dist_dict(allowNonChoke=force_turns_up_threat_path != 0, offset=-1 - addlTurns)
 
         move, value, turnsUsed, gatherNodes = self.try_threat_gather(
             threats=threats,
@@ -6296,8 +6306,9 @@ class EklipZBot(object):
                         isDelayed = interceptingOption.requiredDelay > 0
                     break
 
-        if interceptPath.tail.tile not in threat.armyAnalysis.shortestPathWay.tiles and not includesIntercept:
-            return None, None, isDelayed
+        # removed, breaks test_should_not_try_to_expand_with_potential_threat_blocking_tile
+        # if interceptPath.tail.tile not in threat.armyAnalysis.shortestPathWay.tiles and not includesIntercept:
+        #     return None, None, isDelayed
 
         if interceptPath.length > threat.turns and threat.path.tail.tile.isGeneral:
             return None, None, False
@@ -6353,6 +6364,7 @@ class EklipZBot(object):
             if interceptDelayed:
                 self.viewInfo.add_info_line(f'DEFENSE INTERCEPT SAID DELAYED AGAINST THREAT, NO OPPING DEFENSE')
                 negativeTilesIncludingThreat.update(interceptPath.tileList)
+                outputDefenseCriticalTileSet.update(interceptPath.tileList)
                 continue
             if interceptMove is not None:
                 return interceptMove, interceptPath
@@ -6413,6 +6425,10 @@ class EklipZBot(object):
                 survivalThreshold = threat.threatValue
 
                 distOffset = 1
+                extraTurnOnPriority = 0
+                if threat is not None and self._map.player_has_priority_over_other(self.player.index, threat.threatPlayer, self._map.turn + threat.turns):
+                    distOffset += 1
+                    addlTurns += 1
                 # if (
                 #         army is not None
                 #         and len(threat.armyAnalysis.interceptChokes) > 0
@@ -10784,6 +10800,15 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                     # self.city_expand_plan = None
                     return move
 
+        if self.threat is not None and self.threat.threatType == ThreatType.Kill:
+            expansionNegatives.update(self.threat.path.tileList)
+        if self.dangerAnalyzer.fastestPotentialThreat is not None and self.dangerAnalyzer.fastestPotentialThreat.threatType == ThreatType.Kill:
+            for tile in self.dangerAnalyzer.fastestPotentialThreat.path.tileList:
+                if tile.player != self.player.index:
+                    continue
+                if self.dangerAnalyzer.fastestPotentialThreat.turns < cycleTurnsLeft and self.dangerAnalyzer.fastestPotentialThreat.threatValue + tile.army > self.dangerAnalyzer.fastestPotentialThreat.turns:
+                    expansionNegatives.add(tile)
+
         self.expansion_plan = self.build_expansion_plan(timeLimit, expansionNegatives, pathColor=(50, 30, 255), overrideTurns=overrideTurns)
 
         path = self.expansion_plan.selected_option
@@ -11429,7 +11454,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                         if interceptOption is not None:
                             isOneMoveLargeIntercept = interceptOption.length < 2 or otherPath.length == 1
                             if isOneMoveLargeIntercept or interceptOption.value / interceptOption.length > interceptVtCutoff:
-                                self.viewInfo.add_info_line(f'EXP PLAN INCLUDED INTERCEPT {interceptOption}')
+                                self.viewInfo.add_info_line(f'EXP PLAN USED INTERCEPT {interceptOption}')
                                 if interceptOption.requiredDelay > 0:
                                     logbook.info(f'    HAD DELAY {interceptOption}')
                                     plan.blocking_tiles.update(interceptOption.tileSet)
@@ -11440,30 +11465,31 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                                     plan.selected_option = otherPath
                                     break
 
-                if not anyIntercept:
-                    i = 0
-                    for t in otherPath.tileSet:
-                        planOpt = self.intercept_plans.get(t, None)
-                        if planOpt is not None:
-                            intPath = None
-                            for turns, option in planOpt.intercept_options.items():
-                                econValue = option.value
-                                p = option.path
-                                isOneMoveLargeIntercept = p.length == 1 or turns < 2
-                                if p.start.tile == otherPath.get_first_move().source and (isOneMoveLargeIntercept or econValue / turns > interceptVtCutoff):
-                                    self.viewInfo.add_info_line(f'EXP PLAN INC INTERCEPT ON {str(t)} INDIRECTLY W {str(otherPath)}')
+                i = 0
+                for t in otherPath.tileSet:
+                    planOpt = self.intercept_plans.get(t, None)
+                    if planOpt is not None:
+                        intPath = None
+                        for turns, option in planOpt.intercept_options.items():
+                            if option == planOpt:
+                                continue
+                            econValue = option.value
+                            p = option.path
+                            isOneMoveLargeIntercept = p.length == 1 or turns < 2
+                            if p.start.tile == otherPath.get_first_move().source and (isOneMoveLargeIntercept or econValue / turns > interceptVtCutoff):
+                                self.viewInfo.add_info_line(f'EXP PLAN INDIRECT INTERCEPT ON {str(t)} W {str(otherPath)}')
 
-                                    if option.requiredDelay > 0:
-                                        self.viewInfo.add_info_line(f'   HAD DELAY {option}')
-                                        plan.blocking_tiles.update(option.tileSet)
-                                        plan.intercept_waiting.append(option)
-                                    else:
-                                        plan.includes_intercept = True
-                                        self.viewInfo.add_info_line(f'   REPLACING WITH {option}')
-                                        anyIntercept = True
-                                        plan.selected_option = p
-                                        plan.all_paths[plan.all_paths.index(otherPath)] = p
-                                        break
+                                if option.requiredDelay > 0:
+                                    self.viewInfo.add_info_line(f'   HAD DELAY {option}')
+                                    plan.blocking_tiles.update(option.tileSet)
+                                    plan.intercept_waiting.append(option)
+                                else:
+                                    plan.includes_intercept = True
+                                    self.viewInfo.add_info_line(f'   REPLACING WITH {option}')
+                                    anyIntercept = True
+                                    plan.selected_option = p
+                                    plan.all_paths[plan.all_paths.index(otherPath)] = p
+                                    break
 
                         if anyIntercept:
                             break

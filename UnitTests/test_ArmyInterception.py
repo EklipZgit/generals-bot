@@ -114,7 +114,7 @@ class ArmyInterceptionUnitTests(TestBase):
         path.add_next(map.GetTile(10, 5))
         path.add_next(map.GetTile(9, 5))
 
-        val, turnsUsed = interceptor._get_path_value(path, searchingPlayer=general.player, targetPlayer=enemyGeneral.player, turnsLeftInCycle=19, includeRecaptureEffectiveStartDist=1)
+        val, turnsUsed = interceptor._get_path_econ_values_for_player(path, searchingPlayer=general.player, targetPlayer=enemyGeneral.player, turnsLeftInCycle=19, includeRecaptureEffectiveStartDist=1)
         # we move 6 to intercept, they move 6 forward to 7,5. No collision yet.
         # We collide with over 30 more army with them, giving us full recapture turns.
         self.assertEqual(19, turnsUsed)
@@ -608,16 +608,57 @@ player_index=0
         mapFile = 'GameContinuationEntries/should_intercept_with_further_large_tile_when_possible_not_closer_small_tile___Human.exe-TEST__713fc243-c4e6-4f75-8ec6-38e4b0887581---1--188.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 188, fill_out_tiles=True)
 
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=188)
-        
-        self.enable_search_time_limits_and_disable_debug_asserts()
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
-        bot = self.get_debug_render_bot(simHost, general.player)
-        playerMap = simHost.get_player_map(general.player)
+        plan = self.get_interception_plan(map, general, enemyGeneral)
 
-        self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
-        self.assertIsNone(winner)
+        if debugMode:
+            self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
+        bestOpt = self.get_best_intercept_option(plan)
 
-        self.skipTest("TODO add asserts for should_intercept_with_further_large_tile_when_possible_not_closer_small_tile")
+        self.assertTrue(bestOpt.path.start.move_half or bestOpt.requiredDelay > 0, 'should EITHER delay or move half TODO figure out which is optimal?')
+
+    def test_should_not_mis_evaluate_intercept_value_blocked_damage(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_not_mis_evaluate_intercept_value_blocked_damage___Human.exe-TEST__f7bcf26d-70ff-4e1e-9c87-e0022affe96f---1--348.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 348, fill_out_tiles=True)
+
+        plan = self.get_interception_plan(map, general, enemyGeneral)
+
+        if debugMode:
+            self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
+        bestOpt = self.assert_no_best_intercept_option(plan)
+
+    # def test_should_not_mis_evaluate_intercept_value_blocked_damage__true_unit(self):
+    #     debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+    #     mapFile = 'GameContinuationEntries/should_not_mis_evaluate_intercept_value_blocked_damage___Human.exe-TEST__f7bcf26d-70ff-4e1e-9c87-e0022affe96f---1--348.txtmap'
+    #     map, general, enemyGeneral = self.load_map_and_generals(mapFile, 348, fill_out_tiles=True)
+    #
+    #     plan = self.get_interception_plan(map, general, enemyGeneral)
+    #
+    #     if debugMode:
+    #         self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
+    #     bestOpt = self.get_best_intercept_option(plan)
+    #
+    #     path = Path.from_string(map, '8,8->8,9')
+    #     plan.
+    #
+    #     self.assertTrue(bestOpt.path.start.move_half or bestOpt.requiredDelay > 0, 'should EITHER delay or move half TODO figure out which is optimal?')
+    
+    def test_should_not_split_randomly(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_not_split_randomly___-Zrosee5X---0--81.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 81, fill_out_tiles=True)
+
+        plan = self.get_interception_plan(map, general, enemyGeneral)
+
+        bestOpt = self.get_best_intercept_option(plan)
+
+        self.assertIn(map.GetTile(13, 10), bestOpt.tileList)
+
+        if debugMode:
+            self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
+
+        path = self.get_interceptor_option_by_coords_or_none(plan, 13, 9, 12, 9)
+        if path is not None:
+            self.assertFalse(path.path.start.move_half)
+
+

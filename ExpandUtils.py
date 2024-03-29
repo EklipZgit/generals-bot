@@ -6,6 +6,7 @@ import typing
 import DebugHelper
 import KnapsackUtils
 import SearchUtils
+from Behavior.ArmyInterceptor import InterceptionOptionInfo
 from BoardAnalyzer import BoardAnalyzer
 from DataModels import Move
 from Interfaces import TilePlanInterface
@@ -140,7 +141,7 @@ def get_expansion_single_knapsack_path_trimmed(
 
 
 def path_has_cities_and_should_wait(
-        path: Path | None,
+        path: TilePlanInterface | None,
         friendlyPlayers,
         negativeTiles: typing.Set[Tile],
         territoryMap: MapMatrix[int],
@@ -212,8 +213,8 @@ def path_has_cities_and_should_wait(
 
 
 def _group_expand_paths_by_crossovers(
-    pathsCrossingTiles: typing.Dict[Tile, typing.List[Path]],
-    multiPathDict: typing.Dict[Tile, typing.Dict[int, typing.Tuple[int, Path]]],
+    pathsCrossingTiles: typing.Dict[Tile, typing.List[TilePlanInterface]],
+    multiTilePlanInterfaceDict: typing.Dict[Tile, typing.Dict[int, typing.Tuple[int, TilePlanInterface]]],
 ) -> typing.Dict[int, typing.List[Path]]:
     pathGroupLookup = {}
     #
@@ -241,7 +242,7 @@ def _group_expand_paths_by_crossovers(
         groupNumber = pathGroupLookup[path]
         _merge_path_groups_recurse(groupNumber, path, pathGroupLookup, pathsCrossingTiles)
 
-    pathsGrouped: typing.Dict[int, typing.Set[Path]] = {}
+    pathsGrouped: typing.Dict[int, typing.Set[TilePlanInterface]] = {}
     for path in allPaths:
         groupNumber = pathGroupLookup[path]
         groupList = pathsGrouped.get(groupNumber, set())
@@ -259,8 +260,8 @@ def _group_expand_paths_by_crossovers(
 def _merge_path_groups_recurse(
         groupNumber: int,
         path: TilePlanInterface,
-        pathGroupLookup: typing.Dict[Path, int],
-        pathsCrossingTiles: typing.Dict[Tile, typing.List[Path]]):
+        pathGroupLookup: typing.Dict[TilePlanInterface, int],
+        pathsCrossingTiles: typing.Dict[Tile, typing.List[TilePlanInterface]]):
     for tile in path.tileSet:
         for crossedPath in pathsCrossingTiles[tile]:
             if crossedPath == path:
@@ -268,8 +269,8 @@ def _merge_path_groups_recurse(
 
             crossedPathGroup = pathGroupLookup[crossedPath]
             if groupNumber != crossedPathGroup:
-                if DebugHelper.IS_DEBUGGING:
-                    logbook.info(f'path {groupNumber} {str(path)}\r\n  crosses path {crossedPathGroup} {str(crossedPath)}, converting')
+                # if DebugHelper.IS_DEBUGGING:
+                logbook.info(f'path {groupNumber} {str(path)}\r\n  crosses path {crossedPathGroup} {str(crossedPath)}, converting')
                 pathGroupLookup[crossedPath] = groupNumber
                 _merge_path_groups_recurse(groupNumber, crossedPath, pathGroupLookup, pathsCrossingTiles)
 
@@ -548,7 +549,7 @@ def knapsack_multi_paths_no_crossover(
             allPaths.append((val, p))
             combinedTurnLengths += p.length
     logbook.info(
-        f'EXP MULT KNAP {groupsWithPaths} grps, {len(allPaths)} paths, {remainingTurns} turns, combinedPathLengths {combinedTurnLengths}:')
+        f'EXP MULT NO CROSS KNAP {groupsWithPaths} grps, {len(allPaths)} paths, {remainingTurns} turns, combinedPathLengths {combinedTurnLengths}:')
     if DebugHelper.IS_DEBUGGING:
         for val, p in allPaths:
             logbook.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
@@ -682,6 +683,8 @@ def get_optimal_expansion(
 
     @param additionalOptionValues: list(approxEconValue, approxTurns, path)
     """
+    if additionalOptionValues:
+        additionalOptionValues = [v for v in additionalOptionValues if v.requiredDelay + v.length <= turns]
 
     logEntries = []
     try:
@@ -698,8 +701,8 @@ def get_optimal_expansion(
         respectTerritoryMap = map.players[targetPlayer].tileCount // 2 > len(map.players[targetPlayer].tiles)
         respectTerritoryMap = False
 
-        ## The more turns remaining, the more we prioritize longer paths. Towards the end of expansion, we prioritize sheer captured tiles.
-        ## This hopefully leads to finding more ideal expansion plans earlier on while being greedier later
+        # # The more turns remaining, the more we prioritize longer paths. Towards the end of expansion, we prioritize sheer captured tiles.
+        # # This hopefully leads to finding more ideal expansion plans earlier on while being greedier later
         # lengthWeightOffset = 0.3 * ((turns ** 0.5) - 3)
         # lengthWeightOffset = max(0.25, lengthWeightOffset)
 
@@ -1491,6 +1494,8 @@ def get_optimal_expansion(
         valueOverrides = {}
         if additionalOptionValues is not None:
             for opt in additionalOptionValues:
+                if opt.length + opt.requiredDelay >= remainingTurns:
+                    continue
                 valueOverrides[opt] = (opt.value, opt.length)
 
         path, otherPaths, totalTurns, totalValue = knapsack_multi_paths(
@@ -1523,11 +1528,8 @@ def get_optimal_expansion(
             viewInfo,
             valueOverrides)
 
-        if map.turn == 242 and searchingPlayer == 0:
-            pass
-
-        if totalTurns == 0 or (altTotalTurns > 0 and altTotalValue / altTotalTurns > totalValue / totalTurns):
-            msg = f'EXP CROSS-KNAP WORSE THAN NON, v{altTotalValue}/{totalValue} t{altTotalTurns}/{totalTurns}'
+        if (totalTurns == 0 and altTotalTurns > 0) or (altTotalTurns > 0 and altTotalValue / altTotalTurns > totalValue / totalTurns):
+            msg = f'EXP CROSS-KNAP WORSE THAN NON, {altTotalValue}v/{altTotalTurns}t vs {totalValue}v/{totalTurns}t'
             if viewInfo is not None:
                 viewInfo.add_info_line(msg)
             else:
@@ -1992,6 +1994,8 @@ def _get_capture_counts(
         allPaths.append(mainPath)
 
     allPaths.extend(otherPaths)
+    allPaths = sorted(allPaths, key=lambda p: p.length, reverse=True)
+    visitedByPaths = set()
     visited = negativeTiles.copy()
     enemyCapped = 0
     neutralCapped = 0
@@ -2000,27 +2004,44 @@ def _get_capture_counts(
         pTurnsUsed = -1  # first tile in a path doesn't count
         pNeutCap = 0
         pEnCap = 0
+        validTiles = 0
+        if isinstance(path, InterceptionOptionInfo) and path.tileList[0].x == 13 and path.tileList[0].y == 7:
+            pass
         for tile in path.tileSet:
             pTurnsUsed += 1
+            if tile in visitedByPaths:
+                continue
+            validTiles += 1
+            visitedByPaths.add(tile)
             if tile in visited:
                 continue
             visited.add(tile)
+
             if tile.player not in friendlyPlayers:
                 if tile.player not in targetPlayers:
                     pNeutCap += 1
                 else:
                     pEnCap += 1
 
-        if valueOverrides is not None:
-            overrides = valueOverrides.get(path, None)
-            if overrides is not None:
-                overVal, overTurns = overrides
-                totalCapSoFar = pEnCap * 2 + pNeutCap
-                missing = int(overVal - totalCapSoFar)
-                if missing > 0:
-                    pEnCap += missing // 2
+        if validTiles > 0 and valueOverrides is not None:
+                overrides = valueOverrides.get(path, None)
+                if overrides is not None:
+                    overVal, overTurns = overrides
+                    # if overrides is not None:
+                    # overVal = path.value
+                    # overTurns = path.length
+                    totalCapSoFar = pEnCap * 2 + pNeutCap
+                    missing = int(overVal - totalCapSoFar)
+                    if missing > 0:
+                        pEnCap += missing // 2
 
-                pTurnsUsed = overTurns
+                    pTurnsUsed = overTurns
+        elif validTiles == 0:
+            logbook.info(f'COMPLETELY BAD PATH {path} SHOULD BE PRUNED, pTurnsUsed {pTurnsUsed}, pNeutCap {pNeutCap}, pEnCap {pEnCap}')
+            try:
+                otherPaths.remove(path)
+            except:
+                pass   # uh oh, it was path? lol
 
         turnsUsed += pTurnsUsed
         neutralCapped += pNeutCap
@@ -2029,7 +2050,7 @@ def _get_capture_counts(
     return turnsUsed, enemyCapped, neutralCapped
 
 
-def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: Path, originalNegativeTiles: typing.Set[Tile]) -> float:
+def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: TilePlanInterface, originalNegativeTiles: typing.Set[Tile]) -> float:
     # rating = max(0, path.value) ** 0.5
     rating = 0
     first = path.get_first_move().source
@@ -2054,7 +2075,7 @@ def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: Pat
 
 def find_optimal_expansion_path_to_move_first(
         map,
-        maxPaths,
+        maxPaths: typing.List[TilePlanInterface],
         negativeTiles,
         originalNegativeTiles,
         postPathEvalFunction,
@@ -2062,8 +2083,8 @@ def find_optimal_expansion_path_to_move_first(
         searchingPlayer,
         friendlyPlayers,
         territoryMap,
-        valueOverrides: typing.Dict[Path, typing.Tuple[float, int]] | None = None,
-) -> Path | None:
+        valueOverrides: typing.Dict[TilePlanInterface, typing.Tuple[float, int]] | None = None,
+) -> TilePlanInterface | None:
 
     # playerCities = list(map.players[searchingPlayer].cities)
     # if map.players[searchingPlayer].general is not None:
@@ -2073,13 +2094,13 @@ def find_optimal_expansion_path_to_move_first(
     for p in maxPaths:
         if valueOverrides is not None and p in valueOverrides:
             continue
-        shouldWaitDueToCities = path_has_cities_and_should_wait(
+        shouldWait = p.requiredDelay > 0 or path_has_cities_and_should_wait(
             p,
             friendlyPlayers,
             negativeTiles,
             territoryMap,
             remainingTurns)
-        if shouldWaitDueToCities:
+        if shouldWait:
             waitingPaths.add(p)
 
     sumWaiting = 0
@@ -2116,6 +2137,8 @@ def find_optimal_expansion_path_to_move_first(
             else:
                 logbook.info(
                     f'    waiting on city path uncert{thisUncertainty:.2f} v{thisVal:.2f} > uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)} because path_has_cities_and_should_wait')
+        else:
+            logbook.info(f'    -path uncert{thisUncertainty:.2f} v{thisVal:.2f} < uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)}')
 
     return path
 
@@ -2133,6 +2156,8 @@ def _prune_worst_paths_greedily(
             count += 1
     avg = sum / count
 
+    cutoff = avg - 0.15
+
     newDict = {}
     for group in valuePerTurnPathPerTile.keys():
         pathListByGroup = valuePerTurnPathPerTile[group]
@@ -2140,7 +2165,7 @@ def _prune_worst_paths_greedily(
         for path in pathListByGroup:
             value, dist = valueFunc(path)
             valPerTurn = value / dist
-            if valPerTurn > avg:
+            if valPerTurn > cutoff:
                 newListByGroup.append(path)
         if len(newListByGroup) > 0:
             newDict[group] = newListByGroup
@@ -2150,15 +2175,10 @@ def _prune_worst_paths_greedily(
 
 def expansion_knapsack_gather_iteration(
         turns: int,
-        valuePerTurnPathPerTile: typing.Dict[typing.Any, typing.List[Path]],
+        valuePerTurnPathPerTile: typing.Dict[typing.Any, typing.List[TilePlanInterface]],
         shouldLog: bool = False,
-        valueFunc: typing.Callable[[Path], typing.Tuple[int, int]] | None = None,
-) -> typing.Tuple[int, typing.List[Path]]:
-    if valueFunc is None:
-        def value_func(p: Path) -> typing.Tuple[int, int]:
-            return p.value, p.length
-        valueFunc = value_func
-
+        valueFunc: typing.Callable[[TilePlanInterface], typing.Tuple[int, int]] | None = None,
+) -> typing.Tuple[int, typing.List[TilePlanInterface]]:
     totalValue = 0
     maxKnapsackedPaths = []
     pathValLookup = {}

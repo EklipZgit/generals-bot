@@ -66,6 +66,11 @@ class MapMatrix(Generic[T]):
 
         return myClone
 
+    def negate(self):
+        for x in range(self.map.cols):
+            for y in range(self.map.rows):
+                self._grid[x][y] = 0 - self._grid[x][y]
+
     def __delitem__(self, key: Tile):
         self._grid[key.x][key.y] = self.init_val
 
@@ -77,6 +82,28 @@ class MapMatrix(Generic[T]):
 
     def __repr__(self) -> str:
         return str(self)
+
+    @classmethod
+    def get_summed(cls, matrices: typing.List[MapMatrix[float]]) -> MapMatrix[float]:
+        newMatrix = matrices[0].copy()
+        for matrix in matrices[1:]:
+            for x in range(newMatrix.map.cols):
+                for y in range(newMatrix.map.rows):
+                    newMatrix._grid[x][y] += matrix._grid[x][y]
+
+        return newMatrix
+
+    @classmethod
+    def add_to_matrix(cls, matrixToModify: MapMatrix[float], matrixToAdd: MapMatrix[float]):
+        for x in range(matrixToModify.map.cols):
+            for y in range(matrixToModify.map.rows):
+                matrixToModify._grid[x][y] += matrixToAdd._grid[x][y]
+
+    @classmethod
+    def subtract_from_matrix(cls, matrixToModify: MapMatrix[float], matrixToSubtract: MapMatrix[float]):
+        for x in range(matrixToModify.map.cols):
+            for y in range(matrixToModify.map.rows):
+                matrixToModify._grid[x][y] -= matrixToSubtract._grid[x][y]
 
 
 class MapMatrixFlat(Generic[T]):

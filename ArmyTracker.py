@@ -178,6 +178,9 @@ class ArmyTracker(object):
         self.uneliminated_emergence_events: typing.List[typing.Dict[Tile, int]] = [{} for player in self.map.players]
         """The set of emergence events that have resulted in general location restrictions in the past and have not been dropped in favor of more restrictive restrictions."""
 
+        self.uneliminated_emergence_event_city_perfect_info: typing.List[typing.Set[Tile]] = [set() for player in self.map.players]
+        """Whether a given emergence event had perfect city info or not."""
+
         self.seen_player_lookup: typing.List[bool] = [False for player in self.map.players]
         """Whether a player has been seen."""
 
@@ -1874,21 +1877,46 @@ class ArmyTracker(object):
         pathA = ArmyTracker.get_army_expected_path_non_flank(map, army, general, playerTargets)
         pathB = ArmyTracker.get_army_expected_path_flank(map, army, general)
 
+        matrices = []
+        if not pathA and not pathB:
+            matrices.append(map.distance_mapper.get_tile_dist_matrix(general))
+
         paths = []
-        if pathA is not None:
+        if pathA is not None and pathA.length > 0:
             paths.append(pathA)
-        if pathB is not None and not SearchUtils.any_where(paths, lambda p: p.tail.tile == pathB.tail.tile):
+            matrices.append(map.distance_mapper.get_tile_dist_matrix(pathA.tail.tile))
+        if pathB is not None and pathB.length > 0 and not SearchUtils.any_where(paths, lambda p: p.tail.tile == pathB.tail.tile):
             paths.append(pathB)
             if pathB.length > 2:
                 pathC = ArmyTracker.get_army_expected_path_flank(map, army, general, skipTiles=pathB.tileList[3:])
-                if pathC is not None and pathC.tail.tile != pathB.tail.tile:
+                if pathC is not None and pathC.length > 0 and pathC.tail.tile != pathB.tail.tile:
                     paths.append(pathC)
-        pathD = ArmyTracker.get_expected_enemy_expansion_path(map, army.tile, general, negativeTiles=set(itertools.chain.from_iterable(p.tileList for p in paths)), maxTurns=remainingCycleTurns)
-        if pathD is not None:
+                    matrices.append(map.distance_mapper.get_tile_dist_matrix(pathC.tail.tile))
+            matrices.append(map.distance_mapper.get_tile_dist_matrix(pathB.tail.tile))
+        summed = MapMatrix.get_summed(matrices)
+        # summed.negate()
+        pathD = ArmyTracker.get_expected_enemy_expansion_path(map, army.tile, general, negativeTiles=set(itertools.chain.from_iterable(p.tileList for p in paths)), maxTurns=remainingCycleTurns, prioMatrix=summed)
+        if pathD is not None and pathD.length > 0:
             paths.append(pathD)
-            pathE = ArmyTracker.get_expected_enemy_expansion_path(map, army.tile, general, negativeTiles=set(itertools.chain.from_iterable(p.tileList for p in paths)), distPrioTile=pathD.tail.tile, maxTurns=remainingCycleTurns)
-            if pathE is not None:
+            # MapMatrix.subtract_from_matrix(summed, map.distance_mapper.get_tile_dist_matrix(pathD.tail.tile))
+            MapMatrix.add_to_matrix(summed, map.distance_mapper.get_tile_dist_matrix(pathD.tail.tile))
+            pathE = ArmyTracker.get_expected_enemy_expansion_path(map, army.tile, general, negativeTiles=set(itertools.chain.from_iterable(p.tileList for p in paths)), maxTurns=max(20, remainingCycleTurns), prioMatrix=summed)
+            if pathE is not None and pathE.length > 0:
                 paths.append(pathE)
+
+        if len(paths) > 1:
+            secondTile = paths[0].tileList[1]
+            noAltExits = True
+            for otherPath in paths[1:]:
+                if otherPath.tileList[1] != secondTile:
+                    noAltExits = False
+                    break
+            if noAltExits:
+                skips = {secondTile}
+
+                pathF = ArmyTracker.get_expected_enemy_expansion_path(map, army.tile, general, negativeTiles=set(itertools.chain.from_iterable(p.tileList for p in paths)), prioMatrix=summed, maxTurns=remainingCycleTurns, skipTiles=skips)
+                if pathF is not None and pathF.length > 0:
+                    paths.append(pathF)
 
         return paths
 
@@ -1962,6 +1990,19 @@ class ArmyTracker(object):
 
         if path is None:
             return None
+            # path = SearchUtils.breadth_first_find_queue(
+            #     map,
+            #     [army.tile],
+            #     # goalFunc=lambda tile, armyAmt, dist: armyAmt + tile.army > 0 and tile in player_targets,  # + tile.army so that we find paths that reach tiles regardless of killing them.
+            #     goalFunc=goalFunc,
+            #     prioFunc=lambda t: (not t.visible, t.player == army.player, t.army if t.player == army.player else 0 - t.army),
+            #     skipTiles=skip,
+            #     maxTime=0.1,
+            #     maxDepth=23,
+            #     noNeutralCities=army.tile.army < 150,
+            #     searchingPlayer=army.player,
+            #     noLog=True)
+
         return path.get_positive_subsegment(forPlayer=army.player, teams=MapBase.get_teams_array(map))
 
     @classmethod
@@ -2405,8 +2446,9 @@ class ArmyTracker(object):
         if mustReLimit:
             for p, playerElims in enumerate(self.uneliminated_emergence_events):
                 for prevElimTile, prevElimDist in playerElims.items():
+                    cityPerfectInfo = prevElimTile in self.uneliminated_emergence_event_city_perfect_info[p]
                     logbook.info(f'RE-eliminating p{p} t{prevElimTile} d{prevElimDist}')
-                    self._limit_general_position_to_within_tile_and_distance(p, prevElimTile, prevElimDist, alsoIncreaseEmergence=False)  # alsoIncreaseEmergence=self.map.turn < 56)
+                    self._limit_general_position_to_within_tile_and_distance(p, prevElimTile, prevElimDist, alsoIncreaseEmergence=False, overrideCityPerfectInfo=cityPerfectInfo)  # alsoIncreaseEmergence=self.map.turn < 56)
 
         for tile in self._flipped_tiles:
             for p in self.map.players:
@@ -2516,21 +2558,29 @@ class ArmyTracker(object):
         for player in recheckPlayers:
             self._check_over_elimination(player)
 
-    def _limit_general_position_to_within_tile_and_distance(self, player: int, tile: Tile, maxDist: int, alsoIncreaseEmergence: bool = True, skipIfLongerThanExisting: bool = False):
+    def _limit_general_position_to_within_tile_and_distance(self, player: int, tile: Tile, maxDist: int, alsoIncreaseEmergence: bool = True, skipIfLongerThanExisting: bool = False, overrideCityPerfectInfo: bool | None = None):
         existingLimit = self.uneliminated_emergence_events[player].get(tile, None)
+       
         if skipIfLongerThanExisting and existingLimit is not None and existingLimit <= maxDist:
             logbook.info(f'bypassing {str(tile)} @ dist {maxDist} because it is longer or equal to existing limit for that tile at dist {existingLimit}')
             return
 
-        elims = self._limit_general_position_to_within_tiles_and_distance(player, [tile], maxDist, alsoIncreaseEmergence)
+        elims = self._limit_general_position_to_within_tiles_and_distance(player, [tile], maxDist, alsoIncreaseEmergence, overrideCityPerfectInfo=overrideCityPerfectInfo)
 
         if elims > 0 and (existingLimit is None or existingLimit > maxDist):
             logbook.info(f'including new elim p{player} {str(tile)} at dist {maxDist} which eliminated {elims}')
             self.uneliminated_emergence_events[player][tile] = maxDist
+            cityPerfectInfo = overrideCityPerfectInfo
+            if cityPerfectInfo is None: 
+                cityPerfectInfo = self.has_perfect_information_of_player_cities(player)
+            if cityPerfectInfo:
+                self.uneliminated_emergence_event_city_perfect_info[player].add(tile)
+            else:
+                self.uneliminated_emergence_event_city_perfect_info[player].discard(tile)
 
         self._check_over_elimination(player)
 
-    def _limit_general_position_to_within_tiles_and_distance(self, player: int, tiles: typing.List[Tile], maxDist: int, alsoIncreaseEmergence: bool = True) -> int:
+    def _limit_general_position_to_within_tiles_and_distance(self, player: int, tiles: typing.List[Tile], maxDist: int, alsoIncreaseEmergence: bool = True, overrideCityPerfectInfo: bool | None = None) -> int:
         validSet = set()
 
         # ONLY USE FOR EMERGENCE
@@ -2543,7 +2593,9 @@ class ArmyTracker(object):
             emFactor = 50
             divOffset = 3
 
-        hasPerfectInfoOfPlayerCities = self.has_perfect_information_of_player_cities(player)
+        hasPerfectInfoOfPlayerCities = overrideCityPerfectInfo
+        if hasPerfectInfoOfPlayerCities is None:
+            hasPerfectInfoOfPlayerCities = self.has_perfect_information_of_player_cities(player)
 
         def limiter(t: Tile, dist: int):
             if not self.valid_general_positions_by_player[player][t]:
@@ -2763,10 +2815,14 @@ class ArmyTracker(object):
 
         return bisectCandidates, bisectDistances, bisectPaths
 
-    def has_perfect_information_of_player_cities(self, player: int) -> bool:
+    def has_perfect_information_of_player_cities(self, player: int, overrideCities: int | None = None) -> bool:
         mapPlayer = self.map.players[player]
         realCities = where(mapPlayer.cities, lambda c: c.discovered)
-        return len(realCities) >= mapPlayer.cityCount - 1
+        cityCount = overrideCities
+        if cityCount is None:
+            cityCount = mapPlayer.cityCount
+            
+        return len(realCities) >= cityCount - 1
 
     def try_split_fogged_army_back_into_fog(self, army: Army, trackingArmies: typing.Dict[Tile, Army]):
         potential = []
@@ -3177,10 +3233,11 @@ class ArmyTracker(object):
             general: Tile,
             negativeTiles: typing.Container[Tile] | None = None,
             maxTurns: int = 45,
-            distPrioTile: Tile | None = None
+            prioMatrix: MapMatrix | None = None,
+            skipTiles: typing.Container[Tile] | None = None,
     ) -> Path | None:
-        if distPrioTile is None:
-            distPrioTile = general
+        if prioMatrix is None:
+            prioMatrix = map.distance_mapper.get_tile_dist_matrix(general)
 
         def valueFunc(curTile, prioObj):
             dist, negCaps, negArmy, negPrioDist = prioObj
@@ -3191,8 +3248,10 @@ class ArmyTracker(object):
 
             # prefer one or two negative tiles if they get us to larger patches of capturable material (finds longer more realistic paths)
             weightedDist = dist + 2
+            # weightedDist = dist
             distDiff = maxTurns - dist
-            if distDiff < 4 and negArmy < -10:  # and negPrioDist > -6
+            # if distDiff < 4 and negArmy < -10:  # and negPrioDist > -6
+            if distDiff < 4 or negArmy > -10:  # and negPrioDist > -6
                 weightedDist = dist
 
             val = (0 - negCaps / weightedDist, 0-negPrioDist, dist)
@@ -3204,7 +3263,7 @@ class ArmyTracker(object):
             if negArmy > 0:
                 return None
 
-            prioDist = map.get_distance_between(distPrioTile, nextTile)
+            prioDist = prioMatrix._grid[nextTile.x][nextTile.y]
             # if prioDist is None:
             #     return None
 
@@ -3218,19 +3277,23 @@ class ArmyTracker(object):
                     else:
                         negCaps -= 0.7
 
-            negCaps -= 0.000001 * dist
+            negCaps -= 0.03 * prioDist - 0.10
+            # negCaps -= 0.00001 * dist
+
             negArmy += 1
 
             return dist+1, negCaps, negArmy, 0-prioDist
 
+        initDist = prioMatrix._grid[enTile.x][enTile.y]
         path = SearchUtils.breadth_first_dynamic_max(
             map,
-            {enTile: ((0, 0, 0 - enTile.army + 1, map.get_distance_between(distPrioTile, enTile)), 0)},
+            {enTile: ((0, 0, 0 - enTile.army + 1, 0-initDist), 0)},
             maxDepth=maxTurns,
             valueFunc=valueFunc,
             priorityFunc=prioFunc,
             searchingPlayer=enTile.player,
             noNeutralCities=True,
+            skipTiles=skipTiles,
         )
 
         return path

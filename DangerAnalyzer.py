@@ -210,15 +210,19 @@ class DangerAnalyzer(object):
             addIfNotDuplicate(self.fastestThreat)
         if self.highestThreat is not None:
             addIfNotDuplicate(self.highestThreat)
+        # skip vision threat if we already included the general threats
+        if len(threatLookup) == 0 and includeVisionThreat and self.fastestVisionThreat is not None:
+            addIfNotDuplicate(self.fastestVisionThreat)
         if self.fastestCityThreat is not None:
             addIfNotDuplicate(self.fastestCityThreat)
         if self.fastestAllyThreat is not None:
             addIfNotDuplicate(self.fastestAllyThreat)
         if includePotentialThreat and self.fastestPotentialThreat is not None:
             addIfNotDuplicate(self.fastestPotentialThreat)
-        if includeVisionThreat and self.fastestVisionThreat is not None:
-            addIfNotDuplicate(self.fastestVisionThreat)
 
+        countCity = 0
+        countGen = 0
+        countExpansion = 0
         for threatStart, threatList in threatLookup.items():
             army = armies.get(threatStart, None)
             if army is None:
@@ -227,14 +231,32 @@ class DangerAnalyzer(object):
             added = tailLookup.get(threatStart)
 
             for path in army.expectedPaths:
+                if path.length <= 0:
+                    continue
                 if path.start.tile == threatStart:
                     if path.tail.tile not in added:
+                        if path.tail.tile.isGeneral:
+                            countGen += 1
+                            if countGen > 2:
+                                logbook.info(f'bypassing {countGen}+ general threat {path}')
+                                continue
+                        elif path.tail.tile.isCity:
+                            countCity += 1
+                            if countCity > 2:
+                                logbook.info(f'bypassing {countGen}+ city threat {path}')
+                                continue
+                        else:
+                            countExpansion += 1
+                            if countExpansion > 3:
+                                logbook.info(f'bypassing {countGen}+ expansion threat {path}')
+                                continue
+
                         added.add(path.tail.tile)
                         threat = ThreatObj(path.length - 1, path.value, path, ThreatType.Econ, None)
                         threatList.append(threat)
 
         if alwaysIncludeArmy or alwaysIncludeRecentlyMoved or includeArmiesWithThreats:
-            for army in armies.values():
+            for army in sorted(armies.values(), key=lambda a: a.value, reverse=True):
                 threatStart = army.tile
                 if self.map.is_player_on_team_with(army.player, self.map.player_index):
                     continue
@@ -262,8 +284,25 @@ class DangerAnalyzer(object):
                         if p is not None:
                             army.expectedPaths.append(p)
                     for path in army.expectedPaths:
+                        if path.length <= 0:
+                            continue
                         if path.start.tile == threatStart:
                             if path.tail.tile not in added:
+                                if path.tail.tile.isGeneral:
+                                    countGen += 1
+                                    if countGen > 3:
+                                        logbook.info(f'bypassing {countGen}+ general threat {path}')
+                                        continue
+                                elif path.tail.tile.isCity:
+                                    countCity += 1
+                                    if countCity > 3:
+                                        logbook.info(f'bypassing {countGen}+ city threat {path}')
+                                        continue
+                                else:
+                                    countExpansion += 1
+                                    if countExpansion > 5:
+                                        logbook.info(f'bypassing {countGen}+ expansion threat {path}')
+                                        continue
                                 added.add(path.tail.tile)
                                 threat = ThreatObj(path.length - 1, path.value, path, ThreatType.Econ, None)
                                 threatList.append(threat)

@@ -56,3 +56,40 @@ class OffensiveMicroTests(TestBase):
 
         self.assertGreaterEqual(12, playerMap.GetTile(12, 11).army, 'should have split to cap land even at slight econ loss when ahead on round caps')
         self.assertGreaterEqual(12, playerMap.GetTile(11, 11).army, 'should have split to cap land even at slight econ loss when ahead on round caps')
+
+    def test_should_not_split_randomly(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_split_randomly___-Zrosee5X---0--81.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 81, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=137)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+
+    
+    def test_should_race_when_cant_defend_and_high_kill_probability(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_race_when_cant_defend_and_high_kill_probability___1lZK5xvmU---1--342.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 342, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=342)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+
+        self.skipTest("TODO add asserts for should_race_when_cant_defend_and_high_kill_probability")

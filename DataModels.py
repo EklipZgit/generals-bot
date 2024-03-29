@@ -107,6 +107,19 @@ class GatherTreeNode(typing.Generic[T]):
             return False
         return self.tile == other.tile
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+
+        if 'fromGather' in state:
+            del state['fromGather']
+
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        for child in self.children:
+            child.fromGather = self
+
     def deep_clone(self):
         newNode = GatherTreeNode(self.tile, self.fromTile, self.stateObj)
         newNode.value = self.value

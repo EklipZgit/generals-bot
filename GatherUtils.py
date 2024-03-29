@@ -123,10 +123,43 @@ class GatherCapturePlan(TilePlanInterface):
         return self._requiredDelay
 
     def get_first_move(self) -> Move:
-        return get_tree_move(self.root_nodes, None, self.value_func)
+        if self.value_func:
+            return get_tree_move(self.root_nodes, self.value_func)
+        else:
+            return Move(self.tileList[0], self.tileList[1])
 
     def pop_first_move(self) -> Move:
-        return get_tree_move(self.root_nodes, None, self.value_func, pop=True)
+        if self.value_func:
+            return get_tree_move(self.root_nodes, self.value_func, pop=True)
+        else:
+            raise AssertionError(f'cannot call pop move when value_func is null (after pickling)')
+
+    def get_move_list(self) -> typing.List[Move]:
+        if self.value_func:
+            return get_tree_moves(self.root_nodes, self.value_func)
+        else:
+            raise AssertionError(f'cannot call get_move_list when value_func is null (after pickling)')
+
+    def __getstate__(self):
+        tileList = self.tileList
+        tileSet = self.tileSet
+        state = self.__dict__.copy()
+
+        # if 'notify_unresolved_army_emerged' in state:
+        #     del state['notify_unresolved_army_emerged']
+
+        if 'value_func' in state:
+            del state['value_func']
+        #
+        # if 'perf_timer' in state:
+        #     del state['perf_timer']
+
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.notify_unresolved_army_emerged = []
+        self.notify_army_moved = []
 
     def __str__(self):
         return f'{self.value:.2f}v/{self._turns}t ({self._value / max(1, self._turns):.2f}vt), armyGath {self.gather_turns}, bM {self.best_case_intercept_moves}, del {self.requiredDelay}, path {self.path}'

@@ -1168,29 +1168,33 @@ class CityGatherTests(TestBase):
     
     def test_should_be_able_to_recapture_large_city_cluster(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/should_be_able_to_recapture_large_city_cluster___SIA0U-TNH---1--280.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 280, fill_out_tiles=True)
+        for keepsMoving in [True, False]:
+            with self.subTest(keepsMoving=keepsMoving):
+                mapFile = 'GameContinuationEntries/should_be_able_to_recapture_large_city_cluster___SIA0U-TNH---1--280.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 280, fill_out_tiles=True)
 
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=280)
-        
-        self.enable_search_time_limits_and_disable_debug_asserts()
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-        simHost.queue_player_moves_str(enemyGeneral.player, '3,5->4,5->5,5->5,4')
-        bot = self.get_debug_render_bot(simHost, general.player)
-        playerMap = simHost.get_player_map(general.player)
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=280)
 
-        self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=16)
-        self.assertIsNone(winner)
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, '3,5->4,5->5,5->5,4')
+                if keepsMoving:
+                    simHost.queue_player_moves_str(enemyGeneral.player, '5,4->5,5->4,5->4,4->5,4->5,5->4,5->4,4->5,4->5,5->4,5->4,4->5,4->5,5->4,5->4,4')
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
 
-        cities = [
-            playerMap.GetTile(4, 5),
-            playerMap.GetTile(5, 5),
-            playerMap.GetTile(5, 4),
-        ]
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=16)
+                self.assertIsNone(winner)
 
-        for city in cities:
-            self.assertEqual(general.player, city.player)
+                cities = [
+                    playerMap.GetTile(4, 5),
+                    playerMap.GetTile(5, 5),
+                    playerMap.GetTile(5, 4),
+                ]
+
+                for city in cities:
+                    self.assertEqual(general.player, city.player)
     
     def test_should_take_a_city_wtf(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True

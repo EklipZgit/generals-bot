@@ -1235,6 +1235,13 @@ class TestBase(unittest.TestCase):
                 raise AssertionError(f'unable to manipulate tiles, no tiles were able to be altered.')
         tile.army = newArmy
 
+    def update_tile_in_place(self, map: MapBase, tile: Tile, newPlayer: int, newArmy: int):
+        if tile.player != -1 and tile.player != newPlayer:
+            raise NotImplementedError('havent implemented converting one players tiles to the others yet, as need to increase old players other army to compensate')
+
+        tile.player = newPlayer
+        self.update_tile_army_in_place(map, tile, newArmy)
+
     def add_lag_on_turns(self, simHost: GameSimulatorHost, lagTurns: typing.List[int], forPlayer: int | None = None):
         if forPlayer is None:
             forPlayer = simHost.sim.sim_map.player_index
@@ -1562,6 +1569,7 @@ class TestBase(unittest.TestCase):
             if vt > bestVt:
                 logbook.info(f'NEW BEST INTERCEPT OPT {val:.2f}/{dist} -- {str(path)}')
                 bestOpt = option
+                bestVt = vt
 
         return bestOpt
 
@@ -1658,6 +1666,76 @@ class TestBase(unittest.TestCase):
 
         return bestOpt, bestOptAmt, bestOptDist
 
+    def get_interceptor_option_by_coords(
+            self,
+            plan: ArmyInterception,
+            xStart: int | None = None,
+            yStart: int | None = None,
+            xEnd: int | None = None,
+            yEnd: int | None = None,
+    ) -> InterceptionOptionInfo:
+        """
+        Returns Path, value, turnsUsed if a path is found that starts and ends at those positions
+
+        @param plan:
+        @param xStart:
+        @param yStart:
+        @param xEnd:
+        @param yEnd:
+        @return:
+        """
+
+        bestOpt = self.get_interceptor_option_by_coords_or_none(plan, xStart, yStart, xEnd, yEnd)
+
+        if bestOpt is None:
+            self.fail(f'No intercept option found for xStart {xStart}, yStart {yStart}, xEnd {xEnd}, yEnd {yEnd}')
+
+        return bestOpt
+
+    def get_interceptor_option_by_coords_or_none(
+            self,
+            plan: ArmyInterception,
+            xStart: int | None = None,
+            yStart: int | None = None,
+            xEnd: int | None = None,
+            yEnd: int | None = None,
+    ) -> InterceptionOptionInfo | None:
+        """
+        Returns Path, value, turnsUsed if a path is found that starts and ends at those positions
+
+        @param plan:
+        @param xStart:
+        @param yStart:
+        @param xEnd:
+        @param yEnd:
+        @return:
+        """
+
+        bestOpt = None
+        bestOptAmt = 0
+        bestOptDist = 0
+        maxVt = -1000
+
+        for dist, option in plan.intercept_options.items():
+            val = option.value
+            path = option.path
+            if xStart is not None and path.start.tile.x != xStart:
+                continue
+            if yStart is not None and path.start.tile.y != yStart:
+                continue
+            if xEnd is not None and path.tail.tile.x != xEnd:
+                continue
+            if yEnd is not None and path.tail.tile.y != yEnd:
+                continue
+
+            vt = val/dist
+            if vt > maxVt:
+                logbook.info(f'NEW BEST INTERCEPT OPT {val:.2f}/{dist} -- {str(path)}')
+                bestOpt = option
+                maxVt = vt
+
+        return bestOpt
+
     def render_intercept_plan(self, map: MapBase, plan: ArmyInterception, colorIndex: int = 0, renderIndividualAnalysis: bool = False):
         viewInfo = self.get_renderable_view_info(map)
         targetStyle = TargetStyle(colorIndex + 2)
@@ -1714,7 +1792,7 @@ class TestBase(unittest.TestCase):
                 255,
                 10,
                 255,
-                alpha=10
+                alpha=100
             ))
 
         if maxOpt is not None:

@@ -85,11 +85,14 @@ class MapMatrix(Generic[T]):
 
     @classmethod
     def get_summed(cls, matrices: typing.List[MapMatrix[float]]) -> MapMatrix[float]:
+        if len(matrices) == 0:
+            raise AssertionError('cant sum zero matrices')
         newMatrix = matrices[0].copy()
-        for matrix in matrices[1:]:
-            for x in range(newMatrix.map.cols):
-                for y in range(newMatrix.map.rows):
-                    newMatrix._grid[x][y] += matrix._grid[x][y]
+        if len(matrices) > 1:
+            for matrix in matrices[1:]:
+                for x in range(newMatrix.map.cols):
+                    for y in range(newMatrix.map.rows):
+                        newMatrix._grid[x][y] += matrix._grid[x][y]
 
         return newMatrix
 

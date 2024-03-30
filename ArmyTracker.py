@@ -948,6 +948,8 @@ class ArmyTracker(object):
 
             logbook.info(f"running new_army_emerged for tile {str(emergedTile)} with emValueScaled {armyEmergenceScaledToTurns:.2f}, distance {distance}")
 
+            # bannedTiles, connectedTiles, pathToUnelim = self.get_fog_connected_based_on_emergences(emergingPlayer, predictedGeneralLocation=None, additionalRequiredTiles=[emergedTile])
+
             def foreachFunc(tile, dist):
                 if not tile.discovered:
                     distCapped = max(4, dist)
@@ -1878,8 +1880,6 @@ class ArmyTracker(object):
         pathB = ArmyTracker.get_army_expected_path_flank(map, army, general)
 
         matrices = []
-        if not pathA and not pathB:
-            matrices.append(map.distance_mapper.get_tile_dist_matrix(general))
 
         paths = []
         if pathA is not None and pathA.length > 0:
@@ -1893,6 +1893,9 @@ class ArmyTracker(object):
                     paths.append(pathC)
                     matrices.append(map.distance_mapper.get_tile_dist_matrix(pathC.tail.tile))
             matrices.append(map.distance_mapper.get_tile_dist_matrix(pathB.tail.tile))
+
+        if len(matrices) == 0:
+            matrices.append(map.distance_mapper.get_tile_dist_matrix(general))
         summed = MapMatrix.get_summed(matrices)
         # summed.negate()
         pathD = ArmyTracker.get_expected_enemy_expansion_path(map, army.tile, general, negativeTiles=set(itertools.chain.from_iterable(p.tileList for p in paths)), maxTurns=remainingCycleTurns, prioMatrix=summed)
@@ -2367,9 +2370,6 @@ class ArmyTracker(object):
     def _handle_flipped_tiles(self):
         """To be called every time a tile is flipped from one owner to another owner."""
 
-        def limitSpawnAroundOtherGen(t: Tile):
-            self.valid_general_positions_by_player[player.index][t] = False
-
         for tile in self._flipped_tiles:
             if tile.player == -1 and not tile.isMountain and not tile.isCity and tile.delta.discovered:
                 self.tile_discovered_neutral(tile)
@@ -2428,6 +2428,9 @@ class ArmyTracker(object):
 
                                 SearchUtils.breadth_first_foreach(self.map, [tile], 1000, foreachFunc=limitSpawnAroundAllyGen, bypassDefaultSkip=True)
                             continue
+
+                        def limitSpawnAroundOtherGen(t: Tile):
+                            self.valid_general_positions_by_player[player.index][t] = False
 
                         SearchUtils.breadth_first_foreach(self.map, [tile], self.min_spawn_distance, foreachFunc=limitSpawnAroundOtherGen, bypassDefaultSkip=True)
 
@@ -2597,16 +2600,14 @@ class ArmyTracker(object):
         if hasPerfectInfoOfPlayerCities is None:
             hasPerfectInfoOfPlayerCities = self.has_perfect_information_of_player_cities(player)
 
-        def limiter(t: Tile, dist: int):
-            if not self.valid_general_positions_by_player[player][t]:
-                return
-
-            validSet.add(t)
-            if alsoIncreaseEmergence:
-                launchDistDiff = abs(launchDist - dist)
-                launchDistFactor = (divOffset + launchDistDiff)
-                launchEmergence = emFactor // launchDistFactor
-                self.emergenceLocationMap[player][t] += launchEmergence
+        def limiter(t: Tile, dist: int) -> bool:
+            if self.valid_general_positions_by_player[player][t]:
+                validSet.add(t)
+                if alsoIncreaseEmergence:
+                    launchDistDiff = abs(launchDist - dist)
+                    launchDistFactor = (divOffset + launchDistDiff)
+                    launchEmergence = emFactor // launchDistFactor
+                    self.emergenceLocationMap[player][t] += launchEmergence
             if t.discoveredAsNeutral and t not in self.tiles_ever_owned_by_player[player]:  # and (t.visible or self.map.turn < 50)   # should be solved without the visible check by adding the lost-sight-ever-owned-by-player hack to allow pathing through the fog now.
                 return True
             if (t.isCity and t.player == -1 and (t.visible or hasPerfectInfoOfPlayerCities)) or t.isMountain or (t.isUndiscoveredObstacle and hasPerfectInfoOfPlayerCities) or t.isGeneral:
@@ -2999,70 +3000,8 @@ class ArmyTracker(object):
             playerExpectedFogTileCounts: typing.Dict[int, int],
             predictedGeneralLocation: Tile | None
     ):
-        bannedTiles = MapMatrixSet(self.map)
-        bannedTileList = []
-
         ourGen = self.map.generals[self.map.player_index]
-        tilesEverOwned = self.tiles_ever_owned_by_player[player]
-        uneliminated = self.uneliminated_emergence_events[player]
-
-        validGenSpots = self.valid_general_positions_by_player[player]
-
-        for tile in self.map.get_all_tiles():
-            if tile not in uneliminated and tile not in tilesEverOwned and (tile.discoveredAsNeutral or tile.visible):
-                bannedTiles.add(tile)
-                bannedTileList.append(tile)
-
-        requiredTiles = []
-        requiredIncluded = set()
-
-        for tile in tilesEverOwned:
-            if tile.isNotPathable:
-                continue
-            requiredIncluded.add(tile)
-            requiredTiles.append(tile)
-
-        for tile in uneliminated.keys():
-            if tile not in requiredIncluded:
-                requiredIncluded.add(tile)
-                requiredTiles.append(tile)
-        #
-        # # find the closest un-eliminated valid general location:
-        # pathToUnelim = SearchUtils.breadth_first_find_queue(self.map, requiredTiles, lambda t, _1, _2: validGenSpots[t], noNeutralCities=True)
-        # if pathToUnelim is not None and pathToUnelim.tail.tile not in requiredIncluded:
-        #     requiredIncluded.add(pathToUnelim.tail.tile)
-        #     requiredTiles.append(pathToUnelim.tail.tile)
-
-        if len(requiredTiles) == 0:
-            logbook.warn(f'ArmyTracker found no tiles to build fog land from for player {player}')
-            return
-
-        with self.perf_timer.begin_move_event(f'Fog land build get_map_as_graph_from_tiles p{player} (num banned {len(bannedTileList)}, required {len(requiredTiles)})'):
-            connectedSet, missingRequired = MapSpanningUtils.get_spanning_tree_matrix_from_tile_lists(self.map, requiredTiles, bannedTileList)
-            connectedTiles = [t for t in connectedSet]
-            self.unconnectable_tiles[player] = missingRequired
-        # with self.perf_timer.begin_move_event(f'ArmyTracker build_network_x_steiner_tree p{player} (num banned {len(bannedTileList)}, required {len(requiredTiles)})'):
-        #     connectedTiles = GatherSteiner.build_network_x_steiner_tree(self.map, requiredTiles, bannedTiles=bannedTiles)
-        self.player_connected_tiles[player] = connectedSet
-
-        # TODO this was just bad, why did I add it?
-        # if self.map.players[player].cityCount == 1:
-        #     with self.perf_timer.begin_move_event(f'Fog land build add_emergence_around_minimum_connected_tree p{player}'):
-        #         self.add_emergence_around_minimum_connected_tree(connectedTiles, requiredTiles, player)
-
-        with self.perf_timer.begin_move_event(f'Fog land build connecting to valid gen spawn p{player}'):
-            pathToUnelim: Path | None = None
-            if predictedGeneralLocation is not None:
-                if predictedGeneralLocation not in connectedSet:
-                    pathToUnelim = SearchUtils.breadth_first_find_queue(self.map, connectedTiles, lambda t, _1, _2: t == predictedGeneralLocation, noNeutralCities=True, skipTiles=bannedTiles, noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
-                # find the closest un-eliminated valid general location:
-                if pathToUnelim is None:
-                    pathToUnelim = SearchUtils.breadth_first_find_queue(self.map, connectedTiles, lambda t, _1, _2: validGenSpots[t], noNeutralCities=True, skipTiles=bannedTiles, noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
-            if pathToUnelim is not None:
-                for tile in pathToUnelim.tileList:
-                    if tile not in connectedSet:
-                        connectedSet.add(tile)
-                        connectedTiles.append(tile)
+        bannedTiles, connectedTiles, pathToUnelim = self.get_fog_connected_based_on_emergences(player, predictedGeneralLocation)
 
         keep = []
         for tile in self.map.players[player].tiles:
@@ -3090,6 +3029,72 @@ class ArmyTracker(object):
             tempPredictions = self._fill_land_from_connected_tiles_for_player(player, bannedTiles, connectedDark, connectedTiles, numStartTilesToFill, numTilesToFillIn, ourGen, pathToUnelim, playerExpectedFogTileCounts, tilesToConvertToTempPlayer)
 
         self.map.players[player].tiles.extend(tempPredictions)
+
+    def get_fog_connected_based_on_emergences(self, player, predictedGeneralLocation, additionalRequiredTiles: typing.Iterable[Tile] | None = None):
+        bannedTiles = MapMatrixSet(self.map)
+        bannedTileList = []
+        tilesEverOwned = self.tiles_ever_owned_by_player[player]
+        uneliminated = self.uneliminated_emergence_events[player]
+        validGenSpots = self.valid_general_positions_by_player[player]
+        for tile in self.map.get_all_tiles():
+            if tile not in uneliminated and tile not in tilesEverOwned and (tile.discoveredAsNeutral or tile.visible):
+                bannedTiles.add(tile)
+                bannedTileList.append(tile)
+        requiredTiles = []
+        requiredIncluded = set()
+        for tile in tilesEverOwned:
+            if tile.isNotPathable:
+                continue
+            if not SearchUtils.any_where(tile.movable, lambda t: not t.visible):
+                continue
+            requiredIncluded.add(tile)
+            requiredTiles.append(tile)
+        for tile in uneliminated.keys():
+            if tile not in requiredIncluded:
+                requiredIncluded.add(tile)
+                requiredTiles.append(tile)
+
+        if additionalRequiredTiles is not None:
+            for t in additionalRequiredTiles:
+                if t not in requiredIncluded:
+                    requiredIncluded.add(t)
+                    requiredTiles.append(t)
+        #
+        # # find the closest un-eliminated valid general location:
+        # pathToUnelim = SearchUtils.breadth_first_find_queue(self.map, requiredTiles, lambda t, _1, _2: validGenSpots[t], noNeutralCities=True)
+        # if pathToUnelim is not None and pathToUnelim.tail.tile not in requiredIncluded:
+        #     requiredIncluded.add(pathToUnelim.tail.tile)
+        #     requiredTiles.append(pathToUnelim.tail.tile)
+        # if len(requiredTiles) == 0:
+        #     logbook.warn(f'ArmyTracker found no tiles to build fog land from for player {player}')
+        #     return
+        with self.perf_timer.begin_move_event(f'Fog land build get_map_as_graph_from_tiles p{player} (num banned {len(bannedTileList)}, required {len(requiredTiles)})'):
+            connectedSet, missingRequired = MapSpanningUtils.get_spanning_tree_matrix_from_tile_lists(self.map, requiredTiles, bannedTileList)
+            connectedTiles = [t for t in connectedSet]
+            self.unconnectable_tiles[player] = missingRequired
+        # with self.perf_timer.begin_move_event(f'ArmyTracker build_network_x_steiner_tree p{player} (num banned {len(bannedTileList)}, required {len(requiredTiles)})'):
+        #     connectedTiles = GatherSteiner.build_network_x_steiner_tree(self.map, requiredTiles, bannedTiles=bannedTiles)
+        self.player_connected_tiles[player] = connectedSet
+        # TODO this was just bad, why did I add it?
+        # if self.map.players[player].cityCount == 1:
+        #     with self.perf_timer.begin_move_event(f'Fog land build add_emergence_around_minimum_connected_tree p{player}'):
+        #         self.add_emergence_around_minimum_connected_tree(connectedTiles, requiredTiles, player)
+        with self.perf_timer.begin_move_event(f'Fog land build connecting to valid gen spawn p{player}'):
+            pathToUnelim: Path | None = None
+            if predictedGeneralLocation is not None:
+                if predictedGeneralLocation not in connectedSet:
+                    pathToUnelim = SearchUtils.breadth_first_find_queue(self.map, connectedTiles, lambda t, _1, _2: t == predictedGeneralLocation, noNeutralCities=True, skipTiles=bannedTiles,
+                                                                        noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
+                # find the closest un-eliminated valid general location:
+                if pathToUnelim is None:
+                    pathToUnelim = SearchUtils.breadth_first_find_queue(self.map, connectedTiles, lambda t, _1, _2: validGenSpots[t], noNeutralCities=True, skipTiles=bannedTiles,
+                                                                        noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
+            if pathToUnelim is not None:
+                for tile in pathToUnelim.tileList:
+                    if tile not in connectedSet:
+                        connectedSet.add(tile)
+                        connectedTiles.append(tile)
+        return bannedTiles, connectedTiles, pathToUnelim
 
     def _fill_land_from_connected_tiles_for_player(
             self,

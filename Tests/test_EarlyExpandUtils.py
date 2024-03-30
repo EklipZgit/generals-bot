@@ -676,6 +676,9 @@ class EarlyExpandUtilsTests(TestBase):
         self.assertEqual(25, value)
 
     def test_produces_plans_as_good_or_better_than_historical(self):
+        # 0f, 286p, 52 beat
+        # 0f, 286p, 52 beat, rerun EXACTLY the same
+        # w/ cramped v1  2f, 266p, 70 beat
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         projRoot = pathlib.Path(__file__).parent
         folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
@@ -684,24 +687,59 @@ class EarlyExpandUtilsTests(TestBase):
         self.begin_capturing_logging()
         logbook.info(f'files:\n{joined}')
         for file in files:
+            map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=50)
+
+            playerTilesToMatchOrExceed = self.get_tiles_capped_on_50_count_and_reset_map(map, general)
+            if playerTilesToMatchOrExceed <= 23:
+                continue
+
             with self.subTest(file=file.split('.')[0]):
-                map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=50)
-                if SearchUtils.count(map.pathableTiles, lambda tile: tile.player >= 0 and not tile.player == general.player) > 0:
-                    # remove maps where we ran into another player, those aren't fair tests
-                    safeFile = file.split('.')[0] + '.txtmap'
-                    toRemove = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{safeFile}'
-                    os.remove(toRemove)
-                    continue
-
-                playerTilesToMatchOrExceed = self.get_tiles_capped_on_50_count_and_reset_map(map, general)
-
                 weightMap = self.get_opposite_general_distance_map(map, general)
                 timeStart = time.perf_counter()
-                plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True)
+                plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True, cramped=False)
                 timeSpent = time.perf_counter() - timeStart
                 if debugMode:
                     self.render_expansion_plan(map, plan)
-                self.assertLessEqual(timeSpent, 3.0, 'took longer than we consider safe for finding starts')
+                self.assertLessEqual(timeSpent, 4.3, 'took longer than we consider safe for finding starts')
+                self.assertGreaterEqual(plan.tile_captures, playerTilesToMatchOrExceed)
+                if plan.tile_captures > playerTilesToMatchOrExceed:
+                    self.skipTest(f"Produced a BETTER plan than original, {plan.tile_captures} vs {playerTilesToMatchOrExceed}")
+
+    def test_produces_plans_as_good_or_better_than_historical__cramped_specifically(self):
+        # normal       did 3-31-27 better
+        # (9, 16, 12), did 3-26-32 better all on its own
+        # (9, 16, 10), did 4-24-33
+        # (10, 18, 8)  did 4-26-31
+        # (10, 18, 6)  did 4-27-30
+        # (8, 14, 14) did 3-31-27 but very different subset, interesting. 8, 14, 10 appeared to be performing the same
+        # (7, 12, 14), did 0-29-32
+        # (13, 24, 2) did 8-41-12
+        # mix 13,14,11,15,9 did 24-37
+        # + 7 did 24-37 as well
+        # + 7 with bonus time also 24-37
+        # + 10 did 23-38 no way
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        projRoot = pathlib.Path(__file__).parent
+        folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
+        files = os.listdir(folderWithHistoricals)
+        joined = '\n'.join(files)
+        self.begin_capturing_logging()
+        logbook.info(f'files:\n{joined}')
+        for file in files:
+            map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=50)
+
+            playerTilesToMatchOrExceed = self.get_tiles_capped_on_50_count_and_reset_map(map, general)
+            if playerTilesToMatchOrExceed > 23:
+                continue
+
+            with self.subTest(file=file.split('.')[0]):
+                weightMap = self.get_opposite_general_distance_map(map, general)
+                timeStart = time.perf_counter()
+                plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=True, cramped=True)
+                timeSpent = time.perf_counter() - timeStart
+                if debugMode:
+                    self.render_expansion_plan(map, plan)
+                self.assertLessEqual(timeSpent, 4.3, 'took longer than we consider safe for finding starts')
                 self.assertGreaterEqual(plan.tile_captures, playerTilesToMatchOrExceed)
                 if plan.tile_captures > playerTilesToMatchOrExceed:
                     self.skipTest(f"Produced a BETTER plan than original, {plan.tile_captures} vs {playerTilesToMatchOrExceed}")

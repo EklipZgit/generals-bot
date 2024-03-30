@@ -1181,6 +1181,11 @@ class OpponentTracker(object):
         return self.winning_on_economy(byRatio=byRatio, againstPlayer=againstPlayer, cityValue=0, offset=offset)
 
     def get_tile_differential(self, againstPlayer: int = -2) -> int:
+        """
+        Positive number means we're ahead, negative number means we're behind.
+        @param againstPlayer:
+        @return:
+        """
         if againstPlayer == -2:
             againstPlayer = self.targetPlayer
         if againstPlayer == -1:

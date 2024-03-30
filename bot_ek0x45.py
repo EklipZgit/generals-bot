@@ -40,6 +40,7 @@ from Strategy import OpponentTracker, WinConditionAnalyzer
 from Strategy.WinConditionAnalyzer import WinCondition
 from StrategyModels import CycleStatsData
 from ViewInfo import ViewInfo, PathColorer, TargetStyle
+from base import viewer
 from base.client.generals import ChatUpdate
 from base.client.map import Player, Tile, MapBase, PLAYER_CHAR_BY_INDEX, new_value_grid
 from DangerAnalyzer import DangerAnalyzer, ThreatType, ThreatObj
@@ -1093,8 +1094,8 @@ class EklipZBot(object):
             offset = 0
 
         # if the gather path is real long, then we need to launch the attack a bit earlier.
-        if self.target_player_gather_path is not None and self.target_player_gather_path.length > 20:
-            diff = self.target_player_gather_path.length - 23
+        if self.target_player_gather_path is not None and self.target_player_gather_path.length > 17:
+            diff = self.target_player_gather_path.length - 17
             logbook.info(f'the gather path is really long ({self.target_player_gather_path.length}), then we need to launch the attack a bit earlier. Switching from {gatherSplit} to {gatherSplit - diff}')
             gatherSplit -= diff
         #
@@ -1115,6 +1116,12 @@ class EklipZBot(object):
 
         launchTiming = cycleDuration - pathValueWeight - pathLength - 4 + self.behavior_launch_timing_offset
 
+        tileDiff = self.opponent_tracker.get_tile_differential()
+        if tileDiff < 2:
+            back = max(-10, tileDiff // 2) - 2
+            self.viewInfo.add_info_line(f'gathSplit back {back} turns due to tileDiff {tileDiff}')
+            gatherSplit += back
+
         if self.flanking:
             gatherSplit += self.behavior_flank_launch_timing_offset
             launchTiming = gatherSplit
@@ -1126,7 +1133,6 @@ class EklipZBot(object):
         if self.teammate_path is not None and self.target_player_gather_path is not None and self.target_player_gather_path.start.tile == self.teammate_general:
             gatherSplit -= self.teammate_path.length // 2 + 2
             launchTiming = gatherSplit
-
         # if not self.opponent_tracker.winning_on_economy(byRatio=1.06):
         #     gatherSplit -= 2
         #     launchTiming += 1
@@ -1294,7 +1300,7 @@ class EklipZBot(object):
         # if self._map.remainingPlayers < 4 or self._map.is_2v2:
         timeLimit = self.get_remaining_move_time()
         if self._map.turn < 17:
-            timeLimit = 5.0
+            timeLimit = 4.0
         move = self.get_optimal_first_25_plan_move(timeLimit=timeLimit)
         # TODO should be able to build the whole plan above in an MST prune, no...?
         if move is not None:
@@ -2715,8 +2721,8 @@ class EklipZBot(object):
         value = armyNear.value
         return value
 
-    def get_first_path_move(self, path):
-        return Move(path.start.tile, path.start.next.tile, path.start.move_half)
+    def get_first_path_move(self, path: TilePlanInterface):
+        return path.get_first_move()
 
     def get_afk_players(self) -> typing.List[Player]:
         afks = []
@@ -7182,6 +7188,11 @@ class EklipZBot(object):
             for t in p:
                 self.viewInfo.evaluatedGrid[t.x][t.y] = 2555
 
+        for p, matrix in enumerate(self.armyTracker.player_connected_tiles):
+            if not self._map.is_player_on_team_with(self.player.index, p):
+                self.viewInfo.add_map_division(matrix, viewer.PLAYER_COLORS[p], alpha=255)
+                self.viewInfo.add_map_zone(matrix, viewer.PLAYER_COLORS[p], alpha=75)
+
         if move is not None:
             self.viewInfo.color_path(PathColorer(
                 movePath,
@@ -8331,10 +8342,10 @@ class EklipZBot(object):
             with self.perf_timer.begin_move_event('optimize_first_25'):
                 calcedThisTurn = True
                 cutoff = time.perf_counter() + timeLimit
-                self.city_expand_plan = EarlyExpandUtils.optimize_first_25(self._map, source, distMap, skipTiles=skipTiles, cutoff_time=cutoff, prune_cutoff=pruneCutoff)
+                self.city_expand_plan = EarlyExpandUtils.optimize_first_25(self._map, source, distMap, skipTiles=skipTiles, cutoff_time=cutoff, prune_cutoff=pruneCutoff, cramped=self._spawn_cramped)
 
                 if len(skipTiles) > 0 and self.city_expand_plan.tile_captures < 17 and self._map.turn < 50:
-                    self.city_expand_plan = EarlyExpandUtils.optimize_first_25(self._map, source, distMap, skipTiles=None, cutoff_time=cutoff, prune_cutoff=pruneCutoff)
+                    self.city_expand_plan = EarlyExpandUtils.optimize_first_25(self._map, source, distMap, skipTiles=None, cutoff_time=cutoff, prune_cutoff=pruneCutoff, cramped=self._spawn_cramped)
 
                 while self.city_expand_plan.plan_paths and self.city_expand_plan.plan_paths[0] is None:
                     self.city_expand_plan.plan_paths.pop(0)
@@ -10973,6 +10984,9 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             for tile in self._map.get_all_tiles():
                 if not tile.discovered and not tile.isObstacle and self.armyTracker.valid_general_positions_by_player[player][tile]:
                     emergenceAmt = self.undiscovered_priorities[tile.x][tile.y]
+                    # DONT invert FFA, stay close to general...?
+                    # distMap[tile.x][tile.y] = 0 - distMap[tile.x][tile.y]
+                    emergenceAmt -= self.get_distance_from_board_center(tile, center_ratio=0.35) * 0.1
                     emergenceVals.append((emergenceAmt, tile))
 
         tilesSorted = [tile for val, tile in sorted(emergenceVals, reverse=True)]

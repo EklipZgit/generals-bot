@@ -1016,4 +1016,8 @@ class GeneralPredictionTests(TestBase):
         self.assertGreater(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(10, 4)],
                            bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(3, 7)])
 
-        self.assertGreater(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(2, 12)], 1)
+        tilesMustBeConnected = [playerMap.GetTile(10, 7), playerMap.GetTile(10, 6)]
+
+        for tile in tilesMustBeConnected:
+            self.assertIn(tile, bot.armyTracker.player_connected_tiles[enemyGeneral.player])
+            self.assertOwned(enemyGeneral.player, tile)

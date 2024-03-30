@@ -685,7 +685,7 @@ class TestBase(unittest.TestCase):
         map.update()
 
     def get_furthest_tile_from_general(self, map: MapBase, general: Tile) -> Tile:
-        distMap = SearchUtils.build_distance_map(map, [general])
+        distMap = SearchUtils.build_distance_map_matrix(map, [general])
         maxDist = 0
         furthestTile: Tile = None
         for tile in map.pathableTiles:

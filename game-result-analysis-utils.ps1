@@ -4,7 +4,7 @@
 function Copy-Turn25StartResultsToUnitTest {
     Param(
         $DestFolder = "D:\2019_reformat_backup\generals-bot\Tests\EarlyExpandUtilsTestMaps\SampleTurn25MapsToTryToBeat",
-        $LogFolder = "D:\2019_reformat_backup\bot_logs"
+        $LogFolder = "D:\GeneralsLogs\GroupedLogs"
     )
     
     $items = Get-ChildItem -Path $LogFolder -Recurse -Filter '50.txtmap'
@@ -32,7 +32,7 @@ function Copy-Turn25StartResultsToUnitTest {
 function Copy-WinMapsToWonMapsDirectory {
     Param(
         $DestFolder = "D:\2019_reformat_backup\generals-bot\Tests\WonFullMapVisionSampleMaps",
-        $LogFolder = "D:\2019_reformat_backup\bot_logs"
+        $LogFolder = "D:\GeneralsLogs\GroupedLogs"
     )
 
     if (-not (Test-Path $DestFolder))

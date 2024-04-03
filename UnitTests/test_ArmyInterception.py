@@ -661,4 +661,24 @@ player_index=0
         if path is not None:
             self.assertFalse(path.path.start.move_half)
 
+    def test_should_respect_and_defend_defenseless_modifier(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for mustDefend in [False, True]:
+            with self.subTest(mustDefend=mustDefend):
+                mapFile = 'GameContinuationEntries/should_respect_and_defend_defenseless_modifier___2v3zDUjUn---1--73.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 73, fill_out_tiles=True)
+                if mustDefend:
+                    map.GetTile(18, 11).army = 1
+                    map.GetTile(13, 10).army = 26
 
+                plan = self.get_interception_plan(map, general, enemyGeneral)
+                # if debugMode:
+                #     self.render_intercept_plan(map, plan, renderIndividualAnalysis=True)
+
+                self.assert_no_intercept_option_by_coords(plan, 12, 10, message='shouldnt even have an option that wastes intercept time regardless of general death')
+                bestOpt = self.get_best_intercept_option(plan)
+
+                self.assertIsNotNone(bestOpt, 'should have found an intercept move to the right, though')
+                self.assertNotIn(map.GetTile(12, 10), bestOpt.tileList, 'shouldnt delay and let general die')
+
+# 18f, 17p, 0s

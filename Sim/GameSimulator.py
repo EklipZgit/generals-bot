@@ -69,6 +69,7 @@ def generate_player_map(player_index: int, map_raw: MapBase) -> MapBase:
                     map.update_visible_tile(realTile.x, realTile.y, TILE_FOG, tile_army=0, is_city=False, is_general=False)
 
     map.update(bypassDeltas=True)
+    map.modifiers = map_raw.modifiers
 
     for i, player in enumerate(map_raw.players):
         map.players[i].cityCount = player.cityCount

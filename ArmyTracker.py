@@ -1850,7 +1850,8 @@ class ArmyTracker(object):
             map: MapBase,
             army: Army,
             general: Tile,
-            playerTargets: typing.List[Tile]
+            playerTargets: typing.List[Tile],
+            negativeTiles: typing.Set[Tile] | None = None
     ) -> typing.List[Path]:
         """
         Returns none if asked to predict a friendly army path.
@@ -1876,8 +1877,13 @@ class ArmyTracker(object):
 
         remainingCycleTurns = 50 - map.turn % 50
 
-        pathA = ArmyTracker.get_army_expected_path_non_flank(map, army, general, playerTargets)
-        pathB = ArmyTracker.get_army_expected_path_flank(map, army, general)
+        if negativeTiles is None:
+            negativeTiles = set()
+
+        pathA = ArmyTracker.get_army_expected_path_non_flank(map, army, general, playerTargets, negativeTiles=negativeTiles)
+        if pathA and pathA.length > 0:
+            negativeTiles.update(pathA.tileList)
+        pathB = ArmyTracker.get_army_expected_path_flank(map, army, general, negativeTiles=negativeTiles)
 
         matrices = []
 
@@ -1888,7 +1894,7 @@ class ArmyTracker(object):
         if pathB is not None and pathB.length > 0 and not SearchUtils.any_where(paths, lambda p: p.tail.tile == pathB.tail.tile):
             paths.append(pathB)
             if pathB.length > 2:
-                pathC = ArmyTracker.get_army_expected_path_flank(map, army, general, skipTiles=pathB.tileList[3:])
+                pathC = ArmyTracker.get_army_expected_path_flank(map, army, general, skipTiles=pathB.tileList[3:], negativeTiles=negativeTiles)
                 if pathC is not None and pathC.length > 0 and pathC.tail.tile != pathB.tail.tile:
                     paths.append(pathC)
                     matrices.append(map.distance_mapper.get_tile_dist_matrix(pathC.tail.tile))
@@ -1929,7 +1935,8 @@ class ArmyTracker(object):
             map: MapBase,
             army: Army,
             general: Tile,
-            player_targets: typing.List[Tile]
+            player_targets: typing.List[Tile],
+            negativeTiles: typing.Set[Tile] | None = None
     ) -> Path | None:
         """
         Returns none if asked to predict a friendly army path.
@@ -1989,6 +1996,7 @@ class ArmyTracker(object):
             maxDepth=23,
             noNeutralCities=army.tile.army < 150,
             searchingPlayer=army.player,
+            negativeTiles=negativeTiles,
             noLog=True)
 
         if path is None:
@@ -2006,7 +2014,7 @@ class ArmyTracker(object):
             #     searchingPlayer=army.player,
             #     noLog=True)
 
-        return path.get_positive_subsegment(forPlayer=army.player, teams=MapBase.get_teams_array(map))
+        return path.get_positive_subsegment(forPlayer=army.player, teams=MapBase.get_teams_array(map), negativeTiles=negativeTiles)
 
     @classmethod
     def get_army_expected_path_flank(
@@ -2015,6 +2023,7 @@ class ArmyTracker(object):
             army: Army,
             general: Tile,
             skipTiles: typing.List[Tile] | None = None,
+            negativeTiles: typing.Set[Tile] | None = None
     ) -> Path | None:
         """
         Returns none if asked to predict a friendly army path.
@@ -2080,7 +2089,8 @@ class ArmyTracker(object):
 
         if path is None:
             return None
-        return path.get_positive_subsegment(forPlayer=army.player, teams=MapBase.get_teams_array(map))
+
+        return path.get_positive_subsegment(forPlayer=army.player, teams=MapBase.get_teams_array(map), negativeTiles=negativeTiles)
 
     def convert_fog_city_to_player_owned(self, tile: Tile, player: int):
         if player == -1:
@@ -2916,7 +2926,8 @@ class ArmyTracker(object):
                 nextTile.army = nextTile.army - army.value
                 if nextTile.army < 0:
                     nextTile.army = 0 - nextTile.army
-                nextTile.player = army.player
+                if not nextTile.isGeneral:
+                    nextTile.player = army.player
 
             if existingArmy is not None:
                 if existingArmy.player == army.player:
@@ -3000,11 +3011,15 @@ class ArmyTracker(object):
             playerExpectedFogTileCounts: typing.Dict[int, int],
             predictedGeneralLocation: Tile | None
     ):
+        playerObj = self.map.players[player]
+        if playerObj.dead:
+            return
+
         ourGen = self.map.generals[self.map.player_index]
         bannedTiles, connectedTiles, pathToUnelim = self.get_fog_connected_based_on_emergences(player, predictedGeneralLocation)
 
         keep = []
-        for tile in self.map.players[player].tiles:
+        for tile in playerObj.tiles:
             if tile.isTempFogPrediction and not tile.discovered and tile not in self.armies and not tile.isGeneral:
                 tile.reset_wrong_undiscovered_fog_guess()
             else:

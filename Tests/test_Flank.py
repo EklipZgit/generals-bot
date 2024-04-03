@@ -6,9 +6,20 @@ from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
 from base.client.map import Tile, MapBase, TILE_FOG
+from bot_ek0x45 import EklipZBot
 
 
 class FlankTests(TestBase):
+    def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
+        bot = super().get_debug_render_bot(simHost, player)
+
+        bot.info_render_expansion_matrix_values = True
+        bot.info_render_general_undiscovered_prediction_values = False
+        bot.info_render_leaf_move_values = True
+        bot.info_render_army_emergence_values = False
+
+        return bot
+
     def test_should_not_over_gather_to_flank(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_over_gather_to_flank___wMQvr_kVV---1--101.txtmap'
@@ -47,4 +58,23 @@ class FlankTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=25)
         self.assertIsNone(winner)
 
-# 0f, 2p
+# 0f, 2p    
+    def test_should_never_all_in_with_questionable_flanks_incoming(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_never_all_in_with_questionable_flanks_incoming___7vu5tSibJ---0--272.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 272, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=272)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=20)
+        self.assertIsNone(winner)
+
+        self.assertPlayerTileVisibleAndCorrect(19, 7, simHost.sim, general.player)
+        self.assertPlayerTileVisibleAndCorrect(4, 2, simHost.sim, general.player)

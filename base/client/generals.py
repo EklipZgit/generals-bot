@@ -50,7 +50,6 @@ class GeneralsClient(object):
             gameid=None,
             force_start=False,
             public_server=False):
-
         self._terminated: bool = False
         """Prevent double-termination"""
 
@@ -70,6 +69,7 @@ class GeneralsClient(object):
         self.username = username
         self.server_username = username
         self.mode: str = mode
+        """ffa, 1v1, team, or custom"""
         if mode == "private":
             self.isPrivate = True
             mode = "custom"
@@ -86,7 +86,7 @@ class GeneralsClient(object):
         self._move_id = 1
         self._stars = []
         self.map: MapBase = None
-        """ffa, 1v1, team, or custom"""
+        self.modifiers: typing.Set[str] = set()
         self._cities = []
 
         self.bot_key = "sd09fjd203i0ejwi_changeme"
@@ -359,8 +359,12 @@ class GeneralsClient(object):
                                 "!!!!!!!!!!\n!!!!!!!!!!!!!\n!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!\ncouldn't write chat message to file")
                 elif " captured " in chat_msg["text"]:
                     yield "player_capture", chat_msg
+                elif "modifier" in chat_msg["text"]:
+                    self.modifiers = set(self.parse_modifiers(chat_msg["text"]))
+                    if self.map is not None:
+                        self.map.modifiers = self.modifiers
                 else:
-                    logbook.info("Message: %s" % chat_msg["text"])
+                    logbook.info("Sys Message: %s" % chat_msg["text"])
                     if self.writingFile or (
                         self.chatLogFile is not None
                         and " surrendered" not in chat_msg["text"]
@@ -416,7 +420,7 @@ class GeneralsClient(object):
         while time.time_ns() / (10 ** 9) - self.lastCommunicationTime < 60:
             time.sleep(10)
         logbook.info('killswitch elapsed on no communication')
-        if self.map is not None:
+        if 'map' in self.__dict__ and self.map is not None:
             self.map.complete = True
             self.map.result = False
         self._terminate()
@@ -428,7 +432,7 @@ class GeneralsClient(object):
             return
         self._terminated = True
         self._running = False
-        if self.map is not None:
+        if 'map' in self.__dict__ and self.map is not None:
             try:
                 repId = 'none'
                 if self._start_data is not None and 'replay_id' in self._start_data:
@@ -753,6 +757,12 @@ class GeneralsClient(object):
             return False
 
         return True
+
+    def parse_modifiers(self, message: str) -> typing.List[str]:
+        _, modifiersStr = message.split('enabled: ')
+        modifiers = modifiersStr.split(', ')
+        return modifiers
+
 
 def _spawn(f):
     t = threading.Thread(target=f)

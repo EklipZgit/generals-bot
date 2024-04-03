@@ -1993,3 +1993,47 @@ class DefenseTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
         self.assertIsNone(winner)
+
+    def test_should_respect_and_defend_defenseless_modifier(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for mustDefend in [True, False]:
+            with self.subTest(mustDefend=mustDefend):
+                mapFile = 'GameContinuationEntries/should_respect_and_defend_defenseless_modifier___2v3zDUjUn---1--73.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 73, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=73)
+                if mustDefend:
+                    map.GetTile(18, 11).army = 1
+                    rawMap.GetTile(18, 11).army = 1
+                    map.GetTile(13, 10).army = 26
+                    rawMap.GetTile(13, 10).army = 26
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, '14,9->18,9->18,11')
+                # simHost.queue_player_moves_str(general.player, '12,10->18,10')
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
+                self.assertIsNone(winner)
+                self.assertOwned(general.player, playerMap.GetTile(18, 10), 'should not have let the opp reach this tile (which would be kill with defenseless modifier)')
+    
+    def test_should_defend_2v2_ally(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_defend_2v2_ally___FRAa_4Nfr---2--189.txtmap'
+        map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 189, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=189)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
+        simHost.queue_player_moves_str(enemyAllyGen.player, '12,6->14,6->14,8->15,8->15,9->17,9')
+        simHost.queue_player_moves_str(allyGen.player, '14,8->15,8  None  None  14,10->15,10->15,9  17,10->17,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        self.assertNoFriendliesKilled(map, general, allyGen)

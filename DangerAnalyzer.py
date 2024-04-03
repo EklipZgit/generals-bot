@@ -89,6 +89,8 @@ class DangerAnalyzer(object):
 
         self.largeVisibleEnemyTiles: typing.List[Tile] = []
 
+        self.defenseless_modifier: bool = 'Defenseless' in self.map.modifiers
+
     def __getstate__(self):
         state = self.__dict__.copy()
         if "map" in state:
@@ -359,7 +361,7 @@ class DangerAnalyzer(object):
         if genPlayer.dead:
             return None
 
-        general = self.map.generals[self.map.player_index]
+        general = self.map.generals[againstPlayer]
 
         threatObj = None
 
@@ -406,6 +408,9 @@ class DangerAnalyzer(object):
                 # we only run the other large-tile scan for movement based flagging
                 continue
 
+            if self.defenseless_modifier:
+                curNegs.update(t for t in targets if t.isGeneral)
+
             path = dest_breadth_first_target(
                 map=self.map,
                 goalList=targets,
@@ -415,6 +420,7 @@ class DangerAnalyzer(object):
                 negativeTiles=curNegs,
                 searchingPlayer=player.index,
                 dontEvacCities=False,
+                # ignoreGoalArmy=defenseless,
                 dupeThreshold=3,
                 noLog=True)
 
@@ -449,6 +455,7 @@ class DangerAnalyzer(object):
                     searchingPlayer=player.index,
                     dontEvacCities=False,
                     dupeThreshold=5,
+                    # ignoreGoalArmy=generalOnly and self.defenseless_modifier,
                     skipTiles=[lastTile])
 
                 if altPath:

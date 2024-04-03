@@ -125,6 +125,8 @@ class TextMapLoader(object):
             lines.append(f'teams={teams}')
 
         lines.append(f'mode={gameType}')
+        if len(map.modifiers) > 0:
+            lines.append(f'modifiers={", ".join(sorted(map.modifiers))}')
 
         return '\n'.join([line.rstrip() for line in lines])
 
@@ -252,6 +254,8 @@ class TextMapLoader(object):
 
         if 'mode' in data:
             map.is_2v2 = data['mode'] == 'team'
+        if 'modifiers' in data and len(data['modifiers']) > 0:
+            map.modifiers = set(data['modifiers'].split(', '))
 
         for player in map.players:
             char, index = playerCharMap[player.index]

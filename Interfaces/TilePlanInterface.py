@@ -16,7 +16,7 @@ class TilePlanInterface(ABC):
 
     @property
     @abstractmethod
-    def value(self) -> float:
+    def econValue(self) -> float:
         raise NotImplementedError()
 
     @property
@@ -56,9 +56,9 @@ class TilePlanInterface(ABC):
     def __gt__(self, other) -> bool:
         if other is None:
             return True
-        return self.value > other.value
+        return self.econValue > other.econ_value
 
     def __lt__(self, other) -> bool:
         if other is None:
             return True
-        return self.value < other.value
+        return self.econValue < other.econ_value

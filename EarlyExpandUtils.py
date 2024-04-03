@@ -14,12 +14,15 @@ from base.client.map import MapBase, Tile
 DEBUG_ASSERTS = False
 ALLOW_RANDOM_SKIPS = False
 
+
 class ExpansionPlan(object):
     def __init__(self, tile_captures: int, plan_paths: typing.List[typing.Union[None, Path]], launch_turn: int, core_tile: Tile):
         self.core_tile: Tile = core_tile
         self.tile_captures: int = tile_captures
         self.launch_turn: int = launch_turn
         self.plan_paths: typing.List[typing.Union[None, Path]] = plan_paths
+        if plan_paths is None:
+            self.plan_paths = []
 
 
 # None's represent waiting moves, paths represent path moves
@@ -32,12 +35,13 @@ def get_start_expand_value(
         visitedSet: typing.Set[Tile] | None = None,
         noLog: bool = False) -> int:
 
-    if len(expandPaths) == 0:
+    if expandPaths is None or len(expandPaths) == 0:
         return 0
-
+    #
+    # if visitedSet is not None:
+    #     tilesCapped: typing.Set[Tile] = {t for t in visitedSet if t.player == general.player}
+    # else:
     tilesCapped: typing.Set[Tile] = set()
-    if visitedSet is not None:
-        tilesCapped = visitedSet.copy()
     tilesCapped.add(general)
     enCapped = set()
 
@@ -70,11 +74,12 @@ def get_start_expand_value(
                     logbook.info(f'{turn} ({genArmy}) - {str(nextTile)} (a{movingArmy}) already capped')
             else:
                 movingArmy -= 1
-                tilesCapped.add(nextTile)
-                if nextTile.player >= 0:
-                    enCapped.add(nextTile)
-                if not noLog:
-                    logbook.info(f'{turn} ({genArmy}) - {str(nextTile)} (a{movingArmy}) ({len(tilesCapped)})')
+                if visitedSet is None or nextTile not in visitedSet:
+                    tilesCapped.add(nextTile)
+                    if nextTile.player >= 0:
+                        enCapped.add(nextTile)
+                    if not noLog:
+                        logbook.info(f'{turn} ({genArmy}) - {str(nextTile)} (a{movingArmy}) ({len(tilesCapped)})')
                 if movingArmy <= 0 and DEBUG_ASSERTS:
                     raise AssertionError(f'illegal plan, moved army from 1 tile, see last log above')
             if curPath.length == 0:
@@ -184,6 +189,8 @@ def max_plan(plan1: ExpansionPlan, plan2: ExpansionPlan, map: MapBase, distToGen
         already_visited=visited,
         no_log=False)
 
+    plan1.tile_captures = launchVal1[0]
+
     launchVal2 = __evaluate_plan_value(
         map,
         plan2.core_tile,
@@ -194,6 +201,8 @@ def max_plan(plan1: ExpansionPlan, plan2: ExpansionPlan, map: MapBase, distToGen
         tile_weight_map=tile_weight_map,
         already_visited=visited,
         no_log=False)
+
+    plan2.tile_captures = launchVal2[0]
 
     if launchVal1 >= launchVal2:
         return plan1
@@ -211,7 +220,8 @@ def optimize_first_25(
         no_log=not DEBUG_ASSERTS,
         cutoff_time: float | None = None,
         prune_cutoff: int = 14,
-        cramped: bool = False
+        cramped: bool = False,
+        shuffle_launches: bool = False
 ) -> ExpansionPlan:
     """
 
@@ -242,32 +252,6 @@ def optimize_first_25(
 
     mapTurnAtStart = map.turn
     genArmyAtStart = general.army
-
-    if mapTurnAtStart > 25:
-        turnInCycle = mapTurnAtStart % 50
-        result = _sub_optimize_remaining_cycle_expand_from_cities(
-            map,
-            general,
-            genArmyAtStart,
-            distToGenMap,
-            tile_minimization_map,
-            turn=turnInCycle,
-            visited_set=visited,
-            prune_below=prune_cutoff,
-            allow_wasted_moves=3,
-            dont_force_first=True,
-            debug_view_info=debug_view_info,
-            skip_tiles=skipTiles,
-            cutoff_time=cutoff_time,
-            no_log=no_log)
-        val = get_start_expand_value(map, general, genArmyAtStart, turnInCycle, result, visitedSet=visited, noLog=False)
-
-        return ExpansionPlan(val, result, mapTurnAtStart, general)
-
-    timeLimit = 3.0
-    if cutoff_time:
-        timeLimit = cutoff_time - time.perf_counter()
-        cutoff_time = None
 
     if cramped:
         # genArmy, turn, optimalMaxWasteMoves
@@ -303,6 +287,43 @@ def optimize_first_25(
             (14, 26, 0),
         ]
         # 12-6-5-4-1
+
+    if shuffle_launches:
+        random.shuffle(combinationsWithMaxOptimal)
+
+    if len(visited) > 2:
+        turnInCycle = mapTurnAtStart % 50
+        allowWasted = 3
+        if map.turn < 50:
+            # determine phase in launch cycle:
+            tileCount = len(map.players[general.player].tiles)
+            turnsLeft = 50 - turnInCycle
+            capsLeftForPerfect = 25 - tileCount
+            allowWasted = turnsLeft - capsLeftForPerfect
+            logbook.info(f'for turn {map.turn} with turns left {turnsLeft} and tileCount {tileCount}, capsLeftForPerfect was {capsLeftForPerfect}, so allowWasted was {allowWasted}')
+        result = _sub_optimize_remaining_cycle_expand_from_cities(
+            map,
+            general,
+            genArmyAtStart,
+            distToGenMap,
+            tile_minimization_map,
+            turn=turnInCycle,
+            visited_set=visited,
+            prune_below=prune_cutoff,
+            allow_wasted_moves=allowWasted,
+            dont_force_first=True,
+            debug_view_info=debug_view_info,
+            skip_tiles=skipTiles,
+            cutoff_time=cutoff_time,
+            no_log=no_log)
+        val = get_start_expand_value(map, general, genArmyAtStart, turnInCycle, result, visitedSet=visited, noLog=False)
+
+        return ExpansionPlan(val, result, mapTurnAtStart, general)
+
+    timeLimit = 3.0
+    if cutoff_time:
+        timeLimit = cutoff_time - time.perf_counter()
+        cutoff_time = None
 
     maxResult = None
     maxVal = None
@@ -348,16 +369,19 @@ def optimize_first_25(
                 break
 
     launchTurn = mapTurnAtStart
-    for path in maxResult:
-        if path is not None:
-            break
-        launchTurn += 1
+    maxTiles = 0
+    if maxResult is not None:
+        for path in maxResult:
+            if path is not None:
+                break
+            launchTurn += 1
+        maxTiles = maxVal[0]
 
     logbook.info(f'max launch result  v')
     get_start_expand_value(map, general, general.army, mapTurnAtStart, maxResult, visitedSet=visited, noLog=False)
     logbook.info(f'max launch result {maxVal}, turn {launchTurn} ^')
 
-    return ExpansionPlan(maxVal[0], maxResult, launchTurn, general)
+    return ExpansionPlan(maxTiles, maxResult, launchTurn, general)
 
 
 def _sub_optimize_first_25_specific_wasted(
@@ -531,6 +555,7 @@ def _sub_optimize_first_25_specific_wasted(
 
         return maxValue, pathList
 
+
 def _sub_optimize_remaining_cycle_expand_from_cities(
         map: MapBase,
         general: Tile,
@@ -568,8 +593,9 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
     maxCombinationValue = (0, 0, 0, 0)
     maxCombinationPathList = [None]
     if visited_set is None or len(visited_set) == 0:
-        visited_set = set()
-        visited_set.add(general)
+        visited_set = set(map.players[general.player].tiles)
+        # visited_set = set()
+        # visited_set.add(general)
 
     if skip_tiles is None and ALLOW_RANDOM_SKIPS:
         skip_tiles = set()
@@ -595,10 +621,14 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
     minWastedMovesThisLaunch = max(0, allow_wasted_moves // 2 - 2)
 
     # wastedAllowed = [i for i in range(allow_wasted_moves + 2, minWastedMovesThisLaunch)]
+    maxForce = allow_wasted_moves + 4
+    visitLen = len(visited_set)
+    if visitLen > 6 and maxForce > visitLen - 1:
+        maxForce = visitLen - 1
 
-    for force_wasted_moves in range(minWastedMovesThisLaunch, allow_wasted_moves + 4):
+    for force_wasted_moves in range(minWastedMovesThisLaunch, maxForce):
         bestCaseResult = len(visited_set) + turnsLeft - force_wasted_moves
-        if bestCaseResult <= prune_below:
+        if bestCaseResult < prune_below:
             if not no_log:
                 logbook.info(f'pruning due to bestCaseResult {bestCaseResult} compared to prune_below {prune_below}')
             break
@@ -626,8 +656,8 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
 
         if ALLOW_RANDOM_SKIPS:
             pathLen = len(pathList)
-            if pathLen > 2:
-                randomSkip = random.choice(pathList[1:min(pathLen - 1, 5)])
+            if pathLen > 5:
+                randomSkip = random.choice(pathList[1:min(pathLen - 1, 6)])
 
                 altValue, altPathList = _sub_optimize_first_25_specific_wasted(
                     map=map,
@@ -719,7 +749,7 @@ def _optimize_25_launch_segment(
         visited = nextTile in visited_set
         if not visited:
             pathCappedNeg -= 1
-            if nextTile.player != -1:
+            if nextTile.player != -1 and not map.is_tile_friendly(nextTile):
                 pathCappedNeg -= 1
         else:
             repeats += 1

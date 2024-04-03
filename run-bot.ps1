@@ -224,13 +224,23 @@ This allows you to have different bots running on different monitors, etc.
 
 function Run-SoraAI {
     Param(
-        $game = @('1v1', '1v1', 'ffa', 'ffa')
+        $game = @('1v1', '1v1', 'ffa', 'ffa'),
+        [switch]$public,
+        [switch]$nolog,
+        [int]$sleepMax = 3
     )
     while ($true)
     {
+        $userId = 'EKSORA'
+        if ($public)
+        {
+            $userId = 'SmurfySmurfette'
+        }
+
         foreach ($g in $game)
         {
-            run-botonce -game $g -name "[Bot] Sora_ai_ek" -userID "EKSORA" -path "D:\2019_reformat_Backup\Sora_AI\run_bot.py" -nolog
+            run-botonce -game $g -name "Sora AI" -userID $userId -path "D:\2019_reformat_Backup\Sora_AI\run_bot.py" -public:$public -nolog:$nolog
+            SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
 }
@@ -241,7 +251,7 @@ function Run-SoraAITeammate {
     )
     while ($true)
     {
-        run-botonce -game 'team' -name "[Bot] Sora_ai_2" -userID "EKSORA2" -path "D:\2019_reformat_Backup\Sora_AI\run_bot.py" -nolog
+        run-botonce -game 'team' -name "Sora_ai_2" -userID "EKSORA2" -path "D:\2019_reformat_Backup\Sora_AI\run_bot.py" -nolog -public:$public
     }
 }
 
@@ -1013,19 +1023,28 @@ function Run-Human {
         foreach ($g in $game)
         {
             Run-BotOnce -game $g -name "Human.exe" -roomID $roomID -public @splat -privateGame:$private
-            $sleepTimeA = (Get-Random -Min 0 -Max $sleepMax)
-            $sleepTime = $sleepTimeA
-
-            # use min-of-2 strategy to more often pick lower sleep times but still have high sleep times available.
-            $sleepTimeB = (Get-Random -Min 0 -Max $sleepMax)
-            if ($sleepTimeB -lt $sleepTime) {
-                $sleepTime = $sleepTimeB
-            }
-
-            Write-Verbose "Powershell finished, sleeping $sleepTime" -Verbose
-            Start-Sleep -Seconds $sleepTime
+            SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
+}
+
+
+function SleepLeastOfTwo {
+    Param(
+        $sleepMax
+    )
+    
+    $sleepTimeA = (Get-Random -Min 0 -Max $sleepMax)
+    $sleepTime = $sleepTimeA
+
+    # use min-of-2 strategy to more often pick lower sleep times but still have high sleep times available.
+    $sleepTimeB = (Get-Random -Min 0 -Max $sleepMax)
+    if ($sleepTimeB -lt $sleepTime) {
+        $sleepTime = $sleepTimeB
+    }
+
+    Write-Verbose "Finished, sleeping $sleepTime" -Verbose
+    Start-Sleep -Seconds $sleepTime
 }
 
 

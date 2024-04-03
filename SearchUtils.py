@@ -2329,9 +2329,9 @@ def breadth_first_foreach(
     """
     WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
     (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
-    Does NOT skip neutral cities by emptyVal.
+    Does NOT skip neutral cities by default.
     Return True to skip.
-    Same as breath_first_foreach_dist, except the foreach function does not get the distance parameter passed to it.
+    Same as breadth_first_foreach_dist, except the foreach function does not get the distance parameter passed to it.
 
     @param map:
     @param startTiles:
@@ -2397,9 +2397,9 @@ def breadth_first_foreach_with_state(
     """
     WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
     (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
-    Does NOT skip neutral cities by emptyVal.
+    Does NOT skip neutral cities by default.
     INVERSE of normal return of forceach, return None/False to skip. Return a state object to continue to the next neighbors.
-    Same as breath_first_foreach_dist, except the foreach function does not get the distance parameter passed to it.
+    Same as breadth_first_foreach_dist, except the foreach function does not get the distance parameter passed to it.
 
     @param map:
     @param startTiles:
@@ -2467,9 +2467,9 @@ def breadth_first_foreach_with_state_and_start_dist(
     """
     WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
     (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
-    Does NOT skip neutral cities by emptyVal.
+    Does NOT skip neutral cities by default.
     INVERSE of normal return of forceach, return None/False to skip. Return a state object to continue to the next neighbors.
-    Same as breath_first_foreach_dist, except the foreach function does not get the distance parameter passed to it.
+    Same as breadth_first_foreach_dist, except the foreach function does not get the distance parameter passed to it.
 
     @param map:
     @param startTiles:
@@ -2536,9 +2536,9 @@ def breadth_first_foreach_dist(
     """
     WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
     (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
-    Does NOT skip neutral cities by emptyVal.
+    Does NOT skip neutral cities by default.
     Return True to skip.
-    Same as breath_first_foreach, except the foreach function also gets the distance parameter passed to it.
+    Same as breadth_first_foreach, except the foreach function also gets the distance parameter passed to it.
 
     @param map:
     @param startTiles:
@@ -2599,8 +2599,8 @@ def breadth_first_foreach_dist_fast_incl_neut_cities(
     """
     WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
     (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
-    Does NOT skip neutral cities by emptyVal.
-    Same as breath_first_foreach, except the foreach function also gets the distance parameter passed to it.
+    Does NOT skip neutral cities by default.
+    Same as breadth_first_foreach, except the foreach function also gets the distance parameter passed to it.
 
     @param map:
     @param startTiles:
@@ -2613,7 +2613,7 @@ def breadth_first_foreach_dist_fast_incl_neut_cities(
 
     frontier: typing.Deque[typing.Tuple[Tile, int]] = deque()
 
-    # TODO benchmark this...?
+    # TODO benchmark this...? TODO if we ALWAYS mapmatrix then we can direct-access grid for better perf.
     if maxDepth < map.rows // 3:
         globalVisited = set()
     else:
@@ -2646,10 +2646,9 @@ def breadth_first_foreach_dist_fast_no_neut_cities(
         maxDepth: int,
         foreachFunc: typing.Callable[[Tile, int], bool | None]):
     """
-    WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
-    (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
-    DOES skip neutral cities by emptyVal.
-    Same as breath_first_foreach, except the foreach function also gets the distance parameter passed to it.
+    WILL NOT run the foreach function against mountains (use breadth_first_foreach_dist_fast_no_default_skip to allow mountains).
+    DOES skip neutral cities by default.
+    Same as breadth_first_foreach, except the foreach function also gets the distance parameter passed to it.
 
     @param map:
     @param startTiles:
@@ -2662,7 +2661,7 @@ def breadth_first_foreach_dist_fast_no_neut_cities(
 
     frontier: typing.Deque[typing.Tuple[Tile, int]] = deque()
 
-    # TODO benchmark this...?
+    # TODO benchmark this...? TODO if we ALWAYS mapmatrix then we can direct-access grid for better perf.
     if maxDepth < map.rows // 3:
         globalVisited = set()
     else:
@@ -2678,6 +2677,52 @@ def breadth_first_foreach_dist_fast_no_neut_cities(
         (current, dist) = frontier.pop()
         if current.isObstacle:
             continue
+        if current in globalVisited:
+            continue
+        if dist > maxDepth:
+            break
+        globalVisited.add(current)
+
+        if foreachFunc(current, dist):
+            continue
+
+        newDist = dist + 1
+        for next in current.movable:  # new spots to try
+            frontier.appendleft((next, newDist))
+
+
+def breadth_first_foreach_dist_fast_no_default_skip(
+        map: MapBase,
+        startTiles: typing.List[Tile] | typing.Set[Tile],
+        maxDepth: int,
+        foreachFunc: typing.Callable[[Tile, int], bool | None]):
+    """
+    WILL run the foreach function against mountains.
+    DOES NOT skip neutral cities.
+    Same as breadth_first_foreach, except the foreach function also gets the distance parameter passed to it.
+
+    @param map:
+    @param startTiles:
+    @param maxDepth:
+    @param foreachFunc: ALSO the skip func. Return true to avoid adding neighbors to queue.
+    @return:
+    """
+    if len(startTiles) == 0:
+        return
+
+    frontier: typing.Deque[typing.Tuple[Tile, int]] = deque()
+
+    # TODO benchmark this...? TODO if we ALWAYS mapmatrix then we can direct-access grid for better perf.
+    if maxDepth < map.rows // 3:
+        globalVisited = set()
+    else:
+        globalVisited = MapMatrix(map, False)
+
+    for tile in startTiles:
+        frontier.appendleft((tile, 0))
+
+    while frontier:
+        (current, dist) = frontier.pop()
         if current in globalVisited:
             continue
         if dist > maxDepth:
@@ -2714,7 +2759,7 @@ def breadth_first_foreach_fast_no_neut_cities(
 
     frontier: typing.Deque[typing.Tuple[Tile, int]] = deque()
 
-    # TODO benchmark this...?
+    # TODO benchmark this...? TODO if we ALWAYS mapmatrix then we can direct-access grid for better perf.
     if maxDepth < map.rows // 3:
         globalVisited = set()
     else:
@@ -2757,9 +2802,9 @@ def breadth_first_foreach_dist_revisit_callback(
     """
     WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
     (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
-    Does NOT skip neutral cities by emptyVal.
+    Does NOT skip neutral cities by default.
     Return True to skip.
-    Same as breath_first_foreach, except the foreach function also gets the distance parameter passed to it.
+    Same as breadth_first_foreach, except the foreach function also gets the distance parameter passed to it.
 
     @param map:
     @param startTiles:
@@ -2852,13 +2897,20 @@ def build_distance_map(map: MapBase, startTiles: typing.List[Tile], skipTiles: t
 
         return tile.isNeutral and tile.isCity
 
-    breadth_first_foreach_dist(
-        map,
-        startTiles,
-        1000,
-        bfs_dist_mapper,
-        skipTiles=skipTiles,
-        noLog=True)
+    if skipTiles is None:
+        breadth_first_foreach_dist_fast_incl_neut_cities(
+            map,
+            startTiles,
+            1000,
+            bfs_dist_mapper)
+    else:
+        breadth_first_foreach_dist(
+            map,
+            startTiles,
+            1000,
+            bfs_dist_mapper,
+            skipTiles=skipTiles,
+            noLog=True)
 
     return distanceMap
 
@@ -2889,6 +2941,14 @@ def build_distance_map_matrix(map, startTiles, skipTiles=None) -> MapMatrix[int]
 
 
 def build_distance_map_matrix_include_set(map, startTiles, containsSet: typing.Container[Tile]) -> MapMatrix[int]:
+    """
+    Builds a distance matrix but instead of having skipTiles, instead a set of only ALLOWED tiles is provided. All neighbors will be skipped unless they are in containsSet.
+
+    @param map:
+    @param startTiles:
+    @param containsSet:
+    @return:
+    """
     distanceMap = MapMatrix(map, 1000)
 
     maxDepth = 1000

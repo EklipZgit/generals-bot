@@ -49,7 +49,7 @@ class GatherCapturePlan(TilePlanInterface):
         self.root_nodes: typing.List[GatherTreeNode] = rootNodes
         self.gathered_army: int = gatherValue
         self.gathered_points: float = gatherPoints
-        self._value: float = econValue
+        self._econ_value: float = econValue
         self._turns: int = turnsTotalInclCap
         self.gather_turns: int = gatherTurns
         self._requiredDelay: int = requiredDelay
@@ -70,7 +70,7 @@ class GatherCapturePlan(TilePlanInterface):
     def clone(self) -> GatherCapturePlan:
         clone = GatherCapturePlan(
             rootNodes=[n.deep_clone() for n in self.root_nodes],
-            econValue=self._value,
+            econValue=self._econ_value,
             turnsTotalInclCap=self._turns,
             gatherValue=self.gathered_army,
             gatherPoints=self.gathered_points,
@@ -93,8 +93,12 @@ class GatherCapturePlan(TilePlanInterface):
         return self._turns
 
     @property
-    def value(self) -> float:
-        return self._value
+    def econValue(self) -> float:
+        return self._econ_value
+
+    @econValue.setter
+    def econValue(self, econValue: float):
+        self._econ_value = econValue
 
     @property
     def tileSet(self) -> typing.Set[Tile]:
@@ -162,7 +166,7 @@ class GatherCapturePlan(TilePlanInterface):
         self.notify_army_moved = []
 
     def __str__(self):
-        return f'{self.value:.2f}v/{self._turns}t ({self._value / max(1, self._turns):.2f}vt), armyGath {self.gather_turns}, bM {self.best_case_intercept_moves}, del {self.requiredDelay}, path {self.path}'
+        return f'{self._econ_value:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt), armyGath {self.gathered_army}, del {self.requiredDelay}, tiles {self.tileList}'
 
     def __repr__(self):
         return str(self)
@@ -3003,6 +3007,7 @@ def prune_mst_until(
 
     initialCount = len(nodeMap)
 
+    current: GatherTreeNode
     try:
         # now we have all the leaves, smallest value first
         while pruneHeap.queue:
@@ -3052,8 +3057,8 @@ def prune_mst_until(
 
             # now remove this leaf from its parent and bubble the value change all the way up
             curValue -= current.value
-            parent = nodeMap.get(current.fromTile, None)
-            realParent = parent
+            parent: GatherTreeNode | None = nodeMap.get(current.fromTile, None)
+            realParent: GatherTreeNode | None = parent
 
             if parent is not None:
                 try:

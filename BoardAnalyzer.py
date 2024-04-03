@@ -252,6 +252,10 @@ class BoardAnalyzer:
         enPlayers = SearchUtils.where(self.map.players, lambda p: not self.map.is_player_on_team_with(self.general.player, p.index) and not p.dead)
 
         startTiles = set()
+        hasPerfectInfo = True
+        for p in enPlayers:
+            if SearchUtils.count(p.cities, lambda c: c.discovered) + 1 < p.cityCount:
+                hasPerfectInfo = False
         indexes = [p.index for p in enPlayers]
         for t in self.map.reachableTiles:
             if t.visible:
@@ -262,11 +266,17 @@ class BoardAnalyzer:
                     startTiles.add(t)
 
         self.all_possible_enemy_spawns = startTiles
+        startList = list(startTiles)
+        # dists = SearchUtils.build_distance_map(self.map, startList)
+        discountVisibleNearEnemyGen = int(self.inter_general_distance * 0.35)
 
-        def foreachFunc(tile: Tile) -> bool:
-            if not tile.visible:
-                self.flankable_fog_area_matrix[tile] = True
+        def foreachFunc(tile: Tile, dist: int) -> bool:
+            countsForFlankable = not tile.visible or dist < discountVisibleNearEnemyGen
+            if hasPerfectInfo and tile.isObstacle:
+                return True
+            if tile.isMountain or (tile.isNeutral and tile.isCity and tile.visible) or not countsForFlankable:
+                return True
 
-            return tile.isObstacle or tile.visible
+            self.flankable_fog_area_matrix[tile] = True
 
-        SearchUtils.breadth_first_foreach(self.map, list(startTiles), int(self.inter_general_distance * 1.2), foreachFunc)
+        SearchUtils.breadth_first_foreach_dist_fast_no_default_skip(self.map, startList, int(self.inter_general_distance * 1.4), foreachFunc)

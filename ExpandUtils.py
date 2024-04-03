@@ -10,7 +10,7 @@ from Behavior.ArmyInterceptor import InterceptionOptionInfo
 from BoardAnalyzer import BoardAnalyzer
 from DataModels import Move
 from Interfaces import TilePlanInterface
-from KnapsackUtils import solve_knapsack
+# from KnapsackUtils import solve_knapsack
 from MapMatrix import MapMatrix
 from Path import Path
 from PerformanceTimer import PerformanceTimer
@@ -18,126 +18,126 @@ from SearchUtils import breadth_first_foreach, count, where
 from ViewInfo import PathColorer, ViewInfo
 from base.client.map import Tile, MapBase
 
-
-# attempt to get this to a* able?
-def get_expansion_single_knapsack_path_trimmed(
-        paths: typing.List[typing.Tuple[int, int, Path]],
-        targetPlayers: typing.List[int],
-        turns: int,
-        enemyDistMap: MapMatrix[int],
-        calculateTrimmable: bool,
-        territoryMap: MapMatrix[int],
-        viewInfo: ViewInfo,
-) -> typing.Tuple[Path | None, typing.List[Path]]:
-    """
-    Knapsacks a set of paths that all start from unique tiles, and returns the best one.
-
-    @param paths:
-    @param targetPlayers:
-    @param turns:
-    @param enemyDistMap:
-    @param calculateTrimmable:
-    @param territoryMap:
-    @param viewInfo:
-    @return:
-    """
-
-    trimmable = {}
-    if calculateTrimmable:
-        for friendlyCityCount, tilesCaptured, path in paths:
-            tailNode = path.tail
-            trimCount = 0
-            while tailNode.tile.player == -1 and territoryMap[tailNode.tile] not in targetPlayers and tailNode.tile.discovered:
-                trimCount += 1
-                tailNode = tailNode.prev
-            if trimCount > 0:
-                trimmable[path.start.tile] = (path, trimCount)
-
-            if viewInfo:
-                viewInfo.bottomRightGridText[path.start.tile] = f'cap{tilesCaptured:.1f}'
-                # viewInfo.paths.appendleft(PathColorer(path, 180, 51, 254, alpha, alphaDec, minAlpha))
-
-    intFactor = 100
-    # build knapsack weights and values
-    weights = [path.length for friendlyCityCount, tilesCaptured, path in paths]
-    values = [int(intFactor * tilesCaptured) for friendlyCityCount, tilesCaptured, path in paths]
-    logbook.info(f"Feeding the following paths into knapsackSolver at turns {turns}...")
-    for i, pathTuple in enumerate(paths):
-        friendlyCityCount, tilesCaptured, curPath = pathTuple
-        logbook.info(f"{i}:  cap {tilesCaptured:.2f} length {curPath.length} path {curPath.toString()}")
-
-    totalValue, maxKnapsackedPaths = solve_knapsack(paths, turns, weights, values)
-    logbook.info(f"maxKnapsackedPaths value {totalValue} length {len(maxKnapsackedPaths)},")
-
-    path: typing.Union[None, Path] = None
-    if len(maxKnapsackedPaths) > 0:
-        maxVal = (-10000, -1)
-        totalTrimmable = 0
-        for friendlyCityCount, tilesCaptured, curPath in maxKnapsackedPaths:
-            if curPath.start.tile in trimmable:
-                logbook.info(
-                    f"trimmable in current knapsack, {curPath.toString()} (friendlyCityCount {friendlyCityCount}, tilesCaptured {tilesCaptured})")
-                trimmablePath, possibleTrim = trimmable[curPath.start.tile]
-                totalTrimmable += possibleTrim
-        logbook.info(f"totalTrimmable! {totalTrimmable}")
-
-        if totalTrimmable > 0:
-            trimmableStart = time.perf_counter()
-            trimRange = min(10, 1 + totalTrimmable)
-            # see if there are better knapsacks if we trim the ends off some of these
-            maxKnapsackVal = totalValue
-            for i in range(trimRange):
-                otherValue, otherKnapsackedPaths = solve_knapsack(paths, turns + i, weights, values)
-                # offset by i to compensate for the skipped moves
-                otherValueWeightedByTrim = otherValue - i * intFactor
-                logbook.info(
-                    f"i {i} - otherKnapsackedPaths value {otherValue} weightedValue {otherValueWeightedByTrim} length {len(otherKnapsackedPaths)}")
-                if otherValueWeightedByTrim > maxKnapsackVal:
-                    maxKnapsackVal = otherValueWeightedByTrim
-                    maxKnapsackedPaths = otherKnapsackedPaths
-                    logbook.info(f"NEW MAX {maxKnapsackVal}")
-            logbook.info(
-                f"(Time spent on {trimRange} trimmable iterations: {time.perf_counter() - trimmableStart:.3f})")
-        # Select which of the knapsack paths to move first
-        logbook.info("Selecting which of the above paths to move first")
-        for friendlyCityCount, tilesCaptured, curPath in maxKnapsackedPaths:
-            trimmableVal = 0
-            if curPath.start.tile in trimmable:
-                trimmablePath, possibleTrim = trimmable[curPath.start.tile]
-                trimmableVal = possibleTrim
-            # Paths ending with the largest armies go first to allow for more path selection options later
-            thisVal = (0 - friendlyCityCount,
-                       curPath.value,
-                       0 - trimmableVal,
-                       0 - enemyDistMap[curPath.start.tile.x][curPath.start.tile.y],
-                       tilesCaptured / curPath.length)
-            if thisVal > maxVal:
-                maxVal = thisVal
-                path = curPath
-                logbook.info(
-                    f"new max val, eval [{'], ['.join(str(x) for x in maxVal)}], path {path.toString()}")
-            else:
-                logbook.info(
-                    f"NOT max val, eval [{'], ['.join(str(x) for x in thisVal)}], path {curPath.toString()}")
-
-    otherPaths = [p for _, _, p in maxKnapsackedPaths if p != path]
-
-    for curPath in otherPaths:
-        if viewInfo:
-            # draw other paths darker
-            alpha = 150
-            minAlpha = 150
-            alphaDec = 0
-            viewInfo.paths.appendleft(PathColorer(curPath, 200, 51, 204, alpha, alphaDec, minAlpha))
-
-        # draw maximal path brighter
-        alpha = 255
-        minAlpha = 200
-        alphaDec = 0
-        if viewInfo:
-            viewInfo.paths.appendleft(PathColorer(path, 255, 100, 200, alpha, alphaDec, minAlpha))
-
-    return path, otherPaths
+#
+# # attempt to get this to a* able?
+# def get_expansion_single_knapsack_path_trimmed(
+#         paths: typing.List[typing.Tuple[int, int, Path]],
+#         targetPlayers: typing.List[int],
+#         turns: int,
+#         enemyDistMap: MapMatrix[int],
+#         calculateTrimmable: bool,
+#         territoryMap: MapMatrix[int],
+#         viewInfo: ViewInfo,
+# ) -> typing.Tuple[Path | None, typing.List[Path]]:
+#     """
+#     Knapsacks a set of paths that all start from unique tiles, and returns the best one.
+#
+#     @param paths:
+#     @param targetPlayers:
+#     @param turns:
+#     @param enemyDistMap:
+#     @param calculateTrimmable:
+#     @param territoryMap:
+#     @param viewInfo:
+#     @return:
+#     """
+#
+#     trimmable = {}
+#     if calculateTrimmable:
+#         for friendlyCityCount, tilesCaptured, path in paths:
+#             tailNode = path.tail
+#             trimCount = 0
+#             while tailNode.tile.player == -1 and territoryMap[tailNode.tile] not in targetPlayers and tailNode.tile.discovered:
+#                 trimCount += 1
+#                 tailNode = tailNode.prev
+#             if trimCount > 0:
+#                 trimmable[path.start.tile] = (path, trimCount)
+#
+#             if viewInfo:
+#                 viewInfo.bottomRightGridText[path.start.tile] = f'cap{tilesCaptured:.1f}'
+#                 # viewInfo.paths.appendleft(PathColorer(path, 180, 51, 254, alpha, alphaDec, minAlpha))
+#
+#     intFactor = 100
+#     # build knapsack weights and values
+#     weights = [path.length for friendlyCityCount, tilesCaptured, path in paths]
+#     values = [int(intFactor * tilesCaptured) for friendlyCityCount, tilesCaptured, path in paths]
+#     logbook.info(f"Feeding the following paths into knapsackSolver at turns {turns}...")
+#     for i, pathTuple in enumerate(paths):
+#         friendlyCityCount, tilesCaptured, curPath = pathTuple
+#         logbook.info(f"{i}:  cap {tilesCaptured:.2f} length {curPath.length} path {curPath.toString()}")
+#
+#     totalValue, maxKnapsackedPaths = solve_knapsack(paths, turns, weights, values)
+#     logbook.info(f"maxKnapsackedPaths value {totalValue} length {len(maxKnapsackedPaths)},")
+#
+#     path: typing.Union[None, Path] = None
+#     if len(maxKnapsackedPaths) > 0:
+#         maxVal = (-10000, -1)
+#         totalTrimmable = 0
+#         for friendlyCityCount, tilesCaptured, curPath in maxKnapsackedPaths:
+#             if curPath.start.tile in trimmable:
+#                 logbook.info(
+#                     f"trimmable in current knapsack, {curPath.toString()} (friendlyCityCount {friendlyCityCount}, tilesCaptured {tilesCaptured})")
+#                 trimmablePath, possibleTrim = trimmable[curPath.start.tile]
+#                 totalTrimmable += possibleTrim
+#         logbook.info(f"totalTrimmable! {totalTrimmable}")
+#
+#         if totalTrimmable > 0:
+#             trimmableStart = time.perf_counter()
+#             trimRange = min(10, 1 + totalTrimmable)
+#             # see if there are better knapsacks if we trim the ends off some of these
+#             maxKnapsackVal = totalValue
+#             for i in range(trimRange):
+#                 otherValue, otherKnapsackedPaths = solve_knapsack(paths, turns + i, weights, values)
+#                 # offset by i to compensate for the skipped moves
+#                 otherValueWeightedByTrim = otherValue - i * intFactor
+#                 logbook.info(
+#                     f"i {i} - otherKnapsackedPaths value {otherValue} weightedValue {otherValueWeightedByTrim} length {len(otherKnapsackedPaths)}")
+#                 if otherValueWeightedByTrim > maxKnapsackVal:
+#                     maxKnapsackVal = otherValueWeightedByTrim
+#                     maxKnapsackedPaths = otherKnapsackedPaths
+#                     logbook.info(f"NEW MAX {maxKnapsackVal}")
+#             logbook.info(
+#                 f"(Time spent on {trimRange} trimmable iterations: {time.perf_counter() - trimmableStart:.3f})")
+#         # Select which of the knapsack paths to move first
+#         logbook.info("Selecting which of the above paths to move first")
+#         for friendlyCityCount, tilesCaptured, curPath in maxKnapsackedPaths:
+#             trimmableVal = 0
+#             if curPath.start.tile in trimmable:
+#                 trimmablePath, possibleTrim = trimmable[curPath.start.tile]
+#                 trimmableVal = possibleTrim
+#             # Paths ending with the largest armies go first to allow for more path selection options later
+#             thisVal = (0 - friendlyCityCount,
+#                        curPath.value,
+#                        0 - trimmableVal,
+#                        0 - enemyDistMap[curPath.start.tile],
+#                        tilesCaptured / curPath.length)
+#             if thisVal > maxVal:
+#                 maxVal = thisVal
+#                 path = curPath
+#                 logbook.info(
+#                     f"new max val, eval [{'], ['.join(str(x) for x in maxVal)}], path {path.toString()}")
+#             else:
+#                 logbook.info(
+#                     f"NOT max val, eval [{'], ['.join(str(x) for x in thisVal)}], path {curPath.toString()}")
+#
+#     otherPaths = [p for _, _, p in maxKnapsackedPaths if p != path]
+#
+#     for curPath in otherPaths:
+#         if viewInfo:
+#             # draw other paths darker
+#             alpha = 150
+#             minAlpha = 150
+#             alphaDec = 0
+#             viewInfo.paths.appendleft(PathColorer(curPath, 200, 51, 204, alpha, alphaDec, minAlpha))
+#
+#         # draw maximal path brighter
+#         alpha = 255
+#         minAlpha = 200
+#         alphaDec = 0
+#         if viewInfo:
+#             viewInfo.paths.appendleft(PathColorer(path, 255, 100, 200, alpha, alphaDec, minAlpha))
+#
+#     return path, otherPaths
 
 
 def path_has_cities_and_should_wait(
@@ -1055,9 +1055,10 @@ def get_optimal_expansion(
 
                     last = tile
                     nextNode = nextNode.next
+                path.econValue = value
                 return value
             else:
-                return path.value
+                return path.econValue
 
         if turns <= 0:
             raise AssertionError(f"turns {turns} <= 0 in optimal_expansion...")
@@ -1121,7 +1122,7 @@ def get_optimal_expansion(
             addlPaths = additionalOptionValues
 
             # counts = {}
-            for option in sorted(addlPaths, key=lambda p: p.value / p.length, reverse=True):
+            for option in sorted(addlPaths, key=lambda p: p.econValue / p.length, reverse=True):
                 # for tile in path.tileList:
                 #     count = counts.get(tile, 0)
                 #     counts[tile] = count + 1
@@ -1139,7 +1140,7 @@ def get_optimal_expansion(
                     postPathEvalFunction,
                     tryAvoidSet,
                     useIterativeNegTiles=False,
-                    baseValueOverride=option.value,
+                    baseValueOverride=option.econValue,
                     turnOverride=option.length,
                     logEntries=logEntries)
             logEntries.append(f"Completed additional option inclusion.... elapsed {time.perf_counter() - startTime:.4f}")
@@ -1496,7 +1497,7 @@ def get_optimal_expansion(
             for opt in additionalOptionValues:
                 if opt.length + opt.requiredDelay >= remainingTurns:
                     continue
-                valueOverrides[opt] = (opt.value, opt.length)
+                valueOverrides[opt] = (opt.econValue, opt.length)
 
         path, otherPaths, totalTurns, totalValue = knapsack_multi_paths(
             map,
@@ -2224,8 +2225,8 @@ def expansion_knapsack_gather_iteration(
                 longRuntimeThreshold=0.01)
             logbook.info(f"maxKnapsackedPaths value {totalValue} length {len(maxKnapsackedPaths)},")
             error = False
-        except AssertionError:
-            logbook.error(f'OVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE. v\r\n{traceback.format_exc()}\r\nOVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE.^ ')
+        except AssertionError as ex:
+            logbook.error(f'OVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE. v\r\n{str(ex)}\r\nOVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE. ^ ')
             valuePerTurnPathPerTile = _prune_worst_paths_greedily(valuePerTurnPathPerTile, valueFunc)
 
     return totalValue, sorted(maxKnapsackedPaths, key=lambda p: pathValLookup[p] / max(1, p.length), reverse=True)
@@ -2310,7 +2311,7 @@ def should_consider_path_move_half(
 
         # a 4 move-half leaves 2 behind, a 5 move_half leaves 3 behind. +1 because path.value is already -1
         capArmy = pathTile.army // 2
-        pathValueWithoutCapArmy = path.value - capArmy
+        pathValueWithoutCapArmy = path.econValue - capArmy
 
         altCappable = set()
 

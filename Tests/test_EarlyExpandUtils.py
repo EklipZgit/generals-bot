@@ -44,11 +44,13 @@ class EarlyExpandUtilsTests(TestBase):
         EarlyExpandUtils.DEBUG_ASSERTS = True
 
         plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=noLog)
+        self.assert_expand_plan_valid(map, plan, general)
+        return map, plan
+
+    def assert_expand_plan_valid(self, map: MapBase, plan: EarlyExpandUtils.ExpansionPlan, general: Tile):
         paths = plan.plan_paths
         value = EarlyExpandUtils.get_start_expand_value(map, general, general.army, map.turn, paths, noLog=False)
-
         self.assertEqual(plan.tile_captures, value)
-        return map, plan
 
     def get_tiles_capped_on_50_count_and_reset_map(self, map, general) -> int:
         playerTilesToMatchOrExceed = SearchUtils.count(map.pathableTiles, lambda tile: tile.player == general.player)
@@ -701,6 +703,7 @@ class EarlyExpandUtilsTests(TestBase):
                 if debugMode:
                     self.render_expansion_plan(map, plan)
                 self.assertLessEqual(timeSpent, 4.3, 'took longer than we consider safe for finding starts')
+                self.assert_expand_plan_valid(map, plan, general)
                 self.assertGreaterEqual(plan.tile_captures, playerTilesToMatchOrExceed)
                 if plan.tile_captures > playerTilesToMatchOrExceed:
                     self.skipTest(f"Produced a BETTER plan than original, {plan.tile_captures} vs {playerTilesToMatchOrExceed}")
@@ -740,6 +743,7 @@ class EarlyExpandUtilsTests(TestBase):
                 if debugMode:
                     self.render_expansion_plan(map, plan)
                 self.assertLessEqual(timeSpent, 4.3, 'took longer than we consider safe for finding starts')
+                self.assert_expand_plan_valid(map, plan, general)
                 self.assertGreaterEqual(plan.tile_captures, playerTilesToMatchOrExceed)
                 if plan.tile_captures > playerTilesToMatchOrExceed:
                     self.skipTest(f"Produced a BETTER plan than original, {plan.tile_captures} vs {playerTilesToMatchOrExceed}")
@@ -812,14 +816,15 @@ class EarlyExpandUtilsTests(TestBase):
         rawMap.players[enemyAllyGen.player].general = None
 
         self.enable_search_time_limits_and_disable_debug_asserts()
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True, respectTurnTimeLimitToDropMoves=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=50)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=48)
         self.assertNoFriendliesKilled(map, general, allyGen)
+        self.assertGreater(playerMap.players[general.player].tileCount + playerMap.players[allyGen.player].tileCount, 45)
     
     def test_should_be_capable_of_expanding_out_of_stupid_spawn_near_ally(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True

@@ -25,7 +25,7 @@ class PathTests(TestBase):
                 threatTile.army = 9
 
                 map = self.get_test_map(board, turn=turn)
-                path = Path(value=-42)
+                path = Path(armyRemaining=-42)
                 path.add_next(threatTile)
                 path.add_next(board[1][0])
                 path.add_next(general)
@@ -50,7 +50,7 @@ class PathTests(TestBase):
                 threatTile.army = 27
 
                 map = self.get_test_map(board, turn=turn)
-                path = Path(value=-42)
+                path = Path(armyRemaining=-42)
                 for i in range(10):
                     path.add_next(board[9 - i][0])
 
@@ -72,7 +72,7 @@ class PathTests(TestBase):
                 threatTile.army = 9
 
                 map = self.get_test_map(board, turn=turn)
-                path = Path(value=-42)
+                path = Path(armyRemaining=-42)
                 path.add_next(threatTile)
                 path.add_next(board[1][0])
                 path.add_next(target)
@@ -94,7 +94,7 @@ class PathTests(TestBase):
                 threatTile.army = tileArmy
 
                 map = self.get_test_map(board, turn=1)
-                path = Path(value=-42)
+                path = Path(armyRemaining=-42)
                 path.add_next(threatTile)
                 path.add_next(target, move_half=True)
 
@@ -117,7 +117,7 @@ class PathTests(TestBase):
                 threatTile.army = 23
 
                 map = self.get_test_map(board, turn=turn)
-                path = Path(value=-42)
+                path = Path(armyRemaining=-42)
                 for i in range(10):
                     path.add_next(board[9 - i][0])
 
@@ -137,7 +137,7 @@ class PathTests(TestBase):
         threatTile.army = 23
 
         map = self.get_test_map(board, turn=turn)
-        path = Path(value=-42)
+        path = Path(armyRemaining=-42)
         for i in range(10):
             path.add_next(board[9 - i][0])
 
@@ -160,7 +160,7 @@ class PathTests(TestBase):
         threatTile.army = 23
 
         map = self.get_test_map(board, turn=turn)
-        path = Path(value=-42)
+        path = Path(armyRemaining=-42)
         for i in range(10):
             path.add_next(board[9 - i][0])
 
@@ -183,7 +183,7 @@ class PathTests(TestBase):
         threatTile.army = 23
 
         map = self.get_test_map(board, turn=turn)
-        path = Path(value=-42)
+        path = Path(armyRemaining=-42)
         for i in range(10):
             path.add_next(board[9 - i][0])
 
@@ -204,7 +204,7 @@ class PathTests(TestBase):
         threatTile.army = 23
 
         map = self.get_test_map(board, turn=turn)
-        path = Path(value=-42)
+        path = Path(armyRemaining=-42)
         for i in range(10):
             path.add_next(board[9 - i][0])
 
@@ -226,7 +226,7 @@ class PathTests(TestBase):
         threatTile.army = 23
 
         map = self.get_test_map(board, turn=turn)
-        path = Path(value=-42)
+        path = Path(armyRemaining=-42)
         for i in range(10):
             path.add_next(board[9 - i][0])
 
@@ -266,7 +266,7 @@ class PathTests(TestBase):
                 threatTile.army = 2
 
                 map = self.get_test_map(board, turn=turn)
-                path = Path(value=-42)
+                path = Path(armyRemaining=-42)
                 path.add_next(threatTile)
                 path.add_next(target)
 

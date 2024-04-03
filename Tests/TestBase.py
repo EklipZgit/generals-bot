@@ -1466,7 +1466,11 @@ class TestBase(unittest.TestCase):
             if map.is_tile_friendly(tile) and tile.army > 10:
                 negs.add(tile)
 
-        paths = ArmyTracker.get_army_expected_path(map, Army(enTile), general, targets)
+        negsToSend = None
+        if "Defenseless" in map.modifiers:
+            negsToSend = {general}
+
+        paths = ArmyTracker.get_army_expected_path(map, Army(enTile), general, targets, negativeTiles=negsToSend)
 
         self.begin_capturing_logging()
 
@@ -1541,7 +1545,7 @@ class TestBase(unittest.TestCase):
         for dist, option in plan.intercept_options.items():
             if dist > maxDepth:
                 continue
-            val = option.value
+            val = option.econValue
             path = option.path
             vt = val/dist
             if vt > bestVt:
@@ -1563,7 +1567,7 @@ class TestBase(unittest.TestCase):
         for dist, option in plan.intercept_options.items():
             if dist > maxDepth:
                 continue
-            val = option.value
+            val = option.econValue
             path = option.path
             vt = val/dist
             if vt > bestVt:
@@ -1589,13 +1593,13 @@ class TestBase(unittest.TestCase):
             xEnd: int | None = None,
             yEnd: int | None = None,
             message: str | None = None):
-        bestOpt = None
-        bestOptAmt = 0
-        bestOptDist = 0
+        opt = None
+        optAmt = 0
+        optDist = 0
         maxVt = -1000
 
         for dist, option in plan.intercept_options.items():
-            val = option.value
+            val = option.econValue
             path = option.path
             if xStart is not None and path.start.tile.x != xStart:
                 continue
@@ -1608,14 +1612,14 @@ class TestBase(unittest.TestCase):
 
             vt = val/dist
             if vt > maxVt:
-                logbook.info(f'FOUND BEST INTERCEPT OPT {val}/{dist} -- {str(path)}')
-                bestOpt = path
-                bestOptAmt = val
-                bestOptDist = dist
+                logbook.info(f'FOUND INTERCEPT OPT {val}/{dist} -- {str(path)}')
+                opt = path
+                optAmt = val
+                optDist = dist
                 maxVt = vt
 
-        if bestOpt is not None:
-            self.fail(f'Expected NO best intercept option starting {xStart | "any"},{yStart | "any"}-->{xEnd | "any"},{yEnd | "any"}, instead found bestOptAmt {bestOptAmt}, bestOptDist {bestOptDist}, bestOpt {bestOpt}')
+        if opt is not None:
+            self.fail(f'Expected NO intercept option starting {xStart if xStart else "any"},{yStart if yStart else "any"}-->{xEnd if xEnd else "any"},{yEnd if yEnd else "any"}, instead found optAmt {optAmt}, optDist {optDist}, opt {opt}')
 
     def get_interceptor_path_by_coords(
             self,
@@ -1642,7 +1646,7 @@ class TestBase(unittest.TestCase):
         maxVt = -1000
 
         for dist, option in plan.intercept_options.items():
-            val = option.value
+            val = option.econValue
             path = option.path
             if xStart is not None and path.start.tile.x != xStart:
                 continue
@@ -1717,7 +1721,7 @@ class TestBase(unittest.TestCase):
         maxVt = -1000
 
         for dist, option in plan.intercept_options.items():
-            val = option.value
+            val = option.econValue
             path = option.path
             if xStart is not None and path.start.tile.x != xStart:
                 continue
@@ -1774,7 +1778,7 @@ class TestBase(unittest.TestCase):
         maxValTurnPath = None
         maxOpt = None
         for dist, opt in plan.intercept_options.items():
-            val = opt.value
+            val = opt.econValue
             path = opt.path
             valPerTurn = val / dist
             maxStr = ''

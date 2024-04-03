@@ -829,6 +829,8 @@ class MapBase(object):
         self.resume_data: typing.Dict[str, str] = {}
         """Data for resuming a game in unit test. Unused in normal games."""
 
+        self.modifiers: typing.Set[str] = set()
+
     def __repr__(self):
         return str(self)
 

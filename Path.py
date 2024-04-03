@@ -58,7 +58,7 @@ class PathMove(object):
 
 class Path(TilePlanInterface):
 
-    def __init__(self, value: float = 0):
+    def __init__(self, armyRemaining: float = 0):
         self.start: typing.Union[None, PathMove] = None
         self._pathQueue: typing.Deque[PathMove] = deque()
         self.tail: typing.Union[None, PathMove] = None
@@ -67,7 +67,8 @@ class Path(TilePlanInterface):
         self._adjacentSet: typing.Set[Tile] | None = None
         # The exact army tile number that will exist on the final tile at the end of the path run.
         # So for a path that exactly kills a tile with minimum kill army, this should be 1.
-        self._value: float = value
+        self._value: float = armyRemaining
+        self._econ_value = 0
 
     # def __gt__(self, other) -> bool:
     #     if other is None:
@@ -86,6 +87,14 @@ class Path(TilePlanInterface):
     @value.setter
     def value(self, val: float):
         self._value = val
+
+    @property
+    def econValue(self) -> float:
+        return self._econ_value
+
+    @econValue.setter
+    def econValue(self, val: float):
+        self._econ_value = val
 
     @property
     def length(self) -> int:
@@ -115,6 +124,7 @@ class Path(TilePlanInterface):
 
     @property
     def adjacentSet(self) -> typing.Set[Tile]:
+        """Includes the tileSet itself, too."""
         if self._adjacentSet is None:
             self._adjacentSet = set()
             for t in self._pathQueue:

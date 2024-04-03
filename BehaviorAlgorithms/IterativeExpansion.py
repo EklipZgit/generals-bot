@@ -390,8 +390,8 @@ class ArmyFlowExpander(object):
                     longRuntimeThreshold=0.01)
                 logbook.info(f"maxKnapsackedPaths value {totalValue} length {len(maxKnapsackedPaths)},")
                 error = False
-            except AssertionError:
-                logbook.error(f'OVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE. v\r\n{traceback.format_exc()}\r\nOVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE.^ ')
+            except AssertionError as ex:
+                logbook.error(f'OVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE. v\r\n{str(ex)}\r\nOVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE. ^ ')
                 valuePerTurnPathPerTile = _prune_worst_paths_greedily(valuePerTurnPathPerTile, valueFunc)
 
         return totalValue, sorted(maxKnapsackedPaths, key=lambda p: pathValLookup[p] / max(1, p.length), reverse=True)

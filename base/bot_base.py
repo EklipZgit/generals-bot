@@ -112,6 +112,9 @@ class GeneralsClientHost(object):
             #logbook.warn(''.join('!! ' + line for line in lines))  # Log it or whatever here
             logbook.info("err")  # Log it or whatever here
             logbook.error(''.join('!! ' + line for line in lines))  # Log it or whatever here
+            time.sleep(0.1)
+            time.sleep(0.1)
+            time.sleep(0.1)
 
         self._running = False
         self._game._terminate()
@@ -212,6 +215,8 @@ class GeneralsClientHost(object):
             logbook.info('First update...?')
             self._seen_update = True
             self._map = Map(self._game._start_data, data)
+            self._game.map = self._map
+            self._map.modifiers = self._game.modifiers
 
         logbook.info('applying server update...?')
 

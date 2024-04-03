@@ -378,80 +378,6 @@ class ArmyInterceptionTests(TestBase):
 
         self.assertEqual(map.GetTile(14, 6), plan.best_enemy_threat.threat.path.tail.tile)
 
-    def test_should_identify_best_meeting_point_in_intercept_options(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
-        mapFile = 'GameContinuationEntries/should_intercept_inbound_army_on_edge_when_would_have_10_recapture_turns___l7Y-HnzES---0--181.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 181, fill_out_tiles=True)
-        notCity = map.GetTile(14, 6)
-        notCity.isCity = False
-        map.players[general.player].cities.remove(notCity)
-
-        plan = self.get_interception_plan(map, general, enemyGeneral)
-
-        if debugMode:
-            self.render_intercept_plan(map, plan)
-
-        self.assertEqual(3, len(plan.threats))
-
-        self.assertInterceptChokeTileMoves(plan, map, x=8, y=5, w=0)
-        self.assertInterceptChokeTileMoves(plan, map, x=9, y=5, w=1)
-        self.assertInterceptChokeTileMoves(plan, map, x=13, y=3, w=0)
-        self.assertInterceptChokeTileMoves(plan, map, x=14, y=3, w=0)
-        self.assertInterceptChokeTileMoves(plan, map, x=9, y=4, w=0)
-        self.assertNotInterceptChoke(plan, map, x=10, y=5)
-        self.assertNotInterceptChoke(plan, map, x=10, y=6)
-
-        bestOpt = None
-        bestOptAmt = 0
-        gatherDepth = 20
-        for turn, option in plan.intercept_options.items():
-            val = option.value
-            path = option.path
-            if path.length < gatherDepth and val > bestOptAmt:
-                logbook.info(f'NEW BEST INTERCEPT OPT {val:.2f} -- {str(path)}')
-                bestOpt = path
-                bestOptAmt = val
-
-        self.assertEqual(map.GetTile(9, 5), bestOpt.tail.tile)
-
-# TODO still need an open-map wide choke example to test finding mid-choke-points on. 3 or wider choke required.
-# TODO what about threats where the chokes diverge super early from the threat? Need intercept chokes that are NOT on the shortest path, and find the lowest common denominator between them still?
-# TODO ^ also needs to detect when the path SPLITS vs lines on opposite sides of the same choke where an army could stage in the middle, vs being unable to stage in the middle due to blockage by mountains or pure split scenario.    
-    def test_should_recognize_multi_threat_and_intercept_at_choke__unit_test(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/should_recognize_multi_threat_and_intercept_at_choke___Human.exe-TEST__efebcb16-d770-4d80-ac54-b9c37c8e7bea---0--289.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 289, fill_out_tiles=True)
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=False, turn=289)
-
-        plan = self.get_interception_plan(rawMap, general, enemyGeneral)
-
-        if debugMode:
-            self.render_intercept_plan(rawMap, plan)
-
-        self.assertEqual(2, len(plan.threats))
-        self.assertInterceptChokeTileMoves(plan, map, x=2, y=7, w=1)
-        self.assertNotInterceptChoke(plan, map, x=5, y=7)
-        self.assertNotInterceptChoke(plan, map, x=1, y=5)
-        self.assertNotInterceptChoke(plan, map, x=1, y=6)
-        self.assertNotInterceptChoke(plan, map, x=1, y=7)
-        self.assertNotInterceptChoke(plan, map, x=2, y=8)
-        self.assertNotInterceptChoke(plan, map, x=3, y=8)
-        self.assertNotInterceptChoke(plan, map, x=4, y=8)
-
-        bestOpt = None
-        bestOptAmt = 0
-        gatherDepth = 20
-        option = plan.intercept_options[3]
-        val = option.value
-        path = option.path
-        if path.length < gatherDepth and val > bestOptAmt:
-            logbook.info(f'NEW BEST INTERCEPT OPT {val:.2f} -- {str(path)}')
-            bestOpt = path
-            bestOptAmt = val
-
-        self.assertEqual(map.GetTile(2, 7), bestOpt.tail.tile)
-
     def test_should_recognize_multi_threat_and_intercept_at_choke(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_recognize_multi_threat_and_intercept_at_choke___Human.exe-TEST__efebcb16-d770-4d80-ac54-b9c37c8e7bea---0--289.txtmap'
@@ -511,15 +437,16 @@ class ArmyInterceptionTests(TestBase):
 
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-        simHost.queue_player_moves_str(enemyGeneral.player, '1,8->6,8->6,7')
+        simHost.queue_player_moves_str(enemyGeneral.player, '1,8->6,8->6,6')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
         self.assertIsNone(winner)
 
         self.assertEqual(playerMap.GetTile(6, 7).player, general.player)
+        self.assertEqual(playerMap.GetTile(6, 6).player, general.player)
 
     def test_should_recognize_multi_threat_and_intercept_at_choke__unit_test_does_not_value_incoming_collisions_that_dont_prevent_caps_to_round_end(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1755,3 +1682,47 @@ class ArmyInterceptionTests(TestBase):
                 self.assertIsNone(winner)
 
                 self.assertTileDifferentialGreaterThan(15, simHost)
+    
+    def test_should_not_wastefully_intercept_early_in_the_round(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_wastefully_intercept_early_in_the_round___sTDj-LVHp---1--300.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 300, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=300)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '0,4->0,6->3,6')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.timings = bot.get_timings()
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=28)
+        self.assertIsNone(winner)
+
+        self.assertGreater(playerMap.GetTile(2, 10).army, 20)
+        self.assertGreater(playerMap.GetTile(2, 9).army, 1)
+        self.assertGreater(playerMap.GetTile(2, 8).army, 1)
+        self.assertGreater(playerMap.GetTile(2, 7).army, 1)
+    
+    def test_should_close_distance_and_corner_army__not_leafdist_defense_gather(self):
+        # TODO maybe after we get our good friend everything-knapsack working this should pass?
+        #  basically we shouldn't chase this once it runs down but should recapture the cities instead
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_close_distance_and_corner_army,_not_leafdist_defense_gather___frt1n-JKy---1--491.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 491, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=491)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '13,5->12,5->12,7->17,7->17,6->19,6')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        self.assertIsNone(winner)
+
+        self.assertOwned(general.player, playerMap.GetTile(18, 6))

@@ -81,10 +81,14 @@ class BotHostBase(object):
     def make_move(self, currentMap: MapBase, updateReceivedTime: float):
         # todo most of this logic / timing / whatever should move into EklipZbot...
         timer: PerformanceTimer = self.eklipz_bot.perf_timer
-        diff = (time.time_ns() / NS_CONVERTER) - updateReceivedTime
+        now = (time.time_ns() / NS_CONVERTER)
+        diff = now - updateReceivedTime
         if diff > 0.3:
+            logbook.info(f'MISSED MOVE receiving turn {currentMap.turn}, update diff {diff:.3f}, (now {now:.3f} - updateReceivedTime {updateReceivedTime:.3f})')
             self.receive_update_no_move(currentMap, updateReceivedTime)
             return
+        else:
+            logbook.info(f'receiving turn {currentMap.turn}, update diff {diff:.3f}, (now {now:.3f} - updateReceivedTime {updateReceivedTime:.3f})')
 
         timer.record_update(currentMap.turn, updateReceivedTime)
 

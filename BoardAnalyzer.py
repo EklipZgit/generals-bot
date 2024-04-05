@@ -268,10 +268,10 @@ class BoardAnalyzer:
         self.all_possible_enemy_spawns = startTiles
         startList = list(startTiles)
         # dists = SearchUtils.build_distance_map(self.map, startList)
-        discountVisibleNearEnemyGen = int(self.inter_general_distance * 0.35)
+        discountVisibleNearEnemyGen = SearchUtils.Counter(int(self.inter_general_distance * 0.35))
 
         def foreachFunc(tile: Tile, dist: int) -> bool:
-            countsForFlankable = not tile.visible or dist < discountVisibleNearEnemyGen
+            countsForFlankable = not tile.visible or dist < discountVisibleNearEnemyGen.value
             if hasPerfectInfo and tile.isObstacle:
                 return True
             if tile.isMountain or (tile.isNeutral and tile.isCity and tile.visible) or not countsForFlankable:
@@ -279,4 +279,7 @@ class BoardAnalyzer:
 
             self.flankable_fog_area_matrix[tile] = True
 
-        SearchUtils.breadth_first_foreach_dist_fast_no_default_skip(self.map, startList, int(self.inter_general_distance * 1.4), foreachFunc)
+        SearchUtils.breadth_first_foreach_dist_fast_no_default_skip(self.map, [self.intergeneral_analysis.tileB], int(self.inter_general_distance * 1.4), foreachFunc)
+
+        discountVisibleNearEnemyGen.value = 0
+        SearchUtils.breadth_first_foreach_dist_fast_no_default_skip(self.map, startList, int(self.inter_general_distance * 1.2), foreachFunc)

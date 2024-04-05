@@ -299,6 +299,7 @@ class ArmyTracker(object):
 
         with self.perf_timer.begin_move_event('ArmyTracker army movement'):
             self.track_army_movement()
+        with self.perf_timer.begin_move_event('ArmyTracker find new armies'):
             self.find_new_armies()
 
         with self.perf_timer.begin_move_event('ArmyTracker fog movement / increment'):
@@ -364,12 +365,13 @@ class ArmyTracker(object):
 
             if army.player in self.player_moves_this_turn:
                 continue
-            #
-            # if army.scrapped:
-            #     continue
 
             logbook.info(f'moving fogged army paths for {str(army)}')
 
+            origTile = army.tile
+            origTileArmy = army.tile.army
+
+            anyNextVisible = False
             fogPathNexts = {}
             for path in army.expectedPaths:
                 if (path is None
@@ -378,40 +380,45 @@ class ArmyTracker(object):
                         or path.start.next.tile is None
                 ):
                     continue
+                nextTile = path.start.next.tile
+                if nextTile.visible:
+                    anyNextVisible = True
+                    # can't move out of fog, so will leave tile there
+                    nextTile = path.start.tile
 
-                nextPaths = fogPathNexts.get(path.start.next.tile, [])
+                nextPaths = fogPathNexts.get(nextTile, [])
                 nextPaths.append(path)
-                fogPathNexts[path.start.next.tile] = nextPaths
+                if len(nextPaths) == 1:
+                    fogPathNexts[nextTile] = nextPaths
 
             if len(fogPathNexts) > 1:
                 nextArmies = army.get_split_for_fog(list(fogPathNexts.keys()))
 
                 for nextTile, paths in fogPathNexts.items():
                     nextArmy = nextArmies.pop()
-                    # nextArmy.expectedPaths = where(nextArmy.expectedPaths, lambda p: p.start.next.tile == nextTile)
                     nextArmy.expectedPaths = []
 
-                    first = True
+                    if nextTile == origTile:
+                        for path in paths:
+                            logbook.info(f'for army {str(nextArmy)} ignoring SPLIT fog path move into visible: {str(path)}')
+                            nextArmy.expectedPaths.append(path)
+
+                        if not nextArmy.scrapped:
+                            self.armies[nextArmy.tile] = nextArmy
+
+                        continue
                     for path in paths:
                         nextArmy.expectedPaths.append(path)
-                        if path.start.next.tile.visible:
-                            logbook.info(f'for army {str(nextArmy)} ignoring SPLIT fog path move into visible: {str(path)}')
-                            continue
 
                         logbook.info(f'respecting army {str(nextArmy)} SPLIT fog path: {str(path)}')
 
                         self._move_fogged_army_along_path(nextArmy, path)
 
                         logbook.info(f'AFTER: army {str(nextArmy)}: {str(nextArmy.expectedPaths)}')
-                        # if first:
-                        # else:
-                        #     path.remove_start()
-                        first = False
                     if not nextArmy.scrapped:
                         self.armies[nextArmy.tile] = nextArmy
 
             elif len(fogPathNexts) == 1:
-                first = True
                 for path in army.expectedPaths:
                     if path is not None and path.start.next is not None and path.start.next.tile.visible:
                         logbook.info(f'for army {str(army)} ignoring fog path move into visible: {str(path)}')
@@ -422,10 +429,9 @@ class ArmyTracker(object):
                     self._move_fogged_army_along_path(army, path)
 
                     logbook.info(f'AFTER: army {str(army)}: {str(army.expectedPaths)}')
-                    # if first:
-                    # elif path.length > 0:
-                    #     path.remove_start()
-                    first = False
+
+            if anyNextVisible:
+                origTile.army = origTileArmy
 
     def clean_up_armies(self):
         for army in list(self.armies.values()):
@@ -480,40 +486,41 @@ class ArmyTracker(object):
         #     if tile.delta.armyDelta != 0 and not tile.delta.gainedSight and not tile.delta.lostSight:
         #         self.unaccounted_tile_diffs[tile] = tile.delta.armyDelta
 
-        if self.lastMove is not None:
-            playerMoveArmy = self.get_or_create_army_at(self.lastMove.source)
-            playerMoveArmy.player = self.map.player_index
-            playerMoveArmy.value = self.lastMove.source.delta.oldArmy - 1
-            self.try_track_own_move(playerMoveArmy, skip, trackingArmies)
+        with self.perf_timer.begin_move_event('ArmyTracker move respect'):
+            if self.lastMove is not None:
+                playerMoveArmy = self.get_or_create_army_at(self.lastMove.source)
+                playerMoveArmy.player = self.map.player_index
+                playerMoveArmy.value = self.lastMove.source.delta.oldArmy - 1
+                self.try_track_own_move(playerMoveArmy, skip, trackingArmies)
 
-        playerMoves: typing.Dict[Tile, typing.Set[int]] = {}
-        for player in self.map.players:
-            if player.index == self.map.player_index:
-                continue
-            if player.last_move is not None:
-                src: Tile
-                dest: Tile
-                src, dest, movedHalf = player.last_move
-                if src is not None:
-                    l = playerMoves.get(src, set())
-                    l.add(player.index)
-                    if len(l) == 1:
-                        playerMoves[src] = l
-                if dest is not None:
-                    l = playerMoves.get(dest, set())
-                    l.add(player.index)
-                    if len(l) == 1:
-                        playerMoves[dest] = l
+            playerMoves: typing.Dict[Tile, typing.Set[int]] = {}
+            for player in self.map.players:
+                if player.index == self.map.player_index:
+                    continue
+                if player.last_move is not None:
+                    src: Tile
+                    dest: Tile
+                    src, dest, movedHalf = player.last_move
+                    if src is not None:
+                        l = playerMoves.get(src, set())
+                        l.add(player.index)
+                        if len(l) == 1:
+                            playerMoves[src] = l
+                    if dest is not None:
+                        l = playerMoves.get(dest, set())
+                        l.add(player.index)
+                        if len(l) == 1:
+                            playerMoves[dest] = l
 
-                armyAtSrc = self.armies.get(src, None)
-                if armyAtSrc is not None:
-                    if armyAtSrc.player == player.index:
-                        logbook.info(f'RESPECTING MAP DETERMINED PLAYER MOVE {str(src)}->{str(dest)} BY p{player.index} FOR ARMY {str(armyAtSrc)}')
-                        self.army_moved(armyAtSrc, dest, trackingArmies, dontUpdateOldFogArmyTile=True)  # map already took care of this for us
-                        skip.add(src)
-                    else:
-                        logbook.info(f'ARMY {str(armyAtSrc)} AT SOURCE OF PLAYER {player.index} MOVE {str(src)}->{str(dest)} DID NOT MATCH THE PLAYER THE MAP DETECTED AS MOVER, SCRAPPING ARMY...')
-                        self.scrap_army(armyAtSrc, scrapEntangled=False)
+                    armyAtSrc = self.armies.get(src, None)
+                    if armyAtSrc is not None:
+                        if armyAtSrc.player == player.index:
+                            logbook.info(f'RESPECTING MAP DETERMINED PLAYER MOVE {str(src)}->{str(dest)} BY p{player.index} FOR ARMY {str(armyAtSrc)}')
+                            self.army_moved(armyAtSrc, dest, trackingArmies, dontUpdateOldFogArmyTile=True)  # map already took care of this for us
+                            skip.add(src)
+                        else:
+                            logbook.info(f'ARMY {str(armyAtSrc)} AT SOURCE OF PLAYER {player.index} MOVE {str(src)}->{str(dest)} DID NOT MATCH THE PLAYER THE MAP DETECTED AS MOVER, SCRAPPING ARMY...')
+                            self.scrap_army(armyAtSrc, scrapEntangled=False)
 
         with self.perf_timer.begin_move_event('ArmyTracker emergence pathing'):
             self.unaccounted_tile_diffs: typing.Dict[Tile, int] = {}
@@ -581,42 +588,43 @@ class ArmyTracker(object):
                         trackingArmies[tile] = emergedArmy
                 skip.add(tile)
 
-        for tile in self.map.get_all_tiles():
-            if tile in skip:
-                continue
-            if self.lastMove is not None and tile == self.lastMove.source:
-                continue
-            if tile.delta.toTile is None:
-                continue
-            if tile.isUndiscoveredObstacle or tile.isMountain:
-                msg = f'are we really sure {str(tile)} moved to {str(tile.delta.toTile)}'
-                if BYPASS_TIMEOUTS_FOR_DEBUGGING:
-                    raise AssertionError(msg)
-                else:
-                    logbook.error(msg)
+        with self.perf_timer.begin_move_event('ArmyTracker lastmove loop'):
+            for tile in self.map.get_all_tiles():
+                if tile in skip:
                     continue
-            if tile.delta.toTile.isMountain:
-                msg = f'are we really sure {str(tile.delta.toTile)} was moved to from {str(tile)}'
-                if BYPASS_TIMEOUTS_FOR_DEBUGGING:
-                    raise AssertionError(msg)
-                else:
-                    logbook.error(msg)
+                if self.lastMove is not None and tile == self.lastMove.source:
                     continue
+                if tile.delta.toTile is None:
+                    continue
+                if tile.isUndiscoveredObstacle or tile.isMountain:
+                    msg = f'are we really sure {str(tile)} moved to {str(tile.delta.toTile)}'
+                    if BYPASS_TIMEOUTS_FOR_DEBUGGING:
+                        raise AssertionError(msg)
+                    else:
+                        logbook.error(msg)
+                        continue
+                if tile.delta.toTile.isMountain:
+                    msg = f'are we really sure {str(tile.delta.toTile)} was moved to from {str(tile)}'
+                    if BYPASS_TIMEOUTS_FOR_DEBUGGING:
+                        raise AssertionError(msg)
+                    else:
+                        logbook.error(msg)
+                        continue
 
-            # armyDetectedAsMove = self.armies.get(tile, None)
-            # if armyDetectedAsMove is not None:
-            armyDetectedAsMove = self.get_or_create_army_at(tile)
-            logbook.info(f'Map detected army move, honoring that: {str(tile)}->{str(tile.delta.toTile)}')
-            self.army_moved(armyDetectedAsMove, tile.delta.toTile, trackingArmies)
-            if tile.delta.toTile.isUndiscoveredObstacle:
-                tile.delta.toTile.isCity = True
-                tile.delta.toTile.player = armyDetectedAsMove.player
-                tile.delta.toTile.army = armyDetectedAsMove.value
-                logbook.warn(f'CONVERTING {str(tile.delta.toTile)} UNDISCOVERED MOUNTAIN TO CITY DUE TO MAP SAYING DEFINITELY TILE MOVED THERE. {str(tile)}->{str(tile.delta.toTile)}')
-            armyDetectedAsMove.update()
-            if not tile.delta.toTile.visible:
-                # map knows what it is doing, force tile army update.
-                armyDetectedAsMove.value = tile.delta.toTile.army - 1
+                # armyDetectedAsMove = self.armies.get(tile, None)
+                # if armyDetectedAsMove is not None:
+                armyDetectedAsMove = self.get_or_create_army_at(tile)
+                logbook.info(f'Map detected army move, honoring that: {str(tile)}->{str(tile.delta.toTile)}')
+                self.army_moved(armyDetectedAsMove, tile.delta.toTile, trackingArmies)
+                if tile.delta.toTile.isUndiscoveredObstacle:
+                    tile.delta.toTile.isCity = True
+                    tile.delta.toTile.player = armyDetectedAsMove.player
+                    tile.delta.toTile.army = armyDetectedAsMove.value
+                    logbook.warn(f'CONVERTING {str(tile.delta.toTile)} UNDISCOVERED MOUNTAIN TO CITY DUE TO MAP SAYING DEFINITELY TILE MOVED THERE. {str(tile)}->{str(tile.delta.toTile)}')
+                armyDetectedAsMove.update()
+                if not tile.delta.toTile.visible:
+                    # map knows what it is doing, force tile army update.
+                    armyDetectedAsMove.value = tile.delta.toTile.army - 1
 
         with self.perf_timer.begin_move_event('ArmyTracker try_track_army loop'):
             for army in sorted(self.armies.values(), key=lambda a: self.map.get_distance_between(self.general, a.tile)):
@@ -630,12 +638,14 @@ class ArmyTracker(object):
 
                 self.try_track_army(army, skip, trackingArmies)
 
-        self.scrap_unmoved_low_armies()
+        with self.perf_timer.begin_move_event('ArmyTracker scrap unmoved'):
+            self.scrap_unmoved_low_armies()
 
         for armyDetectedAsMove in trackingArmies.values():
             self.armies[armyDetectedAsMove.tile] = armyDetectedAsMove
 
-        self.clean_up_armies()
+        with self.perf_timer.begin_move_event('ArmyTracker clean up armies'):
+            self.clean_up_armies()
 
     def find_visible_source(self, tile: Tile):
         if tile.delta.armyDelta == 0:

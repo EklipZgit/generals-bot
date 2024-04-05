@@ -143,8 +143,8 @@ def count(enumerable: typing.Iterable[T], filter_func: typing.Callable[[T], bool
 
 
 def dest_breadth_first_target(
-        map,
-        goalList,
+        map: MapBase,
+        goalList: typing.Dict[Tile, typing.Tuple[int, int, float]] | typing.Iterable[Tile],
         targetArmy=1,
         maxTime=0.1,
         maxDepth=20,
@@ -180,14 +180,14 @@ def dest_breadth_first_target(
             goalInc = goalIncModifier + additionalIncrement
 
             # THE goalIncs below might be wrong, unit test.
-            if searchingPlayer != goal.player:
+            if not map.is_player_on_team_with(searchingPlayer, goal.player):
                 startArmy = 0 + goalTargetArmy  # + goalInc
             else:
                 startArmy = 0 - goalTargetArmy  # - goalInc
 
             if ignoreGoalArmy:
                 # then we have to inversely increment so we dont have to figure that out in the loop every time
-                if searchingPlayer != goal.player:
+                if not map.is_player_on_team_with(searchingPlayer, goal.player):
                     if negativeTiles is None or goal not in negativeTiles:
                         startArmy -= goal.army
                 else:
@@ -197,8 +197,8 @@ def dest_breadth_first_target(
             startVal = (startDist, 0, 0 - startArmy)
             frontier.put((startVal, goal, startDist, startArmy, goalInc, None))
     else:
-        for goalRaw in goalList:
-            goal: Tile = goalRaw
+        goal: Tile
+        for goal in goalList:
             if goal.isMountain:
                 # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
                 continue
@@ -209,7 +209,7 @@ def dest_breadth_first_target(
             startArmy = 1
             if ignoreGoalArmy and (negativeTiles is None or goal not in negativeTiles):
                 # then we have to inversely increment so we dont have to figure that out in the loop every time
-                if searchingPlayer != goal.player:
+                if not map.is_player_on_team_with(searchingPlayer, goal.player):
                     startArmy -= goal.army
                 else:
                     startArmy += goal.army
@@ -246,12 +246,13 @@ def dest_breadth_first_target(
         nextArmy = army - 1
         isInc = (baseTurn + dist) & 1 == 0 and dist > 0
 
-        if preferCapture and not map.is_player_on_team_with(searchingPlayer, current.player):  # and army > current.army // 3
+        isTeam = map.is_player_on_team_with(searchingPlayer, current.player)
+        if preferCapture and not isTeam:  # and army > current.army // 3
             negCaptures -= 1
 
         # nextArmy is effectively "you must bring this much army to the tile next to me for this to kill"
         if (current.isCity and current.player != -1) or current.isGeneral:
-            if current.player == searchingPlayer:
+            if isTeam:
                 goalInc -= 0.5
                 if isInc:
                     nextArmy -= int(goalInc * 2)
@@ -261,18 +262,15 @@ def dest_breadth_first_target(
                     nextArmy += int(goalInc * 2)
 
         if negativeTiles is None or current not in negativeTiles:
-            if searchingPlayer == current.player:
-                if current.isCity and dontEvacCities:
-                    nextArmy += (current.army // 2)
-                else:
-                    nextArmy += current.army
+            if isTeam:
+                nextArmy += current.army
             else:
                 nextArmy -= current.army
         newDist = dist + 1
 
         visited[current.x][current.y] = (nextArmy, fromTile)
 
-        if nextArmy >= targetArmy and nextArmy > foundArmy:
+        if nextArmy >= targetArmy and nextArmy > foundArmy and current.player == searchingPlayer:
             foundGoal = True
             foundDist = newDist
             foundArmy = nextArmy

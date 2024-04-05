@@ -307,10 +307,11 @@ def optimize_first_25(
             genArmyAtStart,
             distToGenMap,
             tile_minimization_map,
-            turn=turnInCycle,
+            turn=turnInCycle + 1,
             visited_set=visited,
             prune_below=prune_cutoff,
             allow_wasted_moves=allowWasted,
+            shuffle_launches=shuffle_launches,
             dont_force_first=True,
             debug_view_info=debug_view_info,
             skip_tiles=skipTiles,
@@ -338,7 +339,11 @@ def optimize_first_25(
         (genArmy, launchTurn, optimalWastedMoves) = comboTuple
         perCutoff = cutoff_time
         if perCutoff is None:
-            perCutoff = startTime + (timeLimit / len(combinationsWithMaxOptimal)) * i
+            if shuffle_launches:
+                perCutoff = startTime + timeLimit
+            else:
+                perCutoff = startTime + (timeLimit / len(combinationsWithMaxOptimal)) * i
+
         if mapTurnAtStart > launchTurn:
             continue
 
@@ -398,6 +403,7 @@ def _sub_optimize_first_25_specific_wasted(
         cutoff_time: float,
         additional_one_level_skip: Tile | None = None,
         skip_tiles: typing.Set[Tile] = None,
+        shuffle_launches: bool = False,
         dont_force_first: bool = False,
         debug_view_info: typing.Union[None, ViewInfo] = None,
         no_log: bool = not DEBUG_ASSERTS
@@ -413,6 +419,7 @@ def _sub_optimize_first_25_specific_wasted(
         @param force_wasted_moves: The amount of moves to force-waste on THIS segment. Must always be less than allow_wasted_moves.
         @param allow_wasted_moves: The amount of wasted moves allowed overall for the remaining segments.
         @param visited_set:
+        @param shuffle_launches: if set to True, will randomize launch combinations
         @param dont_force_first: If true, will not force a segment at this exact timing and will instead test subsegments now and at the next general bonus turn.
         @param debug_view_info:
         @param no_log:
@@ -568,6 +575,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
         cutoff_time: float,
         visited_set: typing.Set[Tile] = None,
         skip_tiles: typing.Set[Tile] = None,
+        shuffle_launches: bool = False,
         dont_force_first: bool = False,
         debug_view_info: typing.Union[None, ViewInfo] = None,
         no_log: bool = not DEBUG_ASSERTS,
@@ -583,6 +591,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
     @param turn: turn launch is from (used to cap paths at turn 50)
     @param allow_wasted_moves: number of tiles ALLOWED to be repeated / moves allowed to be wasted.
     @param visited_set:
+    @param shuffle_launches: if set to True, will randomize launch combinations
     @param dont_force_first:
     @param debug_view_info:
     @return:
@@ -626,7 +635,10 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
     if visitLen > 6 and maxForce > visitLen - 1:
         maxForce = visitLen - 1
 
-    for force_wasted_moves in range(minWastedMovesThisLaunch, maxForce):
+    forced = [i for i in range(minWastedMovesThisLaunch, maxForce)]
+    if shuffle_launches:
+        random.shuffle(forced)
+    for force_wasted_moves in forced:
         bestCaseResult = len(visited_set) + turnsLeft - force_wasted_moves
         if bestCaseResult < prune_below:
             if not no_log:
@@ -648,6 +660,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
             prune_below=prune_below,
             visited_set=visited_set,
             skip_tiles=skip_tiles,
+            shuffle_launches=shuffle_launches,
             dont_force_first=dont_force_first,
             debug_view_info=debug_view_info,
             cutoff_time=cutoff_time,
@@ -670,6 +683,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
                     allow_wasted_moves=allow_wasted_moves,
                     prune_below=prune_below,
                     visited_set=visited_set,
+                    shuffle_launches=shuffle_launches,
                     skip_tiles=skip_tiles,
                     additional_one_level_skip=randomSkip,
                     dont_force_first=dont_force_first,

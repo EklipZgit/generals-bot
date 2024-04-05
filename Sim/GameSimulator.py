@@ -246,13 +246,13 @@ class GameSimulator(object):
         sourceTile = self.sim_map.GetTile(move.source.x, move.source.y)
         destTile = self.sim_map.GetTile(move.dest.x, move.dest.y)
         if sourceTile.player != player_index:
-            if not self.ignore_illegal_moves and sourceTile not in self.tiles_updated_this_cycle:
+            if not self.ignore_illegal_moves and sourceTile not in self.tiles_updated_this_cycle and self.sim_map.is_player_on_team_with(player_index, self.sim_map.player_index):
                 raise AssertionError(f'player {player_index} made a move from a tile they dont own. {str(move)}')
             return
 
         if sourceTile.army <= 1:
             # this happens when the tile they are moving gets attacked and is not necessarily a problem
-            if not self.ignore_illegal_moves and sourceTile not in self.tiles_updated_this_cycle:
+            if not self.ignore_illegal_moves and sourceTile not in self.tiles_updated_this_cycle and self.sim_map.is_player_on_team_with(player_index, self.sim_map.player_index):
                 raise AssertionError(f'player {player_index} made a move from a {sourceTile.army} army tile. {str(move)}')
             return
 

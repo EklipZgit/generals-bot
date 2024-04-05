@@ -1726,3 +1726,22 @@ class ArmyInterceptionTests(TestBase):
         self.assertIsNone(winner)
 
         self.assertOwned(general.player, playerMap.GetTile(18, 6))
+    
+    def test_should_not_override_defense_when_gets_self_killed(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_override_defense_when_gets_self_killed___4blcspk3P---1--612.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 612, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=612)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_not_override_defense_when_gets_self_killed")

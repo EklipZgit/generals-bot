@@ -2247,3 +2247,29 @@ a1   b1   b1   bG1
         self.assertEqual(playerMap.GetTile(7, 13), bot.dangerAnalyzer.fastestPotentialThreat.path.start.tile)
         self.assertEqual(playerMap.GetTile(7, 13), bot.dangerAnalyzer.fastestCityThreat.path.start.tile)
 
+    def test_should_not_leave_behind_weird_1_tile_army_copies_in_fog(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_leave_behind_weird_1_tile_army_copies_in_fog___eHIEvb2B2---1--137.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 137, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=137)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '16,4->16,2')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertNoFriendliesKilled(map, general)
+
+        realTile = playerMap.GetTile(16, 2)
+        offendingTile = playerMap.GetTile(16, 3)
+        realArmy = bot.armyTracker.armies[realTile]
+        if offendingTile in bot.armyTracker.armies:
+            offendingArmy = bot.armyTracker.armies[offendingTile]
+            self.assertGreater(offendingArmy.value, 35, 'should not have a 0-copy of the army')
+            self.assertGreater(offendingArmy.tile.army, 36, 'should not have a 0-copy of the army')
+            self.assertIn(offendingArmy, realArmy.entangledArmies)
+            self.assertIn(realArmy, offendingArmy.entangledArmies)

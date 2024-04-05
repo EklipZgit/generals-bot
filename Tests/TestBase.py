@@ -865,7 +865,7 @@ class TestBase(unittest.TestCase):
         self.assertEqual(mapTile.isMountain, playerTile.isMountain, f'tile {x},{y} isMountain mismatched for p{player_index}')
         self.assertEqual(mapTile.isGeneral, playerTile.isGeneral, f'tile {x},{y} isGeneral mismatched for p{player_index}')
 
-    def assertNoFriendliesKilled(self, map: MapBase, general: Tile, allyGen: Tile | None):
+    def assertNoFriendliesKilled(self, map: MapBase, general: Tile, allyGen: Tile | None = None):
         """If the ally was alive at sim start (their general is not None) then assert they still own their general and that our general wasnt captured either."""
         if allyGen is not None:
             self.assertTrue(allyGen.isGeneral, "ally was killed")

@@ -1254,6 +1254,11 @@ class TestBase(unittest.TestCase):
 
         simHost.run_between_turns(lag_inserter)
 
+    def queue_all_other_players_leafmoves(self, simHost: GameSimulatorHost):
+        for player in simHost.sim.sim_map.players:
+            if not player.dead and player.index != simHost.sim.sim_map.player_index:
+                simHost.queue_player_leafmoves(player.index)
+
     def a_b_test(
             self,
             numRuns: int,
@@ -1413,10 +1418,30 @@ class TestBase(unittest.TestCase):
                         tileProx[t] += 1
                     SearchUtils.breadth_first_foreach_dist_fast_incl_neut_cities(map, [tile], 4, incrementer)
             maxTile = None
-            for tile in map.get_all_tiles():
+
+            # make this consistent, but 'random'
+            tiles = [t for t in sorted(map.get_all_tiles(), key = lambda t: (t.x ^ t.y) ^ (3 * t.x - t.y) ^ (t.y >> 3))]
+            for tile in tiles:
+                if tile.isObstacle:
+                    continue
                 if tile.player != player and tile.player != -1:
                     continue
                 if SearchUtils.any_where(tile.adjacents, lambda t: map.is_tile_friendly(t)):
+                    continue
+
+                skip = False
+                for gen in map.generals:
+                    if gen is None:
+                        continue
+                    if map.is_player_on_team_with(player, gen.player):
+                        if map.distance_mapper.get_distance_between(gen, tile) < 4:
+                            skip = True
+                            break
+                    else:
+                        if map.distance_mapper.get_distance_between(gen, tile) < 9:
+                            skip = True
+                            break
+                if skip:
                     continue
                 if maxTile is None or tileProx[maxTile] < tileProx[tile]:
                     maxTile = tile

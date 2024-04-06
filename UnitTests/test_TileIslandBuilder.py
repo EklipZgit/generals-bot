@@ -130,6 +130,33 @@ class TileIslandBuilderUnitTests(TestBase):
 
         self.assertEqual(244-3-3-3-3-3-3-2-2-2-3-2-2-2, topLeftEnIsland.sum_army_all_adjacent_friendly)
 
+    def test_should_group_by_army_values(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+        #
+        # if debugMode:
+        #     self.render_map(map)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+        builder.recalculate_tile_islands(enemyGeneral)
+
+        if debugMode:
+            self.render_tile_islands(map, builder)
+
+        twoIsland1 = builder.tile_island_lookup[map.GetTile(11, 0)]
+
+        twoIsland2 = builder.tile_island_lookup[map.GetTile(10, 1)]
+
+        threeIsland1 = builder.tile_island_lookup[map.GetTile(11, 2)]
+
+        threeIsland2 = builder.tile_island_lookup[map.GetTile(12, 4)]
+
+        self.assertEqual(twoIsland1, twoIsland2, 'these 2 tiles should be grouped in the same island')
+        self.assertEqual(threeIsland1, threeIsland2, 'these 3 tiles should be grouped in the same island')
+        self.assertNotEqual(threeIsland1, twoIsland1, '2s and 3s should be separate islands')
+
     def render_tile_islands(self, map: MapBase, builder: TileIslandBuilder):
         viewInfo = self.get_renderable_view_info(map)
         colors = PLAYER_COLORS

@@ -56,6 +56,9 @@ class PathMove(object):
         return str(self)
 
 
+# class PartialPathPlan(Path):
+
+
 class Path(TilePlanInterface):
 
     def __init__(self, armyRemaining: float = 0):
@@ -68,7 +71,7 @@ class Path(TilePlanInterface):
         # The exact army tile number that will exist on the final tile at the end of the path run.
         # So for a path that exactly kills a tile with minimum kill army, this should be 1.
         self._value: float = armyRemaining
-        self._econ_value = 0
+        self._econ_value: float = 0.0
 
     # def __gt__(self, other) -> bool:
     #     if other is None:

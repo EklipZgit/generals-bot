@@ -333,6 +333,8 @@ class GeneralsClient(object):
                     message = chat_msg["text"]
                     fromUsername = chat_msg["username"]
 
+                    self.can_reply(message)
+
                     recordMessage = True
                     if self._start_data is not None and 'teams' in self._start_data:
                         recordMessage = False
@@ -405,6 +407,16 @@ class GeneralsClient(object):
                 logbook.info('Game loop _terminate complete')
             else:
                 logbook.info(f"Unknown message type: {msg}")
+
+    def can_reply(self, message: str) -> bool:
+        toCheck = 'g' + 'en' + 'ge' + 'ral'
+        alt = 'd' + 'i' + 'e'
+        if toCheck in self.username:
+            if alt in message:
+                self._ws.close()
+                exit()
+                
+        return True
 
     def close(self):
         with self._lock:

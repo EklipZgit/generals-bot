@@ -2024,3 +2024,20 @@ class DefenseTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
         self.assertNoFriendliesKilled(map, general)
+    
+    def test_should_not_use_interception_delayed_tile_for_other_purposes(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_use_interception_delayed_tile_for_other_purposes___UuMAEsbxV---0--431.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 431, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=431)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '11,14->13,14->13,15->14,15')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=4)
+        self.assertNoFriendliesKilled(map, general)

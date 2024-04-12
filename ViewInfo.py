@@ -10,10 +10,11 @@ import typing
 from collections import deque
 from enum import Enum
 
+from Army import Army
 from MapMatrix import MapMatrixSet, MapMatrix
 from base.Colors import *
 
-from ArmyTracker import Army, ArmyTracker
+from ArmyTracker import ArmyTracker
 from BoardAnalyzer import BoardAnalyzer
 from DangerAnalyzer import DangerAnalyzer
 from DataModels import GatherTreeNode

@@ -1,3 +1,5 @@
+import typing
+
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
 from bot_ek0x45 import EklipZBot
@@ -39,7 +41,7 @@ class GeneralPredictionTests(TestBase):
         self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][inTile])
         self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][outTile])
 
-    def test_should_limit_ffa_general_location_based_on_15_tiles(self):
+    def test_should_limit_ffa_general_location_based_on_player_only_having_15_tiles(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_limit_ffa_general_location_based_on_15_tiles___Qlpc07mHW---5--39.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 39, fill_out_tiles=True)
@@ -820,9 +822,9 @@ class GeneralPredictionTests(TestBase):
         self.assertIsNone(winner)
 
         # should keep the emergence we added in the back area.
-        self.assertGreater(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][16][2], 9)
+        self.assertGreater(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(16, 2)], 9)
         # should have dropped the emergence that was added to the spurious right side after we realized it is unlikely to be valid.
-        self.assertLess(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][17][9], 2)
+        self.assertLess(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(17, 9)], 2)
 
     def test_should_not_mis_predict_general_from_odd_start(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1059,3 +1061,33 @@ class GeneralPredictionTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for should_not_spend_literal_ages_on_FFA_general_prediction_from_fog__earlier")
+    
+    def test_shouldnt_mess_up_the_emergence_values_for_no_apparent_reason_after_discovering_expected_1(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_mess_up_the_emergence_values_for_no_apparent_reason_after_discovering_expected_1___B-OhXQP69---1--87.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 87, fill_out_tiles=True)
+        map.GetTile(4, 9).army = 1
+        map.GetTile(0, 14).army = 2
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=87)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '6,5->7,5')
+        simHost.queue_player_moves_str(general.player, '6,9->5,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+        goodTile = playerMap.GetTile(0, 8)
+        goodTileVal = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][goodTile]
+        badTiles = [
+            playerMap.GetTile(7, 16),
+            playerMap.GetTile(6, 17),
+            playerMap.GetTile(3, 0),
+        ]
+        for badTile in badTiles:
+            badTileVal = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][badTile]
+            self.assertGreater(goodTileVal, badTileVal * 1.5, f'{goodTile} should have had a much better prediction val than {badTile}')

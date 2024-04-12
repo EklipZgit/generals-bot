@@ -796,6 +796,7 @@ class EarlyExpandUtilsTests(TestBase):
         self.assertEqual(plan.tile_captures, 22)
     
     def test_should_expand_away_from_allied_general_2v2(self):
+        # TODO need to pretend time passed in the sim so the bots dont get infinite time each turn to make a multi-turn calculation.
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_expand_away_from_allied_general_2v2___z9F5n27D7---3--2.txtmap'
         map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 2, fill_out_tiles=True)
@@ -824,7 +825,8 @@ class EarlyExpandUtilsTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=48)
         self.assertNoFriendliesKilled(map, general, allyGen)
-        self.assertGreater(playerMap.players[general.player].tileCount + playerMap.players[allyGen.player].tileCount, 45)
+        # 48 is easily possible
+        self.assertGreater(playerMap.players[general.player].tileCount + playerMap.players[allyGen.player].tileCount, 47)
     
     def test_should_be_capable_of_expanding_out_of_stupid_spawn_near_ally(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True

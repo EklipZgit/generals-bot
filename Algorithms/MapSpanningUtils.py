@@ -79,7 +79,7 @@ def get_spanning_tree_matrix_from_tile_lists(
         requiredTiles: typing.List[Tile],
         bannedTiles: typing.List[Tile],
         # oneOfTiles: typing.Iterable[Tile] | None = None,
-) -> typing.Tuple[MapMatrixSet, typing.Set[Tile]]:
+) -> typing.Tuple[typing.Set[Tile], typing.Set[Tile]]:
     """
     Returns the graph of all those connected, as well as the set of any required that couldn't be connected to the first required tile.
 
@@ -92,7 +92,7 @@ def get_spanning_tree_matrix_from_tile_lists(
     if LOG_VERBOSE:
         logbook.info('starting get_map_as_graph_from_tiles')
     bannedSet = MapMatrixSet(map, bannedTiles)
-    includedSet = MapMatrixSet(map)
+    includedSet = set()
     missingIncluded = set(requiredTiles)
     # oneOfSet
     # table: MapMatrixSet = MapMatrixSet(map)
@@ -114,6 +114,9 @@ def get_spanning_tree_matrix_from_tile_lists(
     #         adjNode = table[moveable]
     #         if adjNode is not None:
     #             node.adjacents.append(adjNode)
+    if len(requiredTiles) == 0:
+        return includedSet, missingIncluded
+
     root = requiredTiles[0]
     usefulStartSet = includedSet.copy()
     if LOG_VERBOSE:

@@ -11,6 +11,7 @@ class FogLandBuilderTests(TestBase):
 
         bot.info_render_tile_deltas = True
         bot.info_render_army_emergence_values = True
+        # bot.info_render_
         # bot.info_render_general_undiscovered_prediction_values = True
 
         return bot
@@ -96,6 +97,10 @@ class FogLandBuilderTests(TestBase):
 
         self.assertGreater(len(playerMap.players[enemyGeneral.player].tiles), 16)
         self.assertOwned(enemyGeneral.player, playerMap.GetTile(10, 8))
+        self.assertTileIn(playerMap.GetTile(11, 11), bot.armyTracker.player_connected_tiles[enemyGeneral.player])
+        self.assertTileXYIn(playerMap, 10, 7, bot.armyTracker.player_connected_tiles[enemyGeneral.player])
+        self.assertTileXYIn(playerMap, 8, 6, bot.armyTracker.player_connected_tiles[enemyGeneral.player])
+        self.assertTileXYIn(playerMap, 10, 11, bot.armyTracker.player_connected_tiles[enemyGeneral.player])
 
     def test_should_build_land_between_known_emergences__single_emergence(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -182,3 +187,64 @@ class FogLandBuilderTests(TestBase):
         bot.armyTracker.build_fog_prediction(enemyGeneral.player, bot.opponent_tracker.get_player_fog_tile_count_dict(enemyGeneral.player), bot.targetPlayerExpectedGeneralLocation, force=True)
         duration = time.perf_counter() - start
         self.assertLess(duration, 0.003, 'should not take ages to build fog land')
+    
+    def test_shouldnt_over_build_fog_land_on_vision_loss__when_enemy_out_of_cave_tiles_but_has_wallbreak_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_over_build_fog_land_on_vision_loss_and_fog_adjacent_captures___oNee0ECyL---0--206.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 206, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=206)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '16,15->16,16->15,16->15,17->7,17')
+        simHost.queue_player_moves_str(general.player, 'None  None  None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertOwned(-1, playerMap.GetTile(18, 17), 'this OBVIOUSLY was not captured, at no point could it have been')
+        self.assertOwned(-1, playerMap.GetTile(17, 16), 'this OBVIOUSLY was not captured, at no point could it have been')
+        self.assertOwned(-1, playerMap.GetTile(16, 17), 'this OBVIOUSLY was not captured, at no point could it have been')
+        self.assertOwned(-1, playerMap.GetTile(15, 18), 'this OBVIOUSLY was not captured, at no point could it have been')
+
+    def test_shouldnt_over_build_fog_land_on_vision_loss_and_fog_adjacent_captures(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_over_build_fog_land_on_vision_loss_and_fog_adjacent_captures___oNee0ECyL---0--206.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 206, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=206)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '16,15->16,16->15,16->15,17->7,17')
+        simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertOwned(-1, playerMap.GetTile(9, 17), 'this cannot have been captured yet. Fog land builder should expand armies in the fog before rebuilding and redistributing.')
+    
+    def test_shouldnt_pick_wonky_far_city_just_because_wall_breach(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_pick_wonky_far_city_just_because_wall_breach___C2LBGDHPN---0--179.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 179, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=179)
+        rawMap.GetTile(19, 11).reset_wrong_undiscovered_fog_guess()
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_leafmoves(enemyGeneral.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwned(-1, playerMap.GetTile(19, 11))

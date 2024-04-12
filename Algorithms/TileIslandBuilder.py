@@ -37,6 +37,16 @@ class TileIsland(object):
         """
         Tile islands that border this island.
         """
+        #
+        # self.border_tiles: typing.Set[Tile] = set()
+        # """
+        # Tiles that border this island
+        # """
+        #
+        # self.outer_border_tiles: typing.Set[Tile] = set()
+        # """
+        # Tiles that border this island
+        # """
 
         self.tile_count_all_adjacent_friendly: int = self.tile_count
         self.sum_army_all_adjacent_friendly: int = self.sum_army
@@ -57,19 +67,56 @@ class TileIsland(object):
 
         self.name: str | None = None
 
+    def __str__(self) -> str:
+        return f'{{t{self.team} {self.name}: {self.tile_count}t {self.sum_army}a ({next(iter(self.tile_set))})}}'
+
+    def __repr__(self) -> str:
+        return str(self)
+
+    def __lt__(self, other: TileIsland | None):
+        # if other is None:
+        #     return False
+        return self.sum_army < other.sum_army
+
+    def __gt__(self, other: TileIsland | None):
+        # if other is None:
+        #     return True
+        return self.sum_army > other.sum_army
+
+
+class IslandNamer(object):
+    letterStart: int = ord('A')
+    letterEnd: int = ord('z')
+    curLetter: int = letterStart
+    letterSkips: typing.List[int] = [ord('['), ord('\\'), ord(']'), ord('^'), ord('_'), ord('`')]
+
+    @staticmethod
+    def get_letter() -> chr:
+        ch = IslandNamer.curLetter + 1
+
+        while ch in IslandNamer.letterSkips:
+            ch += 1
+
+        if ch > IslandNamer.letterEnd:
+            ch = IslandNamer.letterStart
+
+        IslandNamer.curLetter = ch
+
+        return chr(ch)
+
+
 class IslandBuildMode(Enum):
     GroupByArmy = 1,
     BuildByDistance = 2,
 
 
 class TileIslandBuilder(object):
-    def __init__(self, map: MapBase, averageTileIslandSize: int = 8):
+    def __init__(self, map: MapBase, averageTileIslandSize: int = 4):
         self.map: MapBase = map
         self.teams: typing.List[int] = MapBase.get_teams_array(map)
         # self.expandability_tiles_matrix: MapMatrix[int] = MapMatrix(map, 0)
         # self.expandability_army_matrix: MapMatrix[int] = MapMatrix(map, 0)
-        self.tile_island_size: int = averageTileIslandSize
-        self.tile_island_split_cutoff: int = int(averageTileIslandSize * 1.5)
+        self.desired_tile_island_size: int = averageTileIslandSize
 
         self.tile_island_lookup: MapMatrix[TileIsland] = MapMatrix(self.map, None)
         self.all_tile_islands: typing.List[TileIsland] = []
@@ -163,6 +210,7 @@ class TileIslandBuilder(object):
         )
 
         island = TileIsland(tilesInIsland, stats.teamId, tileCount=len(tilesInIsland))
+        island.name = '_' + IslandNamer.get_letter()
 
         for tile in tilesInIsland:
             self.tile_island_lookup[tile] = island
@@ -171,22 +219,26 @@ class TileIslandBuilder(object):
 
     def _build_island_borders(self, island: TileIsland):
         island.bordered.clear()  # in case its already populated. TODO eventually optimize this away if this is at all slow.
+        # island.border_tiles = set()
         for tile in island.tile_set:
             for movable in tile.movable:
                 if movable.isObstacle:
                     continue
 
                 adjIsland = self.tile_island_lookup[movable]
-                if adjIsland == island:
+                if adjIsland is island:
                     continue
+
+                # island.border_tiles.add(movable)
 
                 island.bordered.add(adjIsland)
 
     def _break_apart_island_if_too_large(self, island: TileIsland) -> typing.List[TileIsland]:
         # stats = self._team_stats_by_team_id[island.team]
-        if island.team != -1 and island.tile_count > self.tile_island_split_cutoff:
+        tile_island_split_cutoff: int = int(self.desired_tile_island_size * 1.5)
+        if island.team != -1 and island.tile_count > tile_island_split_cutoff:
             # Ok, break the island up.
-            breakIntoSubCount = round(island.tile_count / self.tile_island_size)
+            breakIntoSubCount = round(island.tile_count / self.desired_tile_island_size)
             if breakIntoSubCount <= 1:
                 return [island]
 
@@ -202,6 +254,9 @@ class TileIslandBuilder(object):
 
                 if largestEnemyBorder is None or largestEnemyBorder.tile_count < border.tile_count:
                     largestEnemyBorder = border
+
+            if largestEnemyBorder is None:
+                largestEnemyBorder = next(iter(island.bordered))
 
             sets = bifurcate_set_into_n_contiguous(self.map, largestEnemyBorder.tile_set, island.tile_set, breakIntoSubCount)
             logbook.info(f'bifurcated into {len(sets)} sets (desired {breakIntoSubCount}, totalTiles {sum(itertools.chain(len(s.set) for s in sets))})')
@@ -226,9 +281,10 @@ class TileIslandBuilder(object):
     def _break_apart_island_by_army(self, island: TileIsland, primaryPlayer: int) -> typing.List[TileIsland]:
         if island.team != -1:
             # Ok, break the island up.
-            breakIntoSubCount = round(island.tile_count / self.tile_island_size)
+            breakIntoSubCount = round(island.tile_count / self.desired_tile_island_size)
             if breakIntoSubCount <= 1:
-                breakIntoSubCount = 2
+                # setting this to 2 forces small islands to be broken up into smaller pieces. 1 at minimum.
+                breakIntoSubCount = 1
 
             brokenByBorders = []
 
@@ -242,6 +298,9 @@ class TileIslandBuilder(object):
 
                 if largestEnemyBorder is None or largestEnemyBorder.tile_count < border.tile_count:
                     largestEnemyBorder = border
+
+            if largestEnemyBorder is None:
+                largestEnemyBorder = next(iter(island.bordered))
 
             sets = bifurcate_set_into_n_contiguous_by_army(self.map, largestEnemyBorder.tile_set, island.tile_set, breakIntoSubCount)
             logbook.info(f'bifurcated into {len(sets)} sets (desired {breakIntoSubCount}, totalTiles {sum(itertools.chain(len(s.set) for s in sets))})')
@@ -265,25 +324,11 @@ class TileIslandBuilder(object):
 
 
 class SetHolder(object):
-    start = 'A'
-    end = 'z'
-    curLetter = start
-
-    def _get_letter(self):
-        ch = SetHolder.curLetter
-        if ord(ch) + 1 > ord(SetHolder.end):
-            SetHolder.curLetter = SetHolder.start
-        else:
-            SetHolder.curLetter = chr(ord(ch) + 1)
-            while SetHolder.curLetter in ['[', '\\', ']', '^', '_', '`']:
-                SetHolder.curLetter = chr(ord(SetHolder.curLetter) + 1)
-        return ch
-
     def __init__(self):
         self.sets: typing.List[typing.Set] = [set()]
         self.length: int = 0
         self.complete: bool = False
-        self.name = self._get_letter()
+        self.name = IslandNamer.get_letter()
         self.joined_to: SetHolder | None = None
 
     def join_with(self, other: SetHolder):
@@ -311,7 +356,35 @@ def _update_set_if_wrong_and_check_already_in_curset(globalVisited, current: Til
     fromSet = globalVisited[fromTile]
     curSet = globalVisited[current]
     alreadyVisited = curSet is not None
-    if fromSet == curSet or not fromSet or not curSet or fromSet.complete or curSet.complete:
+    if fromSet is curSet or not fromSet or not curSet or fromSet.complete or curSet.complete:
+        return alreadyVisited
+
+    if fromSet.length < curSet.length:
+        # logbook.info(f'executing update_if_wrong FLIPPING {fromTile}->{current} (curSet {curSet.name} <- {fromSet.name})')
+        _update_set_if_wrong_and_check_already_in_curset(globalVisited, fromTile, current)
+        return True
+
+    # logbook.info(f'executing update_if_wrong {fromTile}->{current} (curSet {curSet.name} -> {fromSet.name})')
+
+    fromSet.join_with(curSet)
+    for tile in itertools.chain.from_iterable(curSet.sets):
+        globalVisited[tile] = fromSet
+
+    # globalVisited[current] = fromSet
+
+    # for tile in current.movable:
+    #     if tile == fromTile:
+    #         continue
+    #     _update_set_if_wrong_and_check_already_in_curset(globalVisited, tile, current)
+
+    return True
+
+
+def _update_set_if_wrong_and_check_already_in_curset_and_army_matches(globalVisited, current: Tile, fromTile: Tile) -> bool:
+    fromSet = globalVisited[fromTile]
+    curSet = globalVisited[current]
+    alreadyVisited = curSet is not None
+    if fromTile.army != current.army or not fromSet or fromSet is curSet or not curSet or fromSet.complete or curSet.complete:
         return alreadyVisited
 
     if fromSet.length < curSet.length:
@@ -351,7 +424,7 @@ def bifurcate_set_into_n_contiguous(
 
     # Aim to over-break up the tile set so we can recombine back together
     rawBreakThresh = len(setToBifurcate) / numBreaks / 2 - 1
-    breakThreshold = max(2, int(rawBreakThresh))
+    breakThreshold = max(1, int(rawBreakThresh))
 
     bifurcationMatrix = MapMatrixSet(map, setToBifurcate)
     buildingNoOptionsTime = 0.0
@@ -511,13 +584,23 @@ def bifurcate_set_into_n_contiguous_by_army(
         map: MapBase,
         startPoints: typing.Set[Tile],
         setToBifurcate: typing.Concatenate[typing.Container[Tile], typing.Iterable],
-        numBreaks: int = -1,
-
+        numBreaks: int = 1,
+        doNotRecombine: bool = True
 ) -> typing.List[NamedSet]:
+    """
+    @param map:
+    @param startPoints:
+    @param setToBifurcate:
+    @param numBreaks:
+    @return:
+    """
     fullStart = time.perf_counter()
 
     # Aim to over-break up the tile set so we can recombine back together
-    rawBreakThresh = len(setToBifurcate) / numBreaks / 2 - 1
+    if doNotRecombine:
+        rawBreakThresh = len(setToBifurcate) / numBreaks
+    else:
+        rawBreakThresh = len(setToBifurcate) / numBreaks / 2 - 1
     breakThreshold = max(1, int(rawBreakThresh))
 
     bifurcationMatrix = MapMatrixSet(map, setToBifurcate)
@@ -563,7 +646,7 @@ def bifurcate_set_into_n_contiguous_by_army(
         iter += 1
         (isSameArmy, dist, current, fromTile) = frontier.get()
         # updateStart = time.perf_counter()
-        if _update_set_if_wrong_and_check_already_in_curset(visitedSetLookup, current, fromTile):
+        if _update_set_if_wrong_and_check_already_in_curset_and_army_matches(visitedSetLookup, current, fromTile):
             # timeInUpdateIfWrongCheck += time.perf_counter() - updateStart
             continue
         # timeInUpdateIfWrongCheck += time.perf_counter() - updateStart
@@ -635,7 +718,29 @@ def bifurcate_set_into_n_contiguous_by_army(
         f'split {len(setToBifurcate)} tiles into {len(completedSets)} sets by army in {time.perf_counter() - fullStart:.5f}\r\nRECOMBINING SMALLEST:')
 
     # join small sets to larger
+    if doNotRecombine:
+        finalSets = completedSets
+    else:
+        finalSets = _recombine_sets_by_army(numBreaks, completedSets, visitedSetLookup)
 
+    timeSpentJoiningResultingSets = time.perf_counter() - start
+    start = time.perf_counter()
+
+    reMergedSets = []
+    for setHolder in finalSets:
+        if setHolder.joined_to:
+            continue
+
+        actualSet = {t for t in itertools.chain.from_iterable(setHolder.sets)}
+        reMergedSets.append(NamedSet(actualSet, setHolder.name))
+    finalConvertTime = time.perf_counter() - start
+
+    logbook.info(f'bifurcated {len(setToBifurcate)} tiles by army into {len(reMergedSets)} sets of rough size {breakThreshold} in {time.perf_counter() - fullStart:.5f} (iterations:{iter}, fullIterTime:{fullIterTime:.5f}, timeSpentJoiningResultingSets:{timeSpentJoiningResultingSets:.5f}, timeInUpdateIfWrongCheck:{timeInUpdateIfWrongCheck:.5f}, finalConvertTime:{finalConvertTime:.5f}, buildingNoOptionsTime:{buildingNoOptionsTime:.5f})')
+
+    return reMergedSets
+
+
+def _recombine_sets_by_army(numBreaks: int, completedSets: typing.List[SetHolder], visitedSetLookup: MapMatrix[SetHolder | None]) -> typing.List[SetHolder]:
     finalSets = []
     while len(finalSets) + len(completedSets) > numBreaks and len(completedSets) > 0:
         smallest = min(completedSets, key=lambda s: s.length)
@@ -665,21 +770,7 @@ def bifurcate_set_into_n_contiguous_by_army(
 
     finalSets.extend(completedSets)
 
-    timeSpentJoiningResultingSets = time.perf_counter() - start
-    start = time.perf_counter()
-
-    reMergedSets = []
-    for setHolder in finalSets:
-        if setHolder.joined_to:
-            continue
-
-        actualSet = {t for t in itertools.chain.from_iterable(setHolder.sets)}
-        reMergedSets.append(NamedSet(actualSet, setHolder.name))
-    finalConvertTime = time.perf_counter() - start
-
-    logbook.info(f'bifurcated {len(setToBifurcate)} tiles into {len(reMergedSets)} sets of rough size {breakThreshold} in {time.perf_counter() - fullStart:.5f} (iterations:{iter}, fullIterTime:{fullIterTime:.5f}, timeSpentJoiningResultingSets:{timeSpentJoiningResultingSets:.5f}, timeInUpdateIfWrongCheck:{timeInUpdateIfWrongCheck:.5f}, finalConvertTime:{finalConvertTime:.5f}, buildingNoOptionsTime:{buildingNoOptionsTime:.5f})')
-
-    return reMergedSets
+    return finalSets
 
 
 def _get_tiles_with_no_other_options(bifurcationMatrix: MapMatrixSet, setToBifurcate: typing.Set[Tile], breakThreshold: int) -> typing.Set[Tile]:

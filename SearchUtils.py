@@ -224,7 +224,8 @@ def dest_breadth_first_target(
     endNode = None
     depthEvaluated = 0
     baseTurn = map.turn
-    while frontier.queue:
+    qq = frontier.queue
+    while qq:
         iter += 1
 
         (prioVals, current, dist, army, goalInc, fromTile) = frontier.get()
@@ -415,7 +416,8 @@ def a_star_kill(
     goal = False
     depthEvaluated = 0
 
-    while frontier.queue:
+    qq = frontier.queue
+    while qq:
         iter += 1
         if iter & 64 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
             logbook.info("breaking A* early")
@@ -841,7 +843,8 @@ def breadth_first_dynamic(
     endNode = None
     depthEvaluated = 0
     foundVal = None
-    while frontier.queue:
+    qq = frontier.queue
+    while qq:
         iter += 1
         if iter % 1000 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
             logbook.info("BFS-DYNAMIC BREAKING")
@@ -1120,7 +1123,8 @@ def breadth_first_dynamic_max(
     current: Tile = None
     next: Tile = None
 
-    while frontier.queue:
+    qq = frontier.queue
+    while qq:
         iter += 1
         if (iter & 128 == 0
             and time.perf_counter() - start > maxTime
@@ -1438,7 +1442,8 @@ def breadth_first_dynamic_max_per_tile(
     maxLists: typing.Dict[Tile, typing.List[typing.Tuple[Tile, typing.Any]]] = {}
     endNodes: typing.Dict[Tile, Tile] = {}
 
-    while frontier.queue:
+    qq = frontier.queue
+    while qq:
         iter += 1
         if iter & 64 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING or iter > maxIterations:
             logbook.info(f"BFS-DYNAMIC-MAX-PER-TILE BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
@@ -1765,7 +1770,8 @@ def breadth_first_dynamic_max_per_tile_per_distance(
         except:
             valuePrinter = lambda val: str(val)
 
-    while frontier.queue:
+    qq = frontier.queue
+    while qq:
         iter += 1
         if iter & 64 == 0:
             elapsed = time.perf_counter() - start
@@ -2025,7 +2031,8 @@ def bidirectional_breadth_first_dynamic(
     endNode = None
     depthEvaluated = 0
     foundVal = None
-    while frontier.queue:
+    qq = frontier.queue
+    while qq:
         iter += 1
         if iter % 1000 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
             logbook.info("BI-DIR BREAKING")

@@ -89,7 +89,7 @@ _REPLAY_URLS = {
 
 
 class TeamStats(object):
-    def __init__(self, tileCount: int, score: int, standingArmy: int, cityCount: int, fightingDiff: int, unexplainedTileDelta: int, teamId: int, teamPlayers: typing.List[int], turn: int = 0):
+    def __init__(self, tileCount: int, score: int, standingArmy: int, cityCount: int, fightingDiff: int, unexplainedTileDelta: int, teamId: int, teamPlayers: typing.List[int], livingPlayers: typing.List[int], turn: int = 0):
         self.tileCount: int = tileCount
         self.score: int = score
         self.standingArmy: int = standingArmy
@@ -98,6 +98,7 @@ class TeamStats(object):
         self.unexplainedTileDelta: int = unexplainedTileDelta
         self.teamId: int = teamId
         self.teamPlayers: typing.List[int] = teamPlayers
+        self.livingPlayers: typing.List[int] = livingPlayers
         self.turn: int = turn
 
     def __str__(self) -> str:
@@ -253,8 +254,19 @@ class TileDelta(object):
 
 
 class Tile(object):
-    def __init__(self, x, y, tile=TILE_EMPTY, army=0, isCity=False, isGeneral=False, player: typing.Union[None, int] = None, isMountain=False,
-                 turnCapped=0):
+    def __init__(
+            self,
+            x,
+            y,
+            tile=TILE_EMPTY,
+            army=0,
+            isCity=False,
+            isGeneral=False,
+            player: typing.Union[None, int] = None,
+            isMountain=False,
+            turnCapped=0,
+            tileIndex: int = -1
+    ):
         # Public Properties
         self.x = x
         """Integer X Coordinate"""
@@ -305,6 +317,9 @@ class Tile(object):
 
         self.movable: typing.List[Tile] = []
         """Tiles movable (left right up down) from this tile, including mountains, cities, obstacles."""
+
+        self.tile_index: int = tileIndex
+        self._hash_key = hash((self.x, self.y))
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -449,22 +464,14 @@ class Tile(object):
 
         return ''.join(outputToJoin)
 
-
-    """def __eq__(self, other):
-            return (other != None and self.x==other.x and self.y==other.y)"""
-
     def __lt__(self, other: Tile | None):
         if other is None:
             return False
-        if isinstance(other, str):
-            return True
         return self.army < other.army
 
     def __gt__(self, other: Tile | None):
         if other is None:
             return True
-        if isinstance(other, str):
-            return False
         return self.army > other.army
 
     def __str__(self) -> str:
@@ -474,7 +481,7 @@ class Tile(object):
         return str(self)
 
     def __hash__(self):
-        return hash((self.x, self.y))
+        return self._hash_key
 
     def __eq__(self, other):
         if other is None:
@@ -1092,7 +1099,17 @@ class MapBase(object):
                     fightingDiff += player.actualScoreDelta - player.expectedScoreDelta
                     unexplainedTileDelta += player.unexplainedTileDelta
 
-                teamStats = TeamStats(tileCount=tileCount, score=score, standingArmy=standingArmy, cityCount=cities, fightingDiff=fightingDiff, unexplainedTileDelta=unexplainedTileDelta, teamId=curTeamId, teamPlayers=teamPlayers, turn=self.turn)
+                teamStats = TeamStats(
+                    tileCount=tileCount,
+                    score=score,
+                    standingArmy=standingArmy,
+                    cityCount=cities,
+                    fightingDiff=fightingDiff,
+                    unexplainedTileDelta=unexplainedTileDelta,
+                    teamId=curTeamId,
+                    teamPlayers=teamPlayers,
+                    livingPlayers=[p for p in teamPlayers if not self.players[p].dead],
+                    turn=self.turn)
 
                 self._team_stats[curTeamId] = teamStats
                 if curTeamId == teamId:
@@ -2722,6 +2739,9 @@ class MapBase(object):
     def get_tile_index(self, tile: Tile) -> int:
         return tile.y * self.cols + tile.x
 
+    def get_tile_index_by_x_y(self, x: int, y: int) -> int:
+        return y * self.cols + x
+
     def get_tile_by_tile_index(self, tileIndex: int) -> Tile:
         x, y = self.convert_tile_server_index_to_x_y(tileIndex)
         return self.GetTile(x, y)
@@ -2783,6 +2803,9 @@ class MapBase(object):
         return map._teams
 
     def get_teammates(self, player: int) -> typing.List[int]:
+        """
+        INCLUDES the player that was requested in the output.
+        """
         return self._teammates_by_player[player]
 
 
@@ -2800,7 +2823,7 @@ class Map(MapBase):
         # First Game Data, sets up all the private server-array-style-tile-caches
         self._apply_server_patch(data)
 
-        map_grid_y_x: typing.List[typing.List[Tile]] = [[Tile(x, y) for x in range(self.cols)] for y in range(self.rows)]
+        map_grid_y_x: typing.List[typing.List[Tile]] = [[Tile(x, y, tileIndex=self.get_tile_index_by_x_y(x, y)) for x in range(self.cols)] for y in range(self.rows)]
         teams = None
         if 'teams' in start_data:
             teams = start_data['teams']

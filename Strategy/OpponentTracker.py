@@ -68,7 +68,7 @@ class OpponentTracker(object):
                 self.team_score_data_history[team] = {}
                 teamPlayers = self.get_team_players(team)
                 turn0Stats = CycleStatsData(team, teamPlayers)
-                self.team_score_data_history[team][0] = TeamStats(0, 0, 0, len(turn0Stats.players), 0, 0, team, teamPlayers, self.map.turn - 1)
+                self.team_score_data_history[team][0] = TeamStats(0, 0, 0, len(turn0Stats.players), 0, 0, team, teamPlayers, teamPlayers, self.map.turn - 1)
                 self.current_team_cycle_stats[team] = turn0Stats
                 self.team_cycle_stats_history[team] = {}
                 self._team_indexes.append(team)
@@ -260,7 +260,8 @@ class OpponentTracker(object):
             if cycleTurn is None:
                 break
             for team in self._team_indexes:
-                teamScore = TeamStats(0, 0, 0, 0, 0, 0, team, [], 0)
+                teamPlayers = self.get_team_players(team)
+                teamScore = TeamStats(0, 0, 0, 0, 0, 0, team, teamPlayers, teamPlayers, 0)
                 self.team_score_data_history[team][cycleTurn] = teamScore
                 if f'ot_{team}_c_{cycleTurn}_tileCount' in data:
                     teamScore.tileCount = int(data[f'ot_{team}_c_{cycleTurn}_tileCount'])
@@ -271,7 +272,7 @@ class OpponentTracker(object):
                     teamScore.unexplainedTileDelta = int(data[f'ot_{team}_c_{cycleTurn}_unexplainedTileDelta'])
 
                 if f'ot_{team}_c_{cycleTurn}_stats_moves_spent_capturing_fog_tiles' in data:
-                    stats = CycleStatsData(team, self.get_team_players(team))
+                    stats = CycleStatsData(team, teamPlayers)
                     stats.moves_spent_capturing_fog_tiles = int(data[f'ot_{team}_c_{cycleTurn}_stats_moves_spent_capturing_fog_tiles'])
                     stats.moves_spent_capturing_visible_tiles = int(data[f'ot_{team}_c_{cycleTurn}_stats_moves_spent_capturing_visible_tiles'])
                     stats.moves_spent_gathering_fog_tiles = int(data[f'ot_{team}_c_{cycleTurn}_stats_moves_spent_gathering_fog_tiles'])
@@ -1286,3 +1287,23 @@ class OpponentTracker(object):
     def send_general_distance_notification(self, maxDist: int, tile: Tile, generalConfidence: bool):
         for notification in self.outbound_emergence_notifications:
             notification(maxDist, tile, generalConfidence)
+
+    def get_team_unknown_city_count_by_player(self, player: int) -> int:
+        """
+        Gets the number of cities the players TEAM has that we have never had vision of yet (so basically the number of undiscovered obstacles that are cities).
+        Excludes fog-guess cities.
+
+        @param player:
+        @return:
+        """
+        team = self.get_current_team_scores_by_player(player)
+        unkCount = team.cityCount
+        for pIdx in team.livingPlayers:
+            p = self.map.players[pIdx]
+            # general doesn't count
+            unkCount -= 1
+            for city in p.cities:
+                if city.discovered and not city.isTempFogPrediction:
+                    unkCount -= 1
+
+        return unkCount

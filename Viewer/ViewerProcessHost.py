@@ -1,4 +1,5 @@
-import logbook
+import time
+
 import queue
 import traceback
 import typing
@@ -144,3 +145,21 @@ class ViewerHost(object):
         except BrokenPipeError:
             if self._closed_by_user is None:
                 self._closed_by_user = False
+
+
+def get_renderable_view_info(map: MapBase) -> ViewInfo:
+    viewInfo = ViewInfo(1, map)
+    viewInfo.playerTargetScores = [0 for p in map.players]
+    return viewInfo
+
+
+def render_view_info_debug(titleString: str, infoString: str, map: MapBase, viewInfo: ViewInfo):
+    viewer = ViewerHost(titleString, cell_width=None, cell_height=None, alignTop=False, alignLeft=False, noLog=True)
+    viewer.noLog = True
+    if infoString is not None:
+        viewInfo.infoText = infoString
+    viewer.start()
+    viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
+    while not viewer.check_viewer_closed():
+        viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
+        time.sleep(0.1)

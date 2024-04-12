@@ -118,7 +118,7 @@ class InterceptionOptionInfo(TilePlanInterface):
         return self.path.pop_first_move()
 
     def __str__(self):
-        return f'{self.econValue:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt) dBlk {self.damage_blocked:.2f}, armyLeft {self.intercepting_army_remaining}, bcm {self.best_case_intercept_moves}, del {self.requiredDelay}, path {self.path}'
+        return f'int {self.econValue:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt) dBlk {self.damage_blocked:.2f}, armyLeft {self.intercepting_army_remaining}, bcm {self.best_case_intercept_moves}, del {self.requiredDelay}, path {self.path}'
 
     def __repr__(self):
         return str(self)
@@ -126,7 +126,8 @@ class InterceptionOptionInfo(TilePlanInterface):
     def clone(self) -> InterceptionOptionInfo:
         clone = InterceptionOptionInfo(
             self.path.clone(),
-            self.econValue, self._turns,
+            self.econValue,
+            self._turns,
             self.damage_blocked,
             self.intercepting_army_remaining,
             self.best_case_intercept_moves,

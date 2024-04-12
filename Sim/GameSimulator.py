@@ -18,8 +18,10 @@ from bot_ek0x45 import EklipZBot
 
 
 def generate_player_map(player_index: int, map_raw: MapBase) -> MapBase:
-    playerMap = [[Tile(x, y, tile=TILE_FOG, army=0, player=-1) for x in range(map_raw.cols)] for y in
-                 range(map_raw.rows)]
+    playerMap = [
+            [Tile(x, y, tile=TILE_FOG, army=0, player=-1, tileIndex=y * map_raw.cols + x) for x in range(map_raw.cols)]
+            for y in range(map_raw.rows)
+    ]
 
     scores = [Score(n, map_raw.players[n].score, map_raw.players[n].tileCount, map_raw.players[n].dead) for n in
               range(0, len(map_raw.players))]

@@ -5,19 +5,17 @@
     EklipZ bot - Tries to play generals lol
 """
 
-from __future__ import  annotations
+from __future__ import annotations
 
-import itertools
 import time
 import typing
 
 import logbook
-from numba.cpython.cmathimpl import INF
 
 from collections import deque
 
 import SearchUtils
-from ArmyTracker import Army
+from Army import Army
 from Path import Path
 from base.client.map import Tile, MapBase, TILE_OBSTACLE
 from MapMatrix import MapMatrix, MapMatrixSet
@@ -47,12 +45,12 @@ class ArmyAnalyzer:
     def __init__(self, map: MapBase, armyA: Tile | Army, armyB: Tile | Army):
         startTime = time.perf_counter()
         self.map: MapBase = map
-        if type(armyA) is Army:
+        if isinstance(armyA, Army):
             self.tileA: Tile = armyA.tile
         else:
             self.tileA: Tile = armyA
 
-        if type(armyB) is Army:
+        if isinstance(armyB, Army):
             self.tileB: Tile = armyB.tile
         else:
             self.tileB: Tile = armyB
@@ -126,7 +124,7 @@ class ArmyAnalyzer:
         minPath = INF_PATH_WAY
         for tile in self.map.pathableTiles:
             # build the pathway
-            path = self.pathWayLookupMatrix._grid[tile.x][tile.y]
+            path = self.pathWayLookupMatrix.raw[tile.tile_index]
             if path:
                 continue
 
@@ -147,7 +145,7 @@ class ArmyAnalyzer:
                 if pathTile.isMountain or (pathTile.tile == TILE_OBSTACLE and not pathTile.discovered and not pathTile.isCity) or (pathTile.isCity and pathTile.player == -1):
                     continue
                 cw = chokeCounterMap[self._get_choke_key(pathTile)]
-                self.chokeWidths._grid[pathTile.x][pathTile.y] = cw
+                self.chokeWidths.raw[pathTile.tile_index] = cw
 
         self.shortestPathWay = minPath
     # # stack
@@ -212,7 +210,7 @@ class ArmyAnalyzer:
 
     # recurse
     def build_pathway(self, tile) -> PathWay:
-        distance = self.aMap._grid[tile.x][tile.y] + self.bMap._grid[tile.x][tile.y]
+        distance = self.aMap.raw[tile.tile_index] + self.bMap.raw[tile.tile_index]
         #logbook.info("  building pathway from tile {} distance {}".format(tile.toString(), distance))
         path = PathWay(distance=distance)
         path.seed_tile = tile
@@ -223,17 +221,17 @@ class ArmyAnalyzer:
 
     # I hate all of these .grid hacks, but they are like 30% faster sadly..
     def _build_pathway_recurse(self, path: PathWay, currentTile: Tile):
-        if self.pathWayLookupMatrix._grid[currentTile.x][currentTile.y]:
+        if self.pathWayLookupMatrix.raw[currentTile.tile_index]:
             return
-        if self.aMap._grid[currentTile.x][currentTile.y] + self.bMap._grid[currentTile.x][currentTile.y] != path.distance:
+        if self.aMap.raw[currentTile.tile_index] + self.bMap.raw[currentTile.tile_index] != path.distance:
             return
 
         #logbook.info("    adding tile {}".format(currentTile.toString()))
         path.tiles.add(currentTile)
-        self.pathWayLookupMatrix._grid[currentTile.x][currentTile.y] = path
+        self.pathWayLookupMatrix.raw[currentTile.tile_index] = path
 
         for adjacentTile in currentTile.movable:
-            if self.pathWayLookupMatrix._grid[adjacentTile.x][adjacentTile.y]:
+            if self.pathWayLookupMatrix.raw[adjacentTile.tile_index]:
                 continue
 
             if adjacentTile.isMountain or (adjacentTile.tile == TILE_OBSTACLE and not adjacentTile.discovered and not adjacentTile.isCity) or (adjacentTile.isCity and adjacentTile.player == -1):
@@ -243,7 +241,7 @@ class ArmyAnalyzer:
 
     def _get_choke_key(self, tile: Tile) -> typing.Tuple:
         # including path in the key forces the 'chokes' to be part of the same pathway.
-        return self.aMap._grid[tile.x][tile.y], self.bMap._grid[tile.x][tile.y]
+        return self.aMap.raw[tile.tile_index], self.bMap.raw[tile.tile_index]
 
         # return self.aMap[tile], self.bMap[tile]
         # return path.distance, self.aMap[tile], self.bMap[tile]
@@ -264,7 +262,7 @@ class ArmyAnalyzer:
         q.append((self.tileB, set()))
 
         visited = MapMatrixSet(self.map)
-        pw = self.pathWayLookupMatrix._grid[self.tileA.x][self.tileA.y]
+        pw = self.pathWayLookupMatrix.raw[self.tileA.tile_index]
         if pw is None:
             return
 
@@ -311,7 +309,7 @@ class ArmyAnalyzer:
         q.append(self.tileB)
 
         visited = MapMatrixSet(self.map)
-        pw = self.pathWayLookupMatrix._grid[self.tileA.x][self.tileA.y]
+        pw = self.pathWayLookupMatrix.raw[self.tileA.tile_index]
         if pw is None:
             return
 
@@ -483,6 +481,8 @@ class ArmyAnalyzer:
         startTiles: typing.Dict[Tile, typing.Tuple[int, typing.Tuple[int, int]]] = {}
         for tile in shortestTiles:
             ourDist = self.chokeWidths[tile]
+            if ourDist is None:
+                continue
             for adj in tile.movable:
                 existing = startTiles.get(adj, None)
                 if not existing or existing[0] > ourDist:

@@ -2725,3 +2725,82 @@ whoever has less extra troops will always get ahead
         bot.timings = bot.get_timings()
         self.assertGreater(bot.timings.launchTiming, 24)
         self.assertGreater(bot.timings.splitTurns, 22)
+    
+    def test_should_not_gather_out_of_play_when_totally_safe_and_needs_to_end_round_with_econ(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_gather_out_of_play_when_totally_safe_and_needs_to_end_round_with_econ___3HU1qrXVL---0--388.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 388, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=388)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertFalse(bot.army_out_of_play)
+    
+    def test_should_not_defend_inbound_kill_push_that_cant_come(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_defend_inbound_kill_push_that_cant_come___wVjVyLUkl---0--238.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 238, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=238)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertTileDifferentialGreaterThan(-2, simHost, 'shouldnt sit there while losing and do nothing lmao')
+
+    def test_should_defend_obvious_kill_threat_from_fog_in_early_game(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_defend_obvious_kill_threat_from_fog_in_early_game___B-OhXQP69---1--100.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 100, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=100)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+
+        self.set_general_emergence_around(7, 16, simHost, general.player, enemyGeneral.player, emergenceAmt=0, distance=10)
+        self.set_general_emergence_around(1, 0, simHost, general.player, enemyGeneral.player, emergenceAmt=0, distance=4)
+
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=21)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertMinArmyNear(playerMap, general, general.player, 30, distance=3)
+    
+    def test_should_not_early_all_in_when_not_necessary(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_early_all_in_when_not_necessary___CaVJAhDen---1--115.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 115, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=115)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_leafmoves(enemyGeneral.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertEqual(0, bot.all_in_losing_counter)

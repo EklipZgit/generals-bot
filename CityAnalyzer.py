@@ -110,6 +110,7 @@ class CityAnalyzer(object):
             # TODO calculate predicted enemy city locations in fog and explore mountains more in places we would WANT cities to be
             tileMightBeUndiscCity = not tile.discovered and tile.isObstacle and tile in self.map.reachableTiles
             # if not (tile.isCity or tileMightBeUndiscCity):
+
             if not tile.isCity:
                 continue
 
@@ -335,11 +336,3 @@ class CityAnalyzer(object):
             return True
 
         return False
-
-
-
-
-
-
-
-

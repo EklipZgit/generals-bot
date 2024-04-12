@@ -23,13 +23,56 @@ T = typing.TypeVar('T')
 
 
 class TreeBuilder(typing.Generic[T]):
-    def __init__(self):
+    def __init__(self, map: MapBase):
+        self.map: MapBase = map
         self.tree_builder_prioritizer: typing.Callable[[Tile, T], T | None] = None
         self.tree_builder_valuator: typing.Callable[[Tile, T], typing.Any | None] = None
         """The value function when finding path extensions to the spanning tree"""
 
         self.tree_knapsacker_valuator: typing.Callable[[Path], int] = None
         """For getting the values of tree nodes to shove in the knapsack to build the subtree iteration"""
+
+
+    def build_gather_capture_tree_from_tile_sets(
+            self,
+            gatherTiles: MapMatrix[float | None],
+            captureTiles: MapMatrix[float | None],
+            startTiles: typing.List[Tile] | None = None
+    ) -> GatherCapturePlan:
+        nodes = []
+        # kay need to bi-directional BFS to gather all the nodes...
+        nodeMatrix: MapMatrix[GatherTreeNode] = MapMatrix(self.map)
+
+        self.build_mst_gather_from_matrices(gatherTiles, nodeMatrix, startTiles)
+
+    def build_mst_gather_from_matrices(self, gatherTiles, nodeMatrix, startTiles):
+        # build dumb gather mst
+        frontier: SearchUtils.HeapQueue[typing.Tuple[int, Tile, GatherTreeNode | None, int, float, int]] = SearchUtils.HeapQueue()
+        for tile in startTiles:
+            frontier.put((0, tile, None, 0, 0, 0))
+
+        dist: int
+        curTile: Tile
+        fromNode: GatherTreeNode | None
+        negArmyGathered: int
+        negPrioSum: float
+        negRawArmy: int
+        unk: typing.Any | None
+        qq = frontier.queue
+        while qq:
+            (dist, nextTile, fromNode, negArmyGathered, negPrioSum, negRawArmy) = frontier.get()
+
+            curNode = nodeMatrix[nextTile]
+            if curNode:
+                continue
+
+            treeNode = GatherTreeNode(nextTile, fromNode.tile)
+            if fromNode:
+                fromNode.children.append(treeNode)
+
+            for movable in nextTile.movable:
+                if movable in gatherTiles and movable not in nodeMatrix:
+                    frontier.put((dist + 1, movable, treeNode, negArmyGathered, negPrioSum, negRawArmy))
 
 
 class GatherCapturePlan(TilePlanInterface):
@@ -3197,19 +3240,27 @@ def get_tree_leaves_further_than_distance(
         minArmy: int = 1,
         curArmy: int = 0
 ) -> typing.List[GatherTreeNode]:
-    leaves = get_tree_leaves(gatherNodes)
-    leavesGreaterThanDistance = SearchUtils.where(leaves, lambda g: distMap[g.tile] >= dist)
-
+    includeAll = False
     if minArmy > curArmy:
-        return leavesGreaterThanDistance
+        includeAll = True
 
     leavesToInclude = []
-    for leaf in leavesGreaterThanDistance:
-        leafContribution = (leaf.tile.army - 1)
-        if curArmy - leafContribution <= minArmy:
-            leavesToInclude.append(leaf)
-        else:
-            curArmy -= leafContribution
+    for n in gatherNodes:
+        leaves = get_tree_leaves([n])
+        distOffs = 0
+        if n.tile.isGeneral:
+            distOffs = 1
+        leavesGreaterThanDistance = SearchUtils.where(leaves, lambda g: distMap[g.tile] >= dist - distOffs)
+        if includeAll:
+            leavesToInclude.extend(leavesGreaterThanDistance)
+            continue
+
+        for leaf in leavesGreaterThanDistance:
+            leafContribution = (leaf.tile.army - 1)
+            if curArmy - leafContribution <= minArmy:
+                leavesToInclude.append(leaf)
+            else:
+                curArmy -= leafContribution
 
     return leavesToInclude
 

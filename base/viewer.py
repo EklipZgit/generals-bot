@@ -409,7 +409,8 @@ class GeneralsViewer(object):
                 try:
                     self._drawGrid()
                 except Exception as ex:
-                    logbook.error(f'VIEWER ERROR {ex}')
+                    logbook.error(f'VIEWER ERROR {traceback.format_exc()}')
+                    print(traceback.format_exc())
 
                 self.last_render_time = start
 
@@ -1083,8 +1084,8 @@ class GeneralsViewer(object):
             pathWays: typing.List[PathWay],
             shortestColor: typing.Tuple[int, int, int],
             longestColor: typing.Tuple[int, int, int]):
-        minLength = INF
-        maxLength = 0 - INF
+        minLength = 100000000
+        maxLength = -100000000
         for pathWay in pathWays:
             if minLength > pathWay.distance:
                 minLength = pathWay.distance

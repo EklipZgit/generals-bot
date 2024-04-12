@@ -33,14 +33,23 @@ class TextMapLoader(object):
         rows = data.splitlines()
         widthRow = rows[0]
         width = count(widthRow, lambda c: c == '|')
+        indent = len(widthRow) - len(widthRow.lstrip())
         y = 0
+        numRows = 0
         for row in rows[1:]:
+            if row.startswith('|'):
+                # stuff after this point is ekBot data etc
+                break
+            numRows += 1
+        for row in rows[1:]:
+            if indent > 0:
+                row = row[indent:]
             if row.startswith('|'):
                 # stuff after this point is ekBot data etc
                 break
             row = row.rstrip()
 
-            cols = [Tile(x, y) for x in range(width)]
+            cols = [Tile(x, y, tileIndex=y * width + x) for x in range(width)]
             textTiles = [row[i:i+split_every] for i in range(0, len(row), split_every)]
             x = 0
             for textTile in textTiles:
@@ -69,7 +78,7 @@ class TextMapLoader(object):
                 lastMapRow = i
 
         for i in range(lastMapRow + 1, len(rows)):
-            kvpStr = rows[i]
+            kvpStr = rows[i].strip()
             if not kvpStr:
                 continue
             key, value = kvpStr.split('=')

@@ -11,6 +11,7 @@ from logbook import StreamHandler
 
 import BotHost
 import DebugHelper
+from Algorithms import TileIslandBuilder
 from ArmyAnalyzer import ArmyAnalyzer
 import EarlyExpandUtils
 import GatherUtils
@@ -19,22 +20,24 @@ import base
 from ArmyEngine import ArmySimResult
 from ArmyTracker import Army, ArmyTracker
 from Behavior.ArmyInterceptor import ArmyInterception, ArmyInterceptor, InterceptionOptionInfo
+from BehaviorAlgorithms.IterativeExpansion import FlowExpansionPlanOption
 from BoardAnalyzer import BoardAnalyzer
 from DangerAnalyzer import ThreatType, ThreatObj
 from DataModels import Move
 from DistanceMapperImpl import DistanceMapperImpl
-from MapMatrix import MapMatrix
+from MapMatrix import MapMatrix, MapMatrixSet
 from Path import Path
 from Sim.GameSimulator import GameSimulator, GameSimulatorHost
 from Sim.TextMapLoader import TextMapLoader
 from ViewInfo import ViewInfo, PathColorer, TargetStyle
+from Viewer import ViewerProcessHost
 from Viewer.ViewerProcessHost import ViewerHost
 from base.client.map import MapBase, Tile, Score, Player, TILE_FOG, TILE_OBSTACLE
 from bot_ek0x45 import EklipZBot
 
 
 class TestBase(unittest.TestCase):
-    GLOBAL_BYPASS_REAL_TIME_TEST = False
+    GLOBAL_BYPASS_REAL_TIME_TEST = True
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -345,7 +348,9 @@ class TestBase(unittest.TestCase):
             botPlayer: int,
             emergencePlayer: int,
             emergenceAmt: int = 40,
-            doNotSetTargetLocation: bool = False):
+            doNotSetTargetLocation: bool = False,
+            distance: int = 5
+    ):
         bot = simHost.get_bot(botPlayer)
 
         botTile = bot._map.GetTile(x, y)
@@ -354,7 +359,7 @@ class TestBase(unittest.TestCase):
             bot.armyTracker.emergenceLocationMap[emergencePlayer][t] = (emergenceAmt * 5) // (dist + 5)
             return t.discovered or t.visible
 
-        SearchUtils.breadth_first_foreach_dist(bot._map, [botTile], 5, emergenceMarker)
+        SearchUtils.breadth_first_foreach_dist(bot._map, [botTile], distance, emergenceMarker)
 
         bot.armyTracker.emergenceLocationMap[emergencePlayer][bot._map.GetTile(x, y)] += emergenceAmt
         bot.timing_cycle_ended()
@@ -445,7 +450,7 @@ class TestBase(unittest.TestCase):
 
         return Army(generalArmy), Army(enemyArmy)
 
-    def render_paths(self, map: MapBase, paths: typing.List[Path | None], infoStr: str):
+    def render_paths(self, map: MapBase, paths: typing.List[Path | None], infoStr: str, viewInfoMod: typing.Callable[[ViewInfo], None] | None = None):
         viewInfo = self.get_renderable_view_info(map)
 
         r = 255
@@ -467,9 +472,35 @@ class TestBase(unittest.TestCase):
             r = max(0, r)
             b = min(255, b)
 
+        if viewInfoMod:
+            viewInfoMod(viewInfo)
+
         self.render_view_info(map, viewInfo, infoStr)
 
-    def render_moves(self, map: MapBase, infoStr: str, moves1: typing.List[Move | None], moves2: typing.List[Move | None] = None, addlViewInfoLogLines: typing.List[str] | None = None):
+    def render_tile_islands(self, map: MapBase, builder: TileIslandBuilder, viewInfoMod: typing.Callable[[ViewInfo], None] | None = None):
+        viewInfo = self.get_renderable_view_info(map)
+        # colors = PLAYER_COLORS
+        # i = 0
+        for island in sorted(builder.all_tile_islands, key=lambda i: (i.team, str(i.name))):
+            color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+
+            viewInfo.add_map_zone(island.tile_set, color, alpha=80)
+            viewInfo.add_map_division(island.tile_set, color, alpha=200)
+            if island.name:
+                for tile in island.tile_set:
+                    if viewInfo.bottomRightGridText[tile]:
+                        viewInfo.midRightGridText[tile] = island.name
+                    else:
+                        viewInfo.bottomRightGridText[tile] = island.name
+
+            viewInfo.add_info_line_no_log(f'{island.team}: island {island.name} - {island.sum_army}a/{island.tile_count}t ({island.sum_army_all_adjacent_friendly}a/{island.tile_count_all_adjacent_friendly}t) {str(island.tile_set)}')
+
+        if viewInfoMod:
+            viewInfoMod(viewInfo)
+
+        self.render_view_info(map, viewInfo)
+
+    def render_moves(self, map: MapBase, infoStr: str, moves1: typing.List[Move | None], moves2: typing.List[Move | None] = None, addlViewInfoLogLines: typing.List[str] | None = None, viewInfoMod: typing.Callable[[ViewInfo], None] | None = None):
         viewInfo = self.get_renderable_view_info(map)
         verifiedColors = False
         for move in moves1:
@@ -537,9 +568,12 @@ class TestBase(unittest.TestCase):
             for line in addlViewInfoLogLines:
                 viewInfo.add_info_line(line)
 
+        if viewInfoMod:
+            viewInfoMod(viewInfo)
+
         self.render_view_info(map, viewInfo, infoStr)
 
-    def render_army_analyzer(self, map: MapBase, analyzer: ArmyAnalyzer, alsoRenderPaths: typing.List[Path] | None = None):
+    def render_army_analyzer(self, map: MapBase, analyzer: ArmyAnalyzer, alsoRenderPaths: typing.List[Path] | None = None, viewInfoMod: typing.Callable[[ViewInfo], None] | None = None):
         viewInfo = ViewInfo(0, map)
         board = BoardAnalyzer(map, analyzer.tileA, None)
         board.rebuild_intergeneral_analysis(analyzer.tileB, possibleSpawns=None)
@@ -617,14 +651,19 @@ class TestBase(unittest.TestCase):
         viewInfo.board_analysis = board
         viewInfo.add_targeted_tile(analyzer.tileA, TargetStyle.GREEN)
         viewInfo.add_targeted_tile(analyzer.tileB, TargetStyle.RED)
+
+        if viewInfoMod:
+            viewInfoMod(viewInfo)
+
         self.render_view_info(map, viewInfo, f'ArmyAnalysis between {analyzer.tileA} and {analyzer.tileB}')
 
-    def render_sim_analysis(self, map: MapBase, simResult: ArmySimResult):
+    def render_sim_analysis(self, map: MapBase, simResult: ArmySimResult, viewInfoMod: typing.Callable[[ViewInfo], None] | None = None):
         aMoves = [aMove for aMove, bMove in simResult.expected_best_moves]
         bMoves = [bMove for aMove, bMove in simResult.expected_best_moves]
 
         addlLines = [l.strip() for l in simResult.best_result_state.get_moves_string().split('\n')]
-        self.render_moves(map, str(simResult), aMoves, bMoves, addlLines)
+
+        self.render_moves(map, str(simResult), aMoves, bMoves, addlLines, viewInfoMod=viewInfoMod)
 
     def disable_search_time_limits_and_enable_debug_asserts(self):
         SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING = DebugHelper.IS_DEBUGGING
@@ -687,7 +726,7 @@ class TestBase(unittest.TestCase):
     def get_furthest_tile_from_general(self, map: MapBase, general: Tile) -> Tile:
         distMap = SearchUtils.build_distance_map_matrix(map, [general])
         maxDist = 0
-        furthestTile: Tile = None
+        furthestTile: Tile | None = None
         for tile in map.pathableTiles:
             tileDist = distMap[tile]
             if tileDist > maxDist:
@@ -706,7 +745,7 @@ class TestBase(unittest.TestCase):
         """
         self.reset_map_to_just_generals(map, turn=1)
 
-        enemyGen: Tile = None
+        enemyGen: Tile | None = None
         if map.generals[0] is None or map.generals[1] is None:
             enemyGen = self.generate_enemy_general_opposite_general(map, general)
         else:
@@ -754,9 +793,7 @@ class TestBase(unittest.TestCase):
         return enemyGeneral
 
     def get_renderable_view_info(self, map: MapBase) -> ViewInfo:
-        viewInfo = ViewInfo(1, map)
-        viewInfo.playerTargetScores = [0 for p in map.players]
-        return viewInfo
+        return ViewerProcessHost.get_renderable_view_info(map)
 
     def render_view_info(self, map: MapBase, viewInfo: ViewInfo, infoString: str | None = None):
         # titleString = infoString
@@ -777,21 +814,21 @@ class TestBase(unittest.TestCase):
         titleString = infoString
         if titleString is None:
             titleString = self._testMethodName
-        viewer = ViewerHost(titleString, cell_width=None, cell_height=None, alignTop=False, alignLeft=False, noLog=True)
-        viewer.noLog = True
-        viewInfo = self.get_renderable_view_info(map)
-        if infoString is not None:
-            viewInfo.infoText = infoString
+
+        viewInfo = ViewerProcessHost.get_renderable_view_info(map)
         if includeTileDiffs:
             EklipZBot.render_tile_deltas_in_view_info(viewInfo, map)
-        viewer.start()
-        viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
+        ViewerProcessHost.render_view_info_debug(titleString, infoString, map, viewInfo)
 
-        while not viewer.check_viewer_closed():
-            viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
-            time.sleep(0.1)
+    def assertTileIn(self, tile: Tile, container: MapMatrix | MapMatrixSet | typing.Container[Tile] | typing.Iterable[Tile]):
+        self.assertIn(tile, container)
+
+    def assertTileXYIn(self, map: MapBase, x: int, y: int, container: MapMatrix | MapMatrixSet | typing.Container[Tile] | typing.Iterable[Tile]):
+        self.assertIn(map.GetTile(x, y), container)
 
     def assertOwned(self, player: int, tile: Tile, reason: str | None = None):
+        if not reason:
+            reason = f'expected player {player} to own {tile}'
         self.assertEqual(player, tile.player, reason)
 
     def assertNoRepetition(
@@ -1175,7 +1212,7 @@ class TestBase(unittest.TestCase):
 
         pMap = simHost.get_player_map(player)
         pTiles = pMap.players[player].tileCount
-        enTiles = pMap.players[player - 1].tileCount
+        enTiles = pMap.players[otherPlayer].tileCount
 
         return pTiles - enTiles
 
@@ -1318,7 +1355,7 @@ class TestBase(unittest.TestCase):
             try:
                 lastWinTurns = 0
                 winner = -1
-                simHost: GameSimulatorHost = None
+                simHost: GameSimulatorHost | None = None
                 while lastWinTurns < minGameDurationToCount:
                     try:
                         self.stop_capturing_logging()
@@ -1394,7 +1431,7 @@ class TestBase(unittest.TestCase):
     def _generate_enemy_gen(self, map: MapBase, gameData: typing.Dict[str, str], player: int | None, isTargetPlayer: bool = False):
         chars = TextMapLoader.get_player_char_index_map()
 
-        enemyGen: Tile = None
+        enemyGen: Tile | None = None
         if player is not None:
             if map.generals[player] is not None:
                 enemyGen = map.generals[player]
@@ -1560,6 +1597,14 @@ class TestBase(unittest.TestCase):
             self.fail(f'Expected an intercept option to be found, but none was found.')
 
         return res
+
+    def get_longest_flow_expansion_option(self, plans: typing.List[FlowExpansionPlanOption]) -> FlowExpansionPlanOption:
+        maxOpt = max(plans, key=lambda o: o.length)
+        return maxOpt
+
+    def get_best_flow_expansion_option(self, plans: typing.List[FlowExpansionPlanOption]) -> FlowExpansionPlanOption:
+        maxOpt = max(plans, key=lambda o: (o.econValue / o.length, o.length))
+        return maxOpt
 
     def get_best_intercept_option_path_values_or_none(self, plan: ArmyInterception, maxDepth=200) -> typing.Tuple[int, int, Path] | None:
         """Returns value, effectiveTurns, path"""
@@ -1765,7 +1810,7 @@ class TestBase(unittest.TestCase):
 
         return bestOpt
 
-    def render_intercept_plan(self, map: MapBase, plan: ArmyInterception, colorIndex: int = 0, renderIndividualAnalysis: bool = False):
+    def render_intercept_plan(self, map: MapBase, plan: ArmyInterception, colorIndex: int = 0, renderIndividualAnalysis: bool = False, viewInfoMod: typing.Callable[[ViewInfo], None] | None = None):
         viewInfo = self.get_renderable_view_info(map)
         targetStyle = TargetStyle(colorIndex + 2)
 
@@ -1832,6 +1877,10 @@ class TestBase(unittest.TestCase):
                 155,
                 alpha=255
             ), renderOnBottom=False)
+
+        if viewInfoMod:
+            viewInfoMod(viewInfo)
+
         self.render_view_info(map, viewInfo, f'intercept {maxOpt}')
 
     def assertInterceptChokeTileMoves(self, plan: ArmyInterception, map: MapBase, x: int, y: int, w: int):

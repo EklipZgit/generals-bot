@@ -39,13 +39,13 @@ class BoardAnalyzer:
 
         self.intergeneral_analysis: ArmyAnalyzer = None
 
-        self.core_play_area_matrix: MapMatrix[bool] = None
+        self.core_play_area_matrix: MapMatrixSet = None
 
-        self.extended_play_area_matrix: MapMatrix[bool] = None
+        self.extended_play_area_matrix: MapMatrixSet = None
 
-        self.flankable_fog_area_matrix: MapMatrix[bool] = None
+        self.flankable_fog_area_matrix: MapMatrixSet = None
 
-        self.flank_danger_play_area_matrix: MapMatrix[bool] = None
+        self.flank_danger_play_area_matrix: MapMatrixSet = None
 
         self.general_distances: MapMatrix[int] = MapMatrix(self.map)
 
@@ -68,6 +68,10 @@ class BoardAnalyzer:
         self.within_flank_danger_play_area_threshold: int = 4
         """The cutoff point where we draw red borders as the flank danger surface area."""
 
+        self.enemy_wall_breach_scores: MapMatrix[int] = MapMatrix(map, None)
+
+        self.friendly_wall_breach_scores: MapMatrix[int] = MapMatrix(map, None)
+
         self.rescan_chokes()
 
     def __getstate__(self):
@@ -82,6 +86,7 @@ class BoardAnalyzer:
 
     def rescan_chokes(self):
         self.should_rescan = False
+
         oldInner = self.innerChokes
         oldOuter = self.outerChokes
         self.innerChokes = MapMatrixSet(self.map)
@@ -110,8 +115,10 @@ class BoardAnalyzer:
         lowestAvgDist = 10000000
         lowestAvgTile: Tile | None = None
 
-        for tile in self.map.pathableTiles:
+        for tile in self.map.reachableTiles:
             # logbook.info("Rescanning chokes for {}".format(tile.toString()))
+            if not tile.isPathable:
+                continue
             tileDist = self.friendly_general_distances[tile]
 
             distSum = tileDist
@@ -144,9 +151,11 @@ class BoardAnalyzer:
         logbook.info(f'calculated central defense point to be {str(lowestAvgTile)} due to lowestAvgDist {lowestAvgDist}')
         self.central_defense_point = lowestAvgTile
 
-    def rebuild_intergeneral_analysis(self, opponentGeneral: Tile, possibleSpawns: typing.List[MapMatrix[bool]] | None = None):
+    def rebuild_intergeneral_analysis(self, opponentGeneral: Tile, possibleSpawns: typing.List[MapMatrixSet] | None = None):
         self.intergeneral_analysis = ArmyAnalyzer(self.map, self.general, opponentGeneral)
 
+        self.enemy_wall_breach_scores = MapMatrix(self.map, None)
+        self.friendly_wall_breach_scores = MapMatrix(self.map, None)
         enemyDistMap = self.intergeneral_analysis.bMap
         generalDistMap = self.intergeneral_analysis.aMap
         general = self.general
@@ -170,31 +179,37 @@ class BoardAnalyzer:
                      f'     extended area dist: {self.within_extended_play_area_threshold}\r\n'
                      f'     flank danger dist: {self.within_flank_danger_play_area_threshold}')
 
-        self.core_play_area_matrix: MapMatrix[bool] = MapMatrix(self.map, initVal=False)
-        self.extended_play_area_matrix: MapMatrix[bool] = MapMatrix(self.map, initVal=False)
-        self.flank_danger_play_area_matrix: MapMatrix[bool] = MapMatrix(self.map, initVal=False)
+        self.core_play_area_matrix: MapMatrixSet = MapMatrixSet(self.map)
+        self.extended_play_area_matrix: MapMatrixSet = MapMatrixSet(self.map)
+        self.flank_danger_play_area_matrix: MapMatrixSet = MapMatrixSet(self.map)
 
         self.build_play_area_matrices(enemyDistMap, generalDistMap)
 
         self.rescan_chokes()
 
     def build_play_area_matrices(self, enemyDistMap: MapMatrix[int], generalDistMap: MapMatrix[int]):
-        for tile in self.map.pathableTiles:
+        for tile in self.map.reachableTiles:
+            if tile.isObstacle and not tile.isMountain:
+                self.enemy_wall_breach_scores[tile] = self._get_wall_breach_score_enemy(tile)
+                self.friendly_wall_breach_scores[tile] = self._get_wall_breach_score_friendly(tile)
+            if not tile.isPathable:
+                continue
+
             enDist = enemyDistMap[tile]
             frDist = generalDistMap[tile]
             tileDistSum = enDist + frDist
             if tileDistSum < self.within_extended_play_area_threshold:
-                self.extended_play_area_matrix[tile] = True
+                self.extended_play_area_matrix.add(tile)
 
             if tileDistSum < self.within_core_play_area_threshold:
-                self.core_play_area_matrix[tile] = True
+                self.core_play_area_matrix.add(tile)
 
             if (
                     tileDistSum <= self.within_flank_danger_play_area_threshold
                     # and tileDistSum > self.within_core_play_area_threshold
                     and frDist / (enDist + 1) < 0.7  # prevent us from considering tiles more than 2/3rds into enemy territory as flank danger
             ):
-                self.flank_danger_play_area_matrix[tile] = True
+                self.flank_danger_play_area_matrix.add(tile)
 
     def get_flank_pathways(
             self,
@@ -246,7 +261,7 @@ class BoardAnalyzer:
 
         return goodLeaves
 
-    def rescan_useful_fog(self, possibleSpawns: typing.List[MapMatrix[bool]]):
+    def rescan_useful_fog(self, possibleSpawns: typing.List[MapMatrixSet]):
         self.flankable_fog_area_matrix = MapMatrix(self.map, False)
 
         enPlayers = SearchUtils.where(self.map.players, lambda p: not self.map.is_player_on_team_with(self.general.player, p.index) and not p.dead)
@@ -262,7 +277,7 @@ class BoardAnalyzer:
                 continue
 
             for player in indexes:
-                if possibleSpawns[player][t]:
+                if t in possibleSpawns[player]:
                     startTiles.add(t)
 
         self.all_possible_enemy_spawns = startTiles
@@ -277,9 +292,81 @@ class BoardAnalyzer:
             if tile.isMountain or (tile.isNeutral and tile.isCity and tile.visible) or not countsForFlankable:
                 return True
 
-            self.flankable_fog_area_matrix[tile] = True
+            self.flankable_fog_area_matrix.add(tile)
 
         SearchUtils.breadth_first_foreach_dist_fast_no_default_skip(self.map, [self.intergeneral_analysis.tileB], int(self.inter_general_distance * 1.4), foreachFunc)
 
         discountVisibleNearEnemyGen.value = 0
         SearchUtils.breadth_first_foreach_dist_fast_no_default_skip(self.map, startList, int(self.inter_general_distance * 1.2), foreachFunc)
+
+    def get_wall_breach_expandability(self, tile: Tile, asPlayer: int) -> int:
+        if not tile.isObstacle:
+            return 0
+        enScore = self.enemy_wall_breach_scores[tile]
+        frScore = self.friendly_wall_breach_scores[tile]
+        if enScore is None or frScore is None:
+            return 0
+
+        if self.map.is_tile_on_team_with(self.intergeneral_analysis.tileB, asPlayer):
+            return enScore - frScore
+        elif self.map.is_tile_on_team_with(self.intergeneral_analysis.tileA, asPlayer):
+            return frScore - enScore
+
+        return 0
+
+    def _get_wall_breach_score_combined(self, tile: Tile) -> int:
+        """
+        Gets the wall breach score from the enemies perspective of decreasing their distances, subtracting the score that it decreases from our general (enemies prefer cities that open up their land, but dont open up our attack path).
+
+        @param tile:
+        @return:
+        """
+        return self._get_wall_breach_score_enemy(tile) + self._get_wall_breach_score_friendly(tile)
+
+    def _get_wall_breach_score_enemy(self, tile: Tile) -> int:
+        """
+        Gets the wall breach score from the enemies perspective of decreasing their distances.
+        @param tile:
+        @return:
+        """
+        maxEnSavings = 0
+        for adj in tile.movable:
+            if adj.isObstacle:
+                continue
+            for otherAdj in tile.movable:
+                if otherAdj.isObstacle:
+                    continue
+                if otherAdj is adj:
+                    continue
+
+                enDistA = self.intergeneral_analysis.bMap[adj]
+
+                enDistB = self.intergeneral_analysis.bMap[otherAdj]
+
+                maxEnSavings = max(maxEnSavings, abs(enDistA - enDistB) - 2)  # -2 because our measured tiles are always 2 apart, so need to decrease by that
+
+        return maxEnSavings
+
+    def _get_wall_breach_score_friendly(self, tile: Tile) -> int:
+        """
+        Gets the wall breach score from the enemies perspective of decreasing our distances. Useful for anticipating cities the enemy might shortcut through for surprise-kills on our general.
+        @param tile:
+        @return:
+        """
+        maxGenSavings = 0
+        for adj in tile.movable:
+            if adj.isObstacle:
+                continue
+            for otherAdj in tile.movable:
+                if otherAdj.isObstacle:
+                    continue
+                if otherAdj is adj:
+                    continue
+
+                gDistA = self.intergeneral_analysis.aMap[adj]
+
+                gDistB = self.intergeneral_analysis.aMap[otherAdj]
+
+                maxGenSavings = max(maxGenSavings, abs(gDistA - gDistB) - 2)  # -2 because our measured tiles are always 2 apart, so need to decrease by that
+
+        return maxGenSavings

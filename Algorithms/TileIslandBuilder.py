@@ -127,7 +127,65 @@ class TileIslandBuilder(object):
         self._team_stats_by_team_id: typing.List[TeamStats] = []
 
     def recalculate_tile_islands(self, enemyGeneralExpectedLocation: Tile | None, mode: IslandBuildMode = IslandBuildMode.GroupByArmy):
-        logbook.info('build_tile_islands starting')
+        logbook.info('recalculate_tile_islands starting')
+        start = time.perf_counter()
+        self.tile_island_lookup: MapMatrix[TileIsland] = MapMatrix(self.map, None)
+        for teamArray in self.tile_islands_by_player:
+            teamArray.clear()
+        for teamArray in self.tile_islands_by_team_id:
+            teamArray.clear()
+
+        self._team_stats_by_team_id = self.map.get_team_stats_lookup_by_team_id()  # yeah, shut up
+        self._team_stats_by_player = [self._team_stats_by_team_id[p.team] for p in self.map.players]
+        self._team_stats_by_player.append(self._team_stats_by_team_id[-1])
+
+        newIslands = []
+        gen = self.map.generals[self.map.player_index]
+
+        tiles = [t for t in self.map.get_all_tiles()]
+        if mode == IslandBuildMode.BuildByDistance:
+            tiles = sorted(tiles, key=lambda t: (t.player, self.map.distance_mapper.get_distance_between(gen, t), t.x, t.y))
+        elif mode == IslandBuildMode.GroupByArmy:
+            tiles = sorted(tiles, key=lambda t: (t.player, t.army, self.map.distance_mapper.get_distance_between(gen, t), t.x, t.y))
+
+        for tile in tiles:
+            if tile.isObstacle:
+                continue
+
+            existingIsland = self.tile_island_lookup[tile]
+            if existingIsland is not None:
+                continue
+
+            newIsland = self._build_island_from_tile(tile, tile.player)
+            newIslands.append(newIsland)
+
+        logbook.info(f'initial islands built ({time.perf_counter() - start:.5f}s in)')
+
+        self.all_tile_islands.clear()
+
+        ourTeam = self.map.get_team_stats(self.map.player_index).teamId
+        for island in newIslands:
+            if mode == IslandBuildMode.GroupByArmy and island.team == ourTeam:
+                # we only break our own friendly islands up by player
+                newIslands = self._break_apart_island_by_army(island, primaryPlayer=self.map.player_index)
+            else:  # if mode == IslandBuildMode.BuildByDistance
+                newIslands = self._break_apart_island_if_too_large(island)
+
+            for newIsland in newIslands:
+                self.all_tile_islands.append(newIsland)
+                for teammate in self._team_stats_by_team_id[island.team].teamPlayers:
+                    self.tile_islands_by_player[teammate].append(newIsland)
+                self.tile_islands_by_team_id[newIsland.team].append(newIsland)
+
+        logbook.info(f'building island borders ({time.perf_counter() - start:.5f}s in)')
+        for island in self.all_tile_islands:
+            # if not island.bordered:
+            self._build_island_borders(island)
+        complete = time.perf_counter() - start
+        logbook.info(f'islands all built in {complete:.5f}s')
+
+    def update_tile_islands(self, enemyGeneralExpectedLocation: Tile | None, mode: IslandBuildMode = IslandBuildMode.GroupByArmy):
+        logbook.info('update_tile_islands starting')
         start = time.perf_counter()
         self.tile_island_lookup: MapMatrix[TileIsland] = MapMatrix(self.map, None)
         for teamArray in self.tile_islands_by_player:

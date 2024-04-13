@@ -59,7 +59,7 @@ def get_map_as_graph(map: MapBase) -> TileGraph:
 def get_spanning_tree_from_tile_lists(
         map: MapBase,
         requiredTiles: typing.List[Tile],
-        bannedTiles: typing.List[Tile],
+        bannedTiles: TileSet,
 ) -> typing.Tuple[typing.List[Tile], typing.Set[Tile]]:
     """
     Returns the graph of all those connected, as well as the set of any required that couldn't be connected to the first required tile.
@@ -77,21 +77,20 @@ def get_spanning_tree_from_tile_lists(
 def get_spanning_tree_matrix_from_tile_lists(
         map: MapBase,
         requiredTiles: typing.List[Tile],
-        bannedTiles: typing.List[Tile],
+        bannedSet: TileSet,
         # oneOfTiles: typing.Iterable[Tile] | None = None,
 ) -> typing.Tuple[typing.Set[Tile], typing.Set[Tile]]:
     """
     Returns the graph of all those connected, as well as the set of any required that couldn't be connected to the first required tile.
 
     @param map:
-    @param bannedTiles:
+    @param bannedSet:
     @param requiredTiles:
     @return:
     """
     start = time.perf_counter()
     if LOG_VERBOSE:
         logbook.info('starting get_map_as_graph_from_tiles')
-    bannedSet = MapMatrixSet(map, bannedTiles)
     includedSet = set()
     missingIncluded = set(requiredTiles)
     # oneOfSet

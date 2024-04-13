@@ -37,7 +37,7 @@ from bot_ek0x45 import EklipZBot
 
 
 class TestBase(unittest.TestCase):
-    GLOBAL_BYPASS_REAL_TIME_TEST = True
+    GLOBAL_BYPASS_REAL_TIME_TEST = False
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -207,16 +207,18 @@ class TestBase(unittest.TestCase):
 
         map, general = self.load_map_and_general_from_string(rawMapStr, turn, player_index)
 
+        enemyGen = None
         botTargetPlayer = None
         if 'bot_target_player' in gameData:
             botTargetPlayer = int(gameData['bot_target_player'])
 
         chars = TextMapLoader.get_player_char_index_map()
 
-        enemyGen = self._generate_enemy_gen(map, gameData, botTargetPlayer, isTargetPlayer=True)
+        if botTargetPlayer != -1:
+            enemyGen = self._generate_enemy_gen(map, gameData, botTargetPlayer, isTargetPlayer=True)
 
         for i, player in enumerate(map.players):
-            if i != general.player and i != enemyGen.player:
+            if i != general.player and i != botTargetPlayer and i not in map.teammates:
                 enemyChar, _ = chars[i]
                 # player.dead = True
 
@@ -241,8 +243,10 @@ class TestBase(unittest.TestCase):
                 if f'{enemyChar}AggressionFactor' in gameData:
                     player.aggression_factor = int(gameData[f'{enemyChar}AggressionFactor'])
 
-                if enemyGen.player != i and general.player != i and not player.dead:
-                    self._generate_enemy_gen(map, gameData, i, isTargetPlayer=False)
+                if botTargetPlayer != i and general.player != i and not player.dead:
+                    newGen = self._generate_enemy_gen(map, gameData, i, isTargetPlayer=False)
+                    if enemyGen is None:
+                        enemyGen = newGen
 
         if fill_out_tiles:
             chars = TextMapLoader.get_player_char_index_map()
@@ -1456,8 +1460,8 @@ class TestBase(unittest.TestCase):
                     SearchUtils.breadth_first_foreach_dist_fast_incl_neut_cities(map, [tile], 4, incrementer)
             maxTile = None
 
-            # make this consistent, but 'random'
-            tiles = [t for t in sorted(map.get_all_tiles(), key = lambda t: (t.x ^ t.y) ^ (3 * t.x - t.y) ^ (t.y >> 3))]
+            # make this consistent, but 'random'. NEVER CHANGE THIS or it could impact tests.
+            tiles = [t for t in sorted(map.get_all_tiles(), key=lambda t: (t.x ^ t.y) ^ (3 * t.x - t.y) ^ (t.y >> 3))]
             for tile in tiles:
                 if tile.isObstacle:
                     continue
@@ -1487,8 +1491,8 @@ class TestBase(unittest.TestCase):
         if enemyGen is None:
             raise AssertionError("Unable to produce an enemy general from given map data file...")
 
+        enemyGen.player = player
         if not enemyGen.isGeneral:
-            enemyGen.player = player
             enemyGen.isGeneral = True
             if enemyGen.army == 0:
                 enemyGen.army = 1

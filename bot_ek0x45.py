@@ -21,7 +21,7 @@ import EarlyExpandUtils
 import GatherUtils
 import SearchUtils
 import ExpandUtils
-from Algorithms import MapSpanningUtils
+from Algorithms import MapSpanningUtils, TileIslandBuilder
 from Army import Army
 from ArmyAnalyzer import ArmyAnalyzer
 from ArmyEngine import ArmyEngine, ArmySimResult
@@ -117,7 +117,7 @@ class EklipZBot(object):
         self._gen_distances: MapMatrix[int] = None
         self._ally_distances: MapMatrix[int] = None
         self.defend_economy = False
-        self._spawn_cramped: bool | None = None
+        self._spawn_cramped: bool = False
         self.defending_economy_spent_turns: int = 0
         self.general_safe_func_set = {}
         self.clear_moves_func: typing.Union[None, typing.Callable] = None
@@ -257,6 +257,7 @@ class EklipZBot(object):
         self.defenseless_modifier: bool = False
         self.history = History()
         self.timings: Timings = None
+        self.tileIslandBuilder: TileIslandBuilder = None
         self.armyTracker: ArmyTracker = None
         self.army_interceptor: ArmyInterceptor = None
         self.win_condition_analyzer: WinConditionAnalyzer = None
@@ -274,6 +275,8 @@ class EklipZBot(object):
 
         self.undiscovered_priorities: typing.List[typing.List[float]] = []
         self._undisc_prio_turn: int = -1
+        self._afk_players: typing.List[Player] | None = None
+        self._is_ffa_situation: bool | None = None
 
         self.explored_this_turn = False
         self.board_analysis: BoardAnalyzer | None = None
@@ -804,6 +807,9 @@ class EklipZBot(object):
         if self.last_init_turn == self._map.turn:
             return
 
+        self._afk_players = None
+        self._is_ffa_situation = None
+
         self.gathers = None
         self.gatherNodes = None
 
@@ -847,7 +853,7 @@ class EklipZBot(object):
 
         self.check_target_player_just_took_city()
 
-        self._spawn_cramped = None
+        self._spawn_cramped = False
 
         self.last_init_turn = self._map.turn
 
@@ -887,10 +893,10 @@ class EklipZBot(object):
         if self._map.turn - 1 in self.history.move_history:
             lastMove = self.history.move_history[self._map.turn - 1][0]
 
-        with self.perf_timer.begin_move_event('ArmyTracker Scan'):
+        with self.perf_timer.begin_move_event('ArmyTracker Move/Emerge'):
             self.armies_moved_this_turn = []
             # the callback on armies moved will fill the list above back up during armyTracker.scan
-            self.armyTracker.scan(lastMove, self._map.turn, self.board_analysis)
+            self.armyTracker.scan_movement_and_emergences(lastMove, self._map.turn, self.board_analysis)
             for tile, emergenceTuple in self._map.army_emergences.items():
                 emergedAmount, emergingPlayer = emergenceTuple
                 if emergedAmount > 0 or not self._map.is_player_on_team_with(tile.delta.oldOwner, tile.player):  # otherwise, this is just the player moving into fog generally.
@@ -947,7 +953,14 @@ class EklipZBot(object):
                 playerLoc: Tile | None = None
                 if player.index == self.targetPlayer:
                     playerLoc = self.targetPlayerExpectedGeneralLocation
-                self.armyTracker.build_fog_prediction(player.index, fogTileCounts[player.index], playerLoc)
+                self.armyTracker.update_fog_prediction(player.index, fogTileCounts[player.index], playerLoc)
+
+        if self._map.is_army_bonus_turn:
+            with self.perf_timer.begin_move_event('TileIsland recalc'):
+                self.tileIslandBuilder.recalculate_tile_islands(self.targetPlayerExpectedGeneralLocation)
+        else:
+            with self.perf_timer.begin_move_event('TileIsland update'):
+                self.tileIslandBuilder.update_tile_islands(self.targetPlayerExpectedGeneralLocation)
 
         self.armyTracker.verify_player_tile_and_army_counts_valid()
 
@@ -2720,17 +2733,18 @@ class EklipZBot(object):
         return path.get_first_move()
 
     def get_afk_players(self) -> typing.List[Player]:
-        afks = []
-        minTilesToNotBeAfk = math.sqrt(self._map.turn)
-        for player in self._map.players:
-            if player.index == self.general.player:
-                continue
-            # logbook.info("player {}  self._map.turn {} > 50 ({}) and player.tileCount {} < minTilesToNotBeAfk {:.1f} ({}): {}".format(player.index, self._map.turn, self._map.turn > 50, player.tileCount, minTilesToNotBeAfk, player.tileCount < 10, self._map.turn > 50 and player.tileCount < 10))
-            if (player.leftGame or (self._map.turn >= 50 and player.tileCount <= minTilesToNotBeAfk)) and not player.dead:
-                afks.append(player)
-                logbook.info(f"player {self._map.usernames[player.index]} ({player.index}) was afk")
+        if self._afk_players is None:
+            self._afk_players = []
+            minTilesToNotBeAfk = math.sqrt(self._map.turn)
+            for player in self._map.players:
+                if player.index == self.general.player:
+                    continue
+                # logbook.info("player {}  self._map.turn {} > 50 ({}) and player.tileCount {} < minTilesToNotBeAfk {:.1f} ({}): {}".format(player.index, self._map.turn, self._map.turn > 50, player.tileCount, minTilesToNotBeAfk, player.tileCount < 10, self._map.turn > 50 and player.tileCount < 10))
+                if (player.leftGame or (self._map.turn >= 50 and player.tileCount <= minTilesToNotBeAfk)) and not player.dead:
+                    self._afk_players.append(player)
+                    logbook.info(f"player {self._map.usernames[player.index]} ({player.index}) was afk")
 
-        return afks
+        return self._afk_players
 
     def get_optimal_exploration(
             self,
@@ -5910,7 +5924,7 @@ class EklipZBot(object):
 
                 # addlPath = SearchUtils.breadth_first_find_queue(self._map, [enemyGeneral], lambda t, _1, _2: t == furthestAlt, noNeutralCities=False)
                 if quickKill is not None and quickKill.length > 0:
-                    connectedTiles, missingRequired = MapSpanningUtils.get_spanning_tree_from_tile_lists(self._map, altEnGenPositions, [])
+                    connectedTiles, missingRequired = MapSpanningUtils.get_spanning_tree_from_tile_lists(self._map, altEnGenPositions, set())
                     # furthestAlt = None
                     additionalKillDist = len(connectedTiles)
                     # for tile in altEnGenPositions:
@@ -6850,6 +6864,7 @@ class EklipZBot(object):
         self.armyTracker.notify_army_moved.append(self.handle_army_moved)
         self.armyTracker.notify_army_moved.append(self.opponent_tracker.notify_army_moved)
         self.targetPlayerExpectedGeneralLocation = self.general.movable[0]
+        self.tileIslandBuilder = TileIslandBuilder(self._map)
         self.launchPoints.append(self.general)
         self.board_analysis = BoardAnalyzer(self._map, self.general, self.teammate_general)
         self.army_interceptor = ArmyInterceptor(self._map, self.board_analysis)
@@ -11377,7 +11392,10 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         return matrix
 
     def is_ffa_situation(self) -> bool:
-        return self.are_more_teams_alive_than(2)
+        if self._is_ffa_situation is None:
+            self._is_ffa_situation = self.are_more_teams_alive_than(2)
+
+        return self._is_ffa_situation
 
     def reevaluate_after_player_capture(self):
         if self._map.remainingPlayers <= 3:
@@ -12700,14 +12718,14 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
     def convert_float_map_matrix_to_string(self, mapMatrix: MapMatrix[float]) -> str:
         return ','.join([f'{mapMatrix[tile]:.2f}' for tile in self._map.get_all_tiles()])
 
-    def convert_bool_map_matrix_to_string(self, mapMatrix: MapMatrix[bool]) -> str:
+    def convert_bool_map_matrix_to_string(self, mapMatrix: MapMatrix[bool] | MapMatrixSet) -> str:
         return ''.join(["1" if mapMatrix[tile] else "0" for tile in self._map.get_all_tiles()])
 
     def convert_tile_set_to_string(self, tiles: typing.Set[Tile]) -> str:
         return ''.join(["1" if tile in tiles else "0" for tile in self._map.get_all_tiles()])
 
     def convert_tile_int_dict_to_string(self, tiles: typing.Dict[Tile, int]) -> str:
-        return ','.join([str(tiles.get(tile, 'N')) for tile in self._map.get_all_tiles()])
+        return ','.join([str(tiles.get(tile, '')) for tile in self._map.get_all_tiles()])
 
     def convert_string_to_int_tile_2d_array(self, data: str) -> typing.List[typing.List[int]]:
         arr = new_value_grid(self._map, -1)
@@ -12729,12 +12747,10 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         values = data.split(',')
         i = 0
-        prev = None
         for v in values:
             tile = self.get_tile_by_tile_index(i)
-            arr[tile.x][tile.y] = float(v)
-
-            prev = tile
+            if v != '':
+                arr[tile.x][tile.y] = float(v)
             i += 1
 
         return arr
@@ -12798,7 +12814,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         outputSet = {}
         i = 0
         for v in data.split(','):
-            if v != "N":
+            if v != "N" and v != '':
                 tile = self.get_tile_by_tile_index(i)
                 outputSet[tile] = int(v)
             i += 1

@@ -1764,3 +1764,24 @@ class ArmyInterceptionTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for should_definitely_intercept_when_nothing_good_to_do_with_army")
+    
+    def test_should_not_allow_runaround_to_kill_general(self):
+        # TODO in theory we split backwards here, I think
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_allow_runaround_to_kill_general___4bhqHLlOh---1--335.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 335, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=335)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '7,7->9,7->9,1->7,1')
+        #proof
+        simHost.queue_player_moves_str(general.player, '6,6->7,6->7,5z->9,5')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertTileDifferentialGreaterThan(7, simHost, 'blocking quickly guarantees minimum of 7 econ, as well. Shouldnt let the army get to the damaging-defense point.')

@@ -2247,6 +2247,46 @@ a1   b1   b1   bG1
         self.assertEqual(playerMap.GetTile(7, 13), bot.dangerAnalyzer.fastestPotentialThreat.path.start.tile)
         self.assertEqual(playerMap.GetTile(7, 13), bot.dangerAnalyzer.fastestCityThreat.path.start.tile)
 
+    def test_should_not_emerge_army_on_right_from_left_wtf(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_emerge_army_on_right_from_left_wtf___1lZK5xvmU---1--94.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 94, fill_out_tiles=True)
+        self.update_tile_in_place(map, map.GetTile(9, 12), enemyGeneral.player, 18)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=94)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '9,12->8,12')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+
+        self.assertLess(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(2, 12)], 1)
+
+        self.assertLess(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(0, 17)], 1)
+
+        self.assertLess(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(0, 10)], 1)
+
+        self.assertLess(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(2, 9)], 4)
+
+        self.assertLess(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(4, 5)], 6)
+        self.assertLess(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(3, 7)], 6)
+
+        self.assertGreater(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(10, 1)],
+                           bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(0, 7)])
+        self.assertGreater(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(10, 4)],
+                           bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(3, 7)])
+
+        tilesMustBeConnected = [playerMap.GetTile(10, 7), playerMap.GetTile(10, 6)]
+
+        for tile in tilesMustBeConnected:
+            self.assertIn(tile, bot.armyTracker.player_connected_tiles[enemyGeneral.player])
+            self.assertOwned(enemyGeneral.player, tile)
+
     def test_should_not_leave_behind_weird_1_tile_army_copies_in_fog(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_leave_behind_weird_1_tile_army_copies_in_fog___eHIEvb2B2---1--137.txtmap'

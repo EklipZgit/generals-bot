@@ -28,12 +28,12 @@ TODO not actually benched yet. ^
 
 
 class MapMatrix(Generic[T]):
-    __slots__ = ("init_val", "raw", "map")  # does slots break pickle?
+    __slots__ = ("empty_val", "raw", "map")
 
     def __init__(self, map: MapBase, initVal: T = None, emptyVal: T | None | str = 'PLACEHOLDER'):
-        self.init_val: T = initVal
+        self.empty_val: T = initVal
         if emptyVal != 'PLACEHOLDER':
-            self.init_val = emptyVal
+            self.empty_val = emptyVal
 
         self.raw: typing.List[T] = [initVal] * (map.cols * map.rows) if map is not None else None
         self.map: MapBase = map
@@ -49,7 +49,7 @@ class MapMatrix(Generic[T]):
         @param value:
         @return:
         """
-        if self.raw[key.tile_index] != self.init_val:
+        if self.raw[key.tile_index] != self.empty_val:
             self.raw[key.tile_index] = value
             return True
         return False
@@ -63,19 +63,19 @@ class MapMatrix(Generic[T]):
     def get(self, key: Tile, defaultVal: T | None = None) -> T | None:
         """Note because of the default val check, this is (substantially) slower than getitem indexing."""
         val = self.raw[key.tile_index]
-        return defaultVal if val == self.init_val else val
+        return defaultVal if val == self.empty_val else val
 
     def values(self) -> typing.List[T]:
         allValues: typing.List[T] = []
         for item in self.raw:
-            if item != self.init_val:
+            if item != self.empty_val:
                 allValues.append(item)
         return allValues
 
     def keys(self) -> typing.List[Tile]:
         allKeys: typing.List[Tile] = []
         for idx, item in enumerate(self.raw):
-            if item != self.init_val:
+            if item != self.empty_val:
                 allKeys.append(self.map.get_tile_by_tile_index(idx))
         return allKeys
 
@@ -85,7 +85,7 @@ class MapMatrix(Generic[T]):
         @return:
         """
         myClone = MapMatrix(None)
-        myClone.init_val = self.init_val
+        myClone.empty_val = self.empty_val
         myClone.map = self.map
         myClone.raw = self.raw.copy()
 
@@ -96,10 +96,13 @@ class MapMatrix(Generic[T]):
             self.raw[idx] = 0 - val
 
     def __delitem__(self, key: Tile):
-        self.raw[key.tile_index] = self.init_val
+        self.raw[key.tile_index] = self.empty_val
 
     def __contains__(self, tile: Tile) -> bool:
-        return self.raw[tile.tile_index] != self.init_val
+        return self.raw[tile.tile_index] != self.empty_val
+
+    def discard(self, key: Tile):
+        self.raw[key.tile_index] = self.empty_val
 
     def __str__(self) -> str:
         return repr(self.raw)
@@ -131,7 +134,7 @@ class MapMatrix(Generic[T]):
 
 
 class MapMatrixSet(object):
-    __slots__ = ("raw", "map")  # does slots break pickle?
+    __slots__ = ("raw", "map")
 
     def __init__(self, map: MapBase, fromIterable: typing.Iterable[Tile] | None = None):
         # if fromIterable is None or len(fromIterable) < 100:
@@ -203,207 +206,6 @@ class MapMatrixSet(object):
 
     def __repr__(self) -> str:
         return str(self)
-
-#  Never better than Set() anymore after hashcode precompute fix
-# class MapMatrixSetWithLength(object):
-#     """
-#     Set() is 54% slower on adds, 20% faster on accesses.
-#     if > 85 adds or > 150 accesses to the set, then this is faster than normal Set() object. 200/200 on large maps.
-#     """
-#
-#     __slots__ = ("raw", "_length", "map")  # does slots break pickle?
-#
-#     def __init__(self, map: MapBase):
-#         self.raw: typing.List[T] = [False] * (map.cols * map.rows) if map is not None else None
-#         self.map: MapBase = map
-#         self._length: int = 0
-#
-#     def add(self, item: Tile):
-#         if not self.raw[item.tile_index]:
-#             self._length += 1
-#             self.raw[item.tile_index] = True
-#
-#     def add_check(self, item: Tile) -> bool:
-#         """
-#         Return true if the item was added, false if the item was already in the set
-#         @param item:
-#         @return:
-#         """
-#         if not self.raw[item.tile_index]:
-#             self._length += 1
-#             self.raw[item.tile_index] = True
-#             return True
-#         return False
-#
-#     def __len__(self):
-#         return self._length
-#
-#     def __setitem__(self, key: Tile, val: bool):
-#         """
-#         Do not use, use add instead. This is slow and just here for backcompat
-#         @param key:
-#         @param val:
-#         @return:
-#         """
-#         if val:
-#             self.add(key)
-#         else:
-#             self.discard(key)
-#
-#     def __getitem__(self, key: Tile) -> bool:
-#         return self.raw[key.tile_index]
-#
-#     def __iter__(self) -> typing.Iterable[Tile]:
-#         for idx, val in enumerate(self.raw):
-#             if val:
-#                 yield self.map.get_tile_by_tile_index(idx)
-#
-#     def update(self, tiles: typing.Iterable[Tile]):
-#         for t in tiles:
-#             self.add(t)
-#
-#     def copy(self) -> MapMatrixSetWithLength:
-#         """
-#         cost on 1v1 size map is about 0.00222ms
-#         @return:
-#         """
-#         myClone = MapMatrixSetWithLength(None)
-#         myClone.map = self.map
-#         myClone.raw = self.raw.copy()
-#         myClone._length = self._length
-#
-#         return myClone
-#
-#     def __delitem__(self, item: Tile):
-#         if self.raw[item.tile_index]:
-#             self._length -= 1
-#             self.raw[item.tile_index] = False
-#
-#     def discard(self, item: Tile):
-#         if self.raw[item.tile_index]:
-#             self._length -= 1
-#             self.raw[item.tile_index] = False
-#
-#     def discard_check(self, item: Tile) -> bool:
-#         """
-#         Return true if the item was removed from the set, false if the item was not in the set
-#         @param item:
-#         @return:
-#         """
-#         if self.raw[item.tile_index]:
-#             self.raw[item.tile_index] = False
-#             self._length -= 1
-#             return True
-#         return False
-#
-#     def __contains__(self, tile: Tile) -> bool:
-#         return self.raw[tile.tile_index]
-#
-#     def __str__(self) -> str:
-#         return repr(self.raw)
-#
-#     def __repr__(self) -> str:
-#         return str(self)
-
-#  Never better than Set() anymore after hashcode precompute fix
-# class MapMatrixSetWithLengthAndTiles(object):
-#     """
-#     Normal set() is about 50% slower at adds and 30% slower at accesses.
-#     Becomes better than set() at around 90 accesses + adds combined on small maps. (130 on large maps)
-#     Inserts are more expensive than other mapmatrixes, but still cheaper than set().
-#     """
-#
-#     __slots__ = ("raw", "tiles", "map")  # does slots break pickle?
-#
-#     def __init__(self, map: MapBase, fromIterable: typing.Iterable[Tile] | None = None):
-#         self.raw: typing.List[bool] = [False] * (map.cols * map.rows) if map is not None else None
-#         self.map: MapBase = map
-#         self.tiles: typing.List[Tile]
-#         if fromIterable:
-#             if isinstance(fromIterable, set):
-#                 self.tiles = [t for t in fromIterable]
-#                 for t in self.tiles:
-#                     self.raw[t.tile_index] = True
-#             else:
-#                 self.tiles = []
-#                 for t in fromIterable:
-#                     if not self.raw[t.tile_index]:
-#                         self.raw[t.tile_index] = True
-#                         self.tiles.append(t)
-#         else:
-#             self.tiles = []
-#
-#         # self.tiles: typing.Deque[Tile] = deque()
-#
-#     def add(self, item: Tile):
-#         if not self.raw[item.tile_index]:
-#             self.raw[item.tile_index] = True
-#             self.tiles.append(item)
-#
-#     def add_check(self, item: Tile) -> bool:
-#         """
-#         Return true if the item was added, false if the item was already in the set
-#         @param item:
-#         @return:
-#         """
-#         if not self.raw[item.tile_index]:
-#             self.raw[item.tile_index] = True
-#             self.tiles.append(item)
-#             return True
-#         return False
-#
-#     def __len__(self):
-#         return len(self.tiles)
-#
-#     def __setitem__(self, key: Tile, val: bool):
-#         if val:
-#             self.add(key)
-#         else:
-#             raise AssertionError(f'Cannot set MapMatrixSetWithLengthAndTiles to false, as this would be an O(N) operation')
-#             # self.discard(key)
-#
-#     def __getitem__(self, key: Tile) -> bool:
-#         return self.raw[key.tile_index]
-#
-#     def __iter__(self) -> typing.Iterable[Tile]:
-#         return self.tiles
-#
-#     def update(self, tiles: typing.Iterable[Tile]):
-#         for t in tiles:
-#             self.add(t)
-#
-#     def copy(self) -> MapMatrixSetWithLengthAndTiles:
-#         """
-#         cost on 1v1 size map is about 0.00222ms
-#         @return:
-#         """
-#         myClone = MapMatrixSetWithLengthAndTiles(None)
-#         myClone.map = self.map
-#         myClone.raw = self.raw.copy()
-#         myClone.tiles = self.tiles.copy()
-#
-#         return myClone
-#
-#     def __delitem__(self, key: Tile):
-#         raise AssertionError(f'Cannot del from this as it would be an O(N) operation.')
-#         # if self.raw[key.tile_index]:
-#         #     self._length -= 1
-#         #     self.raw[key.tile_index] = False
-#
-#     def discard(self, key: Tile):
-#         raise AssertionError(f'Cannot discard from this as it would be an O(N) operation.')
-#         # if self.raw[key.tile_index]:
-#         #     self._length -= 1
-#         #     self.raw[key.tile_index] = False
-#
-#     def __contains__(self, tile: Tile) -> bool:
-#         return self.raw[tile.tile_index]
-#
-#     def __str__(self) -> str:
-#         return repr(self.raw)
-#
-#     def __repr__(self) -> str:
-#         return str(self)
 
 
 class MetaTileSet(typing.Protocol):

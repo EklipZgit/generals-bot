@@ -1,3 +1,4 @@
+import time
 import typing
 
 from Sim.GameSimulator import GameSimulatorHost
@@ -11,7 +12,6 @@ class GeneralPredictionTests(TestBase):
 
         bot.info_render_tile_deltas = True
         bot.info_render_army_emergence_values = True
-        bot.armyTracker.use_new_fog_tile_prediction = True
         # bot.info_render_general_undiscovered_prediction_values = True
 
         return bot
@@ -917,12 +917,6 @@ class GeneralPredictionTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
         self.assertEqual(map.player_index, winner)
-
-# 11f, 65p
-# 7f, 72p
-# 9f, 70p
-# 9f, 71p
-# 8f, 73p
     
     def test_should_not_dive_few_fog_tiles_when_cannot_kill(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -984,46 +978,6 @@ class GeneralPredictionTests(TestBase):
 
         self.skipTest("TODO add asserts for should_pick_central_general_location")
     
-    def test_should_not_emerge_army_on_right_from_left_wtf(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/should_not_emerge_army_on_right_from_left_wtf___1lZK5xvmU---1--94.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 94, fill_out_tiles=True)
-        self.update_tile_in_place(map, map.GetTile(9, 12), enemyGeneral.player, 18)
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=94)
-        
-        self.enable_search_time_limits_and_disable_debug_asserts()
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-        simHost.queue_player_moves_str(enemyGeneral.player, '9,12->8,12')
-        bot = self.get_debug_render_bot(simHost, general.player)
-        playerMap = simHost.get_player_map(general.player)
-
-        self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
-        self.assertIsNone(winner)
-
-        self.assertLess(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(2, 12)], 1)
-
-        self.assertLess(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(0, 17)], 1)
-
-        self.assertLess(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(0, 10)], 1)
-
-        self.assertLess(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(2, 9)], 4)
-
-        self.assertLess(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(4, 5)], 6)
-        self.assertLess(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(3, 7)], 6)
-
-        self.assertGreater(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(10, 1)],
-                           bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(0, 7)])
-        self.assertGreater(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(10, 4)],
-                           bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(3, 7)])
-
-        tilesMustBeConnected = [playerMap.GetTile(10, 7), playerMap.GetTile(10, 6)]
-
-        for tile in tilesMustBeConnected:
-            self.assertIn(tile, bot.armyTracker.player_connected_tiles[enemyGeneral.player])
-            self.assertOwned(enemyGeneral.player, tile)
-    
     def test_should_not_spend_literal_ages_on_FFA_general_prediction_from_fog(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_spend_literal_ages_on_FFA_general_prediction_from_fog___QVy9h9CfV---5--86.txtmap'
@@ -1038,10 +992,12 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
-        self.assertNoFriendliesKilled(map, general)
 
-        self.skipTest("TODO add asserts for should_not_spend_literal_ages_on_FFA_general_prediction_from_fog")
+        start = time.perf_counter()
+        bot.recalculate_player_paths(force=True)
+        duration = time.perf_counter() - start
+
+        self.assertLess(duration, 0.020)
 
     def test_should_not_spend_literal_ages_on_FFA_general_prediction_from_fog__earlier(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1091,3 +1047,31 @@ class GeneralPredictionTests(TestBase):
         for badTile in badTiles:
             badTileVal = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][badTile]
             self.assertGreater(goodTileVal, badTileVal * 1.5, f'{goodTile} should have had a much better prediction val than {badTile}')
+    
+    def test_should_eliminate_impossible_spawn_locations_by_bifurcating_map_after_turn_50(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_eliminate_impossible_spawn_locations_by_bifurcating_map_after_turn_50___3t__cnSLF---1--81.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 81, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=81)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '14,7->14,6')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+        bot.armyTracker.uneliminated_emergence_events[enemyGeneral.player][playerMap.GetTile(7, 7)] = 25
+        bot.armyTracker.uneliminated_emergence_event_city_perfect_info[enemyGeneral.player].add(playerMap.GetTile(7, 7))
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][playerMap.GetTile(18, 0)], 'should consider this not possible spawn since left side emergence guarantees no path through mountains')
+
+# 11f, 65p
+# 7f, 72p
+# 9f, 70p
+# 9f, 71p
+# 8f, 73p
+# 17f, 72p after making lots of fixes for adding more emergence events

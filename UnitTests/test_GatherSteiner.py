@@ -230,8 +230,7 @@ class GatherSteinerUnitTests(TestBase):
         for t in tiles:
             viewInfo.add_targeted_tile(t, TargetStyle.GREEN)
         start = time.perf_counter()
-        mst, missingRequired = MapSpanningUtils.get_spanning_tree_from_tile_lists(map, [], tiles)
-        connectedTiles = mst.get_connected_tiles()
+        connectedTiles, missingRequired = MapSpanningUtils.get_spanning_tree_from_tile_lists(map, tiles, bannedTiles=set())
         logbook.info(f'MY steiner tree builder took {time.perf_counter() - start:.5f}s')
         steinerMatrix = MapMatrixSet(map, connectedTiles)
         viewInfo.add_map_zone(steinerMatrix, (150, 255, 150), 90)

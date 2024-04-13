@@ -87,6 +87,8 @@ _REPLAY_URLS = {
     'eu': "http://eu.generals.io/replays/",
 }
 
+T = typing.TypeVar('T')
+
 
 class TeamStats(object):
     def __init__(self, tileCount: int, score: int, standingArmy: int, cityCount: int, fightingDiff: int, unexplainedTileDelta: int, teamId: int, teamPlayers: typing.List[int], livingPlayers: typing.List[int], turn: int = 0):
@@ -2913,18 +2915,18 @@ def new_map_grid(map, initialValueXYFunc):
     return [[initialValueXYFunc(x, y) for y in range(map.rows)] for x in range(map.cols)]
 
 
-def new_tile_grid(map, initialValueTileFunc):
+def new_tile_grid(map, initialValueTileFunc: typing.Callable[[Tile], T]) -> typing.List[typing.List[T]]:
     return [[initialValueTileFunc(map.grid[y][x]) for y in range(map.rows)] for x in range(map.cols)]
 
-def new_tile_grid(map, initialValueTileFunc):
-    return [[initialValueTileFunc(map.grid[y][x]) for y in range(map.rows)] for x in range(map.cols)]
 
 # cur fastest, 0.0185
 # def new_value_grid(map, initValue) -> typing.List[typing.List[int]]:
 #     return [[initValue] * map.rows for _ in range(map.cols)]
 
-def new_value_grid(map, initValue) -> typing.List[typing.List[int]]:
+
+def new_value_grid(map, initValue: T) -> typing.List[typing.List[T]]:
     return [[initValue] * map.rows for _ in range(map.cols)]
+
 
 def evaluate_island_fog_move(tile: Tile, candidateTile: Tile) -> bool:
     if tile.visible or candidateTile.visible:

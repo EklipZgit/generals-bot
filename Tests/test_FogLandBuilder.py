@@ -184,7 +184,7 @@ class FogLandBuilderTests(TestBase):
         self.begin_capturing_logging()
         start = time.perf_counter()
         MapSpanningUtils.LOG_VERBOSE = True
-        bot.armyTracker.build_fog_prediction(enemyGeneral.player, bot.opponent_tracker.get_player_fog_tile_count_dict(enemyGeneral.player), bot.targetPlayerExpectedGeneralLocation, force=True)
+        bot.armyTracker.update_fog_prediction(enemyGeneral.player, bot.opponent_tracker.get_player_fog_tile_count_dict(enemyGeneral.player), bot.targetPlayerExpectedGeneralLocation, force=True)
         duration = time.perf_counter() - start
         self.assertLess(duration, 0.003, 'should not take ages to build fog land')
     

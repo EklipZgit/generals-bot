@@ -2875,13 +2875,23 @@ def build_distance_map_incl_mountains(map, startTiles, skipTiles=None) -> typing
             newSkipTiles.add(tile)
         skipTiles = newSkipTiles
 
-    def bfs_dist_mapper(tile, dist) -> bool:
-        if dist < distanceMap[tile.x][tile.y]:
-            distanceMap[tile.x][tile.y] = dist
+    if skipTiles is None:
+        def bfs_dist_mapper(tile, dist) -> bool:
+            if dist < distanceMap[tile.x][tile.y]:
+                distanceMap[tile.x][tile.y] = dist
 
-        return tile.isObstacle
+            return tile.isObstacle
+    else:
+        def bfs_dist_mapper(tile, dist) -> bool:
+            if tile in skipTiles:
+                return True
 
-    breadth_first_foreach_dist(map, startTiles, 1000, bfs_dist_mapper, skipTiles=skipTiles, bypassDefaultSkip=True)
+            if dist < distanceMap[tile.x][tile.y]:
+                distanceMap[tile.x][tile.y] = dist
+
+            return tile.isObstacle
+
+    breadth_first_foreach_dist_fast_no_default_skip(map, startTiles, 1000, bfs_dist_mapper)
     return distanceMap
 
 
@@ -2896,26 +2906,25 @@ def build_distance_map(map: MapBase, startTiles: typing.List[Tile], skipTiles: t
             newSkipTiles.add(tile)
         skipTiles = newSkipTiles
 
-    def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
-        # if dist < distanceMap[tile.x][tile.y]:
-        distanceMap[tile.x][tile.y] = dist
-
-        return tile.isNeutral and tile.isCity
-
     if skipTiles is None:
-        breadth_first_foreach_dist_fast_incl_neut_cities(
-            map,
-            startTiles,
-            1000,
-            bfs_dist_mapper)
+        def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
+            distanceMap[tile.x][tile.y] = dist
+
+            return tile.isNeutral and tile.isCity
     else:
-        breadth_first_foreach_dist(
-            map,
-            startTiles,
-            1000,
-            bfs_dist_mapper,
-            skipTiles=skipTiles,
-            noLog=True)
+        def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
+            if tile in skipTiles:
+                return True
+
+            distanceMap[tile.x][tile.y] = dist
+
+            return tile.isNeutral and tile.isCity
+
+    breadth_first_foreach_dist_fast_incl_neut_cities(
+        map,
+        startTiles,
+        1000,
+        bfs_dist_mapper)
 
     return distanceMap
 
@@ -2923,7 +2932,7 @@ def build_distance_map(map: MapBase, startTiles: typing.List[Tile], skipTiles: t
 def build_distance_map_matrix(map, startTiles, skipTiles=None) -> MapMatrix[int]:
     distanceMap = MapMatrix(map, 1000)
 
-    if skipTiles is None:
+    if not skipTiles:
         skipTiles = None
     elif not isinstance(skipTiles, set):
         newSkipTiles = set()
@@ -2931,17 +2940,26 @@ def build_distance_map_matrix(map, startTiles, skipTiles=None) -> MapMatrix[int]
             newSkipTiles.add(tile)
         skipTiles = newSkipTiles
 
-    def bfs_dist_mapper(tile, dist) -> bool:
-        distanceMap[tile] = dist
-        return tile.isNeutral and tile.isCity
+    if skipTiles is None:
+        def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
+            distanceMap.raw[tile.tile_index] = dist
 
-    breadth_first_foreach_dist(
+            return tile.isNeutral and tile.isCity
+    else:
+        def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
+            if tile in skipTiles:
+                return True
+
+            distanceMap.raw[tile.tile_index] = dist
+
+            return tile.isNeutral and tile.isCity
+
+    breadth_first_foreach_dist_fast_incl_neut_cities(
         map,
         startTiles,
         1000,
-        bfs_dist_mapper,
-        skipTiles=skipTiles,
-        noLog=True)
+        bfs_dist_mapper)
+
     return distanceMap
 
 

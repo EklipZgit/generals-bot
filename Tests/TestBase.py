@@ -37,7 +37,7 @@ from bot_ek0x45 import EklipZBot
 
 
 class TestBase(unittest.TestCase):
-    GLOBAL_BYPASS_REAL_TIME_TEST = False
+    GLOBAL_BYPASS_REAL_TIME_TEST = True
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -63,6 +63,7 @@ class TestBase(unittest.TestCase):
         bot.info_render_expansion_matrix_values = False
         bot.info_render_intercept_data = False
         bot.info_render_board_analysis_choke_widths = False
+        bot.info_render_tile_islands = False
 
         return bot
 

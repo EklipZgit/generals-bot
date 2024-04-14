@@ -994,6 +994,7 @@ class GeneralPredictionTests(TestBase):
         self.begin_capturing_logging()
 
         start = time.perf_counter()
+        bot.last_init_turn = 0
         bot.recalculate_player_paths(force=True)
         duration = time.perf_counter() - start
 
@@ -1013,13 +1014,16 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
-        self.assertNoFriendliesKilled(map, general)
 
-        self.skipTest("TODO add asserts for should_not_spend_literal_ages_on_FFA_general_prediction_from_fog__earlier")
+        start = time.perf_counter()
+        bot.last_init_turn = 0
+        bot.recalculate_player_paths(force=True)
+        duration = time.perf_counter() - start
+
+        self.assertLess(duration, 0.020)
     
     def test_shouldnt_mess_up_the_emergence_values_for_no_apparent_reason_after_discovering_expected_1(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/shouldnt_mess_up_the_emergence_values_for_no_apparent_reason_after_discovering_expected_1___B-OhXQP69---1--87.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 87, fill_out_tiles=True)
         map.GetTile(4, 9).army = 1
@@ -1074,4 +1078,4 @@ class GeneralPredictionTests(TestBase):
 # 9f, 70p
 # 9f, 71p
 # 8f, 73p
-# 17f, 72p after making lots of fixes for adding more emergence events
+# 17f, 73p after making lots of fixes for adding more emergence events

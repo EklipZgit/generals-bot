@@ -77,7 +77,8 @@ class ExpansionPotential(object):
             enTilesCaptured: int,
             neutTilesCaptured: int,
             selectedOption: TilePlanInterface | None,
-            allOptions: typing.List[TilePlanInterface]
+            allOptions: typing.List[TilePlanInterface],
+            cumulativeEconVal: float
     ):
         self.turns_used: int = turnsUsed
         self.en_tiles_captured: int = enTilesCaptured
@@ -93,6 +94,8 @@ class ExpansionPotential(object):
         self.includes_intercept: bool = False
         for selectedOption in allOptions:
             self.plan_tiles.update(selectedOption.tileSet)
+
+        self.cumulative_econ_value: float = cumulativeEconVal
 
 
 class EklipZBot(object):
@@ -384,6 +387,7 @@ class EklipZBot(object):
         self.info_render_gather_locality_values: bool = False
         self.info_render_expansion_matrix_values: bool = True
         self.info_render_intercept_data: bool = True
+        self.info_render_tile_islands: bool = True
 
     def __repr__(self):
         return str(self)
@@ -6777,14 +6781,15 @@ class EklipZBot(object):
         lengthToReplaceCurrentPlan = curPath.length
         rePlanLength = lengthToReplaceCurrentPlan + countExtraUseableMoves
         with self.perf_timer.begin_move_event(f'Re-calc F25 Expansion for {str(move.source)} (length {rePlanLength})'):
-            newPath, otherPaths = ExpandUtils.get_optimal_expansion(
+            newPath, otherPaths = ExpandUtils.get_round_plan_with_expansion(
                 self._map,
                 self.general.player,
                 self.targetPlayer,
                 rePlanLength,
                 self.board_analysis,
                 self.territories.territoryMap,
-                negExpandTiles,
+                tileIslands=self.tileIslandBuilder,
+                negativeTiles=negExpandTiles,
                 viewInfo=self.viewInfo
             )
 
@@ -7209,6 +7214,19 @@ class EklipZBot(object):
                 alphaDecreaseRate=0
             ))
 
+        if self.info_render_tile_islands:
+            for island in sorted(self.tileIslandBuilder.all_tile_islands, key=lambda i: (i.team, str(i.name))):
+                # color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+                # 
+                # self.viewInfo.add_map_zone(island.tile_set, color, alpha=80)
+                # self.viewInfo.add_map_division(island.tile_set, color, alpha=200)
+                if island.name:
+                    for tile in island.tile_set:
+                        if self.viewInfo.topRightGridText[tile]:
+                            self.viewInfo.midRightGridText[tile] = island.name
+                        else:
+                            self.viewInfo.topRightGridText[tile] = island.name
+
     def get_move_if_afk_player_situation(self) -> Move | None:
         afkPlayers = self.get_afk_players()
         allOtherPlayersAfk = len(afkPlayers) + 1 == self._map.remainingPlayers
@@ -7232,17 +7250,21 @@ class EklipZBot(object):
             with self.perf_timer.begin_move_event('AFK Player optimal EXPANSION'):
                 if self.teammate_general is not None:
                     expansionNegatives.add(self.teammate_general)
-                path, otherPaths = ExpandUtils.get_optimal_expansion(
+                expUtilPlan = ExpandUtils.get_round_plan_with_expansion(
                     self._map,
                     self.general.player,
                     self.targetPlayer,
                     15,
                     self.board_analysis,
                     territoryMap,
+                    self.tileIslandBuilder,
                     expansionNegatives,
                     self.captureLeafMoves,
                     allowLeafMoves=False,
                     viewInfo=self.viewInfo)
+
+                path = expUtilPlan.selected_option
+                otherPaths = expUtilPlan.all_paths
 
             if path is not None:
                 self.finishing_exploration = True
@@ -8472,16 +8494,20 @@ class EklipZBot(object):
                         if self.teammate_general is not None:
                             expansionNegatives.update(self._map.players[self.teammate_general.player].tiles)
                         expansionNegatives.add(self.general)
-                        path, otherPaths = ExpandUtils.get_optimal_expansion(
+                        expUtilPlan = ExpandUtils.get_round_plan_with_expansion(
                             self._map,
                             self.general.player,
                             self.targetPlayer,
                             50 - (self._map.turn % 50),
                             self.board_analysis,
                             self.territories.territoryMap,
+                            self.tileIslandBuilder,
                             negativeTiles=expansionNegatives,
                             viewInfo=self.viewInfo
                         )
+
+                        path = expUtilPlan.selected_option
+                        otherPaths = expUtilPlan.all_paths
 
                         self.board_analysis.intergeneral_analysis.bMap = bMap
 
@@ -11535,13 +11561,14 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
                 # interceptThreatTiles[threatTile] =
 
-            path, otherPaths = ExpandUtils.get_optimal_expansion(
+            expUtilPlan = ExpandUtils.get_round_plan_with_expansion(
                 self._map,
                 searchingPlayer=self.player.index,
                 targetPlayer=self.targetPlayer,
                 turns=remainingCycleTurns,
                 boardAnalysis=self.board_analysis,
                 territoryMap=territoryMap,
+                tileIslands=self.tileIslandBuilder,
                 negativeTiles=expansionNegatives,
                 leafMoves=self.captureLeafMoves,
                 useLeafMovesFirst=self.expansion_use_leaf_moves_first,
@@ -11561,46 +11588,28 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                 bonusCapturePointMatrix=bonusCapturePointMatrix,
                 additionalOptionValues=interceptOptions)
 
-            expansionTurnsAvailable = 0
-            enCaps = 0
-            neutCaps = 0
-            cumulativeEconVal = 0.0
-            visited = set()
-            if path is not None:
-                otherPaths.insert(0, path)
+            path = expUtilPlan.selected_option
+            otherPaths = expUtilPlan.all_paths
 
-            for otherPath in otherPaths:
-                expansionTurnsAvailable += otherPath.length
-                cumulativeEconVal += otherPath.econValue
-                for tile in otherPath.tileSet:
-                    if tile in visited:
-                        continue
-
-                    visited.add(tile)
-
-                    if self._map.is_tile_enemy(tile):
-                        enCaps += 1
-                    elif tile.isNeutral:
-                        neutCaps += 1
-
-            self.viewInfo.add_stats_line(f'EXP AVAIL {expansionTurnsAvailable} {cumulativeEconVal:.2f} - (en{enCaps} neut{neutCaps})')
+            self.viewInfo.add_stats_line(f'EXP AVAIL {expUtilPlan.turns_used} {expUtilPlan.cumulative_econ_value:.2f} - (en{expUtilPlan.en_tiles_captured} neut{expUtilPlan.neut_tiles_captured})')
 
         plan = ExpansionPotential(
-            expansionTurnsAvailable,
-            enCaps,
-            neutCaps,
+            expUtilPlan.turns_used,
+            expUtilPlan.en_tiles_captured,
+            expUtilPlan.neut_tiles_captured,
             path,
-            otherPaths
+            otherPaths,
+            expUtilPlan.cumulative_econ_value
         )
 
         anyIntercept = False
-        interceptVtCutoff = 2.01
+        interceptVtCutoff = 1.99
         if remainingCycleTurns > 35:
-            interceptVtCutoff = 2.7
+            interceptVtCutoff = 2.6
         elif remainingCycleTurns > 28:
-            interceptVtCutoff = 2.4
-        elif remainingCycleTurns > 22:
             interceptVtCutoff = 2.3
+        elif remainingCycleTurns > 22:
+            interceptVtCutoff = 2.2
 
         if len(interceptOptions) > 0:
             for otherPath in plan.all_paths:
@@ -11697,13 +11706,14 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             if DebugHelper.IS_DEBUGGING:
                 timeLimit *= 4
             try:
-                path, otherPaths = ExpandUtils.get_optimal_expansion(
+                expUtilPlan = ExpandUtils.get_round_plan_with_expansion(
                     self._map,
                     searchingPlayer=self.targetPlayer,
                     targetPlayer=self.player.index,
                     turns=remainingCycleTurns,
                     boardAnalysis=self.board_analysis,
                     territoryMap=territoryMap,
+                    tileIslands=self.tileIslandBuilder,
                     negativeTiles=negativeTiles,
                     leafMoves=self.targetPlayerLeafMoves,
                     useLeafMovesFirst=self.expansion_use_leaf_moves_first,
@@ -11725,13 +11735,11 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                 self.board_analysis.intergeneral_analysis.aMap = oldA
                 self.board_analysis.intergeneral_analysis.bMap = oldB
 
+            path = expUtilPlan.selected_option
+            otherPaths = expUtilPlan.all_paths
+
             self.enemy_expansion_plan_tile_path_cap_values = {}
 
-            expansionTurnsAvailable = 0
-            frCaps = 0
-            neutCaps = 0
-            cumulativeEconVal = 0.0
-            visited = set()
             if path is not None:
                 otherPaths.insert(0, path)
 
@@ -11740,27 +11748,16 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                 if isinstance(otherPath, Path):
                     if army is not None:
                         army.include_path(otherPath)
-                    expansionTurnsAvailable += otherPath.length
-                    cumulativeEconVal += otherPath.econValue
-                    for tile in otherPath.tileSet:
-                        if tile in visited:
-                            continue
 
-                        visited.add(tile)
-
-                        if self._map.is_tile_friendly(tile):
-                            frCaps += 1
-                        elif tile.isNeutral:
-                            neutCaps += 1
-
-            self.viewInfo.add_stats_line(f'EN EXP AVAIL {expansionTurnsAvailable} {cumulativeEconVal:.2f} - (fr{frCaps} neut{neutCaps})')
+            self.viewInfo.add_stats_line(f'EN EXP AVAIL {expUtilPlan.turns_used} {expUtilPlan.cumulative_econ_value:.2f} - (fr{expUtilPlan.en_tiles_captured} neut{expUtilPlan.neut_tiles_captured})')
 
         plan = ExpansionPotential(
-            expansionTurnsAvailable,
-            frCaps,
-            neutCaps,
+            expUtilPlan.turns_used,
+            expUtilPlan.en_tiles_captured,
+            expUtilPlan.neut_tiles_captured,
             path,
-            otherPaths
+            otherPaths,
+            expUtilPlan.cumulative_econ_value
         )
 
         return plan
@@ -11926,7 +11923,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         existingExpandPlanVal = 0
         # existingExpandTurns = 1
         if existingPlan is not None:
-            existingExpandPlanVal = existingPlan.en_tiles_captured * 2 + existingPlan.neut_tiles_captured
+            existingExpandPlanVal = existingPlan.cumulative_econ_value
             # existingExpandTurns = max(1, existingPlan.turns_used)
 
         playerTiles = self.opponent_tracker.get_player_fog_tile_count_dict(self.targetPlayer)
@@ -11939,7 +11936,13 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         if launchTurnsTotal == 0:
             return existingPlan
 
-        launchValPerTurn = (econVal + probableRemainingCaps * 2) / launchTurnsTotal
+        factor = 2
+        if self.targetPlayer == -1 or len(self.targetPlayerObj.tiles) == 0:
+            factor = 1
+
+        launchVal = econVal + probableRemainingCaps * factor
+
+        launchValPerTurn = launchVal / launchTurnsTotal
 
         existingValPerTurn = existingExpandPlanVal / turnsLeftInCycle
         if existingPlan.turns_used > turnsLeftInCycle - 10:
@@ -11967,11 +11970,12 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             paths.insert(0, interceptFake)
             self.viewInfo.add_info_line(f'EXP Launch vt{launchValPerTurn:.2f} (en{enCaps} neut{neutCaps}) vs existing {existingValPerTurn:.2f} (en{existingPlan.en_tiles_captured} neut{existingPlan.neut_tiles_captured})')
             newPlan = ExpansionPotential(
-                turnsUsed=max(turns, existingPlan.turns_used),
+                turnsUsed=existingPlan.turns_used + launchTurnsTotal,
                 enTilesCaptured=enCaps,
                 neutTilesCaptured=neutCaps,
                 selectedOption=interceptFake,
                 allOptions=paths,
+                cumulativeEconVal=existingPlan.cumulative_econ_value + launchVal
             )
 
             return newPlan

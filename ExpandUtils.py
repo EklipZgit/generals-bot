@@ -1,16 +1,18 @@
+import itertools
+import traceback
+
 import logbook
 import time
-import traceback
 import typing
 
 import DebugHelper
 import KnapsackUtils
 import SearchUtils
+from Algorithms import TileIslandBuilder, TileIsland
 from Behavior.ArmyInterceptor import InterceptionOptionInfo
 from BoardAnalyzer import BoardAnalyzer
 from DataModels import Move
 from Interfaces import TilePlanInterface
-# from KnapsackUtils import solve_knapsack
 from MapMatrix import MapMatrix
 from Path import Path
 from PerformanceTimer import PerformanceTimer
@@ -18,637 +20,44 @@ from SearchUtils import breadth_first_foreach, count, where
 from ViewInfo import PathColorer, ViewInfo
 from base.client.map import Tile, MapBase
 
-#
-# # attempt to get this to a* able?
-# def get_expansion_single_knapsack_path_trimmed(
-#         paths: typing.List[typing.Tuple[int, int, Path]],
-#         targetPlayers: typing.List[int],
-#         turns: int,
-#         enemyDistMap: MapMatrix[int],
-#         calculateTrimmable: bool,
-#         territoryMap: MapMatrix[int],
-#         viewInfo: ViewInfo,
-# ) -> typing.Tuple[Path | None, typing.List[Path]]:
-#     """
-#     Knapsacks a set of paths that all start from unique tiles, and returns the best one.
-#
-#     @param paths:
-#     @param targetPlayers:
-#     @param turns:
-#     @param enemyDistMap:
-#     @param calculateTrimmable:
-#     @param territoryMap:
-#     @param viewInfo:
-#     @return:
-#     """
-#
-#     trimmable = {}
-#     if calculateTrimmable:
-#         for friendlyCityCount, tilesCaptured, path in paths:
-#             tailNode = path.tail
-#             trimCount = 0
-#             while tailNode.tile.player == -1 and territoryMap[tailNode.tile] not in targetPlayers and tailNode.tile.discovered:
-#                 trimCount += 1
-#                 tailNode = tailNode.prev
-#             if trimCount > 0:
-#                 trimmable[path.start.tile] = (path, trimCount)
-#
-#             if viewInfo:
-#                 viewInfo.bottomRightGridText[path.start.tile] = f'cap{tilesCaptured:.1f}'
-#                 # viewInfo.paths.appendleft(PathColorer(path, 180, 51, 254, alpha, alphaDec, minAlpha))
-#
-#     intFactor = 100
-#     # build knapsack weights and values
-#     weights = [path.length for friendlyCityCount, tilesCaptured, path in paths]
-#     values = [int(intFactor * tilesCaptured) for friendlyCityCount, tilesCaptured, path in paths]
-#     logbook.info(f"Feeding the following paths into knapsackSolver at turns {turns}...")
-#     for i, pathTuple in enumerate(paths):
-#         friendlyCityCount, tilesCaptured, curPath = pathTuple
-#         logbook.info(f"{i}:  cap {tilesCaptured:.2f} length {curPath.length} path {curPath.toString()}")
-#
-#     totalValue, maxKnapsackedPaths = solve_knapsack(paths, turns, weights, values)
-#     logbook.info(f"maxKnapsackedPaths value {totalValue} length {len(maxKnapsackedPaths)},")
-#
-#     path: typing.Union[None, Path] = None
-#     if len(maxKnapsackedPaths) > 0:
-#         maxVal = (-10000, -1)
-#         totalTrimmable = 0
-#         for friendlyCityCount, tilesCaptured, curPath in maxKnapsackedPaths:
-#             if curPath.start.tile in trimmable:
-#                 logbook.info(
-#                     f"trimmable in current knapsack, {curPath.toString()} (friendlyCityCount {friendlyCityCount}, tilesCaptured {tilesCaptured})")
-#                 trimmablePath, possibleTrim = trimmable[curPath.start.tile]
-#                 totalTrimmable += possibleTrim
-#         logbook.info(f"totalTrimmable! {totalTrimmable}")
-#
-#         if totalTrimmable > 0:
-#             trimmableStart = time.perf_counter()
-#             trimRange = min(10, 1 + totalTrimmable)
-#             # see if there are better knapsacks if we trim the ends off some of these
-#             maxKnapsackVal = totalValue
-#             for i in range(trimRange):
-#                 otherValue, otherKnapsackedPaths = solve_knapsack(paths, turns + i, weights, values)
-#                 # offset by i to compensate for the skipped moves
-#                 otherValueWeightedByTrim = otherValue - i * intFactor
-#                 logbook.info(
-#                     f"i {i} - otherKnapsackedPaths value {otherValue} weightedValue {otherValueWeightedByTrim} length {len(otherKnapsackedPaths)}")
-#                 if otherValueWeightedByTrim > maxKnapsackVal:
-#                     maxKnapsackVal = otherValueWeightedByTrim
-#                     maxKnapsackedPaths = otherKnapsackedPaths
-#                     logbook.info(f"NEW MAX {maxKnapsackVal}")
-#             logbook.info(
-#                 f"(Time spent on {trimRange} trimmable iterations: {time.perf_counter() - trimmableStart:.3f})")
-#         # Select which of the knapsack paths to move first
-#         logbook.info("Selecting which of the above paths to move first")
-#         for friendlyCityCount, tilesCaptured, curPath in maxKnapsackedPaths:
-#             trimmableVal = 0
-#             if curPath.start.tile in trimmable:
-#                 trimmablePath, possibleTrim = trimmable[curPath.start.tile]
-#                 trimmableVal = possibleTrim
-#             # Paths ending with the largest armies go first to allow for more path selection options later
-#             thisVal = (0 - friendlyCityCount,
-#                        curPath.value,
-#                        0 - trimmableVal,
-#                        0 - enemyDistMap[curPath.start.tile],
-#                        tilesCaptured / curPath.length)
-#             if thisVal > maxVal:
-#                 maxVal = thisVal
-#                 path = curPath
-#                 logbook.info(
-#                     f"new max val, eval [{'], ['.join(str(x) for x in maxVal)}], path {path.toString()}")
-#             else:
-#                 logbook.info(
-#                     f"NOT max val, eval [{'], ['.join(str(x) for x in thisVal)}], path {curPath.toString()}")
-#
-#     otherPaths = [p for _, _, p in maxKnapsackedPaths if p != path]
-#
-#     for curPath in otherPaths:
-#         if viewInfo:
-#             # draw other paths darker
-#             alpha = 150
-#             minAlpha = 150
-#             alphaDec = 0
-#             viewInfo.paths.appendleft(PathColorer(curPath, 200, 51, 204, alpha, alphaDec, minAlpha))
-#
-#         # draw maximal path brighter
-#         alpha = 255
-#         minAlpha = 200
-#         alphaDec = 0
-#         if viewInfo:
-#             viewInfo.paths.appendleft(PathColorer(path, 255, 100, 200, alpha, alphaDec, minAlpha))
-#
-#     return path, otherPaths
 
-
-def path_has_cities_and_should_wait(
-        path: TilePlanInterface | None,
-        friendlyPlayers,
-        negativeTiles: typing.Set[Tile],
-        territoryMap: MapMatrix[int],
-        remainingTurns: int
-) -> bool:
-    cityCount = 0
-    for t in path.tileList:
-        if (t.isCity or t.isGeneral) and t.player in friendlyPlayers:
-            cityCount += 1
-
-    if cityCount == 0:
-        return False
-
-    # if path.length >= remainingTurns:
-    #     return False
-
-    # TODO get better about this later
-    assumeTerritoryTileValue = 1
-    if remainingTurns > 20:
-        # assume 2's, otherwise assume 1s
-        assumeTerritoryTileValue = 2
-
-    pathWorstCaseTurns = 0
-    curArmy = 0
-    turn = 0
-    worstCaseArmy = 0
-    for tile in path.tileList:
-        tileRealArmyCost = tile.army
-        tileArmyCost = tileRealArmyCost
-        if tile.player in friendlyPlayers:
-            tileRealArmyCost = 0 - tile.army
-        elif tile.isNeutral:
-            tileArmyCost = tileRealArmyCost
-            tileProbPlayer = territoryMap[tile]
-            if tileProbPlayer == -1:
-                for m in tile.adjacents:
-                    if not m.isNeutral:
-                        tileProbPlayer = m.player
-
-            if not tile.discovered and tileProbPlayer != -1:
-                tileArmyCost += assumeTerritoryTileValue
-
-        nextWorstCaseArmy = worstCaseArmy - tileRealArmyCost + 1
-        nextArmy = curArmy - tileArmyCost + 1
-
-        if curArmy > 0 and nextArmy <= 0 and pathWorstCaseTurns == 0:
-            pathWorstCaseTurns = turn
-
-        curArmy = nextArmy
-        worstCaseArmy = nextWorstCaseArmy
-        turn += 1
-    #
-    # if worstCaseArmy > 2:
-    #     cappable = []
-    #     for movable in path.tail.tile.movable:
-    #         if movable.isObstacle or movable.army > worstCaseArmy - 2 or movable in negativeTiles:
-    #             continue
-    #         if movable.player not in friendlyPlayers:
-    #             cappable.append(movable)
-    #     if len(cappable) > 0:
-    #         if DebugHelper.IS_DEBUGGING:
-    #             logbook.info(f'  WORST CASE END ARMY {worstCaseArmy} (realArmy {curArmy}) CAN CAP MORE TILES, RETURNING FALSE ({str(path)})')
-    #         return False
-
-    if pathWorstCaseTurns != path.length and DebugHelper.IS_DEBUGGING:
-        logbook.info(f'  WORST CASE TURNS {pathWorstCaseTurns} < path len {path.length} ({str(path)})')
-
-    return True
-
-
-def _group_expand_paths_by_crossovers(
-    pathsCrossingTiles: typing.Dict[Tile, typing.List[TilePlanInterface]],
-    multiTilePlanInterfaceDict: typing.Dict[Tile, typing.Dict[int, typing.Tuple[int, TilePlanInterface]]],
-) -> typing.Dict[int, typing.List[Path]]:
-    pathGroupLookup = {}
-    #
-    # allPaths = []
-    # combinedTurnLengths = 0
-    # for tile in multiPathDict.keys():
-    #     for val, p in multiPathDict[tile].values():
-    #         allPaths.append((val, p))
-    #         combinedTurnLengths += p.length
-    # logbook.info(
-    #     f'EXP MULT KNAP {len(multiPathDict)} grps, {len(allPaths)} paths, {remainingTurns} turns, combinedPathLengths {combinedTurnLengths}:')
-    # for val, p in allPaths:
-    #     logbook.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
-    #
-    allPaths = []
-    # initially group by starting tile
-    i = 0
-    for pathList in pathsCrossingTiles.values():
-        for path in pathList:
-            pathGroupLookup[path] = i
-        allPaths.extend(pathList)
-        i += 1
-
-    for path in allPaths:
-        groupNumber = pathGroupLookup[path]
-        _merge_path_groups_recurse(groupNumber, path, pathGroupLookup, pathsCrossingTiles)
-
-    pathsGrouped: typing.Dict[int, typing.Set[TilePlanInterface]] = {}
-    for path in allPaths:
-        groupNumber = pathGroupLookup[path]
-        groupList = pathsGrouped.get(groupNumber, set())
-        groupList.add(path)
-        if len(groupList) == 1:
-            pathsGrouped[groupNumber] = groupList
-
-    final = {}
-    for g, pathSet in pathsGrouped.items():
-        final[g] = list(pathSet)
-
-    return final
-
-
-def _merge_path_groups_recurse(
-        groupNumber: int,
-        path: TilePlanInterface,
-        pathGroupLookup: typing.Dict[TilePlanInterface, int],
-        pathsCrossingTiles: typing.Dict[Tile, typing.List[TilePlanInterface]]):
-    for tile in path.tileSet:
-        for crossedPath in pathsCrossingTiles[tile]:
-            if crossedPath == path:
-                continue
-
-            crossedPathGroup = pathGroupLookup[crossedPath]
-            if groupNumber != crossedPathGroup:
-                # if DebugHelper.IS_DEBUGGING:
-                logbook.info(f'path {groupNumber} {str(path)}\r\n  crosses path {crossedPathGroup} {str(crossedPath)}, converting')
-                pathGroupLookup[crossedPath] = groupNumber
-                _merge_path_groups_recurse(groupNumber, crossedPath, pathGroupLookup, pathsCrossingTiles)
-
-
-def _get_tile_path_value(
-        map: MapBase,
-        tile,
-        lastTile,
-        negativeTiles,
-        targetPlayers,
-        searchingPlayer,
-        enemyDistMap,
-        generalDistMap,
-        territoryMap,
-        enemyDistPenaltyPoint,
-        bonusCapturePointMatrix: MapMatrix[float] | None):
-    value = 0.0
-    if tile in negativeTiles:
-        value -= 0.1
-        # or do nothing?
-    else:
-
-        if tile.player in targetPlayers:
-            value += 2.1
-        elif not tile.discovered and territoryMap[tile] in targetPlayers:
-            value += 1.45
-        elif not tile.visible and territoryMap[tile] in targetPlayers:
-            value += 1.2
-        elif tile.player == -1:
-            value += 1.0
-        elif map.is_player_on_team_with(searchingPlayer, tile.player):
-            value -= 0.2 / max(1, (1 + tile.army))
-
-        # if tile.visible:
-        #     value += 0.02
-        # el
-        if not tile.discovered:
-            value += 0.01
-        if bonusCapturePointMatrix is not None:
-            value += bonusCapturePointMatrix[tile]
-
-        # elif lastTile is not None and tile.player == searchingPlayer:
-        #     value -= 0.05
-
-        sourceEnDist = enemyDistMap[lastTile]
-        destEnDist = enemyDistMap[tile]
-        sourceGenDist = generalDistMap[lastTile]
-        destGenDist = generalDistMap[tile]
-
-        sourceDistSum = sourceEnDist + sourceGenDist
-        destDistSum = destEnDist + destGenDist
-
-        if destDistSum >= enemyDistPenaltyPoint:
-            if destDistSum < sourceDistSum:
-                # logbook.info(f"move {str(last)}->{str(tile)} was TOWARDS shortest path")
-                value += 0.01
-
-        if destDistSum == sourceDistSum:
-            # logbook.info(f"move {str(last)}->{str(tile)} was flanking parallel to shortest path")
-            value += 0.01
-
-        if abs(destEnDist - destGenDist) <= abs(sourceEnDist - sourceGenDist):
-            valueAdd = abs(destEnDist - destGenDist) / 200
-            # logbook.info(
-            #     f"move {last.toString()}->{tile.toString()} was moving towards the center, valuing it {valueAdd} higher")
-            value += valueAdd
-    return value
-
-
-def add_path_to_try_avoid_paths_crossing_tiles(
-        path: TilePlanInterface,
-        negativeTiles: typing.Set[Tile],
-        tryAvoidSet: typing.Set[Tile],
-        pathsCrossingTiles: typing.Dict[Tile, typing.List[TilePlanInterface]],
-        addToNegativeTiles = False,
-):
-    for t in path.tileSet:
-        tryAvoidSet.add(t)
-        if addToNegativeTiles:
-            negativeTiles.add(t)
-        tileCrossList = pathsCrossingTiles.get(t, [])
-        tileCrossList.append(path)
-        if len(tileCrossList) == 1:
-            pathsCrossingTiles[t] = tileCrossList
-
-
-def move_can_cap_more(leafMove: Move) -> bool:
-    """Returns whether a leafmove could continue capping tiles, or is a final cap."""
-    capAmt = leafMove.source.army - leafMove.dest.army - 1
-    canCapMoreOnPathWithNoSplit = False
-    for nextCap in leafMove.dest.movable:
-        if nextCap == leafMove.source:
-            continue
-        if nextCap.player != leafMove.source.player and capAmt - 1 > nextCap.army:
-            canCapMoreOnPathWithNoSplit = True
-            break
-
-    return canCapMoreOnPathWithNoSplit
-
-
-def knapsack_multi_paths(
-        map: MapBase,
-        searchingPlayer: int,
-        friendlyPlayers,
-        targetPlayers,
-        remainingTurns: int,
-        pathsCrossingTiles,
-        multiPathDict,
-        territoryMap: MapMatrix[int],
-        postPathEvalFunction: typing.Callable[[Path, typing.Set[Tile]], float],
-        negativeTiles: typing.Set[Tile],
-        tryAvoidSet: typing.Set[Tile],
-        viewInfo: ViewInfo | None,
-        valueOverrides: typing.Dict[TilePlanInterface, typing.Tuple[float, int]] | None = None,
-) -> typing.Tuple[TilePlanInterface | None, typing.List[TilePlanInterface], int, float]:
-    """
-    Returns firstPath, allPaths, totalTurns, totalValue
-
-    @param map:
-    @param searchingPlayer:
-    @param friendlyPlayers:
-    @param targetPlayers
-    @param remainingTurns:
-    @param pathsCrossingTiles:
-    @param multiPathDict:
-    @param territoryMap:
-    @param postPathEvalFunction:
-    @param negativeTiles:
-    @param tryAvoidSet:
-    @param viewInfo:
-    @param valueOverrides: path->(value, dist)
-    @return:
-    """
-    tilePathGroupsRebuilt: typing.Dict[int, typing.List[TilePlanInterface]] = _group_expand_paths_by_crossovers(
-        pathsCrossingTiles,
-        multiPathDict)
-
-    allPaths = []
-    combinedTurnLengths = 0
-    groupsWithPaths = 0
-    for grp, paths in tilePathGroupsRebuilt.items():
-        if len(paths) > 0:
-            groupsWithPaths += 1
-
-    for tile in multiPathDict.keys():
-        pathValues = multiPathDict[tile].values()
-        for val, p in pathValues:
-            allPaths.append((val, p))
-            combinedTurnLengths += p.length
-    logbook.info(
-        f'EXP MULT KNAP {groupsWithPaths} grps, {len(allPaths)} paths, {remainingTurns} turns, combinedPathLengths {combinedTurnLengths}:')
-    if DebugHelper.IS_DEBUGGING:
-        for val, p in allPaths:
-            dist = p.length
-            if valueOverrides is not None:
-                tpl = valueOverrides.get(p, None)
-                if tpl is not None:
-                    floatVal, dist = tpl
-            logbook.info(f'    INPUT {val:.2f} dist {dist}: {str(p)}')
-
-    enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed = extract_paths_from_knapsack_groups(
-        map,
-        searchingPlayer,
-        friendlyPlayers,
-        targetPlayers,
-        remainingTurns,
-        tilePathGroupsRebuilt,
-        negativeTiles,
-        postPathEvalFunction,
-        territoryMap,
-        tryAvoidSet,
-        valueOverrides)
-
-    logbook.info(
-        f'MEXPX en{enemyCapped} neut{neutralCapped} {turnsUsed}/{remainingTurns} {totalValue}v num paths {len(maxPaths)}')
-
-    otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, negativeTiles) / pa.length, reverse=True)]
-
-    return path, otherPaths, turnsUsed, 2 * enemyCapped + neutralCapped
-
-
-def get_multiple_choice_expansion_knapsack_val_converter(valueOverrides, postPathEvalFunction, negativeTiles):
-    def multiple_choice_knapsack_expansion_path_value_converter(p: TilePlanInterface) -> typing.Tuple[int, int]:
-        floatVal = -10000
-        dist = p.length
-        if valueOverrides is not None:
-            tpl = valueOverrides.get(p, None)
-            if tpl is not None:
-                floatVal, dist = tpl
-
-        if floatVal == -10000:
-            floatVal = postPathEvalFunction(p, negativeTiles)
-
-        intVal = int(floatVal * 10000.0)
-        return intVal, dist
-
-    valFunc = multiple_choice_knapsack_expansion_path_value_converter
-    return valFunc
-
-
-def knapsack_multi_paths_no_crossover(
-        map: MapBase,
-        searchingPlayer: int,
-        friendlyPlayers: typing.List[int],
-        targetPlayers: typing.List[int],
-        remainingTurns: int,
-        pathsCrossingTiles,
-        multiPathDict: typing.Dict[Tile, typing.Dict[int, typing.Tuple[int, TilePlanInterface]]],
-        territoryMap: MapMatrix[int],
-        postPathEvalFunction: typing.Callable[[Path, typing.Set[Tile]], float],
-        negativeTiles: typing.Set[Tile],
-        tryAvoidSet: typing.Set[Tile],
-        viewInfo: ViewInfo | None,
-        valueOverrides: typing.Dict[TilePlanInterface, typing.Tuple[float, int]] | None = None,
-) -> typing.Tuple[TilePlanInterface | None, typing.List[TilePlanInterface], int, float]:
-    """
-    Returns firstPath, allPaths, totalTurns, totalValue
-
-    @param map:
-    @param searchingPlayer:
-    @param friendlyPlayers:
-    @param targetPlayers
-    @param remainingTurns:
-    @param pathsCrossingTiles:
-    @param multiPathDict:
-    @param territoryMap:
-    @param postPathEvalFunction:
-    @param negativeTiles:
-    @param tryAvoidSet:
-    @param viewInfo:
-    @param valueOverrides: path->(value, dist)
-    @return:
-    """
-
-    allPaths = []
-    groupsWithPaths = 0
-    groups = {}
-
-    # group cityPaths by first tile captured, instead
-    cityPaths = {}
-
-    for tile, pathsByDist in multiPathDict.items():
-        if len(pathsByDist) == 0:
-            continue
-
-        groupsWithPaths += 1
-        groupPaths = []
-
-        for dist, pathTuple in pathsByDist.items():
-            val, p = pathTuple
-
-            # if (tile.isCity or tile.isGeneral) and p.length < 5:
-            if (tile.isCity or tile.isGeneral) and dist < remainingTurns // 2:
-                # if coming from a city, group by the first tile captured instead of by the city itself...?
-                groupTile = tile
-                for t in p.tileSet:
-                    if not map.is_player_on_team_with(tile.player, t.player):
-                        groupTile = t
-                        break
-
-                existingGroup = groups.get(groupTile, [])
-                existingGroup.append(p)
-
-                groups[groupTile] = existingGroup
-
-                continue
-
-            groupPaths.append(p)
-
-        groups[tile] = groupPaths
-
-    combinedTurnLengths = 0
-    for tile in multiPathDict.keys():
-        pathValues = multiPathDict[tile].values()
-        for val, p in pathValues:
-            allPaths.append((val, p))
-            combinedTurnLengths += p.length
-    logbook.info(
-        f'EXP MULT NO CROSS KNAP {groupsWithPaths} grps, {len(allPaths)} paths, {remainingTurns} turns, combinedPathLengths {combinedTurnLengths}:')
-    if DebugHelper.IS_DEBUGGING:
-        for val, p in allPaths:
-            logbook.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
-
-    enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed = extract_paths_from_knapsack_groups(
-        map,
-        searchingPlayer,
-        friendlyPlayers,
-        targetPlayers,
-        remainingTurns,
-        groups,
-        negativeTiles,
-        postPathEvalFunction,
-        territoryMap,
-        tryAvoidSet,
-        valueOverrides)
-
-    logbook.info(
-        f'MEXPNX en{enemyCapped} neut{neutralCapped} {turnsUsed}/{remainingTurns} {totalValue}v num paths {len(maxPaths)}')
-
-    otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, negativeTiles) / pa.length, reverse=True)]
-
-    return path, otherPaths, turnsUsed, 2 * enemyCapped + neutralCapped
-
-
-def extract_paths_from_knapsack_groups(
-        map,
-        searchingPlayer,
-        friendlyPlayers,
-        targetPlayers,
-        remainingTurns,
-        groups,
-        negativeTiles,
-        postPathEvalFunction,
-        territoryMap,
-        tryAvoidSet,
-        valueOverrides
-):
-    valFunc = get_multiple_choice_expansion_knapsack_val_converter(valueOverrides, postPathEvalFunction, negativeTiles)
-
-    totalValue, maxPaths = expansion_knapsack_gather_iteration(
-        remainingTurns,
-        groups,
-        shouldLog=DebugHelper.IS_DEBUGGING,
-        valueFunc=valFunc
-    )
-
-    path = find_optimal_expansion_path_to_move_first(
-        map,
-        maxPaths,
-        tryAvoidSet,
-        negativeTiles,
-        postPathEvalFunction,
-        remainingTurns,
-        searchingPlayer,
-        friendlyPlayers,
-        territoryMap,
-        valueOverrides)
-
-    otherPaths = [p for p in maxPaths if p != path]
-
-    turnsUsed, enemyCapped, neutralCapped = _get_capture_counts(
-        searchingPlayer,
-        friendlyPlayers,
-        targetPlayers,
-        path,
-        otherPaths,
-        negativeTiles,
-        valueOverrides)
-
-    return enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed
-
-
-def _add_expansion_to_view_info(path: TilePlanInterface, otherPaths: typing.List[TilePlanInterface], viewInfo: ViewInfo, colors: typing.Tuple[int, int, int]):
-    r, g, b = colors
-    for curPath in otherPaths:
-        if viewInfo:
-            # draw other paths darker
-            alpha = 190
-            minAlpha = 100
-            alphaDec = 5
-            viewInfo.paths.appendleft(PathColorer(curPath, max(0, r-40), max(0, g-40), max(0, b-40), alpha, alphaDec, minAlpha))
-
-    # draw maximal path brighter
-    alpha = 255
-    minAlpha = 200
-    alphaDec = 0
-    if viewInfo:
-        # viewInfo.paths = deque(where(viewInfo.paths, lambda pathCol: pathCol.path != path))
-        viewInfo.paths.appendleft(PathColorer(path, r, g, b, alpha, alphaDec, minAlpha))
-
-
-def get_optimal_expansion(
+class RoundPlan(object):
+    def __init__(
+            self,
+            enTilesCaptured: int,
+            neutTilesCaptured: int,
+            selectedOption: TilePlanInterface | None,
+            allOptions: typing.List[TilePlanInterface]
+    ):
+        self.turns_used: int = 0
+        self.en_tiles_captured: int = enTilesCaptured
+        self.neut_tiles_captured: int = neutTilesCaptured
+        self.selected_option: TilePlanInterface = selectedOption
+        self.all_paths: typing.List[TilePlanInterface] = allOptions
+        self.plan_tiles: typing.Set[Tile] = set()
+        # self.preferred_tiles: typing.Set[Tile] = set()
+        # self.blocking_tiles: typing.Set[Tile] = set()
+        # self.intercept_waiting: typing.List[InterceptionOptionInfo] = []
+        # """Tiles who are part of the required plan, but which have a required delay on them."""
+
+        self.includes_intercept: bool = False
+        cumulativeValue = 0.0
+        for selectedOption in allOptions:
+            cumulativeValue += selectedOption.econValue
+            self.turns_used += selectedOption.length
+            self.plan_tiles.update(selectedOption.tileSet)
+
+        self.cumulative_econ_value: float = cumulativeValue
+
+
+def get_round_plan_with_expansion(
         map: MapBase,
         searchingPlayer: int,
         targetPlayer: int,
         turns: int,
         boardAnalysis: BoardAnalyzer,
         territoryMap: MapMatrix[int],
+        tileIslands: TileIslandBuilder,
         negativeTiles: typing.Set[Tile] = None,
         leafMoves: typing.Union[None, typing.List[Move]] = None,
         viewInfo: ViewInfo = None,
@@ -674,7 +83,7 @@ def get_optimal_expansion(
         colors: typing.Tuple[int, int, int] = (235, 240, 50),
         additionalOptionValues: typing.List[TilePlanInterface] | None = None,
         perfTimer: PerformanceTimer | None = None,
-) -> typing.Tuple[TilePlanInterface | None, typing.List[TilePlanInterface]]:
+) -> RoundPlan:
     """
     Does 3 phases of knapsacking expansion paths:
     First, large tile plans.
@@ -691,37 +100,28 @@ def get_optimal_expansion(
 
         startTime = time.perf_counter()
 
-        teams = MapBase.get_teams_array(map)
-        targetPlayers = [p for p, t in enumerate(teams) if teams[targetPlayer] == t]
-        friendlyPlayers = [p for p, t in enumerate(teams) if teams[searchingPlayer] == t]
+        if turns <= 0:
+            raise AssertionError(f"turns {turns} <= 0 in optimal_expansion...")
 
-        enemyDistMap = boardAnalysis.intergeneral_analysis.bMap
-        generalDistMap = boardAnalysis.intergeneral_analysis.aMap
+        # if turns > 30:
+        #     logEntries.append(f"turns {turns} < 30 in optimal_expansion... Setting to 30")
+        #     turns = 30
 
-        respectTerritoryMap = map.players[targetPlayer].tileCount // 2 > len(map.players[targetPlayer].tiles)
-        respectTerritoryMap = False
+        paths = []
 
-        # # The more turns remaining, the more we prioritize longer paths. Towards the end of expansion, we prioritize sheer captured tiles.
-        # # This hopefully leads to finding more ideal expansion plans earlier on while being greedier later
-        # lengthWeightOffset = 0.3 * ((turns ** 0.5) - 3)
-        # lengthWeightOffset = max(0.25, lengthWeightOffset)
-
-        logEntries.append(f"\n\nAttempting Optimal Expansion (tm) for turns {turns} (lengthWeightOffset {lengthWeightOffset}), negatives {str([str(t) for t in negativeTiles])}:\n")
-        generalPlayer = map.players[searchingPlayer]
-        if negativeTiles is None:
-            negativeTiles = set()
+        # if turns < 8:
+        #     valPerTurnCutoff = 0.0
+        #     valPerTurnCutoffScaledown = 0.3
 
         originalNegativeTiles = negativeTiles
         negativeTiles = negativeTiles.copy()
+        teams = MapBase.get_teams_array(map)
+        targetPlayers = [p for p, t in enumerate(teams) if teams[targetPlayer] == t]
+        friendlyPlayers = [p for p, t in enumerate(teams) if teams[searchingPlayer] == t]
+        remainingTurns = turns
 
-        cityUsages = {}
-
-        # TODO be better about this
-        expectedUnseenEnemyTileArmy = 1
-        if turns > 25:
-            expectedUnseenEnemyTileArmy = 2
-        if map.turn > 300:
-            expectedUnseenEnemyTileArmy += 1
+        enemyDistMap = boardAnalysis.intergeneral_analysis.bMap
+        generalDistMap = boardAnalysis.intergeneral_analysis.aMap
 
         enemyDistPenaltyPoint = boardAnalysis.inter_general_distance // 3
         if turns < 12:
@@ -733,317 +133,19 @@ def get_optimal_expansion(
         if turns < 3:
             enemyDistPenaltyPoint = 0
 
-        # for tile in skipTiles:
-        #     logEntries.append(f"expansion starting negativeTile: {tile.toString()}")
-
-        # wastedMoveCap = 4
-        wastedMoveCap = min(7, max(3, turns // 4)) + 1
-
-        iter = [0]
-
-        # skipFunc(next, nextVal). Not sure why this is 0 instead of 1, but 1 breaks it. I guess the 1 is already subtracted
-        if not skipFunc:
-            def skip_after_out_of_army(nextTile, nextVal):
-                (
-                    distSoFar,
-                    prioWeighted,
-                    fakeDistSoFar,
-                    wastedMoves,
-                    tileCapturePoints,
-                    negArmyRemaining,
-                    enemyTiles,
-                    neutralTiles,
-                    pathPriority,
-                    tileSetSoFar,
-                    # adjacentSetSoFar,
-                    # enemyExpansionValue,
-                    # enemyExpansionTileSet
-                ) = nextVal
-                # skip if out of army, or if we've wasted a bunch of moves already and have nothing to show
-                if negArmyRemaining >= 0 or (wastedMoves > wastedMoveCap and tileCapturePoints > -5):
-                    return True
-
-                if nextTile.isCity and nextTile.isNeutral:
-                    return True
-
-                return False
-
-            skipFunc = skip_after_out_of_army
-
-        if not valueFunc:
-            def value_priority_army_dist_basic(currentTile, priorityObject):
-                (
-                    distSoFar,
-                    prioWeighted,
-                    fakeDistSoFar,
-                    wastedMoves,
-                    tileCapturePoints,
-                    negArmyRemaining,
-                    enemyTiles,
-                    neutralTiles,
-                    pathPriority,
-                    tileSetSoFar,
-                    # adjacentSetSoFar,
-                    # enemyExpansionValue,
-                    # enemyExpansionTileSet
-                ) = priorityObject
-                # negative these back to positive
-                value = -1000
-                dist = 1
-                if currentTile in negativeTiles or negArmyRemaining >= 0 or distSoFar == 0:
-                    return None
-                if map.is_tile_on_team_with(currentTile,searchingPlayer):
-                    return None
-
-                if currentTile.isCity and currentTile.isNeutral:
-                    return None
-
-                if viewInfo:
-                    viewInfo.evaluatedGrid[currentTile.x][currentTile.y] += 1
-
-                if distSoFar > 0 and tileCapturePoints < 0:
-                    dist = distSoFar + lengthWeightOffset
-                    # negative points for wasted moves until the end of expansion
-                    value = 0 - tileCapturePoints  # - 2 * wastedMoves * lengthWeightOffset
-
-                if value <= 0:
-                    return None
-
-                valuePerTurn = value / dist
-                # if valuePerTurn < valPerTurnCutoff:
-                #     return None
-
-                # return ((value / (dist + wastedMoves)) - wastedMoves,
-                # return ((value / (dist + wastedMoves)) - wastedMoves / 10,
-                # return ((value / (dist + wastedMoves)),  # ACTUAL ORIG
-                return (
-                    value,  # this value is important, if we JUST use valuePerTurn then we wont take neutral tiles after strings of enemy tiles.
-                    valuePerTurn,
-                    # prioWeighted,
-                    # value,
-                    0 - negArmyRemaining,
-                    # 0 - enemyTiles / dist,
-                    # 0,
-                    0 - distSoFar
-                )
-
-            valueFunc = value_priority_army_dist_basic
-
-        # def a_starey_value_priority_army_dist(currentTile, priorityObject):
-        #    pathPriorityDivided, wastedMoves, armyRemaining, enemyTiles, neutralTiles, pathPriority, distSoFar, tileSetSoFar, adjacentSetSoFar = priorityObject
-        #    # negative these back to positive
-        #    posPathPrio = 0-pathPriorityDivided
-        #    #return (posPathPrio, 0-armyRemaining, distSoFar)
-        #    return (0-(enemyTiles*2 + neutralTiles) / (max(1, distSoFar)), 0-enemyTiles / (max(1, distSoFar)), posPathPrio, distSoFar)
-
-        ENEMY_EXPANSION_TILE_PENALTY = 0.7
-
-        if not priorityFunc:
-            def default_priority_func_basic(nextTile, currentPriorityObject):
-                (
-                    distSoFar,
-                    prioWeighted,
-                    fakeDistSoFar,
-                    wastedMoves,
-                    negTileCapturePoints,
-                    negArmyRemaining,
-                    enemyTiles,
-                    neutralTiles,
-                    pathPriority,
-                    tileSetSoFar,
-                    # adjacentSetSoFar,
-                    # enemyExpansionValue,
-                    # enemyExpansionTileSet
-                ) = currentPriorityObject
-                nextTerritory = territoryMap[nextTile]
-                armyRemaining = 0 - negArmyRemaining
-                distSoFar += 1
-                fakeDistSoFar += 1
-                if nextTile.player == -1 and nextTerritory not in targetPlayers:
-                    fakeDistSoFar += 1
-                # weight tiles closer to the target player higher
-
-                armyRemaining -= 1
-
-                if nextTile in tileSetSoFar:
-                    return None
-
-                nextTileSet = tileSetSoFar.copy()
-                nextTileSet.add(nextTile)
-
-                # only reward closeness to enemy up to a point then penalize it
-                cutoffEnemyDist = abs(enemyDistMap[nextTile] - enemyDistPenaltyPoint)
-                addedPriority = 3 * (0 - cutoffEnemyDist ** 0.5 + 1)
-
-                # reward away from our general but not THAT far away
-                cutoffGenDist = abs(generalDistMap[nextTile])
-                addedPriority += 3 * (cutoffGenDist ** 0.5 - 1)
-
-                # negTileCapturePoints += cutoffEnemyDist / 100
-                # negTileCapturePoints -= cutoffGenDist / 100
-
-                # releventAdjacents = where(nextTile.adjacents, lambda adjTile: adjTile not in adjacentSetSoFar and adjTile not in tileSetSoFar)
-                if negativeTiles is None or (nextTile not in negativeTiles):
-                    if nextTile.player in friendlyPlayers:
-                        armyRemaining += nextTile.army
-                    else:
-                        armyRemaining -= nextTile.army
-                if armyRemaining <= 0:
-                    return None
-                # Tiles penalized that are further than 7 tiles from enemy general
-                # tileModifierPreScale = max(8, enemyDistMap[nextTile.x][nextTile.y]) - 8
-                # tileModScaled = tileModifierPreScale / 200
-                # negTileCapturePoints += tileModScaled
-                usefulMove = nextTile not in negativeTiles
-                # enemytiles or enemyterritory undiscovered tiles
-                # isProbablyEnemyTile = (nextTile.isNeutral
-                #                        and not nextTile.visible
-                #                        and nextTerritory in targetPlayers)
-                # if isProbablyEnemyTile:
-                #     armyRemaining -= expectedUnseenEnemyTileArmy
-
-                if (
-                        nextTile in tryAvoidSet
-                        or nextTile in negativeTiles
-                        or nextTile in tileSetSoFar
-                ):
-                    # our tiles and non-target enemy tiles get negatively weighted
-                    addedPriority -= 1
-                    # 0.7
-                    usefulMove = False
-                    wastedMoves += 0.5
-                elif (
-                        targetPlayer != -1
-                        and (
-                                nextTile.player in targetPlayers
-                                or (not nextTile.visible and respectTerritoryMap and territoryMap[nextTile] in targetPlayers)
-                        )
-                ):
-                    # if nextTile.player == -1:
-                    #     # these are usually 1 or more army since usually after army bonus
-                    #     armyRemaining -= 1
-                    addedPriority += 8
-                    if nextTile.player != -1:
-                        negTileCapturePoints -= 2.0
-                        distSoFar -= 0.99
-                    else:
-                        negTileCapturePoints -= 1.5
-                    enemyTiles -= 1
-
-                    ## points for locking all nearby enemy tiles down
-                    # numEnemyNear = count(nextTile.adjacents, lambda adjTile: adjTile.player in targetPlayers)
-                    # numEnemyLocked = count(releventAdjacents, lambda adjTile: adjTile.player in targetPlayers)
-                    ##    for every other nearby enemy tile on the path that we've already included in the path, add some priority
-                    # addedPriority += (numEnemyNear - numEnemyLocked) * 12
-                elif nextTile.player == -1:
-                    # if nextTile.isCity: #TODO and is reasonably placed?
-                    #    neutralTiles -= 12
-                    # we'd prefer to be killing enemy tiles, yeah?
-                    # wastedMoves += 0.2
-                    neutralTiles -= 1
-                    negTileCapturePoints -= 1
-                    # points for capping tiles in general
-                    addedPriority += 2
-                    # points for taking neutrals next to enemy tiles
-                    # numEnemyNear = count(nextTile.movable, lambda adjTile: adjTile not in adjacentSetSoFar and adjTile.player in targetPlayers)
-                    # if numEnemyNear > 0:
-                    #    addedPriority += 2
-                else:  # our tiles and non-target enemy tiles get negatively weighted
-                    addedPriority -= 1
-                    # 0.7
-                    usefulMove = False
-                    wastedMoves += 0.5
-
-                if nextTile in tryAvoidSet:
-                    addedPriority -= 5
-                    negTileCapturePoints += 0.2
-
-                if bonusCapturePointMatrix is not None:
-                    bonusPoints = bonusCapturePointMatrix[nextTile]
-                    if bonusPoints < 0.0 or usefulMove:  # for penalized tiles, always apply the penalty. For rewarded tiles, only reward when it is a move that does something.
-                        negTileCapturePoints -= bonusPoints
-                    if bonusPoints < -10:
-                        return None
-
-                iter[0] += 1
-                nextAdjacentSet = None
-                # nextAdjacentSet = adjacentSetSoFar.copy()
-                # for adj in nextTile.adjacents:
-                #    nextAdjacentSet.add(adj)
-                # nextEnemyExpansionSet = enemyExpansionTileSet.copy()
-                nextEnemyExpansionSet = None
-                # deprioritize paths that allow counterplay
-                # for adj in nextTile.movable:
-                #    if adj.army >= 3 and adj.player != searchingPlayer and adj.player != -1 and adj not in skipTiles and adj not in tileSetSoFar and adj not in nextEnemyExpansionSet:
-                #        nextEnemyExpansionSet.add(adj)
-                #        enemyExpansionValue += (adj.army - 1) // 2
-                #        tileCapturePoints += ENEMY_EXPANSION_TILE_PENALTY
-                newPathPriority = pathPriority - addedPriority
-                # newPathPriority = addedPriority
-                # prioPerTurn = newPathPriority/distSoFar
-                prioPerTurn = (negTileCapturePoints) / (distSoFar + wastedMoves)  # - addedPriority / 4
-                # if iter[0] < 50 and fullLog:
-                #     logEntries.append(
-                #         f" - nextTile {str(nextTile)}, waste [{wastedMoves:.2f}], prioPerTurn [{prioPerTurn:.2f}], dsf {distSoFar}, capPts [{negTileCapturePoints:.2f}], negArmRem [{0 - armyRemaining}]\n    eTiles {enemyTiles}, nTiles {neutralTiles}, npPrio {newPathPriority:.2f}, nextTileSet {len(nextTileSet)}\n    nextAdjSet {None}, enemyExpVal {enemyExpansionValue}, nextEnExpSet {None}")
-
-                return distSoFar, prioPerTurn, fakeDistSoFar, wastedMoves, negTileCapturePoints, 0 - armyRemaining, enemyTiles, neutralTiles, newPathPriority, nextTileSet  # , nextAdjacentSet, enemyExpansionValue, nextEnemyExpansionSet
-
-            priorityFunc = default_priority_func_basic
-        #
-        # if not boundFunc:
-        #     def default_bound_func(currentTile, currentPriorityObject, maxPriorityObject):
-        #         if maxPriorityObject is None:
-        #             return False
-        #         distSoFar, prioWeighted, fakeDistSoFar, wastedMoves, tileCapturePoints, negArmyRemaining, enemyTiles, neutralTiles, pathPriority, tileSetSoFar, adjacentSetSoFar, enemyExpansionValue, enemyExpansionTileSet = currentPriorityObject
-        #         distSoFarMax, prioWeightedMax, fakeDistSoFarMax, wastedMovesMax, tileCapturePointsMax, negArmyRemainingMax, enemyTilesMax, neutralTilesMax, pathPriorityMax, tileSetSoFarMax, adjacentSetSoFarMax, enemyExpansionValueMax, enemyExpansionTileSetMax = maxPriorityObject
-        #         if distSoFarMax <= 3 or distSoFar <= 3:
-        #             return False
-        #         # if wastedMoves > wastedMovesMax * 1.3 + 0.5:
-        #         #     # logEntries.append(
-        #         #     #     f"Pruned {currentTile} via wastedMoves {wastedMoves:.2f}  >  wastedMovesMax {wastedMovesMax:.2f} * 1.2 + 0.4 {wastedMovesMax * 1.2 + 0.4:.3f}")
-        #         #     return True
-        #         thisCapPoints = tileCapturePoints / distSoFar
-        #         maxCapPoints = tileCapturePointsMax / distSoFarMax
-        #         weightedMax = 0.7 * maxCapPoints + 0.01
-        #         if enemyTilesMax + neutralTilesMax > 0 and thisCapPoints > weightedMax:
-        #             logEntries.append(
-        #                 f"Pruned {currentTile} via tileCap thisCapPoints {thisCapPoints:.3f}  >  weightedMax {weightedMax:.3f} (maxCapPoints {maxCapPoints:.3f})")
-        #             return True
-        #
-        #         return False
-        #
-        #     boundFunc = default_bound_func
-
-        if not initFunc:
-            def initial_value_func_default(tile):
-                startingSet = set()
-                startingSet.add(tile)
-                startingAdjSet = set()
-                for adj in tile.adjacents:
-                    startingAdjSet.add(adj)
-                startingEnemyExpansionTiles = set()
-                enemyExpansionValue = 0
-                tileCapturePoints = 0
-
-                tileArmy = tile.army
-
-                cityUsage = cityUsages.get(tile, None)
-                if cityUsage is not None:
-                    tileArmy = 5
-
-                for adj in tile.movable:
-                    if adj.army > 3 and not map.is_tile_on_team_with(adj, searchingPlayer) and adj.player != -1 and adj not in negativeTiles:
-                        startingEnemyExpansionTiles.add(adj)
-                        enemyExpansionValue += (adj.army - 1) // 2
-                        tileCapturePoints += ENEMY_EXPANSION_TILE_PENALTY
-                return 0, -10000, 0, 0, tileCapturePoints, 0 - tileArmy, 0, 0, 0, startingSet  # , startingAdjSet, enemyExpansionValue, startingEnemyExpansionTiles
-
-            initFunc = initial_value_func_default
+        # if len(sortedTiles) < 5:
+        #    logEntries.append("Only had {} tiles to play with, switching cutoffFactor to full...".format(len(sortedTiles)))
+        #    cutoffFactor = fullCutoff
+        # logStuff = True
+        # if player.tileCount > 70 or turns > 25:
+        #     logEntries.append("Not doing algorithm logging for expansion due to player tilecount > 70 or turn count > 25")
+        #     logStuff = False
+        logStuff = DebugHelper.IS_DEBUGGING
 
         # Switch this up to use more tiles at the start, just removing the first tile in each path at a time. Maybe this will let us find more 'maximal' paths?
         def postPathEvalFunction(path: TilePlanInterface, negativeTiles):
-            if isinstance(path, Path):
-                value = 0
+            if isinstance(path, Path) and path.econValue == 0.0:
+                value = 0.0
                 last = path.start.tile
                 # if bonusCapturePointMatrix:
                 #     value += bonusCapturePointMatrix[path.start.tile]
@@ -1055,55 +157,11 @@ def get_optimal_expansion(
 
                     last = tile
                     nextNode = nextNode.next
+
                 path.econValue = value
                 return value
             else:
                 return path.econValue
-
-        if turns <= 0:
-            raise AssertionError(f"turns {turns} <= 0 in optimal_expansion...")
-
-        # if turns > 30:
-        #     logEntries.append(f"turns {turns} < 30 in optimal_expansion... Setting to 30")
-        #     turns = 30
-
-        tileMinValueCutoff = 2
-        remainingTurns = turns
-        sortedTiles = sorted(list(where(generalPlayer.tiles, lambda tile: tile.army > tileMinValueCutoff and tile not in negativeTiles)),
-                             key=lambda tile: (0 - tile.army, enemyDistMap[tile]))
-        if len(sortedTiles) <= 4:
-            tileMinValueCutoff = 1
-            sortedTiles = sorted(list(where(generalPlayer.tiles, lambda tile: tile.army > tileMinValueCutoff and tile not in negativeTiles)),
-                                 key=lambda tile: (0 - tile.army, enemyDistMap[tile]))
-
-        if len(sortedTiles) == 0:
-            return None, []
-
-        paths = []
-        # fullCutoff
-        fullCutoff = 20
-        cutoffFactor = 5
-        valPerTurnCutoff = 0.5
-        valPerTurnCutoffScaledown = 0.6
-        if not useCutoff:
-            cutoffFactor = 20
-            valPerTurnCutoff = 0.25
-            valPerTurnCutoffScaledown = 0.3
-
-        # if turns < 8:
-        #     valPerTurnCutoff = 0.0
-        #     valPerTurnCutoffScaledown = 0.3
-
-
-        # if len(sortedTiles) < 5:
-        #    logEntries.append("Only had {} tiles to play with, switching cutoffFactor to full...".format(len(sortedTiles)))
-        #    cutoffFactor = fullCutoff
-        player = map.players[searchingPlayer]
-        # logStuff = True
-        # if player.tileCount > 70 or turns > 25:
-        #     logEntries.append("Not doing algorithm logging for expansion due to player tilecount > 70 or turn count > 25")
-        #     logStuff = False
-        logStuff = DebugHelper.IS_DEBUGGING
 
         pathsCrossingTiles: typing.Dict[Tile, typing.List[Path]] = {}
 
@@ -1111,7 +169,7 @@ def get_optimal_expansion(
 
         defaultNoPathValue = (0, None)
 
-        multiPathDict: typing.Dict[Tile, typing.Dict[int, typing.Tuple[int, Path]]] = {}
+        multiPathDict: typing.Dict[Tile, typing.Dict[int, typing.Tuple[float, Path]]] = {}
         """Contains the current max value path per distance per start tile"""
 
         alwaysIncludes = []
@@ -1226,223 +284,39 @@ def get_optimal_expansion(
                 skipNeutrals=False,
                 logEntries=logEntries)
 
-        stage1 = time_limit / 4
-        stage2 = time_limit / 2
-        breakStage = 3 * time_limit / 4
-
-        overrideGlobalVisitedOneCycle = False
-        standingArmyGlobalVisitedOverrideThresh = map.players[searchingPlayer].standingArmy
-        linearOffset = 15
-        if standingArmyGlobalVisitedOverrideThresh > linearOffset:
-            standingArmyGlobalVisitedOverrideThresh = linearOffset + (standingArmyGlobalVisitedOverrideThresh - linearOffset) ** 0.75
-
-        if len(sortedTiles) > 0 and sortedTiles[0].army >= standingArmyGlobalVisitedOverrideThresh:
-            logEntries.append(f'overriding global visited to False for the first cycle due to large tile {str(sortedTiles[0])}')
-            overrideGlobalVisitedOneCycle = True
-
-        inStage2 = False
-        firstIteration = True
-        iteration = 0
-
-        if logStuff:
-            for t, pathsByDist in multiPathDict.items():
-                for dist, (val, p) in pathsByDist.items():
-                    logEntries.append(f'pre tile {str(t)} val {val:.3f} @ dist {dist}: {str(p)}')
-
-        while True:
-            logEntries.append(f"Main cycle iter {iter} start - elapsed {time.perf_counter() - startTime:.4f}")
-            if remainingTurns <= 0:
-                logEntries.append("breaking due to remainingTurns <= 0")
-                break
-            if cutoffFactor > fullCutoff:
-                logEntries.append("breaking due to cutoffFactor > fullCutoff")
-                break
-            if len(sortedTiles) == 0:
-                logEntries.append("breaking due to no tiles left in sortedTiles")
-                break
-            timeUsed = time.perf_counter() - startTime
-            logEntries.append(f'EXP iter {iter[0]} time used {timeUsed:.3f}')
-            # Stages:
-            # first 0.1s, use large tiles and shift smaller. (do nothing)
-            # second 0.1s, use all tiles (to make sure our small tiles are included)
-            # third 0.1s - knapsack optimal stuff outside this loop i guess?
-            if timeUsed > stage1 and timeUsed < stage2:
-                logEntries.append(f"timeUsed > {stage1} ({timeUsed})... Breaking loop and knapsacking...")
-            if timeUsed > breakStage and inStage2:
-                logEntries.append(f"timeUsed > {breakStage} ({timeUsed})... breaking and knapsacking...")
-                break
-            if timeUsed > stage2:
-                logEntries.append(
-                    f"timeUsed > {stage2} ({timeUsed})... Switching to using all tiles, cutoffFactor = fullCutoff...")
-                inStage2 = True
-                cutoffFactor = fullCutoff
-
-            # startIdx = max(0, ((cutoffFactor - 1) * len(sortedTiles))//fullCutoff)
-            startIdx = 0
-            endIdx = min(len(sortedTiles), (cutoffFactor * len(sortedTiles)) // fullCutoff + 1)
-            if endIdx < 3:
-                oldEndIdx = endIdx
-                endIdx = min(len(sortedTiles), 3)
-                logEntries.append(f'forcing endIdx up from {oldEndIdx} to {endIdx}')
-            logEntries.append(
-                f"startIdx {startIdx} endIdx {endIdx}, where endIdx = min(len(sortedTiles) {len(sortedTiles)}, (cutoffFactor {cutoffFactor} * len(sortedTiles) {len(sortedTiles)}) // fullCutoff {fullCutoff} + 1)")
-            tilePercentile = [t for t in sortedTiles if t not in negativeTiles][startIdx:endIdx]
-            if len(tilePercentile) == 0:
-                cutoffFactor += 3
-                continue
-
-            # filter out the bottom value of tiles (will filter out 1's in the early game, or the remaining 2's, etc)
-            smallTiles = where(
-                tilePercentile,
-                lambda tile: tile.army < 15)
-
-            if len(smallTiles) > len(tilePercentile) - 2:
-                if firstIteration:
-                    tilePercentile = where(tilePercentile, lambda t: t.army > tilePercentile[0].army // 2)
-                else:
-                    overrideGlobalVisitedOneCycle = True
-
-            tilesLargerThanAverage = tilePercentile
-
-            # if alwaysIncludeNonTerminatingLeavesInIteration and inStage2:
-            if alwaysIncludeNonTerminatingLeavesInIteration and not firstIteration:
-                for tile in alwaysIncludes:
-                    if tile not in negativeTiles and tile not in tryAvoidSet:
-                        tilesLargerThanAverage.append(tile)
-
-            timeCap = singleIterationPathTimeCap
-            if inStage2 and smallTileExpansionTimeRatio != 1.0:
-                timeCap = singleIterationPathTimeCap * smallTileExpansionTimeRatio
-
-            searchTime = min(time_limit - timeUsed, singleIterationPathTimeCap)
-
-            logEntries.append(
-                f'cutoffFactor {cutoffFactor}/{fullCutoff}, numTiles {len(tilesLargerThanAverage)}, largestTile {tilePercentile[0].toString()}: {tilePercentile[0].army} army, smallestTile {tilePercentile[-1].toString()}: {tilePercentile[-1].army} army')
-            logEntries.append(f'about to run an optimal expansion for {timeCap:.4f}s max for remainingTurns {remainingTurns}, negatives {str([str(t) for t in negativeTiles])}')
-            if DebugHelper.IS_DEBUGGING:
-                logEntries.append('TILES INCLUDED FROM CURRENT PERCENTILE: ')
-                logEntries.append('\n' + f'\n    '.join([str(t) for t in tilesLargerThanAverage]))
-
-            # hack,  see what happens TODO
-            # tilesLargerThanAverage = where(generalPlayer.tiles, lambda tile: tile.army > 1)
-            # logEntries.append("Filtered for tilesLargerThanAverage with army > {}, found {} of them".format(tilePercentile[-1].army, len(tilesLargerThanAverage)))
-            startDict = {}
-            for i, tile in enumerate(tilesLargerThanAverage):
-                # skip tiles we've already used or intentionally ignored
-                if tile in negativeTiles:
-                    continue
-                # self.mark_tile(tile, 10)
-
-                initVal = initFunc(tile)
-                # pathPriorityDivided, wastedMoves, armyRemaining, pathPriority, distSoFar, tileSetSoFar
-                # 10 because it puts the tile above any other first move tile, so it gets explored at least 1 deep...
-                startDict[tile] = (initVal, 0)
-
-            useGlobalVisited = not forceNoGlobalVisited
-            if forceGlobalVisitedStage1 and not inStage2:
-                useGlobalVisited = True
-            # if remainingTurns < 6:
-            #     useGlobalVisited = False
-            if overrideGlobalVisitedOneCycle:
-                useGlobalVisited = False
-                overrideGlobalVisitedOneCycle = False
-            startCopy = startDict.copy()
-            for tile in negativeTiles:
-                startCopy.pop(tile, None)
-
-            maxDepth = 25
-
-            newPathDict = SearchUtils.breadth_first_dynamic_max_per_tile_per_distance(
-                map,
-                startCopy,
-                valueFunc,
-                searchTime,  # TODO not timeCap because we should find lots at once...?
-                remainingTurns,
-                maxDepth=min(remainingTurns, maxDepth),
-                # maxDepth=remainingTurns,
-                noNeutralCities=True,
-                negativeTiles=negativeTiles,
-                searchingPlayer=searchingPlayer,
-                priorityFunc=priorityFunc,
-                useGlobalVisitedSet=useGlobalVisited,
-                skipFunc=skipFunc,
-                logResultValues=logStuff,
-                fullOnly=False,
-                # fullOnlyArmyDistFunc=fullOnly_func,
-                # boundFunc=boundFunc,
-                noLog=not DebugHelper.IS_DEBUGGING)
-
-            newPaths = []
-            for tile, tilePaths in newPathDict.items():
-                curTileDict = multiPathDict.get(tile, {})
-                anyPathInc = False
-                values = {}
-                for path in tilePaths:
-                    value = postPathEvalFunction(path, negativeTiles)
-                    values[path] = value
-                    vpt = value / path.length
-                    if value >= 0.2 and vpt >= valPerTurnCutoff:
-                        anyPathInc = True
-
-                if anyPathInc:
-                    for path in tilePaths:
-                        visited = set()
-                        value = values[path]
-                        friendlyCityCount = 0
-                        node = path.start
-                        while node is not None:
-                            if node.tile not in negativeTiles and node.tile not in visited:
-                                visited.add(node.tile)
-
-                                if node.tile.player in friendlyPlayers and (
-                                        node.tile.isCity or node.tile.isGeneral):
-                                    friendlyCityCount += 1
-                            node = node.next
-                        existingMax, existingPath = curTileDict.get(path.length, defaultNoPathValue)
-                        if value > existingMax:
-                            node = path.start
-                            while node is not None:
-                                if (node.tile.isGeneral or node.tile.isCity) and node.tile.player == searchingPlayer:
-                                    usage = cityUsages.get(node.tile, 0)
-                                    cityUsages[node.tile] = usage + 1
-                                node = node.next
-                            if existingPath is not None:
-                                logEntries.append(f'path for {str(tile)} BETTER than existing:\r\n      new {value} {str(path)}\r\n   exist {existingMax} {str(existingPath)}')
-                            curTileDict[path.length] = (value, path)
-
-                            # todo dont need this...?
-                            # sortedTiles.remove(path.start.tile)
-                            newPaths.append((value, path))
-                        else:
-                            logEntries.append(f'path for {str(tile)} worse than existing:\r\n      bad {value} {str(path)}\r\n   exist {existingMax} {str(existingPath)}')
-
-                multiPathDict[tile] = curTileDict
-
-            logEntries.append(f'iter complete @ {time.perf_counter() - startTime:.3f} iter {iter[0]} paths {len(newPaths)}')
-
-            oldCutoffFactor = cutoffFactor
-            oldValPerTurnCutoff = valPerTurnCutoff
-            cutoffFactor += 3
-            valPerTurnCutoff = valPerTurnCutoff * valPerTurnCutoffScaledown
-            logEntries.append(
-                f"Cycle complete with {len(newPaths)} paths, remainingTurns {remainingTurns}, incrementing cutoffFactor {oldCutoffFactor}->{cutoffFactor}, valuePerTurnCutoff {oldValPerTurnCutoff:.3f}->{valPerTurnCutoff:.3f}.")
-
-            if len(newPaths) == 0:
-                logEntries.append(
-                    f"No multi path found for remainingTurns {remainingTurns}. Allowing global visited disable for one cycle.")
-                overrideGlobalVisitedOneCycle = True
-            else:
-                for value, path in newPaths:
-                    logEntries.append(f'  new path {value:.2f}v  {value / path.length:.2f}vt  {str(path)}')
-                    add_path_to_try_avoid_paths_crossing_tiles(path, negativeTiles, tryAvoidSet, pathsCrossingTiles, addToNegativeTiles=useIterativeNegTiles)
-                    # for tile in path.tileList:
-                    #     cityUsage = cityUsages.get(tile, 0)
-                    #     if (tile.isCity or tile.isGeneral) and cityUsage < 2 and tile not in originalNegativeTiles:
-                    #         logEntries.append('re-including city for additional usage.')
-                    #         negativeTiles.remove(tile)
-                    #         tryAvoidSet.remove(tile)
-
-            firstIteration = False
+        _include_optimal_expansion_options(
+            map,
+            multiPathDict,
+            generalDistMap,
+            enemyDistMap,
+            territoryMap,
+            targetPlayer,
+            targetPlayers,
+            friendlyPlayers,
+            searchingPlayer,
+            negativeTiles,
+            bonusCapturePointMatrix,
+            tileIslands,
+            enemyDistPenaltyPoint,
+            alwaysIncludes,
+            tryAvoidSet,
+            pathsCrossingTiles,
+            useCutoff,
+            logStuff,
+            logEntries,
+            alwaysIncludeNonTerminatingLeavesInIteration,
+            smallTileExpansionTimeRatio,
+            singleIterationPathTimeCap,
+            time_limit,
+            useIterativeNegTiles,
+            forceNoGlobalVisited,
+            forceGlobalVisitedStage1,
+            postPathEvalFunction,
+            defaultNoPathValue,
+            turns,
+            lengthWeightOffset,
+            viewInfo
+        )
 
         # expansionGather = greedy_backpack_gather(map, tilesLargerThanAverage, turns, None, valueFunc, baseCaseFunc, skipTiles, None, searchingPlayer, priorityFunc, skipFunc = None)
         if allowLeafMoves and leafMoves is not None:
@@ -1479,15 +353,15 @@ def get_optimal_expansion(
                     existingMax, existingPath = curTileDict.get(path.length, defaultNoPathValue)
                     if value > existingMax:
                         logEntries.append(
-                            f'leafMove for {str(leafMove.source)} BETTER than existing:\r\n      new {value} {str(path)}\r\n   exist {existingMax} {str(existingPath)}')
+                            f'leafMove for {str(leafMove.source)} BETTER than existing:\r\n      new {value:.2f} {str(path)}\r\n   exist {existingMax:.2f} {str(existingPath)}')
                         curTileDict[path.length] = (value, path)
                     else:
                         logEntries.append(
-                            f'leafMove for {str(leafMove.source)} worse than existing:\r\n      bad {value} {str(path)}\r\n   exist {existingMax} {str(existingPath)}')
+                            f'leafMove for {str(leafMove.source)} worse than existing:\r\n      bad {value:.2f} {str(path)}\r\n   exist {existingMax:.2f} {str(existingPath)}')
                     multiPathDict[leafMove.source] = curTileDict
 
         if logStuff:
-            logbook.info(f'THE FOLLOWING WILL BE INPUT INTO KNAPSACK:')
+            logEntries.append(f'THE FOLLOWING WILL BE INPUT INTO KNAPSACK:')
             for t, pathsByDist in multiPathDict.items():
                 for dist, (val, p) in pathsByDist.items():
                     logEntries.append(f'input tile {str(t)} val {val:.3f} @ dist {dist}: {str(p)}')
@@ -1499,7 +373,7 @@ def get_optimal_expansion(
                     continue
                 valueOverrides[opt] = (opt.econValue, opt.length)
 
-        path, otherPaths, totalTurns, totalValue = knapsack_multi_paths(
+        path, otherPaths, totalTurns, neutCaps, enCaps, totalValue = knapsack_multi_paths(
             map,
             searchingPlayer,
             friendlyPlayers,
@@ -1512,9 +386,10 @@ def get_optimal_expansion(
             originalNegativeTiles,
             tryAvoidSet,
             viewInfo,
-            valueOverrides)
+            valueOverrides,
+            leafMoves)
 
-        altPath, altOtherPaths, altTotalTurns, altTotalValue = knapsack_multi_paths_no_crossover(
+        altPath, altOtherPaths, altTotalTurns, altNeutCaps, altEnCaps, altTotalValue = knapsack_multi_paths_no_crossover(
             map,
             searchingPlayer,
             friendlyPlayers,
@@ -1527,7 +402,8 @@ def get_optimal_expansion(
             originalNegativeTiles,
             tryAvoidSet,
             viewInfo,
-            valueOverrides)
+            valueOverrides,
+            leafMoves)
 
         if (totalTurns == 0 and altTotalTurns > 0) or (altTotalTurns > 0 and altTotalValue / altTotalTurns > totalValue / totalTurns):
             msg = f'EXP CROSS-KNAP WORSE THAN NON, {altTotalValue}v/{altTotalTurns}t vs {totalValue}v/{totalTurns}t'
@@ -1536,28 +412,27 @@ def get_optimal_expansion(
             else:
                 logbook.warn(msg)
 
-            path = altPath
-            otherPaths = altOtherPaths
-            totalValue = altTotalValue
-            totalTurns = altTotalTurns
+            path, otherPaths, totalTurns, neutCaps, enCaps, totalValue = altPath, altOtherPaths, altTotalTurns, altNeutCaps, altEnCaps, altTotalValue
+
         if viewInfo is not None:
             _add_expansion_to_view_info(path, otherPaths, viewInfo, colors)
 
         tilesInKnapsackOtherThanCurrent = set()
 
-        for curPath in otherPaths:
-            for tile in curPath.tileSet:
-                tilesInKnapsackOtherThanCurrent.add(tile)
-
-        # for p in otherPaths:
+        if path is not None:
+            otherPaths.insert(0, path)
+        plan = RoundPlan(enCaps, neutCaps, path, otherPaths)
 
         if path is None:
             logEntries.append(
-                f"No expansion plan.... :( iterations {iter[0]}, Duration {time.perf_counter() - startTime:.3f}")
-            return path, otherPaths
+                f"No expansion plan.... :( Duration {time.perf_counter() - startTime:.3f}")
+            return plan
 
         logEntries.append(
-            f"EXPANSION PLANNED HOLY SHIT? iterations {iter[0]}, Duration {time.perf_counter() - startTime:.3f}, path {str(path)}")
+            f"EXPANSION PLANNED HOLY SHIT? Duration {time.perf_counter() - startTime:.3f}, \r\n    MAIN path {path}")
+
+        for otherPath in otherPaths:
+            logEntries.append(f'    otherPath {otherPath}')
 
         shouldConsiderMoveHalf = should_consider_path_move_half(
             map,
@@ -1570,7 +445,7 @@ def get_optimal_expansion(
             tilesOnMainPathDist=boardAnalysis.within_core_play_area_threshold)
 
         if not shouldConsiderMoveHalf:
-            return path, otherPaths
+            return plan
 
         if isinstance(path, Path):
             path.start.move_half = True
@@ -1581,10 +456,799 @@ def get_optimal_expansion(
                 path.start.move_half = False
                 value = path.calculate_value(searchingPlayer, map._teams, originalNegativeTiles)
 
-        return path, otherPaths
+        return plan
 
     finally:
         logbook.info('\n'.join(logEntries))
+
+
+def _include_optimal_expansion_options(
+    map,
+    multiPathDict,
+    generalDistMap,
+    enemyDistMap,
+    territoryMap,
+    targetPlayer,
+    targetPlayers,
+    friendlyPlayers,
+    searchingPlayer,
+    negativeTiles,
+    bonusCapturePointMatrix,
+    tileIslands,
+    enemyDistPenaltyPoint,
+    alwaysIncludes,
+    tryAvoidSet,
+    pathsCrossingTiles,
+    useCutoff,
+    logStuff,
+    logEntries,
+    alwaysIncludeNonTerminatingLeavesInIteration,
+    smallTileExpansionTimeRatio,
+    singleIterationPathTimeCap,
+    time_limit,
+    useIterativeNegTiles,
+    forceNoGlobalVisited,
+    forceGlobalVisitedStage1,
+    postPathEvalFunction,
+    defaultNoPathValue,
+    turns,
+    lengthWeightOffset,
+    viewInfo,
+):
+    remainingTurns = turns
+    startTime = time.perf_counter()
+    respectTerritoryMap = map.players[targetPlayer].tileCount // 2 > len(map.players[targetPlayer].tiles)
+    respectTerritoryMap = False
+
+    ourTeam = map._teams[searchingPlayer]
+    targetTeam = map._teams[targetPlayer]
+    tileMinimum = min(20, map.players[searchingPlayer].tileCount // 3)
+    largeIslands = None
+    if targetPlayer >= 0:
+        targetPlayerObj = map.players[targetPlayer]
+        if len(targetPlayerObj.tiles) > 0:
+            tileMinimum = max(tileMinimum, targetPlayerObj.tileCount // 4)
+
+            largeIslands = [i for i in tileIslands.all_tile_islands if i.team == targetTeam and i.tile_count_all_adjacent_friendly > tileMinimum]
+            if len(largeIslands) == 0:
+                tileMinimum = tileMinimum // 2
+                largeIslands = [i for i in tileIslands.all_tile_islands if i.team == targetTeam and i.tile_count_all_adjacent_friendly > tileMinimum]
+
+    if not largeIslands:
+        largeIslands = [i for i in tileIslands.all_tile_islands if i.team == -1 and i.tile_count_all_adjacent_friendly > tileMinimum]
+
+    islandTiles = [t for t in itertools.chain.from_iterable(i.tiles_by_army for i in largeIslands)]
+
+    largeIslandSet = {i for i in largeIslands}
+
+    distanceToLargeIslandsMap = SearchUtils.build_distance_map_matrix(map, islandTiles)
+
+    logEntries.append(f"\n\nAttempting Optimal Expansion (tm) for turns {turns} (lengthWeightOffset {lengthWeightOffset}), negatives {str([str(t) for t in negativeTiles])}:\n")
+    logEntries.append(f'LARGE TILE ISLANDS (targetTeam {targetTeam}) ARE {", ".join([i.name for i in largeIslands])}')
+    generalPlayer = map.players[searchingPlayer]
+    if negativeTiles is None:
+        negativeTiles = set()
+
+    cityUsages = {}
+
+    # TODO be better about this
+    expectedUnseenEnemyTileArmy = 1
+    if turns > 25:
+        expectedUnseenEnemyTileArmy = 2
+    if map.turn > 300:
+        expectedUnseenEnemyTileArmy += 1
+
+    # for tile in skipTiles:
+    #     logEntries.append(f"expansion starting negativeTile: {tile.toString()}")
+
+    # wastedMoveCap = 4
+    wastedMoveCap = min(7, max(3, turns // 4)) + 1
+
+    iter = [0]
+
+    def skip_after_out_of_army(nextTile, nextVal):
+        (
+            distSoFar,
+            prioWeighted,
+            fakeDistSoFar,
+            wastedMoves,
+            tileCapturePoints,
+            negArmyRemaining,
+            enemyTiles,
+            neutralTiles,
+            pathPriority,
+            tileSetSoFar,
+            # adjacentSetSoFar,
+            # enemyExpansionValue,
+            # enemyExpansionTileSet
+            hitIsland,
+        ) = nextVal
+        # skip if out of army, or if we've wasted a bunch of moves already and have nothing to show
+        if negArmyRemaining >= 0 or (wastedMoves > wastedMoveCap and tileCapturePoints > -5):
+            return True
+
+        if nextTile.isCity and nextTile.isNeutral:
+            return True
+
+        return False
+
+    skipFunc = skip_after_out_of_army
+
+    def value_priority_army_dist_basic(currentTile, priorityObject):
+        (
+            distSoFar,
+            prioWeighted,
+            fakeDistSoFar,
+            wastedMoves,
+            tileCapturePoints,
+            negArmyRemaining,
+            enemyTiles,
+            neutralTiles,
+            pathPriority,
+            tileSetSoFar,
+            # adjacentSetSoFar,
+            # enemyExpansionValue,
+            # enemyExpansionTileSet
+            hitIsland,
+        ) = priorityObject
+        # negative these back to positive
+        value = -1000
+        dist = 1
+        if currentTile in negativeTiles or negArmyRemaining >= 0 or distSoFar == 0:
+            return None
+        if map.is_tile_on_team_with(currentTile, searchingPlayer):
+            return None
+
+        if currentTile.isCity and currentTile.isNeutral:
+            return None
+
+        if viewInfo:
+            viewInfo.evaluatedGrid[currentTile.x][currentTile.y] += 1
+
+        if distSoFar > 0 and tileCapturePoints < 0:
+            dist = distSoFar + lengthWeightOffset
+            # negative points for wasted moves until the end of expansion
+            value = 0 - tileCapturePoints  # - 2 * wastedMoves * lengthWeightOffset
+
+        if value <= 0:
+            return None
+
+        valuePerTurn = value / dist
+        # if valuePerTurn < valPerTurnCutoff:
+        #     return None
+
+        # return ((value / (dist + wastedMoves)) - wastedMoves,
+        # return ((value / (dist + wastedMoves)) - wastedMoves / 10,
+        # return ((value / (dist + wastedMoves)),  # ACTUAL ORIG
+        return (
+            value,  # this value is important, if we JUST use valuePerTurn then we wont take neutral tiles after strings of enemy tiles.
+            valuePerTurn,
+            # prioWeighted,
+            # value,
+            0 - negArmyRemaining,
+            # 0 - enemyTiles / dist,
+            # 0,
+            0 - distSoFar
+        )
+
+    valueFunc = value_priority_army_dist_basic
+
+    # def a_starey_value_priority_army_dist(currentTile, priorityObject):
+    #    pathPriorityDivided, wastedMoves, armyRemaining, enemyTiles, neutralTiles, pathPriority, distSoFar, tileSetSoFar, adjacentSetSoFar = priorityObject
+    #    # negative these back to positive
+    #    posPathPrio = 0-pathPriorityDivided
+    #    #return (posPathPrio, 0-armyRemaining, distSoFar)
+    #    return (0-(enemyTiles*2 + neutralTiles) / (max(1, distSoFar)), 0-enemyTiles / (max(1, distSoFar)), posPathPrio, distSoFar)
+
+    ENEMY_EXPANSION_TILE_PENALTY = 0.7
+
+    def default_priority_func_basic(nextTile, currentPriorityObject):
+        (
+            distSoFar,
+            prioWeighted,
+            fakeDistSoFar,
+            wastedMoves,
+            negTileCapturePoints,
+            negArmyRemaining,
+            enemyTiles,
+            neutralTiles,
+            pathPriority,
+            tileSetSoFar,
+            # adjacentSetSoFar,
+            # enemyExpansionValue,
+            # enemyExpansionTileSet
+            hitIsland,
+        ) = currentPriorityObject
+        if hitIsland:
+            return None
+        nextTerritory = territoryMap[nextTile]
+        armyRemaining = 0 - negArmyRemaining
+        distSoFar += 1
+        fakeDistSoFar += 1
+        if nextTile.player == -1 and nextTerritory not in targetPlayers:
+            fakeDistSoFar += 1
+        # weight tiles closer to the target player higher
+
+        armyRemaining -= 1
+
+        if nextTile in tileSetSoFar:
+            return None
+
+        nextTileSet = tileSetSoFar.copy()
+        nextTileSet.add(nextTile)
+
+        # only reward closeness to enemy up to a point then penalize it
+        cutoffEnemyDist = abs(enemyDistMap[nextTile] - enemyDistPenaltyPoint)
+        addedPriority = 3 * (0 - cutoffEnemyDist ** 0.5 + 1)
+
+        # reward away from our general but not THAT far away
+        cutoffGenDist = abs(generalDistMap[nextTile])
+        addedPriority += 3 * (cutoffGenDist ** 0.5 - 1)
+
+        # negTileCapturePoints += cutoffEnemyDist / 100
+        # negTileCapturePoints -= cutoffGenDist / 100
+
+        # releventAdjacents = where(nextTile.adjacents, lambda adjTile: adjTile not in adjacentSetSoFar and adjTile not in tileSetSoFar)
+        if negativeTiles is None or (nextTile not in negativeTiles):
+            if nextTile.player in friendlyPlayers:
+                armyRemaining += nextTile.army
+            else:
+                armyRemaining -= nextTile.army
+        if armyRemaining <= 0:
+            return None
+        # Tiles penalized that are further than 7 tiles from enemy general
+        # tileModifierPreScale = max(8, enemyDistMap[nextTile.x][nextTile.y]) - 8
+        # tileModScaled = tileModifierPreScale / 200
+        # negTileCapturePoints += tileModScaled
+        usefulMove = nextTile not in negativeTiles
+        # enemytiles or enemyterritory undiscovered tiles
+        # isProbablyEnemyTile = (nextTile.isNeutral
+        #                        and not nextTile.visible
+        #                        and nextTerritory in targetPlayers)
+        # if isProbablyEnemyTile:
+        #     armyRemaining -= expectedUnseenEnemyTileArmy
+
+        if (
+                nextTile in tryAvoidSet
+                or nextTile in negativeTiles
+                or nextTile in tileSetSoFar
+        ):
+            # our tiles and non-target enemy tiles get negatively weighted
+            addedPriority -= 1
+            # 0.7
+            usefulMove = False
+            wastedMoves += 0.5
+        elif (
+                targetPlayer != -1
+                and (
+                        nextTile.player in targetPlayers
+                        or (not nextTile.visible and respectTerritoryMap and territoryMap[nextTile] in targetPlayers)
+                )
+        ):
+            # if nextTile.player == -1:
+            #     # these are usually 1 or more army since usually after army bonus
+            #     armyRemaining -= 1
+            addedPriority += 8
+            if nextTile.player != -1:
+                negTileCapturePoints -= 2.0
+                distSoFar -= 0.99
+            else:
+                negTileCapturePoints -= 1.5
+            enemyTiles -= 1
+
+            ## points for locking all nearby enemy tiles down
+            # numEnemyNear = count(nextTile.adjacents, lambda adjTile: adjTile.player in targetPlayers)
+            # numEnemyLocked = count(releventAdjacents, lambda adjTile: adjTile.player in targetPlayers)
+            ##    for every other nearby enemy tile on the path that we've already included in the path, add some priority
+            # addedPriority += (numEnemyNear - numEnemyLocked) * 12
+        elif nextTile.player == -1:
+            # if nextTile.isCity: #TODO and is reasonably placed?
+            #    neutralTiles -= 12
+            # we'd prefer to be killing enemy tiles, yeah?
+            # wastedMoves += 0.2
+            neutralTiles -= 1
+            negTileCapturePoints -= 1
+            # points for capping tiles in general
+            addedPriority += 2
+            # points for taking neutrals next to enemy tiles
+            # numEnemyNear = count(nextTile.movable, lambda adjTile: adjTile not in adjacentSetSoFar and adjTile.player in targetPlayers)
+            # if numEnemyNear > 0:
+            #    addedPriority += 2
+        else:  # our tiles and non-target enemy tiles get negatively weighted
+            addedPriority -= 1
+            # 0.7
+            usefulMove = False
+            wastedMoves += 0.5
+
+        if nextTile in tryAvoidSet:
+            addedPriority -= 5
+            negTileCapturePoints += 0.2
+
+        if bonusCapturePointMatrix is not None:
+            bonusPoints = bonusCapturePointMatrix[nextTile]
+            if bonusPoints < 0.0 or usefulMove:  # for penalized tiles, always apply the penalty. For rewarded tiles, only reward when it is a move that does something.
+                negTileCapturePoints -= bonusPoints
+            if bonusPoints < -10:
+                return None
+
+        iter[0] += 1
+        nextAdjacentSet = None
+        # nextAdjacentSet = adjacentSetSoFar.copy()
+        # for adj in nextTile.adjacents:
+        #    nextAdjacentSet.add(adj)
+        # nextEnemyExpansionSet = enemyExpansionTileSet.copy()
+        nextEnemyExpansionSet = None
+        # deprioritize paths that allow counterplay
+        # for adj in nextTile.movable:
+        #    if adj.army >= 3 and adj.player != searchingPlayer and adj.player != -1 and adj not in skipTiles and adj not in tileSetSoFar and adj not in nextEnemyExpansionSet:
+        #        nextEnemyExpansionSet.add(adj)
+        #        enemyExpansionValue += (adj.army - 1) // 2
+        #        tileCapturePoints += ENEMY_EXPANSION_TILE_PENALTY
+        newPathPriority = pathPriority - addedPriority
+        # newPathPriority = addedPriority
+        # prioPerTurn = newPathPriority/distSoFar
+        prioPerTurn = (negTileCapturePoints) / (distSoFar + wastedMoves)  # - addedPriority / 4
+        # if iter[0] < 50 and fullLog:
+        #     logEntries.append(
+        #         f" - nextTile {str(nextTile)}, waste [{wastedMoves:.2f}], prioPerTurn [{prioPerTurn:.2f}], dsf {distSoFar}, capPts [{negTileCapturePoints:.2f}], negArmRem [{0 - armyRemaining}]\n    eTiles {enemyTiles}, nTiles {neutralTiles}, npPrio {newPathPriority:.2f}, nextTileSet {len(nextTileSet)}\n    nextAdjSet {None}, enemyExpVal {enemyExpansionValue}, nextEnExpSet {None}")
+
+        hitIsland = False
+        if enemyTiles + neutralTiles > 33:
+            island = tileIslands.tile_island_lookup.raw[nextTile.tile_index]
+            if island in largeIslandSet and armyRemaining > 10:
+                logEntries.append(f'HIT ISLAND {island.name} AT TILE {nextTile} WITH {armyRemaining} ARMY, TERMING')
+                hitIsland = True
+
+        return distSoFar, prioPerTurn, fakeDistSoFar, wastedMoves, negTileCapturePoints, 0 - armyRemaining, enemyTiles, neutralTiles, newPathPriority, nextTileSet, hitIsland  # , nextAdjacentSet, enemyExpansionValue, nextEnemyExpansionSet
+
+    priorityFunc = default_priority_func_basic
+
+    # def default_bound_func(currentTile, currentPriorityObject, maxPriorityObject):
+    #     if maxPriorityObject is None:
+    #         return False
+    #     distSoFar, prioWeighted, fakeDistSoFar, wastedMoves, tileCapturePoints, negArmyRemaining, enemyTiles, neutralTiles, pathPriority, tileSetSoFar, adjacentSetSoFar, enemyExpansionValue, enemyExpansionTileSet = currentPriorityObject
+    #     distSoFarMax, prioWeightedMax, fakeDistSoFarMax, wastedMovesMax, tileCapturePointsMax, negArmyRemainingMax, enemyTilesMax, neutralTilesMax, pathPriorityMax, tileSetSoFarMax, adjacentSetSoFarMax, enemyExpansionValueMax, enemyExpansionTileSetMax = maxPriorityObject
+    #     if distSoFarMax <= 3 or distSoFar <= 3:
+    #         return False
+    #     # if wastedMoves > wastedMovesMax * 1.3 + 0.5:
+    #     #     # logEntries.append(
+    #     #     #     f"Pruned {currentTile} via wastedMoves {wastedMoves:.2f}  >  wastedMovesMax {wastedMovesMax:.2f} * 1.2 + 0.4 {wastedMovesMax * 1.2 + 0.4:.3f}")
+    #     #     return True
+    #     thisCapPoints = tileCapturePoints / distSoFar
+    #     maxCapPoints = tileCapturePointsMax / distSoFarMax
+    #     weightedMax = 0.7 * maxCapPoints + 0.01
+    #     if enemyTilesMax + neutralTilesMax > 0 and thisCapPoints > weightedMax:
+    #         logEntries.append(
+    #             f"Pruned {currentTile} via tileCap thisCapPoints {thisCapPoints:.3f}  >  weightedMax {weightedMax:.3f} (maxCapPoints {maxCapPoints:.3f})")
+    #         return True
+    #
+    #     return False
+    #
+    # boundFunc = default_bound_func
+
+    def initial_value_func_default(tile):
+        startingSet = set()
+        startingSet.add(tile)
+        startingAdjSet = set()
+        for adj in tile.adjacents:
+            startingAdjSet.add(adj)
+        startingEnemyExpansionTiles = set()
+        enemyExpansionValue = 0
+        tileCapturePoints = 0
+
+        tileArmy = tile.army
+
+        cityUsage = cityUsages.get(tile, None)
+        if cityUsage is not None:
+            tileArmy = 5
+
+        for adj in tile.movable:
+            if adj.army > 3 and not map.is_tile_on_team_with(adj, searchingPlayer) and adj.player != -1 and adj not in negativeTiles:
+                startingEnemyExpansionTiles.add(adj)
+                enemyExpansionValue += (adj.army - 1) // 2
+                tileCapturePoints += ENEMY_EXPANSION_TILE_PENALTY
+        return 0, -10000, 0, 0, tileCapturePoints, 0 - tileArmy, 0, 0, 0, startingSet, False  # , startingAdjSet, enemyExpansionValue, startingEnemyExpansionTiles
+
+    initFunc = initial_value_func_default
+
+    tileMinValueCutoff = 2
+    sortedByArmyTiles = sorted(
+        list(where(generalPlayer.tiles, lambda tile: tile.army > tileMinValueCutoff and tile not in negativeTiles)),
+        key=lambda tile: (0 - tile.army, distanceToLargeIslandsMap[tile]))
+    if len(sortedByArmyTiles) <= 4:
+        tileMinValueCutoff = 1
+        sortedByArmyTiles = sorted(
+            list(where(generalPlayer.tiles, lambda tile: tile.army > tileMinValueCutoff and tile not in negativeTiles)),
+            key=lambda tile: (0 - tile.army, distanceToLargeIslandsMap[tile]))
+
+    if len(sortedByArmyTiles) == 0:
+        return None, []
+
+    largeToBeConcernedWith = min(10, 1 + map.players[searchingPlayer].tileCount // 10)
+    zoneTiles = (t for t in sortedByArmyTiles[0:largeToBeConcernedWith] if t.army > 4)
+
+    sortedByDistToZoneTiles = sorted(
+        zoneTiles,
+        key=lambda tile: 0 - distanceToLargeIslandsMap[tile])
+
+    logEntries.append(f'sortedByDistToZoneTiles tiles: {" | ".join([f"{t}:{t.army}@{distanceToLargeIslandsMap[t]}" for t in sortedByDistToZoneTiles])}')
+
+    # fullCutoff
+    fullCutoff = 20
+    cutoffFactor = 5
+    valPerTurnCutoff = 0.5
+    valPerTurnCutoffScaledown = 0.6
+    if not useCutoff:
+        cutoffFactor = 20
+        valPerTurnCutoff = 0.25
+        valPerTurnCutoffScaledown = 0.3
+
+    stage1 = time_limit / 4
+    stage2 = time_limit / 2
+    breakStage = 3 * time_limit / 4
+
+    overrideGlobalVisitedOneCycle = False
+    standingArmyGlobalVisitedOverrideThresh = map.players[searchingPlayer].standingArmy
+    linearOffset = 15
+    if standingArmyGlobalVisitedOverrideThresh > linearOffset:
+        standingArmyGlobalVisitedOverrideThresh = linearOffset + (standingArmyGlobalVisitedOverrideThresh - linearOffset) ** 0.75
+
+    if len(sortedByArmyTiles) > 0 and sortedByArmyTiles[0].army >= standingArmyGlobalVisitedOverrideThresh:
+        logEntries.append(f'overriding global visited to False for the first cycle due to large tile {str(sortedByArmyTiles[0])}')
+        overrideGlobalVisitedOneCycle = True
+
+    inStage2 = False
+    firstIteration = True
+    iteration = 0
+
+    delayedAdds = []
+
+    if logStuff:
+        for t, pathsByDist in multiPathDict.items():
+            for dist, (val, p) in pathsByDist.items():
+                logEntries.append(f'pre tile {str(t)} val {val:.3f} @ dist {dist}: {str(p)}')
+
+    breakNextFullCutoff = False
+
+    while True:
+        iteration += 1
+        logEntries.append(f"Main cycle {iteration} iter {iter[0]} start - elapsed {time.perf_counter() - startTime:.4f}")
+        if remainingTurns <= 0:
+            logEntries.append("breaking due to remainingTurns <= 0")
+            break
+
+        if cutoffFactor > fullCutoff:
+            if breakNextFullCutoff or not overrideGlobalVisitedOneCycle:
+                logEntries.append("breaking due to cutoffFactor > fullCutoff")
+                break
+            breakNextFullCutoff = True
+
+        if len(sortedByArmyTiles) == 0:
+            logEntries.append("breaking due to no tiles left in sortedTiles")
+            break
+        timeUsed = time.perf_counter() - startTime
+        logEntries.append(f'EXP iter {iter[0]} time used {timeUsed:.3f}')
+        # Stages:
+        # first 0.1s, use large tiles and shift smaller. (do nothing)
+        # second 0.1s, use all tiles (to make sure our small tiles are included)
+        # third 0.1s - knapsack optimal stuff outside this loop i guess?
+        if timeUsed > stage1 and timeUsed < stage2:
+            logEntries.append(f"timeUsed > {stage1} ({timeUsed})... Breaking loop and knapsacking...")
+        if timeUsed > breakStage and inStage2:
+            logEntries.append(f"timeUsed > {breakStage} ({timeUsed})... breaking and knapsacking...")
+            break
+        if timeUsed > stage2:
+            logEntries.append(
+                f"timeUsed > {stage2} ({timeUsed})... Switching to using all tiles, cutoffFactor = fullCutoff...")
+            inStage2 = True
+            cutoffFactor = fullCutoff
+
+        # startIdx = max(0, ((cutoffFactor - 1) * len(sortedTiles))//fullCutoff)
+        startIdx = 0
+        endIdx = min(len(sortedByArmyTiles), (cutoffFactor * len(sortedByArmyTiles)) // fullCutoff + 1)
+        if endIdx < 3:
+            oldEndIdx = endIdx
+            endIdx = min(len(sortedByArmyTiles), 3)
+            logEntries.append(f'forcing endIdx up from {oldEndIdx} to {endIdx}')
+        logEntries.append(
+            f"startIdx {startIdx} endIdx {endIdx}, where endIdx = min(len(sortedTiles) {len(sortedByArmyTiles)}, (cutoffFactor {cutoffFactor} * len(sortedTiles) {len(sortedByArmyTiles)}) // fullCutoff {fullCutoff} + 1)")
+        tilePercentile = [t for t in sortedByArmyTiles if t not in negativeTiles][startIdx:endIdx]
+        if len(tilePercentile) == 0:
+            cutoffFactor += 3
+            continue
+
+        # # TODO
+        # ogTilePercentile = tilePercentile
+        # tilePercentile = []
+        # for tile in ogTilePercentile:
+        #     tileDist = distanceToLargeIslandsMap[tile]
+        #     skip = False
+        #     for otherTile in sortedByDistToZoneTiles:
+        #         if tile is otherTile:
+        #             continue
+        #
+        #         otherDist = distanceToLargeIslandsMap[otherTile]
+        #         manhatDist = map.manhattan_dist(tile, otherTile)
+        #         if tileDist <= otherDist and manhatDist < 4:
+        #             logEntries.append(f'due to distanceToLargeIslands, eliming {tile} dist {tileDist} due to {otherTile} dist {otherDist} at manhattan {manhatDist}')
+        #             skip = True
+        #             break
+        #
+        #     if skip:
+        #         continue
+        #
+        #     tilePercentile.append(tile)
+        #
+        # if len(tilePercentile) == 0:
+        #     cutoffFactor += 3
+        #     continue
+
+        # filter out the bottom value of tiles (will filter out 1's in the early game, or the remaining 2's, etc)
+        smallTiles = where(
+            tilePercentile,
+            lambda tile: tile.army < 15)
+
+        if len(smallTiles) > len(tilePercentile) - 2:
+            if firstIteration:
+                tilePercentile = where(tilePercentile, lambda t: t.army > tilePercentile[0].army // 2)
+            else:
+                overrideGlobalVisitedOneCycle = True
+
+        tilesLargerThanAverage = tilePercentile
+
+        # if alwaysIncludeNonTerminatingLeavesInIteration and inStage2:
+        if alwaysIncludeNonTerminatingLeavesInIteration and not firstIteration:
+            for tile in alwaysIncludes:
+                if tile not in negativeTiles and tile not in tryAvoidSet:
+                    tilesLargerThanAverage.append(tile)
+
+        timeCap = singleIterationPathTimeCap
+        if inStage2 and smallTileExpansionTimeRatio != 1.0:
+            timeCap = singleIterationPathTimeCap * smallTileExpansionTimeRatio
+
+        searchTime = min(time_limit - timeUsed, singleIterationPathTimeCap)
+
+        logEntries.append(
+            f'cutoffFactor {cutoffFactor}/{fullCutoff}, numTiles {len(tilesLargerThanAverage)}, largestTile {tilePercentile[0].toString()}: {tilePercentile[0].army} army, smallestTile {tilePercentile[-1].toString()}: {tilePercentile[-1].army} army')
+        logEntries.append(f'about to run an optimal expansion for {timeCap:.4f}s max for remainingTurns {remainingTurns}, negatives {str([str(t) for t in negativeTiles])}')
+        if DebugHelper.IS_DEBUGGING:
+            logEntries.append('TILES INCLUDED FROM CURRENT PERCENTILE: ')
+            logEntries.append('\n' + f'\n    '.join([str(t) for t in tilesLargerThanAverage]))
+
+        # hack,  see what happens TODO
+        # tilesLargerThanAverage = where(generalPlayer.tiles, lambda tile: tile.army > 1)
+        # logEntries.append("Filtered for tilesLargerThanAverage with army > {}, found {} of them".format(tilePercentile[-1].army, len(tilesLargerThanAverage)))
+        startDict = {}
+        for i, tile in enumerate(tilesLargerThanAverage):
+            # skip tiles we've already used or intentionally ignored
+            if tile in negativeTiles:
+                continue
+            # self.mark_tile(tile, 10)
+
+            initVal = initFunc(tile)
+            # pathPriorityDivided, wastedMoves, armyRemaining, pathPriority, distSoFar, tileSetSoFar
+            # 10 because it puts the tile above any other first move tile, so it gets explored at least 1 deep...
+            startDict[tile] = (initVal, 0)
+
+        useGlobalVisited = not forceNoGlobalVisited
+        if forceGlobalVisitedStage1 and not inStage2:
+            useGlobalVisited = True
+        # if remainingTurns < 6:
+        #     useGlobalVisited = False
+        if overrideGlobalVisitedOneCycle:
+            useGlobalVisited = False
+            overrideGlobalVisitedOneCycle = False
+        startCopy = startDict.copy()
+        for tile in negativeTiles:
+            startCopy.pop(tile, None)
+
+        maxDepth = 25
+
+        newPathDict = SearchUtils.breadth_first_dynamic_max_per_tile_per_distance(
+            map,
+            startCopy,
+            valueFunc,
+            searchTime,  # TODO not timeCap because we should find lots at once...?
+            remainingTurns,
+            maxDepth=min(remainingTurns, maxDepth),
+            # maxDepth=remainingTurns,
+            noNeutralCities=True,
+            negativeTiles=negativeTiles,
+            searchingPlayer=searchingPlayer,
+            priorityFunc=priorityFunc,
+            useGlobalVisitedSet=useGlobalVisited,
+            skipFunc=skipFunc,
+            logResultValues=logStuff,
+            fullOnly=False,
+            # fullOnlyArmyDistFunc=fullOnly_func,
+            # boundFunc=boundFunc,
+            noLog=not DebugHelper.IS_DEBUGGING)
+
+        testTile = map.GetTile(2, 19)
+        testOtherTile = map.GetTile(2, 18)
+        testTilePaths = newPathDict.get(testTile, None)
+        testOtherTilePaths = newPathDict.get(testOtherTile, None)
+
+        if testTilePaths is not None or testOtherTilePaths is not None:
+            pass
+
+        newPaths = []
+        for tile, tilePaths in newPathDict.items():
+            curTileDict = multiPathDict.get(tile, {})
+            anyPathInc = False
+            values = {}
+            for path in tilePaths:
+                value = postPathEvalFunction(path, negativeTiles)
+                values[path] = value
+                vpt = value / path.length
+                if value >= 0.2 and vpt >= valPerTurnCutoff:
+                    anyPathInc = True
+
+            if anyPathInc:
+                for path in tilePaths:
+                    visited = set()
+                    value = values[path]
+                    friendlyCityCount = 0
+                    node = path.start
+                    reachedIsland: TileIsland | None = tileIslands.tile_island_lookup.raw[path.tail.tile.tile_index]
+                    if reachedIsland not in largeIslandSet:
+                        reachedIsland = None
+                    # else:
+                    #     while reachedIsland.full_island:
+                    #         reachedIsland = reachedIsland.full_island
+
+                    while node is not None:
+                        nodeIsland = tileIslands.tile_island_lookup.raw[node.tile.tile_index]
+                        # TODO
+                        # islandInSet = nodeIsland in largeIslandSet
+                        islandInSet = False
+                        if node.tile not in negativeTiles and (islandInSet or node.tile not in visited):
+                            # TODO?
+                            # if not islandInSet:
+                            visited.add(node.tile)
+
+                            if node.tile.player in friendlyPlayers and (
+                                    node.tile.isCity or node.tile.isGeneral):
+                                friendlyCityCount += 1
+                        node = node.next
+
+                    remainingArmy = path.value
+                    curDist = path.length
+                    hasRemaining = True
+                    fullIsland: TileIsland | None = None
+                    tilesInIsland = []
+                    if reachedIsland:
+                        tilesInIsland = reachedIsland.tiles_by_army
+                        fullIsland = reachedIsland
+                        while fullIsland.full_island:
+                            fullIsland = fullIsland.full_island
+                    # skip the 2 largest tiles, idk
+                    tilesInIslandIdx = 2
+                    curValue = value
+
+                    islandCapValue = 2.2
+                    if reachedIsland and reachedIsland.team == -1:
+                        islandCapValue = 1.0
+
+                    while hasRemaining:
+                        existingMax, existingPath = curTileDict.get(curDist, defaultNoPathValue)
+                        if curValue > existingMax:
+                            path.econValue = curValue
+                            node = path.start
+                            while node is not None:
+                                if (node.tile.isGeneral or node.tile.isCity) and node.tile.player == searchingPlayer:
+                                    usage = cityUsages.get(node.tile, 0)
+                                    cityUsages[node.tile] = usage + 1
+                                node = node.next
+                            if existingPath is not None:
+                                logEntries.append(f'path for {str(tile)} dist {curDist} BETTER than existing:\r\n      new {curValue:.3f} {str(path)}\r\n   exist {existingMax:.3f} {str(existingPath)}')
+                            curTileDict[curDist] = (curValue, path)
+
+                            # todo dont need this...?
+                            # sortedTiles.remove(path.start.tile)
+                            newPaths.append((curValue, path))
+                        elif logStuff:
+                            logEntries.append(f'path for {str(tile)} dist {curDist} worse than existing:\r\n      bad {curValue:.3f} {str(path)}\r\n   exist {existingMax:.3f} {str(existingPath)}')
+                        if tilesInIslandIdx >= len(tilesInIsland):
+                            tilesInIslandIdx = 0
+                            if reachedIsland and reachedIsland.full_island:
+                                reachedIsland = reachedIsland.full_island
+                                # skip the 4 largest tiles, idk
+                                tilesInIsland = reachedIsland.tiles_by_army[7:]
+                            else:
+                                break
+
+                        nextTile = tilesInIsland[tilesInIslandIdx]
+                        curValue = curValue + islandCapValue
+                        remainingArmy -= nextTile.army + 1
+                        if remainingArmy < 1:
+                            break
+                        if curDist > turns:
+                            break
+
+                        if reachedIsland:
+                            path = path.clone()
+                            closest = None
+                            for t in path.tail.tile.movable:
+                                if t not in path.tileSet and t in fullIsland.tile_set and (closest is None or enemyDistMap[closest] > enemyDistMap[t]):
+                                    closest = t
+
+                            if not closest:
+                                closest = path.tail.prev.tile
+
+                            path.add_next(closest)
+                            path.value = remainingArmy
+
+                        tilesInIslandIdx += 1
+                        curDist += 1
+
+            multiPathDict[tile] = curTileDict
+
+        logEntries.append(f'iter complete @ {time.perf_counter() - startTime:.3f} iter {iter[0]} paths {len(newPaths)}')
+
+        oldCutoffFactor = cutoffFactor
+        oldValPerTurnCutoff = valPerTurnCutoff
+        cutoffFactor += 3
+        valPerTurnCutoff = valPerTurnCutoff * valPerTurnCutoffScaledown
+        logEntries.append(
+            f"Cycle complete with {len(newPaths)} paths, remainingTurns {remainingTurns}, incrementing cutoffFactor {oldCutoffFactor}->{cutoffFactor}, valuePerTurnCutoff {oldValPerTurnCutoff:.3f}->{valPerTurnCutoff:.3f}.")
+
+        if len(newPaths) == 0:
+            logEntries.append(
+                f"No multi path found for remainingTurns {remainingTurns}. Allowing global visited disable for one cycle.")
+            overrideGlobalVisitedOneCycle = True
+        else:
+            for value, path in newPaths:
+                logEntries.append(f'  new path {value:.2f}v  {value / path.length:.2f}vt  {str(path)}')
+                shouldDelay = _check_should_delay(map, path, distanceToLargeIslandsMap, sortedByDistToZoneTiles, negativeTiles, tryAvoidSet, logEntries)
+
+                if shouldDelay:
+                    delayedAdds.append(path)
+                else:
+                    add_path_to_try_avoid_paths_crossing_tiles(path, negativeTiles, tryAvoidSet, pathsCrossingTiles, addToNegativeTiles=useIterativeNegTiles)
+                # for tile in path.tileList:
+                #     cityUsage = cityUsages.get(tile, 0)
+                #     if (tile.isCity or tile.isGeneral) and cityUsage < 2 and tile not in originalNegativeTiles:
+                #         logEntries.append('re-including city for additional usage.')
+                #         negativeTiles.remove(tile)
+                #         tryAvoidSet.remove(tile)
+
+        firstIteration = False
+
+    logEntries.append(f'TOTAL DELAYED ADDS: {len(delayedAdds)}')
+    for delayedAdd in delayedAdds:
+        if DebugHelper.IS_DEBUGGING or logStuff:
+            logEntries.append(f'  delayed add: {delayedAdd}')
+        add_path_to_try_avoid_paths_crossing_tiles(delayedAdd, negativeTiles, tryAvoidSet, pathsCrossingTiles, addToNegativeTiles=useIterativeNegTiles)
+
+
+def _check_should_delay(
+        map: MapBase,
+        path: Path,
+        distanceToLargeIslandsMap: MapMatrix[int],
+        sortedByDistToZoneTiles: typing.List[Tile],
+        negativeTiles: typing.Set[Tile],
+        tryAvoidSet: typing.Set[Tile],
+        logEntries: typing.List[str]
+) -> bool:
+    tile = path.start.tile
+    tileDist = distanceToLargeIslandsMap[tile]
+    skip = False
+    for otherTile in sortedByDistToZoneTiles:
+        if tile is otherTile:
+            continue
+
+        otherDist = distanceToLargeIslandsMap[otherTile]
+        manhatDist = map.manhattan_dist(tile, otherTile)
+        if tileDist > otherDist:
+            break
+
+        if manhatDist < 4:
+            logEntries.append(f'    due to distanceToLargeIslands, bypass {tile} dist {tileDist} due to {otherTile} dist {otherDist} at manhattan {manhatDist}')
+            skip = True
+            break
+
+    return skip
 
 
 def _include_leaf_moves_in_exp_plan(
@@ -1916,6 +1580,553 @@ def _execute_expansion_gather_to_borders(
     return paths
 
 
+def path_has_cities_and_should_wait(
+        path: TilePlanInterface | None,
+        friendlyPlayers,
+        negativeTiles: typing.Set[Tile],
+        territoryMap: MapMatrix[int],
+        remainingTurns: int
+) -> bool:
+    cityCount = 0
+    for t in path.tileList:
+        if (t.isCity or t.isGeneral) and t.player in friendlyPlayers:
+            cityCount += 1
+
+    if cityCount == 0:
+        return False
+
+    # if path.length >= remainingTurns:
+    #     return False
+
+    # TODO get better about this later
+    assumeTerritoryTileValue = 1
+    if remainingTurns > 20:
+        # assume 2's, otherwise assume 1s
+        assumeTerritoryTileValue = 2
+
+    pathWorstCaseTurns = 0
+    curArmy = 0
+    turn = 0
+    worstCaseArmy = 0
+    for tile in path.tileList:
+        tileRealArmyCost = tile.army
+        tileArmyCost = tileRealArmyCost
+        if tile.player in friendlyPlayers:
+            tileRealArmyCost = 0 - tile.army
+        elif tile.isNeutral:
+            tileArmyCost = tileRealArmyCost
+            tileProbPlayer = territoryMap[tile]
+            if tileProbPlayer == -1:
+                for m in tile.adjacents:
+                    if not m.isNeutral:
+                        tileProbPlayer = m.player
+
+            if not tile.discovered and tileProbPlayer != -1:
+                tileArmyCost += assumeTerritoryTileValue
+
+        nextWorstCaseArmy = worstCaseArmy - tileRealArmyCost + 1
+        nextArmy = curArmy - tileArmyCost + 1
+
+        if curArmy > 0 and nextArmy <= 0 and pathWorstCaseTurns == 0:
+            pathWorstCaseTurns = turn
+
+        curArmy = nextArmy
+        worstCaseArmy = nextWorstCaseArmy
+        turn += 1
+    #
+    # if worstCaseArmy > 2:
+    #     cappable = []
+    #     for movable in path.tail.tile.movable:
+    #         if movable.isObstacle or movable.army > worstCaseArmy - 2 or movable in negativeTiles:
+    #             continue
+    #         if movable.player not in friendlyPlayers:
+    #             cappable.append(movable)
+    #     if len(cappable) > 0:
+    #         if DebugHelper.IS_DEBUGGING:
+    #             logbook.info(f'  WORST CASE END ARMY {worstCaseArmy} (realArmy {curArmy}) CAN CAP MORE TILES, RETURNING FALSE ({str(path)})')
+    #         return False
+
+    if pathWorstCaseTurns != path.length and DebugHelper.IS_DEBUGGING:
+        logbook.info(f'  WORST CASE TURNS {pathWorstCaseTurns} < path len {path.length} ({str(path)})')
+
+    return True
+
+
+def _group_expand_paths_by_crossovers(
+    pathsCrossingTiles: typing.Dict[Tile, typing.List[TilePlanInterface]],
+    multiTilePlanInterfaceDict: typing.Dict[Tile, typing.Dict[int, typing.Tuple[float, TilePlanInterface]]],
+    groupPruneThreshold: int
+) -> typing.Dict[int, typing.List[TilePlanInterface]]:
+    pathGroupLookup = {}
+    #
+    # allPaths = []
+    # combinedTurnLengths = 0
+    # for tile in multiPathDict.keys():
+    #     for val, p in multiPathDict[tile].values():
+    #         allPaths.append((val, p))
+    #         combinedTurnLengths += p.length
+    # logbook.info(
+    #     f'EXP MULT KNAP {len(multiPathDict)} grps, {len(allPaths)} paths, {remainingTurns} turns, combinedPathLengths {combinedTurnLengths}:')
+    # for val, p in allPaths:
+    #     logbook.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
+    #
+    allPaths = []
+    # initially group by starting tile
+    # i = 0
+    # for pathList in pathsCrossingTiles.values():
+    #     for path in pathList:
+    #         pathGroupLookup[path] = i
+    #     allPaths.extend(pathList)
+    #     i += 1
+
+    i = 0
+    for tile, distDict in multiTilePlanInterfaceDict.items():
+        for dist, (value, path) in distDict.items():
+            allPaths.append(path)
+            pathGroupLookup[path] = i
+            i += 1
+
+    logbook.info(f'LEN ALLPATHS {len(allPaths)}')
+
+    for path in allPaths:
+        groupNumber = pathGroupLookup[path]
+        _merge_path_groups_recurse(groupNumber, path, pathGroupLookup, pathsCrossingTiles)
+
+    pathsGrouped: typing.Dict[int, typing.Set[TilePlanInterface]] = {}
+    for path in allPaths:
+        groupNumber = pathGroupLookup[path]
+        groupList = pathsGrouped.get(groupNumber, set())
+        groupList.add(path)
+        if len(groupList) == 1:
+            pathsGrouped[groupNumber] = groupList
+
+    final = {}
+    for g, pathSet in pathsGrouped.items():
+        if len(pathSet) > groupPruneThreshold:
+            # If the group is pretty big, we would never pick a low value dist 4 over a high value dist 4, so prune those immediately.
+            lookupByDist = {}
+            for path in pathSet:
+                existing = lookupByDist.get(path.length, None)
+                if not existing or existing.econValue < path.econValue:
+                    lookupByDist[path.length] = path
+
+            final[g] = list(lookupByDist.values())
+        else:
+            final[g] = list(pathSet)
+
+    return final
+
+
+def _merge_path_groups_recurse(
+        groupNumber: int,
+        path: TilePlanInterface,
+        pathGroupLookup: typing.Dict[TilePlanInterface, int],
+        pathsCrossingTiles: typing.Dict[Tile, typing.List[TilePlanInterface]]):
+    crossedGroups = set()
+    for tile in path.tileList[0:10]:
+        for crossedPath in pathsCrossingTiles[tile]:
+            if crossedPath == path:
+                continue
+            # if crossedPath.tileList[-1] in path.tileSet or path.tileList[-1] in crossedPath.tileSet:
+            #     continue
+
+            crossedPathGroup = pathGroupLookup.get(crossedPath, None)
+            if crossedPathGroup is None:
+                # logbook.info(f'skipping missing pathGroup for {crossedPath}')
+                continue
+
+            if groupNumber == crossedPathGroup:
+                continue
+
+            if crossedPathGroup in crossedGroups:
+                continue
+
+            if DebugHelper.IS_DEBUGGING:
+                logbook.info(f'path g{groupNumber} {str(path)}  @tile {tile}\r\n  crosses path g{crossedPathGroup} {str(crossedPath)}, converting')
+            pathGroupLookup[crossedPath] = groupNumber
+            crossedGroups.add(crossedPathGroup)
+            _merge_path_groups_recurse(groupNumber, crossedPath, pathGroupLookup, pathsCrossingTiles)
+
+
+def _get_tile_path_value(
+        map: MapBase,
+        tile,
+        lastTile,
+        negativeTiles,
+        targetPlayers,
+        searchingPlayer,
+        enemyDistMap,
+        generalDistMap,
+        territoryMap,
+        enemyDistPenaltyPoint,
+        bonusCapturePointMatrix: MapMatrix[float] | None):
+    value = 0.0
+    if tile in negativeTiles:
+        value -= 0.1
+        # or do nothing?
+    else:
+
+        if tile.player in targetPlayers:
+            value += 2.1
+        elif not tile.discovered and territoryMap[tile] in targetPlayers:
+            value += 1.45
+        elif not tile.visible and territoryMap[tile] in targetPlayers:
+            value += 1.2
+        elif tile.player == -1:
+            value += 1.0
+        elif map.is_player_on_team_with(searchingPlayer, tile.player):
+            value -= 0.2 / max(1, (1 + tile.army))
+
+        # if tile.visible:
+        #     value += 0.02
+        # el
+        if not tile.discovered:
+            value += 0.01
+        if bonusCapturePointMatrix is not None:
+            value += bonusCapturePointMatrix[tile]
+
+        # elif lastTile is not None and tile.player == searchingPlayer:
+        #     value -= 0.05
+
+        sourceEnDist = enemyDistMap[lastTile]
+        destEnDist = enemyDistMap[tile]
+        sourceGenDist = generalDistMap[lastTile]
+        destGenDist = generalDistMap[tile]
+
+        sourceDistSum = sourceEnDist + sourceGenDist
+        destDistSum = destEnDist + destGenDist
+
+        if destDistSum >= enemyDistPenaltyPoint:
+            if destDistSum < sourceDistSum:
+                # logbook.info(f"move {str(last)}->{str(tile)} was TOWARDS shortest path")
+                value += 0.01
+
+        if destDistSum == sourceDistSum:
+            # logbook.info(f"move {str(last)}->{str(tile)} was flanking parallel to shortest path")
+            value += 0.01
+
+        if abs(destEnDist - destGenDist) <= abs(sourceEnDist - sourceGenDist):
+            valueAdd = abs(destEnDist - destGenDist) / 200
+            # logbook.info(
+            #     f"move {last.toString()}->{tile.toString()} was moving towards the center, valuing it {valueAdd} higher")
+            value += valueAdd
+    return value
+
+
+def add_path_to_try_avoid_paths_crossing_tiles(
+        path: TilePlanInterface,
+        negativeTiles: typing.Set[Tile],
+        tryAvoidSet: typing.Set[Tile],
+        pathsCrossingTiles: typing.Dict[Tile, typing.List[TilePlanInterface]],
+        addToNegativeTiles = False,
+):
+    for t in path.tileSet:
+        tryAvoidSet.add(t)
+        if addToNegativeTiles:
+            negativeTiles.add(t)
+        tileCrossList = pathsCrossingTiles.get(t, [])
+        tileCrossList.append(path)
+        if len(tileCrossList) == 1:
+            pathsCrossingTiles[t] = tileCrossList
+
+
+def move_can_cap_more(leafMove: Move) -> bool:
+    """Returns whether a leafmove could continue capping tiles, or is a final cap."""
+    capAmt = leafMove.source.army - leafMove.dest.army - 1
+    canCapMoreOnPathWithNoSplit = False
+    for nextCap in leafMove.dest.movable:
+        if nextCap == leafMove.source:
+            continue
+        if nextCap.player != leafMove.source.player and capAmt - 1 > nextCap.army:
+            canCapMoreOnPathWithNoSplit = True
+            break
+
+    return canCapMoreOnPathWithNoSplit
+
+
+def knapsack_multi_paths(
+        map: MapBase,
+        searchingPlayer: int,
+        friendlyPlayers,
+        targetPlayers,
+        remainingTurns: int,
+        pathsCrossingTiles,
+        multiPathDict: typing.Dict[Tile, typing.Dict[int, typing.Tuple[float, TilePlanInterface]]],
+        territoryMap: MapMatrix[int],
+        postPathEvalFunction: typing.Callable[[Path, typing.Set[Tile]], float],
+        negativeTiles: typing.Set[Tile],
+        tryAvoidSet: typing.Set[Tile],
+        viewInfo: ViewInfo | None,
+        valueOverrides: typing.Dict[TilePlanInterface, typing.Tuple[float, int]] | None = None,
+        leafMoves: typing.List[Move] | None = None,
+) -> typing.Tuple[TilePlanInterface | None, typing.List[TilePlanInterface], int, int, int, int]:
+    """
+    Returns firstPath, allPaths, totalTurns, tileValues, totalValue
+
+    @param map:
+    @param searchingPlayer:
+    @param friendlyPlayers:
+    @param targetPlayers
+    @param remainingTurns:
+    @param pathsCrossingTiles:
+    @param multiPathDict:
+    @param territoryMap:
+    @param postPathEvalFunction:
+    @param negativeTiles:
+    @param tryAvoidSet:
+    @param viewInfo:
+    @param valueOverrides: path->(value, dist)
+    @param leafMoves: optionally include leafMoves. Will be used to backfill any gaps in the knapsack
+    @return:
+    """
+    startTime = time.perf_counter()
+    tilePathGroupsRebuilt: typing.Dict[int, typing.List[TilePlanInterface]] = _group_expand_paths_by_crossovers(
+        pathsCrossingTiles,
+        multiPathDict,
+        groupPruneThreshold=min(remainingTurns, 20))
+
+    allPaths = []
+    combinedTurnLengths = 0
+    groupsWithPaths = 0
+    for grp, paths in tilePathGroupsRebuilt.items():
+        if len(paths) > 0:
+            groupsWithPaths += 1
+
+    for tile in multiPathDict.keys():
+        pathValues = multiPathDict[tile].values()
+        for val, p in pathValues:
+            allPaths.append((val, p))
+            combinedTurnLengths += p.length
+    logbook.info(
+        f'EXP MULT KNAP {groupsWithPaths} grps, {len(allPaths)} paths, {remainingTurns} turns, combinedPathLengths {combinedTurnLengths} (used {time.perf_counter() - startTime:.4f}s):')
+    startTime = time.perf_counter()
+    if DebugHelper.IS_DEBUGGING:
+        for val, p in allPaths:
+            dist = p.length
+            if valueOverrides is not None:
+                tpl = valueOverrides.get(p, None)
+                if tpl is not None:
+                    floatVal, dist = tpl
+            logbook.info(f'    INPUT {val:.2f} dist {dist}: {str(p)}')
+
+    enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed, visited = extract_paths_from_knapsack_groups(
+        map,
+        searchingPlayer,
+        friendlyPlayers,
+        targetPlayers,
+        remainingTurns,
+        tilePathGroupsRebuilt,
+        negativeTiles,
+        postPathEvalFunction,
+        territoryMap,
+        tryAvoidSet,
+        valueOverrides,
+        leafMoves)
+
+    logbook.info(
+        f'MEXPX en{enemyCapped} neut{neutralCapped} {turnsUsed}/{remainingTurns}t {totalValue}v num paths {len(maxPaths)} (used {time.perf_counter() - startTime:.4f}s)')
+    otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, negativeTiles) / pa.length, reverse=True)]
+
+    return path, otherPaths, turnsUsed, neutralCapped, enemyCapped, totalValue
+
+
+def get_multiple_choice_expansion_knapsack_val_converter(valueOverrides, postPathEvalFunction, negativeTiles):
+    def multiple_choice_knapsack_expansion_path_value_converter(p: TilePlanInterface) -> typing.Tuple[int, int]:
+        floatVal = -10000
+        dist = p.length
+        if valueOverrides is not None:
+            tpl = valueOverrides.get(p, None)
+            if tpl is not None:
+                floatVal, dist = tpl
+
+        if floatVal == -10000:
+            floatVal = postPathEvalFunction(p, negativeTiles)
+
+        intVal = int(floatVal * 10000.0)
+        return intVal, dist
+
+    valFunc = multiple_choice_knapsack_expansion_path_value_converter
+    return valFunc
+
+
+def knapsack_multi_paths_no_crossover(
+        map: MapBase,
+        searchingPlayer: int,
+        friendlyPlayers: typing.List[int],
+        targetPlayers: typing.List[int],
+        remainingTurns: int,
+        pathsCrossingTiles,
+        multiPathDict: typing.Dict[Tile, typing.Dict[int, typing.Tuple[float, TilePlanInterface]]],
+        territoryMap: MapMatrix[int],
+        postPathEvalFunction: typing.Callable[[Path, typing.Set[Tile]], float],
+        negativeTiles: typing.Set[Tile],
+        tryAvoidSet: typing.Set[Tile],
+        viewInfo: ViewInfo | None,
+        valueOverrides: typing.Dict[TilePlanInterface, typing.Tuple[float, int]] | None = None,
+        leafMoves: typing.List[Move] | None = None
+) -> typing.Tuple[TilePlanInterface | None, typing.List[TilePlanInterface], int, int, int, int]:
+    """
+    Returns firstPath, allPaths, totalTurns, tileValues, totalValue
+
+    @param map:
+    @param searchingPlayer:
+    @param friendlyPlayers:
+    @param targetPlayers
+    @param remainingTurns:
+    @param pathsCrossingTiles:
+    @param multiPathDict:
+    @param territoryMap:
+    @param postPathEvalFunction:
+    @param negativeTiles:
+    @param tryAvoidSet:
+    @param viewInfo:
+    @param valueOverrides: path->(value, dist)
+    @param leafMoves: optionally include leafMoves. Will be used to backfill any gaps in the knapsack
+    @return:
+    """
+    startTime = time.perf_counter()
+
+    allPaths = []
+    groupsWithPaths = 0
+    groups = {}
+
+    # group cityPaths by first tile captured, instead
+    cityPaths = {}
+
+    for tile, pathsByDist in multiPathDict.items():
+        if len(pathsByDist) == 0:
+            continue
+
+        groupsWithPaths += 1
+        groupPaths = []
+
+        for dist, pathTuple in pathsByDist.items():
+            val, p = pathTuple
+
+            # if (tile.isCity or tile.isGeneral) and p.length < 5:
+            if (tile.isCity or tile.isGeneral) and dist < remainingTurns // 2:
+                # if coming from a city, group by the first tile captured instead of by the city itself...?
+                groupTile = tile
+                for t in p.tileSet:
+                    if not map.is_player_on_team_with(tile.player, t.player):
+                        groupTile = t
+                        break
+
+                existingGroup = groups.get(groupTile, [])
+                existingGroup.append(p)
+
+                groups[groupTile] = existingGroup
+
+                continue
+
+            groupPaths.append(p)
+
+        groups[tile] = groupPaths
+
+    combinedTurnLengths = 0
+    for tile in multiPathDict.keys():
+        pathValues = multiPathDict[tile].values()
+        for val, p in pathValues:
+            allPaths.append((val, p))
+            combinedTurnLengths += p.length
+    logbook.info(
+        f'EXP MULT NO CROSS KNAP {groupsWithPaths} grps, {len(allPaths)} paths, {remainingTurns} turns, combinedPathLengths {combinedTurnLengths} (used {time.perf_counter() - startTime:.4f}s):')
+    startTime = time.perf_counter()
+    if DebugHelper.IS_DEBUGGING:
+        for val, p in allPaths:
+            logbook.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
+
+    enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed, visited = extract_paths_from_knapsack_groups(
+        map,
+        searchingPlayer,
+        friendlyPlayers,
+        targetPlayers,
+        remainingTurns,
+        groups,
+        negativeTiles,
+        postPathEvalFunction,
+        territoryMap,
+        tryAvoidSet,
+        valueOverrides,
+        leafMoves)
+
+    logbook.info(
+        f'MEXPNX en{enemyCapped} neut{neutralCapped} {turnsUsed}/{remainingTurns}t {totalValue}v num paths {len(maxPaths)} (used {time.perf_counter() - startTime:.4f}s)')
+
+    otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, negativeTiles) / pa.length, reverse=True)]
+
+    return path, otherPaths, turnsUsed, neutralCapped, enemyCapped, totalValue
+
+
+def extract_paths_from_knapsack_groups(
+        map,
+        searchingPlayer,
+        friendlyPlayers,
+        targetPlayers,
+        remainingTurns,
+        groups,
+        negativeTiles,
+        postPathEvalFunction,
+        territoryMap,
+        tryAvoidSet,
+        valueOverrides,
+        leafMoves: typing.List[Move],
+):
+    valFunc = get_multiple_choice_expansion_knapsack_val_converter(valueOverrides, postPathEvalFunction, negativeTiles)
+
+    totalValue, maxPaths = expansion_knapsack_gather_iteration(
+        remainingTurns,
+        groups,
+        shouldLog=DebugHelper.IS_DEBUGGING,
+        valueFunc=valFunc
+    )
+
+    path = find_optimal_expansion_path_to_move_first(
+        map,
+        maxPaths,
+        tryAvoidSet,
+        negativeTiles,
+        postPathEvalFunction,
+        remainingTurns,
+        searchingPlayer,
+        friendlyPlayers,
+        territoryMap,
+        valueOverrides)
+
+    otherPaths = [p for p in maxPaths if p != path]
+
+    turnsUsed, enemyCapped, neutralCapped, visited = _get_capture_counts(
+        searchingPlayer,
+        friendlyPlayers,
+        targetPlayers,
+        path,
+        otherPaths,
+        negativeTiles,
+        valueOverrides,
+        leafMoves)
+
+    return enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed, visited
+
+
+def _add_expansion_to_view_info(path: TilePlanInterface, otherPaths: typing.List[TilePlanInterface], viewInfo: ViewInfo, colors: typing.Tuple[int, int, int]):
+    r, g, b = colors
+    for curPath in otherPaths:
+        if viewInfo:
+            # draw other paths darker
+            alpha = 190
+            minAlpha = 100
+            alphaDec = 5
+            viewInfo.paths.appendleft(PathColorer(curPath, max(0, r-40), max(0, g-40), max(0, b-40), alpha, alphaDec, minAlpha))
+
+    # draw maximal path brighter
+    alpha = 255
+    minAlpha = 200
+    alphaDec = 0
+    if viewInfo:
+        # viewInfo.paths = deque(where(viewInfo.paths, lambda pathCol: pathCol.path != path))
+        viewInfo.paths.appendleft(PathColorer(path, r, g, b, alpha, alphaDec, minAlpha))
+
+
 def _try_include_alt_sourced_path(
         map: MapBase,
         searchingPlayer: int,
@@ -1980,9 +2191,10 @@ def _get_capture_counts(
         otherPaths: typing.List[TilePlanInterface],
         negativeTiles: typing.Set[Tile],
         valueOverrides: typing.Dict[TilePlanInterface, typing.Tuple[float, int]] | None = None,
-) -> typing.Tuple[int, int, int]:
+        leafMoves: typing.List[Move] | None = None
+) -> typing.Tuple[int, int, int, typing.Set[Tile]]:
     """
-    Returns (turnsUsed, enemyCaptured, neutralCaptured). Negative tiles dont count towards the sums but do count towards turns used.
+    Returns (turnsUsed, enemyCaptured, neutralCaptured, visited). Negative tiles dont count towards the sums but do count towards turns used.
 
     @param mainPath:
     @param otherPaths:
@@ -2001,14 +2213,17 @@ def _get_capture_counts(
     enemyCapped = 0
     neutralCapped = 0
     turnsUsed = 0
+    removedTurns = 0
+
+    candidateRemoves = []
+
     for path in allPaths:
         pTurnsUsed = -1  # first tile in a path doesn't count
         pNeutCap = 0
         pEnCap = 0
         validTiles = 0
-        if isinstance(path, InterceptionOptionInfo) and path.tileList[0].x == 13 and path.tileList[0].y == 7:
-            pass
-        for tile in path.tileSet:
+
+        for tile in path.tileList:
             pTurnsUsed += 1
             if tile in visitedByPaths:
                 continue
@@ -2024,7 +2239,98 @@ def _get_capture_counts(
                 else:
                     pEnCap += 1
 
-        if validTiles > 0 and valueOverrides is not None:
+        if validTiles == 0:
+            logbook.info(f'COMPLETELY BAD PATH {path} WILL BE PRUNED, pTurnsUsed {pTurnsUsed}, pNeutCap {pNeutCap}, pEnCap {pEnCap}')
+            removedTurns += path.length
+            try:
+                otherPaths.remove(path)
+                continue
+            except:
+                logbook.error(f'unable to remove path {path}...???? {traceback.format_exc()}')
+                pass  # uh oh, it was path? lol
+
+        if validTiles < 2 * path.length // 3 and (pNeutCap + 2 * pEnCap) / pTurnsUsed < 1.0:
+            candidateRemoves.append((pTurnsUsed, pNeutCap, pEnCap, validTiles, path))
+            continue
+        elif validTiles > 0 and valueOverrides is not None:
+            # bake in support for input plans like intercepts that achieve value greater than what their included tiles would indicate. Convert missing value into enemy tile captures
+            overrides = valueOverrides.get(path, None)
+            if overrides is not None:
+                overVal, overTurns = overrides
+                # if overrides is not None:
+                # overVal = path.value
+                # overTurns = path.length
+                totalCapSoFar = pEnCap * 2 + pNeutCap
+                missing = int(overVal - totalCapSoFar)
+                if missing > 0:
+                    pEnCap += missing // 2
+
+                pTurnsUsed = overTurns
+
+        turnsUsed += pTurnsUsed
+        neutralCapped += pNeutCap
+        enemyCapped += pEnCap
+
+    if leafMoves:
+        leafIdx = 0
+        while removedTurns > 0 and leafIdx < len(leafMoves):
+            move = leafMoves[leafIdx]
+            if move.source not in visited and move.dest not in visited:
+                logbook.info(f'subbing in leafmove {move} in place of bad move paths')
+                newPath = Path()
+                newPath.add_next(move.source)
+                newPath.add_next(move.dest)
+                if move.dest.player == -1:
+                    newPath.econValue = 1.0
+                    neutralCapped += 1
+                else:
+                    newPath.econValue = 2.0
+                    enemyCapped += 1
+                turnsUsed += 1
+                visited.add(move.source)
+                visited.add(move.dest)
+                otherPaths.append(newPath)
+                removedTurns -= 1
+            leafIdx += 1
+
+        for (pTurnsUsed, pNeutCap, pEnCap, validTiles, path) in sorted(candidateRemoves):
+            leavesToAdd = []
+            while len(leavesToAdd) < pTurnsUsed and leafIdx < len(leafMoves):
+                move = leafMoves[leafIdx]
+                if move.source not in visited and move.dest not in visited:
+                    logbook.info(f'MAYBE subbing in leafmove {move} in place of bad move path len {pTurnsUsed}')
+                    leavesToAdd.append(move)
+                    visited.add(move.source)
+                    visited.add(move.dest)
+                leafIdx += 1
+
+            if len(leavesToAdd) == path.length:
+                logbook.info(f'WHOO SUBBING OUT BAD PATH WITH LEAFMOVES! Bad path len {pTurnsUsed} {path.get_first_move().source}')
+                try:
+                    otherPaths.remove(path)
+                    continue
+                except:
+                    logbook.error(f'unable to remove path {path}...???? {traceback.format_exc()}')
+                    pass  # uh oh, it was path? lol
+                for move in leavesToAdd:
+                    newPath = Path()
+                    newPath.add_next(move.source)
+                    newPath.add_next(move.dest)
+                    if move.dest.player == -1:
+                        newPath.econValue = 1.0
+                        neutralCapped += 1
+                    else:
+                        newPath.econValue = 2.0
+                        enemyCapped += 1
+
+                    turnsUsed += 1
+                    visited.add(move.source)
+                    visited.add(move.dest)
+                    otherPaths.append(newPath)
+                    continue
+
+            if validTiles > 0 and valueOverrides is not None:
+                # bake in support for input plans like intercepts that achieve value greater than what their included tiles would indicate. Convert missing value into enemy tile captures
                 overrides = valueOverrides.get(path, None)
                 if overrides is not None:
                     overVal, overTurns = overrides
@@ -2037,18 +2343,12 @@ def _get_capture_counts(
                         pEnCap += missing // 2
 
                     pTurnsUsed = overTurns
-        elif validTiles == 0:
-            logbook.info(f'COMPLETELY BAD PATH {path} SHOULD BE PRUNED, pTurnsUsed {pTurnsUsed}, pNeutCap {pNeutCap}, pEnCap {pEnCap}')
-            try:
-                otherPaths.remove(path)
-            except:
-                pass   # uh oh, it was path? lol
 
-        turnsUsed += pTurnsUsed
-        neutralCapped += pNeutCap
-        enemyCapped += pEnCap
+            turnsUsed += pTurnsUsed
+            neutralCapped += pNeutCap
+            enemyCapped += pEnCap
 
-    return turnsUsed, enemyCapped, neutralCapped
+    return turnsUsed, enemyCapped, neutralCapped, visited
 
 
 def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: TilePlanInterface, originalNegativeTiles: typing.Set[Tile]) -> float:
@@ -2146,7 +2446,8 @@ def find_optimal_expansion_path_to_move_first(
 
 def _prune_worst_paths_greedily(
         valuePerTurnPathPerTile: typing.Dict[typing.Any, typing.List[Path]],
-        valueFunc: typing.Callable[[Path], typing.Tuple[int, int]]
+        valueFunc: typing.Callable[[Path], typing.Tuple[int, int]],
+        attempt: int,
 ) -> typing.Dict[typing.Any, typing.List[Path]]:
     sum = 0
     count = 0
@@ -2157,9 +2458,11 @@ def _prune_worst_paths_greedily(
             count += 1
     avg = sum / count
 
-    cutoff = avg - 0.15
+    cutoff = avg - 0.40 / attempt
+    logbook.info(f'dropping everything below {cutoff:.4f}')
 
     newDict = {}
+    newCount = 0
     for group in valuePerTurnPathPerTile.keys():
         pathListByGroup = valuePerTurnPathPerTile[group]
         newListByGroup = []
@@ -2167,9 +2470,102 @@ def _prune_worst_paths_greedily(
             value, dist = valueFunc(path)
             valPerTurn = value / dist
             if valPerTurn > cutoff:
+                newCount += 1
                 newListByGroup.append(path)
         if len(newListByGroup) > 0:
             newDict[group] = newListByGroup
+
+    logbook.info(f'Pruned from {count} paths down to {newCount} paths')
+
+    return newDict
+
+
+def _prune_worst_paths_greedily__shorter_bias(
+        valuePerTurnPathPerTile: typing.Dict[typing.Any, typing.List[Path]],
+        valueFunc: typing.Callable[[Path], typing.Tuple[int, int]],
+        attempt: int,
+) -> typing.Dict[typing.Any, typing.List[Path]]:
+    sum = 0
+    count = 0
+    for group in valuePerTurnPathPerTile.keys():
+        for path in valuePerTurnPathPerTile[group]:
+            value, dist = valueFunc(path)
+            sum += value / dist
+            count += 1
+
+    avg = sum / count
+
+    cutoff = avg - 0.60 / attempt
+    logbook.info(f'dropping everything below {cutoff:.4f}')
+
+    newDict = {}
+    newCount = 0
+    for group in valuePerTurnPathPerTile.keys():
+        pathListByGroup = valuePerTurnPathPerTile[group]
+        newListByGroup = []
+        for path in pathListByGroup:
+            value, dist = valueFunc(path)
+            # this causes us to bias pruning the longest (but lower value) paths first
+            if dist > 7:
+                newDist = 7 + ((dist - 7) ** 1.05)
+                logbook.info(f'  dist increased from {dist} to {newDist:.2f} when weighting avg')
+                dist = newDist
+            valPerTurn = value / dist
+            if valPerTurn > cutoff:
+                newCount += 1
+                newListByGroup.append(path)
+        if len(newListByGroup) > 0:
+            newDict[group] = newListByGroup
+
+    logbook.info(f'Pruned from {count} paths down to {newCount} paths')
+
+    return newDict
+
+
+def _prune_worst_paths__two_thirds_median(
+        valuePerTurnPathPerTile: typing.Dict[typing.Any, typing.List[Path]],
+        valueFunc: typing.Callable[[Path], typing.Tuple[int, int]],
+        attempt: int,
+) -> typing.Dict[typing.Any, typing.List[Path]]:
+    count = 0
+    all = []
+    for group in valuePerTurnPathPerTile.keys():
+        for path in valuePerTurnPathPerTile[group]:
+            value, dist = valueFunc(path)
+            newDist = dist
+            vt = value / dist
+            weightVt = vt
+            if dist > 7:
+                newDist = 7 + ((dist - 7) ** 1.05)
+                weightVt = value / newDist
+                logbook.info(f'  dist increased from {dist} to {newDist:.2f} when weighting value per turn, resulting in {vt:.3f}->{weightVt:.3f}')
+            # IF YOU CHANGE ORDER OF TUPLE CHANGE cutoff=allSorted INDEXING BELOW
+            all.append((weightVt, vt, 0 - dist, path))
+            count += 1
+
+    allSorted = sorted(all, reverse=True)
+    cutoff = allSorted[2 * len(allSorted) // 3][0]
+    logbook.info(f'dropping everything below {cutoff:.4f}')
+
+    newDict = {}
+    newCount = 0
+    for group in valuePerTurnPathPerTile.keys():
+        pathListByGroup = valuePerTurnPathPerTile[group]
+        newListByGroup = []
+        for path in pathListByGroup:
+            value, dist = valueFunc(path)
+            # this causes us to bias pruning the longest (but lower value) paths first
+            if dist > 7:
+                newDist = 7 + ((dist - 7) ** 1.05)
+                dist = newDist
+            valPerTurn = value / dist
+            if valPerTurn >= cutoff:
+                newCount += 1
+                newListByGroup.append(path)
+        if len(newListByGroup) > 0:
+            newDict[group] = newListByGroup
+
+    logbook.info(f'Pruned from {count} paths down to {newCount} paths')
 
     return newDict
 
@@ -2177,6 +2573,7 @@ def _prune_worst_paths_greedily(
 def expansion_knapsack_gather_iteration(
         turns: int,
         valuePerTurnPathPerTile: typing.Dict[typing.Any, typing.List[TilePlanInterface]],
+        # logEntries: typing.List[str],
         shouldLog: bool = False,
         valueFunc: typing.Callable[[TilePlanInterface], typing.Tuple[int, int]] | None = None,
 ) -> typing.Tuple[int, typing.List[TilePlanInterface]]:
@@ -2186,7 +2583,7 @@ def expansion_knapsack_gather_iteration(
 
     error = True
     attempts = 0
-    while error and attempts < 4:
+    while error and attempts < 5:
         attempts += 1
         try:
             # build knapsack weights and values
@@ -2227,7 +2624,7 @@ def expansion_knapsack_gather_iteration(
             error = False
         except AssertionError as ex:
             logbook.error(f'OVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE. v\r\n{str(ex)}\r\nOVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE. ^ ')
-            valuePerTurnPathPerTile = _prune_worst_paths_greedily(valuePerTurnPathPerTile, valueFunc)
+            valuePerTurnPathPerTile = _prune_worst_paths__two_thirds_median(valuePerTurnPathPerTile, valueFunc, attempts)
 
     return totalValue, sorted(maxKnapsackedPaths, key=lambda p: pathValLookup[p] / max(1, p.length), reverse=True)
 

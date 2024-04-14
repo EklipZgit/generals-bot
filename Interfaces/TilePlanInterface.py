@@ -61,4 +61,4 @@ class TilePlanInterface(ABC):
     def __lt__(self, other) -> bool:
         if other is None:
             return True
-        return self.econValue < other.econ_value
+        return self.econValue < other.econValue

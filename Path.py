@@ -373,7 +373,10 @@ class Path(TilePlanInterface):
             nodeStrs.append(f'{node.tile.x},{node.tile.y}{"" if not half else "z"}')
             half = node.move_half
             node = node.next
-        return f"[{self.value} len {self.length}] {' -> '.join(nodeStrs)}"
+        valStr = ''
+        if self.econValue != 0.0:
+            valStr = f' {self.econValue:.2f}v'
+        return f"[{self.value}a{valStr} {self.length}t] {' -> '.join(nodeStrs)}"
 
     def toString(self) -> str:
         return str(self)

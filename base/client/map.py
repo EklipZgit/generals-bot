@@ -899,6 +899,8 @@ class MapBase(object):
             for tile in row:
                 yield tile
 
+    def manhattan_dist(self, tileA: Tile, tileB: Tile) -> int:
+        return abs(tileA.x - tileB.x) + abs(tileA.y - tileB.y)
 
     def GetTile(self, x, y) -> typing.Union[None, Tile]:
         if x < 0 or x >= self.cols or y < 0 or y >= self.rows:

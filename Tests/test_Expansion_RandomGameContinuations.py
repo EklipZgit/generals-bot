@@ -1,5 +1,5 @@
 import typing
-from ExpandUtils import get_optimal_expansion
+from ExpandUtils import get_round_plan_with_expansion
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from Tests.TestBase import TestBase
@@ -26,7 +26,7 @@ class ExpansionTests(TestBase):
 
         self.begin_capturing_logging()
         self.enable_search_time_limits_and_disable_debug_asserts()
-        path, otherPaths = get_optimal_expansion(
+        path, otherPaths = get_round_plan_with_expansion(
             bot._map,
             general.player,
             targetPlayer,

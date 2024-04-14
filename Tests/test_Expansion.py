@@ -4,7 +4,7 @@ import typing
 import DebugHelper
 import ExpandUtils
 import SearchUtils
-from ExpandUtils import get_optimal_expansion
+from ExpandUtils import get_round_plan_with_expansion
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from Tests.TestBase import TestBase
@@ -65,7 +65,7 @@ class ExpansionTests(TestBase):
         self.begin_capturing_logging()
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        path, otherPaths = get_optimal_expansion(
+        path, otherPaths = get_round_plan_with_expansion(
             bot._map,
             searchingPlayer=bot.player.index,
             targetPlayer=bot.targetPlayer,
@@ -512,7 +512,7 @@ bot_target_player=1
         # 16 mv 2 en 3 neut if down+right
         # 4 remaining = 1 neut, so total 2 en, 4 neut in 20 moves is possible.
         finalTileDiff = self.get_tile_differential(simHost, general.player)
-        self.assertEqual(finalTileDiff - initDifferential, 12, "should be able to eek this much differential out of this AT LEAST. Change the assert if greater is found.")
+        self.assertEqual(12, finalTileDiff - initDifferential, "should be able to eek this much differential out of this AT LEAST. Change the assert if greater is found.")
 
     def test_should_attack_in_to_opponent_after_launch(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1420,16 +1420,6 @@ bot_target_player=1
         with self.subTest(careLess=True):
             self.assertTileDifferentialGreaterThan(5, simHost, 'See convoluted proof above. +6 is POSSIBLE, though hard to calculate this. Heuristically, dont break up tile lines, instead see how much you can gather to the recapture line before end.')
 
-# 15f-23p-2s totally original
-# 17f-21p RE 19-19 minus the self-tile-penalty
-# 15f-23p-2s self-tile-penalty 0.2 instead of 0.5
-# 16f-22p-2s with cutoff
-# 17f-21p-2s no cutoff
-# 14-24 with cutoff tweak
-# 15-23 with revamp of including all paths from tile if any path from tile meets value per turn cutoff
-# 13-25 ^ but rolled back early one?
-# 25f 30p
-
     def test_should_not_expand_into_general__pre_split(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_dive_few_fog_tiles_when_cannot_kill__actual___Je4XxW4D9---1--76.txtmap'
@@ -1566,3 +1556,68 @@ bot_target_player=1
         self.assertIsNone(winner)
 
         self.assertTileDifferentialGreaterThan(9, simHost)
+
+    def test_should_launch_full_army_if_launching__maximize_army_per_turn_caps__full_run(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_launch_full_army_if_launching,_maximize_army_per_turn_caps___Cq4LFDNyO---0--109.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 109, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=109)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # THIS IS ALL PROOF THAT THIS IS THE RIGHT CHOICE
+        #proof ACTUALLY LAUNCH IS BAD LMAO, only gets 43
+        # simHost.queue_player_moves_str(general.player, '0,19->2,19->2,18->4,18->4,17->8,17->8,16->11,16->11,15->13,15->13,18')
+        # proof launch is bad, non-launch:
+        # simHost.queue_player_moves_str(general.player, '2,19->2,18->4,18->4,17->8,17->8,16->11,16->11,15->13,15->13,18')  # force us not to find opponent, to make test consistent
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=41)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTileDifferentialGreaterThan(43, simHost, 'should spend the whole damn time capping tiles and pull from corner.')
+        self.assertTileDifferentialGreaterThan(44, simHost, 'shouldnt move leafmove into the capture-path of the main push, wasting a move')
+
+    def test_should_launch_full_army_if_launching__maximize_army_per_turn_caps(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_launch_full_army_if_launching,_maximize_army_per_turn_caps___Cq4LFDNyO---0--109.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 109, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=109)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # SEE PREVIOUS TEST FOR PROOF OF PLAN
+
+        # really though, we should just have pulling the 2,19 tile out into the open as part of the expansion plan, and have a full plan.
+        shouldMoveFirstTile = playerMap.GetTile(2, 19)
+        self.begin_capturing_logging()
+        # DebugHelper.IS_DEBUGGING = True
+        move = bot.find_move()
+        planOpts = SearchUtils.where(bot.expansion_plan.all_paths, lambda p: p.get_first_move().source == shouldMoveFirstTile)
+        if len(planOpts) != 1:
+            self.fail(f'found {len(planOpts)} plan options that started with the 2,19 tile.')
+
+        plan = planOpts[0]
+        nextMove = plan.get_first_move()
+        self.assertEqual(playerMap.GetTile(2, 18), nextMove.dest)
+        self.assertTrue(move.dest.player == -1 or move.source == shouldMoveFirstTile)
+        self.assertGreater(plan.econValue / plan.length, 0.7)
+        self.assertEqual(41, bot.expansion_plan.turns_used)
+
+# 15f-23p-2s totally original
+# 17f-21p RE 19-19 minus the self-tile-penalty
+# 15f-23p-2s self-tile-penalty 0.2 instead of 0.5
+# 16f-22p-2s with cutoff
+# 17f-21p-2s no cutoff
+# 14-24 with cutoff tweak
+# 15-23 with revamp of including all paths from tile if any path from tile meets value per turn cutoff
+# 13-25 ^ but rolled back early one?
+# 25f 30p

@@ -24,6 +24,7 @@ class TileIslandBuilderUnitTests(TestBase):
         # bot.info_render_tile_deltas = True
         # bot.info_render_army_emergence_values = True
         # bot.info_render_general_undiscovered_prediction_values = True
+        bot.info_render_tile_islands = True
 
         return bot
 

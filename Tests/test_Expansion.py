@@ -1621,3 +1621,4 @@ bot_target_player=1
 # 15-23 with revamp of including all paths from tile if any path from tile meets value per turn cutoff
 # 13-25 ^ but rolled back early one?
 # 25f 30p
+# 26f 49p 2s

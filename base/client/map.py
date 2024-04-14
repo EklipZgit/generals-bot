@@ -6,6 +6,8 @@
 """
 from __future__ import annotations
 
+from copy import deepcopy
+
 import logbook
 import random
 import typing
@@ -767,8 +769,9 @@ class MapBase(object):
         for p, t in enumerate(self._teams):
             if t != -1:
                 self.players[p].team = t
-        self._teammates_by_player = [[p.index for p in self.players if p.team == t] for t in self._teams]
+        self._teammates_by_player: typing.List[typing.List[int]] = [[p.index for p in self.players if p.team == t] for t in self._teams]
         self._teammates_by_player[-1].append(-1)  # neutrals only teammate is neutral
+        self._teammates_by_player_no_self: typing.List[typing.List[int]] = [[p.index for p in self.players if p.team == t if p.index != pIdx] for pIdx, t in enumerate(self._teams)]
         self._teammates_by_team = [[p.index for p in self.players if p.team == i] for i in range(max(self._teams) + 2)]  # +2 so we have an entry for each time ID AND -1
         self._teammates_by_team[-1].append(-1)  # neutrals only teammate is neutral
         self._team_stats: typing.List[TeamStats | None] = [None for i in range(max(self._teams) + 2)]  # +2 so we have an entry for each time ID AND -1
@@ -2809,8 +2812,20 @@ class MapBase(object):
     def get_teammates(self, player: int) -> typing.List[int]:
         """
         INCLUDES the player that was requested in the output.
+        DO NOT MODIFY the resulting list.
         """
         return self._teammates_by_player[player]
+
+    def get_teammates_no_self(self, player: int) -> typing.List[int]:
+        """
+        DOES NOT include the player that was requested in the output. So in an FFA or 1v1, the returned list will always be empty.
+        DO NOT MODIFY the resulting list.
+        """
+        return self._teammates_by_player_no_self[player]
+
+    def clone(self) -> MapBase:
+        newMap = deepcopy(self)
+        return newMap
 
 
 class Map(MapBase):

@@ -158,7 +158,7 @@ def dest_breadth_first_target(
         noLog=True,
         additionalIncrement: float = 0.0,
         preferCapture: bool = False
-) -> typing.Union[None, Path]:
+) -> Path | None:
     """
     Gets a path that results in {targetArmy} army on one of the goalList tiles.
     GoalList can be a dict that maps from start tile to (startDist, goalTargetArmy)
@@ -1191,7 +1191,7 @@ def breadth_first_dynamic_max(
                     skip = skipFunc(next, nextVal) if not includePath else skipFunc(next, nextVal, nodeList)
                     if skip:
                         continue
-                newNodeList = list(nodeList)
+                newNodeList = nodeList.copy()
                 newNodeList.append((next, nextVal))
                 frontier.put((nextVal, dist, next, current, newNodeList))
     if not noLog:
@@ -1235,6 +1235,7 @@ def breadth_first_dynamic_max(
     matrixStart = 0 if not priorityMatrixSkipStart else 1
     matrixEndOffset = -1 if not priorityMatrixSkipEnd else 0
 
+    # TODO this needs to change to .econValue...?
     if priorityMatrix:
         for tile in pathObject.tileList[matrixStart:pathObject.length - matrixEndOffset]:
             pathObject.value += priorityMatrix[tile]

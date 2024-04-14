@@ -97,6 +97,7 @@ class TestBase(unittest.TestCase):
         general.army = 1
         map.player_index = general.player
         map.generals[general.player] = general
+        map.players[general.player].tiles = [general]
 
         return map, general
 

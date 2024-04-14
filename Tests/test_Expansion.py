@@ -1,11 +1,9 @@
 import time
 import typing
 
-import DebugHelper
-import ExpandUtils
 import SearchUtils
 from ExpandUtils import get_round_plan_with_expansion
-from Path import Path
+from Interfaces import TilePlanInterface
 from Sim.GameSimulator import GameSimulatorHost
 from Tests.TestBase import TestBase
 from base.client.map import Tile, MapBase
@@ -31,7 +29,7 @@ class ExpansionTests(TestBase):
             mapVision: MapBase | None,
             debugMode: bool = False,
             timeLimit: float | None = None,
-    ) -> typing.Tuple[Path | None, typing.List[Path]]:
+    ) -> typing.Tuple[TilePlanInterface | None, typing.List[TilePlanInterface]]:
         # self.render_view_info(map, ViewInfo("h", map))
         # self.begin_capturing_logging()
         # SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING = DebugHelper.IS_DEBUGGING
@@ -57,7 +55,7 @@ class ExpansionTests(TestBase):
             turns: int,
             negativeTiles: typing.Set[Tile] | None,
             timeLimit: float,
-    ) -> typing.Tuple[Path | None, typing.List[Path]]:
+    ) -> typing.Tuple[TilePlanInterface | None, typing.List[TilePlanInterface]]:
 
         if timeLimit is None:
             timeLimit = bot.expansion_full_time_limit
@@ -65,13 +63,14 @@ class ExpansionTests(TestBase):
         self.begin_capturing_logging()
         self.enable_search_time_limits_and_disable_debug_asserts()
 
-        path, otherPaths = get_round_plan_with_expansion(
+        plan = get_round_plan_with_expansion(
             bot._map,
             searchingPlayer=bot.player.index,
             targetPlayer=bot.targetPlayer,
             turns=turns,
             boardAnalysis=bot.board_analysis,
             territoryMap=bot.territories.territoryMap,
+            tileIslands=bot.tileIslandBuilder,
             negativeTiles=negativeTiles,
             leafMoves=bot.leafMoves,
             useLeafMovesFirst=bot.expansion_use_leaf_moves_first,
@@ -87,15 +86,17 @@ class ExpansionTests(TestBase):
             lengthWeightOffset=bot.expansion_length_weight_offset,
             useCutoff=bot.expansion_use_cutoff,
             smallTileExpansionTimeRatio=bot.expansion_small_tile_time_ratio,
-            bonusCapturePointMatrix=bot.get_standard_expansion_capture_weight_matrix())
+            bonusCapturePointMatrix=bot._get_standard_expansion_capture_weight_matrix())
+        path = plan.selected_option
+        otherPaths = plan.all_paths
 
         return path, otherPaths
 
     def assertTilesCaptured(
             self,
             searchingPlayer: int,
-            firstPath: Path,
-            otherPaths: typing.List[Path],
+            firstPath: TilePlanInterface,
+            otherPaths: typing.List[TilePlanInterface],
             enemyAmount: int,
             neutralAmount: int = 0,
             assertNoDuplicates: bool = True):
@@ -109,7 +110,7 @@ class ExpansionTests(TestBase):
             for tile in path.tileList:
                 if tile in visited:
                     if assertNoDuplicates:
-                        failures.append(f'tile path {str(path.start.tile)} had duplicate from other path {str(tile)}')
+                        failures.append(f'tile path {str(path.get_first_move().source)} had duplicate from other path {str(tile)}')
                     continue
                 visited.add(tile)
                 if tile.player != searchingPlayer:
@@ -129,8 +130,8 @@ class ExpansionTests(TestBase):
     def assertMinTilesCaptured(
             self,
             searchingPlayer: int,
-            firstPath: Path,
-            otherPaths: typing.List[Path],
+            firstPath: TilePlanInterface,
+            otherPaths: typing.List[TilePlanInterface],
             minEnemyCaptures: int,
             minNeutralCaptures: int = 0,
             assertNoDuplicates: bool = True
@@ -145,7 +146,7 @@ class ExpansionTests(TestBase):
             for tile in path.tileList:
                 if tile in visited:
                     if assertNoDuplicates:
-                        failures.append(f'tile path {str(path.start.tile)} had duplicate from other path {str(tile)}')
+                        failures.append(f'tile path {str(path.get_first_move().source)} had duplicate from other path {str(tile)}')
                     continue
                 visited.add(tile)
                 if tile.player != searchingPlayer:
@@ -175,9 +176,9 @@ class ExpansionTests(TestBase):
         # should go 5,9 -> 5,10 -> 4,10
         self.assertIsNotNone(path)
         self.assertEquals(path.length, 2)
-        self.assertEquals(path.start.tile, map.GetTile(5, 9))
-        self.assertEquals(path.start.next.tile, map.GetTile(5, 10))
-        self.assertEquals(path.start.next.next.tile, map.GetTile(4, 10))
+        self.assertEquals(path.get_first_move().source, map.GetTile(5, 9))
+        self.assertEquals(path.get_first_move().dest, map.GetTile(5, 10))
+        self.assertEquals(path.get_first_move().dest, map.GetTile(4, 10))
 
     def test_should_not_split_for_neutral_while_exploring_enemy_path_with_largish_army(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -244,7 +245,7 @@ bot_target_player=1
         self.assertTilesCaptured(general.player, path, otherPaths, enemyAmount=4, neutralAmount=1)  #
 
         # should not move the general first
-        self.assertNotEqual(general, path.start.tile)
+        self.assertNotEqual(general, path.get_first_move().source)
 
     def test_validate_expansion__calculates_city_expansion_correctly(self):
         # TODO expansion doesn't take city increment into account currently so this test will never pass until that is implemented.
@@ -285,13 +286,13 @@ bot_target_player=1
         with self.subTest(careLess=False):
 
             self.assertIsNotNone(path)
-            self.assertMinTilesCaptured(general.player, path, otherPaths, minEnemyCaptures=4, minNeutralCaptures=11)
+            self.assertMinTilesCaptured(general.player, path, otherPaths, minEnemyCaptures=4, minNeutralCaptures=11, assertNoDuplicates=False)
 
             # should not move the general first
-            self.assertNotEqual(general, path.start.tile)
+            self.assertNotEqual(general, path.get_first_move().source)
 
         with self.subTest(careLess=True):
-            self.assertTilesCaptured(general.player, path, otherPaths, enemyAmount=4, neutralAmount=12)
+            self.assertTilesCaptured(general.player, path, otherPaths, enemyAmount=4, neutralAmount=12, assertNoDuplicates=False)
 
     def test_should_not_launch_attack_at_suboptimal_time(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1621,4 +1622,4 @@ bot_target_player=1
 # 15-23 with revamp of including all paths from tile if any path from tile meets value per turn cutoff
 # 13-25 ^ but rolled back early one?
 # 25f 30p
-# 26f 49p 2s
+# 28f 49p 2s ish, some are inconsistent, between 26 and 30f

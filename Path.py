@@ -381,6 +381,16 @@ class Path(TilePlanInterface):
     def toString(self) -> str:
         return str(self)
 
+    def to_move_string(self):
+        node = self.start
+        nodeStrs = []
+        half = False
+        while node is not None:
+            nodeStrs.append(f'{node.tile.x},{node.tile.y}{"" if not half else "z"}')
+            half = node.move_half
+            node = node.next
+        return '->'.join(nodeStrs)
+
     def __repr__(self) -> str:
         return str(self)
 

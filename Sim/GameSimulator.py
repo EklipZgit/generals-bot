@@ -337,7 +337,7 @@ class GameSimulator(object):
         for row in self.sim_map.grid:
             for mapTile in row:
                 updated = False
-                if self.turn % 2 == 0 and (mapTile.isGeneral or (mapTile.isCity and not mapTile.isNeutral)):
+                if self.turn & 1 == 0 and (mapTile.isGeneral or (mapTile.isCity and not mapTile.isNeutral)):
                     mapTile.army += 1
                     updated = True
 
@@ -485,6 +485,13 @@ class GameSimulatorHost(object):
         self.init_only: bool = botInitOnly
         self.do_not_notify_bot_on_move_overrides: bool = False
         """If set to True, the bot will not be notified when its move is updated by queue_player_moves allowing the simulation of laggy moves / dropped moves from the bots perspective."""
+
+        self.simulated_excess_move_time_wasted_by_player: typing.List[float] = [0.0 for player in map.players]
+        self.update_receive_lag: float = 0.005
+        self.turn_real_time_simulated_update_interval: float = 0.5
+        """No matter what rate the sim is running at, we use this as the 'pretend' time between updates (so no matter the sim rate, if a player spends 2 seconds on a move, it drops 4 turns)"""
+        self.force_lag_turn_even_with_debugger: bool = False
+        """Set to true to force 'lag turns' for long running calculations even when the debugger is attached. Only set to True when debugging lag-move-handling code."""
 
         self.bot_hosts: typing.List[BotHostBase | None] = [None for player in self.sim.players]
         self.dropped_move_counts_by_player: typing.List[int] = [0 for player in self.sim.players]
@@ -816,21 +823,37 @@ class GameSimulatorHost(object):
         for playerIndex, botHost in enumerate(self.bot_hosts):
             player = self.sim.players[playerIndex]
 
-            if not player.dead and not player.index in self.forced_afk_players:
+            if not player.dead and playerIndex not in self.forced_afk_players:
+                timeWaste = self.simulated_excess_move_time_wasted_by_player[playerIndex]
+                timeWaste -= self.turn_real_time_simulated_update_interval
+                if timeWaste < self.update_receive_lag:
+                    timeWaste = self.update_receive_lag
+                else:
+                    logbook.info(f'player{playerIndex} wasted {timeWaste:.3f} of their next moves time.')
+                self.simulated_excess_move_time_wasted_by_player[playerIndex] = timeWaste
+
+                if DebugHelper.IS_DEBUGGING and not self.force_lag_turn_even_with_debugger and timeWaste > self.update_receive_lag:
+                    logbook.info(f'OVERRIDING timeWaste from {timeWaste:.3f} to {self.update_receive_lag:.3f} due to debugger')
+                    timeWaste = self.update_receive_lag
+
                 moveStart = time.perf_counter()
                 try:
                     if not self.init_only:
-                        botHost.make_move(player.map, updateReceivedTime=time.time_ns() / NS_CONVERTER)
+                        botHost.make_move(player.map, updateReceivedTime=time.time_ns() / NS_CONVERTER - timeWaste)  # - timeWaste simulates roll-over lag from moves that took too long to calculate. THIS IMPACTS DEBUGGING, HOWEVER, SO WE SET TO 0 WITH DEBUGGER ATTACHED.
                     else:
-                        botHost.receive_update_no_move(player.map, updateReceivedTime=time.time_ns() / NS_CONVERTER)
+                        botHost.receive_update_no_move(player.map, updateReceivedTime=time.time_ns() / NS_CONVERTER - timeWaste)
                 except:
                     raise AssertionError(f'{traceback.format_exc()}\r\n\r\nIMPORT TEST FILES FOR TURN {self.sim.turn} FROM @ {botHost.eklipz_bot.logDirectory}')
 
                 moveTime = time.perf_counter() - moveStart
-                if self.respect_turn_time_limit and self.sim.sim_map.turn > 20 and moveTime > self.player_move_cutoff_time and not DebugHelper.IS_DEBUGGING:
+                if self.respect_turn_time_limit and moveTime > self.player_move_cutoff_time and not DebugHelper.IS_DEBUGGING:  # and self.sim.sim_map.turn > 20
+                    # then we dropped this move.
                     logbook.error(f'turn {self.sim.sim_map.turn}: player {playerIndex} {self.sim.sim_map.usernames[playerIndex]} took {moveTime:.3f} to move, dropping its move!')
                     self.sim.make_move(playerIndex, None, force=True)
                     self.dropped_move_counts_by_player[playerIndex] += 1
+
+                # we're now bleeding into the next turn
+                self.simulated_excess_move_time_wasted_by_player[playerIndex] += moveTime
 
             # if we have a move queued explicitly, overwrite their move with the test-forced move.
             if len(self.move_queue[playerIndex]) > 0:

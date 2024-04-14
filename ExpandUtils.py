@@ -793,7 +793,7 @@ def _include_optimal_expansion_options(
         #         f" - nextTile {str(nextTile)}, waste [{wastedMoves:.2f}], prioPerTurn [{prioPerTurn:.2f}], dsf {distSoFar}, capPts [{negTileCapturePoints:.2f}], negArmRem [{0 - armyRemaining}]\n    eTiles {enemyTiles}, nTiles {neutralTiles}, npPrio {newPathPriority:.2f}, nextTileSet {len(nextTileSet)}\n    nextAdjSet {None}, enemyExpVal {enemyExpansionValue}, nextEnExpSet {None}")
 
         hitIsland = False
-        if enemyTiles + neutralTiles > 33:
+        if enemyTiles + neutralTiles > 3:
             island = tileIslands.tile_island_lookup.raw[nextTile.tile_index]
             if island in largeIslandSet and armyRemaining > 10:
                 logEntries.append(f'HIT ISLAND {island.name} AT TILE {nextTile} WITH {armyRemaining} ARMY, TERMING')
@@ -1154,7 +1154,9 @@ def _include_optimal_expansion_options(
                             if reachedIsland and reachedIsland.full_island:
                                 reachedIsland = reachedIsland.full_island
                                 # skip the 4 largest tiles, idk
-                                tilesInIsland = reachedIsland.tiles_by_army[7:]
+                                tilesInIsland = reachedIsland.tiles_by_army[4:]
+                                if len(tilesInIsland) == 0:
+                                    break
                             else:
                                 break
 

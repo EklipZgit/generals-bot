@@ -1549,13 +1549,6 @@ class ArmyInterceptionTests(TestBase):
                     self.assertOwned(general.player, playerMap.GetTile(9, 9))
                     self.assertOwned(general.player, playerMap.GetTile(7, 7))
                     # if split:
-
-# 22-12 with everything bad
-# 11f 19p - hacked defense intercept
-# 10-20 with defense -1 instead of -2
-# 17f 18p - initial intercept/expand impl
-# 43f 38p
-# 56f 63p 1s, lots are only failing by 1-2 econ dropped, too, instead of 10-20    
     def test_should_split_to_defend_opponent_expansion_split(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_split_to_defend_opponent_expansion_split___ZusMFqFXI---1--184.txtmap'
@@ -1777,7 +1770,7 @@ class ArmyInterceptionTests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '7,7->9,7->9,1->7,1')
         #proof
-        simHost.queue_player_moves_str(general.player, '6,6->7,6->7,5z->9,5')
+        # simHost.queue_player_moves_str(general.player, '6,6->7,6->7,5z->9,5')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
@@ -1785,3 +1778,12 @@ class ArmyInterceptionTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
         self.assertNoFriendliesKilled(map, general)
         self.assertTileDifferentialGreaterThan(7, simHost, 'blocking quickly guarantees minimum of 7 econ, as well. Shouldnt let the army get to the damaging-defense point.')
+
+
+# 22-12 with everything bad
+# 11f 19p - hacked defense intercept
+# 10-20 with defense -1 instead of -2
+# 17f 18p - initial intercept/expand impl
+# 43f 38p
+# 56f 63p 1s, lots are only failing by 1-2 econ dropped, too, instead of 10-20
+# 70f 59p 4s after "new" expansion revamp (RoundPlan)

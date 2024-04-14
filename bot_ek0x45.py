@@ -3048,7 +3048,7 @@ class EklipZBot(object):
 
         return path
 
-    def explore_target_player_undiscovered(self, negativeTiles: typing.Set[Tile] | None, onlyHuntGeneral: bool = False) -> typing.Union[None, Path]:
+    def explore_target_player_undiscovered(self, negativeTiles: typing.Set[Tile] | None, onlyHuntGeneral: bool = False) -> Path | None:
         # if self._map.turn < 100 or self.player == -1 or self._map.generals[self.player] is not None:
         if negativeTiles:
             negativeTiles = negativeTiles.copy()
@@ -6781,7 +6781,7 @@ class EklipZBot(object):
         lengthToReplaceCurrentPlan = curPath.length
         rePlanLength = lengthToReplaceCurrentPlan + countExtraUseableMoves
         with self.perf_timer.begin_move_event(f'Re-calc F25 Expansion for {str(move.source)} (length {rePlanLength})'):
-            newPath, otherPaths = ExpandUtils.get_round_plan_with_expansion(
+            expUtilPlan = ExpandUtils.get_round_plan_with_expansion(
                 self._map,
                 self.general.player,
                 self.targetPlayer,
@@ -6792,6 +6792,8 @@ class EklipZBot(object):
                 negativeTiles=negExpandTiles,
                 viewInfo=self.viewInfo
             )
+        newPath = expUtilPlan.selected_option
+        otherPaths = expUtilPlan.all_paths
 
         if newPath is not None and isinstance(newPath, Path):
             segments = newPath.break_overflow_into_one_move_path_subsegments(
@@ -8386,24 +8388,26 @@ class EklipZBot(object):
                     self.send_teammate_communication("I'm planning my start expand here, try to avoid these pinged tiles.", cooldown=50)
 
         if (
-                (
-                    self.city_expand_plan.launch_turn > self._map.turn
-                    or (
-                        self.city_expand_plan.launch_turn < self._map.turn
-                        and not SearchUtils.any_where(
-                            self.player.tiles,
-                            lambda tile: not tile.isGeneral and SearchUtils.any_where(tile.movable, lambda mv: not mv.isObstacle and tile.army - 1 > mv.army and not self._map.is_tile_friendly(mv))
-                        )
+            (
+                self.city_expand_plan.launch_turn > self._map.turn
+                or (
+                    self.city_expand_plan.launch_turn < self._map.turn
+                    and not SearchUtils.any_where(
+                        self.player.tiles,
+                        lambda tile: not tile.isGeneral and SearchUtils.any_where(tile.movable, lambda mv: not mv.isObstacle and tile.army - 1 > mv.army and not self._map.is_tile_friendly(mv))
                     )
+                )
             )
             and not calcedThisTurn
         ):
-            self.city_expand_plan.tile_captures = EarlyExpandUtils.get_start_expand_value(
+            # self.city_expand_plan.tile_captures = len(self.player.tiles) + EarlyExpandUtils.get_start_expand_captures(
+            self.city_expand_plan.tile_captures = EarlyExpandUtils.get_start_expand_captures(
                 self._map,
                 self.city_expand_plan.core_tile,
                 self.city_expand_plan.core_tile.army,
                 self._map.turn,
                 self.city_expand_plan.plan_paths,
+                launchTurn=self.city_expand_plan.launch_turn,
                 noLog=False)
 
             distToGenMap = SearchUtils.build_distance_map_matrix(self._map, self.get_target_player_possible_general_location_tiles_sorted(elimNearbyRange=7)[0:3])
@@ -8417,7 +8421,7 @@ class EklipZBot(object):
                     visited.update(self._map.players[teammate].tiles)
                 visited.update(skipTiles)
 
-                maxPlan = EarlyExpandUtils.max_plan(self.city_expand_plan, optionalNewExpandPlan, self._map, distToGenMap, distMap, visited)
+                maxPlan = EarlyExpandUtils.recalculate_max_plan(self.city_expand_plan, optionalNewExpandPlan, self._map, distToGenMap, distMap, visited, no_log=False)
                 self.viewInfo.add_info_line(f'Recalced a new f25, val {optionalNewExpandPlan.tile_captures} (vs {self.city_expand_plan.tile_captures})')
 
                 if maxPlan == optionalNewExpandPlan:

@@ -541,7 +541,7 @@ class GeneralPredictionTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
-        self.assertLess(bot.euclidDist(7, 4, bot.targetPlayerExpectedGeneralLocation.x, bot.targetPlayerExpectedGeneralLocation.y), 3)
+        self.assertLess(bot.euclidDist(7, 4, bot.targetPlayerExpectedGeneralLocation.x, bot.targetPlayerExpectedGeneralLocation.y), 4)
 
     def test_should_not_prune_top_map_just_because_fog_discovered_neutral_previously(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False

@@ -1,11 +1,13 @@
 import typing
 from ExpandUtils import get_round_plan_with_expansion
+from Interfaces import TilePlanInterface
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from Tests.TestBase import TestBase
 from base.client.map import Tile, MapBase
 
-class ExpansionTests(TestBase):
+
+class ExpansionContinuationTests(TestBase):
     def run_expansion(
             self,
             map: MapBase,
@@ -15,7 +17,7 @@ class ExpansionTests(TestBase):
             negativeTiles: typing.Set[Tile],
             mapVision: MapBase | None,
             debugMode: bool = False,
-    ) -> typing.Tuple[Path | None, typing.List[Path]]:
+    ) -> typing.Tuple[TilePlanInterface | None, typing.List[TilePlanInterface]]:
         targetPlayer = enemyGeneral.player
 
         # self.render_view_info(map, ViewInfo("h", map))
@@ -26,20 +28,22 @@ class ExpansionTests(TestBase):
 
         self.begin_capturing_logging()
         self.enable_search_time_limits_and_disable_debug_asserts()
-        path, otherPaths = get_round_plan_with_expansion(
+        plan = get_round_plan_with_expansion(
             bot._map,
             general.player,
             targetPlayer,
             turns,
             bot.board_analysis,
             territoryMap=bot.territories.territoryMap,
+            tileIslands=bot.tileIslandBuilder,
             negativeTiles=negativeTiles,
             leafMoves=bot.leafMoves,
             # allowMultiPathReturn=True,
-            allowMultiPathMultiDistReturn=True,
             forceNoGlobalVisited=False,
             viewInfo=bot.viewInfo
         )
+        path = plan.selected_option
+        otherPaths = plan.all_paths
 
         if debugMode:
             bot.prep_view_info_for_render()

@@ -37,7 +37,7 @@ from bot_ek0x45 import EklipZBot
 
 
 class TestBase(unittest.TestCase):
-    GLOBAL_BYPASS_REAL_TIME_TEST = False
+    GLOBAL_BYPASS_REAL_TIME_TEST = True
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -1489,12 +1489,15 @@ class TestBase(unittest.TestCase):
                 if maxTile is None or tileProx[maxTile] < tileProx[tile]:
                     maxTile = tile
             enemyGen = maxTile
+            if player is not None:
+                enemyGen.player = player
 
         if enemyGen is None:
             raise AssertionError("Unable to produce an enemy general from given map data file...")
 
-        enemyGen.player = player
         if not enemyGen.isGeneral:
+            if player is not None:
+                enemyGen.player = player
             enemyGen.isGeneral = True
             if enemyGen.army == 0:
                 enemyGen.army = 1

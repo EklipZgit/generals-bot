@@ -2248,8 +2248,9 @@ def _get_capture_counts(
                 otherPaths.remove(path)
                 continue
             except:
-                logbook.error(f'unable to remove path {path}...???? {traceback.format_exc()}')
-                pass  # uh oh, it was path? lol
+                if path != mainPath:
+                    logbook.error(f'unable to remove path {path}...???? {traceback.format_exc()}')
+                    pass
 
         if validTiles < 2 * path.length // 3 and (pNeutCap + 2 * pEnCap) / pTurnsUsed < 1.0:
             candidateRemoves.append((pTurnsUsed, pNeutCap, pEnCap, validTiles, path))

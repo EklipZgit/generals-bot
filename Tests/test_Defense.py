@@ -638,23 +638,28 @@ class DefenseTests(TestBase):
     
     def test_should_always_make_furthest_defense_gather_move_first(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/should_always_make_furthest_defense_gather_move_first___HgshlO-0n---b--441.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 441, fill_out_tiles=True)
+        for has2_14Interceptable in [True, False]:
+            with self.subTest(has2_14Interceptable=has2_14Interceptable):
+                mapFile = 'GameContinuationEntries/should_always_make_furthest_defense_gather_move_first___HgshlO-0n---b--441.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 441, fill_out_tiles=True)
 
-        self.enable_search_time_limits_and_disable_debug_asserts()
+                self.enable_search_time_limits_and_disable_debug_asserts()
 
-        # Grant the general the same fog vision they had at the turn the map was exported
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=441)
-        
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-        simHost.queue_player_moves_str(enemyGeneral.player, '6,15->0,15')
+                # Grant the general the same fog vision they had at the turn the map was exported
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=441)
+                if has2_14Interceptable:
+                    map.GetTile(1, 14).army = 6
+                    rawMap.GetTile(1, 14).army = 6
 
-        # alert enemy of the player general
-        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, '6,15->0,15')
 
-        self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
-        self.assertIsNone(winner)
+                # alert enemy of the player general
+                simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=7)
+                self.assertIsNone(winner)
     
     def test_should_not_allow_army_to_pass(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -2067,6 +2072,30 @@ class DefenseTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
         self.assertNoFriendliesKilled(map, general)
+    
+    def test_should_wait_to_gather_tiles_that_are_in_the_shortest_pathway_for_last(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for path in [
+            '6,10->6,7->5,7',
+            '6,10->6,9->5,9->5,7'
+        ]:
+            with self.subTest(path=path):
+                mapFile = 'GameContinuationEntries/should_wait_to_gather_tiles_that_are_in_the_shortest_pathway_for_last___GIghDuWWN---1--437.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 437, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=437)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, path)
+                # proof:
+                # simHost.queue_player_moves_str(general.player, '3,7->5,7')
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+                self.assertNoFriendliesKilled(map, general)
 
     # 36-69-5 as of tweaking chokes and honoring allowNonChoke
     # 31-74-5 reverted chokeWidth reduction to -2 from -1, which i'm like 100% sure is wrong but it makes the 'one too far' tests pass, lmao.
@@ -2077,3 +2106,5 @@ class DefenseTests(TestBase):
     # 63f-26p-9skip after everything fucked by intercept
     # 44f-45p-5skip fixed assertion float rounding failures by casting to int lol
     # 59f 66p 5s with i think broken stuff as far as priority offset goes
+    # 58f, 72p, 5s with fix to intercept overriding defense
+    # 56f, 74p, 5s with another ^

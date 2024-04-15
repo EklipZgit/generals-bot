@@ -6348,7 +6348,7 @@ class EklipZBot(object):
     def check_defense_intercept_move(self, threat: ThreatObj) -> typing.Tuple[Move | None, Path | None, bool]:
         threatInterceptionPlan = self.intercept_plans.get(threat.path.start.tile, None)
         isDelayed = False
-        if threatInterceptionPlan is None or not self.expansion_plan.includes_intercept and not self.expansion_plan.intercept_waiting:
+        if threatInterceptionPlan is None or not self.expansion_plan.includes_intercept and not self.expansion_plan.intercept_waiting or len(threatInterceptionPlan.intercept_options) == 0:
             return None, None, isDelayed
 
         interceptingOption: InterceptionOptionInfo | None = None
@@ -6356,6 +6356,8 @@ class EklipZBot(object):
         if interceptPath is not None and isinstance(interceptPath, InterceptionOptionInfo):
             interceptingOption = interceptPath
             interceptPath = interceptPath.path
+            if interceptingOption not in threatInterceptionPlan.intercept_options:
+                return None, None, isDelayed
 
         includesIntercept = False
         for delayedInterceptOption in self.expansion_plan.intercept_waiting:
@@ -6381,16 +6383,21 @@ class EklipZBot(object):
         # if interceptPath.tail.tile not in threat.armyAnalysis.shortestPathWay.tiles and not includesIntercept:
         #     return None, None, isDelayed
 
-        if interceptPath.length > threat.turns and threat.path.tail.tile.isGeneral:
-            return None, None, False
+        tookTooLong = interceptPath.length > threat.turns
+        notEnoughDamageBlocked = interceptingOption.damage_blocked < threat.threatValue
+        armyLeftOver = interceptingOption.intercepting_army_remaining > 0
+        if threat.path.tail.tile.isGeneral:
+            if tookTooLong or notEnoughDamageBlocked or armyLeftOver:
+                self.viewInfo.add_info_line(f'def int BYP: rem ar {interceptingOption.intercepting_army_remaining}, long {"T" if tookTooLong else "F"}, notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, {interceptPath}')
+                return None, None, False
 
         self.viewInfo.color_path(PathColorer(
             interceptPath, 1, 1, 1
         ))
         intOptInfo = ''
         if interceptingOption:
-            intOptInfo = f'{interceptingOption}, '
-        self.info(f'def int incl {intOptInfo}{interceptPath}')
+            intOptInfo = f' {interceptingOption}'
+        self.info(f'def int incl{intOptInfo}: long {"T" if tookTooLong else "F"}, notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, {interceptPath}')
         return self.get_first_path_move(interceptPath), interceptPath, isDelayed
 
     def get_defense_moves(
@@ -10567,15 +10574,20 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
     ) -> typing.Callable[[Tile, typing.Any], typing.Any]:
         # threatenedTileDistMap = SearchUtils.build_distance_map(self._map, [threat.path.tail.tile])
         threatenedTileDistMap = threat.armyAnalysis.aMap
-
+        threatDist = threatenedTileDistMap.raw[threat.path.start.tile.tile_index]
         # moveClosestMap = SearchUtils.build_distance_map(self._map, [threat.path.start.tile])
 
+        shortestTiles = threat.armyAnalysis.shortestPathWay.tiles
+
         def move_closest_value_func(curTile: Tile, currentPriorityObject):
-            closenessToThreat = 0 - threatenedTileDistMap[curTile]
+            # this is very specifically like this to pass test_should_wait_to_gather_tiles_that_are_in_the_shortest_pathway_for_last
+            closenessToThreat = threatenedTileDistMap.raw[curTile.tile_index]
+            if curTile in shortestTiles and threatDist > closenessToThreat:
+                closenessToThreat = 0 - closenessToThreat
 
             return (
                 not (anyLeafIsSameDistAsThreat or curTile.isCity),
-                0 - closenessToThreat,
+                closenessToThreat,
                 curTile.army
             )
 
@@ -11657,8 +11669,8 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                                     plan.includes_intercept = True
                                     self.viewInfo.add_info_line(f'   REPLACING WITH {option}')
                                     anyIntercept = True
-                                    plan.selected_option = p
-                                    plan.all_paths[plan.all_paths.index(otherPath)] = p
+                                    plan.selected_option = option
+                                    plan.all_paths[plan.all_paths.index(otherPath)] = option
                                     break
 
                         if anyIntercept:
@@ -12456,13 +12468,15 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         if self.enemy_attack_path is not None and self.likely_kill_push:
             logbook.info(f'due to high risk threat path, using that as flank vision target instead of biggest flank path itself')
-            checkPath = self.enemy_attack_path
-            tail = checkPath.tail
+            altPath = self.enemy_attack_path
+            tail = altPath.tail
             i = 0
             while tail and tail.tile.visible:
                 tail = tail.prev
                 i += 1
-            checkPath = checkPath.get_subsegment(checkPath.length - i)
+            altPath = altPath.get_subsegment(altPath.length - i)
+            if altPath is not None and altPath.length > 0:
+                checkPath = altPath
 
         checkFlank = checkPath is not None and (
                 checkPath.tail.tile in self.board_analysis.flank_danger_play_area_matrix

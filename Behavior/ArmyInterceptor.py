@@ -626,6 +626,8 @@ class ArmyInterceptor(object):
 
     def ensure_threat_army_analysis(self, threat: ThreatObj) -> bool:
         """returns True if the army analysis was built"""
+        if threat.path.value == 0:
+            threat.path.calculate_value(threat.threatPlayer, self.map._teams)
         if threat.armyAnalysis is None:
             threat.armyAnalysis = ArmyAnalyzer.build_from_path(self.map, threat.path)
             return True
@@ -1061,8 +1063,7 @@ class ArmyInterceptor(object):
         worstCaseInterceptTurn = 0
 
         turnsLeft = turnsLeftInCycle
-        i = 0
-        for tile in interceptPath.tileList:
+        for i, tile in enumerate(interceptPath.tileList):
             if turnsLeft == 0:
                 break
 
@@ -1082,7 +1083,6 @@ class ArmyInterceptor(object):
                         bestCaseInterceptTurn = min(bestCaseInterceptTurn, i + 2)
 
             # worstCaseInterceptTurn =
-            i += 1
 
 
         enArmy = int(best_enemy_threat.path.value)

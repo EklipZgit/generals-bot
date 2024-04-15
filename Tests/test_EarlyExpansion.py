@@ -806,6 +806,7 @@ class EarlyExpandUtilsTests(TestBase):
         # + 7 did 24-37 as well
         # + 7 with bonus time also 24-37
         # + 10 did 23-38 no way
+        # 24-37 with adjacency update
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         projRoot = pathlib.Path(__file__).parent
         folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'

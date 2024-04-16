@@ -2072,20 +2072,6 @@ class DefenseTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
         self.assertNoFriendliesKilled(map, general)
-
-    # 36-69-5 as of tweaking chokes and honoring allowNonChoke
-    # 31-74-5 reverted chokeWidth reduction to -2 from -1, which i'm like 100% sure is wrong but it makes the 'one too far' tests pass, lmao.
-    # 50-55 if i switch to gathering to shortest pathway tiles with pathwidth offset
-    # 34-71
-    # 57-49 with chokewidth -1 instead of -2 and the choke defense changes in place
-    # 53-53
-    # 63f-26p-9skip after everything fucked by intercept
-    # 44f-45p-5skip fixed assertion float rounding failures by casting to int lol
-    # 59f 66p 5s with i think broken stuff as far as priority offset goes
-    # 58f, 72p, 5s with fix to intercept overriding defense
-    # 56f, 74p, 5s with another ^
-    # 53f, 77p, 5s still more tweaks to ^
-    # 58f, 72p, 5s LITERALLY THE SAME CODE AS ^
     
     def test_should_gather_adj_to_threat_first__i_thought_i_already_fixed_thisssss(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -2179,3 +2165,19 @@ class DefenseTests(TestBase):
                 self.begin_capturing_logging()
                 winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
                 self.assertNoFriendliesKilled(map, general)
+
+
+    # 36-69-5 as of tweaking chokes and honoring allowNonChoke
+    # 31-74-5 reverted chokeWidth reduction to -2 from -1, which i'm like 100% sure is wrong but it makes the 'one too far' tests pass, lmao.
+    # 50-55 if i switch to gathering to shortest pathway tiles with pathwidth offset
+    # 34-71
+    # 57-49 with chokewidth -1 instead of -2 and the choke defense changes in place
+    # 53-53
+    # 63f-26p-9skip after everything fucked by intercept
+    # 44f-45p-5skip fixed assertion float rounding failures by casting to int lol
+    # 59f 66p 5s with i think broken stuff as far as priority offset goes
+    # 58f, 72p, 5s with fix to intercept overriding defense
+    # 56f, 74p, 5s with another ^
+    # 53f, 77p, 5s still more tweaks to ^
+    # 58f, 72p, 5s LITERALLY THE SAME CODE AS ^
+    # 77f, 64p, 5s after fucking with the intercept instead of chokewidth in distDict and changing the gather-leaf-defense-move-priority-order which needs to be fixed, see test above. TODO

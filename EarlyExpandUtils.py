@@ -81,7 +81,7 @@ def get_start_expand_captures(
     pathIdx = 0
     p = expandPaths[pathIdx]
     if launchTurn != -1:
-        while p is None:
+        while p is None and pathIdx + 1 < len(expandPaths):
             pathIdx += 1
             p = expandPaths[pathIdx]
 

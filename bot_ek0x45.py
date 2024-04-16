@@ -1209,7 +1209,9 @@ class EklipZBot(object):
             gatherSplit = 32
 
         expValue = 20.0
+        bypass = True
         if self.expansion_plan is not None:
+            bypass = False
             expValue = self.expansion_plan.cumulative_econ_value
 
         if self.target_player_gather_targets is not None:
@@ -1222,11 +1224,16 @@ class EklipZBot(object):
                 elif t.player == -1:
                     countNeutOnPath += 1
             # TODO fancy ass dynamic timing based on opponents historical timings
-            launchTiming = 50 - self.shortest_path_to_target_player.length - 3 - countFrOnPath + countEnOnPath
-            xPweight = int(expValue * 0.6)
+            launchTiming = 50 - self.shortest_path_to_target_player.length
+            launchTiming += countEnOnPath
+            launchTiming += countNeutOnPath
+            launchTiming -= countFrOnPath
+
+            xPweight = int(expValue * 0.7)
             expGatherTiming = max(15, 50 - xPweight)
             gatherSplit = min(launchTiming, expGatherTiming)
-            self.viewInfo.add_info_line(f'(timings: gS {gatherSplit} <- min(launch {launchTiming}, expGather {expGatherTiming} <- xW {xPweight})')
+            if not bypass:
+                self.viewInfo.add_info_line(f'(timings: gS {gatherSplit} <- min(launch {launchTiming}, expGather {expGatherTiming} <- xW {xPweight})')
 
         randomVal = random.randint(-1, 2)
         # what size cycle to use, normally the 50 turn cycle
@@ -1270,7 +1277,8 @@ class EklipZBot(object):
         tileDiff = self.opponent_tracker.get_tile_differential()
         if tileDiff < 2:
             back = max(-10, tileDiff // 2) - 2
-            self.viewInfo.add_info_line(f'gathSplit back {back} turns due to tileDiff {tileDiff}')
+            if not bypass:
+                self.viewInfo.add_info_line(f'gathSplit/launch back {back} turns due to tileDiff {tileDiff}')
             gatherSplit += back
             launchTiming += back
 
@@ -1298,7 +1306,8 @@ class EklipZBot(object):
             overage = 2 * numFog - 1 * self.target_player_gather_path.length // 2 - numEn
             if overage > 0 and self._map.turn > 85 and numEn < self.target_player_gather_path.length // 3:
                 isOurPathAMostlyFogAltPath = True
-                self.viewInfo.add_info_line(f'launch reduc {overage} bc fog {numFog} vs pathlen {self.target_player_gather_path.length}')
+                if not bypass:
+                    self.viewInfo.add_info_line(f'launch reduc {overage} bc fog {numFog} vs pathlen {self.target_player_gather_path.length}')
                 launchTiming -= overage
                 gatherSplit -= overage
 
@@ -1306,10 +1315,12 @@ class EklipZBot(object):
             gatherSplit += self.behavior_launch_timing_offset
             if self.flanking:
                 gatherSplit += self.behavior_flank_launch_timing_offset
-            self.viewInfo.add_info_line(f'adjusting launchTiming (was {launchTiming}) to be same as gatherSplit {gatherSplit}, targetLen {self.shortest_path_to_target_player.length}')
+            if not bypass:
+                self.viewInfo.add_info_line(f'adjusting launchTiming (was {launchTiming}) to be same as gatherSplit {gatherSplit}, targetLen {self.shortest_path_to_target_player.length}')
             launchTiming = gatherSplit
         else:
-            self.viewInfo.add_info_line(f'launchTiming {launchTiming}, targetLen {self.shortest_path_to_target_player.length}')
+            if not bypass:
+                self.viewInfo.add_info_line(f'launchTiming {launchTiming}, targetLen {self.shortest_path_to_target_player.length}')
 
         # should usually be 0 except the first turn
         correction = self._map.turn % 50

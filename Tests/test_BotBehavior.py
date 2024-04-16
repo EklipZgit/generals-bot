@@ -2821,7 +2821,8 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        # winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=50)
         timings: Timings | None = bot.timings
         self.assertIsNotNone(timings)
 

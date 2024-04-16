@@ -157,7 +157,7 @@ class TeammateCommunicator(object):
                 gatherTiles.append(n.tile)
 
         if self.is_defense_lead and defensePlanGatherNodes is not None:
-            GatherUtils.iterate_tree_nodes(defensePlanGatherNodes, gatherTileAdder)
+            GatherUtils.foreach_tree_node(defensePlanGatherNodes, gatherTileAdder)
 
         self.coordinated_defense.include_defense_plan(threatTarget, threatTile, threatTurns, requiredArmy, gatherTiles, markLivePlan=True)
 

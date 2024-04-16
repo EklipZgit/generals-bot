@@ -1153,7 +1153,10 @@ class ArmyTracker(object):
                 thisTile: Tile,
                 prioObject
         ):
-            dist, _ = prioObject
+            dist, _, validLocation = prioObject
+            if not validLocation:
+                return None
+
             if thisTile.visible or thisTile == tile or dist == 0:
                 return None
 
@@ -1172,11 +1175,11 @@ class ArmyTracker(object):
             val = emergenceVal
             return val, True  # has to be tuple or logging blows up i guess
 
-        def pathSortFunc(
+        def prioFunc(
                 nextTile: Tile,
                 prioObject
         ):
-            (dist, _) = prioObject
+            (dist, _, validLocation) = prioObject
 
             dist += 1
             if nextTile.isUndiscoveredObstacle:
@@ -1191,7 +1194,13 @@ class ArmyTracker(object):
                     if self.map.get_distance_between(self.general, t) > self.map.get_distance_between(self.general, nextTile) + 4 and self.map.get_distance_between(self.general, t) < 150:
                         dist -= 2
 
-            return dist, 0
+            if not validLocation:
+                dist += 0.5
+
+            if dist > 3:
+                validLocation = True
+
+            return dist, 0, validLocation
 
         def fogSkipFunc(
                 nextTile: Tile,
@@ -1200,7 +1209,7 @@ class ArmyTracker(object):
             if prioObject is None:
                 return True
 
-            (dist, _) = prioObject
+            (dist, _, validLocation) = prioObject
 
             # logbook.info("nextTile {}: negArmy {}".format(nextTile.toString(), negArmy))
             return (
@@ -1212,7 +1221,12 @@ class ArmyTracker(object):
         inputTiles = {}
         logbook.info(f"FINDING NEXT FOG CITY FOR PLAYER {cityPlayer} for not-fog-city tile {str(tile)}")
         # we want the path to get army up to 0, so start it at the negative delta (positive)
-        inputTiles[tile] = ((0, 0), 0)
+        inputTiles[tile] = ((0, 0, True), 0)
+        for player in self.map.players:
+            for city in player.cities:
+                if city.discovered:
+                    continue
+                inputTiles[city] = ((-2, 0, False), 0)
 
         fogSourcePath = breadth_first_dynamic_max(
             self.map,
@@ -1221,7 +1235,7 @@ class ArmyTracker(object):
             maxTime=100000.0,
             noNeutralCities=False,
             noNeutralUndiscoveredObstacles=False,
-            priorityFunc=pathSortFunc,
+            priorityFunc=prioFunc,
             skipFunc=fogSkipFunc,
             searchingPlayer=cityPlayer,
             logResultValues=True,

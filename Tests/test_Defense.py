@@ -2072,7 +2072,90 @@ class DefenseTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
         self.assertNoFriendliesKilled(map, general)
+
+    # 36-69-5 as of tweaking chokes and honoring allowNonChoke
+    # 31-74-5 reverted chokeWidth reduction to -2 from -1, which i'm like 100% sure is wrong but it makes the 'one too far' tests pass, lmao.
+    # 50-55 if i switch to gathering to shortest pathway tiles with pathwidth offset
+    # 34-71
+    # 57-49 with chokewidth -1 instead of -2 and the choke defense changes in place
+    # 53-53
+    # 63f-26p-9skip after everything fucked by intercept
+    # 44f-45p-5skip fixed assertion float rounding failures by casting to int lol
+    # 59f 66p 5s with i think broken stuff as far as priority offset goes
+    # 58f, 72p, 5s with fix to intercept overriding defense
+    # 56f, 74p, 5s with another ^
+    # 53f, 77p, 5s still more tweaks to ^
+    # 58f, 72p, 5s LITERALLY THE SAME CODE AS ^
     
+    def test_should_gather_adj_to_threat_first__i_thought_i_already_fixed_thisssss(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for path in [
+            '11,7->11,9->12,9->12,12->13,12->13,13',
+            '11,7->11,9->12,9->12,12->12,13->13,13'
+        ]:
+            with self.subTest(path=path):
+                mapFile = 'GameContinuationEntries/should_gather_adj_to_threat_first__i_thought_i_already_fixed_thisssss___igX7EXz65---1--126.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 126, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=126)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, path)
+                #proof
+                # simHost.queue_player_moves_str(general.player, '12,7->11,7')
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+                self.assertNoFriendliesKilled(map, general)
+
+    def test_should_gather_adj_to_threat_first__i_thought_i_already_fixed_thisssss__slightly_longer(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for path in [
+            '10,7->11,7->11,9->12,9->12,12->13,12->13,13',
+            '10,7->11,7->11,9->12,9->12,12->12,13->13,13'
+        ]:
+            for fakeTurn in [125, 126]:
+                with self.subTest(path=path, fakeTurn=fakeTurn):
+                    mapFile = 'GameContinuationEntries/should_gather_adj_to_threat_first__i_thought_i_already_fixed_thisssss__slightly_longer___igX7EXz65---1--125.txtmap'
+                    map, general, enemyGeneral = self.load_map_and_generals(mapFile, fakeTurn, fill_out_tiles=True)
+
+                    rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=fakeTurn)
+
+                    self.enable_search_time_limits_and_disable_debug_asserts()
+                    simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                    simHost.queue_player_moves_str(enemyGeneral.player, path)
+                    bot = self.get_debug_render_bot(simHost, general.player)
+                    playerMap = simHost.get_player_map(general.player)
+
+                    self.begin_capturing_logging()
+                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=9)
+                    self.assertNoFriendliesKilled(map, general)
+    
+    def test_should_gather_adj_to_threat_first__i_thought_i_already_fixed_thisssss__longer(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for path in [
+            '6,7->11,7->11,9->12,9->12,12->13,12->13,13',
+            '6,7->11,7->11,9->12,9->12,12->12,13->13,13'
+        ]:
+            with self.subTest(path=path):
+                mapFile = 'GameContinuationEntries/should_gather_adj_to_threat_first__i_thought_i_already_fixed_thisssss__longer___igX7EXz65---1--121.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 121, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=121)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, path)
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=13)
+                self.assertNoFriendliesKilled(map, general)
+
     def test_should_wait_to_gather_tiles_that_are_in_the_shortest_pathway_for_last(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         for path in [
@@ -2096,15 +2179,3 @@ class DefenseTests(TestBase):
                 self.begin_capturing_logging()
                 winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
                 self.assertNoFriendliesKilled(map, general)
-
-    # 36-69-5 as of tweaking chokes and honoring allowNonChoke
-    # 31-74-5 reverted chokeWidth reduction to -2 from -1, which i'm like 100% sure is wrong but it makes the 'one too far' tests pass, lmao.
-    # 50-55 if i switch to gathering to shortest pathway tiles with pathwidth offset
-    # 34-71
-    # 57-49 with chokewidth -1 instead of -2 and the choke defense changes in place
-    # 53-53
-    # 63f-26p-9skip after everything fucked by intercept
-    # 44f-45p-5skip fixed assertion float rounding failures by casting to int lol
-    # 59f 66p 5s with i think broken stuff as far as priority offset goes
-    # 58f, 72p, 5s with fix to intercept overriding defense
-    # 56f, 74p, 5s with another ^

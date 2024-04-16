@@ -200,6 +200,9 @@ class GeneralsClientHost(object):
                     self._moves_realized += 1
             except queue.Empty:
                 logbook.info('no update received after 1s of waiting...?')
+                if self._game._terminated:
+                    logbook.info('GAME WAS TERMINATED, TERMING UPDATE LOOP TOO')
+                    break
             except:
                 exc_type, exc_value, exc_traceback = sys.exc_info()
                 lines = traceback.format_exception(exc_type, exc_value, exc_traceback)

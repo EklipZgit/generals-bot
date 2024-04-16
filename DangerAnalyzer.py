@@ -31,9 +31,24 @@ class ThreatObj(object):
         self.saveTile: Tile | None = saveTile
         self.armyAnalysis: ArmyAnalyzer = armyAnalysis
 
-    def convert_to_dist_dict(self, offset: int = -1, allowNonChoke: bool = False) -> typing.Dict[Tile, int]:
+    def convert_to_dist_dict(self, offset: int = -1, allowNonChoke: bool = False, mapForPriority: MapBase | None = None) -> typing.Dict[Tile, int]:
+        """
+        If mapForPriority is provided, then the distdict will take into account priority.
+
+        @param offset:
+        @param allowNonChoke:
+        @param mapForPriority:
+        @return:
+        """
         # if offset == -1 and not self.path.tail.tile.isGeneral:
         #     offset = 0
+
+        includePriority = False
+        hasPriority = False
+        if mapForPriority is not None:
+            includePriority = True
+            threatTurn = mapForPriority.turn  #  + self.turns + offset  # ??? offset? TODO
+            hasPriority = mapForPriority.player_has_priority_over_other(mapForPriority.player_index, self.threatPlayer, threatTurn)
 
         dict = self.path.get_reversed().convert_to_dist_dict(offset=offset)
 
@@ -42,6 +57,9 @@ class ThreatObj(object):
             dist = dict.pop(tile, None)
             # if dist is None:
             dist = self.armyAnalysis.aMap[tile] + offset
+            if includePriority and hasPriority:
+                dist -= 1
+
             if allowNonChoke:
                 dict[tile] = dist
             if tile.isGeneral:
@@ -52,11 +70,13 @@ class ThreatObj(object):
                 # neighbors = where(pathWay.tiles, lambda t: t != tile and self.armyAnalysis.aMap[t] == self.armyAnalysis.aMap[tile] and self.armyAnalysis.bMap[t] == self.armyAnalysis.bMap[tile])
                 chokeWidth = self.armyAnalysis.chokeWidths.get(tile, None)
                 interceptChoke = self.armyAnalysis.interceptChokes.get(tile, None)
-                if allowNonChoke or (interceptChoke is not None and interceptChoke < 4):
+                if allowNonChoke or (interceptChoke is not None and interceptChoke < 3):
                     if chokeWidth is not None:
-                        newDist = dist + chokeWidth - 1  # this 2 is almost certainly wrong, but makes some tests pass.
+                        # newDist = dist + chokeWidth - 1  # this 2 is almost certainly wrong, but makes some tests pass.
+                        newDist = dist + interceptChoke + 1 + offset
                         logbook.info(f'Threat path tile {str(tile)} dist {dist} changed to {newDist} based on chokeWidth {chokeWidth} / interceptChoke {interceptChoke}')
                         dict[tile] = newDist
+            hasPriority = not hasPriority
 
         return dict
 

@@ -1,4 +1,3 @@
-import itertools
 import traceback
 
 import logbook
@@ -9,7 +8,6 @@ import DebugHelper
 import KnapsackUtils
 import SearchUtils
 from Algorithms import TileIslandBuilder, TileIsland
-from Behavior.ArmyInterceptor import InterceptionOptionInfo
 from BoardAnalyzer import BoardAnalyzer
 from DataModels import Move
 from Interfaces import TilePlanInterface
@@ -499,32 +497,18 @@ def _include_optimal_expansion_options(
     startTime = time.perf_counter()
     respectTerritoryMap = map.players[targetPlayer].tileCount // 2 > len(map.players[targetPlayer].tiles)
     respectTerritoryMap = False
-
-    ourTeam = map._teams[searchingPlayer]
-    targetTeam = map._teams[targetPlayer]
-    tileMinimum = min(20, map.players[searchingPlayer].tileCount // 3)
-    largeIslands = None
+    targetTeam = -1
     if targetPlayer >= 0:
-        targetPlayerObj = map.players[targetPlayer]
-        if len(targetPlayerObj.tiles) > 0:
-            tileMinimum = max(tileMinimum, targetPlayerObj.tileCount // 4)
+        targetTeam = map.players[targetPlayer].team
 
-            largeIslands = [i for i in tileIslands.all_tile_islands if i.team == targetTeam and i.tile_count_all_adjacent_friendly > tileMinimum]
-            if len(largeIslands) == 0:
-                tileMinimum = tileMinimum // 2
-                largeIslands = [i for i in tileIslands.all_tile_islands if i.team == targetTeam and i.tile_count_all_adjacent_friendly > tileMinimum]
+    largeIslandSet = tileIslands.large_tile_islands_by_team[targetTeam]
+    distanceToLargeIslandsMap = tileIslands.large_tile_island_distances_by_team[targetTeam]
 
-    if not largeIslands:
-        largeIslands = [i for i in tileIslands.all_tile_islands if i.team == -1 and i.tile_count_all_adjacent_friendly > tileMinimum]
-
-    islandTiles = [t for t in itertools.chain.from_iterable(i.tiles_by_army for i in largeIslands)]
-
-    largeIslandSet = {i for i in largeIslands}
-
-    distanceToLargeIslandsMap = SearchUtils.build_distance_map_matrix(map, islandTiles)
+    if distanceToLargeIslandsMap is None:
+        distanceToLargeIslandsMap = tileIslands.large_tile_island_distances_by_team[-1]
 
     logEntries.append(f"\n\nAttempting Optimal Expansion (tm) for turns {turns} (lengthWeightOffset {lengthWeightOffset}), negatives {str([str(t) for t in negativeTiles])}:\n")
-    logEntries.append(f'LARGE TILE ISLANDS (targetTeam {targetTeam}) ARE {", ".join([i.name for i in largeIslands])}')
+
     generalPlayer = map.players[searchingPlayer]
     if negativeTiles is None:
         negativeTiles = set()
@@ -1140,7 +1124,7 @@ def _include_optimal_expansion_options(
                                     usage = cityUsages.get(node.tile, 0)
                                     cityUsages[node.tile] = usage + 1
                                 node = node.next
-                            if existingPath is not None:
+                            if existingPath is not None and logStuff:
                                 logEntries.append(f'path for {str(tile)} dist {curDist} BETTER than existing:\r\n      new {curValue:.3f} {str(path)}\r\n   exist {existingMax:.3f} {str(existingPath)}')
                             curTileDict[curDist] = (curValue, path)
 
@@ -1201,8 +1185,9 @@ def _include_optimal_expansion_options(
             overrideGlobalVisitedOneCycle = True
         else:
             for value, path in newPaths:
-                logEntries.append(f'  new path {value:.2f}v  {value / path.length:.2f}vt  {str(path)}')
-                shouldDelay = _check_should_delay(map, path, distanceToLargeIslandsMap, sortedByDistToZoneTiles, negativeTiles, tryAvoidSet, logEntries)
+                if logStuff:
+                    logEntries.append(f'  new path {value:.2f}v  {value / path.length:.2f}vt  {str(path)}')
+                shouldDelay = _check_should_delay(map, path, distanceToLargeIslandsMap, sortedByDistToZoneTiles, negativeTiles, tryAvoidSet, logEntries, logStuff)
 
                 if shouldDelay:
                     delayedAdds.append(path)
@@ -1214,6 +1199,8 @@ def _include_optimal_expansion_options(
                 #         logEntries.append('re-including city for additional usage.')
                 #         negativeTiles.remove(tile)
                 #         tryAvoidSet.remove(tile)
+            if not logStuff:
+                logEntries.append(f'  {len(newPaths)} new paths added (not logged)')
 
         firstIteration = False
 
@@ -1231,7 +1218,8 @@ def _check_should_delay(
         sortedByDistToZoneTiles: typing.List[Tile],
         negativeTiles: typing.Set[Tile],
         tryAvoidSet: typing.Set[Tile],
-        logEntries: typing.List[str]
+        logEntries: typing.List[str],
+        logStuff: bool
 ) -> bool:
     tile = path.start.tile
     tileDist = distanceToLargeIslandsMap[tile]
@@ -1245,7 +1233,8 @@ def _check_should_delay(
         if tileDist > otherDist:
             break
 
-        if manhatDist < 4:
+        if manhatDist < 3:
+            # if logStuff:
             logEntries.append(f'    due to distanceToLargeIslands, bypass {tile} dist {tileDist} due to {otherTile} dist {otherDist} at manhattan {manhatDist}')
             skip = True
             break

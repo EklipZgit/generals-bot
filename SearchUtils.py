@@ -2130,7 +2130,7 @@ def breadth_first_find_queue(
         searchingPlayer = map.player_index
 
     frontier = deque()
-    nodeValues = [[None for x in range(map.rows)] for y in range(map.cols)]
+    nodeValues: MapMatrix[typing.Tuple[int, Tile | None]] = MapMatrix(map)  # (army, fromTile)
     visited: typing.Set[Tile] = set()
     if isinstance(startTiles, dict):
         for tile in startTiles.keys():
@@ -2147,7 +2147,7 @@ def breadth_first_find_queue(
                 goalInc = -1 * goalInc
             if ignoreStartTile:
                 startArmy = 0
-            nodeValues[tile.x][tile.y] = (startArmy, None)
+            nodeValues.raw[tile.tile_index] = (startArmy, None)
             frontier.appendleft((tile, startDist, startArmy, goalInc))
     else:
         for tile in startTiles:
@@ -2158,7 +2158,7 @@ def breadth_first_find_queue(
             startArmy = tile.army - 1
             if tile.player != searchingPlayer:
                 startArmy = 0 - tile.army - 1
-            nodeValues[tile.x][tile.y] = (startArmy, None)
+            nodeValues.raw[tile.tile_index] = (startArmy, None)
             if (tile.isCity or tile.isGeneral) and tile.player != -1:
                 goalInc = 0.5
             if ignoreStartTile:
@@ -2190,36 +2190,37 @@ def breadth_first_find_queue(
             nextSearch = current.movable
             if prioFunc is not None:
                 nextSearch = sorted(current.movable, key=prioFunc, reverse=True)
-            for next in nextSearch:  # new spots to try
+            for nextTile in nextSearch:  # new spots to try
                 if (
                     (
                         not bypassDefaultSkipLogic
                         and (
-                            next.isMountain
-                            or (noNeutralCities and next.isCity and next.player == -1)
-                            or (not next.discovered and next.isNotPathable)
+                            nextTile.isMountain
+                            or (noNeutralCities and nextTile.isCity and nextTile.player == -1)
+                            or (not nextTile.discovered and nextTile.isNotPathable)
                         )
                     )
-                    or next in visited
+                    or nextTile in visited
                 ):
                     continue
 
-                inc = 0 if not ((next.isCity and next.player != -1) or next.isGeneral) else dist / 2
+                inc = 0 if not ((nextTile.isCity and nextTile.player != -1) or nextTile.isGeneral) else dist / 2
                 # new_cost = cost_so_far[current] + graph.cost(current, next)
                 nextArmy = army - 1
-                if negativeTiles is None or next not in negativeTiles:
-                    if searchingPlayer == next.player:
-                        nextArmy += next.army + inc
+                if negativeTiles is None or nextTile not in negativeTiles:
+                    if searchingPlayer == nextTile.player:
+                        nextArmy += nextTile.army + inc
                     else:
-                        nextArmy -= (next.army + inc)
+                        nextArmy -= (nextTile.army + inc)
                 newDist = dist + 1
-                if nodeValues[next.x][next.y] is None or nodeValues[next.x][next.y][0] < nextArmy:
-                    nodeValues[next.x][next.y] = (nextArmy, current)
-                frontier.appendleft((next, newDist, nextArmy, goalInc))
+                curTuple = nodeValues.raw[nextTile.tile_index]
+                if curTuple is None or curTuple[0] < nextArmy:
+                    nodeValues.raw[nextTile.tile_index] = (nextArmy, current)
+                frontier.appendleft((nextTile, newDist, nextArmy, goalInc))
 
     if not noLog:
         logbook.info(
-            f"BFS-FIND-QUEUE ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
+            f"BFS-FIND-QUEUE ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         return None
 
@@ -2236,14 +2237,13 @@ def breadth_first_find_queue(
         nodes.append((army, node))
 
         # logbook.info(pformat(visited[node.x][node.y]))
-        (army, node) = nodeValues[node.x][node.y]
+        (army, node) = nodeValues.raw[node.tile_index]
         dist -= 1
-    nodes.reverse()
     (startArmy, startNode) = nodes[0]
     pathObject = Path(foundArmy)
     pathObject.add_next(startNode)
     dist = foundDist
-    for i, armyNode in enumerate(nodes[1:]):
+    for i, armyNode in enumerate(nodes[-2::-1]):
         (curArmy, curNode) = armyNode
         if curNode is not None:
             # logbook.info("curArmy {} NODE {},{}".format(curArmy, curNode.x, curNode.y))

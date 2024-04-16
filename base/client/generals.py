@@ -419,24 +419,33 @@ class GeneralsClient(object):
         return True
 
     def close(self):
-        with self._lock:
-            self._ws.close()
-        if _LOG_WS:
-            if self.logFile is None:
-                self.earlyLogs.append("\nClosed WebSocket")
-            else:
-                with open(self.logFile, "a+") as myfile:
-                    myfile.write("\nClosed WebSocket")
+        try:
+            with self._lock:
+                self._ws.close()
+            if _LOG_WS:
+                if self.logFile is None:
+                    self.earlyLogs.append("\nClosed WebSocket")
+                else:
+                    with open(self.logFile, "a+") as myfile:
+                        myfile.write("\nClosed WebSocket")
+        except:
+            logbook.info(f'failed to close socket, probably wasnt set up yet or already closed. Ignoring error.')
+            pass
 
     def _start_killswitch_timer(self):
-        while time.time_ns() / (10 ** 9) - self.lastCommunicationTime < 60:
+        while time.time_ns() / (10 ** 9) - self.lastCommunicationTime < 90:
             time.sleep(10)
-        logbook.info('killswitch elapsed on no communication')
-        if 'map' in self.__dict__ and self.map is not None:
-            self.map.complete = True
-            self.map.result = False
-        self._terminate()
-        time.sleep(10)
+        try:
+            logbook.info('killswitch elapsed on no communication')
+            if 'map' in self.__dict__ and self.map is not None:
+                self.map.complete = True
+                self.map.result = False
+            self._terminate()
+            time.sleep(10)
+        except:
+            logbook.error(f'error shutting down in killswitch elapsed timer.')
+            logbook.error(traceback.format_exc())
+        logbook.info('peace nerd')
         exit(2)  # End Program
 
     def _terminate(self):

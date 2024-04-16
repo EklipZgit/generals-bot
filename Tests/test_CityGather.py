@@ -1608,7 +1608,7 @@ class CityGatherTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
         self.assertNoFriendliesKilled(map, general)
 
         city = playerMap.GetTile(12, 4)

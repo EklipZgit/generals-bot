@@ -123,6 +123,8 @@ class TileIslandBuilder(object):
         self.tile_islands_by_player: typing.List[typing.List[TileIsland]] = [[] for _ in self.map.players]
         self.tile_islands_by_player.append([])  # for -1 player
         self.tile_islands_by_team_id: typing.List[typing.List[TileIsland]] = [[] for _ in self.teams]
+        self.large_tile_islands_by_team: typing.List[typing.Set[TileIsland]] = [set() for _ in self.teams]
+        self.large_tile_island_distances_by_team: typing.List[MapMatrix[int] | None] = [MapMatrix(map, 1000) for _ in self.teams]
         self._team_stats_by_player: typing.List[TeamStats] = []
         self._team_stats_by_team_id: typing.List[TeamStats] = []
 
@@ -181,6 +183,11 @@ class TileIslandBuilder(object):
         for island in self.all_tile_islands:
             # if not island.bordered:
             self._build_island_borders(island)
+
+        logbook.info(f'building large island distances and sets ({time.perf_counter() - start:.5f}s in)')
+        for team in self.teams:
+            self._build_large_island_distances_for_team(team)
+
         complete = time.perf_counter() - start
         logbook.info(f'islands all built in {complete:.5f}s')
 
@@ -330,6 +337,51 @@ class TileIslandBuilder(object):
             return brokenByBorders
         else:
             return [island]
+
+    def _build_large_island_distances_for_team(self, team: int):
+        targetTeam = self.map._teams[team]
+
+        tileMinimum = min(12, self.map.players[self.map.player_index].tileCount // 3)
+
+        largeIslands = []
+
+        islandsByTeam = self.tile_islands_by_team_id[team]
+
+        if len(islandsByTeam) == 0:
+            logbook.info(f'NO TILE ISLANDS FOR LARGE ISLANDS (targetTeam {targetTeam})')
+            self.large_tile_island_distances_by_team[team] = None
+            self.large_tile_islands_by_team[team] = set()
+            return
+
+        for pIndx in self.map.get_team_stats_by_team_id(team).livingPlayers:
+            if pIndx >= 0:
+                playerObj = self.map.players[pIndx]
+                if len(playerObj.tiles) > 0:
+                    tileMinimum = max(tileMinimum, playerObj.tileCount // 4)
+
+            largeIslands = [i for i in islandsByTeam if i.tile_count_all_adjacent_friendly > tileMinimum]
+            if len(largeIslands) == 0:
+                tileMinimum = tileMinimum // 2
+                largeIslands = [i for i in islandsByTeam if i.tile_count_all_adjacent_friendly > tileMinimum]
+
+        if len(largeIslands) == 0:
+            largeIslands = [i for i in islandsByTeam if i.tile_count_all_adjacent_friendly > 7]
+        if len(largeIslands) == 0:
+            largeIslands = islandsByTeam
+            # self.large_tile_island_distances_by_team[team] = None
+            # self.large_tile_islands_by_team[team] = set()
+            # logbook.info(f'--NO LARGE TILE ISLANDS (targetTeam {targetTeam})')
+            # return
+
+        islandTiles = [t for t in itertools.chain.from_iterable(i.tiles_by_army for i in largeIslands)]
+
+        largeIslandSet = {i for i in largeIslands}
+        distanceToLargeIslandsMap = SearchUtils.build_distance_map_matrix(self.map, islandTiles)
+
+        self.large_tile_island_distances_by_team[team] = distanceToLargeIslandsMap
+        self.large_tile_islands_by_team[team] = largeIslandSet
+
+        logbook.info(f'LARGE TILE ISLANDS (targetTeam {targetTeam}) ARE {", ".join([i.name for i in largeIslands])}')
 
 
 class SetHolder(object):

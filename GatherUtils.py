@@ -1028,8 +1028,8 @@ def _knapsack_levels_gather_iterative_prune(
             itr.add(1)
             turnsToGather = fullTurns - turnsSoFar
             logEntries.append(f'Sub Knap (iter {itr.value} {time.perf_counter() - startTime:.4f} in) turns {turnsToGather} sub_knapsack, fullTurns {fullTurns}, turnsSoFar {turnsSoFar}')
-            # if shouldLog:
-            logEntries.append(f'start tiles: {str(newStartTilesDict)}')
+            if shouldLog:
+                logEntries.append(f'start tiles: {str(newStartTilesDict)}')
             newGatheredArmy, newPaths = get_sub_knapsack_gather(
                 map,
                 newStartTilesDict,
@@ -1060,14 +1060,6 @@ def _knapsack_levels_gather_iterative_prune(
                 logEntries.append(f'  returned:')
                 logEntries.extend([f'\r\n    {p}' for p in newPaths])
 
-            turnsUsedByNewPaths = 0
-            for path in newPaths:
-                turnsUsedByNewPaths += path.length
-            calculatedLeftOverTurns = remainingTurns - turnsUsedByNewPaths
-
-            # if DebugHelper.IS_DEBUGGING and map.GetTile(15, 7) in gatherTreeNodeLookup:
-            #     pass
-
             extend_tree_node_lookup(
                 newPaths,
                 gatherTreeNodeLookup,
@@ -1080,21 +1072,24 @@ def _knapsack_levels_gather_iterative_prune(
                 priorityMatrix=priorityMatrix,
                 shouldLog=shouldLog,
             )
-            # if DebugHelper.IS_DEBUGGING and map.GetTile(15, 7) in gatherTreeNodeLookup:
-            #     pass
 
-            # for path in newPaths:
-            #     rootNode = gatherTreeNodeLookup.get(path.start.tile, None)
-            #     if rootNode is not None:
-            #         (startPriorityObject, distance) = newStartTilesDict[rootNode.tile]
-            #         add_tree_nodes_to_start_tiles_dict_recurse(
-            #             rootNode,
-            #             newStartTilesDict,
-            #             searchingPlayer,
-            #             calculatedLeftOverTurns,
-            #             baseCaseFunc,
-            #             dist=distance
-            #         )
+            turnsUsedByNewPaths = 0
+            for path in newPaths:
+                turnsUsedByNewPaths += path.length
+            calculatedLeftOverTurns = remainingTurns - turnsUsedByNewPaths
+
+            for path in newPaths:
+                rootNode = gatherTreeNodeLookup.get(path.start.tile, None)
+                if rootNode is not None:
+                    (startPriorityObject, distance) = newStartTilesDict[rootNode.tile]
+                    add_tree_nodes_to_start_tiles_dict_recurse(
+                        rootNode,
+                        newStartTilesDict,
+                        searchingPlayer,
+                        calculatedLeftOverTurns,
+                        baseCaseFunc,
+                        dist=distance
+                    )
 
             rootNodes = [gatherTreeNodeLookup[tile] for tile in origStartTilesDict]
 
@@ -1198,21 +1193,6 @@ def _knapsack_levels_gather_iterative_prune(
                 if totalTurns > pruneToTurns:
                     _dump_log_entries(logEntries)
                     raise AssertionError(f'Pruned turns {totalTurns} was more than the amount requested, {pruneToTurns}')
-
-            # newStartTilesDict = origStartTilesDict.copy()
-
-            for path in newPaths:
-                rootNode = gatherTreeNodeLookup.get(path.start.tile, None)
-                if rootNode is not None:
-                    (startPriorityObject, distance) = newStartTilesDict[rootNode.tile]
-                    add_tree_nodes_to_start_tiles_dict_recurse(
-                        rootNode,
-                        newStartTilesDict,
-                        searchingPlayer,
-                        calculatedLeftOverTurns,
-                        baseCaseFunc,
-                        dist=distance
-                    )
 
             # _debug_print_diff_between_start_dict_and_GatherTreeNodes(gatherTreeNodeLookup, newStartTilesDict)
 
@@ -2725,148 +2705,6 @@ def prune_mst_to_army(
     )
 
     return rootNodes
-
-#
-# def prune_mst_to_max_army_per_turn_with_values(
-#         rootNodes: typing.List[GatherTreeNode],
-#         minArmy: int,
-#         searchingPlayer: int,
-#         teams: typing.List[int],
-#         viewInfo: ViewInfo | None = None,
-#         noLog: bool = True,
-#         gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
-#         invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
-#         allowBranchPrune: bool = True,
-# ) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
-#     """
-#     Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
-#     O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
-#
-#     @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
-#     @param minArmy: The minimum army amount to prune the MST down to
-#     @param searchingPlayer:
-#     @param viewInfo:
-#     @param noLog:
-#     @param gatherTreeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
-#     @param invalidMoveFunc: func(GatherTreeNode) -> bool, return true if you want a leaf GatherTreeNode to always be pruned. By emptyVal, if none is passed, then gather nodes that begin at an enemy tile or that are 1's will always be pruned as invalid.
-#     @param allowBranchPrune: Optionally, pass false to disable pruning whole branches. Allowing branch prunes produces lower value per turn trees but also smaller trees.
-#
-#     @return: (totalCount, totalValue, The list same list of rootnodes passed in, modified)
-#     """
-#     turn = 0  # TODO parameterize
-#     turnIncFactor = (1 + turn) & 1
-#
-#     cityCounter = SearchUtils.Counter(0)
-#     cityGatherDepthCounter = SearchUtils.Counter(0)
-#     citySkipTiles = set()
-#     totalValue = 0
-#     totalTurns = 0
-#     for n in rootNodes:
-#         if (n.tile.isCity or n.tile.isGeneral) and not n.tile.isNeutral:
-#             if teams[n.tile.player] == teams[searchingPlayer]:
-#                 citySkipTiles.add(n.tile)
-#
-#         totalTurns += n.gatherTurns
-#         totalValue += n.value
-#
-#     if totalTurns == 0:
-#         if viewInfo:
-#             viewInfo.add_info_line(f'zero turns gather prune, value {totalValue}')
-#         return 0, 0, rootNodes
-#
-#
-#     def cityCounterFunc(node: GatherTreeNode):
-#         if (node.tile.isGeneral or node.tile.isCity) and not node.tile.isNeutral and node.tile not in citySkipTiles:
-#             if teams[node.tile.player] == teams[searchingPlayer]:
-#                 cityCounter.add(1)
-#                 # each time we add one of these we must gather all the other cities in the tree first too so we lose that many increment turns + that
-#                 cityGatherDepthCounter.add(node.trunkDistance)
-#             else:
-#                 cityCounter.add(-1)
-#
-#         for child in node.children:
-#             cityCounterFunc(child)
-#
-#     for n in rootNodes:
-#         cityCounterFunc(n)
-#
-#     def setCountersToPruneCitiesRecurse(node: GatherTreeNode):
-#         for child in node.children:
-#             setCountersToPruneCitiesRecurse(child)
-#
-#         if teams[node.tile.player] == teams[searchingPlayer] and (node.tile.isCity or node.tile.isGeneral):
-#             cityGatherDepthCounter.add(0 - node.trunkDistance)
-#             cityCounter.add(-1)
-#
-#     if invalidMoveFunc is None:
-#         def invalid_move_func(node: GatherTreeNode):
-#             if node.tile.army <= 1:
-#                 return True
-#             if node.tile.player != searchingPlayer:
-#                 return True
-#         invalidMoveFunc = invalid_move_func
-#
-#     def getCurrentCityIncAmount(gatherTurnsLeft: int) -> int:
-#         cityIncrementAmount = (cityCounter.value * (gatherTurnsLeft - turnIncFactor)) // 2  # +1 here definitely causes it to under-gather
-#         cityIncrementAmount -= cityGatherDepthCounter.value // 2
-#         return cityIncrementAmount
-#
-#     totalValue += getCurrentCityIncAmount(totalTurns)
-#     curValuePerTurn = SearchUtils.Counter(totalValue / totalTurns)
-#
-#     def untilFunc(node: GatherTreeNode, _, turnsLeft: int, curValue: int):
-#         turnsLeftIfPruned = turnsLeft - node.gatherTurns
-#
-#         # act as though we're pruning the city so we can calculate the gather value without it
-#         setCountersToPruneCitiesRecurse(node)
-#
-#         cityIncrementAmount = getCurrentCityIncAmount(turnsLeftIfPruned)
-#         armyLeftIfPruned = curValue - node.value + cityIncrementAmount
-#         if turnsLeftIfPruned == 0:
-#             cityCounterFunc(node)
-#             return True
-#
-#         pruneValPerTurn = armyLeftIfPruned / turnsLeftIfPruned
-#
-#         if pruneValPerTurn < curValuePerTurn.value or armyLeftIfPruned < minArmy:
-#             # not pruning here, put the city increments back
-#             cityCounterFunc(node)
-#             return True
-#
-#         curValuePerTurn.value = pruneValPerTurn
-#         return False
-#
-#     def pruneOrderFunc(node: GatherTreeNode, curObj):
-#         if node.gatherTurns == 0 or node.trunkDistance == 0:
-#             msg = f'ERR PRUNE node {repr(node)} had trunkDist {node.trunkDistance} or gatherTurns {node.gatherTurns} of 0...?'
-#             # if USE_DEBUG_ASSERTS:
-#             if viewInfo:
-#                 viewInfo.add_info_line(msg)
-#             return -1, -1, -1
-#         return (node.value / node.gatherTurns), node.trunkValue / node.trunkDistance, node.trunkDistance
-#
-#     # def pruneFunc(node: GatherTreeNode, curObj) -> typing.Tuple:
-#     #     trunkValuePerTurn = node.trunkValue / node.trunkDistance if node.trunkDistance > 0 else 0
-#     #     return node.value / node.gatherTurns, trunkValuePerTurn, node.trunkDistance
-#
-#     prunedTurns, noCityCalcGathValue, nodes = prune_mst_until(
-#         rootNodes,
-#         untilFunc=untilFunc,
-#         # if we dont include trunkVal/node.trunkDistance we end up keeping shitty branches just because they have a far, large tile on the end.
-#         pruneOrderFunc=pruneOrderFunc,
-#         # pruneOrderFunc=lambda node, curObj: (node.value, node.trunkValue / node.trunkDistance, node.trunkDistance),
-#         # pruneOrderFunc=lambda node, curObj: (node.value / node.gatherTurns, node.trunkValue / node.trunkDistance, node.trunkDistance),
-#         invalidMoveFunc=invalidMoveFunc,
-#         viewInfo=viewInfo,
-#         noLog=noLog,
-#         gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
-#         pruneBranches=False
-#     )
-#
-#     finalIncValue = getCurrentCityIncAmount(prunedTurns)
-#     gathValue = noCityCalcGathValue + finalIncValue
-#
-#     return prunedTurns, gathValue, nodes
 
 
 def prune_mst_to_max_army_per_turn_with_values(

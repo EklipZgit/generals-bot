@@ -87,7 +87,7 @@ class ArmyInterceptionUnitTests(TestBase):
         # plan = self.get_interception_plan(map, general, enemyGeneral, enTile=enTile)
 
         if debugMode:
-            self.render_intercept_plan(map, plan, renderIndividualAnalysis=True)
+            self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
 
         self.assertNotIn(map.GetTile(9, 10), plan.common_intercept_chokes)
 
@@ -526,7 +526,7 @@ player_index=0
                 plan = self.get_interception_plan_from_paths(map, general, enemyGeneral, paths)
 
                 if debugMode:
-                    self.render_intercept_plan(map, plan, renderIndividualAnalysis=True)
+                    self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
 
                 value, turns, bestOpt = self.get_best_intercept_option_path_values(plan)
                 self.assertIn(map.GetTile(2, 6), bestOpt.tileList)
@@ -672,8 +672,9 @@ player_index=0
                     map.GetTile(13, 10).army = 26
 
                 plan = self.get_interception_plan(map, general, enemyGeneral)
-                # if debugMode:
-                #     self.render_intercept_plan(map, plan, renderIndividualAnalysis=True)
+
+                if debugMode:
+                    self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
 
                 self.assert_no_intercept_option_by_coords(plan, 12, 10, message='shouldnt even have an option that wastes intercept time regardless of general death')
                 bestOpt = self.get_best_intercept_option(plan)
@@ -681,4 +682,24 @@ player_index=0
                 self.assertIsNotNone(bestOpt, 'should have found an intercept move to the right, though')
                 self.assertNotIn(map.GetTile(12, 10), bestOpt.tileList, 'shouldnt delay and let general die')
 
+    def test_should_intercept_obvious_intercept_use_case(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_intercept_obvious_intercept_use_case___wQ-7lZL7d---0--131.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 131, fill_out_tiles=True)
+
+        plan = self.get_interception_plan(map, general, enemyGeneral, enTile=map.GetTile(11, 10), fromTile=map.GetTile(10, 10))
+
+        if debugMode:
+            self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
+
+        bestOpt = self.get_best_intercept_option(plan)
+        self.assertIsNotNone(bestOpt)
+
+        self.assertEqual((12, 6), bestOpt.path.start.tile.coords)
+        self.assertCoordsInPath((12, 8), bestOpt.path)
+
+        # if path is not None:
+        #     self.assertFalse(path.path.start.move_half)
+
 # 18f, 17p, 0s
+# 19f, 17p, 0s  before fixing  test_should_intercept_obvious_intercept_use_case

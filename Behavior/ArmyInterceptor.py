@@ -84,6 +84,8 @@ class InterceptionOptionInfo(TilePlanInterface):
         """While Turns should be the worst case intercept moves, this should be best case?"""
         self._requiredDelay: int = requiredDelay
 
+        self.intercept: ArmyInterception | None = None
+
     @property
     def length(self) -> int:
         return self._turns
@@ -138,10 +140,13 @@ class InterceptionOptionInfo(TilePlanInterface):
 class ArmyInterception(object):
     def __init__(
         self,
-        threats: typing.List[ThreatValueInfo]
+        threats: typing.List[ThreatValueInfo],
+        ignoredThreats: typing.List[ThreatObj]
     ):
-        self.threats: typing.List[ThreatObj] = [t.threat for t in threats]
         self.threat_values: typing.List[ThreatValueInfo] = threats
+        self.threats: typing.List[ThreatObj] = [t.threat for t in threats]
+
+        self.ignored_threats: typing.List[ThreatObj] = ignoredThreats
 
         self.base_threat_army: int = 0
         self.common_intercept_chokes: typing.Dict[Tile, InterceptPointTileInfo] = {}
@@ -207,14 +212,24 @@ class ArmyInterceptor(object):
         turnsLeftInCycle: int,
         otherThreatsBlockingTiles: typing.Dict[Tile, ThreatBlockInfo] | None = None
     ) -> ArmyInterception | None:
-        threatValues = self._prune_threats_to_valuable_threat_info(threats, turnsLeftInCycle)
+        threatValues, ignoredThreats = self._prune_threats_to_valuable_threat_info(threats, turnsLeftInCycle)
 
         if len(threatValues) == 0:
             return None
 
-        interception = ArmyInterception(threatValues)
+        interception = ArmyInterception(threatValues, ignoredThreats)
 
-        interception.common_intercept_chokes = self.get_shared_chokes(interception.threat_values)
+        interception.common_intercept_chokes = self.get_shared_chokes(interception.threat_values, interception)
+        threatMovable = [t for t in interception.target_tile.movableNoObstacles]
+        if len(interception.common_intercept_chokes) <= len(threatMovable):
+            countMightBeMovable = len(threatMovable) - len(interception.common_intercept_chokes)
+            for mv in threatMovable:
+                if mv in interception.common_intercept_chokes:
+                    countMightBeMovable -= 1
+
+            if countMightBeMovable == 0:
+                # TODO do something with this info...?
+                logbook.warn(f'ALL of the {len(interception.common_intercept_chokes)} common intercept chokes were only one tile adjacent to the threat. Should probably re-evaluate which threats we care about, then...?')
 
         interception.base_threat_army = self._get_threats_army_amount(threats)
         # potentialRecaptureArmyInterceptTable = self._get_potential_intercept_table(turnsLeftInCycle, interception.base_threat_army)
@@ -223,18 +238,24 @@ class ArmyInterceptor(object):
             logbook.warn(f'No intercept options found, retrying shared chokes but being more lenient filtering out threats')
             # try again, more friendly
             altThreatValues = [t for t in threatValues if t.threat.path.get_first_move().dest.lastMovedTurn < self.map.turn]
-            if len(altThreatValues) < len(threatValues) and len(altThreatValues) > 0:
-                interception = ArmyInterception(altThreatValues)
-                threats = [t.threat for t in altThreatValues]
-                interception.common_intercept_chokes = self.get_shared_chokes(interception.threat_values)
+            if len(threatValues) > len(altThreatValues) > 0:
+                newIgnored = [t.threat for t in threatValues if t not in altThreatValues]
+                newIgnored.extend(ignoredThreats)
+                interception = ArmyInterception(altThreatValues, newIgnored)
+
+                interception.common_intercept_chokes = self.get_shared_chokes(interception.threat_values, interception)
 
                 interception.base_threat_army = self._get_threats_army_amount(interception.threats)
-                # potentialRecaptureArmyInterceptTable = self._get_potential_intercept_table(turnsLeftInCycle, interception.base_threat_army)
+
                 interception.intercept_options = self._get_intercept_plan_options(interception, turnsLeftInCycle, otherThreatsBlockingTiles)
 
         return interception
 
-    def get_shared_chokes(self, threats: typing.List[ThreatValueInfo]) -> typing.Dict[Tile, InterceptPointTileInfo]:
+    def get_shared_chokes(
+            self,
+            threats: typing.List[ThreatValueInfo],
+            interceptData: ArmyInterception,
+    ) -> typing.Dict[Tile, InterceptPointTileInfo]:
         commonChokesCounts: typing.Dict[Tile, int] = {}
         # commonChokesCombinedTurnOffsets: typing.Dict[Tile, int] = {}
         commonMinDelayTurns = {}
@@ -328,9 +349,11 @@ class ArmyInterceptor(object):
         #     for tile, dist in sorted(sharedChokes.items()):
         #         logbook.info(f'potential shared: {str(tile)} = dist {dist}')
 
-        if len(sharedChokes) == 1 and len(threats) > 1 and threats[0].threat.path.start.tile in sharedChokes:
+        indexesToKeepIfBad = 1
+        if len(sharedChokes) == 1 and len(threats) > indexesToKeepIfBad and threats[0].threat.path.start.tile in sharedChokes:
             logbook.info(f'No shared chokes found against {threats}, falling back to just first threat intercept...')
-            return self.get_shared_chokes(threats[0:1])
+            interceptData.ignored_threats.extend([t.threat for t in threats[indexesToKeepIfBad:]])
+            return self.get_shared_chokes(threats[0:indexesToKeepIfBad], interceptData)
 
         return sharedChokes
 
@@ -566,11 +589,19 @@ class ArmyInterceptor(object):
 
         return potentialRecaptureArmyInterceptTable
 
-    def _prune_threats_to_valuable_threat_info(self, threats: typing.List[ThreatObj], turnsLeftInCycle: int) -> typing.List[ThreatValueInfo]:
+    def _prune_threats_to_valuable_threat_info(self, threats: typing.List[ThreatObj], turnsLeftInCycle: int) -> typing.Tuple[typing.List[ThreatValueInfo], typing.List[ThreatObj]]:
+        """
+        Returns threatsToConsider, threatsIgnored
+
+        @param threats:
+        @param turnsLeftInCycle:
+        @return:
+        """
         if len(threats) == 0:
             raise AssertionError(f'Threat list was empty.')
 
         outThreats = []
+        ignoredThreats: typing.List[ThreatObj] = []
 
         threatTile = threats[0].path.start.tile
         countCity = 0
@@ -578,6 +609,7 @@ class ArmyInterceptor(object):
         countExpansion = 0
         for threat in threats:
             if threat.path.length <= 0:
+                ignoredThreats.append(threat)
                 continue
             # Why was this here?
             # if threat.turns > 30:
@@ -588,16 +620,19 @@ class ArmyInterceptor(object):
                 countGen += 1
                 if countGen > 2:
                     logbook.info(f'bypassing {countGen}+ general threat {threat.path}')
+                    ignoredThreats.append(threat)
                     continue
             elif threat.path.tail.tile.isCity:
                 countCity += 1
                 if countCity > 2:
                     logbook.info(f'bypassing {countCity}+ city threat {threat.path}')
+                    ignoredThreats.append(threat)
                     continue
             else:
                 countExpansion += 1
                 if countExpansion > 3:
                     logbook.info(f'bypassing {countExpansion}+ expansion threat {threat.path}')
+                    ignoredThreats.append(threat)
                     continue
 
             self.ensure_threat_army_analysis(threat)
@@ -619,10 +654,11 @@ class ArmyInterceptor(object):
         for threat in threatValues:
             if not threat.threat.path.tail.tile.isGeneral and threat.turns_used_by_enemy <= lenCutoffIfNotCompliant:
                 logbook.info(f'bypassing threat due to turns {threat.turns_used_by_enemy} vs cutoff {avgLen}. Cut {threat}')
+                ignoredThreats.append(threat.threat)
                 continue
             finalThreats.append(threat)
 
-        return finalThreats
+        return finalThreats, ignoredThreats
 
     def ensure_threat_army_analysis(self, threat: ThreatObj) -> bool:
         """returns True if the army analysis was built"""
@@ -896,6 +932,8 @@ class ArmyInterceptor(object):
                         interceptingArmyRemaining=enemyArmyLeftAtIntercept,
                         bestCaseInterceptMoves=bestCaseInterceptMoves,
                         requiredDelay=1 if shouldDelay else 0)
+
+                    opt.intercept = interception
 
                     if existing is None:
                         if self.log_debug:

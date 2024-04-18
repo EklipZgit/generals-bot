@@ -911,19 +911,19 @@ def _include_optimal_expansion_options(
             logEntries.append("breaking due to no tiles left in sortedTiles")
             break
         timeUsed = time.perf_counter() - startTime
-        logEntries.append(f'EXP iter {iter[0]} time used {timeUsed:.3f}')
+        logEntries.append(f'EXP iter {iter[0]} time used {timeUsed:.4f}')
         # Stages:
         # first 0.1s, use large tiles and shift smaller. (do nothing)
         # second 0.1s, use all tiles (to make sure our small tiles are included)
         # third 0.1s - knapsack optimal stuff outside this loop i guess?
-        if timeUsed > stage1 and timeUsed < stage2:
-            logEntries.append(f"timeUsed > {stage1} ({timeUsed})... Breaking loop and knapsacking...")
+        if stage1 < timeUsed < stage2 and not inStage2:
+            logEntries.append(f"timeUsed > stage1 {stage1} ({timeUsed:.4f})... Moving to stage 2...")
         if timeUsed > breakStage and inStage2:
-            logEntries.append(f"timeUsed > {breakStage} ({timeUsed})... breaking and knapsacking...")
+            logEntries.append(f"timeUsed > breakStage {breakStage} ({timeUsed:.4f})... breaking and knapsacking...")
             break
         if timeUsed > stage2:
             logEntries.append(
-                f"timeUsed > {stage2} ({timeUsed})... Switching to using all tiles, cutoffFactor = fullCutoff...")
+                f"timeUsed > {stage2} ({timeUsed:.4f})... Switching to using all tiles, cutoffFactor = fullCutoff...")
             inStage2 = True
             cutoffFactor = fullCutoff
 
@@ -994,8 +994,9 @@ def _include_optimal_expansion_options(
 
         logEntries.append(
             f'cutoffFactor {cutoffFactor}/{fullCutoff}, numTiles {len(tilesLargerThanAverage)}, largestTile {tilePercentile[0].toString()}: {tilePercentile[0].army} army, smallestTile {tilePercentile[-1].toString()}: {tilePercentile[-1].army} army')
-        logEntries.append(f'about to run an optimal expansion for {timeCap:.4f}s max for remainingTurns {remainingTurns}, negatives {str([str(t) for t in negativeTiles])}')
+        logEntries.append(f'about to run an optimal expansion for {timeCap:.4f}s max for remainingTurns {remainingTurns}')
         if DebugHelper.IS_DEBUGGING:
+            logEntries.append(f'Including negative tiles: {str([str(t) for t in negativeTiles])}')
             logEntries.append('TILES INCLUDED FROM CURRENT PERCENTILE: ')
             logEntries.append('\n' + f'\n    '.join([str(t) for t in tilesLargerThanAverage]))
 

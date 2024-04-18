@@ -37,7 +37,7 @@ from bot_ek0x45 import EklipZBot
 
 
 class TestBase(unittest.TestCase):
-    GLOBAL_BYPASS_REAL_TIME_TEST = False
+    GLOBAL_BYPASS_REAL_TIME_TEST = True
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -832,10 +832,21 @@ class TestBase(unittest.TestCase):
     def assertTileXYIn(self, map: MapBase, x: int, y: int, container: MapMatrix | MapMatrixSet | typing.Container[Tile] | typing.Iterable[Tile]):
         self.assertIn(map.GetTile(x, y), container)
 
+    def assertCoordsIn(self, map: MapBase, coords: typing.Tuple[int, int], container: MapMatrix | MapMatrixSet | typing.Container[Tile] | typing.Iterable[Tile]):
+        x, y = coords
+        self.assertIn(map.GetTile(x, y), container)
+
     def assertOwned(self, player: int, tile: Tile, reason: str | None = None):
         if not reason:
             reason = f'expected player {player} to own {tile}'
         self.assertEqual(player, tile.player, reason)
+
+    def assertCoordsInPath(self, coords: typing.Tuple[int, int], path: Path):
+        for tile in path.tileList:
+            if coords == tile.coords:
+                return
+
+        self.fail(f'Expected {coords} to be in {path}')
 
     def assertNoRepetition(
             self,
@@ -1515,7 +1526,7 @@ class TestBase(unittest.TestCase):
         interceptor = ArmyInterceptor(map, analysis, useDebugLogging=useDebugLogging)
         return interceptor
 
-    def get_interception_plan(self, map: MapBase, general: Tile, enemyGeneral: Tile, enTile: Tile | None = None, turnsLeftInCycle: int = -1, useDebugLogging: bool = True, additionalPath: str | None = None, justCityAndGeneralThreats: bool = False) -> ArmyInterception:
+    def get_interception_plan(self, map: MapBase, general: Tile, enemyGeneral: Tile, enTile: Tile | None = None, turnsLeftInCycle: int = -1, useDebugLogging: bool = True, additionalPath: str | None = None, justCityAndGeneralThreats: bool = False, fromTile: Tile | None = None) -> ArmyInterception:
         if turnsLeftInCycle == -1:
             turnsLeftInCycle = 50 - map.turn % 50
 
@@ -1525,9 +1536,23 @@ class TestBase(unittest.TestCase):
 
         if enTile is None:
             enTile = max(map.get_all_tiles(), key=lambda t: t.army if t.player == enemyGeneral.player else 0)
+        if fromTile is None:
+            potentialFroms = SearchUtils.where(enTile.movableNoObstacles, lambda t: t.player == enTile.player and (t.army == 1 or (map.turn % 50 == 0 and t.army == 2)))
+            if len(potentialFroms) > 1:
+                for potFrom in potentialFroms.copy():
+                    potentialFromFroms = SearchUtils.where(potFrom.movableNoObstacles, lambda t: t != enTile and t not in potentialFroms and t.player == enTile.player and (t.army == 1 or ((map.turn - 1) % 50 in [49, 0] and t.army == 2)))
+                    if len(potentialFromFroms) == 0:
+                        potentialFroms.remove(potFrom)
+                    if len(potentialFroms) == 1:
+                        break
+            if potentialFroms:
+                fromTile = potentialFroms[0]
 
         # dangerAnalyzer = DangerAnalyzer(map)
         # dangerAnalyzer.analyze([general], 40, {})
+
+        if fromTile is not None:
+            enTile.delta.fromTile = fromTile
 
         targets = [general]
         targets.extend(map.players[general.player].cities)
@@ -1851,6 +1876,15 @@ class TestBase(unittest.TestCase):
                 color[0] + 20 * i,
                 90 - 10 * i,
                 121 + 15 * i,
+            ))
+
+        for i, threat in enumerate(plan.ignored_threats):
+            color = ViewInfo.get_color_from_target_style(TargetStyle.YELLOW)
+            viewInfo.color_path(PathColorer(
+                threat.path,
+                color[0] + 20 * i,
+                140 - 10 * i,
+                70 + 15 * i,
             ))
 
         maxValPerTurn = 0

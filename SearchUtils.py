@@ -296,7 +296,7 @@ def dest_breadth_first_target(
                 frontier.put(((newDist, negCaptures, 0 - nextArmy), next, newDist, nextArmy, goalInc, current))
     if not noLog:
         logbook.info(
-            f"BFS DEST SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}, FOUNDDIST: {foundDist}")
+            f"BFS DEST SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}, FOUNDDIST: {foundDist}")
     if foundDist < 0:
         return None
 
@@ -477,7 +477,7 @@ def a_star_kill(
                     # logbook.info("a* enqueued next")
                     came_from[next] = current
     logbook.info(
-        f"A* KILL SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
+        f"A* KILL SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
     goal = None
     for possibleGoal in goalSet:
         if possibleGoal in came_from:
@@ -567,7 +567,7 @@ def a_star_find(
 
     if not noLog:
         logbook.info(
-            f"A* FIND SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
+            f"A* FIND SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
 
     if goal not in came_from:
         return None
@@ -655,7 +655,7 @@ def a_star_find_matrix(
 
     if not noLog:
         logbook.info(
-            f"A* FIND SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
+            f"A* FIND SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
 
     if goal not in came_from:
         return None
@@ -735,7 +735,7 @@ def a_star_find_dist(
 
     if not noLog:
         logbook.info(
-            f"A* FIND SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
+            f"A* FIND SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
 
     return foundDist
 
@@ -881,7 +881,7 @@ def breadth_first_dynamic(
                 frontier.put((nextVal, newDist, next, current))
 
     logbook.info(
-        f"BFS-DYNAMIC ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
+        f"BFS-DYNAMIC ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         return None
 
@@ -1047,7 +1047,9 @@ def breadth_first_dynamic_max(
     if searchingPlayer == -2:
         searchingPlayer = map.player_index
 
+    nonDefaultPrioFunc = True
     if priorityFunc is None:
+        nonDefaultPrioFunc = False
         # make sure to initialize the initial base values and account for first priorityObject being None. Or initialize all your start values in the dict.
         def default_priority_func(nextTile, currentPriorityObject):
             (dist, negCityCount, negEnemyTileCount, negArmySum, sumX, sumY, goalIncrement) = currentPriorityObject
@@ -1070,6 +1072,7 @@ def breadth_first_dynamic_max(
             return dist, negCityCount, negEnemyTileCount, negArmySum, sumX + nextTile.x, sumY + nextTile.y, goalIncrement
 
         priorityFunc = default_priority_func
+
     frontier = HeapQueue()
 
     globalVisitedSet = set()
@@ -1083,7 +1086,7 @@ def breadth_first_dynamic_max(
             frontier.put((startVal, distance, tile, None, startList))
     else:
         for tile in startTiles:
-            if priorityFunc != default_priority_func:
+            if nonDefaultPrioFunc:
                 raise AssertionError(
                     "yo you need to do the dictionary start if you're gonna pass a nonstandard priority func.")
             if tile.isMountain:
@@ -1195,7 +1198,7 @@ def breadth_first_dynamic_max(
                 newNodeList.append((next, nextVal))
                 frontier.put((nextVal, dist, next, current, newNodeList))
     if not noLog:
-        logbook.info(f"BFS-DYNAMIC-MAX ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
+        logbook.info(f"BFS-DYNAMIC-MAX ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         if includePathValue:
             return None, None
@@ -1519,7 +1522,7 @@ def breadth_first_dynamic_max_per_tile(
                 newNodeList.append((next, nextPrio))
                 frontier.put((nextPrio, dist, next, current, newNodeList, startTile))
     if not noLog:
-        logbook.info(f"BFS-DYNAMIC-MAX-PER-TILE ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
+        logbook.info(f"BFS-DYNAMIC-MAX-PER-TILE ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         return {}
 
@@ -1858,7 +1861,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
                 newNodeList.append((next, nextPrio))
                 frontier.put((nextPrio, dist, next, current, newNodeList, startTile))
     if not noLog:
-        logbook.info(f"BFS-DYNAMIC-MAX ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
+        logbook.info(f"BFS-DYNAMIC-MAX ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         return {}
 
@@ -2070,7 +2073,7 @@ def bidirectional_breadth_first_dynamic(
                 frontier.put((nextVal, newDist, next, current))
 
     logbook.info(
-        f"BI-DIR BFS-FIND ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}, DEPTH: {depthEvaluated}")
+        f"BI-DIR BFS-FIND ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         return None
 
@@ -2320,7 +2323,7 @@ def breadth_first_find_dist_queue(
 
     if not noLog:
         logbook.info(
-            f"BFS-FIND-QUEUE-DIST ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.3f}")
+            f"BFS-FIND-QUEUE-DIST ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}")
     return foundDist
 
 

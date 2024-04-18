@@ -120,7 +120,7 @@ def get_start_expand_captures(
             if move.source == general:
                 movingArmy = curGenArmy
                 movingGen = True
-            elif move.dest.isGeneral:
+            elif move.dest.isGeneral and move.dest.player in teamPlayers:
                 raise AssertionError(f'Pathed into another general....? {move}')
 
             curMoveIdx += 1

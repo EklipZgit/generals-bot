@@ -1132,7 +1132,8 @@ class ArmyTracker(object):
 
     def find_next_fog_city_candidate_near_tile(self, cityPlayer: int, tile: Tile, cutoffDist: int = 10, distanceWeightReduction: int = 3, wallBreakWeight: float = 2.0, emergenceWeight: float = 1.0) -> Tile | None:
         """
-        Looks for a fog city candidate nearby a given tile
+        Looks for a fog city candidate nearby a given tile, and convert it to player owned if so.
+
         @param cityPlayer:
         @param tile:
         @param cutoffDist:
@@ -1429,9 +1430,10 @@ class ArmyTracker(object):
         if self.map.last_player_index_submitted_move is not None:
             # then map determined it did something and wasn't dropped. Execute it.
             src, dest, move_half = self.map.last_player_index_submitted_move
-            logbook.info(f'executing OUR move {str(self.map.last_player_index_submitted_move)}')
+            if src.visible:
+                logbook.info(f'executing OUR move {str(self.map.last_player_index_submitted_move)}')
 
-            self.army_moved(army, dest, trackingArmies)
+                self.army_moved(army, dest, trackingArmies)
 
     def try_track_army(
             self,
@@ -2061,9 +2063,25 @@ class ArmyTracker(object):
 
             self.check_if_this_city_was_actual_fog_city_location(city)
 
+        for player in self.map.players:
+            for city in player.cities:
+                if not city.discovered:
+                    self.check_need_to_shift_fog_city(city)
+
         self.updated_city_tiles = set()
 
     def check_need_to_shift_fog_city(self, city: Tile) -> Tile | None:
+        if not city.discovered:
+            noFriendlies = True
+            for t in city.movableNoObstacles:
+                if self.map.is_tile_on_team_with(t, city.player):
+                    noFriendlies = False
+                    break
+
+            if noFriendlies:
+                newCity = self._find_replacement_fog_city_internal(city)
+                return newCity
+
         if city.delta.oldOwner == city.player:
             return None
         if city.delta.oldOwner == -1:
@@ -2075,7 +2093,28 @@ class ArmyTracker(object):
             logbook.info(f'Not shifting player {city.delta.oldOwner} city {str(city)} because already enough cities on the board.')
             return None
 
-        return self.find_next_fog_city_candidate_near_tile(city.delta.oldOwner, city)
+        newCity = self._find_replacement_fog_city_internal(city)
+
+        return newCity
+
+    def _find_replacement_fog_city_internal(self, city: Tile):
+        prevArmy = city.delta.oldArmy
+
+        cityOwner = city.delta.oldOwner
+        if not city.visible:
+            cityOwner = city.player
+
+        cityPlayer = self.map.players[city.player]
+
+        newCity = self.find_next_fog_city_candidate_near_tile(cityOwner, city)
+        if not city.discovered:
+            city.reset_wrong_undiscovered_fog_guess()
+            cityPlayer.cities = [c for c in cityPlayer.cities if c != city]
+
+        if newCity:
+            newCity.army = prevArmy
+
+        return newCity
 
     def check_if_this_city_was_actual_fog_city_location(self, city: Tile):
         if not city.visible:
@@ -2153,7 +2192,7 @@ class ArmyTracker(object):
                 while mapTileCount > actualTileCount and tilesAsEncountered.queue:
                     toRemove: Tile
                     score, toRemove = tilesAsEncountered.get()
-                    if not toRemove.isCity:
+                    if not toRemove.isCity and not toRemove.isGeneral:
                         logbook.info(f'dropped player {player.index} over-tile tile {str(toRemove)}')
                         self.reset_temp_tile_marked(toRemove, noLog=True)
                         mapTileCount -= 1

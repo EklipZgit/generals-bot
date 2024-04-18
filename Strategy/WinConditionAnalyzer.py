@@ -650,7 +650,7 @@ class WinConditionAnalyzer(object):
             attackPruned = prunedValue + pruneFogRisk
             logbook.info(f'concluded get_dynamic_attack_against prune {tile} gather turns {prunedTurns} for total {attackPruned}, pruned gather {prunedValue}, pruneFogRisk {pruneFogRisk}')
 
-            if attackPruned / prunedTurns > attackVal / maxTurns:
+            if prunedTurns > 0 and attackPruned / prunedTurns > attackVal / maxTurns:
                 return prunedTurns, max(0, attackPruned), prunedNodes
 
             logbook.error(f'Prune wasnt the max value per turn...?')

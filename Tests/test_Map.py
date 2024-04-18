@@ -1,328 +1,15 @@
-import time
 import typing
 
-import EarlyExpandUtils
 import SearchUtils
-from BoardAnalyzer import BoardAnalyzer
-from BotHost import BotHostBase
 from DataModels import Move
 from Sim.GameSimulator import GameSimulatorHost
+from Sim.TextMapLoader import TextMapLoader
 from TestBase import TestBase
-from base.client.map import MapBase, Tile, TILE_FOG, TILE_OBSTACLE, TILE_MOUNTAIN, Score
-from bot_ek0x45 import EklipZBot
-
-ALL_SCENARIOS_TEAM_MAP = data = """
-|    |    |    |    |    
-          b60
-b20  cG3  aG55 c2          
-          c0
-d3   d3             
-a5   b5                    
-c3   c3
-               b1     
-     a55  C45  bC5  b1      
-     aC5       b55     
-     a1        a0       
-                    
-          d0          
-     d2   bG55 dG3  a20
-          a60       
-|    |    |    |    |    
-player_index=0
-teams=0,1,0,1
-mode=team
-bot_target_player=1
-aTiles=7
-bTiles=8
-cTiles=5
-dTiles=5
-"""
+from base.client.map import TILE_FOG, TILE_OBSTACLE, TILE_MOUNTAIN, Score
+from test_MapBaseClass import MapTestsBase
 
 
-class MapTests(TestBase):
-    def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
-        bot = super().get_debug_render_bot(simHost, player)
-
-        bot.info_render_tile_deltas = True
-        bot.info_render_army_emergence_values = True
-
-        return bot
-
-    def assertCorrectArmyDeltas(
-            self,
-            simHost: GameSimulatorHost,
-            player: int = -1,
-            excludeFogMoves: bool = False,
-            minTurn = -1,
-            includeAllPlayers: bool = False
-    ):
-        realMap = simHost.sim.sim_map
-        if realMap.turn <= minTurn:
-            return
-
-        players = [i for i in range(len(simHost.sim.players))]
-        if player > -1:
-            players = [player]
-
-        failures = []
-
-        skipFromToCollisionTiles = set()
-        # # WHY WOULD WE SKIP COLLISION TILES, THIS IS MESSING UP test_run_adj_collision_mutual TEST!?
-        # if len(simHost.sim.moves_history) > 0:
-        #     skipFromToCollisionTiles = self.get_collision_tiles(simHost.sim.moves_history[-1])
-
-        killedOrIndeterminateMoves: typing.Set[Move] = set()
-        for player in players:
-            if not includeAllPlayers and player > 1:
-                continue
-
-            playerMap = simHost.get_player_map(player)
-            # playerBot = simHost.get_bot(player)
-            # if playerBot.armyTracker.lastTurn != realMap.turn:
-            #     playerBot.init_turn()
-
-            for playerMapPlayer in playerMap.players:
-                if not includeAllPlayers and playerMapPlayer.index > 1:
-                    continue
-                if len(simHost.sim.moves_history) > 0:
-                    simPlayerMove = simHost.sim.moves_history[-1][playerMapPlayer.index]
-
-                    if simPlayerMove is None and playerMapPlayer.last_move is not None:
-                        src, dest, moveHalf = playerMapPlayer.last_move
-                        move = Move(src, dest, moveHalf)
-                        failures.append(
-                            f'(pMap {player} had incorrect last move for player {playerMapPlayer.index}. Expected None, found {str(move)}')
-                    elif simPlayerMove is not None:
-                        # ignore if the target players move got nuked with priority:
-                        simDest = simHost.sim.sim_map.GetTile(simPlayerMove.dest.x, simPlayerMove.dest.y)
-                        if simDest.delta.armyDelta == 0:
-                            continue
-                        simSrc = simHost.sim.sim_map.GetTile(simPlayerMove.source.x, simPlayerMove.source.y)
-                        simDest = simHost.sim.sim_map.GetTile(simPlayerMove.dest.x, simPlayerMove.dest.y)
-                        priorityKillerMoves = []
-                        for i, move in enumerate(simHost.sim.moves_history[-1]):
-                            if i == playerMapPlayer.index:
-                                continue
-                            if move is None:
-                                continue
-                            if (
-                                    move.dest.x == simSrc.x
-                                    and move.dest.y == simSrc.y
-                                    and MapBase.player_had_priority_over_other(i, playerMapPlayer.index, simHost.sim.turn)
-                                    and move.army_moved >= simSrc.delta.oldArmy - 1
-                            ):
-                                priorityKillerMoves.append(move)
-
-                            if (
-                                    move.dest.x == simSrc.x
-                                    and move.dest.y == simSrc.y
-                                    and move.source.x == simDest.x
-                                    and move.source.y == simDest.y
-                                    and move.army_moved >= simSrc.delta.oldArmy - 1
-                            ):
-                                # then this is a collision and doesn't have enough information to differentiate between
-                                priorityKillerMoves.append(move)
-
-                        if len(priorityKillerMoves) > 0:
-                            killedOrIndeterminateMoves.add(simPlayerMove)
-                            continue
-
-                        if playerMapPlayer.last_move is None:
-                            failures.append(
-                                f'(pMap {player} had incorrect last move for player {playerMapPlayer.index}. Expected {str(simPlayerMove)}, found None')
-                        else:
-                            pSource, pDest, movedHalf = playerMapPlayer.last_move
-                            if (
-                                    simPlayerMove.source.x != pSource.x
-                                    or simPlayerMove.source.y != pSource.y
-                                    or simPlayerMove.dest.x != pDest.x
-                                    or simPlayerMove.dest.y != pDest.y
-                                    or simPlayerMove.move_half != movedHalf
-                            ):
-                                src, dest, moveHalf = playerMapPlayer.last_move
-                                move = Move(src, dest, moveHalf)
-                                failures.append(
-                                    f'(pMap {player} had incorrect last move for player {playerMapPlayer.index}. Expected {str(simPlayerMove)}, found {str(move)}')
-
-        for player in players:
-            playerMap = simHost.get_player_map(player)
-            if not includeAllPlayers and player > 1:
-                continue
-
-            for tile in realMap.get_all_tiles():
-                playerTile = playerMap.GetTile(tile.x, tile.y)
-                if not playerTile.visible:
-                    # TODO FIX THIS
-                    if playerTile.lastSeen < playerMap.turn - 2 and excludeFogMoves:
-                        continue
-                    #
-                    # pTilePlayer = simHost.sim.players[playerTile.player]
-                    # if pTilePlayer.move_history[-1] is not None and
-                    if playerTile.isGeneral != tile.isGeneral:
-                        continue
-
-                if not playerTile.discovered and playerTile.army == 0 and playerTile.player == -1:
-                    continue
-
-                if playerTile.army != tile.army:
-                    failures.append(f'(pMap {player} tile {str(tile)}) expected tile.army {tile.army} on {repr(tile)}, found {playerTile.army} on {repr(playerTile)}')
-                if playerTile.player != tile.player:
-                    failures.append(f'(pMap {player} tile {str(tile)}) expected player {tile.player} on {repr(tile)}, found {playerTile.player} on {repr(playerTile)}')
-                if playerTile.isCity != tile.isCity:
-                    failures.append(f'(pMap {player} tile {str(tile)}) expected isCity {tile.isCity} on {repr(tile)}, found {playerTile.isCity} on {repr(playerTile)}')
-
-                if not playerTile.delta.discovered:
-                    # these asserts are not valid the turn of discovery...?
-                    if playerTile.delta.armyDelta != tile.delta.armyDelta:
-                        failures.append(f'(pMap {player} tile {str(tile)}) expected tile.delta.armyDelta {tile.delta.armyDelta} on {repr(tile)}, found {playerTile.delta.armyDelta} on {repr(playerTile)}')
-                    if playerTile.delta.oldArmy != tile.delta.oldArmy:
-                        failures.append(f'(pMap {player} tile {str(tile)}) expected delta.oldArmy {tile.delta.oldArmy} on {repr(tile)}, found {playerTile.delta.oldArmy} on {repr(playerTile)}')
-                    if playerTile.delta.oldOwner != tile.delta.oldOwner:
-                        failures.append(f'(pMap {player} tile {str(tile)}) expected delta.oldOwner {tile.delta.oldOwner} on {repr(tile)}, found {playerTile.delta.oldOwner} on {repr(playerTile)}')
-                if playerTile.delta.newOwner != tile.delta.newOwner:
-                    failures.append(f'(pMap {player} tile {str(tile)}) expected delta.newOwner {tile.delta.newOwner} on {repr(tile)}, found {playerTile.delta.newOwner} on {repr(playerTile)}')
-                if playerTile not in skipFromToCollisionTiles:
-                    if playerTile.delta.fromTile != tile.delta.fromTile:
-                        # a tile can be moved to from multiple tiles at once. However a tile cannot move TO multiple tiles
-                        # at once, so cross reference the mismatched froms corresponding to-tiles in the real map.
-                        # If they match, then this mismatch is fine.
-                        fMessage = f'(pMap {player} tile {str(tile)}) expected delta.fromTile {str(tile.delta.fromTile)} on {repr(tile)}, found {str(playerTile.delta.fromTile)} on {repr(playerTile)}'
-                        # all bets are off when the dest tile has no delta and both players moved at each others armies. Both players think their move took effect and the other player didn't move, as those two cases are indistinguishable from each players perspective.
-                        if playerTile.delta.fromTile is None:
-                            if Move(tile.delta.fromTile, tile) not in killedOrIndeterminateMoves:
-                                failures.append(fMessage)
-                        else:
-                            realPlayerFrom = realMap.GetTile(playerTile.delta.fromTile.x, playerTile.delta.fromTile.y)
-                            realFrom = tile.delta.fromTile
-                            if realFrom is None:
-                                if Move(realPlayerFrom, playerTile) not in killedOrIndeterminateMoves:
-                                    failures.append(fMessage)
-                            elif realPlayerFrom.delta.toTile != realFrom.delta.toTile and Move(realFrom, realFrom.delta.toTile) not in killedOrIndeterminateMoves:
-                                failures.append(fMessage)
-
-                    if playerTile.delta.toTile != tile.delta.toTile:
-                        fMessage = f'(pMap {player} tile {str(tile)}) expected delta.toTile {str(tile.delta.toTile)} on {repr(tile)}, found {str(playerTile.delta.toTile)} on {repr(playerTile)}'
-                        if tile.delta.toTile is None:
-                            if Move(playerTile, playerTile.delta.toTile) not in killedOrIndeterminateMoves:
-                                failures.append(fMessage)
-                        elif playerTile.delta.toTile is None:
-                            if Move(tile, tile.delta.toTile) not in killedOrIndeterminateMoves:
-                                failures.append(fMessage)
-                        else:
-                            failures.append(fMessage)
-
-        if len(failures) > 0:
-            self.fail(f'TURN {simHost.sim.turn}\r\n' + '\r\n'.join(failures))
-
-    def get_collision_tiles(self, playerMoves: typing.List[Move | None]) -> typing.Set[Tile]:
-        ignoreCollisions: typing.Set[Tile] = set()
-        for pp, pMove in enumerate(playerMoves):
-            if pMove is None:
-                continue
-            for op, opMove in enumerate(playerMoves):
-                if opMove is None:
-                    continue
-                if pMove == opMove:
-                    continue
-                if (
-                        pMove.source.x == opMove.dest.x
-                        and pMove.source.y == opMove.dest.y
-                        and pMove.dest.x == opMove.source.x
-                        and pMove.dest.y == opMove.source.y
-                ):
-                    # then these moves collided completely and the players will not be able to differentiate whether
-                    # the player with the smaller army tile made a move at all.
-                    if pMove.source.army - 1 < opMove.source.army:
-                        # then cant differentiate this from no move
-                        ignoreCollisions.add(pMove.source)
-                    if opMove.source.army - 1 < pMove.source.army:
-                        # then cant differentiate this from no move
-                        ignoreCollisions.add(pMove.dest)
-        return ignoreCollisions
-
-    def run_map_delta_test(
-            self,
-            map: MapBase,
-            aTile: Tile,
-            bTile: Tile,
-            general: Tile,
-            enemyGeneral: Tile,
-            debugMode: bool,
-            aArmy: int,
-            bArmy: int,
-            aMove: typing.Tuple[int, int] | None,
-            bMove: typing.Tuple[int, int] | None,
-            seenFog: bool = True,
-            includeAllPlayerMaps: bool = False,
-    ):
-        if aTile is not None:
-            aTile.army = aArmy
-        if bTile is not None:
-            bTile.army = bArmy
-
-        simHost = GameSimulatorHost(map, player_with_viewer=-2, afkPlayers=[i for i in range(len(map.players))])
-        if debugMode:
-            startTurn = map.turn + 1
-
-            renderTurnBeforeSim = False
-            renderTurnBeforePlayers = False
-            renderP0 = False
-            renderP1 = False
-
-            renderTurnBeforeSim = True
-            # renderTurnBeforePlayers = True
-            renderP0 = True
-            renderP1 = True
-
-            def mapRenderer():
-                if map.turn >= startTurn:
-                    if map.turn > startTurn:
-                        # self.render_sim_map_from_all_perspectives(simHost.sim)
-                        if renderP0:
-                            self.render_map(simHost.get_player_map(0), includeTileDiffs=True, infoString='p0')
-                        if renderP1:
-                            self.render_map(simHost.get_player_map(1), includeTileDiffs=True, infoString='p1')
-                    else:
-                        if renderTurnBeforeSim:
-                            self.render_map(simHost.sim.sim_map, includeTileDiffs=True)
-                        if renderTurnBeforePlayers:
-                            if renderP0:
-                                self.render_map(simHost.get_player_map(0), includeTileDiffs=True, infoString='p0')
-                            if renderP1:
-                                self.render_map(simHost.get_player_map(1), includeTileDiffs=True, infoString='p1')
-
-            simHost.run_between_turns(mapRenderer)
-
-        simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost, includeAllPlayers=includeAllPlayerMaps))
-
-        if seenFog:
-            for player in map.players:
-                simHost.apply_map_vision(player=player.index, rawMap=map)
-
-        # simHost.sim.sim_map.USE_OLD_MOVEMENT_DETECTION = False
-        # simHost.get_player_map(0).USE_OLD_MOVEMENT_DETECTION = False
-        # simHost.get_player_map(1).USE_OLD_MOVEMENT_DETECTION = False
-
-        if aMove is not None:
-            aX, aY = aMove
-            simHost.queue_player_moves_str(general.player,
-                                           f'None  {aTile.x},{aTile.y}->{aTile.x + aX},{aTile.y + aY}  None')
-        else:
-            simHost.queue_player_moves_str(general.player, f'None  None  None')
-
-        if bMove is not None:
-            bX, bY = bMove
-            simHost.queue_player_moves_str(enemyGeneral.player,
-                                           f'None  {bTile.x},{bTile.y}->{bTile.x + bX},{bTile.y + bY}  None')
-        else:
-            simHost.queue_player_moves_str(enemyGeneral.player, f'None  None  None')
-
-        if debugMode:
-            self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=False, turn_time=5.5, turns=3)
-        if debugMode:
-            self.stop_capturing_logging()
-
+class MapTests(MapTestsBase):
     def run_diag_test(self, debugMode, aArmy, bArmy, aMove, bMove, turn):
         # 4x4 map, with all fog scenarios covered. Each player has enough information to unequivocably determine which tile moved to where.
         data = """
@@ -342,76 +29,6 @@ a1   b1   b1   bG1
         aTile = map.GetTile(1, 1)
         bTile = map.GetTile(2, 2)
         self.run_map_delta_test(map, aTile, bTile, general, enemyGeneral, debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove)
-
-    def run_team_adj_test(self, debugMode, aArmy, bArmy, aMove, bMove, targetTileFriendly, turn):
-        # 4x4 map, with all fog scenarios covered. Each player has enough information to unequivocably determine which tile moved to where.
-        data = """
-|    |    |    |
-aG1  a1   a1   b1
-cG1  a1   b1   b1
-a1   a1   b1   dG1
-a1   b1   b1   bG1
-|    |    |    |
-mode=team
-teams=1,1,2,2
-player_index=0
-bot_target_player=2
-aUsername=[Bot] Sora_ai_ek
-aTiles=32
-bUsername=[Bot] Sora_ai_2
-bTiles=27
-cUsername=Bot EklipZ_ai_2
-cTiles=25
-dUsername=EklipZ_0x45
-dTiles=27
-"""
-        map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2_from_string(
-            data,
-            turn,
-            fill_out_tiles=True,
-            player_index=0)
-
-        tgTile = map.GetTile(1, 2)
-        tgTile2 = map.GetTile(2, 1)
-
-        if not targetTileFriendly:
-            tgTile.player = 2
-            tgTile2.player = 2
-
-        aTile = map.GetTile(1, 1)
-        bTile = map.GetTile(2, 2)
-        self.run_map_delta_test(map, aTile, bTile, general, allyGen, debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove)
-
-    def run_all_scenarios_team_test(self, debugMode, aMove, bMove, turn):
-        # 4x4 map, with all fog scenarios covered. Each player has enough information to unequivocably determine which tile moved to where.
-
-        map, general, allyGen, enemyGen, enemyAllyGen = self.load_map_and_generals_2v2_from_string(ALL_SCENARIOS_TEAM_MAP, turn)
-        # give them COMPLETELY separate maps so they can't possibly affect each other during the diff
-        engineMap, _, _, _, _ = self.load_map_and_generals_2v2_from_string(ALL_SCENARIOS_TEAM_MAP, turn)
-
-        aMovement = None
-        aTile = None
-        aArmy = 0
-        if aMove is not None:
-            aFromTileXY, aToTileXY, aMoveHalf = aMove
-            aX, aY = aFromTileXY
-            aDX, aDY = aToTileXY
-            aTile = map.GetTile(aX, aY)
-            aMovement = (aDX - aX, aDY - aY)
-            aArmy = aTile.army
-
-        bMovement = None
-        bTile = None
-        bArmy = 0
-        if bMove is not None:
-            bFromTileXY, bToTileXY, bMoveHalf = bMove
-            bX, bY = bFromTileXY
-            bDX, bDY = bToTileXY
-            bTile = map.GetTile(bX, bY)
-            bMovement = (bDX - bX, bDY - bY)
-            bArmy = bTile.army
-
-        self.run_map_delta_test(map, aTile, bTile, general, allyGen, debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMovement, bMove=bMovement, includeAllPlayerMaps=True)
 
     def run_adj_test(self, debugMode, aArmy, bArmy, aMove, bMove, turn):
         # 4x4 map, with all fog scenarios covered.
@@ -565,6 +182,7 @@ b1
 """
         map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=0)
 
+        self.begin_capturing_logging()
         targetTile = map.GetTile(0, 1)
         genArmyMoved = general.army - 1
 
@@ -577,8 +195,8 @@ b1
         self.assertEqual(0 - genArmyMoved, general.delta.armyDelta)
         self.assertEqual(5, targetTile.army)
         self.assertEqual(0-genArmyMoved, targetTile.delta.armyDelta)
-        self.assertEqual(general, targetTile.delta.fromTile)
         self.assertEqual(targetTile, general.delta.toTile)
+        self.assertEqual(general, targetTile.delta.fromTile)
 
     def test_tile_delta_against_neutral_city_non_bonus_turn(self):
         mapRaw = """
@@ -893,8 +511,8 @@ C5
             map, general, enemyGeneral = self.load_map_and_generals(mapFile, 166)
             simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
-            simHost.queue_player_moves_str(enemyGeneral.player, "6,16 -> 6,15 -> 6,14 -> 6,13")
-            simHost.queue_player_moves_str(general.player, "5,5 -> 6,5 -> 7,5 -> 8,5")
+            simHost.queue_player_moves_str(enemyGeneral.player, "6,16->6,15->6,14->6,13")
+            simHost.queue_player_moves_str(general.player, "5,5->6,5->7,5->8,5")
             simHost.run_sim(run_real_time=True, turn_time=2, turns=5)
 
         enemyPlayer = (gen.player + 1) & 1
@@ -998,16 +616,16 @@ C5
 
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, gen = self.load_map_and_general(mapFile, 399)
-
-        if debugMode:
-            map, general, enemyGeneral = self.load_map_and_generals(mapFile, 399)
-
-            simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-
-            simHost.queue_player_moves_str(general.player, "14,6 -> 15,6 -> 16,6 -> 17,6")
-            simHost.queue_player_moves_str(enemyGeneral.player, "12,13 -> 12,12 -> 12,11 -> 12,10")
-            self.begin_capturing_logging()
-            simHost.run_sim(run_real_time=True, turn_time=2, turns=5)
+        #
+        # if debugMode:
+        #     map, general, enemyGeneral = self.load_map_and_generals(mapFile, 399)
+        #
+        #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        #
+        #     simHost.queue_player_moves_str(general.player, "14,6->15,6->16,6->17,6")
+        #     simHost.queue_player_moves_str(enemyGeneral.player, "12,13->12,12->12,11->13,11")
+        #     self.begin_capturing_logging()
+        #     simHost.run_sim(run_real_time=True, turn_time=2, turns=5)
 
         self.begin_capturing_logging()
         enemyPlayer = (gen.player + 1) & 1
@@ -1051,7 +669,7 @@ C5
         m.update_visible_tile(12, 12, TILE_FOG, tile_army=0)
         m.update_visible_tile(11, 12, TILE_FOG, tile_army=0)
         m.update_visible_tile(13, 12, TILE_OBSTACLE, tile_army=0)
-        m.update_visible_tile(12, 11, enemyPlayer, tile_army=78)  # 82 -> 3 = 3 - 81
+        m.update_visible_tile(12, 11, enemyPlayer, tile_army=78)  # 82->3 = 3 - 81
 
         self.assertTrue(m.GetTile(12, 11).delta.armyMovedHere)
         self.assertFalse(m.GetTile(12, 12).delta.armyMovedHere)
@@ -1093,8 +711,8 @@ C5
 
             simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
-            simHost.queue_player_moves_str(general.player, "8,12 -> 7,12 -> 8,12 -> 7,12")
-            simHost.queue_player_moves_str(enemyGeneral.player, "10,13 -> 10,14")
+            simHost.queue_player_moves_str(general.player, "8,12->7,12->8,12->7,12")
+            simHost.queue_player_moves_str(enemyGeneral.player, "10,13->10,14")
             self.begin_capturing_logging()
             simHost.run_sim(run_real_time=True, turn_time=2, turns=5)
 
@@ -1144,8 +762,8 @@ C5
 
             simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
-            simHost.queue_player_moves_str(general.player, "8,12 -> 7,12 -> 8,12 -> 7,12")
-            simHost.queue_player_moves_str(enemyGeneral.player, "7,16 -> 7,15")
+            simHost.queue_player_moves_str(general.player, "8,12->7,12->8,12->7,12")
+            simHost.queue_player_moves_str(enemyGeneral.player, "7,16->7,15")
             self.begin_capturing_logging()
             simHost.run_sim(run_real_time=True, turn_time=2, turns=5)
 
@@ -1218,6 +836,7 @@ C5
                                     # 0
                                     # 145
                                     # 17
+                                    # 0
                                     # 0
                                     self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bArmyAdjacent=bArmyAdjacent)
 
@@ -1320,145 +939,13 @@ C5
                         for turn in [96, 97]:
                             with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn):
                                 # 0
+                                # 0
                                 self.run_diag_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_diag_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         self.run_diag_test(debugMode=debugMode, aArmy=11, bArmy=9, aMove=(1, 0), bMove=(0, -1), turn=96)
 
-    def test_generate_all_team_adjacent_army_scenarios(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
-
-        moveOpts = [None, (1, 0), (-1, 0), (0, 1), (0, -1)]
-
-        for aMove in moveOpts:
-            for bMove in moveOpts:
-                for aArmy in [10, 11, 12, 15, 20, 2, 5, 8, 9]:
-                    for bArmy in [10, 11, 12, 15, 20, 2, 5, 8, 9]:
-                        for targetTileFriendly in [False, True]:
-                            for turn in [96, 97]:
-                                with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, targetTileFriendly=targetTileFriendly, turn=turn):
-                                    # 1667
-                                    # 4501
-                                    self.run_team_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, targetTileFriendly=targetTileFriendly, turn=turn)
-
-    def test_run_one_off_team_adj_test(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        self.run_team_adj_test(debugMode=debugMode, aArmy=9, bArmy=12, aMove=(1, 0), bMove=(1, 0), targetTileFriendly=False, turn=97)
-
-    def test_generate_all_all_scenarios_team_playground_scenarios(self):
-        outerMap, general, allyGen, enemyGen, enemyAllyGen = self.load_map_and_generals_2v2_from_string(ALL_SCENARIOS_TEAM_MAP, 0)
-
-        frTiles = SearchUtils.where(outerMap.players[general.player].tiles, lambda t: t.army > 1)
-
-        enTiles = []
-
-        enTiles.extend(SearchUtils.where(outerMap.players[allyGen.player].tiles, lambda t: t.army > 1))
-        enTiles.extend(SearchUtils.where(outerMap.players[enemyAllyGen.player].tiles, lambda t: t.army > 1))
-        # enTiles.extend(SearchUtils.where(outerMap.players[enemyGen.player].tiles, lambda t: t.army > 1))
-
-        allFrMoves = []
-        allEnMoves = []
-
-        for tile in frTiles:
-            for movable in tile.movable:
-                allFrMoves.append(Move(tile, movable, move_half=False))
-                # allFrMoves.append(Move(tile, movable, move_half=True))
-        for tile in enTiles:
-            for movable in tile.movable:
-                allEnMoves.append(Move(tile, movable, move_half=False))
-                # allEnMoves.append(Move(tile, movable, move_half=True))
-
-        allFrMoves.append(None)
-        allEnMoves.append(None)
-
-        # for turn in [148, 149, 150]:
-        for turn in [120]:
-            for playerMove in allFrMoves:
-                for otherMove in allEnMoves:
-                    with self.subTest(turn=turn, playerMove=playerMove, otherMove=otherMove):
-                        aMove = None
-                        bMove = None
-                        if playerMove:
-                            aMove = ((playerMove.source.x, playerMove.source.y), (playerMove.dest.x, playerMove.dest.y), playerMove.move_half)
-                        if otherMove:
-                            bMove = ((otherMove.source.x, otherMove.source.y), (otherMove.dest.x, otherMove.dest.y), otherMove.move_half)
-                        self.run_all_scenarios_team_test(debugMode=False, aMove=aMove, bMove=bMove, turn=turn)
-
-    def test_run_one_off__all_scenarios_team_playground(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-
-        self.begin_capturing_logging()
-        self.run_all_scenarios_team_test(debugMode=debugMode, aMove=((2, 1), (3, 1), True), bMove=((0, 1), (1, 1), True), turn=96)
-    
-    def test_should_not_think_2v2_move_is_from_neut_city(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/should_not_think_2v2_move_is_from_neut_city___HeB_SpEW6---2--65.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 65, fill_out_tiles=True)
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=65)
-        
-        self.enable_search_time_limits_and_disable_debug_asserts()
-        simHost = GameSimulatorHost(map, player_with_viewer=2, playerMapVision=rawMap, allAfkExceptMapPlayer=False)
-        simHost.queue_player_moves_str(0, '6,7->5,7  None')
-        simHost.queue_player_moves_str(3, '5,6->6,6  None')
-        simHost.queue_player_moves_str(1, 'None  None')
-        simHost.queue_player_moves_str(2, 'None  None')
-        # bot = self.get_debug_render_bot(simHost, general.player)
-        # playerMap = simHost.get_player_map(general.player)
-
-        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
-
-        self.begin_capturing_logging()
-        simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
-        self.assertIsNone(winner)
-    
-    def test_should_handle_fog_island_capture_in_2v2(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/should_handle_fog_island_capture_in_2v2___F6_mInEvD---0--264.txtmap'
-        map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 264, fill_out_tiles=True)
-
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=264)
-        
-        self.enable_search_time_limits_and_disable_debug_asserts()
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-        simHost.queue_player_moves_str(enemyGeneral.player, '11,14->11,15->11,16')
-        bot = self.get_debug_render_bot(simHost, general.player)
-        playerMap = simHost.get_player_map(general.player)
-
-        # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
-
-        self.begin_capturing_logging()
-        simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=3)
-        self.assertNoFriendliesKilled(map, general, allyGen)
-
-    def test_should_not_try_to_set_ally_general_to_other_player(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-
-        for move in [0, -1, 1]:
-            with self.subTest(move=move):
-                mapFile = 'GameContinuationEntries/should_not_try_to_set_ally_general_to_other_player___ydcsakF7K---2--237.txtmap'
-                map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 237, fill_out_tiles=True)
-
-                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=237)
-
-                self.enable_search_time_limits_and_disable_debug_asserts()
-                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=False)
-                simHost.queue_player_moves_str(enemyGeneral.player, '17,13->17,12->17,11')
-                if move != 0:
-                    simHost.queue_player_moves_str(allyGen.player, f'17,11->17,{11+move}')
-                else:
-                    simHost.queue_player_moves_str(allyGen.player, 'None')
-                bot = self.get_debug_render_bot(simHost, general.player)
-                playerMap = simHost.get_player_map(general.player)
-
-                self.begin_capturing_logging()
-                simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
-                self.assertNoFriendliesKilled(map, general, allyGen)
-    
     def test_should_not_turn_cities_neutral_on_capture(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_turn_cities_neutral_on_capture___Human.exe-TEST__fd14d74c-6889-4816-85b9-9a692c3f397e---0--297.txtmap'
@@ -1479,7 +966,110 @@ C5
         city = playerMap.GetTile(8, 5)
         self.assertEqual(enemyGeneral.player, city.player)
 
+    def test_should_not_leave_captured_city_as_own_city_in_the_fog(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for turn in [396, 397, 399]:
+            for isCity in [False, True]:
+                for playerMoves in [True, False]:
+                    with self.subTest(turn=turn, isCity=isCity, playerMoves=playerMoves):
+                        # all pass
+                        mapFile = 'GameContinuationEntries/should_not_leave_captured_city_as_own_city_in_the_fog___UTLSPeD5A---0--396.txtmap'
+                        rawData = TextMapLoader.get_map_raw_string_from_file(mapFile)
+                        if not isCity:
+                            rawData = rawData.replace('aC60', 'a60 ')
+                        map, general, enemyGeneral = self.load_map_and_generals_from_string(rawData, 396, fill_out_tiles=True)
 
+                        rawMap, _ = self.load_map_and_general_from_string(rawData, respect_undiscovered=True, turn=396)
+
+                        self.enable_search_time_limits_and_disable_debug_asserts()
+                        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                        simHost.queue_player_moves_str(enemyGeneral.player, '6,21->7,21')
+                        if playerMoves:
+                            simHost.queue_player_moves_str(general.player, '7,21->6,21')
+                        bot = self.get_debug_render_bot(simHost, general.player)
+                        playerMap = simHost.get_player_map(general.player)
+
+                        self.begin_capturing_logging()
+                        simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
+                        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+                        self.assertNoFriendliesKilled(map, general)
+
+                        self.assertOwned(enemyGeneral.player, playerMap.GetTile(7, 21))
+
+    def test_fog_island_capture_with_vision_both_sides__from_after_capture_visible(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapRaw = """
+|    |    |    |    |
+aG15
+b1   a1   b1
+b12  a1   b1
+b1   a1   b1 
+b1   b1   b1         
+b1   b1   a1         
+
+
+          b5        bG1
+|    |    |    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapRaw, turn=50, player_index=0)
+
+        rawMap, _ = self.load_map_and_general_from_string(mapRaw, turn=50, player_index=general.player, respect_undiscovered=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, botInitOnly=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '0,2->1,2->1,3')
+        simHost.queue_player_moves_str(general.player, 'None  None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwned(enemyGeneral.player, playerMap.GetTile(1, 3))
+
+    def test_fog_island_capture_with_vision_both_sides__from_after_capture_NOT_visible(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapRaw = """
+|    |    |    |    |
+aG15
+b1   a1   b1
+     b1   b1
+b12  a1   b1 
+b1   b1   b1         
+b1   b1   a1         
+
+
+          b5        bG1
+|    |    |    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapRaw, turn=50, player_index=0)
+
+        rawMap, _ = self.load_map_and_general_from_string(mapRaw, turn=50, player_index=general.player, respect_undiscovered=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, botInitOnly=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '0,3->1,3')
+        simHost.queue_player_moves_str(general.player, 'None  None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwned(enemyGeneral.player, playerMap.GetTile(1, 3))
+
+
+    # THIS IS ALL BEFORE SPLITTING 2v2 OUT
     # 4590 failed, 23,663 passed
     # 4904 failed, 23,353 passed after fixing move into fog issue
     # 4904 failed, 23,354 passed after fixing city capture at fog border issue
+    # 5095 failed, 23,177 passed after ??? changes that were made since last test run....
+    # 8485 failed, 19,787 passed with the current changes
+    # AFTER SPLITTING 2v2 OUT
+    # 295f, 19,187p

@@ -619,6 +619,7 @@ class EklipZBot(object):
         return None
 
     def handle_tile_captures(self, tile: Tile):
+        """This triggers before we know the new owner of fog tiles. tile.delta.newOwner might currently be -1, when in reality it is the opponent."""
         logbook.info(
             f"EH: Tile captured! Tile {repr(tile)}, oldOwner {tile.delta.oldOwner} newOwner {tile.delta.newOwner}")
         self.territories.needToUpdateAroundTiles.add(tile)
@@ -628,6 +629,7 @@ class EklipZBot(object):
             if tile.delta.oldOwner == -1 or tile.delta.newOwner == -1:
                 self.board_analysis.should_rescan = True
                 self._map.distance_mapper.recalculate()
+                # NO see comment at top
                 if tile.delta.newOwner == -1:
                     return
 
@@ -1208,11 +1210,16 @@ class EklipZBot(object):
         if self.is_still_ffa_and_non_dominant() and self.targetPlayer != -1:
             gatherSplit = 32
 
+        timeOutsideLaunchAndGath = 0
+
         expValue = 20.0
         bypass = True
         if self.expansion_plan is not None:
             bypass = False
             expValue = self.expansion_plan.cumulative_econ_value
+            for opt in self.expansion_plan.all_paths:
+                if opt.econValue / opt.length > 0.99 and opt.tileSet.isdisjoint(self.target_player_gather_targets):
+                    timeOutsideLaunchAndGath += opt.length
 
         if self.target_player_gather_targets is not None:
             # countFrOnPath = SearchUtils.count(self.target_player_gather_targets, lambda tile: self._map.is_tile_friendly(tile))
@@ -1224,18 +1231,23 @@ class EklipZBot(object):
                 elif t.player == -1:
                     countNeutOnPath += 1
             # TODO fancy ass dynamic timing based on opponents historical timings
-            launchTiming = 50 - self.shortest_path_to_target_player.length
-            launchTiming += countEnOnPath
-            launchTiming += countNeutOnPath
-            launchTiming -= countFrOnPath
+            launchTiming = 50 - self.shortest_path_to_target_player.length - 4
+            # more enemy / neutral tiles on path make our launch later, since we're going to be capturing their tiles
+            launchTiming += countEnOnPath // 2
+            launchTiming += countNeutOnPath // 2
+            # more ally tiles on path make our launch sooner, since those are technically kind of part of the 'gather' phase and wont be capping tiles.
+            launchTiming -= countFrOnPath // 2
 
-            xPweight = int(expValue * 0.7)
-            expGatherTiming = max(15, 50 - xPweight)
+            # if we have a plan already for 40 turns of enemy captures, (80 econ), then we should probably just gather for 10 turns, except that would be dangerous so need to account for that (?)
+            xPweight = int(expValue * 0.5)
+            minExpWeighted = 32
+            # expGatherTiming = max(minExpWeighted, 50 - xPweightOld)
+            expGatherTiming = max(15, min(minExpWeighted, 50 - timeOutsideLaunchAndGath))
             gatherSplit = min(launchTiming, expGatherTiming)
             if not bypass:
-                self.viewInfo.add_info_line(f'(timings: gS {gatherSplit} <- min(launch {launchTiming}, expGather {expGatherTiming} <- xW {xPweight})')
+                self.viewInfo.add_info_line(f'timingsBase: g{gatherSplit} <- min(launch {launchTiming}, max({minExpWeighted}, 50-timeAv {timeOutsideLaunchAndGath})), en{countEnOnPath}, fr{countFrOnPath}, nt{countNeutOnPath}, expW {xPweight}')
 
-        randomVal = random.randint(-1, 2)
+        randomVal = random.randint(-3, 1)
         # what size cycle to use, normally the 50 turn cycle
         cycleDuration = 50
 
@@ -1254,10 +1266,10 @@ class EklipZBot(object):
         quickExpandSplit = 0
 
         if self.defend_economy:
-            gatherSplit += 3
+            gatherSplit += 2
 
         if self.currently_forcing_out_of_play_gathers:
-            gatherSplit += 3
+            gatherSplit += 2
 
         if self.is_still_ffa_and_non_dominant():
             gatherSplit += 4
@@ -1275,7 +1287,7 @@ class EklipZBot(object):
         # launchTiming = cycleDuration - pathLength - 4 + self.behavior_launch_timing_offset
 
         tileDiff = self.opponent_tracker.get_tile_differential()
-        if tileDiff < 2:
+        if tileDiff < 4:
             back = max(-10, tileDiff // 2) - 2
             if not bypass:
                 self.viewInfo.add_info_line(f'gathSplit/launch back {back} turns due to tileDiff {tileDiff}')
@@ -1285,7 +1297,6 @@ class EklipZBot(object):
         if self.flanking:
             gatherSplit += self.behavior_flank_launch_timing_offset
             launchTiming = gatherSplit
-            quickExpandSplit = 0
             # launchTiming += self.behavior_flank_launch_timing_offset
             # if launchTiming > gatherSplit:
             #     launchTiming = gatherSplit
@@ -11851,7 +11862,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         if self.shortest_path_to_target_player is not None:
             searchLen = self.shortest_path_to_target_player.length + 1
 
-        enPath = SearchUtils.breadth_first_dynamic_max(self._map, genTargs, valFunc, 0.1, searchLen, noNeutralCities=True, noNeutralUndiscoveredObstacles=True, negativeTiles=genSet, searchingPlayer=targetPlayer, ignoreNonPlayerArmy=True)
+        enPath = SearchUtils.breadth_first_dynamic_max(self._map, genTargs, valFunc, 0.1, searchLen, noNeutralCities=True, noNeutralUndiscoveredObstacles=True, negativeTiles=genSet, searchingPlayer=targetPlayer, ignoreNonPlayerArmy=True, noLog=True)
         if enPath is None or enPath.length < 3:
             return None
 
@@ -13461,14 +13472,24 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             if not negativeTiles.isdisjoint(path.tileSet):
                 continue
 
+            if path.length > self.approximate_greedy_turns_avail:
+                continue
+
+            if SearchUtils.any_where(path.tileList, lambda t: t.army == 1 and self._map.is_tile_friendly(t)):
+                continue
+
             scoreVt = path.econValue / path.length
             if maxPath is None or maxScoreVt < scoreVt:
                 maxPath = path
-                maxScoreVt = path.econValue
+                maxScoreVt = scoreVt
 
         if maxPath is not None and maxScoreVt > 1.0:
             move = maxPath.get_first_move()
-            self.info(f'greedy exp move {str(move)} (vt {maxScoreVt:.2f})')
+            if self.timings.in_gather_split(self._map.turn) and self.timings.splitTurns < self.timings.launchTiming:
+                self.timings.splitTurns += 1
+                self.info(f'greedy exp move {str(move)} (vt {maxScoreVt:.2f}), inc gather {self.timings.splitTurns-1}->{self.timings.splitTurns}')
+            else:
+                self.info(f'greedy exp move {str(move)} (vt {maxScoreVt:.2f})')
 
         return move
 

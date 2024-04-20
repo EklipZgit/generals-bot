@@ -836,6 +836,7 @@ def breadth_first_dynamic(
 
             startVal = (dist, negCityCount, negEnemyTileCount, negArmySum, tile.x, tile.y, goalIncrement)
             frontier.put((startVal, dist, tile, None))
+
     start = time.perf_counter()
     iter = 0
     foundGoal = False
@@ -947,6 +948,7 @@ def breadth_first_dynamic_max(
         priorityMatrix: MapMatrix[float] | None = None,
         priorityMatrixSkipStart: bool = False,
         priorityMatrixSkipEnd: bool = False,
+        pathValueFunc: typing.Callable[[Path, typing.Tuple], float] | None = None,
         includePath=False,
         ignoreNonPlayerArmy: bool = False,
         ignoreIncrement: bool = True
@@ -1227,21 +1229,25 @@ def breadth_first_dynamic_max(
     pathNegs = negativeTiles
     if ignoreStartTile:
         pathNegs = negativeTiles.union(startTiles)
-    pathObject.calculate_value(
-        searchingPlayer,
-        teams=map._teams,
-        negativeTiles=pathNegs,
-        ignoreNonPlayerArmy=ignoreNonPlayerArmy,
-        incrementBackwards=incrementBackward,
-        ignoreIncrement=ignoreIncrement)
 
-    matrixStart = 0 if not priorityMatrixSkipStart else 1
-    matrixEndOffset = -1 if not priorityMatrixSkipEnd else 0
+    if pathValueFunc:
+        pathObject.value = pathValueFunc(pathObject, maxValue)
+    else:
+        pathObject.calculate_value(
+            searchingPlayer,
+            teams=map._teams,
+            negativeTiles=pathNegs,
+            ignoreNonPlayerArmy=ignoreNonPlayerArmy,
+            incrementBackwards=incrementBackward,
+            ignoreIncrement=ignoreIncrement)
 
-    # TODO this needs to change to .econValue...?
-    if priorityMatrix:
-        for tile in pathObject.tileList[matrixStart:pathObject.length - matrixEndOffset]:
-            pathObject.value += priorityMatrix[tile]
+        matrixStart = 0 if not priorityMatrixSkipStart else 1
+        matrixEndOffset = -1 if not priorityMatrixSkipEnd else 0
+
+        # TODO this needs to change to .econValue...?
+        if priorityMatrix:
+            for tile in pathObject.tileList[matrixStart:pathObject.length - matrixEndOffset]:
+                pathObject.value += priorityMatrix[tile]
 
     if pathObject.length == 0:
         if not noLog:
@@ -1601,6 +1607,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
         boundFunc=None,
         maxIterations: int = INF,
         includePath=False,
+        pathValueFunc: typing.Callable[[Path, typing.Tuple], float] | None = None,
         priorityMatrix: MapMatrix[float] | None = None,
         priorityMatrixSkipStart: bool = False,
         priorityMatrixSkipEnd: bool = False,
@@ -1877,7 +1884,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
 
     for startTile in maxValuesTMP.keys():
         pathListForTile = []
-        for dist in maxValuesTMP[startTile].keys():
+        for dist, valObj in maxValuesTMP[startTile].items():
             pathObject = Path()
             # # prune any paths that are not higher value than the shorter path.
             # # THIS WOULD PRUNE LOWER VALUE PER TURN PATHS THAT ARE LONGER, WHICH IS ONLY OK IF WE ALWAYS DO PARTIAL LAYERS OF THE FULL GATHER...
@@ -1900,17 +1907,20 @@ def breadth_first_dynamic_max_per_tile_per_distance(
                     # logbook.info("curArmy {} NODE {},{}".format(curArmy, curNode.x, curNode.y))
                     pathObject.add_next(tile)
 
-            pathObject.calculate_value(
-                searchingPlayer,
-                teams=map._teams,
-                negativeTiles=pathNegs,
-                ignoreNonPlayerArmy=ignoreNonPlayerArmy,
-                incrementBackwards=incrementBackward,
-                ignoreIncrement=ignoreIncrement)
+            if pathValueFunc:
+                pathObject.value = pathValueFunc(pathObject, valObj)
+            else:
+                pathObject.calculate_value(
+                    searchingPlayer,
+                    teams=map._teams,
+                    negativeTiles=pathNegs,
+                    ignoreNonPlayerArmy=ignoreNonPlayerArmy,
+                    incrementBackwards=incrementBackward,
+                    ignoreIncrement=ignoreIncrement)
 
-            if priorityMatrix:
-                for tile in pathObject.tileList[matrixStart:pathObject.length - matrixEndOffset]:
-                    pathObject.value += priorityMatrix[tile]
+                if priorityMatrix:
+                    for tile in pathObject.tileList[matrixStart:pathObject.length - matrixEndOffset]:
+                        pathObject.value += priorityMatrix[tile]
 
             if pathObject.length == 0:
                 if not noLog:
@@ -2869,14 +2879,18 @@ def breadth_first_foreach_dist_revisit_callback(
 
 
 def build_distance_map_incl_mountains(map, startTiles, skipTiles=None) -> typing.List[typing.List[int]]:
+    """
+    Builds a distance map to everything including mountains (but does not path through mountains / neutral cities).
+
+    @param map:
+    @param startTiles:
+    @param skipTiles:
+    @return:
+    """
     distanceMap = new_value_grid(map, 1000)
 
-    if skipTiles is None:
-        skipTiles = None
-    elif not isinstance(skipTiles, set):
-        newSkipTiles = set()
-        for tile in skipTiles:
-            newSkipTiles.add(tile)
+    if skipTiles is not None and not isinstance(skipTiles, set):
+        newSkipTiles = {t for t in skipTiles}
         skipTiles = newSkipTiles
 
     if skipTiles is None:
@@ -2902,15 +2916,11 @@ def build_distance_map_incl_mountains(map, startTiles, skipTiles=None) -> typing
 def build_distance_map(map: MapBase, startTiles: typing.List[Tile], skipTiles: typing.Set[Tile] | typing.Iterable[Tile] | None = None) -> typing.List[typing.List[int]]:
     distanceMap = new_value_grid(map, 1000)
 
-    if skipTiles is None:
-        skipTiles = None
-    elif not isinstance(skipTiles, set):
-        newSkipTiles = set()
-        for tile in skipTiles:
-            newSkipTiles.add(tile)
+    if skipTiles is not None and not isinstance(skipTiles, set):
+        newSkipTiles = {t for t in skipTiles}
         skipTiles = newSkipTiles
 
-    if skipTiles is None:
+    if not skipTiles:
         def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
             distanceMap[tile.x][tile.y] = dist
 
@@ -2934,6 +2944,14 @@ def build_distance_map(map: MapBase, startTiles: typing.List[Tile], skipTiles: t
 
 
 def build_distance_map_matrix(map, startTiles, skipTiles=None) -> MapMatrix[int]:
+    """
+    Builds a distance map to all reachable tiles (including neutral cities). Does not put distances in for mountains / undiscovered obstacles.
+
+    @param map:
+    @param startTiles:
+    @param skipTiles:
+    @return:
+    """
     distanceMap = MapMatrix(map, 1000)
 
     if not skipTiles:
@@ -2957,6 +2975,46 @@ def build_distance_map_matrix(map, startTiles, skipTiles=None) -> MapMatrix[int]
             distanceMap.raw[tile.tile_index] = dist
 
             return tile.isNeutral and tile.isCity
+
+    breadth_first_foreach_dist_fast_incl_neut_cities(
+        map,
+        startTiles,
+        1000,
+        bfs_dist_mapper)
+
+    return distanceMap
+
+
+def build_distance_map_matrix_allow_pathing_through_neut_cities(map, startTiles, skipTiles=None) -> MapMatrix[int]:
+    """
+    Builds a distance map that allows pathing through neutral cities.
+
+    @param map:
+    @param startTiles:
+    @param skipTiles:
+    @return:
+    """
+    distanceMap = MapMatrix(map, 1000)
+
+    if not skipTiles:
+        skipTiles = None
+    elif not isinstance(skipTiles, set):
+        newSkipTiles = set()
+        for tile in skipTiles:
+            newSkipTiles.add(tile)
+        skipTiles = newSkipTiles
+
+    if skipTiles is None:
+        def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
+            distanceMap.raw[tile.tile_index] = dist
+            return False
+    else:
+        def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
+            if tile in skipTiles:
+                return True
+
+            distanceMap.raw[tile.tile_index] = dist
+            return False
 
     breadth_first_foreach_dist_fast_incl_neut_cities(
         map,

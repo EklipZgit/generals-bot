@@ -43,9 +43,19 @@ class BoardAnalyzer:
 
         self.extended_play_area_matrix: MapMatrixSet = None
 
+        self.shortest_path_distances: MapMatrix[int] = None
+
         self.flankable_fog_area_matrix: MapMatrixSet = None
+        """
+        Fog tiles that are potentially reachable from the opponent, and thus could be a flank source
+        """
 
         self.flank_danger_play_area_matrix: MapMatrixSet = None
+        """
+        All tiles that are within the flank danger distance, visible or not
+        """
+
+        self.backwards_tiles: typing.Set[Tile] = set()
 
         self.general_distances: MapMatrix[int] = MapMatrix(self.map)
 
@@ -188,28 +198,65 @@ class BoardAnalyzer:
         self.rescan_chokes()
 
     def build_play_area_matrices(self, enemyDistMap: MapMatrix[int], generalDistMap: MapMatrix[int]):
+        self.backwards_tiles: typing.Set[Tile] = set()
+        shortestPathDist = self.intergeneral_analysis.shortestPathWay.distance
+        # flankTiles = []
+        friendlies = self.map.get_teammates(self.general.player)
+
+        if len(self.intergeneral_analysis.shortestPathWay.tiles) > 0:
+            self.shortest_path_distances = SearchUtils.build_distance_map_matrix(
+                self.map,
+                [tile for tile in self.intergeneral_analysis.shortestPathWay.tiles],
+                skipTiles=None)
+        else:
+            self.shortest_path_distances = SearchUtils.build_distance_map_matrix(self.map, [self.general])
+
         for tile in self.map.reachableTiles:
+            tIndex = tile.tile_index
             if tile.isObstacle and not tile.isMountain:
-                self.enemy_wall_breach_scores[tile] = self._get_wall_breach_score_enemy(tile)
-                self.friendly_wall_breach_scores[tile] = self._get_wall_breach_score_friendly(tile)
-            if not tile.isPathable:
+                self.enemy_wall_breach_scores.raw[tIndex] = self._get_wall_breach_score_enemy(tile)
+                self.friendly_wall_breach_scores.raw[tIndex] = self._get_wall_breach_score_friendly(tile)
+
+            if not tile.isPathable:  # so we include neutral cities
                 continue
 
-            enDist = enemyDistMap[tile]
-            frDist = generalDistMap[tile]
-            tileDistSum = enDist + frDist
-            if tileDistSum < self.within_extended_play_area_threshold:
-                self.extended_play_area_matrix.add(tile)
+            enDist = enemyDistMap.raw[tIndex]
+            frDist = generalDistMap.raw[tIndex]
+            pathwayDist = enDist + frDist
 
-            if tileDistSum < self.within_core_play_area_threshold:
-                self.core_play_area_matrix.add(tile)
+            # pathWay = self.intergeneral_analysis.pathWayLookupMatrix.raw[tIndex]
+            # if pathWay is not None:
+            #     pwDist = pathWay.distance - shortestPathDist
+            #     self.shortest_path_distances.raw[tIndex] = pwDist
+            #     if pwDist != tileDistSum - shortestPathDist:
+            #         raise AssertionError(f'tile {tile} - pwDist was {pwDist}, tileDistSum was {tileDistSum} (shortestPathDist {shortestPathDist})')
+            #
+            # else:
+            #     logbook.info(f'DEBUG DEBUG DEBUG {tile} HAD NONE PATHWAY')
+
+            if pathwayDist < self.within_extended_play_area_threshold:
+                self.extended_play_area_matrix.raw[tIndex] = True
+
+            if pathwayDist < self.within_core_play_area_threshold:
+                self.core_play_area_matrix.raw[tIndex] = True
 
             if (
-                    tileDistSum <= self.within_flank_danger_play_area_threshold
+                    pathwayDist <= self.within_flank_danger_play_area_threshold
                     # and tileDistSum > self.within_core_play_area_threshold
                     and frDist / (enDist + 1) < 0.7  # prevent us from considering tiles more than 2/3rds into enemy territory as flank danger
             ):
-                self.flank_danger_play_area_matrix.add(tile)
+                self.flank_danger_play_area_matrix.raw[tIndex] = True
+
+            if tile.player in friendlies:
+                # distToShortestPath = (pathwayDist - shortestPathDist) // 2
+                trueShortest = self.shortest_path_distances.raw[tile.tile_index]
+                sumThing = enDist - shortestPathDist + trueShortest
+                if sumThing > 0:
+                    self.backwards_tiles.add(tile)
+                # if tile.coords in [(15, 6), (12, 9), (16, 8), (17, 9), (14, 16), (16, 13)]:
+                #     logbook.info(f'tile {tile} | {sumThing}; tileDistSum {pathwayDist}, enDist {enDist}, shortestPathDist {shortestPathDist}, pwDist {pathwayDist}, distToShortest, {distToShortestPath}, trueShortest, {trueShortest}')
+                # # if sumThing > 0:
+                # #     pass
 
     def get_flank_pathways(
             self,
@@ -289,7 +336,9 @@ class BoardAnalyzer:
             countsForFlankable = not tile.visible or dist < discountVisibleNearEnemyGen.value
             if hasPerfectInfo and tile.isObstacle:
                 return True
-            if tile.isMountain or (tile.isNeutral and tile.isCity and tile.visible) or not countsForFlankable:
+            if not countsForFlankable:
+                return True
+            if tile.isMountain or (tile.isNeutral and tile.isCity and tile.visible):
                 return True
 
             self.flankable_fog_area_matrix.add(tile)

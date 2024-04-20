@@ -16,7 +16,7 @@ class GatherTests(TestBase):
         bot = super().get_debug_render_bot(simHost, player)
 
         bot.info_render_gather_values = True
-        bot.info_render_centrality_distances = True
+        # bot.info_render_centrality_distances = True
         GatherUtils.USE_DEBUG_ASSERTS = True
         DebugHelper.IS_DEBUGGING = True
 
@@ -764,4 +764,43 @@ b1   b1   b1   b1   b1   b1   bG1
 
         self.skipTest("TODO add asserts for should_not_pull_tiles_from_enemy_territory")
 
-# 11f 14p 6s
+# 11f 14p 6s    
+    def test_should_pull_from_backwards_tiles_first(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_pull_from_backwards_tiles_first___ocPjZe5c----1--100.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 100, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=100)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.timings.splitTurns = 30
+        bot.timings.launchTiming = 32
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=27)
+        self.assertNoFriendliesKilled(map, general)
+
+        for tile in [
+            # playerMap.GetTile(6, 8),  # its reasonable to leave this one out there to expand later.
+            # playerMap.GetTile(5, 8),  # its reasonable to leave this one out there to expand later.
+            playerMap.GetTile(5, 9),
+            playerMap.GetTile(6, 9),
+            playerMap.GetTile(4, 10),
+            playerMap.GetTile(5, 10),
+            playerMap.GetTile(6, 11),
+            playerMap.GetTile(5, 11),
+            playerMap.GetTile(5, 12),
+            playerMap.GetTile(0, 14),
+            # playerMap.GetTile(2, 16),  # its reasonable to leave this one out there to expand later.
+            playerMap.GetTile(2, 15),
+            playerMap.GetTile(0, 13),
+            playerMap.GetTile(1, 13),
+            playerMap.GetTile(1, 11),
+            playerMap.GetTile(2, 12),
+            playerMap.GetTile(3, 12),
+        ]:
+            self.assertEqual(1, tile.army, f'tile {tile} should have been gathered or expanded, but its army was {tile.army}')

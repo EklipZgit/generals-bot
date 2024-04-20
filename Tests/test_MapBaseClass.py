@@ -232,7 +232,7 @@ class MapTestsBase(TestBase):
         if bTile is not None:
             bTile.army = bArmy
 
-        simHost = GameSimulatorHost(map, player_with_viewer=-2, afkPlayers=[i for i in range(len(map.players))])
+        simHost = GameSimulatorHost(map, player_with_viewer=-2, afkPlayers=[i for i in range(len(map.players))], botInitOnly=True)
         if debugMode:
             startTurn = map.turn + 1
 
@@ -241,10 +241,10 @@ class MapTestsBase(TestBase):
             renderP0 = False
             renderP1 = False
 
-            renderTurnBeforeSim = True
+            # renderTurnBeforeSim = True
             # renderTurnBeforePlayers = True
             renderP0 = True
-            renderP1 = True
+            # renderP1 = True
 
             def mapRenderer():
                 if map.turn >= startTurn:

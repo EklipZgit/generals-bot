@@ -94,7 +94,7 @@ class BotHostBase(object):
 
         if not self.eklipz_bot.isInitialized:
             self.eklipz_bot.initialize_from_map_for_first_time(currentMap)
-        self.eklipz_bot._map = currentMap
+        # self.eklipz_bot._map = currentMap
 
         with timer.begin_move(currentMap.turn) as moveTimer:
             gap = timer.get_elapsed_since_update(currentMap.turn)
@@ -169,7 +169,7 @@ class BotHostBase(object):
 
         if not self.eklipz_bot.isInitialized:
             self.eklipz_bot.initialize_from_map_for_first_time(currentMap)
-        self.eklipz_bot._map = currentMap
+        # self.eklipz_bot._map = currentMap
 
         with timer.begin_move(currentMap.turn) as moveTimer:
             try:

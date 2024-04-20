@@ -210,7 +210,7 @@ a1
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=65)
         
         self.enable_search_time_limits_and_disable_debug_asserts()
-        simHost = GameSimulatorHost(map, player_with_viewer=2, playerMapVision=rawMap, allAfkExceptMapPlayer=False)
+        simHost = GameSimulatorHost(map, player_with_viewer=2, playerMapVision=rawMap, allAfkExceptMapPlayer=False, botInitOnly=True)
         simHost.queue_player_moves_str(0, '6,7->5,7  None')
         simHost.queue_player_moves_str(3, '5,6->6,6  None')
         simHost.queue_player_moves_str(1, 'None  None')
@@ -233,7 +233,7 @@ a1
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=264)
         
         self.enable_search_time_limits_and_disable_debug_asserts()
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, botInitOnly=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '11,14->11,15->11,16')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
@@ -256,7 +256,7 @@ a1
                 rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=237)
 
                 self.enable_search_time_limits_and_disable_debug_asserts()
-                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=False)
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=False, botInitOnly=True)
                 simHost.queue_player_moves_str(enemyGeneral.player, '17,13->17,12->17,11')
                 if move != 0:
                     simHost.queue_player_moves_str(allyGen.player, f'17,11->17,{11+move}')

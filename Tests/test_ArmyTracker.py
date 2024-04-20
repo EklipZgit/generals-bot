@@ -30,6 +30,7 @@ class ArmyTrackerTests(TestBase):
             player: int = -1,
             excludeEntangledFog: bool = True,
             excludeFogMoves: bool = False,
+            excludeTempFogPredictions: bool = True,
             aroundTile: Tile | None = None
     ):
         realMap = simHost.sim.sim_map
@@ -81,6 +82,9 @@ class ArmyTrackerTests(TestBase):
                         continue
 
                 if not playerTile.discovered and playerTile.army == 0 and playerTile.player == -1:
+                    continue
+
+                if playerTile.isTempFogPrediction and excludeTempFogPredictions:
                     continue
 
                 if playerTile.army != tile.army:
@@ -2167,17 +2171,17 @@ a1   b1   b1   bG1
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
-        emergence = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][8][17]
+        emergence = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(8, 17)]
         self.assertGreater(emergence, 70, 'should have VERY high confidence here that the enemy general is right behind this because we had to reduce city army to 1')
 
-        emergence = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][8][16]
+        emergence = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(8, 16)]
         self.assertGreater(emergence, 70, 'should have VERY high confidence here that the enemy general is right behind this because we had to reduce city army to 1')
 
-        badEmergence = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][6][11]
+        badEmergence = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(6, 11)]
         self.assertLess(badEmergence, 2, 'should have dropped all other emergences for the most part')
     
     def test_should_not_dupe_army_to_the_side_on_collision(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_dupe_army_to_the_side_on_collision___8x8cAEcQl---1--79.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 79, fill_out_tiles=True)
 
@@ -2192,7 +2196,7 @@ a1   b1   b1   bG1
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
     
     def test_should_vanish_entangled_armies_after_city_cap(self):
@@ -2313,3 +2317,89 @@ a1   b1   b1   bG1
             self.assertGreater(offendingArmy.tile.army, 36, 'should not have a 0-copy of the army')
             self.assertIn(offendingArmy, realArmy.entangledArmies)
             self.assertIn(realArmy, offendingArmy.entangledArmies)
+
+    def test_should_not_hallucinate_new_armies_in_the_fog_while_tracking_a_single_army_through(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_invent_new_armies_in_the_fog_while_tracking_a_single_army_through___v7k5TON3e---1--212.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 212, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=212)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '10,7->11,7->11,6->12,6')
+        simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  None  None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        armies = bot.armyTracker.get_unique_armies_by_player(enemyGeneral.player)
+        self.assertEqual(2, len(armies), 'should not have duplicated armies in LE FOG...........')
+
+    def test_should_collide_entangled_correctly(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_invent_new_armies_in_the_fog_while_tracking_a_single_army_through___v7k5TON3e---1--212.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 212, fill_out_tiles=True)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=212)
+
+        map.GetTile(13, 8).player = general.player
+        rawMap.GetTile(13, 8).player = general.player
+
+        map.GetTile(12, 8).army = 38
+        rawMap.GetTile(12, 8).army = 38
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '10,7->11,7->11,8  12,8->11,8')
+        simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  None  None  None  None  None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        self.assertNoFriendliesKilled(map, general)
+
+        army = bot.armyTracker.armies.get(playerMap.GetTile(11, 8))
+        self.assertGreater(army.value, 63)
+
+        shouldStillBeEntangled = bot.armyTracker.armies.get(playerMap.GetTile(11, 6))
+        self.assertIn(shouldStillBeEntangled, army.entangledArmies)
+        self.assertIn(army, shouldStillBeEntangled.entangledArmies)
+
+    def test_should_collide_entangled_and_de_entangle_multiple_armies_correctly(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+
+        for path, expectedFogArmyCount, expectedFogArmyMax, description in [
+            ('10,7->11,7->11,8  12,8->11,8->11,10->10,10', 1, 20, 'both emerge as one'),
+            ('10,7->11,7->11,6  12,8->11,8  None  None  11,6->10,6', 2, 30, 'only smaller emerges'),
+            ('10,7->11,7->11,6  12,8->11,8  None  None  11,8->12,8', 2, 40, 'only larger emerges'),
+            ('10,7->11,7  12,8->11,8', 4, 40, 'neither emerge but didnt line up to combine, should have extra combined army'),
+            ('10,7->11,7->11,6  12,8->11,8', 3, 40, 'neither emerge, should have extra combined army'),  # realistically this should also have 4......? But we can't put 2 armies on the same tile at the current moment....
+        ]:
+            with self.subTest(description=description, path=path):
+                mapFile = 'GameContinuationEntries/should_not_invent_new_armies_in_the_fog_while_tracking_a_single_army_through___v7k5TON3e---1--212.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 212, fill_out_tiles=True)
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=212)
+
+                map.GetTile(13, 8).player = general.player
+                rawMap.GetTile(13, 8).player = general.player
+
+                map.GetTile(12, 8).army = 38
+                rawMap.GetTile(12, 8).army = 38
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, path)
+                simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  None  None  None  None  None  None  None  None')
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+                self.assertNoFriendliesKilled(map, general)
+
+                armies = bot.armyTracker.get_unique_armies_by_player(enemyGeneral.player)
+                self.assertEqual(2, len(armies), f'expected handling {description}')

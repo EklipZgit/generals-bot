@@ -182,10 +182,13 @@ class ArmyInterception(object):
 
         return None, None
 
-    def get_intercept_option_by_path(self, path: Path) -> InterceptionOptionInfo | None:
+    def get_intercept_option_by_path(self, path: Path | TilePlanInterface) -> InterceptionOptionInfo | None:
         """returns distance, value"""
         if isinstance(path, InterceptionOptionInfo):
             return path
+
+        if not isinstance(path, Path):
+            return None
 
         for dist, optionInfo in self.intercept_options.items():
             p = optionInfo.path
@@ -427,124 +430,6 @@ class ArmyInterceptor(object):
             sharedChokes[tile] = InterceptPointTileInfo(tile, minDelayTurns, maxExtraMoves, maxChokeWidth, maxInterceptTurnOffset)
 
         return sharedChokes
-
-    # OLD
-    # def _build_shared_chokes(
-    #         self,
-    #         potentialSharedChokes: typing.Concatenate[typing.Iterable[Tile], typing.Container[Tile]],
-    #         commonMaxExtraMoves: typing.Dict[Tile, int],
-    #         commonMinDelayTurns: typing.Dict[Tile, int],
-    #         threats: typing.List[ThreatObj]
-    # ) -> typing.Dict[Tile, InterceptPointTileInfo]:
-    #     furthestPotentialCommon = max(potentialSharedChokes, key=lambda t: threats[0].armyAnalysis.bMap[t])
-    #     furthestDist = threats[0].armyAnalysis.bMap[furthestPotentialCommon]
-    #     dists = self.map.distance_mapper.get_tile_dist_matrix(furthestPotentialCommon)
-    #
-    #     sharedChokes = {}
-    #     distLookups = {}
-    #     for i in range(40):
-    #         distLookups[i] = []
-    #
-    #     queue = deque()
-    #     queue.append((0, threats[0].path.start.tile, None))
-    #     fromSets = {}
-    #     toSets = {}
-    #     lastDepth = -1
-    #     lastVisited = set()
-    #     visited = set()
-    #     while queue:
-    #         depth, tile, fromTile = queue.popleft()
-    #         if tile in lastVisited:
-    #             continue
-    #
-    #         fSet = fromSets.get(tile, None)
-    #         if fSet is None:
-    #             fSet = set()
-    #             fromSets[tile] = fSet
-    #         fSet.add(fromTile)
-    #
-    #         tSet = toSets.get(fromTile, None)
-    #         if tSet is None:
-    #             tSet = set()
-    #             toSets[fromTile] = tSet
-    #         tSet.add(tile)
-    #
-    #         if depth > lastDepth:
-    #             lastDepth = depth
-    #             lastVisited.update(visited)
-    #             visited.clear()
-    #
-    #         curDist = dists[tile]
-    #         if curDist > furthestDist:
-    #             if self.log_debug:
-    #                 logbook.info(f'skipping {str(tile)} because dists[tile] {dists[tile]} > furthestDist {furthestDist}')
-    #             continue
-    #
-    #         tilesAtDist = distLookups[depth]
-    #         tilesAtDist.append(tile)
-    #
-    #         if tile in visited:
-    #             continue
-    #
-    #         visited.add(tile)
-    #
-    #         # INCLUDE mountains, we need to treat them as fucked stuff. Dont path THROUGH them though.
-    #         if tile.isObstacle:
-    #             continue
-    #
-    #         for adj in tile.movable:
-    #             if adj in potentialSharedChokes:
-    #                 queue.append((depth + 1, adj, tile))
-    #
-    #     common = {}
-    #     fromCommon = set()
-    #     for i in range(40):
-    #         tiles = distLookups[i]
-    #         if len(tiles) == 0:
-    #             continue
-    #
-    #         # find the middle tile...?
-    #         common.clear()
-    #         fromCommon.clear()
-    #
-    #         for tile in tiles:
-    #             fromTiles = fromSets[tile]
-    #             fromCommon.update(fromTiles)
-    #             # toTiles = toSets.get(tile, None)
-    #
-    #         for tile in tiles:
-    #             allCommon = len(fromCommon) > 0
-    #             fromTiles = fromSets[tile]
-    #             for t in fromCommon:
-    #                 if t not in fromTiles:
-    #                     allCommon = False
-    #                     break
-    #             if allCommon:
-    #                 # sharedChokes[tile] = i + len(fromTiles) + len(toTiles)
-    #                 if tile not in potentialSharedChokes:
-    #                     if self.log_debug:
-    #                         logbook.info(f'DEBUG: SHAREDINTERCEPTVAL WAS NONE FOR TILE {tile} IN INTERCEPT {threats[0].path.start.tile}')
-    #                 else:
-    #                     minDelayTurns = commonMinDelayTurns[tile]
-    #                     maxExtraMoves = commonMaxExtraMoves[tile]
-    #                     maxChokeWidth = 0
-    #                     maxInterceptTurnOffset = 0
-    #                     for threat in threats:
-    #                         ito = threat.armyAnalysis.interceptChokes[tile]
-    #                         cw = threat.armyAnalysis.chokeWidths[tile]
-    #                         if cw is not None:
-    #                             maxChokeWidth = max(cw, maxChokeWidth)
-    #                         if ito is not None:
-    #                             maxInterceptTurnOffset = max(ito, maxInterceptTurnOffset)
-    #                     if self.log_debug:
-    #                         logbook.info(f'common choke {str(tile)} was '
-    #                                      f'minDelayTurns {minDelayTurns}, '
-    #                                      f'maxExtraMoves {maxExtraMoves}, '
-    #                                      f'maxChokeWidth {maxChokeWidth}, '
-    #                                      f'maxInterceptTurnOffset {maxInterceptTurnOffset}')
-    #                     sharedChokes[tile] = InterceptPointTileInfo(tile, minDelayTurns, maxExtraMoves, maxChokeWidth, maxInterceptTurnOffset)
-    #
-    #     return sharedChokes
 
     def _get_threats_army_amount(self, threats: typing.List[ThreatObj]) -> int:
         maxAmount = 0

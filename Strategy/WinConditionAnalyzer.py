@@ -9,7 +9,7 @@ import SearchUtils
 from BoardAnalyzer import BoardAnalyzer
 from CityAnalyzer import CityAnalyzer
 from DataModels import GatherTreeNode
-from MapMatrix import MapMatrix, TileSet
+from MapMatrix import TileSet
 from Path import Path
 from Territory import TerritoryClassifier
 from .OpponentTracker import OpponentTracker
@@ -244,7 +244,7 @@ class WinConditionAnalyzer(object):
 
         logbook.info(f'losingByTwoCyclesAgo {losingByTwoCyclesAgo}, losingByOneCyclesAgo {losingByOneCyclesAgo}')
 
-        if losingByTwoCyclesAgo < -1 and losingByTwoCyclesAgo > losingByOneCyclesAgo + 1:
+        if -1 > losingByTwoCyclesAgo > losingByOneCyclesAgo + 1:
             logbook.info(f'We appear to be losing more and more on economy.')
             return False
 
@@ -342,7 +342,7 @@ class WinConditionAnalyzer(object):
         @param noLog:
         @return:
         """
-        bestValue, bestPlan = self.get_approximate_attack_plan_against(
+        plan = self.get_approximate_attack_plan_against(
             tiles=tiles,
             inTurns=inTurns,
             asPlayer=asPlayer,
@@ -352,7 +352,7 @@ class WinConditionAnalyzer(object):
             noLog=noLog,
         )
 
-        return bestValue
+        return plan.gathered_army
 
     def get_approximate_attack_plan_against(
             self,
@@ -363,7 +363,7 @@ class WinConditionAnalyzer(object):
             forceFogRisk: bool = False,
             negativeTiles: typing.Set[Tile] | None = None,
             noLog: bool = False,
-    ) -> typing.Tuple[int, typing.List[GatherTreeNode]]:
+    ) -> GatherUtils.GatherCapturePlan:
         """
         Does NOT include the army ON the target tile.
 
@@ -408,17 +408,15 @@ class WinConditionAnalyzer(object):
             # priorityMatrix=priorityMatrix
         )
 
-        # turnsUsed = 0
-        # for n in gatherNodes:
-        #     turnsUsed += n.gatherTurns
-
         fogRiskValue = value + self.get_additional_fog_gather_risk(gatherNodes, asPlayer, inTurns, forceFogRisk=forceFogRisk)
 
         if fogRiskValue > bestValue:
             if not noLog:
-                logbook.info(f'approx raw gather attack {fogRiskValue} in {inTurns}, > best {bestValue}')
+                logbook.info(f'>> RAW gather attack {fogRiskValue} in {inTurns}, > best {bestValue}')
             bestValue = fogRiskValue
             bestPlan = gatherNodes
+        elif not noLog:
+            logbook.info(f'<  RAW gather attack {fogRiskValue} in {inTurns}, < best {bestValue}')
 
         prunedGatherTurns, prunedValue, prunedGatherNodes = GatherUtils.prune_mst_to_max_army_per_turn_with_values(
             GatherUtils.clone_nodes(gatherNodes),
@@ -434,27 +432,46 @@ class WinConditionAnalyzer(object):
 
         if prunedFogRiskValue > bestValue:
             if not noLog:
-                logbook.info(f'approx raw gather attack pruned + fog {prunedFogRiskValue} in {inTurns}, > best {bestValue}')
+                logbook.info(f'>> PRUNE + FOG gather attack {prunedFogRiskValue} in {inTurns}, > best {bestValue}')
             bestValue = prunedFogRiskValue
             bestPlan = prunedGatherNodes
+        elif not noLog:
+            logbook.info(f'<  PRUNE + FOG gather attack {prunedFogRiskValue} in {inTurns}, < best {bestValue}')
 
         attackPathRiskVal = 0
-        maxAttack = self.get_best_attack_path_from_fog(tiles, asPlayer, inTurns, negativeTiles=negativeTiles)
+        maxAttack = self.get_best_attack_path_from_fog_by_army_per_turn(tiles, asPlayer, inTurns, negativeTiles=negativeTiles)
         if maxAttack is not None:
             attackPathRiskVal = maxAttack.value
             fakeGathNodes = [maxAttack.convert_to_tree_nodes(self.map, asPlayer)]
-            attackPathRiskVal += self.get_additional_fog_gather_risk(fakeGathNodes, asPlayer, inTurns, forceFogRisk=forceFogRisk)
+            addlRisk = self.get_additional_fog_gather_risk(fakeGathNodes, asPlayer, inTurns, forceFogRisk=forceFogRisk)
+            attackPathRiskVal += addlRisk
 
             if attackPathRiskVal > bestValue:
                 if not noLog:
-                    logbook.info(f'max attack + fog {attackPathRiskVal} in {inTurns}, > best {bestValue}')
+                    logbook.info(f'>> PATH + FOG {attackPathRiskVal} in {inTurns}, > best {bestValue}')
                 bestValue = attackPathRiskVal
                 bestPlan = fakeGathNodes
+            elif not noLog:
+                logbook.info(f'<  PATH + FOG {attackPathRiskVal} in {inTurns}, < best {bestValue}')
+        elif not noLog:
+            logbook.info(f'<  NO MAX PATH FOUND')
 
         if not noLog:
-            logbook.info(f'concluded get_approximate_attack_against gather, value {fogRiskValue} or {prunedFogRiskValue} or {attackPathRiskVal}')
+            logbook.info(f'concluded get_approximate_attack_against, value {fogRiskValue} or {prunedFogRiskValue} or {attackPathRiskVal}')
 
-        return bestValue, bestPlan
+        plan = GatherUtils.GatherCapturePlan(
+            bestPlan,
+            self.map,
+            econValue=0.0,
+            turnsTotalInclCap=inTurns,
+            gatherValue=max(0, bestValue),
+            gatherPoints=0.0,
+            gatherTurns=inTurns,
+            requiredDelay=0,
+            cityCount=0,  # todo
+        )
+
+        return plan
 
     def get_dynamic_turns_visible_defense_against(
             self,
@@ -471,7 +488,7 @@ class WinConditionAnalyzer(object):
 
         returns turns, gatheredVal
         """
-        turns, value, nodes = self.get_dynamic_turns_visible_defense_plan_against(
+        plan = self.get_dynamic_turns_visible_defense_plan_against(
             tiles=tiles,
             maxTurns=maxTurns,
             asPlayer=asPlayer,
@@ -479,7 +496,7 @@ class WinConditionAnalyzer(object):
             minArmy=minArmy,
             negativeTiles=negativeTiles,
         )
-        return turns, value
+        return plan.length, plan.gathered_army
 
     def get_dynamic_turns_visible_defense_plan_against(
             self,
@@ -489,7 +506,7 @@ class WinConditionAnalyzer(object):
             timeLimit: float = 0.05,
             minArmy: int = 1,
             negativeTiles: typing.Set[Tile] | None = None
-    ) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
+    ) -> GatherUtils.GatherCapturePlan:
         """
         Max-value-per-turn known tile gather + fog option, or full gather minus fog option.
         Use for players you have full vision of, or when you do not want to include the players fogRisk army.
@@ -541,10 +558,31 @@ class WinConditionAnalyzer(object):
 
             logbook.info(f'concluded get_dynamic_visible_defense_against prune, value {prunedValue}')
 
-            return prunedTurns, max(0, prunedValue), prunedNodes
+            plan = GatherUtils.GatherCapturePlan(
+                prunedNodes,
+                self.map,
+                econValue=0.0,
+                turnsTotalInclCap=prunedTurns,
+                gatherValue=max(0, prunedValue),
+                gatherPoints=0.0,
+                gatherTurns=prunedTurns,
+                requiredDelay=0,
+                cityCount=0,  # todo
+            )
+            return plan
 
         logbook.info(f'concluded get_dynamic_visible_defense_against zeros')
-        return 0, 0, []
+        return GatherUtils.GatherCapturePlan(
+            [],
+            self.map,
+            econValue=0.0,
+            turnsTotalInclCap=0,
+            gatherValue=0,
+            gatherPoints=0.0,
+            gatherTurns=0,
+            requiredDelay=0,
+            cityCount=0,
+        )
 
     def get_dynamic_turns_approximate_attack_against(
             self,
@@ -565,14 +603,14 @@ class WinConditionAnalyzer(object):
         @return:
         """
 
-        turns, value, nodes = self.get_dynamic_turns_approximate_attack_plan_against(
+        plan = self.get_dynamic_turns_approximate_attack_plan_against(
             tile=tile,
             maxTurns=maxTurns,
             asPlayer=asPlayer,
             timeLimit=timeLimit,
         )
 
-        return turns, value
+        return plan.length, plan.gathered_army
 
     def get_dynamic_turns_approximate_attack_plan_against(
             self,
@@ -582,7 +620,7 @@ class WinConditionAnalyzer(object):
             timeLimit: float = 0.005,
             negativeTiles: TileSet | None = None,
             minTurns: int = 0
-    ) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
+    ) -> GatherUtils.GatherCapturePlan:
         """
         returns turns, attackValue, nodes
         Max-value-per-turn known tile gather + fog option, or full gather minus fog option.
@@ -631,6 +669,10 @@ class WinConditionAnalyzer(object):
 
         logbook.info(f'get_dynamic_attack_against {tile} gather for total {attackVal}, raw gather {value}, fogRisk {fogRisk}')
 
+        finalTurns: int = 0
+        finalAttack: int = 0
+        finalNodes = []
+
         if attackVal > 0:
             prunedTurns, prunedValue, prunedNodes = GatherUtils.prune_mst_to_max_army_per_turn_with_values(
                 [g.deep_clone() for g in gatherNodes],
@@ -651,14 +693,114 @@ class WinConditionAnalyzer(object):
             logbook.info(f'concluded get_dynamic_attack_against prune {tile} gather turns {prunedTurns} for total {attackPruned}, pruned gather {prunedValue}, pruneFogRisk {pruneFogRisk}')
 
             if prunedTurns > 0 and attackPruned / prunedTurns > attackVal / maxTurns:
-                return prunedTurns, max(0, attackPruned), prunedNodes
+                finalTurns, finalAttack, finalNodes = prunedTurns, max(0, attackPruned), prunedNodes
+            else:
+                logbook.error(f'Prune wasnt the max value per turn...?')
+                finalTurns, finalAttack, finalNodes = maxTurns, max(0, attackVal), gatherNodes
+        else:
+            logbook.info(f'concluded get_dynamic_attack_against, zeros')
 
-            logbook.error(f'Prune wasnt the max value per turn...?')
-            return maxTurns, max(0, attackVal), gatherNodes
+        plan = GatherUtils.GatherCapturePlan(
+            finalNodes,
+            self.map,
+            econValue=0.0,
+            turnsTotalInclCap=finalTurns,
+            gatherValue=finalAttack,
+            gatherPoints=0.0,
+            gatherTurns=finalTurns,
+            requiredDelay=0,
+            cityCount=0,  # todo
+        )
 
-        logbook.info(f'concluded get_dynamic_attack_against, zeros')
+        return plan
 
-        return 0, 0, []
+    def get_dynamic_approximate_attack_defense(
+            self,
+            tile: Tile,
+            negativeTiles: TileSet,
+            minTurns: int = 0,
+            maxTurns: int = 35,
+            attackingPlayer: int = -1,
+            defendingPlayer: int = -1,
+            noLog: bool = False
+    ) -> typing.Tuple[int, int, int]:
+        """
+        returns foundTurns, approxAttack, approxDef
+
+        @param tile: The tile to attack
+        @param negativeTiles: negative tiles in the attack (but not the defense)
+        @param minTurns: The minimum number of turns allowed
+        @param maxTurns: The maximum number of turns allowed.
+        @param attackingPlayer:
+        @param defendingPlayer:
+        @param noLog: if False, do not log.
+        @return:
+        """
+
+        attackPlan, defPlan = self.get_dynamic_approximate_attack_defense_plans(
+            tile=tile,
+            negativeTiles=negativeTiles,
+            minTurns=minTurns,
+            maxTurns=maxTurns,
+            attackingPlayer=attackingPlayer,
+            defendingPlayer=defendingPlayer,
+            noLog=noLog,
+        )
+
+        return attackPlan.length, attackPlan.gathered_army, defPlan.gathered_army
+
+    def get_dynamic_approximate_attack_defense_plans(
+            self,
+            tile: Tile,
+            negativeTiles: TileSet,
+            minTurns: int = 0,
+            maxTurns: int = 35,
+            attackingPlayer: int = -1,
+            defendingPlayer: int = -1,
+            noLog: bool = False
+    ) -> typing.Tuple[GatherUtils.GatherCapturePlan, GatherUtils.GatherCapturePlan]:
+        """
+        returns attackPlan, defensePlan
+
+        @param tile: The tile to attack
+        @param negativeTiles: negative tiles in the attack (but not the defense)
+        @param minTurns: The minimum number of turns allowed
+        @param maxTurns: The maximum number of turns allowed.
+        @param attackingPlayer:
+        @param defendingPlayer:
+        @param noLog: if False, do not log.
+        @return:
+        """
+
+        if attackingPlayer == -1:
+            attackingPlayer = self.map.player_index
+        if defendingPlayer == -1:
+            defendingPlayer = tile.player
+
+        attackPlan = self.get_dynamic_turns_approximate_attack_plan_against(
+            tile,
+            maxTurns,
+            attackingPlayer,
+            0.005,
+            negativeTiles=negativeTiles,
+            minTurns=minTurns,
+        )
+
+        defensePlan = self.get_approximate_attack_plan_against(
+            [tile],
+            attackPlan.length,
+            defendingPlayer,
+            0.005,
+            forceFogRisk=False,
+            negativeTiles=None,
+            noLog=True,
+        )
+
+        curDiff = attackPlan.gathered_army - defensePlan.gathered_army
+        if not noLog:
+            logbook.info(f'atk/def @{tile}: diff {curDiff} in {attackPlan.length}t (attack {attackPlan.gathered_army}, def {defensePlan.gathered_army}')
+
+        return attackPlan, defensePlan
 
     def is_city_forward_relative_to_central_point(self, city: Tile, offset: int = 3):
         if self.board_analysis.central_defense_point is None:
@@ -688,19 +830,23 @@ class WinConditionAnalyzer(object):
 
         fogValue = SearchUtils.Counter(0)
 
-        def fogCounterFunc(node: GatherTreeNode):
-            if not node.tile.visible:
-                numFogTiles.value += 1
-                if self.map.is_player_on_team_with(node.tile.player, asPlayer):
-                    fogValue.value += node.tile.army - 1
-                else:
-                    fogValue.value -= node.tile.army + 1
+        for node in GatherUtils.iterate_tree_nodes(gatherNodes):
+            if node.tile.visible:
+                continue
 
-        GatherUtils.foreach_tree_node(gatherNodes, forEachFunc=fogCounterFunc)
+            numFogTiles.value += 1
+            if self.map.is_player_on_team_with(node.tile.player, asPlayer):
+                fogValue.value += node.tile.army - 1
+            else:
+                fogValue.value -= node.tile.army + 1
 
         turnsUsed = 0
         for t in gatherNodes:
             turnsUsed += t.gatherTurns
+
+        # if their gather doesn't hit the fog, or they didn't gather at all, we can't include fog in this plan. :)
+        if turnsUsed == 0 or numFogTiles.value == 0:
+            return 0
 
         turnsLeft = inTurns - turnsUsed
 
@@ -747,12 +893,14 @@ class WinConditionAnalyzer(object):
 
         return frEcon - enEcon
 
-    def get_best_attack_path_from_fog(self, tiles: typing.List[Tile], asPlayer: int, inTurns: int, negativeTiles: typing.Set[Tile] | None) -> Path | None:
+    def get_best_attack_path_from_fog_by_army_per_turn(self, tiles: typing.List[Tile], asPlayer: int, inTurns: int, negativeTiles: typing.Set[Tile] | None) -> Path | None:
         if negativeTiles is None:
             negativeTiles = set()
         negativeTiles.update(tiles)
 
         def valueFunc(tile: Tile, prioVals) -> typing.Tuple | None:
+            if not tile in self.board_analysis.flankable_fog_area_matrix:
+                return None
             if tile.visible:
                 return None
             if tile.player != asPlayer:

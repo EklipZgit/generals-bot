@@ -83,7 +83,7 @@ def generate_player_map(player_index: int, map_raw: MapBase) -> MapBase:
 class GamePlayer(object):
     def __init__(self, map_raw: MapBase, player_index: int):
         self.index = player_index
-        self.map = generate_player_map(player_index, map_raw)
+        self.map: MapBase | None = generate_player_map(player_index, map_raw)
         self.move_history: typing.List[typing.Union[None, Move]] = []
         self.tiles_gained_this_turn: typing.Set[Tile] = set()
         self.tiles_lost_this_turn: typing.Set[Tile] = set()
@@ -150,7 +150,7 @@ class GamePlayer(object):
 
 
 class GameSimulator(object):
-    def __init__(self, map_raw: MapBase, ignore_illegal_moves: bool = False):
+    def __init__(self, map_raw: MapBase, ignore_illegal_moves: bool = False, exclusive_player_map: int | None = None):
         """
 
         @param map_raw: Should be the full map
@@ -172,6 +172,10 @@ class GameSimulator(object):
             self.teams = [i for i in range(len(map_raw.players))]
 
         self.players: typing.List[GamePlayer] = [GamePlayer(map_raw, i) for i in range(len(map_raw.players))]
+        if exclusive_player_map is not None:
+            for player in self.players:
+                if player.index != exclusive_player_map:
+                    player.map = None
         self.turn: int = map_raw.turn
         self.sim_map: MapBase = map_raw
         self.moves: typing.List[typing.Union[None, Move]] = [None for i in range(len(map_raw.players))]
@@ -223,7 +227,7 @@ class GameSimulator(object):
     def is_game_over(self) -> bool:
         livingTeams = set()
         for player in self.players:
-            if player.map.complete:
+            if player.map is not None and player.map.complete:
                 player.dead = True
             if not player.dead:
                 livingTeams.add(self.teams[player.index])
@@ -236,7 +240,7 @@ class GameSimulator(object):
         logbook.info(f'Detected game win')
 
         for player in self.players:
-            if not player.dead:
+            if not player.dead and player.map is not None:
                 player.map.complete = True
                 player.map.result = True
 
@@ -371,6 +375,9 @@ class GameSimulator(object):
         # call update
 
         for player in self.players:
+            if player.map is None:
+                continue
+
             logbook.info(f'----')
             logbook.info(f'----')
             logbook.info(f'SIM SENDING TURN {self.turn} MAP UPDATES TO PLAYER {player.index}')
@@ -407,6 +414,8 @@ class GameSimulator(object):
 
     def end_game(self):
         for player in self.players:
+            if player.map is None:
+                continue
             player.map.result = False
             player.map.complete = True
 
@@ -445,7 +454,8 @@ class GameSimulator(object):
 
     def reset_player_map_deltas(self):
         for player in self.players:
-            player.map.clear_deltas_and_score_history()
+            if player.map is not None:
+                player.map.clear_deltas_and_score_history()
 
     def _update_tile_deltas(self):
         for tile in self.tiles_updated_this_cycle:
@@ -467,6 +477,7 @@ class GameSimulatorHost(object):
             allAfkExceptMapPlayer: bool = False,
             teammateNotAfk: bool = False,
             respectTurnTimeLimitToDropMoves: bool = False,
+            disableOtherPlayerMaps: bool = False,
             botInitOnly: bool = False):
         """
 
@@ -481,7 +492,10 @@ class GameSimulatorHost(object):
         self.queued_tile_pings: "Queue[typing.Tuple[int, Tile]]" = Queue()
         self.queued_chat_messages: "Queue[typing.Tuple[int, str, bool]]" = Queue()
         self.move_queue: typing.List[typing.List[Move | None]] = [[] for player in map.players]
-        self.sim: GameSimulator = GameSimulator(map, ignore_illegal_moves=False)
+        playerWithMap = None
+        if disableOtherPlayerMaps:
+            playerWithMap = player_with_viewer
+        self.sim: GameSimulator = GameSimulator(map, ignore_illegal_moves=False, exclusive_player_map=playerWithMap)
         self.init_only: bool = botInitOnly
         self.do_not_notify_bot_on_move_overrides: bool = False
         """If set to True, the bot will not be notified when its move is updated by queue_player_moves allowing the simulation of laggy moves / dropped moves from the bots perspective."""
@@ -711,6 +725,9 @@ class GameSimulatorHost(object):
         @param moves_str:
         @return:
         """
+        pMap = self.sim.players[player].map
+        if pMap is None:
+            pMap = self.sim.sim_map
         paths = moves_str.split('  ')
         for path_str in paths:
             if path_str.strip().lower() == 'none':
@@ -741,7 +758,7 @@ class GameSimulatorHost(object):
                     yInc = 1
 
                 while prevTile.x != nextTile.x or prevTile.y != nextTile.y:
-                    currentTile = self.sim.players[player].map.GetTile(prevTile.x + xInc, prevTile.y + yInc)
+                    currentTile = pMap.GetTile(prevTile.x + xInc, prevTile.y + yInc)
                     self.move_queue[player].append(Move(prevTile, currentTile, moveHalf))
                     prevTile = currentTile
 
@@ -876,9 +893,10 @@ class GameSimulatorHost(object):
 
                 if not self.do_not_notify_bot_on_move_overrides:
                     player = self.sim.players[playerIndex]
-                    player.map.last_player_index_submitted_move = None
-                    if move is not None:
-                        player.map.last_player_index_submitted_move = (move.source, move.dest, move.move_half)
+                    if player.map is not None:
+                        player.map.last_player_index_submitted_move = None
+                        if move is not None:
+                            player.map.last_player_index_submitted_move = (move.source, move.dest, move.move_half)
 
         for func in self._between_turns_funcs:
             self._run_between_turns_func(run_real_time, func)
@@ -976,14 +994,19 @@ class GameSimulatorHost(object):
             moveHalf = True
             yStr = yStr.strip('z ')
 
-        currentTile = self.sim.players[player].map.GetTile(int(xStr), int(yStr))
+        pMap = self.sim.players[player].map
+        if pMap is None:
+            pMap = self.sim.sim_map
+        currentTile = pMap.GetTile(int(xStr), int(yStr))
         return currentTile, moveHalf
 
     def give_players_perfect_initial_city_information(self):
         # give all players in the game perfect information about each others cities like they would have in a normal game by that turn
         for player in self.sim.players:
-            for i, otherPlayer in enumerate(self.sim.players):
-                player.map.players[i].cityCount = otherPlayer.map.players[otherPlayer.map.player_index].cityCount
+            if player.map is None:
+                continue
+            for i, otherPlayer in enumerate(self.sim.sim_map.players):
+                player.map.players[i].cityCount = otherPlayer.cityCount
 
     def _run_between_turns_func(self, run_real_time: bool, func):
         try:

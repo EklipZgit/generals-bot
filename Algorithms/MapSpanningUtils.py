@@ -93,26 +93,11 @@ def get_spanning_tree_matrix_from_tile_lists(
         logbook.info('starting get_map_as_graph_from_tiles')
     includedSet = set()
     missingIncluded = set(requiredTiles)
-    # oneOfSet
-    # table: MapMatrixSet = MapMatrixSet(map)
+
+    # bannedSet.difference_update(requiredTiles)
     for req in requiredTiles:
         bannedSet.discard(req)
-    # for tile in map.reachableTiles:
-    #     if tile in bannedSet:
-    #         continue
-    #     node = TileNode(tile)
-    #     table[tile] = node
-    # for tile in requiredTiles:
-    #     node = TileNode(tile)
-    #     table[tile] = node
-    # for tile in requiredTiles:
-    #     node = table[tile]
-    #     for moveable in tile.movable:
-    #         if moveable in bannedSet:
-    #             continue
-    #         adjNode = table[moveable]
-    #         if adjNode is not None:
-    #             node.adjacents.append(adjNode)
+
     if len(requiredTiles) == 0:
         return includedSet, missingIncluded
 

@@ -1671,7 +1671,8 @@ class MapBase(object):
 
     def _get_expected_delta_amount_toward(self, source: Tile, dest: Tile, moveHalf: bool = False) -> int:
         sourceDelta = source.delta.unexplainedDelta
-        sameOwnerMove = source.delta.oldOwner == dest.delta.oldOwner and source.delta.oldOwner != -1
+        sameOwnerMove = source.delta.oldOwner == dest.delta.oldOwner and source.delta.oldOwner != -1  # and (dest.player == source.delta.oldOwner or dest.player != self.player_index)
+        attackedFlippedTile = dest.delta.oldOwner != dest.player and source.delta.oldOwner != dest.player and dest.visible
         teamMateMove = source.delta.oldOwner != dest.delta.oldOwner and self._teams[source.delta.oldOwner] == self._teams[dest.delta.oldOwner]
         if not source.visible:
             if not source.delta.lostSight:
@@ -1696,7 +1697,7 @@ class MapBase(object):
             #     sourceDelta = dest.delta.unexplainedDelta
         elif moveHalf:
             raise AssertionError(f'cannot provide moveHalf directive for visible tile {str(source)}, visible tiles exclusively use tile deltas.')
-        if sameOwnerMove:
+        if sameOwnerMove or attackedFlippedTile:
             return 0 - sourceDelta
         if teamMateMove:
             if not dest.isGeneral:
@@ -1707,6 +1708,7 @@ class MapBase(object):
                 return 0 - (2 * dest.delta.oldArmy - sourceDelta)
             else:
                 return 0 - sourceDelta
+
         return sourceDelta
 
     def _apply_last_player_move(self, last_player_index_submitted_move: typing.Tuple[Tile, Tile, bool]) -> typing.Tuple[Tile, Tile, bool] | None:
@@ -1773,9 +1775,13 @@ class MapBase(object):
         destUnexpectedDelta = actualDestDelta - expectedDestDelta
         # necessary for test_should_not_dupe_army_to_the_side_on_collision
         if dest.delta.oldOwner != dest.player and dest.player != self.player_index and dest.delta.oldOwner != self.player_index:
+            # detect if collided on tile that wasn't ours, and we didnt win
             destUnexpectedDelta = (0 - actualDestDelta) - expectedDestDelta
+        # elif dest.delta.oldOwner != dest.player and dest.player == self.player_index:
+        #     # detect if collided on tile that wasn't ours, and we DID win.
+        #     destUnexpectedDelta = 0 - destUnexpectedDelta
 
-        destDeltaMismatch = destUnexpectedDelta != 0
+        hasDestDeltaMismatch = destUnexpectedDelta != 0
 
         sourceDefinitelyKilledWithPriority = not source.visible and not dest.visible and sourceWouldHaveCappedDest
 
@@ -1830,7 +1836,7 @@ class MapBase(object):
         sourceWasCaptured = False
         sourceWasAttackedWithPriority = False
         # if sourceDeltaMismatch or source.player != self.player_index or (actualDestDelta == 0 and sourceHasEnPriorityDeltasNearby):
-        if sourceDeltaMismatch or source.player != self.player_index or (destDeltaMismatch and sourceHasEnPriorityDeltasNearby) or sourceDefinitelyKilledWithPriority:
+        if sourceDeltaMismatch or source.player != self.player_index or (hasDestDeltaMismatch and sourceHasEnPriorityDeltasNearby) or sourceDefinitelyKilledWithPriority:
             if sourceHasEnPriorityDeltasNearby:
                 sourceWasAttackedWithPriority = True
                 if source.player != self.player_index or not source.visible:
@@ -1897,7 +1903,7 @@ class MapBase(object):
             else:
                 # we can get here if the source tile was attacked with priority but not for full damage, OR if it was attacked without priority for non full damage...
                 destArmyInterferedToo = False
-                if not destDeltaMismatch:
+                if not hasDestDeltaMismatch:
                     # then we almost certainly didn't have source attacked with priority.
                     logbook.warn(
                         f'MOVE {str(last_player_index_submitted_move)} ? src attacked for srcUnexpectedDelta {srcUnexpectedDelta} WITHOUT priority based on actualSrcDelta {actualSrcDelta} vs expectedSourceDelta {expectedSourceDelta}')
@@ -1930,7 +1936,7 @@ class MapBase(object):
             # self.unaccounted_tile_diffs.pop(source, 0)
             source.delta.unexplainedDelta = 0
 
-        if destDeltaMismatch:
+        if hasDestDeltaMismatch:
             if dest.delta.lostSight:
                 # then we got attacked, possibly BY the dest tile.
                 if dest.delta.oldArmy > source.delta.oldArmy - 1 and dest.delta.oldOwner != self.player_index:
@@ -2367,10 +2373,11 @@ class MapBase(object):
 
         tile.delta.oldArmy = army - expectedDelta
 
-        if self.is_army_bonus_turn:
-            army += 1
-        if (tile.isCity or tile.isGeneral) and self.is_city_bonus_turn:
-            army += 1
+        # this gets done separately, later. WHy would we do it now...?
+        # if self.is_army_bonus_turn:
+        #     army += 1
+        # if (tile.isCity or tile.isGeneral) and self.is_city_bonus_turn:
+        #     army += 1
 
         tile.army = army
         tile.delta.oldOwner = byPlayer
@@ -2588,11 +2595,14 @@ class MapBase(object):
                             )
                     ):
                         continue
+                    # if destWasAttackedNonLethalOrVacatedOrUnmoved and potentialSource.player != destTile.delta.oldOwner:
+                    #     logbook.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} <- SRC {repr(potentialSource)} SKIPPED BECAUSE destWasAttackedNonLethalOrVacatedOrUnmoved {destWasAttackedNonLethalOrVacatedOrUnmoved}')
+                    #     continue
                     if potentialSource.delta.oldOwner in skipCapturedPlayers:
                         continue
-                    if potentialSource.was_visible_last_turn() and self._teams[potentialSource.delta.oldOwner] != self._teams[destTile.delta.oldOwner]:
+                    if potentialSource.was_visible_last_turn() and self._teams[potentialSource.delta.oldOwner] != self._teams[destTile.delta.oldOwner] and self.player_index != destTile.player:
                         # only the player who owns the resulting tile can move one of their own tiles into it. TODO 2v2...?
-                        logbook.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)}: SRC {repr(potentialSource)} SKIPPED BECAUSE potentialSource.was_visible_last_turn() and potentialSource.delta.oldOwner != destTile.player')
+                        logbook.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} <- SRC {repr(potentialSource)} SKIPPED BECAUSE potentialSource.was_visible_last_turn() and potentialSource.delta.oldOwner != destTile.player')
                         continue
                     if destTile.delta.armyDelta > 0 and destTile.was_visible_last_turn() and potentialSource.was_visible_last_turn() and potentialSource.delta.armyDelta > 0:
                         msg = f'This shouldnt be possible, two of the same players tiles increasing on the same turn...? {repr(potentialSource)} - {repr(destTile)}'
@@ -2606,19 +2616,19 @@ class MapBase(object):
                     # if  sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
                     if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
                         potentialSources = [potentialSource]
-                        logbook.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(potentialSource)} FORCE-SELECTED DUE TO EXACT MATCH, BREAKING EARLY')
+                        logbook.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} <- SRC {repr(potentialSource)} FORCE-SELECTED DUE TO EXACT MATCH, BREAKING EARLY')
                         break
 
                     # no effect on diagonal
                     # if potentialSource.delta.imperfectArmyDelta and (not sourceWasAttackedNonLethalOrVacated or (potentialSource.player >= 0 and potentialSource.player != destTile.delta.oldOwner)):
                     if potentialSource.delta.imperfectArmyDelta and not self._move_would_violate_known_player_deltas(potentialSource, destTile):
-                        logbook.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(potentialSource)} INCLUDED AS POTENTIAL SOURCE BUT CONTINUING TO LOOK FOR MORE')
+                        logbook.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} <- SRC {repr(potentialSource)} INCLUDED AS POTENTIAL SOURCE BUT CONTINUING TO LOOK FOR MORE')
                         potentialSources.append(potentialSource)
                     elif self.remainingPlayers > 2 and self._is_partial_army_movement_delta_match(source=potentialSource, dest=destTile):
                         if destTile.army < 3:
-                            logbook.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(potentialSource)} refusing to include potential FFA third party attack because tile appears to have been moved, something seems messed up...')
+                            logbook.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} <- SRC {repr(potentialSource)} refusing to include potential FFA third party attack because tile appears to have been moved, something seems messed up...')
                         else:
-                            logbook.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(potentialSource)} including potential FFA third party attack from fog as tile damager.')
+                            logbook.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} <- SRC {repr(potentialSource)} including potential FFA third party attack from fog as tile damager.')
                             potentialSources.append(potentialSource)
 
                 if len(potentialSources) == 1:
@@ -2630,7 +2640,7 @@ class MapBase(object):
                             and self._is_exact_army_movement_delta_match(exclusiveSrc, destTile)
                     )
 
-                    logbook.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(exclusiveSrc)} WAS EXCLUSIVE SOURCE, EXACT MATCH {exactMatch} INCLUDING IN MOVES')
+                    logbook.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} <- SRC {repr(exclusiveSrc)} WAS EXCLUSIVE SOURCE, EXACT MATCH {exactMatch} INCLUDING IN MOVES')
 
                     byPlayer = -1
                     if destTile.was_visible_last_turn() and destTile.delta.oldOwner == destTile.player:

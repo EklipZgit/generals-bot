@@ -62,6 +62,9 @@ class ArmyTracker(object):
         self.uneliminated_emergence_events: typing.List[typing.Dict[Tile, int]] = [{} for player in self.map.players]
         """The set of emergence events that have resulted in general location restrictions in the past and have not been dropped in favor of more restrictive restrictions."""
 
+        self.unrecaptured_emergence_events: typing.List[typing.Set[Tile]] = [set() for player in self.map.players]
+        """The set of emergence events from which an army emerged and the target player still owns the tile. ONLY counts when we didn't find an obvious emergence path for the player."""
+
         self.uneliminated_emergence_event_city_perfect_info: typing.List[typing.Set[Tile]] = [set() for player in self.map.players]
         """Whether a given emergence event had perfect city info or not."""
 
@@ -91,6 +94,7 @@ class ArmyTracker(object):
         self.update_track_threshold()
 
         self._flipped_tiles: typing.Set[Tile] = set()
+        """Tracks any tile that changed players on a given turn"""
 
         self._flipped_by_army_tracker_this_turn: typing.List[typing.Tuple[int, Tile]] = []
         """The list of all (oldOwner,tile)s that were updated by armyTracker this turn."""
@@ -247,9 +251,8 @@ class ArmyTracker(object):
                 army.value += 1
 
     def move_fogged_army_paths(self):
-        for army in list(self.armies.values()):
-            if army.tile.visible:
-                continue
+        armyVals = list(a for a in self.armies.values() if not a.tile.visible)
+        for army in armyVals:
             if army.player == self.map.player_index or army.player in self.map.teammates:
                 self.scrap_army(army, scrapEntangled=False)
                 continue
@@ -290,6 +293,8 @@ class ArmyTracker(object):
                     fogPathNexts[nextTile] = nextPaths
 
             if len(fogPathNexts) > 1:
+                self.armies.pop(army.tile, None)
+
                 nextArmies = army.get_split_for_fog(list(fogPathNexts.keys()))
 
                 for nextTile, paths in fogPathNexts.items():
@@ -310,7 +315,7 @@ class ArmyTracker(object):
 
                         logbook.info(f'respecting army {str(nextArmy)} SPLIT fog path: {str(path)}')
 
-                        self._move_fogged_army_along_path(nextArmy, path)
+                        self._move_fogged_army_along_path(nextArmy, path, armyAlreadyPopped=True)
 
                         logbook.info(f'AFTER: army {str(nextArmy)}: {str(nextArmy.expectedPaths)}')
                     if not nextArmy.scrapped:
@@ -494,6 +499,9 @@ class ArmyTracker(object):
                     continue
                 if self.lastMove is not None and tile == self.lastMove.source:
                     continue
+                if tile.delta.oldOwner == self.map.player_index:
+                    # we track our own moves elsewhere
+                    continue
                 if tile.delta.toTile is None:
                     continue
                 if tile.isUndiscoveredObstacle or tile.isMountain:
@@ -646,7 +654,7 @@ class ArmyTracker(object):
         for listener in self.notify_army_moved:
             listener(army)
 
-    def scrap_army(self, army: Army, scrapEntangled: bool):
+    def scrap_army(self, army: Army, scrapEntangled: bool = False):
         army.scrapped = True
         if scrapEntangled:
             for entangledArmy in army.entangledArmies:
@@ -820,7 +828,7 @@ class ArmyTracker(object):
 
             # if tile WAS bordered by fog find the closest fog army and remove it (not tile.visible or tile.delta.gainedSight)
 
-    def new_army_emerged(self, emergedTile: Tile, armyEmergenceValue: float):
+    def new_army_emerged(self, emergedTile: Tile, armyEmergenceValue: float, emergingPlayer: int = -1):
         """
         when an army can't be resolved to coming from the fog from a known source, this method gets called to track its emergence location.
         @param emergedTile:
@@ -831,7 +839,12 @@ class ArmyTracker(object):
         if emergedTile.player == self.map.player_index or emergedTile.player in self.map.teammates:
             return
 
-        emergingPlayer = emergedTile.player
+        if emergingPlayer == -1:
+            emergingPlayer = emergedTile.player
+            if emergingPlayer == -1:
+                raise AssertionError('neutral army emergence...?')
+
+        self.unrecaptured_emergence_events[emergingPlayer].add(emergedTile)
 
         # largest = [0]
         # largestTile = [None]
@@ -900,6 +913,7 @@ class ArmyTracker(object):
 
     def notify_concrete_emergence(self, maxDist: int, emergingTile: Tile, confidentFromGeneral: bool):
         player = emergingTile.player
+        self.unrecaptured_emergence_events[player].add(emergingTile)
         if confidentFromGeneral:
             for tile in self.map.get_all_tiles():
                 self.emergenceLocationMap[player][tile] /= 5.0
@@ -1748,6 +1762,11 @@ class ArmyTracker(object):
             logbook.info(
                 f"  WAS POOR RESOLUTION! Adding emergence for player {armyTile.player} armyTile {armyTile.toString()} value {armyEmergenceValue}")
             self.new_army_emerged(armyTile, armyEmergenceValue)
+        else:
+            # Make the emerged tile path be permanent...?
+            for t in fogPath.tileList:
+                if t.isTempFogPrediction:
+                    t.isTempFogPrediction = False
 
         return isGoodResolution
 
@@ -2149,7 +2168,7 @@ class ArmyTracker(object):
 
             return True
 
-        reasonablePath = SearchUtils.breadth_first_find_queue(self.map, [tile], reasonablePathDetector, noNeutralCities=True, maxDepth=8, noLog=True)
+        reasonablePath = SearchUtils.breadth_first_find_queue(self.map, [tile], reasonablePathDetector, noNeutralCities=True, maxDepth=6, noLog=True)
         if reasonablePath is not None:
             logbook.info(f'army {str(tile)} by p{armyPlayer} found a reasonable path, so non-wall-breach. Path {str(reasonablePath)}.')
             return False
@@ -2343,7 +2362,7 @@ class ArmyTracker(object):
                     q.append((curPlayer, tile))
 
     def _handle_flipped_tiles(self):
-        """To be called every time a tile is flipped from one owner to another owner."""
+        """To be called every time a tile is flipped from one owner to another owner by the map updates themselves."""
 
         self._handle_flipped_discovered_as_neutrals()
 
@@ -2351,6 +2370,8 @@ class ArmyTracker(object):
         for oldOwner, tile in self._flipped_by_army_tracker_this_turn:
             if oldOwner >= 0:
                 reTilePlayers.add(oldOwner)
+                if not self.map.is_player_on_team_with(oldOwner, tile.player):
+                    self.unrecaptured_emergence_events[oldOwner].discard(tile)
             if tile.player >= 0:
                 reTilePlayers.add(tile.player)
 
@@ -2881,7 +2902,7 @@ class ArmyTracker(object):
             logbook.info(f'RAISING TRACK THRESHOLD FROM {self.track_threshold} TO {newTrackThreshold}')
             self.track_threshold = newTrackThreshold
 
-    def _move_fogged_army_along_path(self, army: Army, path: Path | None):
+    def _move_fogged_army_along_path(self, army: Army, path: Path | None, armyAlreadyPopped: bool = False):
 
         isCompletePath = (
             path is None
@@ -2912,7 +2933,8 @@ class ArmyTracker(object):
             #     # do nothing
             #     return
 
-            self.armies.pop(army.tile, None)
+            if not armyAlreadyPopped:
+                self.armies.pop(army.tile, None)
 
             logbook.info(
                 f"Moving fogged army {str(army)} along expected path {str(path)}")
@@ -3143,12 +3165,13 @@ class ArmyTracker(object):
         """
         tilesEverOwned = self.tiles_ever_owned_by_player[player]
         uneliminated = self.uneliminated_emergence_events[player]
+        unrecapturedEmergenceEvents = self.unrecaptured_emergence_events[player]
         validGenSpots = self.valid_general_positions_by_player[player]
         teamStats = self.map.get_team_stats(player)
         perfectInfo = teamStats.cityCount == len(teamStats.teamPlayers)
         bannedTiles = MapMatrixSet(self.map)
         for tile in self.map.get_all_tiles():
-            if tile not in uneliminated and tile not in tilesEverOwned and (tile.discoveredAsNeutral or tile.visible):
+            if tile not in uneliminated and tile not in unrecapturedEmergenceEvents and tile not in tilesEverOwned and (tile.discoveredAsNeutral or tile.visible):
                 bannedTiles.add(tile)
             elif tile.isObstacle and perfectInfo:
                 bannedTiles.add(tile)
@@ -3158,6 +3181,11 @@ class ArmyTracker(object):
         for tile in uneliminated.keys():
             # if not SearchUtils.any_where(tile.movable, lambda t: not t.visible):
             #     continue
+            if tile not in requiredIncluded:
+                requiredIncluded.add(tile)
+                requiredTiles.append(tile)
+
+        for tile in unrecapturedEmergenceEvents:
             if tile not in requiredIncluded:
                 requiredIncluded.add(tile)
                 requiredTiles.append(tile)
@@ -3549,3 +3577,15 @@ class ArmyTracker(object):
             self.dropped_fog_tiles_this_turn.add(curTile)
 
         curTile.reset_wrong_undiscovered_fog_guess()
+
+    def get_unique_armies_by_player(self, player: int) -> typing.List[Army]:
+        armiesIncl = set()
+        armies = []
+        for army in self.armies.values():
+            if army.player != player:
+                continue
+            if army.name not in armiesIncl:
+                armiesIncl.add(army.name)
+                armies.append(army)
+
+        return armies

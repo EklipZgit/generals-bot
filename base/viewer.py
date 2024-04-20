@@ -1225,11 +1225,11 @@ class GeneralsViewer(object):
             for prunedChild in node.pruned:
                 q.appendleft((prunedChild, False))
 
-            if node.fromTile is not None:
+            if node.toTile is not None:
                 if unpruned:
-                    self.draw_between_tiles(shape, node.fromTile, node.tile, alpha)
+                    self.draw_between_tiles(shape, node.toTile, node.tile, alpha)
                 else:
-                    self.draw_between_tiles(prunedShape, node.fromTile, node.tile, pruneAlpha)
+                    self.draw_between_tiles(prunedShape, node.toTile, node.tile, pruneAlpha)
 
     def draw_between_tiles(self, shape: DirectionalShape, sourceTile, destTile, alpha=255):
         xDiff = destTile.x - sourceTile.x

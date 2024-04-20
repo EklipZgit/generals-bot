@@ -13,9 +13,10 @@ class CityGatherTests(TestBase):
     def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
         bot = super().get_debug_render_bot(simHost, player)
 
-        bot.info_render_centrality_distances = True
+        # bot.info_render_centrality_distances = True
         bot.info_render_city_priority_debug_info = True
         # bot.info_render_general_undiscovered_prediction_values = True
+        bot.info_render_gather_values = True
 
         return bot
 
@@ -1087,7 +1088,6 @@ class CityGatherTests(TestBase):
         city = playerMap.GetTile(10, 17)
         self.assertEqual(general.player, city.player)
 
-    
     def test_should_keep_expanding_until_cycle_end(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_keep_expanding_until_cycle_end___OGhsl6UbO---0--147.txtmap'
@@ -1587,12 +1587,6 @@ class CityGatherTests(TestBase):
         # todo this isn't a great city to take tbh so if this test starts failing because it wants a different one, remove it.
         city = playerMap.GetTile(12, 13)
         self.assertOwned(general.player, city)
-
-# 14f 38p 6s
-# 21f 36p 6s
-# 28f 32p
-# 30f 44p 9s
-# 32f 41p 9s (after removing prioFunc from get_tree_move and switching to MaxHeap and friends)
     
     def test_should_not_gather_at_undiscovered_fog_cities_instead_of_capping_neutral(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1613,3 +1607,50 @@ class CityGatherTests(TestBase):
 
         city = playerMap.GetTile(12, 4)
         self.assertOwned(general.player, city)
+    
+    def test_should_immediately_take_a_city_in_this_obviously_extreme_long_spawn_scenario(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_immediately_take_a_city_in_this_obviously_extreme_long_spawn_scenario___v7k5TON3e---1--150.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 150, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=150)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        self.assertNoFriendliesKilled(map, general)
+
+        city = playerMap.GetTile(19, 18)
+        self.assertOwned(general.player, city)
+
+    def test_shouldnt_randomly_launch_attack_in_the_middle_of_city_gather(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_randomly_launch_attack_in_the_middle_of_city_gather___SYAfoUuMn---0--119.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 119, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=119)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+        self.assertNoFriendliesKilled(map, general)
+
+        city = playerMap.GetTile(1, 12)
+        self.assertOwned(general.player, city)
+
+# 14f 38p 6s
+# 21f 36p 6s
+# 28f 32p
+# 30f 44p 9s
+# 32f 41p 9s (after removing prioFunc from get_tree_move and switching to MaxHeap and friends)
+# 40f, 39p 8s after redoing neutral city gather safety calculations

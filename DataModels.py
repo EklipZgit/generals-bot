@@ -64,11 +64,11 @@ class GatherTreeNode(typing.Generic[T]):
     def __init__(
             self,
             tile: Tile,
-            fromTile: Tile | None,
+            toTile: Tile | None,
             stateObj: T = None
     ):
         self.tile: Tile = tile
-        self.fromTile: Tile | None = fromTile
+        self.toTile: Tile | None = toTile
         self.fromGather: GatherTreeNode | None = None
         self.value: int = 0
         self.trunkValue: int = 0
@@ -121,7 +121,7 @@ class GatherTreeNode(typing.Generic[T]):
             child.fromGather = self
 
     def deep_clone(self):
-        newNode = GatherTreeNode(self.tile, self.fromTile, self.stateObj)
+        newNode = GatherTreeNode(self.tile, self.toTile, self.stateObj)
         newNode.value = self.value
         newNode.trunkValue = self.trunkValue
         newNode.gatherTurns = self.gatherTurns
@@ -148,7 +148,7 @@ class GatherTreeNode(typing.Generic[T]):
         self.pruned = []
 
     def __str__(self):
-        return f'[{str(self.tile)}<-{str(self.fromTile)} t{str(self.gatherTurns)} v{round(self.value, 6)} tv{round(self.trunkValue, 6)}, ch{len(self.children)}]'
+        return f'[{str(self.tile)}->{str(self.toTile)} t{str(self.gatherTurns)} v{round(self.value, 6)} tv{round(self.trunkValue, 6)}, ch{len(self.children)}]'
 
     def __repr__(self):
         return str(self)

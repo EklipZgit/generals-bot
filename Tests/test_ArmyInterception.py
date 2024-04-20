@@ -1841,3 +1841,28 @@ class ArmyInterceptionTests(TestBase):
                 self.assertNoFriendliesKilled(map, general)
 
                 self.assertTileDifferentialGreaterThan(5, simHost)
+    
+    def test_should_split_to_avoid_repetition_behind_on_tiles(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_split_to_avoid_repetition_behind_on_tiles___w7yEMyu4x---1--189.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 189, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=189)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '8,10->7,10->7,9->7,10->7,9->7,10->7,9->7,10->7,9->7,10->7,9->7,10->7,9->7,10')
+        # bot should NEVER have played these moves but, if it DOES play them, then it should play a split to stop the repetition
+        simHost.queue_player_moves_str(general.player, '5,9->5,10->6,10')
+        # proof
+        simHost.queue_player_moves_str(general.player, '6,10->6,9->7,9z')
+
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwned(general.player, playerMap.GetTile(8, 10), 'should have split and prevented repetition, and recaptured line')
+        self.assertOwned(general.player, playerMap.GetTile(9, 10), 'should have split and prevented repetition, and recaptured line')

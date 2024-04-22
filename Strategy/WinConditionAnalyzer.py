@@ -387,6 +387,7 @@ class WinConditionAnalyzer(object):
 
         bestPlan = []
         bestValue = 0
+        bestFogRisk = 0
 
         value, gatherNodes = GatherUtils.knapsack_levels_backpack_gather_with_value(
             self.map,
@@ -408,13 +409,15 @@ class WinConditionAnalyzer(object):
             # priorityMatrix=priorityMatrix
         )
 
-        fogRiskValue = value + self.get_additional_fog_gather_risk(gatherNodes, asPlayer, inTurns, forceFogRisk=forceFogRisk)
+        fogVal = self.get_additional_fog_gather_risk(gatherNodes, asPlayer, inTurns, forceFogRisk=forceFogRisk)
+        fogRiskValue = value + fogVal
 
         if fogRiskValue > bestValue:
             if not noLog:
                 logbook.info(f'>> RAW gather attack {fogRiskValue} in {inTurns}, > best {bestValue}')
             bestValue = fogRiskValue
             bestPlan = gatherNodes
+            bestFogRisk = fogVal
         elif not noLog:
             logbook.info(f'<  RAW gather attack {fogRiskValue} in {inTurns}, < best {bestValue}')
 
@@ -428,13 +431,15 @@ class WinConditionAnalyzer(object):
             # preferPrune=self.expansion_plan.preferred_tiles if self.expansion_plan is not None else None
             )
 
-        prunedFogRiskValue = prunedValue + self.get_additional_fog_gather_risk(prunedGatherNodes, asPlayer, inTurns, forceFogRisk=forceFogRisk)
+        fogVal = self.get_additional_fog_gather_risk(prunedGatherNodes, asPlayer, inTurns, forceFogRisk=forceFogRisk)
+        prunedFogRiskValue = prunedValue + fogVal
 
         if prunedFogRiskValue > bestValue:
             if not noLog:
                 logbook.info(f'>> PRUNE + FOG gather attack {prunedFogRiskValue} in {inTurns}, > best {bestValue}')
             bestValue = prunedFogRiskValue
             bestPlan = prunedGatherNodes
+            bestFogRisk = fogVal
         elif not noLog:
             logbook.info(f'<  PRUNE + FOG gather attack {prunedFogRiskValue} in {inTurns}, < best {bestValue}')
 
@@ -451,6 +456,7 @@ class WinConditionAnalyzer(object):
                     logbook.info(f'>> PATH + FOG {attackPathRiskVal} in {inTurns}, > best {bestValue}')
                 bestValue = attackPathRiskVal
                 bestPlan = fakeGathNodes
+                bestFogRisk = addlRisk
             elif not noLog:
                 logbook.info(f'<  PATH + FOG {attackPathRiskVal} in {inTurns}, < best {bestValue}')
         elif not noLog:
@@ -459,17 +465,20 @@ class WinConditionAnalyzer(object):
         if not noLog:
             logbook.info(f'concluded get_approximate_attack_against, value {fogRiskValue} or {prunedFogRiskValue} or {attackPathRiskVal}')
 
-        plan = GatherUtils.GatherCapturePlan(
-            bestPlan,
+        plan = GatherUtils.GatherCapturePlan.build_from_root_nodes(
             self.map,
-            econValue=0.0,
-            turnsTotalInclCap=inTurns,
-            gatherValue=max(0, bestValue),
-            gatherPoints=0.0,
-            gatherTurns=inTurns,
-            requiredDelay=0,
-            cityCount=0,  # todo
+            bestPlan,
+            negativeTiles=negativeTiles,
+            searchingPlayer=asPlayer,
+            onlyCalculateFriendlyArmy=False,
+            priorityMatrix=None,
+            includeGatherPriorityAsEconValues=False,
+            includeCapturePriorityAsEconValues=False,
+            cloneNodes=False,
         )
+        fogTurns = inTurns - plan.length
+        if fogTurns > 0:
+            plan.include_additional_fog_gather(fogTurns, bestFogRisk)
 
         return plan
 
@@ -558,17 +567,18 @@ class WinConditionAnalyzer(object):
 
             logbook.info(f'concluded get_dynamic_visible_defense_against prune, value {prunedValue}')
 
-            plan = GatherUtils.GatherCapturePlan(
-                prunedNodes,
+            plan = GatherUtils.GatherCapturePlan.build_from_root_nodes(
                 self.map,
-                econValue=0.0,
-                turnsTotalInclCap=prunedTurns,
-                gatherValue=max(0, prunedValue),
-                gatherPoints=0.0,
-                gatherTurns=prunedTurns,
-                requiredDelay=0,
-                cityCount=0,  # todo
+                prunedNodes,
+                negativeTiles=negativeTiles,
+                searchingPlayer=asPlayer,
+                onlyCalculateFriendlyArmy=False,
+                priorityMatrix=None,
+                includeGatherPriorityAsEconValues=False,
+                includeCapturePriorityAsEconValues=False,
+                cloneNodes=False,
             )
+
             return plan
 
         logbook.info(f'concluded get_dynamic_visible_defense_against zeros')
@@ -578,10 +588,11 @@ class WinConditionAnalyzer(object):
             econValue=0.0,
             turnsTotalInclCap=0,
             gatherValue=0,
-            gatherPoints=0.0,
+            gatherCapturePoints=0.0,
             gatherTurns=0,
             requiredDelay=0,
-            cityCount=0,
+            friendlyCityCount=0,
+            enemyCityCount=0,
         )
 
     def get_dynamic_turns_approximate_attack_against(
@@ -623,7 +634,7 @@ class WinConditionAnalyzer(object):
     ) -> GatherUtils.GatherCapturePlan:
         """
         returns turns, attackValue, nodes
-        Max-value-per-turn known tile gather + fog option, or full gather minus fog option.
+        Max-value-per-turn known tile gather + fog option.
         Use for fog players attacking things, as well as attacking as visible / friendly players.
 
         @param tile:
@@ -660,17 +671,13 @@ class WinConditionAnalyzer(object):
         )
 
         attackVal = value
-        fogRisk = 0
         playerHasFog = not self.map.is_player_on_team_with(self.map.player_index, asPlayer)
-        if playerHasFog:
-            fogRisk = self.get_additional_fog_gather_risk(gatherNodes, asPlayer, maxTurns)
 
-            attackVal = value + fogRisk
-
-        logbook.info(f'get_dynamic_attack_against {tile} gather for total {attackVal}, raw gather {value}, fogRisk {fogRisk}')
+        logbook.info(f'get_dynamic_attack_against {tile} gather for total {attackVal}, raw gather {value}')
 
         finalTurns: int = 0
         finalAttack: int = 0
+        finalFogRisk: int = 0
         finalNodes = []
 
         if attackVal > 0:
@@ -681,6 +688,7 @@ class WinConditionAnalyzer(object):
                 teams=MapBase.get_teams_array(self.map),
                 minTurns=minTurns,
                 noLog=True,
+                allowNegative=False,
                 # viewInfo=self.viewInfo if self.info_render_gather_values else None,
                 allowBranchPrune=False
             )
@@ -694,23 +702,28 @@ class WinConditionAnalyzer(object):
 
             if prunedTurns > 0 and attackPruned / prunedTurns > attackVal / maxTurns:
                 finalTurns, finalAttack, finalNodes = prunedTurns, max(0, attackPruned), prunedNodes
+                finalFogRisk = pruneFogRisk
             else:
                 logbook.error(f'Prune wasnt the max value per turn...?')
                 finalTurns, finalAttack, finalNodes = maxTurns, max(0, attackVal), gatherNodes
         else:
             logbook.info(f'concluded get_dynamic_attack_against, zeros')
 
-        plan = GatherUtils.GatherCapturePlan(
-            finalNodes,
+        plan = GatherUtils.GatherCapturePlan.build_from_root_nodes(
             self.map,
-            econValue=0.0,
-            turnsTotalInclCap=finalTurns,
-            gatherValue=finalAttack,
-            gatherPoints=0.0,
-            gatherTurns=finalTurns,
-            requiredDelay=0,
-            cityCount=0,  # todo
+            finalNodes,
+            negativeTiles=negativeTiles,
+            searchingPlayer=asPlayer,
+            onlyCalculateFriendlyArmy=False,
+            priorityMatrix=None,
+            includeGatherPriorityAsEconValues=False,
+            includeCapturePriorityAsEconValues=False,
+            cloneNodes=False,
         )
+
+        fogTurns = finalTurns - plan.length
+        if fogTurns > 0:
+            plan.include_additional_fog_gather(fogTurns, finalFogRisk)
 
         return plan
 

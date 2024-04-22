@@ -462,12 +462,79 @@ myDeque = deque(range(0, {numChecks}))
                 logbook.info(f'{numChecks}: while True try except: {result:.3f} seconds')
 
     def test_bench_priority_queue_empty_checking_perf(self):
+        """
+        20: while q: 0.3683 seconds
+        20: while len(q) != 0: 0.5021 seconds
+        20: while myDeque.queue: 0.2808 seconds
+        20: while len(myDeque.queue) != 0: 0.4320 seconds
+        20: while True try except: 16.8902 seconds
+        20: while not myDeque.empty(): 3.5556 seconds
+        20: while myDeque.qsize() != 0: 3.6573 seconds
+        100: while q: 0.0774 seconds
+        100: while len(q) != 0: 0.1194 seconds
+        100: while myDeque.queue: 0.0622 seconds
+        100: while len(myDeque.queue) != 0: 0.0870 seconds
+        100: while True try except: 3.3733 seconds
+        100: while not myDeque.empty(): 0.7240 seconds
+        100: while myDeque.qsize() != 0: 0.7198 seconds
+        500: while q: 0.0158 seconds
+        500: while len(q) != 0: 0.0209 seconds
+        500: while myDeque.queue: 0.0117 seconds
+        500: while len(myDeque.queue) != 0: 0.0173 seconds
+        500: while True try except: 0.6754 seconds
+        500: while not myDeque.empty(): 0.1477 seconds
+        500: while myDeque.qsize() != 0: 0.1487 seconds
+        2000: while q: 0.0049 seconds
+        2000: while len(q) != 0: 0.0063 seconds
+        2000: while myDeque.queue: 0.0042 seconds
+        2000: while len(myDeque.queue) != 0: 0.0055 seconds
+        2000: while True try except: 0.1748 seconds
+        2000: while not myDeque.empty(): 0.0397 seconds
+        @return:
+        """
         numPops = 500000000
         self.begin_capturing_logging()
         for numChecks in [20, 100, 500, 2000]:
             with self.subTest(numChecks=numChecks):
                 numRuns = numPops // numChecks
                 q = PriorityQueue()
+                # q.qsize()
+
+                # benchmark the task
+                result = timeit(
+                    '''
+q = myDeque.queue
+while q:
+    myDeque.get()
+                    ''',
+                    setup=f'''
+from queue import PriorityQueue
+myDeque = PriorityQueue()
+for i in range(0, {numChecks}):
+    myDeque.put_nowait(i)
+                    ''',
+                    number=numRuns)
+
+                # report the result
+                logbook.info(f'{numChecks}: while q: {result:.4f} seconds')
+
+                # benchmark the task
+                result = timeit(
+                    '''
+q = myDeque.queue
+while len(q) != 0:
+    myDeque.get()
+                    ''',
+                    setup=f'''
+from queue import PriorityQueue
+myDeque = PriorityQueue()
+for i in range(0, {numChecks}):
+    myDeque.put_nowait(i)
+                    ''',
+                    number=numRuns)
+
+                # report the result
+                logbook.info(f'{numChecks}: while len(q) != 0: {result:.4f} seconds')
                 # q.qsize()
 
                 # benchmark the task
@@ -485,7 +552,7 @@ for i in range(0, {numChecks}):
                     number=numRuns)
 
                 # report the result
-                logbook.info(f'{numChecks}: while myDeque.queue: {result:.3f} seconds')
+                logbook.info(f'{numChecks}: while myDeque.queue: {result:.4f} seconds')
 
                 result = timeit(
                     '''
@@ -501,7 +568,7 @@ for i in range(0, {numChecks}):
                     number=numRuns)
 
                 # report the result
-                logbook.info(f'{numChecks}: while len(myDeque.queue) != 0: {result:.3f} seconds')
+                logbook.info(f'{numChecks}: while len(myDeque.queue) != 0: {result:.4f} seconds')
 
                 result = timeit(
                     '''
@@ -520,7 +587,7 @@ for i in range(0, {numChecks}):
                     number=numRuns)
 
                 # report the result
-                logbook.info(f'{numChecks}: while True try except: {result:.3f} seconds')
+                logbook.info(f'{numChecks}: while True try except: {result:.4f} seconds')
 
                 result = timeit(
                     '''
@@ -536,7 +603,7 @@ for i in range(0, {numChecks}):
                     number=numRuns)
 
                 # report the result
-                logbook.info(f'{numChecks}: while not myDeque.empty(): {result:.3f} seconds')
+                logbook.info(f'{numChecks}: while not myDeque.empty(): {result:.4f} seconds')
 
                 result = timeit(
                     '''
@@ -552,7 +619,7 @@ for i in range(0, {numChecks}):
                     number=numRuns)
 
                 # report the result
-                logbook.info(f'{numChecks}: while myDeque.qsize() != 0: {result:.3f} seconds')
+                logbook.info(f'{numChecks}: while myDeque.qsize() != 0: {result:.4f} seconds')
 
     def test_bench_heap_queue_empty_checking_perf(self):
         numPops = 500000000

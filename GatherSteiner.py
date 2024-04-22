@@ -12,7 +12,7 @@ from base.client.map import MapBase, Tile
 
 def build_network_x_steiner_tree(
         map: MapBase,
-        includingTiles: typing.List[Tile],
+        includingTiles: typing.Iterable[Tile],
         searchingPlayer=-2,
         weightMod: MapMatrix[float] | None = None,
         baseWeight: int = 1,
@@ -23,7 +23,7 @@ def build_network_x_steiner_tree(
     g = build_networkX_graph(map, weightMod, baseWeight, bannedTiles=bannedTiles)
 
     terminalNodes = [map.get_tile_index(t) for t in includingTiles]
-    steinerTree: nx.Graph = nx.algorithms.approximation.steiner_tree(g, terminal_nodes=terminalNodes, method='mehlhorn')  # kou or mehlhorn
+    steinerTree: nx.Graph = nx.algorithms.approximation.steiner_tree(g, terminal_nodes=terminalNodes, method='mehlhorn')  # kou or mehlhorn. kou is just bad...?
     # steinerTree: nx.Graph = nx.algorithms.approximation.steiner_tree(g, terminal_nodes=terminalNodes)
 
     nodes = [map.get_tile_by_tile_index(n) for n in steinerTree.nodes]
@@ -150,8 +150,13 @@ def build_prize_collecting_steiner_tree(
     num_clusters = 1  # we want exactly one subtree...?
     """ num_clusters: the number of connected components in the output."""
 
-    pruning = 'gw'
-    """ pruning: a string value indicating the pruning method. Possible values are 'none', 'simple', 'gw', and 'strong' (all literals are case-insensitive). 'none' and 'simple' return intermediate stages of the algorithm and do not have approximation guarantees. They are only intended for development. The standard GW pruning method is 'gw', which is also the default. 'strong' uses "strong pruning", which was introduced in [JMP00]. It has the same theoretical guarantees as GW pruning but better empirical performance in some cases. For the PCSF problem, the output of strong pruning is at least as good as the output of GW pruning."""
+    pruning = 'strong'
+    """ pruning: a string value indicating the pruning method. 
+    Possible values are 'none', 'simple', 'gw', and 'strong' (all literals are case-insensitive). 
+    'none' and 'simple' return intermediate stages of the algorithm and do not have approximation guarantees. They are only intended for development. 
+    The standard GW pruning method is 'gw', which is also the default. 
+    'strong' uses "strong pruning", which was introduced in [JMP00]. It has the same theoretical guarantees as GW pruning but better empirical performance in some cases. 
+    For the PCSF problem, the output of strong pruning is at least as good as the output of GW pruning."""
 
     verbosity_level = 0
     """ verbosity_level: an integer indicating how much debug output the function should produce."""
@@ -175,10 +180,10 @@ def build_prize_collecting_steiner_tree(
         right = map.GetTile(tile.x + 1, tile.y)
         down = map.GetTile(tile.x, tile.y + 1)
         if right and not right.isObstacle:
-            edges.append([tileIndex, map.get_tile_index(right)])
+            edges.append([tileIndex, right.tile_index])
             costs.append(2.0 + extraCost)
         if down and not down.isObstacle:
-            edges.append([tileIndex, map.get_tile_index(down)])
+            edges.append([tileIndex, down.tile_index])
             costs.append(2.0 + extraCost)
 
     vertices, edges = pcst_fast(edges, prizes, costs, root, num_clusters, pruning, verbosity_level)

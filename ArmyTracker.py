@@ -2816,7 +2816,7 @@ class ArmyTracker(object):
             #     movingAwayFromUs = self.map.get_distance_between(self.general, tile) > self.map.get_distance_between(self.general, fromTile)
             #     movingAwayOrParallelToEn = self.map.get_distance_between(self.general, tile) > self.map.get_distance_between(self.general, fromTile)
 
-        results = SearchUtils.breadth_first_dynamic_max_per_tile(self.map, startTiles, valueFunc=valFunc, priorityFunc=prioFunc, skipFunc=skipFuncDynamic, useGlobalVisitedSet=True)
+        results = SearchUtils.breadth_first_dynamic_max_per_tile_global_visited(self.map, startTiles, valueFunc=valFunc, priorityFunc=prioFunc, skipFunc=skipFuncDynamic)
 
         logbook.info(f'BISECTOR FOUND {len(results)} BISECT PATHS...?')
 

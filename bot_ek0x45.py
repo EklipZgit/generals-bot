@@ -929,6 +929,9 @@ class EklipZBot(object):
 
         # if self._map.turn >= 3 and self.board_analysis.should_rescan:
         # I think reachable tiles isn't built till turn 2? so chokes aren't built properly turn 1
+        if self.board_analysis is None:
+            return
+
         with self.perf_timer.begin_move_event('Inter-general analysis'):
             # also rescans chokes, now.
             self.board_analysis.rebuild_intergeneral_analysis(self.targetPlayerExpectedGeneralLocation, self.armyTracker.valid_general_positions_by_player)
@@ -1425,7 +1428,7 @@ class EklipZBot(object):
                     return self.move_half_on_repetition(gatherMove, 6)
             else:
                 skipFunc = None
-                if self._map.remainingPlayers > 2:
+                if self.is_still_ffa_and_non_dominant():
                     # avoid gathering to undiscovered tiles when there are third parties on the map
                     skipFunc = lambda tile, tilePriorityObject: not tile.discovered
 
@@ -1488,7 +1491,7 @@ class EklipZBot(object):
                     for t in self._map.reachableTiles:
                         val = priorityMatrix[t]
                         if val:
-                            self.viewInfo.topRightGridText[t] = f'gm{str(round(val, 3)).lstrip("0").replace("-0", "-")}'
+                            self.viewInfo.topRightGridText[t] = f'g{str(round(val, 3)).lstrip("0").replace("-0", "-")}'
 
                 move = self.get_tree_move_default(self.gatherNodes)
                 if move is not None:
@@ -3769,10 +3772,13 @@ class EklipZBot(object):
             # already logged
             return rapidCityPath, None
 
+        with self.perf_timer.begin_move_event('finding neutral city path'):
+            neutPath = self.find_neutral_city_path()
+
         desiredGatherTurns = -1
         with self.perf_timer.begin_move_event('Find Enemy City Path'):
             # ignoring negatives because.... why?
-            desiredGatherTurns, path = self.find_enemy_city_path(negativeTiles=set(self.win_condition_analyzer.defend_cities))
+            desiredGatherTurns, path = self.find_enemy_city_path(negativeTiles=set(self.win_condition_analyzer.defend_cities), force=neutPath is None)
 
         if path:
             logbook.info(f"   find_enemy_city_path returned {str(path)}")
@@ -3783,9 +3789,6 @@ class EklipZBot(object):
         for tile in player.tiles:
             if tile.army > largestTile.army:
                 largestTile = tile
-
-        with self.perf_timer.begin_move_event('finding neutral city path'):
-            neutPath = self.find_neutral_city_path()
 
         mustContestEnemy = False
         if path is not None:
@@ -4029,11 +4032,12 @@ class EklipZBot(object):
 
         return path
 
-    def find_enemy_city_path(self, negativeTiles) -> typing.Tuple[int, Path | None]:
+    def find_enemy_city_path(self, negativeTiles: TileSet, force: bool = False) -> typing.Tuple[int, Path | None]:
         """
         Returns bestGatherTurnsApprox, pathToCity if a good city contest option is found. If not, returns turns -1 and None path.
 
         @param negativeTiles:
+        @param force: if True will prioritize enemy cities that otherwise would not be allowed.
         @return:
         """
 
@@ -4056,6 +4060,9 @@ class EklipZBot(object):
             if self.territories.is_tile_in_friendly_territory(tile) or self._map.is_player_on_team_with(self.targetPlayer, tile.player):
                 if approxed > 2:
                     break
+
+                if not tile.discovered and self.armyTracker.emergenceLocationMap[tile.player].raw[tile.tile_index] < 7:
+                    continue
 
                 if tile in prevApproxed and tile not in self.city_capture_plan_tiles and not self._map.is_army_bonus_turn:
                     continue
@@ -4085,7 +4092,7 @@ class EklipZBot(object):
             return bestTurns, None
 
         # TODO hack because kept gathering obnoxiously
-        # bestTurns = -1
+        bestTurns = -1
         return bestTurns, self.get_path_to_target(tgTile)
 
     def get_approximate_attack_defense_sweet_spot(
@@ -5266,14 +5273,14 @@ class EklipZBot(object):
         if ourArmy < 100:
             return False
 
-        factoredArmyThreshold = oppArmy * 2 + 20
+        factoredArmyThreshold = oppArmy * 2 + self.shortest_path_to_target_player.length
 
         # if already all in, keep pushing for longer
         if self.is_all_in_army_advantage:
-            factoredArmyThreshold = oppArmy * 1.4 + 10
+            factoredArmyThreshold = oppArmy * 1.4 + self.shortest_path_to_target_player.length // 2
 
         if ourArmy > factoredArmyThreshold:
-            self.viewInfo.add_info_line(f"TEMP ALL IN ON ARMY ADV {ourArmy} vs {oppArmy} thr({factoredArmyThreshold})")
+            self.viewInfo.add_info_line(f"TEMP ALL IN ON ARMY ADV {ourArmy} vs {oppArmy} thresh({factoredArmyThreshold:.2f})")
             return True
 
         return False
@@ -6635,7 +6642,7 @@ class EklipZBot(object):
 
         for tile in self.board_analysis.backwards_tiles:
             if tile.army > 1:
-                matrix.raw[tile.tile_index] += 1.5
+                matrix.raw[tile.tile_index] += 0.75
 
         # TODO get actual expansion plan value/turn into the expansion plan and prioritize according to those.
         if self.expansion_plan is not None:
@@ -6676,8 +6683,10 @@ class EklipZBot(object):
                 if distToShortest < 1000:
                     matrix.raw[tile.tile_index] += min(0.49, 0.03 * distToShortest)
 
-            if self.info_render_gather_values and self._map.is_tile_friendly(tile) and matrix.raw[tile.tile_index] != 0:
-                self.viewInfo.topRightGridText.raw[tile.tile_index] = f'gm{matrix.raw[tile.tile_index]:.3f}'
+            if self.info_render_gather_values and self._map.is_tile_friendly(tile):
+                matrixVal = matrix.raw[tile.tile_index]
+                if matrixVal:
+                    self.viewInfo.topRightGridText.raw[tile.tile_index] = f'g{str(round(matrixVal, 3)).lstrip("0").replace("-0", "-")}'
 
         return matrix
 
@@ -6958,15 +6967,16 @@ class EklipZBot(object):
                     abandonDefenseThreshold = survivalThreshold
 
                 if valueGathered < survivalThreshold - 1:
-                    if threat.turns < 15:
-                        with self.perf_timer.begin_move_event(f'def scrim @{str(threat.path.start.tile)} {str(threat.path)}'):
-                            path, simResult = self.try_find_counter_army_scrim_path_kill(threat.path, allowGeneral=True, forceEnemyTowardsGeneral=False)
-                        if simResult is not None and simResult.net_economy_differential > -40:
-                            if path is not None:
-                                return self.get_first_path_move(path), path
-                            else:
-                                self.info("Def scrim said wait...?")
-                                return None, None
+                    # TODO defense scrim lol?
+                    # if threat.turns < 15:
+                    #     with self.perf_timer.begin_move_event(f'def scrim @{str(threat.path.start.tile)} {str(threat.path)}'):
+                    #         path, simResult = self.try_find_counter_army_scrim_path_kill(threat.path, allowGeneral=True, forceEnemyTowardsGeneral=False)
+                    #     if simResult is not None and simResult.net_economy_differential > -40:
+                    #         if path is not None:
+                    #             return self.get_first_path_move(path), path
+                    #         else:
+                    #             self.info("Def scrim said wait...?")
+                    #             return None, None
 
                     self.communicate_threat_to_ally(threat, valueGathered, gatherNodes)
                     extraTurns = 1
@@ -6976,7 +6986,8 @@ class EklipZBot(object):
                     else:
                         flags = f'CAP {flags}'
                         pruneToValuePerTurn = True
-                        extraTurns = 6
+                        # making this lower than 10 fails test_should_defend_city_what_the_fuck
+                        extraTurns = 10
 
                     with self.perf_timer.begin_move_event(f'+{extraTurns} Defense Threat Gather'):
                         altMove, altValueGathered, altTurnsUsed, altGatherNodes = self.get_gather_to_threat_path(
@@ -7035,6 +7046,8 @@ class EklipZBot(object):
 
                     if isGatherMoveFromBackwards and not self.detect_repetition_tile(move.source):
                         movesToMakeAnyway.append(move)
+                else:
+                    self.info(f'abandoning defense because ???????????????')
 
             if not isRealThreat or isEconThreat:
                 continue
@@ -9133,7 +9146,7 @@ class EklipZBot(object):
                 negativeSet=negativeTiles,
                 targetArmy=targetGatherArmy,
                 additionalIncrement=addlIncrementing,
-                priorityMatrix=self.get_gather_tiebreak_matrix()
+                # priorityMatrix=self.get_gather_tiebreak_matrix()  # this blows stuff up i think, 44f 35p, 36f 43p without it. Causes invalid army amount gathers
             )
 
             if move is not None:

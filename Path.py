@@ -72,6 +72,7 @@ class Path(TilePlanInterface):
         # So for a path that exactly kills a tile with minimum kill army, this should be 1.
         self._value: float = armyRemaining
         self._econ_value: float = 0.0
+        self._requiredDelay: int = 0
 
     # def __gt__(self, other) -> bool:
     #     if other is None:
@@ -137,7 +138,11 @@ class Path(TilePlanInterface):
 
     @property
     def requiredDelay(self) -> int:
-        return 0
+        return self._requiredDelay
+
+    @requiredDelay.setter
+    def requiredDelay(self, val: int):
+        self._requiredDelay = val
 
     def get_move_list(self) -> typing.List[Move]:
         moves = []
@@ -170,6 +175,8 @@ class Path(TilePlanInterface):
         if self.start is not None:
             move.next = self.start
             self.start.prev = move
+        else:
+            self.tail = move
         self.start = move
         if self._tileList is not None:
             self._tileList.insert(0, startTile)
@@ -326,6 +333,8 @@ class Path(TilePlanInterface):
         while node is not None:
             newPath.add_next(node.tile)
             node = node.next
+
+        newPath._requiredDelay = self._requiredDelay
         return newPath
 
     def get_reversed(self) -> Path:

@@ -640,6 +640,7 @@ class CityGatherTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        simHost.queue_player_moves_str(general.player, '5,14->5,13')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
@@ -1654,3 +1655,24 @@ class CityGatherTests(TestBase):
 # 30f 44p 9s
 # 32f 41p 9s (after removing prioFunc from get_tree_move and switching to MaxHeap and friends)
 # 40f, 39p 8s after redoing neutral city gather safety calculations
+    
+    def test_should_complete_capture_of_city_instead_of_stopping_for_no_reason(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        # TODO general prediction should never pick a spot so obviously far from where the general really ought to be based on all the emergences...
+        mapFile = 'GameContinuationEntries/should_complete_capture_of_city_instead_of_stopping_for_no_reason___nWAqZP0Om---1--181.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 181, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=181)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '0,15->1,15')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertNoFriendliesKilled(map, general)
+
+        city = playerMap.GetTile(10, 15)
+        self.assertOwned(general.player, city)

@@ -550,11 +550,12 @@ b1   b1   b1   b1   b1   b1   bG1
         map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 90, fill_out_tiles=True)
         enemyGeneral = self.move_enemy_general(map, enemyGeneral, 13, 19)
         enemyAllyGen = self.move_enemy_general(map, enemyAllyGen, 10, 23)
+        # self.render_map(map)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=90)
         
         self.enable_search_time_limits_and_disable_debug_asserts()
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=False)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)

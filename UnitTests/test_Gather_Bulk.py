@@ -6,6 +6,7 @@ import DebugHelper
 import GatherUtils
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
+from Sim.TextMapLoader import TextMapLoader
 from TestBase import TestBase
 from base.client.map import TILE_EMPTY
 from bot_ek0x45 import EklipZBot
@@ -35,8 +36,9 @@ class GatherBulkTests(TestBase):
             debugMode: bool = False,
             incGreedy: bool = True,
             incRecurse: bool = True,
+            playerIndex: int = 0
     ):
-        map, general, enemyGeneral = self.load_map_and_generals_from_string(testMapStr, 102, player_index=0)
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(testMapStr, 102, player_index=playerIndex)
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general_from_string(testMapStr, 102)
         if targetsAreEnemy is not None:
@@ -559,3 +561,42 @@ class GatherBulkTests(TestBase):
                         testTiming=True,
                         debugMode=False,
                     )
+
+    def test_gather__adversarial_large_gather__big_map(self):
+        """
+        Same as test_gather__adversarial_far_tiles_to_gather, except must also break through a line of enemy tiles
+        that divides the high value gather cluster from the low value cluster.
+        @return:
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        testData = TextMapLoader.get_map_raw_string_from_file('GameContinuationEntries/should_not_do_infinite_intercepts_costing_tons_of_time___qg3nAW1cN---1--708.txtmap')
+        cases = [
+            35,
+            45,
+            55,
+            65,
+            75,
+            85,
+        ]
+
+        targetXYs = [
+            (23, 4),
+        ]
+
+        inclNegative = False
+        useTrueVal = True
+
+        for depth in cases:
+            with self.subTest(depth=depth):
+                self.run_adversarial_gather_test_all_algorithms(
+                    testData,
+                    targetXYs,
+                    depth,
+                    expectedGather=None,
+                    inclNegative=inclNegative,
+                    useTrueVal=useTrueVal,
+                    targetsAreEnemy=True,
+                    testTiming=True,
+                    debugMode=debugMode,
+                    playerIndex=1,
+                )

@@ -71,6 +71,8 @@ class GatherTreeNode(typing.Generic[T]):
         self.toTile: Tile | None = toTile
         self.fromGather: GatherTreeNode | None = None
         self.value: int = 0
+        """The army value gathered by this point in the tree."""
+        self.points: float = 0.0
         self.trunkValue: int = 0
         """
         trunkValue is the value of the branch up to and including this node, 

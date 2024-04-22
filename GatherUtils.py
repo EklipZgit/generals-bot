@@ -1,4 +1,4 @@
-from __future__ import  annotations
+from __future__ import annotations
 
 import logbook
 import time
@@ -6,11 +6,12 @@ import typing
 from collections import deque
 
 import DebugHelper
+import GatherSteiner
 import KnapsackUtils
 import SearchUtils
 from DataModels import Move, GatherTreeNode
 from Interfaces import TilePlanInterface
-from MapMatrix import MapMatrix, MapMatrixSet
+from MapMatrix import MapMatrix, MapMatrixSet, TileSet
 from Path import Path
 from SearchUtils import where
 from ViewInfo import ViewInfo
@@ -39,13 +40,25 @@ class TreeBuilder(typing.Generic[T]):
             captureTiles: MapMatrix[float | None],
             startTiles: typing.List[Tile] | None = None
     ) -> GatherCapturePlan:
-        nodes = []
+        nodeMatrix = self.build_mst_gather_from_matrices(gatherTiles, captureTiles, startTiles)
+
+    def build_mst_gather_from_matrices(
+            self,
+            gatherTiles: MapMatrix[float | None],
+            captureTiles: MapMatrix[float | None],
+            startTiles: typing.List[Tile]
+    ) -> MapMatrix[GatherTreeNode]:
+        """
+        Outputs
+        @param gatherTiles:
+        @param captureTiles:
+        @param startTiles:
+        @return:
+        """
+
         # kay need to bi-directional BFS to gather all the nodes...
         nodeMatrix: MapMatrix[GatherTreeNode] = MapMatrix(self.map)
 
-        self.build_mst_gather_from_matrices(gatherTiles, nodeMatrix, startTiles)
-
-    def build_mst_gather_from_matrices(self, gatherTiles, nodeMatrix, startTiles):
         # build dumb gather mst
         frontier: SearchUtils.HeapQueue[typing.Tuple[int, Tile, GatherTreeNode | None, int, float, int]] = SearchUtils.HeapQueue()
         for tile in startTiles:
@@ -74,6 +87,8 @@ class TreeBuilder(typing.Generic[T]):
                 if movable in gatherTiles and movable not in nodeMatrix:
                     frontier.put((dist + 1, movable, treeNode, negArmyGathered, negPrioSum, negRawArmy))
 
+        return nodeMatrix
+
 
 class GatherCapturePlan(TilePlanInterface):
     def __init__(
@@ -83,25 +98,57 @@ class GatherCapturePlan(TilePlanInterface):
             econValue: float,
             turnsTotalInclCap: int,
             gatherValue: int,
-            gatherPoints: float,
+            gatherCapturePoints: float,
             gatherTurns: int,
             requiredDelay: int,
             minValueFunc: typing.Callable[[Tile, typing.Tuple], typing.Tuple | None] | None = None,
-            cityCount: int | None = None,
+            friendlyCityCount: int | None = None,
+            enemyCityCount: int | None = None,
+            asPlayer: int = -1
     ):
+        """
+
+        @param rootNodes:
+        @param map:
+        @param econValue:
+        @param turnsTotalInclCap:
+        @param gatherValue: The actual amount of army gathered. If this was with UseTrueValueGathered, should be the actual amount of army that WILL end up on the destination tile (excluding negative tiles).
+        @param gatherCapturePoints: The weighted-by-gather/capture-matrices value of the gather. Different from econValue, which is the expected econ payoff of using this gather/capture plan.
+        @param gatherTurns: The total number of turns this gather plan spends GATHERING (not capturing). DONT just set this to the same thing as turnsTotalInclCap.
+        @param requiredDelay: You'd usually not delay a gather unless it involved multiple cities capturing something.
+        @param minValueFunc: The move selection function for prioritizing leaf move order. Default is simply delaying cities as first priority and second priority the furthest tiles from our general.
+        @param friendlyCityCount: leave None to auto-calculate.
+        @param enemyCityCount: leave None to auto-calculate.
+        @param asPlayer: defaults to the map.player_index player if not provided.
+        """
+        if asPlayer == -1:
+            asPlayer = map.player_index
+        self.player: int = asPlayer
         self.root_nodes: typing.List[GatherTreeNode] = rootNodes
         self.gathered_army: int = gatherValue
-        self.gathered_points: float = gatherPoints
+        """The actual amount of army gathered. If this was with UseTrueValueGathered=True or OnlyConsiderFriendlyArmy=False, should be the actual amount of army that WILL end up on the destination tile (excluding negative tiles). Otherwise should be the sum of friendly army gathered."""
+        self.gather_capture_points: float = gatherCapturePoints
+        """The actual amount of capture points gathered. Mimicks the same logic as gathered_army, but includes the priorityMatrix values (including negative tiles)."""
         self._econ_value: float = econValue
+        """The expected economic payoff from performing this gather/capture plan. May or may not include priorityMatrix weight for gathered / captured tiles."""
         self._turns: int = turnsTotalInclCap
         self.gather_turns: int = gatherTurns
+        """The total number of turns spent GATHERING (not capturing). Use length for the total plan length instead."""
+        self.friendly_city_count: int = friendlyCityCount
+        self.enemy_city_count: int = enemyCityCount
+        self.fog_gather_turns: int = 0
+        """The number of turns this gather includes from unknown (not included in tileset/tilelist) fog tiles."""
+        self.fog_gather_army: int = 0
+        """The amount of army this gather includes from unknown (not included in tileset/tilelist) fog tiles."""
         self._requiredDelay: int = requiredDelay
         self._tileList: typing.List[Tile] | None = None
         self._tileSet: typing.Set[Tile] | None = None
         self._map: MapBase = map
         self.value_func: typing.Callable[[Tile, typing.Tuple], typing.Tuple | None] = minValueFunc
 
-        if not self.value_func: # emptyVal value func, gathers based on cityCount then distance from general
+        if not self.value_func:  # emptyVal value func, gathers based on cityCount then distance from general
+            frPlayers = map.get_teammates(asPlayer)
+
             def default_value_func(currentTile, currentPriorityObject):
                 negCityCount = army = unfriendlyTileCount = 0
                 # i don't think this does anything...?
@@ -111,31 +158,33 @@ class GatherCapturePlan(TilePlanInterface):
                     army -= 1
                 nextIsOurCity = curIsOurCity
                 curIsOurCity = True
-                if self._map.is_tile_friendly(currentTile):
+                if currentTile.player in frPlayers:
                     if currentTile.isGeneral or currentTile.isCity:
                         negCityCount -= 1
+                    army += currentTile.army
                 else:
                     if currentTile.isGeneral or currentTile.isCity and army + 2 <= currentTile.army:
                         curIsOurCity = False
                         # cityCount += 1
                     unfriendlyTileCount += 1
-
-                if self._map.is_tile_friendly(currentTile):
-                    army += currentTile.army
-                else:
                     army -= currentTile.army
+
                 # heuristicVal = negArmy / distFromPlayArea
                 return nextIsOurCity, negCityCount, unfriendlyTileCount, army, curIsOurCity
 
             self.value_func = default_value_func
 
-        self.city_count: int = cityCount
-        if self.city_count is None:
-            self.city_count = 0
+        if self.friendly_city_count is None or self.enemy_city_count is None:
+            self.friendly_city_count = 0
+            self.enemy_city_count = 0
+            frPlayers = map.get_teammates(asPlayer)
 
             def incrementer(node: GatherTreeNode):
                 if node.tile.isCity:
-                    self.city_count += 1
+                    if node.tile.player in frPlayers:
+                        self.friendly_city_count += 1
+                    elif node.tile.player >= 0:
+                        self.enemy_city_count += 1
 
             foreach_tree_node(self.root_nodes, incrementer)
 
@@ -146,11 +195,12 @@ class GatherCapturePlan(TilePlanInterface):
             econValue=self._econ_value,
             turnsTotalInclCap=self._turns,
             gatherValue=self.gathered_army,
-            gatherPoints=self.gathered_points,
+            gatherCapturePoints=self.gather_capture_points,
             gatherTurns=self.gather_turns,
-            cityCount=self.city_count,
+            friendlyCityCount=self.friendly_city_count,
             requiredDelay=self._requiredDelay,
             minValueFunc=self.value_func,
+            asPlayer=self.player,
         )
 
         if self._tileList is not None:
@@ -242,6 +292,221 @@ class GatherCapturePlan(TilePlanInterface):
 
     def __repr__(self):
         return str(self)
+
+    def include_additional_fog_gather(self, fogTurns: int, fogGatherValue: int):
+        self._turns += fogTurns
+        self.gather_turns += fogTurns
+        self.gathered_army += fogGatherValue
+        self.gather_capture_points += fogGatherValue
+        self.fog_gather_turns += fogTurns
+        self.fog_gather_army += fogGatherValue
+
+    @staticmethod
+    def build_from_root_nodes(
+            map: MapBase,
+            # logEntries: typing.List[str],
+            rootNodes: typing.List[GatherTreeNode],
+            negativeTiles: typing.Set[Tile] | None,
+            searchingPlayer: int,
+            onlyCalculateFriendlyArmy=False,
+            priorityMatrix: MapMatrix[float] | None = None,
+            includeGatherPriorityAsEconValues: bool = False,
+            includeCapturePriorityAsEconValues: bool = True,
+            viewInfo=None,
+            cloneNodes: bool = False
+    ) -> GatherCapturePlan:
+        """
+        Returns the plan
+
+        @param map:
+        @param rootNodes:
+        @param negativeTiles:
+        @param searchingPlayer:
+        @param onlyCalculateFriendlyArmy: If True, captured tiles will NOT be included in the gatherValue and gatherPoints calculations (but will still be included in econValue calculations).
+        @param priorityMatrix: The priority matrix for both gathered and captured nodes. Always added to the 'gatherPoints' sum. Optionally also included in the econ value calculation.
+        @param includeGatherPriorityAsEconValues: if True, the priority matrix values of gathered nodes will be included in the econValue of the plan for gatherNodes.
+        @param includeCapturePriorityAsEconValues: if True, the priority matrix values of CAPTURED nodes will be included in the econValue of the plan for enemy tiles in the plan.
+        @param viewInfo:
+        @param cloneNodes: if True, the original root nodes will not be modified and will be cloned instead. Default is false.
+        @return:
+        """
+        if cloneNodes:
+            rootNodes = clone_nodes(rootNodes)
+        plan = GatherCapturePlan(
+            [],  # we dont pass the root nodes in because we're going to hand-calculate all the values and dont want it doing weird stuff.
+            map,
+            econValue=0.0,
+            turnsTotalInclCap=0,
+            gatherValue=0,
+            gatherCapturePoints=0.0,
+            gatherTurns=0,
+            requiredDelay=0,
+            friendlyCityCount=0,
+        )
+        plan._turns = 0
+        frPlayers = map.get_teammates(searchingPlayer)
+
+        for currentNode in rootNodes:
+            GatherCapturePlan._recalculate_gather_plan_values(
+                plan,
+                # logEntries,
+                currentNode,
+                negativeTiles,
+                searchingPlayer,
+                frPlayers,
+                onlyCalculateFriendlyArmy,
+                priorityMatrix,
+                includeGatherPriorityAsEconValues=includeGatherPriorityAsEconValues,
+                includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
+            )
+            plan.root_nodes.append(currentNode)
+            # plan.gathered_army += currentNode.value
+            plan._turns += currentNode.gatherTurns
+
+        # find the leaves and build the trunk values.
+        leaves = []
+        queue = deque()
+        for treeNode in rootNodes:
+            treeNode.trunkValue = 0
+            treeNode.trunkDistance = 0
+            queue.appendleft(treeNode)
+
+        while queue:
+            current = queue.pop()
+            if not current.children:
+                leaves.append(current)
+            for child in current.children:
+                trunkValue = current.trunkValue
+                trunkDistance = current.trunkDistance + 1
+                if not negativeTiles or child.tile not in negativeTiles:
+                    if child.tile.player in frPlayers:
+                        trunkValue += child.tile.army
+                    elif not onlyCalculateFriendlyArmy:
+                        trunkValue -= child.tile.army
+                # always leave 1 army behind.
+                trunkValue -= 1
+                child.trunkValue = trunkValue
+                child.trunkDistance = trunkDistance
+
+                queue.appendleft(child)
+
+        if viewInfo:
+            for currentNode in iterate_tree_nodes(rootNodes):
+                currentTile = currentNode.tile
+                viewInfo.midRightGridText.raw[currentTile.tile_index] = f'v{currentNode.value:.1f}'
+                viewInfo.bottomMidRightGridText.raw[currentTile.tile_index] = f'tv{currentNode.trunkValue:.1f}'
+                viewInfo.bottomRightGridText.raw[currentTile.tile_index] = f'td{currentNode.trunkDistance}'
+
+                if currentNode.trunkDistance > 0:
+                    rawValPerTurn = currentNode.value / currentNode.trunkDistance
+                    trunkValPerTurn = currentNode.trunkValue / currentNode.trunkDistance
+                    viewInfo.bottomMidLeftGridText.raw[currentTile.tile_index] = f'tt{trunkValPerTurn:.1f}'
+                    viewInfo.bottomLeftGridText.raw[currentTile.tile_index] = f'vt{rawValPerTurn:.1f}'
+
+        plan.leaves = leaves
+
+        return plan
+
+    @staticmethod
+    def _recalculate_gather_plan_values(
+            plan: GatherCapturePlan,
+            # logEntries: typing.List[str],
+            currentNode: GatherTreeNode,
+            negativeTiles: typing.Set[Tile] | None,
+            searchingPlayer: int,
+            frPlayers: typing.List[int],
+            onlyCalculateFriendlyArmy=False,
+            priorityMatrix: MapMatrix[float] | None = None,
+            includeGatherPriorityAsEconValues: bool = False,
+            includeCapturePriorityAsEconValues: bool = True,
+    ):
+        if USE_DEBUG_ASSERTS:
+            logbook.info(f'RECALCING currentNode {currentNode}')
+
+        isStartNode = False
+
+        # we leave one node behind at each tile, except the root tile.
+        turns = 1
+        sumArmy = -1
+        sumPoints = -1
+        econValue = 0.0
+        currentTile = currentNode.tile
+        isTileFriendly = currentTile.player in frPlayers
+
+        if currentNode.toTile is None:
+            if USE_DEBUG_ASSERTS:
+                logbook.info(f'{currentTile} is first tile, starting at 0')
+            isStartNode = True
+            turns = 0
+            sumArmy = 0
+            sumPoints = 0
+        # elif priorityMatrix:
+        #     sum += priorityMatrix[currentTile]
+
+        if not negativeTiles or currentTile not in negativeTiles:
+            if isTileFriendly:
+                if not isStartNode:
+                    sumArmy += currentTile.army
+                    # sumPoints += currentTile.army
+                    if currentTile.isCity:
+                        plan.friendly_city_count += 1
+            else:
+                if not onlyCalculateFriendlyArmy and not isStartNode:
+                    sumArmy -= currentTile.army
+                    # sumPoints -= currentTile.army
+                if currentTile.player >= 0:
+                    econValue += 2.2
+                    if currentTile.isCity:
+                        plan.enemy_city_count += 1
+                else:
+                    econValue += 1.0
+
+        if priorityMatrix:
+            prioVal = priorityMatrix.raw[currentTile.tile_index]
+            if not isStartNode:
+                sumPoints += prioVal
+                if isTileFriendly and includeGatherPriorityAsEconValues:
+                    econValue += prioVal
+            elif not isTileFriendly and includeCapturePriorityAsEconValues:
+                econValue += prioVal
+            # if USE_DEBUG_ASSERTS:
+            #     logbook.info(f'appending {currentTile}  {currentTile.army}a  matrix {priorityMatrix[currentTile]:.3f} -> {sumArmy:.3f}')
+
+        # we do econValue BEFORE the children because the children will sum their own econ value
+        sumPoints += sumArmy
+        plan.gathered_army += sumArmy
+        plan.econValue += econValue
+        plan.gather_capture_points += sumPoints
+        if isTileFriendly:
+            plan.gather_turns += turns
+
+        for child in currentNode.children:
+            GatherCapturePlan._recalculate_gather_plan_values(
+                plan,
+                child,
+                negativeTiles,
+                searchingPlayer,
+                frPlayers,
+                onlyCalculateFriendlyArmy,
+                priorityMatrix,
+                includeGatherPriorityAsEconValues,
+                includeCapturePriorityAsEconValues)
+            sumArmy += child.value
+            sumPoints += child.points
+            turns += child.gatherTurns
+
+        currentNode.value = sumArmy
+        # old behavior was tile 'values' were points, not army. Safe to not preserve that...?
+        currentNode.points = sumPoints
+        currentNode.gatherTurns = turns
+        # friendly_city_count  # covered above
+        # enemy_city_count  # covered above
+        # gathered_army  # covered above
+        # gather_capture_points  # covered above
+        # _econ_value  # covered above.
+        # _turns  # covered by the outer rootnodes loop
+        # gather_turns   # covered in if above
+
 
 def knapsack_gather_iteration(
         turns: int,
@@ -351,7 +616,7 @@ def get_sub_knapsack_gather(
             valueFunc,
             pathValueFunc=pathValueFunc)
 
-    valuePerTurnPathPerTilePerDistance = SearchUtils.breadth_first_dynamic_max_per_tile_per_distance(
+    valuePerTurnPathPerTilePerDistance = SearchUtils.breadth_first_dynamic_max_per_tile_per_distance_global_visited(
         map,
         startTilesDict,
         valueFunc,
@@ -431,7 +696,7 @@ def get_single_line_iterative_starter(
     #         outTuple.append(valPrio[tupleIdx] / dist)
     #     return outTuple
 
-    valuePerTurnPath = SearchUtils.breadth_first_dynamic_max(
+    valuePerTurnPath = SearchUtils.breadth_first_dynamic_max_global_visited(
         map,
         startTilesDict,
         valueFunc,
@@ -449,7 +714,6 @@ def get_single_line_iterative_starter(
         ignoreStartTile=ignoreStartTile,
         incrementBackward=incrementBackward,
         preferNeutral=preferNeutral,
-        useGlobalVisitedSet=True,
         priorityMatrix=priorityMatrix,
         logResultValues=shouldLog,
         ignoreNonPlayerArmy=not useTrueValueGathered,
@@ -1648,7 +1912,7 @@ def knapsack_levels_backpack_gather_with_value(
                     threatDist,
                     depthDist,
                     0,
-                    0,
+                    negPrioTilesPerTurn,
                     gathNegSum,  # gath neg
                     armyNegSum,  # army neg
                     # tile.x,
@@ -2096,7 +2360,7 @@ def greedy_backpack_gather_values(
                 node = node.next
 
         logbook.info(f"Searching for the next path with remainingTurns {remainingTurns}")
-        valuePerTurnPath = SearchUtils.breadth_first_dynamic_max(
+        valuePerTurnPath = SearchUtils.breadth_first_dynamic_max_global_visited(
             map,
             startTilesDict,
             valueFunc,
@@ -2164,7 +2428,7 @@ def recalculate_tree_values(
     """
     totalValue = 0
     totalTurns = 0
-    logEntries.append('recalcing treenodes....')
+    # logEntries.append('recalcing treenodes....')
     for currentNode in rootNodes:
         _recalculate_tree_values_recurse(
             logEntries,
@@ -2193,7 +2457,7 @@ def recalculate_tree_values(
         treeNode.trunkDistance = 0
         queue.appendleft(treeNode)
 
-    while not len(queue) == 0:
+    while queue:
         current = queue.pop()
         for child in current.children:
             trunkValue = current.trunkValue
@@ -3371,41 +3635,193 @@ def get_tree_leaves_further_than_distance(
 def convert_contiguous_tiles_to_gather_tree_nodes_with_values(
         map: MapBase,
         rootTiles: typing.Iterable[Tile],
-        tiles: typing.Container[Tile],
-        negativeTiles: typing.Container[Tile] | None,
+        tiles: TileSet,
+        negativeTiles: TileSet | None,
         searchingPlayer: int,
-        priorityMatrix: MapMatrix[float] | None = None
-) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
-    visited = MapMatrix(map)
+        priorityMatrix: MapMatrix[float] | None = None,
+        useTrueValueGathered: bool = True,
+        includeGatherPriorityAsEconValues: bool = False,
+        includeCapturePriorityAsEconValues: bool = True,
+        viewInfo=None,
+) -> GatherCapturePlan:
+    """
+
+    @param map:
+    @param rootTiles:
+    @param tiles:
+    @param negativeTiles:
+    @param searchingPlayer:
+    @param priorityMatrix:
+    @param useTrueValueGathered: if True, the gathered_value will be the RAW army that ends up on the target tile(s) rather than just the sum of friendly army gathered, excluding army lost traversing enemy tiles.
+    @param includeGatherPriorityAsEconValues: if True, the priority matrix values of gathered nodes will be included in the econValue of the plan for gatherNodes.
+    @param includeCapturePriorityAsEconValues: if True, the priority matrix values of CAPTURED nodes will be included in the econValue of the plan for enemy tiles in the plan.
+    @param viewInfo: if included, gather values will be written the viewInfo debug output
+    @return:
+    """
+    visited = MapMatrixSet(map)
 
     q = deque()
     for tile in rootTiles:
         q.appendleft((tile, None, None))
 
+    rootNodes = []
+
     tile: Tile
     fromTile: Tile | None
     fromNode: GatherTreeNode | None
-    while q:
+    while True:
         (tile, fromTile, fromNode) = q.pop()
-        if tile in visited:
+        if visited.raw[tile.tile_index]:
             continue
+        if fromTile:
+            # break and continue in the next loop. The double loop lets us be hyper efficient here
+            q.append((tile, fromTile, fromNode))
+            break
 
         newNode = GatherTreeNode(tile, fromTile)
-        visited[tile] = newNode
-
-        if fromNode:
-            fromNode.children.append(newNode)
+        rootNodes.append(newNode)
+        visited.raw[tile.tile_index] = True
 
         for t in tile.movable:
             if t in tiles:
                 q.appendleft((t, tile, newNode))
 
-    rootNodes = [visited[t] for t in rootTiles]
-    logs = []
-    totalTurns, totalValue = recalculate_tree_values(logs, rootNodes, negativeTiles, {}, searchingPlayer, MapBase.get_teams_array(map), priorityMatrix=priorityMatrix, shouldAssert=False)
+    while q:
+        (tile, fromTile, fromNode) = q.pop()
+        if visited.raw[tile.tile_index]:
+            continue
 
-    return totalTurns, totalValue, rootNodes
+        newNode = GatherTreeNode(tile, fromTile)
+        visited.raw[tile.tile_index] = True
+
+        fromNode.children.append(newNode)
+
+        for t in tile.movable:
+            if t in tiles:
+                q.appendleft((t, tile, newNode))
+
+    return GatherCapturePlan.build_from_root_nodes(
+        map,
+        rootNodes,
+        negativeTiles,
+        searchingPlayer,
+        onlyCalculateFriendlyArmy=not useTrueValueGathered,
+        priorityMatrix=priorityMatrix,
+        includeGatherPriorityAsEconValues=includeGatherPriorityAsEconValues,
+        includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
+        viewInfo=viewInfo,
+        cloneNodes=False,
+    )
+    # logs = []
+    # totalTurns, totalValue = recalculate_tree_values(
+    #     logs,
+    #     rootNodes,
+    #     negativeTiles,
+    #     startTilesDict={},
+    #     searchingPlayer=searchingPlayer,
+    #     teams=MapBase.get_teams_array(map),
+    #     priorityMatrix=priorityMatrix,
+    #     shouldAssert=False,
+    # )
+    #
+    # return GatherCapturePlan(
+    #     rootNodes,
+    #     map,
+    #     econValue=0.0,
+    #     turnsTotalInclCap=totalTurns,
+    #     gatherValue=totalValue,
+    #     gatherCapturePoints=totalValue,  # TODO
+    #     gatherTurns=totalTurns,  # TODO
+    #     requiredDelay=0,
+    #     friendlyCityCount=0  # TODO
+    # )
 
 
 def clone_nodes(gatherNodes: typing.List[GatherTreeNode]) -> typing.List[GatherTreeNode]:
     return [n.deep_clone() for n in gatherNodes]
+
+
+def build_gather_plan_from_desired_nodes(
+    map: MapBase,
+    rootTiles: typing.Iterable[Tile],
+    tiles: typing.Iterable[Tile],
+    asPlayer: int = -1,
+    gatherMatrix: MapMatrix[float | None] = None,
+    captureMatrix: MapMatrix[float | None] = None,
+    negativeTiles: TileSet | None = None,
+    prioritizeCaptureHighArmyTiles: bool = False,
+    useTrueValueGathered: bool = True,
+    includeGatherPriorityAsEconValues: bool = False,
+    includeCapturePriorityAsEconValues: bool = True,
+    logDebug: bool = False,
+    viewInfo=None,
+) -> GatherCapturePlan:
+    """
+    When you want to gather some specific tiles.
+
+    Currently just shits out a steiner tree that includes ALL the requested nodes, with no pruning, along with the optimal capture path into targets.
+
+    Does calculate gather tree values.
+
+    @param map:
+    @param rootTiles: The tile(s) that will be the destination(s) of the gather.
+    @param tiles: The tiles that must be included in the gather.
+    @param asPlayer:
+    @param gatherMatrix: Priority values for gathered tiles. Only applies to friendly tiles.
+    @param captureMatrix: Priority values for captured tiles. Only applies to non-friendly tiles.
+    @param prioritizeCaptureHighArmyTiles: If true, we'll value pathing through large army enemy territory over pathing through small army enemy territory.
+    @param negativeTiles: The negative tile set, as with any other gather. Does not bypass the capture/gather priority matrix values.
+    @param useTrueValueGathered: if True, the gathered_value will be the RAW army that ends up on the target tile(s) rather than just the sum of friendly army gathered, excluding army lost traversing enemy tiles.
+    @param includeGatherPriorityAsEconValues: if True, the priority matrix values of gathered nodes will be included in the econValue of the plan for gatherNodes.
+    @param includeCapturePriorityAsEconValues: if True, the priority matrix values of CAPTURED nodes will be included in the econValue of the plan for enemy tiles in the plan.
+    @param logDebug:
+    @param viewInfo: if provided, debug output will be written to the view info tile zones.
+    @return:
+    """
+    startTime = time.perf_counter()
+
+    if asPlayer == -1:
+        asPlayer = map.player_index
+
+    # baseCostOffset = map.largest_army_tile.army + 5
+    baseCostOffset = 0
+
+    weightMatrix = MapMatrix(map, 0-baseCostOffset)
+
+    for t in map.get_all_tiles():
+        # positive weights are not allowed...? Need to find the max and offset, presumably?
+        if map.is_tile_on_team_with(t, asPlayer):
+            weightMatrix.raw[t.tile_index] += t.army
+            if gatherMatrix:
+                weightMatrix.raw[t.tile_index] += gatherMatrix.raw[t.tile_index]
+        else:
+            if prioritizeCaptureHighArmyTiles:
+                weightMatrix.raw[t.tile_index] += t.army
+            else:
+                weightMatrix.raw[t.tile_index] -= t.army
+
+            if captureMatrix:
+                weightMatrix.raw[t.tile_index] += captureMatrix.raw[t.tile_index]
+        if logDebug:
+            logbook.info(f'tile {t} weight: {weightMatrix.raw[t.tile_index]:.3f}')
+
+    steinerNodes = GatherSteiner.build_network_x_steiner_tree(map, tiles, asPlayer, weightMod=weightMatrix, baseWeight=1000)
+    # steinerMatrix = MapMatrixSet(map, steinerNodes)
+
+    plan = convert_contiguous_tiles_to_gather_tree_nodes_with_values(
+        map,
+        rootTiles=rootTiles,
+        tiles=steinerNodes,
+        negativeTiles=negativeTiles,
+        searchingPlayer=asPlayer,
+        priorityMatrix=weightMatrix,
+        useTrueValueGathered=useTrueValueGathered,
+        includeGatherPriorityAsEconValues=includeGatherPriorityAsEconValues,
+        includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
+        viewInfo=viewInfo,
+    )
+
+    usedTime = time.perf_counter()-startTime
+    logbook.info(f'build_gather_plan_from_desired_nodes complete in {usedTime:.4f}s with {plan}')
+
+    return plan

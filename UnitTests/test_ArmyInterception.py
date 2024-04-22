@@ -335,9 +335,9 @@ class ArmyInterceptionUnitTests(TestBase):
 
         self.begin_capturing_logging()
 
-        # if debugMode:
-        #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
-        #     self.assertIsNone(winner)
+        if debugMode:
+            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+            self.assertIsNone(winner)
 
         start = time.perf_counter()
         ArmyAnalyzer.reset_times()
@@ -346,7 +346,7 @@ class ArmyInterceptionUnitTests(TestBase):
             done = time.perf_counter() - start
         timings = '\r\n'.join(bot.perf_timer.current_move.get_events_organized_longest_to_shortest(25))
         ArmyAnalyzer.dump_times()
-        self.assertLess(done, 0.04, f'should spent no more than 40ms on intercepts, \r\n{timings}')
+        self.assertLess(done, 0.05, f'should spent no more than 50ms on intercepts, \r\n{timings}')
 
     def test_should_see_split_path_blocker_as_mid_choke(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False

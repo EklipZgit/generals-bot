@@ -19,7 +19,7 @@ ALLOW_RANDOM_SKIPS = False
 EMPTY_COMBINATION = (0, 0, 0, 0)
 
 
-class ExpansionPlan(object):
+class CityExpansionPlan(object):
     def __init__(self, tile_captures: int, plan_paths: typing.List[Path | None], launch_turn: int, core_tile: Tile):
         self.core_tile: Tile = core_tile
         self.tile_captures: int = tile_captures
@@ -272,7 +272,7 @@ def __evaluate_plan_value(
     )
 
 
-def recalculate_max_plan(plan1: ExpansionPlan, plan2: ExpansionPlan, map: MapBase, distToGenMap, tile_weight_map, visited, no_log: bool = False) -> ExpansionPlan:
+def recalculate_max_plan(plan1: CityExpansionPlan, plan2: CityExpansionPlan, map: MapBase, distToGenMap, tile_weight_map, visited, no_log: bool = False) -> CityExpansionPlan:
     launchVal1 = __evaluate_plan_value(
         map,
         plan1.core_tile,
@@ -317,7 +317,7 @@ def optimize_first_25(
         prune_cutoff: int = -1,
         cramped: bool = False,
         shuffle_launches: bool = False
-) -> ExpansionPlan:
+) -> CityExpansionPlan:
     """
 
     @param map:
@@ -451,7 +451,7 @@ def optimize_first_25(
         val = get_start_expand_captures(map, general, genArmyAtStart, turnInCycle, result, alreadyOwned=alreadyOwned, noLog=False)
         # val = len(alreadyOwned) + get_start_expand_captures(map, general, genArmyAtStart, turnInCycle, result, alreadyOwned=alreadyOwned, noLog=False)
 
-        return ExpansionPlan(val, result, mapTurnAtStart, general)
+        return CityExpansionPlan(val, result, mapTurnAtStart, general)
 
     timeLimit = 3.0
     if cutoff_time:
@@ -518,7 +518,7 @@ def optimize_first_25(
     if val != maxTiles:
         raise AssertionError(f'maxTiles {maxTiles} did not match expand val {val}')
 
-    return ExpansionPlan(maxTiles, maxResultPaths, launchTurn, general)
+    return CityExpansionPlan(maxTiles, maxResultPaths, launchTurn, general)
 
 
 def _sub_optimize_first_25_specific_wasted(

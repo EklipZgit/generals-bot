@@ -5,7 +5,7 @@ import logbook
 
 import SearchUtils
 from ArmyAnalyzer import ArmyAnalyzer
-from Behavior.ArmyInterceptor import ArmyInterceptor
+from Behavior.ArmyInterceptor import ArmyInterceptor, TARGET_CAP_VALUE
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
@@ -338,45 +338,6 @@ class ArmyInterceptionTests(TestBase):
                 self.assertIsNone(winner)
 
                 self.assertGreater(self.get_tile_differential(simHost), 10)
-
-    def test_should_value_recaptures_properly(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/should_intercept_inbound_army_on_edge_when_would_have_10_recapture_turns___l7Y-HnzES---0--181.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 181, fill_out_tiles=True)
-
-        interceptor = self.get_interceptor(map, general, enemyGeneral)
-        path = Path()
-        path.add_next(map.GetTile(14, 6))
-        path.add_next(map.GetTile(13, 6))
-        path.add_next(map.GetTile(12, 6))
-        path.add_next(map.GetTile(11, 6))
-        path.add_next(map.GetTile(10, 6))
-        path.add_next(map.GetTile(10, 5))
-        path.add_next(map.GetTile(9, 5))
-
-        val, turnsUsed = interceptor._get_path_econ_values_for_player(path, searchingPlayer=general.player, targetPlayer=enemyGeneral.player, turnsLeftInCycle=19, includeRecaptureEffectiveStartDist=1)
-        # we move 6 to intercept, they move 6 forward to 7,5. No collision yet.
-        # We collide with over 30 more army with them, giving us full recapture turns.
-        self.assertEqual(19, turnsUsed)
-
-        # Since we captured 0 other tiles, the value of the intercept should equal number of remaining recapture turns * 2, which should be 22
-        self.assertGreater(val, 21)
-
-    def test_should_identify_multi_threat_chokes_in_defense_plan(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/should_intercept_inbound_army_on_edge_when_would_have_10_recapture_turns___l7Y-HnzES---0--181.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 181, fill_out_tiles=True)
-
-        plan = self.get_interception_plan(map, general, enemyGeneral)
-        self.assertEqual(3, len(plan.threats))
-
-        self.assertInterceptChokeTileMoves(plan, map, x=8, y=5, w=0)
-        self.assertInterceptChokeTileMoves(plan, map, x=9, y=5, w=1)
-        self.assertNotInterceptChoke(plan, map, x=10, y=5)
-        self.assertNotInterceptChoke(plan, map, x=9, y=4)
-        self.assertNotInterceptChoke(plan, map, x=10, y=6)
-
-        self.assertEqual(map.GetTile(14, 6), plan.best_enemy_threat.threat.path.tail.tile)
 
     def test_should_recognize_multi_threat_and_intercept_at_choke(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1428,7 +1389,7 @@ class ArmyInterceptionTests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '9,11->9,15')
         #proof
-        simHost.queue_player_moves_str(general.player, '6,9->6,8  10,12->9,12')
+        # simHost.queue_player_moves_str(general.player, '6,9->6,8  10,12->9,12')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
@@ -1549,6 +1510,7 @@ class ArmyInterceptionTests(TestBase):
                     self.assertOwned(general.player, playerMap.GetTile(9, 9))
                     self.assertOwned(general.player, playerMap.GetTile(7, 7))
                     # if split:
+
     def test_should_split_to_defend_opponent_expansion_split(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_split_to_defend_opponent_expansion_split___ZusMFqFXI---1--184.txtmap'
@@ -1779,15 +1741,6 @@ class ArmyInterceptionTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
         self.assertTileDifferentialGreaterThan(7, simHost, 'blocking quickly guarantees minimum of 7 econ, as well. Shouldnt let the army get to the damaging-defense point.')
 
-
-# 22-12 with everything bad
-# 11f 19p - hacked defense intercept
-# 10-20 with defense -1 instead of -2
-# 17f 18p - initial intercept/expand impl
-# 43f 38p
-# 56f 63p 1s, lots are only failing by 1-2 econ dropped, too, instead of 10-20
-# 70f 59p 4s after "new" expansion revamp (RoundPlan)
-
     def test_should_intercept_before_split_choke(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
 
@@ -1855,7 +1808,7 @@ class ArmyInterceptionTests(TestBase):
         # bot should NEVER have played these moves but, if it DOES play them, then it should play a split to stop the repetition
         simHost.queue_player_moves_str(general.player, '5,9->5,10->6,10')
         # proof
-        simHost.queue_player_moves_str(general.player, '6,10->6,9->7,9z')
+        # simHost.queue_player_moves_str(general.player, '6,10->6,9->7,9z')
 
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
@@ -1866,3 +1819,37 @@ class ArmyInterceptionTests(TestBase):
 
         self.assertOwned(general.player, playerMap.GetTile(8, 10), 'should have split and prevented repetition, and recaptured line')
         self.assertOwned(general.player, playerMap.GetTile(9, 10), 'should have split and prevented repetition, and recaptured line')
+    
+    def test_should_intercept_instead_of_eating_damage_on_late_attacks_after_defensive_gather_timing_increment(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_intercept_instead_of_eating_damage_on_late_attacks_after_defensive_gather_timing_increment___xBu7OEmps---1--185.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 185, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=185)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '9,6->9,5->12,5->12,4->15,4->15,3->17,3->17,2')
+        #proof
+        # simHost.queue_player_moves_str(general.player, '18,7->14,7->14,5')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTileDifferentialGreaterThan(2, simHost, 'should have launched off general immediately to intercept to prevent damage')
+
+# 22-12 with everything bad
+# 11f 19p - hacked defense intercept
+# 10-20 with defense -1 instead of -2
+# 17f 18p - initial intercept/expand impl
+# 43f 38p
+# 56f 63p 1s, lots are only failing by 1-2 econ dropped, too, instead of 10-20
+# 70f 59p 4s after "new" expansion revamp (RoundPlan)
+# 86f 55p 4s after reworking a bunch of stuff and better unit testing. Prior to fixing other tests that may be asserting incorrectly. Broke splitting and started disregarding tile-blocking, for now.
+        # DO NOT COMMIT UNTIL SPLITTING FIXED, SEE
+            # test_should_split_when_necessary_to_defend_multiple_targets
+            # test_should_split_or_delay_when_appropriate
+            # test_should_split_to_avoid_repetition_behind_on_tiles

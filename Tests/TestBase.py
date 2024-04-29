@@ -37,7 +37,7 @@ from bot_ek0x45 import EklipZBot
 
 
 class TestBase(unittest.TestCase):
-    GLOBAL_BYPASS_REAL_TIME_TEST = False
+    GLOBAL_BYPASS_REAL_TIME_TEST = True
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -96,6 +96,7 @@ class TestBase(unittest.TestCase):
         general = next(t for t in map.pathableTiles if t.isGeneral)
         general.army = 1
         map.player_index = general.player
+        map.friendly_team = map._teams[general.player]
         map.generals[general.player] = general
         map.players[general.player].tiles = [general]
 
@@ -119,6 +120,7 @@ class TestBase(unittest.TestCase):
         TextMapLoader.load_map_data_into_map(map, data)
         general = next(t for t in map.pathableTiles if t.isGeneral and (t.player == player_index or player_index == -1))
         map.player_index = general.player
+        map.friendly_team = map._teams[general.player]
         map.generals[general.player] = general
         map.resume_data = data
 
@@ -765,6 +767,7 @@ class TestBase(unittest.TestCase):
         map.generals = [general, enemyGen]
         map.usernames = ['a', 'b']
         map.player_index = 0
+        map.friendly_team = map._teams[map.player_index]
 
         map.players = [Player(i) for i in range(2)]
         map.scores = [Score(player.index, total=0, tiles=1, dead=False) for player in map.players]
@@ -841,12 +844,12 @@ class TestBase(unittest.TestCase):
             reason = f'expected player {player} to own {tile}'
         self.assertEqual(player, tile.player, reason)
 
-    def assertCoordsInPath(self, coords: typing.Tuple[int, int], path: Path):
+    def assertCoordsInPath(self, coords: typing.Tuple[int, int], path: Path, reason: str = ''):
         for tile in path.tileList:
             if coords == tile.coords:
                 return
 
-        self.fail(f'Expected {coords} to be in {path}')
+        self.fail(f'Expected {coords} to be in {path} | {reason}'.strip().strip('|').strip())
 
     def assertNoRepetition(
             self,
@@ -1289,7 +1292,7 @@ class TestBase(unittest.TestCase):
                 raise AssertionError(f'unable to manipulate tiles, no tiles were able to be altered.')
         tile.army = newArmy
 
-    def update_tile_in_place(self, map: MapBase, tile: Tile, newPlayer: int, newArmy: int):
+    def update_tile_preserving_player_army(self, map: MapBase, tile: Tile, newPlayer: int, newArmy: int):
         if tile.player != -1 and tile.player != newPlayer:
             raise NotImplementedError('havent implemented converting one players tiles to the others yet, as need to increase old players other army to compensate')
 
@@ -1869,6 +1872,7 @@ class TestBase(unittest.TestCase):
         viewInfo.add_info_line('  it: = intercept turn (which turn in the intercept the tile must be reached by to guarantee a 2-move-intercept-capture assuming the opp moved this way)')
         viewInfo.add_info_line('  im: = intercept moves (worst case moves to achieve the intercept capture, worst case, assuming opp moves along shortest path)')
 
+        viewInfo.add_info_line(f'considered threats: shades of yellow/orangey')
         for i, threat in enumerate(plan.threats):
             color = ViewInfo.get_color_from_target_style(TargetStyle.YELLOW)
             viewInfo.color_path(PathColorer(
@@ -1878,14 +1882,25 @@ class TestBase(unittest.TestCase):
                 121 + 15 * i,
             ))
 
+        viewInfo.add_info_line(f'ignored threats: shades of purpley')
         for i, threat in enumerate(plan.ignored_threats):
             color = ViewInfo.get_color_from_target_style(TargetStyle.YELLOW)
             viewInfo.color_path(PathColorer(
                 threat.path,
                 color[0] + 20 * i,
-                140 - 10 * i,
+                180 - 10 * i,
                 70 + 15 * i,
             ))
+
+        viewInfo.add_info_line(f'best threat: bright purple')
+
+        viewInfo.add_info_line(f'  ^ {plan.best_enemy_threat}')
+        viewInfo.color_path(PathColorer(
+            plan.best_enemy_threat.threat.path,
+            255,
+            255,
+            0,
+        ))
 
         maxValPerTurn = 0
         maxValTurnPath = None

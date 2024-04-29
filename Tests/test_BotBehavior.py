@@ -2844,3 +2844,44 @@ whoever has less extra troops will always get ahead
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
         self.assertNoFriendliesKilled(map, general)
+    
+    def test_should_have_a_normal_ish_launch_and_gather_split_timing(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_have_a_normal_ish_launch_and_gather_split_timing...___b8UEs3SHe---1--400.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 400, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=400)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '16,14->19,14')
+        simHost.queue_player_leafmoves(enemyGeneral.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.timings = bot.get_timings()
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertLess(bot.timings.launchTiming, 33)
+        self.assertLess(bot.timings.splitTurns, 33)
+    
+    def test_should_not_OVERgather_defensively_near_end_of_round__must_weight_tile_differential_appropriately(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_OVERgather_defensively_near_end_of_round__must_weight_tile_differential_appropriately___xBu7OEmps---1--181.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 181, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=181)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_not_OVERgather_defensively_near_end_of_round__must_weight_tile_differential_appropriately")

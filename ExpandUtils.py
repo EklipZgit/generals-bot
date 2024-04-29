@@ -8,6 +8,7 @@ import DebugHelper
 import KnapsackUtils
 import SearchUtils
 from Algorithms import TileIslandBuilder, TileIsland
+from Behavior.ArmyInterceptor import InterceptionOptionInfo
 from BoardAnalyzer import BoardAnalyzer
 from DataModels import Move
 from Interfaces import TilePlanInterface
@@ -72,6 +73,7 @@ def get_round_plan_with_expansion(
         forceGlobalVisitedStage1: bool = False,
         useIterativeNegTiles: bool = False,
         allowGatherPlanExtension=False,
+        includeExpansionSearch: bool = True,
         alwaysIncludeNonTerminatingLeavesInIteration=False,
         smallTileExpansionTimeRatio: float = 1.0,
         lengthWeightOffset: float = -0.3,
@@ -89,6 +91,7 @@ def get_round_plan_with_expansion(
     Third, adds all unused leafmove tiles into the path list and knapsacks.
 
     @param additionalOptionValues: list(approxEconValue, approxTurns, path)
+    @param includeExpansionSearch: use the (legacy, soon...?) expansion planner?
     """
     if additionalOptionValues:
         additionalOptionValues = [v for v in additionalOptionValues if v.requiredDelay + v.length <= turns]
@@ -141,7 +144,7 @@ def get_round_plan_with_expansion(
         logStuff = DebugHelper.IS_DEBUGGING
 
         # Switch this up to use more tiles at the start, just removing the first tile in each path at a time. Maybe this will let us find more 'maximal' paths?
-        def postPathEvalFunction(path: TilePlanInterface, negativeTiles):
+        def postPathEvalFunction(path: TilePlanInterface, negativeTiles: typing.Set[Tile]) -> float:
             if isinstance(path, Path) and path.econValue == 0.0:
                 value = 0.0
                 last = path.start.tile
@@ -282,39 +285,40 @@ def get_round_plan_with_expansion(
                 skipNeutrals=False,
                 logEntries=logEntries)
 
-        _include_optimal_expansion_options(
-            map,
-            multiPathDict,
-            generalDistMap,
-            enemyDistMap,
-            territoryMap,
-            targetPlayer,
-            targetPlayers,
-            friendlyPlayers,
-            searchingPlayer,
-            negativeTiles,
-            bonusCapturePointMatrix,
-            tileIslands,
-            enemyDistPenaltyPoint,
-            alwaysIncludes,
-            tryAvoidSet,
-            pathsCrossingTiles,
-            useCutoff,
-            logStuff,
-            logEntries,
-            alwaysIncludeNonTerminatingLeavesInIteration,
-            smallTileExpansionTimeRatio,
-            singleIterationPathTimeCap,
-            time_limit,
-            useIterativeNegTiles,
-            forceNoGlobalVisited,
-            forceGlobalVisitedStage1,
-            postPathEvalFunction,
-            defaultNoPathValue,
-            turns,
-            lengthWeightOffset,
-            viewInfo
-        )
+        if includeExpansionSearch:
+            _include_optimal_expansion_options(
+                map,
+                multiPathDict,
+                generalDistMap,
+                enemyDistMap,
+                territoryMap,
+                targetPlayer,
+                targetPlayers,
+                friendlyPlayers,
+                searchingPlayer,
+                negativeTiles,
+                bonusCapturePointMatrix,
+                tileIslands,
+                enemyDistPenaltyPoint,
+                alwaysIncludes,
+                tryAvoidSet,
+                pathsCrossingTiles,
+                useCutoff,
+                logStuff,
+                logEntries,
+                alwaysIncludeNonTerminatingLeavesInIteration,
+                smallTileExpansionTimeRatio,
+                singleIterationPathTimeCap,
+                time_limit,
+                useIterativeNegTiles,
+                forceNoGlobalVisited,
+                forceGlobalVisitedStage1,
+                postPathEvalFunction,
+                defaultNoPathValue,
+                turns,
+                lengthWeightOffset,
+                viewInfo
+            )
 
         # expansionGather = greedy_backpack_gather(map, tilesLargerThanAverage, turns, None, valueFunc, baseCaseFunc, skipTiles, None, searchingPlayer, priorityFunc, skipFunc = None)
         if allowLeafMoves and leafMoves is not None:
@@ -558,7 +562,7 @@ def _include_optimal_expansion_options(
 
     skipFunc = skip_after_out_of_army
 
-    def value_priority_army_dist_basic(currentTile, priorityObject):
+    def value_priority_army_dist_basic(currentTile: Tile, priorityObject):
         (
             distSoFar,
             prioWeighted,
@@ -585,9 +589,6 @@ def _include_optimal_expansion_options(
 
         if currentTile.isCity and currentTile.isNeutral:
             return None
-
-        if viewInfo:
-            viewInfo.evaluatedGrid[currentTile.x][currentTile.y] += 1
 
         if distSoFar > 0 and tileCapturePoints < 0:
             dist = distSoFar + lengthWeightOffset
@@ -1049,127 +1050,22 @@ def _include_optimal_expansion_options(
             # boundFunc=boundFunc,
             noLog=not DebugHelper.IS_DEBUGGING)
 
-        testTile = map.GetTile(2, 19)
-        testOtherTile = map.GetTile(2, 18)
-        testTilePaths = newPathDict.get(testTile, None)
-        testOtherTilePaths = newPathDict.get(testOtherTile, None)
-
-        if testTilePaths is not None or testOtherTilePaths is not None:
-            pass
-
-        newPaths = []
-        for tile, tilePaths in newPathDict.items():
-            curTileDict = multiPathDict.get(tile, {})
-            anyPathInc = False
-            values = {}
-            for path in tilePaths:
-                value = postPathEvalFunction(path, negativeTiles)
-                values[path] = value
-                vpt = value / path.length
-                if value >= 0.2 and vpt >= valPerTurnCutoff:
-                    anyPathInc = True
-
-            if anyPathInc:
-                for path in tilePaths:
-                    visited = set()
-                    value = values[path]
-                    friendlyCityCount = 0
-                    node = path.start
-                    reachedIsland: TileIsland | None = tileIslands.tile_island_lookup.raw[path.tail.tile.tile_index]
-                    if reachedIsland not in largeIslandSet:
-                        reachedIsland = None
-                    # else:
-                    #     while reachedIsland.full_island:
-                    #         reachedIsland = reachedIsland.full_island
-
-                    while node is not None:
-                        nodeIsland = tileIslands.tile_island_lookup.raw[node.tile.tile_index]
-                        # TODO
-                        # islandInSet = nodeIsland in largeIslandSet
-                        islandInSet = False
-                        if node.tile not in negativeTiles and (islandInSet or node.tile not in visited):
-                            # TODO?
-                            # if not islandInSet:
-                            visited.add(node.tile)
-
-                            if node.tile.player in friendlyPlayers and (
-                                    node.tile.isCity or node.tile.isGeneral):
-                                friendlyCityCount += 1
-                        node = node.next
-
-                    remainingArmy = path.value
-                    curDist = path.length
-                    hasRemaining = True
-                    fullIsland: TileIsland | None = None
-                    tilesInIsland = []
-                    if reachedIsland:
-                        tilesInIsland = reachedIsland.tiles_by_army
-                        fullIsland = reachedIsland
-                        while fullIsland.full_island:
-                            fullIsland = fullIsland.full_island
-                    # skip the 2 largest tiles, idk
-                    tilesInIslandIdx = 2
-                    curValue = value
-
-                    islandCapValue = 2.2
-                    if reachedIsland and reachedIsland.team == -1:
-                        islandCapValue = 1.0
-
-                    while hasRemaining:
-                        existingMax, existingPath = curTileDict.get(curDist, defaultNoPathValue)
-                        if curValue > existingMax:
-                            path.econValue = curValue
-                            node = path.start
-                            while node is not None:
-                                if (node.tile.isGeneral or node.tile.isCity) and node.tile.player == searchingPlayer:
-                                    usage = cityUsages.get(node.tile, 0)
-                                    cityUsages[node.tile] = usage + 1
-                                node = node.next
-                            if existingPath is not None and logStuff:
-                                logEntries.append(f'path for {str(tile)} dist {curDist} BETTER than existing:\r\n      new {curValue:.3f} {str(path)}\r\n   exist {existingMax:.3f} {str(existingPath)}')
-                            curTileDict[curDist] = (curValue, path)
-
-                            # todo dont need this...?
-                            # sortedTiles.remove(path.start.tile)
-                            newPaths.append((curValue, path))
-                        elif logStuff:
-                            logEntries.append(f'path for {str(tile)} dist {curDist} worse than existing:\r\n      bad {curValue:.3f} {str(path)}\r\n   exist {existingMax:.3f} {str(existingPath)}')
-                        if tilesInIslandIdx >= len(tilesInIsland):
-                            tilesInIslandIdx = 0
-                            if reachedIsland and reachedIsland.full_island:
-                                reachedIsland = reachedIsland.full_island
-                                # skip the 4 largest tiles, idk
-                                tilesInIsland = reachedIsland.tiles_by_army[4:]
-                                if len(tilesInIsland) == 0:
-                                    break
-                            else:
-                                break
-
-                        nextTile = tilesInIsland[tilesInIslandIdx]
-                        curValue = curValue + islandCapValue
-                        remainingArmy -= nextTile.army + 1
-                        if remainingArmy < 1:
-                            break
-                        if curDist > turns:
-                            break
-
-                        if reachedIsland:
-                            path = path.clone()
-                            closest = None
-                            for t in path.tail.tile.movable:
-                                if t not in path.tileSet and t in fullIsland.tile_set and (closest is None or enemyDistMap[closest] > enemyDistMap[t]):
-                                    closest = t
-
-                            if not closest:
-                                closest = path.tail.prev.tile
-
-                            path.add_next(closest)
-                            path.value = remainingArmy
-
-                        tilesInIslandIdx += 1
-                        curDist += 1
-
-            multiPathDict[tile] = curTileDict
+        newPaths = _process_new_expansion_paths(
+            cityUsages,
+            defaultNoPathValue,
+            enemyDistMap,
+            friendlyPlayers,
+            largeIslandSet,
+            logEntries,
+            logStuff,
+            multiPathDict,
+            negativeTiles,
+            newPathDict,
+            postPathEvalFunction,
+            searchingPlayer,
+            tileIslands,
+            turns,
+            valPerTurnCutoff)
 
         logEntries.append(f'iter complete @ {time.perf_counter() - startTime:.3f} iter {iter[0]} paths {len(newPaths)}')
 
@@ -1210,6 +1106,139 @@ def _include_optimal_expansion_options(
         if DebugHelper.IS_DEBUGGING or logStuff:
             logEntries.append(f'  delayed add: {delayedAdd}')
         add_path_to_try_avoid_paths_crossing_tiles(delayedAdd, negativeTiles, tryAvoidSet, pathsCrossingTiles, addToNegativeTiles=useIterativeNegTiles)
+
+
+def _process_new_expansion_paths(
+        cityUsages,
+        defaultNoPathValue,
+        enemyDistMap,
+        friendlyPlayers,
+        largeIslandSet,
+        logEntries,
+        logStuff,
+        multiPathDict,
+        negativeTiles,
+        newPathDict,
+        postPathEvalFunction,
+        searchingPlayer,
+        tileIslands,
+        turns,
+        valPerTurnCutoff
+) -> typing.List[typing.Tuple[float, Path]]:
+    newPaths = []
+    for tile, tilePaths in newPathDict.items():
+        curTileDict = multiPathDict.get(tile, {})
+        anyPathInc = False
+        values = {}
+        for path in tilePaths:
+            value = postPathEvalFunction(path, negativeTiles)
+            values[path] = value
+            vpt = value / path.length
+            if value >= 0.2 and vpt >= valPerTurnCutoff:
+                anyPathInc = True
+
+        if anyPathInc:
+            for path in tilePaths:
+                visited = set()
+                value = values[path]
+                friendlyCityCount = 0
+                node = path.start
+                reachedIsland: TileIsland | None = tileIslands.tile_island_lookup.raw[path.tail.tile.tile_index]
+                if reachedIsland not in largeIslandSet:
+                    reachedIsland = None
+                # else:
+                #     while reachedIsland.full_island:
+                #         reachedIsland = reachedIsland.full_island
+
+                while node is not None:
+                    # nodeIsland = tileIslands.tile_island_lookup.raw[node.tile.tile_index]
+                    # TODO
+                    # islandInSet = nodeIsland in largeIslandSet
+                    islandInSet = False
+                    if node.tile not in negativeTiles and (islandInSet or node.tile not in visited):
+                        # TODO?
+                        # if not islandInSet:
+                        visited.add(node.tile)
+
+                        if node.tile.player in friendlyPlayers and (
+                                node.tile.isCity or node.tile.isGeneral):
+                            friendlyCityCount += 1
+                    node = node.next
+
+                remainingArmy = path.value
+                curDist = path.length
+                fullIsland: TileIsland | None = None
+                tilesInIsland = []
+                if reachedIsland:
+                    tilesInIsland = reachedIsland.tiles_by_army
+                    fullIsland = reachedIsland
+                    while fullIsland.full_island:
+                        fullIsland = fullIsland.full_island
+                # skip the 2 largest tiles, idk
+                tilesInIslandIdx = 2
+                curValue = value
+
+                islandCapValue = 2.2
+                if reachedIsland and reachedIsland.team == -1:
+                    islandCapValue = 1.0
+
+                while True:
+                    existingMax, existingPath = curTileDict.get(curDist, defaultNoPathValue)
+                    if curValue > existingMax:
+                        path.econValue = curValue
+                        node = path.start
+                        while node is not None:
+                            if (node.tile.isGeneral or node.tile.isCity) and node.tile.player == searchingPlayer:
+                                usage = cityUsages.get(node.tile, 0)
+                                cityUsages[node.tile] = usage + 1
+                            node = node.next
+                        if existingPath is not None and logStuff:
+                            logEntries.append(f'path for {str(tile)} dist {curDist} BETTER than existing:\r\n      new {curValue:.3f} {str(path)}\r\n   exist {existingMax:.3f} {str(existingPath)}')
+                        curTileDict[curDist] = (curValue, path)
+
+                        # todo dont need this...?
+                        # sortedTiles.remove(path.start.tile)
+                        newPaths.append((curValue, path))
+                    elif logStuff:
+                        logEntries.append(f'path for {str(tile)} dist {curDist} worse than existing:\r\n      bad {curValue:.3f} {str(path)}\r\n   exist {existingMax:.3f} {str(existingPath)}')
+                    if tilesInIslandIdx >= len(tilesInIsland):
+                        tilesInIslandIdx = 0
+                        if reachedIsland and reachedIsland.full_island:
+                            reachedIsland = reachedIsland.full_island
+                            # skip the 4 largest tiles, idk
+                            tilesInIsland = reachedIsland.tiles_by_army[4:]
+                            if len(tilesInIsland) == 0:
+                                break
+                        else:
+                            break
+
+                    nextTile = tilesInIsland[tilesInIslandIdx]
+                    curValue = curValue + islandCapValue
+                    remainingArmy -= nextTile.army + 1
+                    if remainingArmy < 1:
+                        break
+                    if curDist > turns:
+                        break
+
+                    if reachedIsland:
+                        path = path.clone()
+                        closest = None
+                        for t in path.tail.tile.movable:
+                            if t not in path.tileSet and t in fullIsland.tile_set and (closest is None or enemyDistMap[closest] > enemyDistMap[t]):
+                                closest = t
+
+                        if not closest:
+                            closest = path.tail.prev.tile
+
+                        path.add_next(closest)
+                        path.value = remainingArmy
+
+                    tilesInIslandIdx += 1
+                    curDist += 1
+
+        multiPathDict[tile] = curTileDict
+
+    return newPaths
 
 
 def _check_should_delay(
@@ -2346,6 +2375,10 @@ def _get_capture_counts(
 
 def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: TilePlanInterface, originalNegativeTiles: typing.Set[Tile]) -> float:
     # rating = max(0, path.value) ** 0.5
+    if isinstance(path, InterceptionOptionInfo) and path.requiredDelay <= 0:
+        # intercepts are high priority no matter what, and always more important than other intercepts of smaller tile amounts.
+        return path.intercept.target_tile.army
+
     rating = 0
     first = path.get_first_move().source
     for t in path.tileSet:

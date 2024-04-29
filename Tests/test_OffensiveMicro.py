@@ -1,3 +1,4 @@
+import SearchUtils
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
 
@@ -74,7 +75,6 @@ class OffensiveMicroTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
-    
     def test_should_race_when_cant_defend_and_high_kill_probability(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_race_when_cant_defend_and_high_kill_probability___1lZK5xvmU---1--342.txtmap'
@@ -93,3 +93,57 @@ class OffensiveMicroTests(TestBase):
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_race_when_cant_defend_and_high_kill_probability")
+    
+    def test_should_not_dive_general_instead_of_capturing_cities_when_very_unlikely_to_kill(self):
+        # TODO: shift finding king-kills out into something that gets shoved in the RoundPlanner
+        # TODO: king kill dives should include a kill likelihood, which heavily weights their perceived econValue (especially given that if they dont kill they allow recaptures and should be negatively weighted as such).
+        # TODO: enemy cities defensability should be calculated by WinConditionAnalyzer, and we should know these two cities are harder for opp to defend based on his general position.
+        # TODO: city quick-kills should also be shoved into the round planner. In this case we should clearly see that the expected payoff for holding two cities far from the players other cities is much higher than the expected payoff from a general dive.
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_dive_general_instead_of_capturing_cities_when_very_unlikely_to_kill___9fI5z--ww---0--510.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 510, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=510)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+        army = bot.armyTracker.armies[playerMap.GetTile(16, 5)]
+        army.expectedPaths.append(SearchUtils.a_star_find([army.tile], general))
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        city1 = playerMap.GetTile(10, 6)
+        city2 = playerMap.GetTile(10, 4)
+
+        self.assertOwned(general.player, city1)
+        self.assertOwned(general.player, city2)
+    
+    def test_should_not_dive_general_instead_of_capturing_cities_when_very_unlikely_to_kill__longer(self):
+        # TODO why the f is this not reproducing...?
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_dive_general_instead_of_capturing_cities_when_very_unlikely_to_kill__longer___9fI5z--ww---0--509.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 509, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=509)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '3,5->4,5')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        # bot.opponent_tracker.current_team_cycle_stats[enemyGeneral.player].approximate_fog_city_army -= 10
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        city1 = playerMap.GetTile(10, 6)
+        city2 = playerMap.GetTile(10, 4)
+
+        self.assertOwned(general.player, city1)
+        self.assertOwned(general.player, city2)

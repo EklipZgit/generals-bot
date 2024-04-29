@@ -3414,7 +3414,7 @@ def prune_mst_until(
                     logEntries.append(f'SKIPPING pruning tree node {str(current)} due to pruneOverrideFunc')
                 continue
 
-            if not allowNegative and _would_prune_cause_negative_root(current, nodeMap, logEntries):
+            if not allowNegative and _would_prune_cause_negative_root(current, nodeMap, logEntries if not noLog else None):
                 if not noLog:
                     logEntries.append(f'SKIPPING pruning tree node {str(current)} because would cause negative node')
                 continue

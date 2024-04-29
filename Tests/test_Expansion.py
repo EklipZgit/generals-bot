@@ -101,7 +101,7 @@ class ExpansionTests(TestBase):
             neutralAmount: int = 0,
             assertNoDuplicates: bool = True):
         allPaths = [firstPath]
-        allPaths.extend(otherPaths)
+        allPaths.extend(p for p in otherPaths if p != firstPath)
         visited = set()
         failures = []
         enemyCapped = 0
@@ -211,15 +211,15 @@ class ExpansionTests(TestBase):
 |    |    |    |    |    |    |    |    |    |    |    |   
 a8   a1   a1   a2   a1   a2   a2   a2   a2   a1   a1   a5  
 a1   a1   a1   a1   a1   a1   a1   a1   a1             b1
-a1   a1   a1   a1   a1                                 b1
+a1   a1   a1   a1   a1                                 b1D
 a1   a1   a1   aG1 
      a5   a1   a1   
      a1   a1   a1   
      b1
-     b1      
+     b1D
        
       
-                                                       bG50
+                                                       bG50D
 |    |    |    |    |    |    |    |    |    |    |    |
 player_index=0
 bot_target_player=1   
@@ -253,15 +253,15 @@ bot_target_player=1
 |    |    |    |    |    |    |    |    |    |    |    |   
 a8   a1   a1   a2   a1   a2   a2   a2   a2   a1   a1   a5  
 a1   a1   a1   a1   a1   a1   a1   a1   a1             b1
-a1   a1   a1   a1   a1                                 b1
+a1   a1   a1   a1   a1                                 b1D
 a1   a1   a1   aG11 
      a5   a1   a1   
      a1   a1   a1   
      b1
-     b1      
+     b1D      
        
       
-                                                       bG50
+                                                       bG50D
 |    |    |    |    |    |    |    |    |    |    |    |
 player_index=0
 bot_target_player=1   
@@ -284,7 +284,6 @@ bot_target_player=1
             debugMode=debugMode)
 
         with self.subTest(careLess=False):
-
             self.assertIsNotNone(path)
             self.assertMinTilesCaptured(general.player, path, otherPaths, minEnemyCaptures=4, minNeutralCaptures=11, assertNoDuplicates=False)
 
@@ -293,6 +292,48 @@ bot_target_player=1
 
         with self.subTest(careLess=True):
             self.assertTilesCaptured(general.player, path, otherPaths, enemyAmount=4, neutralAmount=12, assertNoDuplicates=False)
+
+    def test_validate_expansion__calculates_city_expansion_correctly__live_sim(self):
+        # TODO expansion doesn't take city increment into account currently so this test will never pass until that is implemented.
+        rawMapData = """
+|    |    |    |    |    |    |    |    |    |    |    |   
+a8   a1   a1   a2   a1   a2   a2   a2   a2   a1   a1   a5  
+a1   a1   a1   a1   a1   a1   a1   a1   a1             b1
+a1   a1   a1   a1   a1                                 b1D
+a1   a1   a1   aG11 
+     a5   a1   a1   
+     a1   a1   a1   
+     b1
+     b1D      
+
+
+                                                       bG50D
+|    |    |    |    |    |    |    |    |    |    |    |
+player_index=0
+bot_target_player=1   
+"""
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        # 2 in 3 moves
+        # 4 in 5 moves
+        # gen has 13 army so then 12 more in 12 moves for 16 in 17 moves
+
+        remainingTurns = 17
+        turn = 400 - remainingTurns
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(rawMapData, turn, fill_out_tiles=False)
+
+        rawMap, _ = self.load_map_and_general_from_string(rawMapData, respect_undiscovered=True, turn=turn)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=remainingTurns)
+        self.assertIsNone(winner)
+
+        self.assertPlayerTileCountGreater(simHost, general.player, 50, '?')
 
     def test_should_not_launch_attack_at_suboptimal_time(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False

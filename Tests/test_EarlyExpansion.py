@@ -38,7 +38,7 @@ class EarlyExpandUtilsTests(TestBase):
             mapFileName: str,
             turn: int = 1,
             noLog: bool = True
-    ) -> typing.Tuple[MapBase, EarlyExpandUtils.ExpansionPlan]:
+    ) -> typing.Tuple[MapBase, EarlyExpandUtils.CityExpansionPlan]:
         map, general = self.load_turn_1_map_and_general(mapFileName)
 
         self.get_tiles_capped_on_50_count_and_reset_map(map, general)
@@ -54,7 +54,7 @@ class EarlyExpandUtilsTests(TestBase):
         self.assert_expand_plan_valid(map, plan, general)
         return map, plan
 
-    def check_plan_produces_result_in_simulation(self, map: MapBase, general, plan: EarlyExpandUtils.ExpansionPlan, debugMode: bool = False):
+    def check_plan_produces_result_in_simulation(self, map: MapBase, general, plan: EarlyExpandUtils.CityExpansionPlan, debugMode: bool = False):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
         for path in plan.plan_paths:
             if not path:
@@ -74,7 +74,7 @@ class EarlyExpandUtilsTests(TestBase):
         playerTc = playerMap.players[general.player].tileCount
         self.assertEqual(plan.tile_captures, playerTc, f"plan ({plan.tile_captures}) didn't match executed result {playerTc}.")
 
-    def assert_expand_plan_valid(self, map: MapBase, plan: EarlyExpandUtils.ExpansionPlan, general: Tile):
+    def assert_expand_plan_valid(self, map: MapBase, plan: EarlyExpandUtils.CityExpansionPlan, general: Tile):
         paths = plan.plan_paths
         value = EarlyExpandUtils.get_start_expand_captures(map, general, general.army, map.turn, paths, noLog=False)
         self.assertEqual(plan.tile_captures, value)
@@ -96,7 +96,7 @@ class EarlyExpandUtilsTests(TestBase):
 
         return playerTilesToMatchOrExceed
 
-    def render_expansion_plan(self, map: MapBase, plan: EarlyExpandUtils.ExpansionPlan):
+    def render_expansion_plan(self, map: MapBase, plan: EarlyExpandUtils.CityExpansionPlan):
         self.render_paths(map, plan.plan_paths, f'{str(plan.tile_captures)}')
 
     def test_takes_1_move_final_move(self):
@@ -1099,4 +1099,3 @@ class EarlyExpandUtilsTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=48)
         self.assertNoFriendliesKilled(map, general)
-

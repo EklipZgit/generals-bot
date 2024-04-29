@@ -260,6 +260,9 @@ class TextMapLoader(object):
             map.teams = [int(s) for s in teams]
             playerTeam = map.teams[map.player_index]
             map.teammates.update([p for p, t in enumerate(map.teams) if t == playerTeam and p != map.player_index])
+            map.friendly_team = playerTeam
+        else:
+            map.friendly_team = MapBase.get_teams_array(map)[map.player_index]
 
         if 'mode' in data:
             map.is_2v2 = data['mode'] == 'team'
@@ -301,6 +304,7 @@ class TextMapLoader(object):
                 player.cityLostTurn = int(data[f'{char}CityLostTurn'])
             if f'{char}LastSeenMoveTurn' in data:
                 player.last_seen_move_turn = int(data[f'{char}LastSeenMoveTurn'])
+            player.team = map._teams[player.index]
 
         for tile in map.get_all_tiles():
             tile.turn_captured = 0

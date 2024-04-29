@@ -338,6 +338,9 @@ class ArmyTracker(object):
 
     def clean_up_armies(self):
         for army in list(self.armies.values()):
+            if army is not None and army.tile.visible:
+                army.last_seen_turn = self.map.turn
+
             if army.scrapped:
                 logbook.info(f"Army {str(army)} was scrapped last turn, deleting.")
                 if army.tile in self.armies and self.armies[army.tile] == army:
@@ -782,51 +785,39 @@ class ArmyTracker(object):
         # for tile in self.map.pathableTiles:
         #    if tile.player != -1 and (playerLargest[tile.player] == None or tile.army > playerLargest[tile.player].army):
         #        playerLargest[tile.player] = tile
-        for tile in self.map.pathableTiles:
-            notOurMove = (self.lastMove is None or (tile != self.lastMove.source and tile != self.lastMove.dest))
+        for player in self.map.players:
+            for tile in player.tiles:
+                notOurMove = (self.lastMove is None or (tile != self.lastMove.source and tile != self.lastMove.dest))
 
-            movingPlayer = tile.player
-            anyPlayersMoves = playerMoves.get(tile, None)
-
-            if anyPlayersMoves is not None:
-                movingPlayer = [p for p in anyPlayersMoves][0]
-
-            # if tile.delta.oldOwner != self.map.player_index and (tile.delta.oldOwner != tile.delta.newOwner or tile.delta.unexplainedDelta > 0):
-            #     self.handle_unaccounted_delta(tile, movingPlayer, unaccountedForDelta=abs(tile.delta.unexplainedDelta))
-
-            tileNewlyMovedByEnemy = (
-                tile not in self.armies
-                and not tile.delta.gainedSight
-                and tile.player != self.map.player_index
-                and abs(tile.delta.armyDelta) > 2
-                and tile.army > 2
-                and notOurMove
-            )
-
-            # if we moved our army into a spot last turn that a new enemy army appeared this turn
-            tileArmy = self.armies.get(tile, None)
-            if tileArmy is not None and tile.visible:
-                tileArmy.last_seen_turn = self.map.turn
-
-            if (
-                (tileArmy is None or tileArmy.scrapped)
-                and tile.player != -1
-                and (
-                    playerLargest[tile.player] == tile
-                    or tile.army > self.track_threshold
-                    or tileNewlyMovedByEnemy
+                tileNewlyMovedByEnemy = (
+                    tile not in self.armies
+                    and not tile.delta.gainedSight
+                    and tile.player != self.map.player_index
+                    and abs(tile.delta.armyDelta) > 2
+                    and tile.army > 2
+                    and notOurMove
                 )
-            ):
-                logbook.info(
-                    f"{str(tile)} Discovered as Army! (tile.army {tile.army}, tile.delta {tile.delta.armyDelta}) - no fog emergence")
 
-                army = self.get_or_create_army_at(tile, skip_expected_path=not tile.visible and tile.isCity or tile.isGeneral)
-                if not army.visible:
-                    army.value = army.tile.army - 1
-                else:
-                    army.last_seen_turn = self.map.turn
+                isTileValidForArmy = (
+                        playerLargest[tile.player] == tile
+                        or tile.army > self.track_threshold
+                        or tileNewlyMovedByEnemy
+                )
 
-            # if tile WAS bordered by fog find the closest fog army and remove it (not tile.visible or tile.delta.gainedSight)
+                if isTileValidForArmy:
+                    tileArmy = self.armies.get(tile, None)
+
+                    if tileArmy is None or tileArmy.scrapped:
+                        logbook.info(
+                            f"{str(tile)} Discovered as Army! (tile.army {tile.army}, tile.delta {tile.delta.armyDelta}) - no fog emergence")
+
+                        army = self.get_or_create_army_at(tile, skip_expected_path=not tile.visible and tile.isCity or tile.isGeneral)
+                        if not army.visible:
+                            army.value = army.tile.army - 1
+                        else:
+                            army.last_seen_turn = self.map.turn
+
+                # if tile WAS bordered by fog find the closest fog army and remove it (not tile.visible or tile.delta.gainedSight)
 
     def new_army_emerged(self, emergedTile: Tile, armyEmergenceValue: float, emergingPlayer: int = -1):
         """
@@ -1620,21 +1611,23 @@ class ArmyTracker(object):
             skip_expected_path: bool = False
     ) -> Army:
         army = self.armies.get(tile, None)
-        if army is None:
-            logbook.info(f'creating new army at {str(tile)} in get_or_create.')
-            army = Army(tile)
-            army.last_moved_turn = 0
-            if army.tile.delta.fromTile is not None:
-                army.last_moved_turn = self.map.turn - 1
-            if not tile.visible:
-                army.last_moved_turn = self.map.turn - 2  # this should only really happen on incrementing fog cities or on initial unit test map load
-                army.value = tile.army - 1
+        if army is not None:
+            return army
 
-            if not skip_expected_path:
-                army.expectedPaths = ArmyTracker.get_army_expected_path(self.map, army, self.general, self.player_targets)
-                logbook.info(f'set army {str(army)} expected path to {str(army.expectedPaths)}')
+        logbook.info(f'creating new army at {str(tile)} in get_or_create.')
+        army = Army(tile)
+        army.last_moved_turn = 0
+        if army.tile.delta.fromTile is not None:
+            army.last_moved_turn = self.map.turn - 1
+        if not tile.visible:
+            army.last_moved_turn = self.map.turn - 2  # this should only really happen on incrementing fog cities or on initial unit test map load
+            army.value = tile.army - 1
 
-            self.armies[tile] = army
+        if not skip_expected_path:
+            army.expectedPaths = ArmyTracker.get_army_expected_path(self.map, army, self.general, self.player_targets)
+            logbook.info(f'set army {str(army)} expected path to {str(army.expectedPaths)}')
+
+        self.armies[tile] = army
 
         return army
 
@@ -2037,7 +2030,7 @@ class ArmyTracker(object):
 
         return path.get_positive_subsegment(forPlayer=army.player, teams=MapBase.get_teams_array(map), negativeTiles=negativeTiles)
 
-    def convert_fog_city_to_player_owned(self, tile: Tile, player: int):
+    def convert_fog_city_to_player_owned(self, tile: Tile, player: int, isTempFogPrediction: bool = True):
         if player == -1:
             raise AssertionError(f'lol player -1 in convert_fog_city_to_player_owned for tile {str(tile)}')
         wasUndiscObst = tile.isUndiscoveredObstacle
@@ -2047,6 +2040,7 @@ class ArmyTracker(object):
         if wasUndiscObst:
             tile.discovered = False
             tile.discoveredAsNeutral = False
+            tile.isTempFogPrediction = isTempFogPrediction
 
         self.map.players[player].cities.append(tile)
         self.map.update_reachable()
@@ -2132,6 +2126,7 @@ class ArmyTracker(object):
 
         if newCity:
             newCity.army = prevArmy
+            newCity.isTempFogPrediction = True
 
         return newCity
 
@@ -2294,6 +2289,7 @@ class ArmyTracker(object):
         logbook.info(f'drop_incorrect_player_fog_around for player {forPlayer} wrong tile {str(neutralTile)}')
         q = deque()
 
+        # TODO this might be droppable to 2 now that I fixed the ever_owned_by_player update order..
         playerTileAdvantageDepth = 3
 
         isDroppingChainedBadFog = forPlayer != -1
@@ -2364,6 +2360,10 @@ class ArmyTracker(object):
     def _handle_flipped_tiles(self):
         """To be called every time a tile is flipped from one owner to another owner by the map updates themselves."""
 
+        for tile in self._flipped_tiles:
+            if tile.player != -1:  #  and (tile.delta.oldOwner == -1 or not self.map.players[tile.delta.oldOwner].dead)  # not sure why this logic was here...?
+                self.tiles_ever_owned_by_player[tile.player].add(tile)
+
         self._handle_flipped_discovered_as_neutrals()
 
         reTilePlayers = set()
@@ -2414,10 +2414,6 @@ class ArmyTracker(object):
 
             elif tile.player >= 0 and SearchUtils.any_where(tile.movable, lambda t: not t.discovered):
                 reFogLandPlayers.add(tile.player)
-
-            logbook.info(f"AT Handling flipped {repr(tile)}")
-            if tile.player != -1 and (tile.delta.oldOwner == -1 or not self.map.players[tile.delta.oldOwner].dead):
-                self.tiles_ever_owned_by_player[tile.player].add(tile)
 
             if self.map.is_tile_friendly(tile):
                 continue
@@ -3446,6 +3442,7 @@ class ArmyTracker(object):
             maxTurns: int = 45,
             prioMatrix: MapMatrix | None = None,
             skipTiles: typing.Container[Tile] | None = None,
+            noLog: bool = True,
     ) -> Path | None:
         if prioMatrix is None:
             prioMatrix = map.distance_mapper.get_tile_dist_matrix(general)
@@ -3505,6 +3502,7 @@ class ArmyTracker(object):
             searchingPlayer=enTile.player,
             noNeutralCities=True,
             skipTiles=skipTiles,
+            noLog=noLog,
         )
 
         return path

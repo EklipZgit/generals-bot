@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import itertools
 import time
 import typing
 
@@ -42,7 +43,15 @@ class ArmyAnalyzer:
     TimeSpentInInit: float = 0.0
     NumAnalysisBuilt: int = 0
 
-    def __init__(self, map: MapBase, armyA: Tile | Army, armyB: Tile | Army):
+    def __init__(self, map: MapBase, armyA: Tile | Army, armyB: Tile | Army, bypassRetraverseThreshold: int = -1, bypassRetraverseThresholdPathTiles: typing.Iterable[Tile] | None = None):
+        """
+
+        @param map:
+        @param armyA:
+        @param armyB:
+        @param bypassRetraverseThreshold: if set to a positive integer, will bypass including tiles where army at tile B would retraverse this many of its own friendly tiles with no adjacent A team tiles.
+        @param bypassRetraverseThresholdPathTiles: if included, these tiles will be excluded from the retraverse limitation
+        """
         startTime = time.perf_counter()
         self.map: MapBase = map
         if isinstance(armyA, Army):
@@ -78,8 +87,27 @@ class ArmyAnalyzer:
 
         logbook.info(f"ArmyAnalyzer analyzing {self.tileA} and {self.tileB}")
 
-        self.aMap: MapMatrix[int] = map.distance_mapper.get_tile_dist_matrix(self.tileA)
-        self.bMap: MapMatrix[int] = map.distance_mapper.get_tile_dist_matrix(self.tileB)
+        self.aMap: MapMatrix[int]
+        self.bMap: MapMatrix[int]
+
+        if bypassRetraverseThreshold <= 0:
+            self.aMap = map.distance_mapper.get_tile_dist_matrix(self.tileA)
+            self.bMap = map.distance_mapper.get_tile_dist_matrix(self.tileB)
+        else:
+            skip = {t for t in itertools.chain.from_iterable(map.players[p].tiles for p in map.get_teammates(self.tileB.player))}
+
+            if bypassRetraverseThresholdPathTiles:
+                skip.difference_update(bypassRetraverseThresholdPathTiles)
+
+            def foreachFunc(tile: Tile):
+                skip.discard(tile)
+
+            SearchUtils.breadth_first_foreach_fast_no_neut_cities(map, [t for t in map.pathableTiles if map.is_tile_on_team_with(t, self.tileA.player) or t == self.tileB], maxDepth=bypassRetraverseThreshold, foreachFunc=foreachFunc)
+            logbook.info(f'building distance maps except skipping {len(skip)} tiles: {" | ".join([str(t) for t in skip])}')
+
+            self.aMap = SearchUtils.build_distance_map_matrix(map, [self.tileA], skip)
+            self.bMap = SearchUtils.build_distance_map_matrix(map, [self.tileB], skip)
+
         ArmyAnalyzer.TimeSpentInInit += time.perf_counter() - startTime
 
         self.scan()
@@ -384,7 +412,14 @@ class ArmyAnalyzer:
         return chokeMoves is not None and chokeMoves <= 2
 
     @classmethod
-    def build_from_path(cls, map: MapBase, path: Path) -> ArmyAnalyzer:
+    def build_from_path(cls, map: MapBase, path: Path, bypassRetraverse: bool = False) -> ArmyAnalyzer:
+        """
+
+        @param map:
+        @param path:
+        @param bypassRetraverse: if True, will make sure that the average captures of the path are matched by the army analysis board; tiles will be cut if it involves backtracking over friendly territory instead of capturing tiles. DO NOT use for kill threats.
+        @return:
+        """
 
         tileA = path.tail.tile
         tileB = path.start.tile
@@ -401,6 +436,12 @@ class ArmyAnalyzer:
             logbook.info(f'ArmyAnalyzer.build_from_path was non-shortest, shortest segment ending at {prev.tile} for path {tileB}-->{tileA}  ({path})')
             tileA = prev.tile
 
-        analyzer = ArmyAnalyzer(map, tileA, tileB)
+        bypassRetraverseThreshold = -1
+        bypassRetraversePath = None
+        if bypassRetraverse:
+            bypassRetraverseThreshold = 2
+            bypassRetraversePath = path.tileList
+
+        analyzer = ArmyAnalyzer(map, tileA, tileB, bypassRetraverseThreshold=bypassRetraverseThreshold, bypassRetraverseThresholdPathTiles=bypassRetraversePath)
 
         return analyzer

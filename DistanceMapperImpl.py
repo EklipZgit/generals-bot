@@ -20,7 +20,7 @@ class DistanceMapperImpl(DistanceMapper):
 
     def __init__(self, map: MapBase):
         self.map: MapBase = map
-        self._dists: MapMatrix[MapMatrix[int] | None] = MapMatrix(map)  # SearchUtils.dumbassDistMatrix(map)
+        self._dists: MapMatrix[MapMatrix[int] | None] = MapMatrix(map)
 
     def get_distance_between_or_none(self, tileA: Tile, tileB: Tile) -> int | None:
         dist = self.get_distance_between(tileA, tileB)
@@ -49,56 +49,57 @@ class DistanceMapperImpl(DistanceMapper):
             return dist
 
     def get_distance_between(self, tileA: Tile, tileB: Tile) -> int:
-        tileDists = self._dists[tileA]
+        tileDists = self._dists.raw[tileA.tile_index]
         if tileDists is None:
-            tileDists = self.build_distance_map_matrix_fast(tileA)
-            self._dists[tileA] = tileDists
+            tileDists = self._build_distance_map_matrix_fast(tileA)
+            self._dists.raw[tileA.tile_index] = tileDists
 
-        return tileDists[tileB]
+        return tileDists.raw[tileB.tile_index]
 
     def get_distance_between_dual_cache(self, tileA: Tile, tileB: Tile) -> int:
-        tileDists = self._dists[tileA]
+        tileDists = self._dists.raw[tileA.tile_index]
         if tileDists is None:
-            bDists = self._dists[tileB]
+            bDists = self._dists.raw[tileB.tile_index]
             if bDists is None:
-                tileDists = self.build_distance_map_matrix_fast(tileA)
-                self._dists[tileA] = tileDists
+                tileDists = self._build_distance_map_matrix_fast(tileA)
+                self._dists.raw[tileA.tile_index] = tileDists
             else:
-                return bDists[tileA]
+                return bDists.raw[tileA.tile_index]
 
-        return tileDists[tileB]
+        return tileDists.raw[tileB.tile_index]
 
     def get_tile_dist_matrix(self, tile: Tile) -> MapMatrix[int]:
-        tileDists = self._dists[tile]
+        tileDists = self._dists.raw[tile.tile_index]
         if tileDists is None:
-            tileDists = self.build_distance_map_matrix_fast(tile)
-            self._dists[tile] = tileDists
+            tileDists = self._build_distance_map_matrix_fast(tile)
+            self._dists.raw[tile.tile_index] = tileDists
 
         return tileDists
 
-    def build_distance_map_matrix_fast(self, startTile: Tile) -> MapMatrix[int]:
+    def _build_distance_map_matrix_fast(self, startTile: Tile) -> MapMatrix[int]:
         distanceMap = MapMatrix(self.map, UNREACHABLE)
 
         frontier = deque()
 
-        distanceMap[startTile] = 0
+        distanceMap.raw[startTile.tile_index] = 0
         for mov in startTile.movable:
             frontier.append((mov, 1))
 
         dist: int
+        current: Tile
         while frontier:
             (current, dist) = frontier.popleft()
-            if current in distanceMap:
+            if distanceMap.raw[current.tile_index] != UNREACHABLE:
                 continue
 
-            distanceMap[current] = dist
+            distanceMap.raw[current.tile_index] = dist
 
             if current.isObstacle:
                 continue
 
             newDist = dist + 1
             for n in current.movable:  # new spots to try
-                if n in distanceMap:
+                if distanceMap.raw[n.tile_index] != UNREACHABLE:
                     continue
 
                 frontier.append((n, newDist))
@@ -108,5 +109,5 @@ class DistanceMapperImpl(DistanceMapper):
     def recalculate(self):
         logbook.info(f'RESETTING CACHED DISTANCE MAPS IN DistanceMapperImpl')
         # for tile in self.map.get_all_tiles():
-        #     self._dists[tile] = None
+        #     self._dists.raw[tile.tile_index] = None
         self._dists = MapMatrix(self.map, None)

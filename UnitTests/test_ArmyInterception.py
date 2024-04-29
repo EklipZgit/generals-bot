@@ -4,6 +4,7 @@ import logbook
 
 import SearchUtils
 from ArmyAnalyzer import ArmyAnalyzer
+from Behavior.ArmyInterceptor import TARGET_CAP_VALUE
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
@@ -120,7 +121,7 @@ class ArmyInterceptionUnitTests(TestBase):
         self.assertEqual(19, turnsUsed)
 
         # Since we captured 0 other tiles, the value of the intercept should equal number of remaining recapture turns * 2, which should be 22
-        self.assertGreater(val, 21)
+        self.assertGreater(val, 10.5 * TARGET_CAP_VALUE)
 
     def test_should_identify_multi_threat_chokes_in_defense_plan(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -701,5 +702,77 @@ player_index=0
         # if path is not None:
         #     self.assertFalse(path.path.start.move_half)
 
+    def test_should_evaluate_simple_threat_intercept_correctly__single_threat(self):
+        # ref test_should_intercept_instead_of_eating_damage_on_late_attacks_after_defensive_gather_timing_increment for proof of values asserted here
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_intercept_instead_of_eating_damage_on_late_attacks_after_defensive_gather_timing_increment___xBu7OEmps---1--185.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 185, fill_out_tiles=True)
+
+        plan = self.get_interception_plan_from_paths(map, general, enemyGeneral, ['9,6->9,5->12,5->12,4->15,4->15,3->17,3->17,2'])
+
+        if debugMode:
+            self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
+
+        bestOpt = self.get_best_intercept_option(plan)
+        self.assertIsNotNone(bestOpt)
+
+        with self.subTest(baseAssumptions=True):
+            self.assertEqual((18, 7), bestOpt.path.start.tile.coords)
+            self.assertCoordsInPath((14, 7), bestOpt.path, 'should have included the high value army tiles in the intercept path for as long as possible before shifting upward')
+            self.assertCoordsInPath((14, 6), bestOpt.path, 'should have included the high value army tiles in the intercept path for as long as possible before shifting upward')
+            # if intercept gets revamped to include the recapture path, drop this assert since the above is here.
+            self.assertEqual((14, 5), bestOpt.path.tail.tile.coords)
+
+        with self.subTest(damageBlocked=True):
+            # 24 total damage by opponent (up top), we block 6 tiles in, so we block 12
+            # So assert we block somewhere in that range...
+            self.assertGreater(bestOpt.damage_blocked, 5 * TARGET_CAP_VALUE)
+            self.assertLess(bestOpt.damage_blocked, 7 * TARGET_CAP_VALUE)
+
+        with self.subTest(recapTurns=True):
+            # we recapture 1 post-block tile, so the full econ value should be one more target tile than the raw econ damage blocked
+            self.assertEqual(1, bestOpt.recapture_turns)
+
+        with self.subTest(econValue=True):
+            # we recapture 1 post-block tile, so the full econ value should be one more target tile than the raw econ damage blocked
+            self.assertGreater(bestOpt.econValue, 6 * TARGET_CAP_VALUE)
+            self.assertLess(bestOpt.econValue, 8 * TARGET_CAP_VALUE)
+
+        with self.subTest(remainingArmy=True):
+            # TODO not sure yet
+            self.assertEqual(-1, bestOpt.intercepting_army_remaining)
+
+    def test_should_intercept_instead_of_eating_damage_on_late_attacks_after_defensive_gather_timing_increment(self):
+        # ref test_should_intercept_instead_of_eating_damage_on_late_attacks_after_defensive_gather_timing_increment for proof of values asserted here
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_intercept_instead_of_eating_damage_on_late_attacks_after_defensive_gather_timing_increment___xBu7OEmps---1--185.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 185, fill_out_tiles=True)
+
+        plan = self.get_interception_plan(map, general, enemyGeneral, enTile=map.GetTile(9, 6), fromTile=map.GetTile(9, 7))
+
+        if debugMode:
+            self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
+
+        bestOpt = self.get_best_intercept_option(plan)
+        self.assertIsNotNone(bestOpt)
+
+        self.assertEqual((18, 7), bestOpt.path.start.tile.coords)
+        self.assertCoordsInPath((14, 7), bestOpt.path, 'should have included the high value army tiles in the intercept path for as long as possible before shifting upward')
+        self.assertCoordsInPath((14, 6), bestOpt.path, 'should have included the high value army tiles in the intercept path for as long as possible before shifting upward')
+        # if intercept gets revamped to include the recapture path, drop this assert since the above is here.
+        self.assertEqual((14, 6), bestOpt.path.tail.tile.coords)
+
+        # bestOpt.intercept.best_enemy_threat
+
+        # 24 total damage by opponent (up top), we block / recapture all but 10 of it, so we block ~ 14 econ damage. 15.4 damage if we do 2.2 damage per tile as calculation.
+        # 31.5 damage by opponent (down right), we block recapture all but 10 of it, so we block ~21 econ damage.
+        # So assert we block somewhere in that range...
+        self.assertGreater(bestOpt.damage_blocked, 13)
+        self.assertLess(bestOpt.damage_blocked, 22)
+
+        # self.assertEqual(0, bestOpt.intercepting_army_remaining, 'or should we actually declare how negative the path value ends up being, like we do now?')
+        self.assertLessEqual(bestOpt.intercepting_army_remaining, 0, 'Or, should we return 0 when the path goes negative?')
+
 # 18f, 17p, 0s
 # 19f, 17p, 0s  before fixing  test_should_intercept_obvious_intercept_use_case
+# 26f, 17p, 0s  after reworking a bunch of stuff and better unit testing. Prior to fixing other tests that may be asserting incorrectly. Broke splitting and started disregarding tile-blocking, for now.

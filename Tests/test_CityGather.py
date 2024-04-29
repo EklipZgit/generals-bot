@@ -1676,3 +1676,66 @@ class CityGatherTests(TestBase):
 
         city = playerMap.GetTile(10, 15)
         self.assertOwned(general.player, city)
+    
+    def test_should_definitely_contest_middle_city_what_the_hell_why_would_it_not(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_definitely_contest_middle_city_what_the_hell_why_would_it_not___OdLI35cWj---0--597.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 597, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=597)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        self.assertNoFriendliesKilled(map, general)
+
+        city = playerMap.GetTile(13, 10)
+        self.assertOwned(general.player, city)
+    
+    def test_should_capture_general_adjacent_city_quick_from_3_angles(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_capture_general_adjacent_city_quick_from_3_angles___9fI5z--ww---0--167.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 167, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=167)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        # make sure as the city capturing safety threshold adjusts, that this test continues to choose to take the city
+        bot.opponent_tracker.current_team_cycle_stats[map.players[enemyGeneral.player].team].approximate_fog_army_available_total -= 15
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        city = playerMap.GetTile(15, 16)
+        self.assertOwned(general.player, city)
+    
+    def test_should_take_neutral_city_very_near_general_even_if_enemy_can_see(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_take_neutral_city_very_near_general_even_if_enemy_can_see___eoG3JrdLe---1--168.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 168, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=168)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        self.assertNoFriendliesKilled(map, general)
+
+        city = playerMap.GetTile(0, 8)
+        self.assertOwned(general.player, city)

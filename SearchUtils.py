@@ -168,6 +168,7 @@ def dest_breadth_first_target(
     """
     if searchingPlayer == -2:
         searchingPlayer = map.player_index
+
     frontier = HeapQueue()
     visited = [[None for _ in range(map.rows)] for _ in range(map.cols)]
     if isinstance(goalList, dict):

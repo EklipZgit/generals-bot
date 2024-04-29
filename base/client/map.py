@@ -452,6 +452,9 @@ class Tile(object):
             case 15:
                 return 'p'
 
+    def __str__(self) -> str:
+        return f"{self.x},{self.y}"
+
     def __repr__(self):
         vRep = self.get_value_representation()
 
@@ -492,9 +495,6 @@ class Tile(object):
         if other is None:
             return True
         return self.army > other.army
-
-    def __str__(self) -> str:
-        return f"{self.x},{self.y}"
 
     def toString(self) -> str:
         return str(self)

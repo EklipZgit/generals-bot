@@ -1199,6 +1199,14 @@ class OpponentTracker(object):
         return ourStats.tileCount - enStats.tileCount
 
     def winning_on_army(self, byRatio: float = 1.0, useFullArmy: bool = False, againstPlayer: int = -2, offset: int = 0) -> bool:
+        """
+
+        @param byRatio:
+        @param useFullArmy:
+        @param againstPlayer:
+        @param offset:
+        @return:
+        """
         if againstPlayer == -2:
             againstPlayer = self.targetPlayer
         if againstPlayer == -1:

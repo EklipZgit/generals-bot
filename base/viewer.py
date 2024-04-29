@@ -160,6 +160,7 @@ class GeneralsViewer(object):
         self.square_inner_3: Rect = None
         self.square_inner_4: Rect = None
         self.square_inner_5: Rect = None
+        self._red_x: Surface = None
 
     def updateGrid(self, viewInfo: ViewInfo, map: MapBase):
         if viewInfo is not None:
@@ -272,6 +273,14 @@ class GeneralsViewer(object):
         self.statsSpaceFromLeft = self.get_any_text_width(samplePerfText, self.infoLineHeight / 2.27) + 1
 
         self._clock = pygame.time.Clock()
+
+        self._red_x = pygame.Surface((self.cellWidth, self.cellHeight))
+        self._red_x.fill(WHITE)
+        self._red_x.set_colorkey(WHITE)
+        pygame.draw.line(self._red_x, BLACK, (0, 0), (self.cellWidth, self.cellHeight), 4)
+        pygame.draw.line(self._red_x, RED, (0, 0), (self.cellWidth, self.cellHeight), 2)
+        pygame.draw.line(self._red_x, BLACK, (0, self.cellHeight), (self.cellWidth, 0), 4)
+        pygame.draw.line(self._red_x, RED, (0, self.cellHeight), (self.cellWidth, 0), 2)
 
         self.pathAlphas = []
         self.Arrow = [(self.cellWidth / 2, 0), (self.cellWidth / 8, self.cellHeight / 2),
@@ -652,24 +661,14 @@ class GeneralsViewer(object):
             pygame.draw.circle(s, BLACK, [int(self.cellWidth / 2), int(self.cellHeight / 2)],
                                int(self.cellWidth / 2 - 2), 7)
 
-            s = pygame.Surface((self.cellWidth, self.cellHeight))
-            s.fill(WHITE)
-            s.set_colorkey(WHITE)
-            pygame.draw.line(s, BLACK, (0, 0), (self.cellWidth, self.cellHeight), 4)
-            pygame.draw.line(s, RED, (0, 0), (self.cellWidth, self.cellHeight), 2)
-            pygame.draw.line(s, BLACK, (0, self.cellHeight), (self.cellWidth, 0), 4)
-            pygame.draw.line(s, RED, (0, self.cellHeight), (self.cellWidth, 0), 2)
             if (self._map is not None and self._viewInfo is not None and self._viewInfo.evaluatedGrid is not None and len(
                     self._viewInfo.evaluatedGrid) > 0):
                 for row in range(self._map.rows):
                     for column in range(self._map.cols):
                         countEvaluated = int(self._viewInfo.evaluatedGrid[column][row])
                         if countEvaluated > 0:
-                            pos_left = (CELL_MARGIN + self.cellWidth) * column + CELL_MARGIN
-                            pos_top = (CELL_MARGIN + self.cellHeight) * row + CELL_MARGIN
-                            alpha = int(75 + countEvaluated * 3)
-                            s.set_alpha(alpha if alpha < 255 else 255)
-                            self._screen.blit(s, (pos_left, pos_top))
+                            alpha = 75 + countEvaluated * 3
+                            self.draw_red_x(self._map.GetTile(column, row), alpha=alpha)
             # Draw deltas
             for row in range(self._map.rows):
                 for column in range(self._map.cols):
@@ -831,6 +830,13 @@ class GeneralsViewer(object):
             logbook.info("err")  # Log it or whatever here
             logbook.error(''.join('!! ' + line for line in lines))  # Log it or whatever here
             raise
+
+    def draw_red_x(self, tile: Tile, alpha: int):
+        pos_left = (CELL_MARGIN + self.cellWidth) * tile.x + CELL_MARGIN
+        pos_top = (CELL_MARGIN + self.cellHeight) * tile.y + CELL_MARGIN
+        alpha = alpha
+        self._red_x.set_alpha(alpha if alpha < 255 else 255)
+        self._screen.blit(self._red_x, (pos_left, pos_top))
 
     def draw_info_text(self):
         curInfoTextHeight = 0

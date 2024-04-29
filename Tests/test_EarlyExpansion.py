@@ -766,6 +766,7 @@ class EarlyExpandUtilsTests(TestBase):
         # !!! added new maps. Added backwards search. Added time constraint by forced-move combination.
         # 28f, 284p, 39 beat
         # 2f, 308p, 41 beat weight thresh 3
+        # 0f, 309p, 42 beat after weighting for lower optimal wasted first (instead of min optimal wasted first).
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         projRoot = pathlib.Path(__file__).parent
         folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'

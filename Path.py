@@ -581,8 +581,9 @@ class MoveListPath(Path):
             else:
                 self._tileSet = set()
                 for t in self._pathQueue:
-                    self._tileSet.add(t.source)
-                    self._tileSet.add(t.dest)
+                    if t:
+                        self._tileSet.add(t.source)
+                        self._tileSet.add(t.dest)
 
         return self._tileSet
 
@@ -596,10 +597,13 @@ class MoveListPath(Path):
             self._tileList = []
             lastDest = None
             for move in self._pathQueue:
-                if move.source != lastDest:
-                    self._tileList.append(move.source)
-                self._tileList.append(move.dest)
-                lastDest = move.dest
+                if move:
+                    if move.source != lastDest:
+                        self._tileList.append(move.source)
+                    self._tileList.append(move.dest)
+                    lastDest = move.dest
+                else:
+                    lastDest = None
         return self._tileList
 
     @property
@@ -707,7 +711,7 @@ class MoveListPath(Path):
         toRet = self.start
         self.start = self.start.next
         move = self._pathQueue.popleft()
-        if self.start and self._pathQueue and self._pathQueue[0].source != self.start.tile:
+        if self.start and self._pathQueue and self._pathQueue[0] and self._pathQueue[0].source != self.start.tile:
             self.start = self.start.next
         # this wasn't / isn't here in main path impl
         if self.start is not None:

@@ -69,7 +69,6 @@ def get_start_expand_captures(
     if alreadyOwned:
         alreadyVisited = alreadyOwned.copy()
     else:
-        logbook.info(f'REMOVE ME initing empty alreadyVisited set')
         alreadyVisited = set(map.players[genPlayer].tiles)
         # alreadyVisited.add(general)
 
@@ -129,7 +128,16 @@ def get_start_expand_captures(
             if nextTile in alreadyVisited:
                 if not noLog:
                     logbook.info(f'{turn} ({curGenArmy}) - {str(nextTile)} (a{movingArmy}) already capped')
+            elif nextTile.player == genPlayer:
+                movingArmy += nextTile.army
+                movingArmy -= 1
+                alreadyVisited.add(nextTile)
+                if not noLog:
+                    logbook.info(f'{turn} ({curGenArmy}) - {str(nextTile)} (a{movingArmy}) was our tile')
             elif nextTile.player in teamPlayers:
+                movingArmy += nextTile.army
+                movingArmy -= 1
+                alreadyVisited.add(nextTile)
                 if not noLog:
                     logbook.info(f'{turn} ({curGenArmy}) - {str(nextTile)} (a{movingArmy}) was ally tile')
             else:
@@ -334,7 +342,7 @@ def optimize_first_25(
     if debug_view_info:
         debug_view_info.bottomLeftGridText = distToGenMap
 
-    alreadyOwned: typing.Set[Tile] = set(map.players[general.player].tiles)
+    alreadyOwned: typing.Set[Tile] = {t for t in map.players[general.player].tiles if t.isCity or t.isGeneral or t.army <= 1}
 
     #
     # if skipTiles is not None:
@@ -390,15 +398,15 @@ def optimize_first_25(
             (10, 18, 10),
             (13, 24, 2),
             None,
-            None,  # buys 9 more time
+            None,  # buys 8 more time
             (8, 14, 10),
             None,  # buys 7 more time
             (7, 12, 14),
             None,
-            None,  # buys 7 more time
+            None,
             (9, 16, 10),
-            # None,  # buys 7 more time
-            # None,  # buys 10 more time
+            # None,
+            # None,
             (14, 26, 0),
             (15, 28, 0),
             # (12, 22, 4),
@@ -423,14 +431,22 @@ def optimize_first_25(
     if len(alreadyOwned) > 1:
         logbook.info(f'DUE TO NUM VISITED {len(alreadyOwned)}, USING NON-PRE-ARRANGED WASTED COUNTS')
         turnInCycle = mapTurnAtStart % 50
+        turnsLeft = 50 - turnInCycle
         allowWasted = 3
         if map.turn < 50:
             # determine phase in launch cycle:
             tileCount = len(map.players[general.player].tiles)
-            turnsLeft = 50 - turnInCycle
             capsLeftForPerfect = 25 - tileCount
             allowWasted = turnsLeft - capsLeftForPerfect
-            logbook.info(f'NON PRE ARRANGED: for turn {map.turn} with turns left {turnsLeft} and tileCount {tileCount}, capsLeftForPerfect was {capsLeftForPerfect}, so allowWasted was {allowWasted}')
+            logbook.info(f'NON PRE ARRANGED F25: for turn {map.turn} with turns left {turnsLeft} and tileCount {tileCount}, capsLeftForPerfect was {capsLeftForPerfect}, so allowWasted was {allowWasted}')
+        else:
+            totalGenArmy = general.army + turnsLeft // 2
+            tileCount = len(map.players[general.player].tiles)
+            capsLeftForPerfect = totalGenArmy
+
+            allowWasted = max(3, turnsLeft - capsLeftForPerfect)
+
+            logbook.info(f'NON PRE ARRANGED LATE: for turn {map.turn} with turns left {turnsLeft} and tileCount {tileCount}, capsLeftForPerfect was {capsLeftForPerfect}, so allowWasted was {allowWasted}')
         result = _sub_optimize_remaining_cycle_expand_from_cities(
             map,
             general,
@@ -444,6 +460,7 @@ def optimize_first_25(
             shuffle_launches=shuffle_launches,
             dont_force_first=True,
             debug_view_info=debug_view_info,
+            try_bi_directional_first_launch=True,
             skip_tiles=skipTiles,
             cutoff_time=cutoff_time,
             no_log=no_log)
@@ -483,6 +500,7 @@ def optimize_first_25(
             distToGenMap,
             tile_minimization_map,
             turn=launchTurn,
+            try_bi_directional_first_launch=True,  # required to pass test_can_attempt_backwards_initial_paths_for_higher_land_count
             allow_wasted_moves=optimalWastedMoves + 3,
             debug_view_info=debug_view_info,
             visited_set=alreadyOwned,
@@ -533,11 +551,12 @@ def _sub_optimize_first_25_specific_wasted(
         prune_below: int,
         visited_set: typing.Set[Tile],
         cutoff_time: float,
-        additional_one_level_skip: Tile | None = None,
+        additional_one_level_skips: typing.Set[Tile] | None = None,
         skip_tiles: typing.Set[Tile] = None,
         shuffle_launches: bool = False,
         dont_force_first: bool = False,
         debug_view_info: typing.Union[None, ViewInfo] = None,
+        try_random_skips: bool = False,
         no_log: bool = not DEBUG_ASSERTS
     ) -> typing.Tuple[typing.Tuple[int, int, int, int], typing.List[Path | None]]:
         """
@@ -572,8 +591,10 @@ def _sub_optimize_first_25_specific_wasted(
             if curAttemptGenArmy <= 1:
                 raise AssertionError(f'Someone ran a sub_optimize_specific_wasted with gen army 1 lol')
 
-            if additional_one_level_skip and ALLOW_RANDOM_SKIPS:
-                skip_tiles.add(additional_one_level_skip)
+            skipToUse = skip_tiles
+            if additional_one_level_skips:
+                skipToUse = skip_tiles.union(additional_one_level_skips) if skip_tiles else additional_one_level_skips
+
             path1 = _optimize_25_launch_segment(
                 map,
                 general,
@@ -583,11 +604,9 @@ def _sub_optimize_first_25_specific_wasted(
                 force_wasted_moves=force_wasted_moves,
                 tile_weight_map=tile_weight_map,
                 visited_set=visited_set,
-                skip_tiles=skip_tiles,
+                skip_tiles=skipToUse,
                 debug_view_info=debug_view_info,
                 no_log=no_log)
-            if additional_one_level_skip and ALLOW_RANDOM_SKIPS:
-                skip_tiles.remove(additional_one_level_skip)
 
             if path1 is None:
                 if not no_log:
@@ -642,6 +661,8 @@ def _sub_optimize_first_25_specific_wasted(
             cutoff_time=cutoff_time,
             visited_set=visited_set,
             skip_tiles=skip_tiles,
+            shuffle_launches=shuffle_launches,
+            try_random_skips=try_random_skips,
             debug_view_info=debug_view_info,
             no_log=no_log)
         maxValue = __evaluate_plan_value(map, general, curAttemptGenArmy, curTurn, maxOptimized, dist_to_gen_map=dist_to_gen_map, tile_weight_map=tile_weight_map, already_owned=visited_set, no_log=no_log)
@@ -670,6 +691,7 @@ def _sub_optimize_first_25_specific_wasted(
                 prune_below=max(maxValue[0], prune_below),
                 visited_set=visited_set,
                 skip_tiles=skip_tiles,
+                shuffle_launches=shuffle_launches,
                 debug_view_info=debug_view_info,
                 no_log=no_log)
             oneWaitVal = __evaluate_plan_value(map, general, curAttemptGenArmy, curTurn, withOneWait, dist_to_gen_map=dist_to_gen_map, tile_weight_map=tile_weight_map, already_owned=visited_set, no_log=no_log)
@@ -709,6 +731,8 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
         shuffle_launches: bool = False,
         dont_force_first: bool = False,
         debug_view_info: typing.Union[None, ViewInfo] = None,
+        try_bi_directional_first_launch: bool = False,
+        try_random_skips: bool = False,
         no_log: bool = not DEBUG_ASSERTS,
     ) -> typing.List[Path | None]:
     """
@@ -766,9 +790,71 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
     if visitLen > 6 and maxForce > visitLen - 1:
         maxForce = visitLen - 1
 
-    forced = [i for i in range(minWastedMovesThisLaunch, maxForce)]
+    # # THIS IMPL ORDERS FROM MIN WASTED TO MAX WASTED
+    # forced = []
+    # for forceWasted in range(minWastedMovesThisLaunch, maxForce):
+    #     bestCaseResult = len(visited_set) + turnsLeft - forceWasted
+    #     if bestCaseResult < prune_below:
+    #         if not no_log:
+    #             logbook.info(f'pruning due to bestCaseResult {bestCaseResult} compared to prune_below {prune_below}')
+    #         break
+    #     forced.append(forceWasted)
+    # # END IMPL
+
+    # THIS IMPL ORDERS FROM CLOSEST TO 'allow_wasted_moves' TO FURTHEST RATHER THAN LEAST WASTED TO MOST, WHICH MAY BE PREFERABLE.
+    forced = []
+    # start low, move up into optimal allow wasted, and further up into max wasted stuff.
+    curLess = allow_wasted_moves - 2
+    curMore = allow_wasted_moves - 1
+    while True:
+        if curMore < maxForce:
+            forced.append(curMore)
+            curMore += 1
+        if curLess >= minWastedMovesThisLaunch:
+            forced.append(curLess)
+            curLess -= 1
+        elif curMore >= maxForce:
+            break
+
+    oldForced = forced
+    forced = []
+
+    for forceWasted in oldForced:
+        bestCaseResult = len(visited_set) + turnsLeft - forceWasted
+        if bestCaseResult < prune_below:
+            if not no_log:
+                logbook.info(f'pruning due to bestCaseResult {bestCaseResult} compared to prune_below {prune_below}')
+            continue
+        forced.append(forceWasted)
+    # END IMPL
+
+    if len(forced) == 0:
+        return maxCombinationPathList
+
     if shuffle_launches:
         random.shuffle(forced)
+
+    nextStart = time.perf_counter()
+    totalTime = cutoff_time - nextStart
+    timeEach = totalTime / len(forced)
+    divisions = 1
+    if try_bi_directional_first_launch:
+        divisions += 1
+    if ALLOW_RANDOM_SKIPS and try_random_skips:
+        divisions += 1
+
+    addlLevelsRandSkips = False
+    if try_random_skips and turnsLeft > 20:
+        addlLevelsRandSkips = True
+
+    timeEach = timeEach / divisions
+    # curTimeWeight = timeEach /
+    # we want to give more time to the most likely to succeed combinations...?
+    timeEach *= 3
+    # if not shuffle_launches:
+    #     # timeEachWeight = len(forced)
+    #     # give more priority to the low waste attempts
+
     for force_wasted_moves in forced:
         bestCaseResult = len(visited_set) + turnsLeft - force_wasted_moves
         if bestCaseResult < prune_below:
@@ -778,6 +864,8 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
 
         if time.perf_counter() > cutoff_time:
             break
+
+        newCutoff = min(cutoff_time, nextStart + timeEach)
 
         value, pathList = _sub_optimize_first_25_specific_wasted(
             map=map,
@@ -793,14 +881,23 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
             skip_tiles=skip_tiles,
             shuffle_launches=shuffle_launches,
             dont_force_first=dont_force_first,
+            try_random_skips=addlLevelsRandSkips,
             debug_view_info=debug_view_info,
-            cutoff_time=cutoff_time,
+            cutoff_time=newCutoff,
             no_log=no_log
         )
 
-        if ALLOW_RANDOM_SKIPS:
+        if value > maxCombinationValue:
+            maxCombinationValue = value
+            maxCombinationPathList = pathList
+            prune_below = max(prune_below, value[0])
+
+        nextStart = time.perf_counter()
+
+        if try_random_skips:
             pathLen = len(pathList)
             if pathLen > 5:
+                newCutoff = min(cutoff_time, nextStart + timeEach)
                 randomSkip = random.choice(pathList[1:min(pathLen - 1, 6)])
 
                 altValue, altPathList = _sub_optimize_first_25_specific_wasted(
@@ -816,25 +913,57 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
                     visited_set=visited_set,
                     shuffle_launches=shuffle_launches,
                     skip_tiles=skip_tiles,
-                    additional_one_level_skip=randomSkip,
+                    additional_one_level_skips={randomSkip},
                     dont_force_first=dont_force_first,
+                    try_random_skips=addlLevelsRandSkips,
                     debug_view_info=debug_view_info,
-                    cutoff_time=cutoff_time,
+                    cutoff_time=newCutoff,
                     no_log=no_log
                 )
+                nextStart = time.perf_counter()
 
                 if altValue > maxCombinationValue:
+                    logbook.info(f'try_random_skips FOUND BETTER! {altValue} >>> {maxCombinationValue}')
                     maxCombinationValue = altValue
                     maxCombinationPathList = altPathList
                     prune_below = max(prune_below, altValue[0])
 
-        if value > maxCombinationValue:
-            maxCombinationValue = value
-            maxCombinationPathList = pathList
-            prune_below = max(prune_below, value[0])
+        if try_bi_directional_first_launch:
+            if len(maxCombinationPathList) > 1:
+                skips = maxCombinationPathList[0].tileSet
+
+                newCutoff = min(cutoff_time, nextStart + timeEach)
+
+                altValue, altPathList = _sub_optimize_first_25_specific_wasted(
+                    map=map,
+                    general=general,
+                    gen_army=gen_army,
+                    dist_to_gen_map=dist_to_gen_map,
+                    tile_weight_map=tile_weight_map,
+                    turn=turn,
+                    force_wasted_moves=force_wasted_moves,
+                    allow_wasted_moves=allow_wasted_moves,
+                    prune_below=prune_below,
+                    visited_set=visited_set,
+                    shuffle_launches=shuffle_launches,
+                    skip_tiles=skip_tiles,
+                    additional_one_level_skips=skips,
+                    try_random_skips=addlLevelsRandSkips,
+                    dont_force_first=dont_force_first,
+                    debug_view_info=debug_view_info,
+                    cutoff_time=newCutoff,
+                    no_log=no_log
+                )
+                nextStart = time.perf_counter()
+
+                if altValue > maxCombinationValue:
+                    logbook.info(f'try_bi_directional_first_launch SKIP FOUND BETTER! {altValue} >>> {maxCombinationValue}')
+                    maxCombinationValue = altValue
+                    maxCombinationPathList = altPathList
+                    prune_below = max(prune_below, altValue[0])
 
     if len(maxCombinationPathList) > 0:
-        for i in range(skipMoveCount):
+        for forceWasted in range(skipMoveCount):
             maxCombinationPathList.insert(0, None)
 
     return maxCombinationPathList
@@ -853,6 +982,7 @@ def _optimize_25_launch_segment(
     debug_view_info: typing.Union[None, ViewInfo] = None,
     no_log: bool = not DEBUG_ASSERTS
 ) -> Path | None:
+    # no_log = False
     searchingPlayer = map.player_index
     friendlyPlayers = map.get_teammates(searchingPlayer)
 
@@ -864,12 +994,15 @@ def _optimize_25_launch_segment(
     i = SearchUtils.Counter(0)
 
     def value_func(currentTile: Tile, priorityObject, pathList: typing.List[Tile]):
-        _, currentGenDist, _, pathCappedNeg, negAdjWeight, repeats, cappedAdj, maxGenDist = priorityObject
+        _, currentGenDist, _, pathCappedNeg, negAdjWeight, repeats, cappedAdj, maxGenDist, armyLeft = priorityObject
         # currentGenDist = 0 - negCurrentGenDist
         # higher better
         tileValue = 0 - tile_weight_map[currentTile]
 
-        if repeats - force_wasted_moves > 0:
+        repeatsVal = repeats - force_wasted_moves
+        # not necessary because of the below return
+        # repeatsVal = 0 - abs(repeats - force_wasted_moves)
+        if repeatsVal > 0:
             return None
 
         if pathCappedNeg == 0:
@@ -886,20 +1019,31 @@ def _optimize_25_launch_segment(
         #     logbook.info(f'bounded off loop path (value)...? {str(fromTile)}->{str(currentTile)}')
             # return None
 
-        valObj = 0 - pathCappedNeg, 0 - abs(repeats - force_wasted_moves), 0 - cappedAdj, currentGenDist, tileValue - negAdjWeight / 3
+        valObj = 0 - pathCappedNeg, repeatsVal, 0 - cappedAdj, currentGenDist, tileValue - negAdjWeight / 3
 
         return valObj
 
     adjCapableRewards = [-0.3, 0.0, 0.1, 0.2]
 
+    # alwaysMoveAwayDist = 4
+    # if map.turn > 50:
+    #     alwaysMoveAwayDist = 7
+
     # must always prioritize the tiles furthest from general first, to make sure we dequeue in the right order
     def prio_func(nextTile: Tile, currentPriorityObject, pathList: typing.List[typing.Tuple[Tile, typing.Any]]):
-        repeatAvoider, _, closerToEnemyNeg, pathCappedNeg, negAdjWeight, repeats, cappedAdj, maxGenDist = currentPriorityObject
+        repeatAvoider, _, closerToEnemyNeg, pathCappedNeg, negAdjWeight, repeats, cappedAdj, maxGenDist, armyLeft = currentPriorityObject
         visited = nextTile in visited_set
         if not visited:
-            pathCappedNeg -= 1
-            if nextTile.player != -1 and nextTile.player not in friendlyPlayers:
+            if nextTile.player == -1:
                 pathCappedNeg -= 1
+            elif nextTile.player not in friendlyPlayers:
+                pathCappedNeg -= 1
+                armyLeft -= nextTile.army
+            else:
+                armyLeft += nextTile.army
+                repeats += 1
+
+            armyLeft -= 1
         else:
             repeats += 1
 
@@ -907,7 +1051,6 @@ def _optimize_25_launch_segment(
             i.add(1)
             debug_view_info.bottomRightGridText.raw[nextTile.tile_index] = i.value
 
-        #
         # if pathCappedNeg + genArmy <= 0:
         #     logbook.info(f'tile {str(nextTile)} ought to be skipped...?')
         #     return None
@@ -935,8 +1078,7 @@ def _optimize_25_launch_segment(
             adjWeight += adjAdjust
             repeatAvoider -= adjAdjust
 
-        remainingArmy = pathCappedNeg + gen_army
-        if remainingArmy > 4:
+        if armyLeft > 4:
             for tile in nextTile.movable:
                 valid = (
                     tile not in visited_set
@@ -949,7 +1091,7 @@ def _optimize_25_launch_segment(
                 if valid and distance_to_gen_map.raw[tile.tile_index] > distToGen:  # and tile is further from general
                     adjWeight += 1
 
-        if distToGen < 4 and nextTile not in visited_set:
+        if distToGen < 4 and not visited:
             cappedAdj += 1
             repeatAvoider += cappedAdj
 
@@ -958,7 +1100,7 @@ def _optimize_25_launch_segment(
 
         maxGenDist = max(maxGenDist, distToGen)
 
-        priObj = repeatAvoider, distToGen, closerToEnemyNeg, pathCappedNeg, 0 - adjWeight, repeats, cappedAdj, maxGenDist
+        priObj = repeatAvoider, distToGen, closerToEnemyNeg, pathCappedNeg, 0 - adjWeight, repeats, cappedAdj, maxGenDist, armyLeft
 
         return priObj
 
@@ -969,9 +1111,7 @@ def _optimize_25_launch_segment(
             nextTile: Tile,
             currentPriorityObject,
             pathList: typing.List[typing.Tuple[Tile, typing.Any]]):
-        _, genDist, _, pathCappedNeg, _, repeats, cappedAdj, maxGenDist = currentPriorityObject
-        remainingArmy = pathCappedNeg + gen_army
-
+        _, genDist, _, pathCappedNeg, _, repeats, cappedAdj, maxGenDist, armyLeft = currentPriorityObject
         if skip_tiles is not None and nextTile in skip_tiles:
             return True
 
@@ -999,9 +1139,9 @@ def _optimize_25_launch_segment(
             if nextTile is tile:
                 return True
 
-        return remainingArmy <= 0
+        return armyLeft <= 0
 
-    startVals: typing.Dict[Tile, typing.Tuple[object, int]] = {general: ((0, 0, -1000, 0, 0, 0, 0, 0), 0)}
+    startVals: typing.Dict[Tile, typing.Tuple[object, int]] = {general: ((0, 0, -1000, 0, 0, 0, 0, 0, gen_army), 0)}
     if not no_log:
         logbook.info(f'finding segment for genArmy {gen_army}, force_wasted_moves {force_wasted_moves}, alreadyVisited {len(visited_set)}')
     path = breadth_first_dynamic_max(
@@ -1015,5 +1155,8 @@ def _optimize_25_launch_segment(
         maxTurns=turns_left,
         useGlobalVisitedSet=False,  # has to be false so we try multiple combinations of deviations from the re-traversal in one go.
         includePath=True)
+
+    # if not no_log:
+    #     logbook.info(f'  found {path}')
 
     return path

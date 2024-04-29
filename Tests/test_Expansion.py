@@ -1663,4 +1663,32 @@ bot_target_player=1
 # 15-23 with revamp of including all paths from tile if any path from tile meets value per turn cutoff
 # 13-25 ^ but rolled back early one?
 # 25f 30p
-# 28f 49p 2s ish, some are inconsistent, between 26 and 30f
+# 28f 49p 2s ish, some are inconsistent, between 26 and 30f    
+    def test_should_prefer_capping_central_tiles_over_edges_near_end_of_round(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_prefer_capping_central_tiles_over_edges_near_end_of_round___CqXBGqAAd---0--147.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 147, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=147)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwned(general.player, playerMap.GetTile(9, 10), "should capture this central tile with a 2, no reason not to.")
+
+        twoOf = [
+            playerMap.GetTile(9, 12),
+            playerMap.GetTile(10, 12),
+            playerMap.GetTile(10, 13),
+            playerMap.GetTile(11, 13),
+        ]
+
+        numCapped = SearchUtils.count(twoOf, lambda t: t.player == general.player)
+        self.assertEqual(2, numCapped, f'should have captured two of {"  |  ".join([repr(t) for t in twoOf])}')

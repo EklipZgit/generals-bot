@@ -1185,17 +1185,18 @@ class GeneralsViewer(object):
         key = WHITE
         color = (R, G, B)
         for move in tilePlanObj.get_move_list():
-            s = pygame.Surface((self.cellWidth, self.cellHeight))
-            s.set_colorkey(key)
-            # first, "erase" the surface by filling it with a color and
-            # setting this color as colorkey, so the surface is empty
-            s.fill(key)
+            if move:
+                s = pygame.Surface((self.cellWidth, self.cellHeight))
+                s.set_colorkey(key)
+                # first, "erase" the surface by filling it with a color and
+                # setting this color as colorkey, so the surface is empty
+                s.fill(key)
 
-            tile = move.source
-            toTile = move.dest
-            pygame.draw.polygon(s, color, self.Arrow)
-            pygame.draw.polygon(s, BLACK, self.Arrow, 2)
-            self.draw_between_tiles(DirectionalShape(s), tile, toTile, alpha)
+                tile = move.source
+                toTile = move.dest
+                pygame.draw.polygon(s, color, self.Arrow)
+                pygame.draw.polygon(s, BLACK, self.Arrow, 2)
+                self.draw_between_tiles(DirectionalShape(s), tile, toTile, alpha)
             alpha -= alphaDec
             if alpha < alphaMin:
                 alpha = alphaMin

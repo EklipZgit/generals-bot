@@ -271,6 +271,7 @@ class EklipZBot(object):
         self.finishing_exploration = True
         self.targetPlayerExpectedGeneralLocation: Tile | None = None
         self.alt_en_gen_positions: typing.List[typing.List[Tile]] = []
+        self._alt_en_gen_position_distances: typing.List[MapMatrix[int] | None] = []
         self.lastPlayerKilled = None
         self.launchPoints: typing.List[Tile] | None = []
         self.locked_launch_point: Tile | None = None
@@ -7171,6 +7172,7 @@ class EklipZBot(object):
         self.general = self._map.generals[self._map.player_index]
         self.player = self._map.players[self.general.player]
         self.alt_en_gen_positions = [[] for p in self._map.players]
+        self._alt_en_gen_position_distances = [None for p in self._map.players]
 
         self.teams = MapBase.get_teams_array(map)
         self.opponent_tracker = OpponentTracker(self._map, self.viewInfo)
@@ -8727,19 +8729,15 @@ class EklipZBot(object):
         else:
             distMap, skipTiles = self.get_first_25_expansion_distance_priority_map()
 
-        pruneCutoff = 14
-        if len(self.player.tiles) > 2:
-            pruneCutoff = 0
-
         if self.city_expand_plan is None or len(self.city_expand_plan.plan_paths) == 0:
             with self.perf_timer.begin_move_event('optimize_first_25'):
                 calcedThisTurn = True
                 cutoff = time.perf_counter() + timeLimit
-                self.city_expand_plan = EarlyExpandUtils.optimize_first_25(self._map, source, distMap, skipTiles=skipTiles, cutoff_time=cutoff, prune_cutoff=pruneCutoff, cramped=self._spawn_cramped)
+                self.city_expand_plan = EarlyExpandUtils.optimize_first_25(self._map, source, distMap, skipTiles=skipTiles, cutoff_time=cutoff, cramped=self._spawn_cramped)
 
                 totalTiles = self.city_expand_plan.tile_captures + len(self.player.tiles)
                 if len(skipTiles) > 0 and totalTiles < 17 and self._map.turn < 50:
-                    self.city_expand_plan = EarlyExpandUtils.optimize_first_25(self._map, source, distMap, skipTiles=None, cutoff_time=cutoff, prune_cutoff=pruneCutoff, cramped=self._spawn_cramped)
+                    self.city_expand_plan = EarlyExpandUtils.optimize_first_25(self._map, source, distMap, skipTiles=None, cutoff_time=cutoff, cramped=self._spawn_cramped)
 
                 while self.city_expand_plan.plan_paths and self.city_expand_plan.plan_paths[0] is None:
                     self.city_expand_plan.plan_paths.pop(0)
@@ -8752,9 +8750,9 @@ class EklipZBot(object):
                         or (
                                 self.city_expand_plan.launch_turn < self._map.turn
                                 and not SearchUtils.any_where(
-                            self.player.tiles,
-                            lambda tile: not tile.isGeneral and SearchUtils.any_where(tile.movable, lambda mv: not mv.isObstacle and tile.army - 1 > mv.army and not self._map.is_tile_friendly(mv))
-                        )
+                                    self.player.tiles,
+                                    lambda tile: not tile.isGeneral and SearchUtils.any_where(tile.movable, lambda mv: not mv.isObstacle and tile.army - 1 > mv.army and not self._map.is_tile_friendly(mv))
+                                )
                         )
                 )
                 and not calcedThisTurn
@@ -11307,6 +11305,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                     if self._map.turn < self.city_expand_plan.launch_turn:
                         self.info(f'Optimal Expansion F25 piggyback wait {str(move)}')
                         return None
+
                     self.info(f'Optimal Expansion F25 piggyback {str(move)}')
 
                     moveListPath = MoveListPath([])
@@ -11315,8 +11314,8 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                         if planPath is None:
                             moveListPath.add_next_move(None)
                             continue
-                        for move in planPath.get_move_list():
-                            moveListPath.add_next_move(move)
+                        for m in planPath.get_move_list():
+                            moveListPath.add_next_move(m)
 
                     self.curPath = moveListPath
                     self.city_expand_plan = None
@@ -11705,12 +11704,19 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         dontRevealCities = self.targetPlayer != -1 and self.opponent_tracker.winning_on_economy(byRatio=1.05) and not self.opponent_tracker.winning_on_army(byRatio=1.10)
 
+        enPotentialGenDistances = self._alt_en_gen_position_distances[self.targetPlayer]
+        if enPotentialGenDistances is None:
+            enPotentialGenDistances = SearchUtils.build_distance_map_matrix(self._map, self.alt_en_gen_positions[self.targetPlayer])
+            self._alt_en_gen_position_distances[self.targetPlayer] = enPotentialGenDistances
+
+        tgPlayerTerritoryDists = self.territories.territoryDistances[self.targetPlayer]
+
         if dontRevealCities:
             self.viewInfo.add_info_line(f'!@! expansion avoiding revealing cities')
             for city in self.win_condition_analyzer.defend_cities:
                 cityDist = self.territories.territoryDistances[self.targetPlayer][city]
                 for tile in city.movable:
-                    if tile.isNeutral and self.territories.territoryDistances[self.targetPlayer][tile] < cityDist:
+                    if tile.isNeutral and tgPlayerTerritoryDists.raw[tile.tile_index] < cityDist:
                         self.viewInfo.add_targeted_tile(tile, targetStyle=TargetStyle.PURPLE, radiusReduction=12)
                         matrix[tile] -= 100
 
@@ -11764,7 +11770,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         for tile in self._map.get_all_tiles():
             bonus = 0.0
             # choke points
-            if innerChokes[tile]:
+            if innerChokes.raw[tile.tile_index]:
                 # bonus points for retaking iChokes
                 bonus += 0.002
 
@@ -11779,17 +11785,27 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             if self._map.is_tile_friendly(tile) and tile.army < 2:
                 bonus -= 0.25
 
-            if tile in self.board_analysis.flank_danger_play_area_matrix:
+            anyFlankVis = False
+            for vis in tile.adjacents:
+                if vis in self.board_analysis.flankable_fog_area_matrix:
+                    anyFlankVis = True
+                    break
+
+            if anyFlankVis:
                 bonus += 0.1
 
+            # bonus for neutrals near enemy land
+            if tile.player == -1 and tgPlayerTerritoryDists.raw[tile.tile_index] < 3:
+                bonus += 0.03
+
             if tile.isCity:
-                isCloserToEn = self.board_analysis.intergeneral_analysis.aMap[tile] > self.board_analysis.intergeneral_analysis.bMap[tile]
+                isCloserToEn = self.board_analysis.intergeneral_analysis.aMap[tile] > enPotentialGenDistances[tile]
                 cityScore = self.cityAnalyzer.city_scores.get(tile, None)
                 isCityGapping = (cityScore is None or cityScore.intergeneral_distance_differential > 0) and not self._map.is_tile_friendly(tile)
                 for vis in tile.adjacents:
                     if vis.isNotPathable or self._map.is_tile_friendly(vis):
                         continue
-                    if isCloserToEn or not isCityGapping or self.board_analysis.intergeneral_analysis.bMap[tile] <= self.board_analysis.intergeneral_analysis.bMap[vis]:
+                    if isCloserToEn or not isCityGapping or enPotentialGenDistances[tile] <= enPotentialGenDistances[vis]:
                         matrix[vis] += 0.05
 
             if self._map.is_player_on_team_with(tile.player, self.targetPlayer):
@@ -11826,7 +11842,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             else:
                 bonus -= 10
 
-            excessDist = self.board_analysis.intergeneral_analysis.bMap[tile] - self.board_analysis.inter_general_distance
+            excessDist = enPotentialGenDistances[tile] - self.board_analysis.inter_general_distance
             if excessDist > 0:
                 bonus -= 0.05 * excessDist
 

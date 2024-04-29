@@ -763,6 +763,9 @@ class EarlyExpandUtilsTests(TestBase):
         # 0f, 286p, 52 beat, rerun EXACTLY the same
         # w/ cramped v1  2f, 266p, 70 beat
         # 0f, 246p, 32 beat (after moving cramped to its own test, and fixing up the stuff with the things, but NOT doing the capture_val swapover yet)
+        # !!! added new maps. Added backwards search. Added time constraint by forced-move combination.
+        # 28f, 284p, 39 beat
+        # 2f, 308p, 41 beat weight thresh 3
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         projRoot = pathlib.Path(__file__).parent
         folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
@@ -782,6 +785,7 @@ class EarlyExpandUtilsTests(TestBase):
                 weightMap = self.get_opposite_general_distance_map(map, general)
                 timeStart = time.perf_counter()
                 plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=not debugMode, cramped=False)
+                logbook.info(f'MAP {file} used {plan.launch_turn // 2 + 1}a start turn {plan.launch_turn} to get {plan.tile_captures} (vs prev {playerTilesToMatchOrExceed})')
                 timeSpent = time.perf_counter() - timeStart
                 if debugMode and False:
                     self.render_expansion_plan(map, plan)
@@ -807,6 +811,10 @@ class EarlyExpandUtilsTests(TestBase):
         # + 7 with bonus time also 24-37
         # + 10 did 23-38 no way
         # 24-37 with adjacency update
+        # !!! added new maps. Added backwards search. Added time constraint by forced-move combination.
+        # 4f, 28p, 37 beat
+        # 0f, 26p, 43 beat after optimizing around trying the optimal wasted first, with a weight thresh of 3
+        # 0f, 25p, 44 beat after weighting for lower optimal wasted first (instead of min optimal wasted first).
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         projRoot = pathlib.Path(__file__).parent
         folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
@@ -825,10 +833,61 @@ class EarlyExpandUtilsTests(TestBase):
                 weightMap = self.get_opposite_general_distance_map(map, general)
                 timeStart = time.perf_counter()
                 plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=not debugMode, cramped=True)
+                logbook.info(f'MAP {file} used {plan.launch_turn // 2 + 1}a start turn {plan.launch_turn} to get {plan.tile_captures} (vs prev {playerTilesToMatchOrExceed})')
                 timeSpent = time.perf_counter() - timeStart
                 if debugMode:
                     self.render_expansion_plan(map, plan)
                 self.assertLessEqual(timeSpent, 4.3, 'took longer than we consider safe for finding starts')
+                self.assert_expand_plan_valid(map, plan, general)
+                self.assertGreaterEqual(plan.tile_captures, playerTilesToMatchOrExceed)
+                if plan.tile_captures > playerTilesToMatchOrExceed:
+                    self.skipTest(f"Produced a BETTER plan than original, {plan.tile_captures} vs {playerTilesToMatchOrExceed}")
+
+    def test_produces_plans_as_good_or_better_than_historical__temp_non_ffa_23_specifically(self):
+        # 24p, 27b
+        # 23p, 28b w/ backwards launch attempt
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        if TestBase.GLOBAL_BYPASS_REAL_TIME_TEST:
+            # this isn't a real test...
+            return
+
+        skips = [
+            'He1G1kX33',
+            'BxRP6Qr32',
+            'vzhSmFHTV',
+            'refiPJQ2n',
+            'HgQ1pHSnh',
+            'Hg-fuSS2n',
+            'He1G1kX33',
+            'BxRP6Qr32',
+            'BgZjVLr2h',
+            'BgRfjvS3h',
+            'BezNrON2n',
+        ]
+
+        projRoot = pathlib.Path(__file__).parent
+        folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
+        files = os.listdir(folderWithHistoricals)
+        joined = '\n'.join(files)
+        self.begin_capturing_logging()
+        logbook.info(f'files:\n{joined}')
+        for file in files:
+            if file.split('.')[0] in skips:
+                continue
+            map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=50)
+
+            playerTilesToMatchOrExceed = self.get_tiles_capped_on_50_count_and_reset_map(map, general)
+            if playerTilesToMatchOrExceed > 23 or map.remainingPlayers > 2:
+                continue
+
+            with self.subTest(file=file.split('.')[0]):
+                weightMap = self.get_opposite_general_distance_map(map, general)
+                timeStart = time.perf_counter()
+                plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=not debugMode, cramped=True, cutoff_time=time.perf_counter() + 30.0)
+                logbook.info(f'MAP {file} used {plan.launch_turn // 2 + 1}a start turn {plan.launch_turn} to get {plan.tile_captures} (vs prev {playerTilesToMatchOrExceed})')
+                timeSpent = time.perf_counter() - timeStart
+                if debugMode:
+                    self.render_expansion_plan(map, plan)
                 self.assert_expand_plan_valid(map, plan, general)
                 self.assertGreaterEqual(plan.tile_captures, playerTilesToMatchOrExceed)
                 if plan.tile_captures > playerTilesToMatchOrExceed:
@@ -1099,3 +1158,43 @@ class EarlyExpandUtilsTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=48)
         self.assertNoFriendliesKilled(map, general)
+
+    def test_can_attempt_backwards_initial_paths_for_higher_land_count(self):
+        # need to at least allow alt-path spawn finding for the initial trail (?) Or maybe this needs to be a re-calc turns thing, where we run an actual sim and assume it found it by the end, but not necessarily initially.
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/BezNrON2n', turn=50)
+
+        playerTilesToMatchOrExceed = self.get_tiles_capped_on_50_count_and_reset_map(map, general)
+
+        weightMap = self.get_opposite_general_distance_map(map, general)
+        timeStart = time.perf_counter()
+        plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, no_log=not debugMode, cramped=True)
+        logbook.info(f'MAP BezNrON2n used {plan.launch_turn // 2 + 1}a start turn {plan.launch_turn} to get {plan.tile_captures} (vs prev {playerTilesToMatchOrExceed})')
+        timeSpent = time.perf_counter() - timeStart
+        if debugMode:
+            self.render_expansion_plan(map, plan)
+        self.assertLessEqual(timeSpent, 4.3, 'took longer than we consider safe for finding starts')
+        self.assert_expand_plan_valid(map, plan, general)
+        self.assertGreaterEqual(plan.tile_captures, 24, 'it is possible to get 24 with 10-start out the back, followed by next trail out the back, followed by rest out front')
+
+    def test_should_be_successful_in_using_city_expand_to_maximize_GAINZ(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_be_successful_in_using_city_expand_to_maximize_GAINZ___cIm1H61C5---0--80.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 80, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=80)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '9,5->9,4')
+        simHost.queue_player_moves_str(general.player, '9,3->9,4')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        EarlyExpandUtils.DEBUG_ASSERTS = True
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=20)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertPlayerTileCountGreater(simHost, general.player, 50, 'ref replay for successful 50 with one wasted capture due to exception, so 51 for sure possible')

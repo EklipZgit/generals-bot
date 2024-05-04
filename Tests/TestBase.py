@@ -25,6 +25,7 @@ from BoardAnalyzer import BoardAnalyzer
 from DangerAnalyzer import ThreatType, ThreatObj
 from DataModels import Move
 from DistanceMapperImpl import DistanceMapperImpl
+from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrix, MapMatrixSet
 from Path import Path
 from Sim.GameSimulator import GameSimulator, GameSimulatorHost
@@ -37,7 +38,7 @@ from bot_ek0x45 import EklipZBot
 
 
 class TestBase(unittest.TestCase):
-    GLOBAL_BYPASS_REAL_TIME_TEST = True
+    GLOBAL_BYPASS_REAL_TIME_TEST = False
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -418,14 +419,14 @@ class TestBase(unittest.TestCase):
         map.distance_mapper = DistanceMapperImpl(map)
         return map
 
-    def get_from_general_weight_map(self, map: MapBase, general: Tile, negate: bool = False) -> MapMatrix[int]:
+    def get_from_general_weight_map(self, map: MapBase, general: Tile, negate: bool = False) -> MapMatrixInterface[int]:
         distMap = map.distance_mapper.get_tile_dist_matrix(general)
         if negate:
             for tile in map.get_all_tiles():
                 distMap[tile] = 0 - distMap[tile]
         return distMap
 
-    def get_opposite_general_distance_map(self, map: MapBase, general: Tile, negate: bool = False) -> MapMatrix[int]:
+    def get_opposite_general_distance_map(self, map: MapBase, general: Tile, negate: bool = False) -> MapMatrixInterface[int]:
         furthestTile = self.get_furthest_tile_from_general(map, general)
 
         furthestMap = map.distance_mapper.get_tile_dist_matrix(furthestTile)
@@ -1872,17 +1873,18 @@ class TestBase(unittest.TestCase):
         viewInfo.add_info_line('  it: = intercept turn (which turn in the intercept the tile must be reached by to guarantee a 2-move-intercept-capture assuming the opp moved this way)')
         viewInfo.add_info_line('  im: = intercept moves (worst case moves to achieve the intercept capture, worst case, assuming opp moves along shortest path)')
 
-        viewInfo.add_info_line(f'considered threats: shades of yellow/orangey')
+        viewInfo.add_info_line(f'  yellow<->orangey: considered threats')
         for i, threat in enumerate(plan.threats):
             color = ViewInfo.get_color_from_target_style(TargetStyle.YELLOW)
             viewInfo.color_path(PathColorer(
                 threat.path,
                 color[0] + 20 * i,
-                90 - 10 * i,
-                121 + 15 * i,
+                90 + 10 * i,
+                0 + 15 * i,
+                alpha=255
             ))
 
-        viewInfo.add_info_line(f'ignored threats: shades of purpley')
+        viewInfo.add_info_line(f'  purpley: ignored threats')
         for i, threat in enumerate(plan.ignored_threats):
             color = ViewInfo.get_color_from_target_style(TargetStyle.YELLOW)
             viewInfo.color_path(PathColorer(
@@ -1890,21 +1892,26 @@ class TestBase(unittest.TestCase):
                 color[0] + 20 * i,
                 180 - 10 * i,
                 70 + 15 * i,
+                alpha=150
             ))
 
-        viewInfo.add_info_line(f'best threat: bright purple')
+        viewInfo.add_info_line(f'  bright yellow: best threat')
+        viewInfo.add_info_line(f'    ^ {plan.best_enemy_threat}')
 
-        viewInfo.add_info_line(f'  ^ {plan.best_enemy_threat}')
         viewInfo.color_path(PathColorer(
             plan.best_enemy_threat.threat.path,
             255,
             255,
             0,
-        ))
+            alpha=255
+        ), renderOnBottom=False)
 
         maxValPerTurn = 0
         maxValTurnPath = None
         maxOpt = None
+        viewInfo.add_info_line(f'  teal shades: intercepts')
+        viewInfo.add_info_line(f'  green: best intercept')
+        viewInfo.add_info_line(f'')  # Line break for visual pleasure
         for dist, opt in plan.intercept_options.items():
             val = opt.econValue
             path = opt.path
@@ -1921,18 +1928,18 @@ class TestBase(unittest.TestCase):
             viewInfo.add_info_line(f'   {maxStr} {opt2}')
             viewInfo.color_path(PathColorer(
                 path,
-                255,
                 10,
                 255,
-                alpha=100
+                255,
+                alpha=150
             ))
 
         if maxOpt is not None:
             viewInfo.color_path(PathColorer(
                 maxValTurnPath,
-                155,
+                55,
                 255,
-                155,
+                55,
                 alpha=255
             ), renderOnBottom=False)
 

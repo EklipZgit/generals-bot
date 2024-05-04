@@ -15,7 +15,7 @@ from MctsLudii import MctsDUCT, MoveSelectionFunction
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost, GameSimulator
 from TestBase import TestBase
-from base.client.map import Tile, MapBase
+from base.client.tile import Tile, MapBase
 from bot_ek0x45 import EklipZBot
 
 SIM_VS_ENGINE_ALL_TILE_TYPES_TEST_MAP = """

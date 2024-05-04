@@ -7,7 +7,7 @@
 
 import typing
 
-from base.client.map import Tile
+from base.client.tile import Tile
 
 
 class PathNode(object):

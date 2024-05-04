@@ -6,7 +6,7 @@ from numba import int64, jit, float32, boolean, types
 from numba.experimental import jitclass
 
 from DataModels import Move
-from base.client.map import Tile
+from base.client.tile import Tile
 
 
 class SimTile(object):

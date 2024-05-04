@@ -1,5 +1,6 @@
 import typing
 
+import SearchUtils
 from DataModels import Move
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
@@ -23,7 +24,8 @@ class MapTestsBase(TestBase):
             excludeFogMoves: bool = False,
             minTurn = -1,
             includeAllPlayers: bool = False,
-            excludeTempFogPredictions: bool = True
+            excludeTempFogPredictions: bool = True,
+            nearTile: Tile | None = None
     ):
         realMap = simHost.sim.sim_map
         if realMap.turn <= minTurn:
@@ -120,6 +122,8 @@ class MapTestsBase(TestBase):
 
             for tile in realMap.get_all_tiles():
                 playerTile = playerMap.GetTile(tile.x, tile.y)
+                if nearTile and SearchUtils.euclidean_distance(nearTile, tile) > 2.2:
+                    continue
                 if not playerTile.visible:
                     # TODO FIX THIS
                     if playerTile.lastSeen < playerMap.turn - 2 and excludeFogMoves:

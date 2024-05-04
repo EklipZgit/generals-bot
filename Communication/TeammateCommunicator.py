@@ -211,8 +211,8 @@ class TeammateCommunicator(object):
 
     def determine_leads(
             self,
-            gen_distance_map: MapMatrix[int],
-            ally_distances: MapMatrix[int],
+            gen_distance_map: MapMatrixInterface[int],
+            ally_distances: MapMatrixInterface[int],
             targetPlayerExpectedGeneralLocation: Tile
     ):
         usDist = gen_distance_map[targetPlayerExpectedGeneralLocation]

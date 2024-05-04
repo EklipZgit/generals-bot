@@ -4,6 +4,7 @@ from collections import deque
 import logbook
 
 import SearchUtils
+from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrix
 from base.client.map import DistanceMapper, MapBase, Tile
 
@@ -20,7 +21,7 @@ class DistanceMapperImpl(DistanceMapper):
 
     def __init__(self, map: MapBase):
         self.map: MapBase = map
-        self._dists: MapMatrix[MapMatrix[int] | None] = MapMatrix(map)
+        self._dists: MapMatrixInterface[MapMatrixInterface[int] | None] = MapMatrix(map)
 
     def get_distance_between_or_none(self, tileA: Tile, tileB: Tile) -> int | None:
         dist = self.get_distance_between(tileA, tileB)
@@ -68,7 +69,7 @@ class DistanceMapperImpl(DistanceMapper):
 
         return tileDists.raw[tileB.tile_index]
 
-    def get_tile_dist_matrix(self, tile: Tile) -> MapMatrix[int]:
+    def get_tile_dist_matrix(self, tile: Tile) -> MapMatrixInterface[int]:
         tileDists = self._dists.raw[tile.tile_index]
         if tileDists is None:
             tileDists = self._build_distance_map_matrix_fast(tile)
@@ -76,7 +77,7 @@ class DistanceMapperImpl(DistanceMapper):
 
         return tileDists
 
-    def _build_distance_map_matrix_fast(self, startTile: Tile) -> MapMatrix[int]:
+    def _build_distance_map_matrix_fast(self, startTile: Tile) -> MapMatrixInterface[int]:
         distanceMap = MapMatrix(self.map, UNREACHABLE)
 
         frontier = deque()

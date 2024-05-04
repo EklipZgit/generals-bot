@@ -519,7 +519,7 @@ class DangerAnalyzer(object):
             if not army.visible and army.last_moved_turn < self.map.turn - 4:
                 continue  # dont defend against invisible predicted threats that probably arent real
 
-            if requireMovement and army.last_moved_turn < self.map.turn - 2:
+            if army.visible and requireMovement and army.last_moved_turn < self.map.turn - 2:
                 continue
 
             startTiles = {}

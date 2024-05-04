@@ -4,6 +4,7 @@ import typing
 import DebugHelper
 import SearchUtils
 from BoardAnalyzer import BoardAnalyzer
+from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrix
 from SearchUtils import Counter
 from base.client.map import MapBase, Tile, Player
@@ -266,7 +267,7 @@ class CityAnalyzer(object):
             self,
             tile: Tile,
             board_analysis: BoardAnalyzer,
-            ally_dist_map: MapMatrix[int],
+            ally_dist_map: MapMatrixInterface[int],
             teammate: Player,
             score: CityScoreData):
 

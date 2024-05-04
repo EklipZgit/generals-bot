@@ -8,7 +8,7 @@ import KnapsackUtils
 import SearchUtils
 from SearchUtils import dest_breadth_first_target
 from Tests.TestBase import TestBase
-from base.client.map import Tile
+from base.client.tile import Tile
 from base.viewer import GeneralsViewer
 from DangerAnalyzer import DangerAnalyzer
 

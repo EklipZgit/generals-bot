@@ -15,7 +15,7 @@ from MctsLudii import MctsDUCT, MoveSelectionFunction
 from PerformanceTelemetry import PerformanceTelemetry
 from Sim.GameSimulator import GameSimulatorHost, GameSimulator
 from TestBase import TestBase
-from base.client.map import Tile, MapBase
+from base.client.tile import Tile, MapBase
 from bot_ek0x45 import EklipZBot
 
 

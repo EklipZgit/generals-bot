@@ -5,7 +5,7 @@ import logbook
 
 import SearchUtils
 from Path import Path
-from base.client.map import Tile
+from base.client.tile import Tile
 
 
 class Army(object):

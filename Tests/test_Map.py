@@ -5,7 +5,7 @@ from DataModels import Move
 from Sim.GameSimulator import GameSimulatorHost
 from Sim.TextMapLoader import TextMapLoader
 from TestBase import TestBase
-from base.client.map import TILE_FOG, TILE_OBSTACLE, TILE_MOUNTAIN, Score
+from base.client.tile import Tile_FOG, TILE_OBSTACLE, TILE_MOUNTAIN, Score
 from test_MapBaseClass import MapTestsBase
 
 
@@ -999,3 +999,23 @@ player_index=0
     # 295f, 19,187p
     # 297f 19189p w/ pre neutral tile collision fix
     # 277 after FUCKING TWO WHOLE GODDAMN DAYS OF TRYING TO FUCKING FJKDSF:LKJFDS:JLKFDSGLJK:HRSW:JMNKLGWR GOD I HATE TILE TRACKING, BRUTE FORCE WOULD HAVE BEEN SO MUCH BETTER
+    
+    def test_should_not_duplicate_armies_back_into_fog(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_duplicate_armies_back_into_fog___Uay7ww5nZ---0--224.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 224, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=224)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '12,3->11,3')
+        simHost.queue_player_moves_str(general.player, '11,2->11,3')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost, general.player, nearTile=playerMap.GetTile(12, 3)))
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+

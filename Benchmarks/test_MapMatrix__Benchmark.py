@@ -12,7 +12,7 @@ from DistanceMapperImpl import DistanceMapperImpl
 from MapMatrix import MapMatrix, MapMatrixSet  #, MapMatrixSetWithLength, MapMatrixSetWithLengthAndTiles
 from Tests.TestBase import TestBase
 from ViewInfo import PathColorer
-from base.client.map import Tile
+from base.client.tile import Tile
 
 
 class MapMatrixBenchmarkTests(TestBase):
@@ -39,7 +39,7 @@ class MapMatrixBenchmarkTests(TestBase):
                 for i in range(50):
                     val = 0
                     start = time.perf_counter()
-                    matrix: MapMatrix[int] = MapMatrix(map, 1)
+                    matrix: MapMatrixInterface[int] = MapMatrix(map, 1)
                     for tile1 in map.pathableTiles:
                         for tile2 in map.pathableTiles:
                             val += matrix[tile2] - matrix[tile1]
@@ -100,7 +100,7 @@ class MapMatrixBenchmarkTests(TestBase):
     #                     val = 0
     #                     iter = accesses // 2
     #                     start = time.perf_counter()
-    #                     matrix: MapMatrix[int] = MapMatrix(map, 1)
+    #                     matrix: MapMatrixInterface[int] = MapMatrix(map, 1)
     #                     while iter > 0:
     #                         for tile1 in map.pathableTiles:
     #                             val += matrix[last] - matrix[tile1]
@@ -171,7 +171,7 @@ class MapMatrixBenchmarkTests(TestBase):
     #                     val = 0
     #                     iterLeft = accesses // 2  # we do 2 accesses per iter
     #                     start = time.perf_counter()
-    #                     matrix: MapMatrix[int] = MapMatrix(map, 1)
+    #                     matrix: MapMatrixInterface[int] = MapMatrix(map, 1)
     #                     while iterLeft > 0:
     #                         for tile1 in map.pathableTiles:
     #                             val += matrix[last] - matrix[tile1]
@@ -223,7 +223,7 @@ class MapMatrixBenchmarkTests(TestBase):
     #
     #             for i in range(5000):
     #                 start = time.perf_counter()
-    #                 matrix: MapMatrix[int] = MapMatrix(map, 1)
+    #                 matrix: MapMatrixInterface[int] = MapMatrix(map, 1)
     #                 mapMatrixDuration = time.perf_counter() - start
     #                 mapMatrixTotalDur += mapMatrixDuration
     #
@@ -303,7 +303,7 @@ class MapMatrixBenchmarkTests(TestBase):
                             val = 0
                             itrLeft = accesses // 2
                             start = time.perf_counter()
-                            matrix: MapMatrix[int] = MapMatrix(map, 0, emptyVal=None)
+                            matrix: MapMatrixInterface[int] = MapMatrix(map, 0, emptyVal=None)
                             for tile in randTiles:
                                 matrix.add(tile, 1)
                             while itrLeft > 0:
@@ -406,7 +406,7 @@ class MapMatrixBenchmarkTests(TestBase):
                             val = 0
                             itrLeft = accesses // 2
                             start = time.perf_counter()
-                            matrix: MapMatrix[int] = MapMatrix(map, 0, emptyVal=None)
+                            matrix: MapMatrixInterface[int] = MapMatrix(map, 0, emptyVal=None)
                             for tile in randTiles:
                                 matrix[tile] = 1
                             while itrLeft > 0:
@@ -506,7 +506,7 @@ class MapMatrixBenchmarkTests(TestBase):
                             val = 0
                             itrLeft = accesses // 2
                             start = time.perf_counter()
-                            matrix: MapMatrix[int] = MapMatrix(map, 0)
+                            matrix: MapMatrixInterface[int] = MapMatrix(map, 0)
                             for tile in randTiles:
                                 matrix.raw[tile.tile_index] = 1
                             while itrLeft > 0:
@@ -606,7 +606,7 @@ class MapMatrixBenchmarkTests(TestBase):
                             val = 0
                             itrLeft = accesses // 2
                             start = time.perf_counter()
-                            matrix: MapMatrix[int] = MapMatrix(map, 0)
+                            matrix: MapMatrixInterface[int] = MapMatrix(map, 0)
                             for tile in randTiles:
                                 matrix.raw[tile.tile_index] = 1
                             while itrLeft > 0:
@@ -1163,7 +1163,7 @@ class MapMatrixBenchmarkTests(TestBase):
                     dictTotalDuration = 0.0
 
                     for i in range(5000):
-                        matrix: MapMatrix[int] = MapMatrix(map, 1)
+                        matrix: MapMatrixInterface[int] = MapMatrix(map, 1)
                         start = time.perf_counter()
                         matrix2 = matrix.copy()
                         mapMatrixDuration = time.perf_counter() - start
@@ -1223,7 +1223,7 @@ class MapMatrixBenchmarkTests(TestBase):
 
                     for i in range(5000):
                         start = time.perf_counter()
-                        matrix: MapMatrix[int] = MapMatrix(map, 1)
+                        matrix: MapMatrixInterface[int] = MapMatrix(map, 1)
                         mapMatrixDuration = time.perf_counter() - start
                         mapMatrixTotalDur += mapMatrixDuration
 
@@ -1274,7 +1274,7 @@ class MapMatrixBenchmarkTests(TestBase):
                         val = 0
                         itrLeft = iterations
                         start = time.perf_counter()
-                        matrix: MapMatrix[int] = MapMatrix(map, 1)
+                        matrix: MapMatrixInterface[int] = MapMatrix(map, 1)
                         while itrLeft > 0:
                             for tile in map.pathableTiles:
                                 val += matrix[last] - matrix[tile]

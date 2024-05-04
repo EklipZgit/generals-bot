@@ -12,6 +12,7 @@ import logbook
 import SearchUtils
 from ArmyAnalyzer import ArmyAnalyzer
 from DataModels import Move
+from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrix, MapMatrixSet
 from base.client.map import MapBase, Tile
 
@@ -33,9 +34,9 @@ class BoardAnalyzer:
 
         self.central_defense_point: Tile = map.players[map.player_index].general
 
-        self.friendly_city_distances: typing.Dict[Tile, MapMatrix[int]] = {}
+        self.friendly_city_distances: typing.Dict[Tile, MapMatrixInterface[int]] = {}
 
-        self.defense_centrality_sums: MapMatrix[int] = MapMatrix(self.map, initVal=250)
+        self.defense_centrality_sums: MapMatrixInterface[int] = MapMatrix(self.map, initVal=250)
 
         self.intergeneral_analysis: ArmyAnalyzer = None
 
@@ -43,7 +44,7 @@ class BoardAnalyzer:
 
         self.extended_play_area_matrix: MapMatrixSet = None
 
-        self.shortest_path_distances: MapMatrix[int] = None
+        self.shortest_path_distances: MapMatrixInterface[int] = None
 
         self.flankable_fog_area_matrix: MapMatrixSet = None
         """
@@ -57,14 +58,14 @@ class BoardAnalyzer:
 
         self.backwards_tiles: typing.Set[Tile] = set()
 
-        self.general_distances: MapMatrix[int] = MapMatrix(self.map)
+        self.general_distances: MapMatrixInterface[int] = MapMatrix(self.map)
 
         self.all_possible_enemy_spawns: typing.Set[Tile] = set()
 
-        self.friendly_general_distances: MapMatrix[int] = MapMatrix(self.map)
+        self.friendly_general_distances: MapMatrixInterface[int] = MapMatrix(self.map)
         """The distance map to any friendly general."""
 
-        self.teammate_distances: MapMatrix[int] = MapMatrix(self.map)
+        self.teammate_distances: MapMatrixInterface[int] = MapMatrix(self.map)
 
         self.inter_general_distance: int = 10
         """The (possibly estimated) distance between our gen and target player gen."""
@@ -78,9 +79,9 @@ class BoardAnalyzer:
         self.within_flank_danger_play_area_threshold: int = 4
         """The cutoff point where we draw red borders as the flank danger surface area."""
 
-        self.enemy_wall_breach_scores: MapMatrix[int] = MapMatrix(map, None)
+        self.enemy_wall_breach_scores: MapMatrixInterface[int] = MapMatrix(map, None)
 
-        self.friendly_wall_breach_scores: MapMatrix[int] = MapMatrix(map, None)
+        self.friendly_wall_breach_scores: MapMatrixInterface[int] = MapMatrix(map, None)
 
         self.rescan_chokes()
 
@@ -125,10 +126,7 @@ class BoardAnalyzer:
         lowestAvgDist = 10000000
         lowestAvgTile: Tile | None = None
 
-        for tile in self.map.reachableTiles:
-            # logbook.info("Rescanning chokes for {}".format(tile.toString()))
-            if not tile.isPathable:
-                continue
+        for tile in self.map.pathableTiles:
             tileDist = self.friendly_general_distances[tile]
 
             distSum = tileDist
@@ -146,7 +144,8 @@ class BoardAnalyzer:
             if movableInnerCount == 1:
                 self.outerChokes.add(tile)
             # checking movableInner to avoid considering dead ends 'chokes'
-            if (movableOuterCount == 1
+            if (
+                    movableOuterCount == 1
                     # and movableInnerCount >= 1
             ):
                 self.innerChokes.add(tile)
@@ -197,7 +196,7 @@ class BoardAnalyzer:
 
         self.rescan_chokes()
 
-    def build_play_area_matrices(self, enemyDistMap: MapMatrix[int], generalDistMap: MapMatrix[int]):
+    def build_play_area_matrices(self, enemyDistMap: MapMatrixInterface[int], generalDistMap: MapMatrixInterface[int]):
         self.backwards_tiles: typing.Set[Tile] = set()
         shortestPathDist = self.intergeneral_analysis.shortestPathWay.distance
         # flankTiles = []

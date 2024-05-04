@@ -19,9 +19,11 @@ from heapq_max import heappush_max, heappop_max
 # from numba import jit, float32, int64
 
 from DataModels import PathNode
+from Interfaces import MapMatrixInterface
 from Path import Path
 from test.test_float import INF
-from base.client.map import Tile, MapBase, new_value_grid
+from base.client.tile import Tile
+from base.client.map import MapBase, new_value_grid
 from MapMatrix import MapMatrix
 
 BYPASS_TIMEOUTS_FOR_DEBUGGING = False
@@ -594,8 +596,8 @@ def a_star_find_matrix(
         allowNeutralCities: bool = False,
         noLog: bool = False):
     frontier = []
-    came_from: MapMatrix[Tile | None] = MapMatrix(map, None)
-    cost_so_far: MapMatrix[int] = MapMatrix(map, 1000)
+    came_from: MapMatrixInterface[Tile | None] = MapMatrix(map, None)
+    cost_so_far: MapMatrixInterface[int] = MapMatrix(map, 1000)
     if isinstance(startTiles, dict):
         for start in startTiles.keys():
             startDist = startTiles[start]
@@ -944,7 +946,7 @@ def breadth_first_dynamic_max(
         fullOnlyArmyDistFunc=None,
         boundFunc=None,
         maxIterations: int = INF,
-        priorityMatrix: MapMatrix[float] | None = None,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
         priorityMatrixSkipStart: bool = False,
         priorityMatrixSkipEnd: bool = False,
         pathValueFunc: typing.Callable[[Path, typing.Tuple], float] | None = None,
@@ -1289,7 +1291,7 @@ def breadth_first_dynamic_max_per_tile(
         boundFunc=None,
         maxIterations: int = INF,
         includePath=False,
-        priorityMatrix: MapMatrix[float] | None = None,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
         priorityMatrixSkipStart: bool = False,
         priorityMatrixSkipEnd: bool = False,
         ignoreNonPlayerArmy: bool = False,
@@ -1614,7 +1616,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
         maxIterations: int = INF,
         includePath=False,
         pathValueFunc: typing.Callable[[Path, typing.Tuple], float] | None = None,
-        priorityMatrix: MapMatrix[float] | None = None,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
         priorityMatrixSkipStart: bool = False,
         priorityMatrixSkipEnd: bool = False,
         ignoreNonPlayerArmy: bool = False,
@@ -1969,7 +1971,7 @@ def breadth_first_dynamic_max_global_visited(
         fullOnlyArmyDistFunc=None,
         boundFunc=None,
         maxIterations: int = INF,
-        priorityMatrix: MapMatrix[float] | None = None,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
         priorityMatrixSkipStart: bool = False,
         priorityMatrixSkipEnd: bool = False,
         pathValueFunc: typing.Callable[[Path, typing.Tuple], float] | None = None,
@@ -2100,7 +2102,7 @@ def breadth_first_dynamic_max_global_visited(
 
     frontier = HeapQueue()
 
-    fromTileLookup: MapMatrix[typing.Tuple[typing.Any, Tile]] = MapMatrix(map, None)
+    fromTileLookup: MapMatrixInterface[typing.Tuple[typing.Any, Tile]] = MapMatrix(map, None)
 
     if isinstance(startTiles, dict):
         for tile in startTiles.keys():
@@ -2311,7 +2313,7 @@ def breadth_first_dynamic_max_per_tile_global_visited(
         fullOnlyArmyDistFunc=None,
         boundFunc=None,
         maxIterations: int = INF,
-        priorityMatrix: MapMatrix[float] | None = None,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
         priorityMatrixSkipStart: bool = False,
         priorityMatrixSkipEnd: bool = False,
         ignoreNonPlayerArmy: bool = False,
@@ -2425,7 +2427,7 @@ def breadth_first_dynamic_max_per_tile_global_visited(
         priorityFunc = default_priority_func
     frontier = HeapQueue()
 
-    fromTileLookup: MapMatrix[typing.Tuple[typing.Any, Tile]] = MapMatrix(map, None)
+    fromTileLookup: MapMatrixInterface[typing.Tuple[typing.Any, Tile]] = MapMatrix(map, None)
 
     if isinstance(startTiles, dict):
         for tile in startTiles.keys():
@@ -2633,7 +2635,7 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
         boundFunc=None,
         maxIterations: int = INF,
         pathValueFunc: typing.Callable[[Path, typing.Tuple], float] | None = None,
-        priorityMatrix: MapMatrix[float] | None = None,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
         priorityMatrixSkipStart: bool = False,
         priorityMatrixSkipEnd: bool = False,
         ignoreNonPlayerArmy: bool = False,
@@ -2749,7 +2751,7 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
         priorityFunc = default_priority_func
     frontier = HeapQueue()
 
-    fromTileLookup: MapMatrix[typing.Tuple[typing.Any, Tile]] = MapMatrix(map, None)
+    fromTileLookup: MapMatrixInterface[typing.Tuple[typing.Any, Tile]] = MapMatrix(map, None)
     # fromTileLookup: typing.Dict[int, typing.Tuple[typing.Any, Tile]] = {}
 
     maxValuesDict = {}
@@ -3175,7 +3177,7 @@ def breadth_first_find_queue(
         searchingPlayer = map.player_index
 
     frontier = deque()
-    nodeValues: MapMatrix[typing.Tuple[int, Tile | None]] = MapMatrix(map)  # (army, fromTile)
+    nodeValues: MapMatrixInterface[typing.Tuple[int, Tile | None]] = MapMatrix(map)  # (army, fromTile)
     visited: typing.Set[Tile] = set()
     if isinstance(startTiles, dict):
         for tile in startTiles.keys():
@@ -3975,7 +3977,7 @@ def build_distance_map(map: MapBase, startTiles: typing.List[Tile], skipTiles: t
     return distanceMap
 
 
-def build_distance_map_matrix(map, startTiles, skipTiles=None) -> MapMatrix[int]:
+def build_distance_map_matrix(map, startTiles, skipTiles=None) -> MapMatrixInterface[int]:
     """
     Builds a distance map to all reachable tiles (including neutral cities). Does not put distances in for mountains / undiscovered obstacles.
 
@@ -4017,7 +4019,7 @@ def build_distance_map_matrix(map, startTiles, skipTiles=None) -> MapMatrix[int]
     return distanceMap
 
 
-def build_distance_map_matrix_allow_pathing_through_neut_cities(map, startTiles, skipTiles=None) -> MapMatrix[int]:
+def build_distance_map_matrix_allow_pathing_through_neut_cities(map, startTiles, skipTiles=None) -> MapMatrixInterface[int]:
     """
     Builds a distance map that allows pathing through neutral cities.
 
@@ -4057,7 +4059,7 @@ def build_distance_map_matrix_allow_pathing_through_neut_cities(map, startTiles,
     return distanceMap
 
 
-def build_distance_map_matrix_include_set(map, startTiles, containsSet: typing.Container[Tile]) -> MapMatrix[int]:
+def build_distance_map_matrix_include_set(map, startTiles, containsSet: typing.Container[Tile]) -> MapMatrixInterface[int]:
     """
     Builds a distance matrix but instead of having skipTiles, instead a set of only ALLOWED tiles is provided. All neighbors will be skipped unless they are in containsSet.
 
@@ -4101,6 +4103,11 @@ def build_distance_map_matrix_include_set(map, startTiles, containsSet: typing.C
     return distanceMap
 
 
+def euclidean_distance(v: Tile, goal: Tile) -> float:
+    """Not fast, does square root"""
+
+    return ((v.x - goal.x)**2 + (v.y - goal.y)**2)**0.5
+
 def bidirectional_a_star_pq(start: Tile, goal: Tile, allowNeutralCities: bool = False) -> Path | None:
     """
     Lifted from
@@ -4123,9 +4130,6 @@ def bidirectional_a_star_pq(start: Tile, goal: Tile, allowNeutralCities: bool = 
 
     cameFrom1 = dict()
     cameFrom2 = dict()
-
-    def euclidean_distance(v: Tile, goal: Tile) -> float:
-        return ((v.x - goal.x)**2 + (v.y - goal.y)**2)**0.5
 
     def h1(v: Tile) -> float:  # heuristic for forward search (from start to goal)
         return euclidean_distance(v, goal)
@@ -4416,9 +4420,9 @@ def printSolution(dist):
 # Solves the all-pairs shortest path problem using Johnson's algorithm
 
 
-def floydWarshall(map: MapBase) -> MapMatrix[MapMatrix[int]]:
+def floydWarshall(map: MapBase) -> MapMatrixInterface[MapMatrixInterface[int]]:
     # dist = [[0 for x in range(V)] for y in range(V)]
-    dist: MapMatrix[MapMatrix[int]] = MapMatrix(map, None)
+    dist: MapMatrixInterface[MapMatrixInterface[int]] = MapMatrix(map, None)
     for tile in map.get_all_tiles():
         dist[tile] = MapMatrix(map, 1000)
 
@@ -4453,16 +4457,16 @@ def floydWarshall(map: MapBase) -> MapMatrix[MapMatrix[int]]:
     return dist
 
 
-def dumbassDistMatrix(map: MapBase) -> MapMatrix[MapMatrix[int]]:
+def dumbassDistMatrix(map: MapBase) -> MapMatrixInterface[MapMatrixInterface[int]]:
     # dist = [[0 for x in range(V)] for y in range(V)]
-    dist: MapMatrix[MapMatrix[int]] = MapMatrix(map, None)
+    dist: MapMatrixInterface[MapMatrixInterface[int]] = MapMatrix(map, None)
     for tile in map.get_all_tiles():
         dist[tile] = build_distance_map_matrix(map, [tile])
 
     return dist
 
 
-# def johnson(map: MapBase) -> MapMatrix[MapMatrix[int]]:
+# def johnson(map: MapBase) -> MapMatrixInterface[MapMatrixInterface[int]]:
 #     """Return distance where distance[u][v] is the min distance from u to v.
 #
 #     distance[u][v] is the shortest distance from vertex u to v.
@@ -4470,7 +4474,7 @@ def dumbassDistMatrix(map: MapBase) -> MapMatrix[MapMatrix[int]]:
 #     g is a Graph object which can have negative edge weights.
 #     """
 #
-#     dist: MapMatrix[MapMatrix[int]] = MapMatrix(map, None)
+#     dist: MapMatrixInterface[MapMatrixInterface[int]] = MapMatrix(map, None)
 #     for tile in map.get_all_tiles():
 #         dist[tile] = MapMatrix(map, 1000)
 #

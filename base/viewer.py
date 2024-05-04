@@ -977,7 +977,10 @@ class GeneralsViewer(object):
 
         pos_left = (CELL_MARGIN + self.cellWidth) * tile.x + CELL_MARGIN
         pos_top = (CELL_MARGIN + self.cellHeight) * tile.y + CELL_MARGIN
-        self._screen.blit(self._medFont.render(army.name, True, WHITE), (pos_left + self.cellWidth - 10, pos_top))
+        armyStr = army.name
+        if army.last_moved_turn > 0:
+            armyStr = f'{army.name}-{self._map.turn - army.last_moved_turn}'
+        self._screen.blit(self._medFont.render(armyStr, True, WHITE), (pos_left + self.cellWidth - 10, pos_top))
 
     def draw_armies(self):
         if self._viewInfo.armyTracker is None:

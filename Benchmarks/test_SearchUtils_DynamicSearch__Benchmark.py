@@ -11,7 +11,7 @@ import SearchUtils
 from DistanceMapperImpl import DistanceMapperImpl
 from Tests.TestBase import TestBase
 from ViewInfo import PathColorer
-from base.client.map import Tile
+from base.client.tile import Tile
 
 
 class SearchUtils_DynamicSearch_BenchmarkTests(TestBase):

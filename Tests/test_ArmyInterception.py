@@ -1853,3 +1853,101 @@ class ArmyInterceptionTests(TestBase):
             # test_should_split_when_necessary_to_defend_multiple_targets
             # test_should_split_or_delay_when_appropriate
             # test_should_split_to_avoid_repetition_behind_on_tiles
+    
+    def test_shouldnt_intercept_wrong_army_or_whatever_the_fuck_its_doing_here(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_intercept_wrong_army_or_whatever_the_fuck_its_doing_here___G3AsU8h9C---0--286.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 286, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=286)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '8,4->8,2->3,2->3,3')
+        simHost.queue_player_moves_str(general.player, '4,3->5,3')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        self.assertNoFriendliesKilled(map, general)
+    
+    def test_should_intercept__not_defend_when_at_right_angles_to_inbound_threat(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for path in [
+            '2,10->1,10->1,9->2,9->2,8->1,8->1,7->2,7->2,6->1,6->0,6->0,7',
+            '2,10->1,10->1,9->4,9->4,7->2,7->2,8->1,8->1,7->0,7->0,3',
+            '2,10->1,10->1,4',
+        ]:
+            with self.subTest(path=path):
+                mapFile = 'GameContinuationEntries/should_intercept__not_defend_when_at_right_angles_to_inbound_threat___NnpRYI6Jp---0--233.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 233, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=233)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, path)
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=17)
+                self.assertNoFriendliesKilled(map, general)
+
+                self.assertTileDifferentialGreaterThan(0, simHost)
+
+    def test_should_delay_any_intercept_from_general_that_could_die__live(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for path in [
+            '12,4->12,3->11,3',
+            '12,4->11,4->11,3',
+            '12,4->9,4',
+        ]:
+            with self.subTest(path=path):
+                mapFile = 'GameContinuationEntries/should_delay_any_intercept_from_general_that_could_die___INbO_bt38---0--342.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 342, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=342)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, path)
+                # proof
+                # simHost.queue_player_moves_str(general.player, '11,3->11,4z')
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+                self.assertNoFriendliesKilled(map, general)
+
+                self.assertOwned(general.player, playerMap.GetTile(9, 4))
+                self.assertOwned(general.player, playerMap.GetTile(10, 4))
+
+    def test_should_delay_any_intercept_from_general_that_could_die__live__end_of_round(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for path in [
+            '12,4->12,3->11,3',
+            '12,4->11,4->11,3',
+            '12,4->9,4',
+        ]:
+            with self.subTest(path=path):
+                mapFile = 'GameContinuationEntries/should_delay_any_intercept_from_general_that_could_die___INbO_bt38---0--342.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 342, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=342)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, path)
+                # proof split is better than delay (delay gets 19 in one scenario, but thats probably just misplay off general anyway so maybe doesn't matter in this case.
+                # simHost.queue_player_moves_str(general.player, '11,3->11,4z')
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+                self.assertNoFriendliesKilled(map, general)
+
+                self.assertTileDifferentialGreaterThan(18, simHost)

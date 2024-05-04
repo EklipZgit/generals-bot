@@ -120,7 +120,7 @@ class OpponentTracker(object):
             self.team_cycle_stats_history[team][self.map.turn] = teamStats.clone()
             if self.map.turn > 99:
                 oldTotal = teamStats.approximate_fog_army_available_total
-                teamStats.approximate_fog_army_available_total = int(0.95 * teamStats.approximate_fog_army_available_total - 1)
+                teamStats.approximate_fog_army_available_total = round(0.96 * teamStats.approximate_fog_army_available_total + 0.49)
                 self.view_info.add_info_line(f'Updated team {team} approx fog army from {oldTotal} to {teamStats.approximate_fog_army_available_total}')
 
     def get_current_cycle_end_turn(self) -> int | None:

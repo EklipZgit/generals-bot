@@ -7,7 +7,7 @@ from MapMatrix import MapMatrix
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
-from base.client.map import Tile, MapBase, TILE_FOG
+from base.client.tile import Tile, MapBase, TILE_FOG
 
 
 class BotBehaviorTests(TestBase):
@@ -2885,3 +2885,70 @@ whoever has less extra troops will always get ahead
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for should_not_OVERgather_defensively_near_end_of_round__must_weight_tile_differential_appropriately")
+    
+    def test_should_not_do_weird_gather_shit_when_pre_defending_a_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_do_weird_gather_shit_when_pre_defending_a_city___am36fHtj9---0--121.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 121, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=121)
+        self.update_tile_army_in_place(map, map.GetTile(12, 8), 37)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None  None  None  None  12,8->12,9->14,9->14,16->18,16')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertEqual(3, playerMap.GetTile(9, 9).army)
+        self.assertEqual(2, playerMap.GetTile(10, 9).army)
+        self.assertEqual(2, playerMap.GetTile(10, 10).army)
+        self.assertEqual(2, playerMap.GetTile(11, 10).army)
+        self.assertEqual(2, playerMap.GetTile(12, 11).army)
+    
+    def test_should_not_defensive_gather_into_oblivion_when_just_need_to_keep_up_on_tiles(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_defensive_gather_into_oblivion_when_just_need_to_keep_up_on_tiles___uUkVbuD0T---0--473.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 473, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=473)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '13,9->13,8->15,8->15,7')
+        simHost.queue_player_leafmoves(enemyGeneral.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=27)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTileDifferentialGreaterThan(9, simHost)
+    
+    def test_shouldnt_do_janky_riskpath_gather_backwards_to_general(self):
+        # TODO real problem here is that we have no target general location because we mis-eliminated their real gen location 17,5...
+        #  Need to fix that. In theory we should have elimed the bottom left corner on city/neut discovery elims, so we should un-elim the whole map.
+        # TODO also need to fix where they launch in a straight line only from like, 17, and then launch in a straight line again for round 2 and wrap the whole map emerging somewhere totally unexpected.
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_do_janky_riskpath_gather_backwards_to_general___Uay7ww5nZ---0--331.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 331, fill_out_tiles=True)
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 17, 5)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=331)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for shouldnt_do_janky_riskpath_gather_backwards_to_general")

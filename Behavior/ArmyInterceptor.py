@@ -181,7 +181,7 @@ class ArmyInterception(object):
 
         self.base_threat_army: int = 0
         self.common_intercept_chokes: typing.Dict[Tile, InterceptPointTileInfo] = {}
-        self.furthest_common_intercept_distances: MapMatrix[int] = None
+        self.furthest_common_intercept_distances: MapMatrixInterface[int] = None
         self.target_tile: Tile = threats[0].threat.path.start.tile
 
         maxValPerTurn = -100000
@@ -825,8 +825,8 @@ class ArmyInterceptor(object):
                     interceptArmy -= interception.target_tile.army - 1
 
                 shouldDelay, shouldSplit = self._should_delay_or_split(tile, path, interception.threat_values, turnsLeftInCycle)
-                if shouldSplit:
-                    path.start.move_half = True
+                splittingForSafetyOnSingleIntercept = shouldSplit
+                """This will be true when we split just against this intercept (and thus intend to use both halves of this split army for the intercept recapture, still."""
 
                 if shouldDelay and self.log_debug:
                     logbook.info(f'DETERMINED SHOULD DELAY FOR {tile} {path}')
@@ -865,6 +865,10 @@ class ArmyInterceptor(object):
                             worstCaseInterceptMoves
                         ) = self._get_value_of_threat_blocked(interception, path, interception.best_enemy_threat, turnsLeftInCycle)
 
+                fullAddl = addlTurns
+                if splittingForSafetyOnSingleIntercept:
+                    fullAddl += 1
+
                 # TODO this is returning extra moves, see test_should_full_intercept_all_options
                 newValue, turnsUsed = self._get_path_econ_values_for_player(
                     path,
@@ -872,14 +876,19 @@ class ArmyInterceptor(object):
                     targetPlayer=interception.threats[0].threatPlayer,
                     turnsLeftInCycle=turnsLeftInCycle,
                     interceptingArmy=enemyArmyCollidedWithAtIntercept,
-                    includeRecaptureEffectiveStartDist=addlTurns)  #+ (1 if shouldDelay else 0)
+                    includeRecaptureEffectiveStartDist=fullAddl)  #+ (1 if shouldDelay else 0)
+
+                # INTENTIONALLY DO THIS AFTER THE VALUE CALCULATION AND OTHER SPLIT CALCULATION ABOVE, BECAUSE WE DONT ACTUALLY INTEND TO RECAPTURE WITH ONLY THE SPLIT PART OF THE PATH, WE WILL PULL THE FULL ARMY STILL IF BETTER. THE SPLIT IS JUST TO GUARANTEE OUR SAFETY, SO ADD ONE EXTRA WASTED MOVE INSTEAD.
+                if shouldSplit:
+                    path.start.move_half = True
+
                 # TODO use best/worst case intercept moves instead...? WHy do i calc those if we're not using them???
                 turnsUsed += interceptInfo.max_extra_moves_to_capture
 
                 newValue += blockedDamage
 
                 if self.log_debug:
-                    logbook.info(f'interceptPointDist:{interceptPointDist}, addlTurns:{addlTurns}, effectiveDist:{effectiveDist}, turnsUsed:{turnsUsed}, blockedAmount:{blockedDamage}, maxExtraMoves:{interceptInfo.max_extra_moves_to_capture}')
+                    logbook.info(f'interceptPointDist:{interceptPointDist}, addlTurns:{fullAddl}, effectiveDist:{effectiveDist}, turnsUsed:{turnsUsed}, blockedAmount:{blockedDamage}, maxExtraMoves:{interceptInfo.max_extra_moves_to_capture}')
 
                 # for curDist in range(path.length + addlTurns, turnsUsed + 1):
                 for curDist in range(path.length, turnsUsed + 1):
@@ -1371,11 +1380,19 @@ class ArmyInterceptor(object):
 
         return blockingTiles
 
-    def _should_delay_or_split(self, tile: Tile, interceptionPath: Path, threats: typing.List[ThreatValueInfo], turnsLeftInCycle: int) -> typing.Tuple[bool, bool]:
+    def _should_delay_or_split(
+            self,
+            interceptEndTile: Tile,
+            interceptionPath: Path,
+            threats: typing.List[ThreatValueInfo],
+            turnsLeftInCycle: int
+    ) -> typing.Tuple[bool, bool]:
         """
         Returns shouldDelay, shouldSplit
 
-        @param tile:
+        TODO incomplete, add more logic here to decide when splitting is ideal
+
+        @param interceptEndTile:
         @param interceptionPath:
         @param threats:
         @param turnsLeftInCycle:
@@ -1385,26 +1402,43 @@ class ArmyInterceptor(object):
         shouldDelay = False
         firstThreat = threats[0].threat
         isTwoAway = firstThreat.armyAnalysis.bMap[interceptionPath.start.tile] == 2
-        threatArmy = firstThreat.path.start.tile.army
-        if self.map.is_tile_on_team_with(firstThreat.path.start.next.tile, firstThreat.threatPlayer):
-            threatArmy += firstThreat.path.start.next.tile.army - 1
-        else:
-            threatArmy -= firstThreat.path.start.next.tile.army + 1
 
-        if isTwoAway:
-            threatNexts = set()
-            usNexts = set()
-            for threatInfo in threats:
-                threatNext = threatInfo.threat.path.tileList[1]
+        if not isTwoAway:
+            return shouldDelay, shouldSplit
+
+        allowSplit = True
+
+        threatNexts = set()
+        usNexts = set()
+        for threatInfo in threats:
+            tilesAtDist = threatInfo.threat.armyAnalysis.tileDistancesLookup[1]
+
+            threatBase = threatInfo.threat.path.start.tile.army
+
+            for threatNext in tilesAtDist:
+                if self.map.is_tile_on_team_with(threatNext, threatInfo.threat.threatPlayer):
+                    threatArmy = threatBase + threatNext.army - 1
+                else:
+                    threatArmy = threatBase - threatNext.army - 1
+
+                halfLower = interceptionPath.start.tile.army // 2
+                # if halfLower - 2 < threatArmy:  # TODO dunno why this was -2, but making this over-split to find counter-examples where we dont want it to, I guess.
+                if halfLower < threatArmy - 1:
+                    allowSplit = False
+
                 threatNexts.add(threatNext)
                 if threatNext in interceptionPath.start.tile.movable:
                     usNexts.add(threatNext)
 
-            if len(threatNexts) > 1 and len(usNexts) > 1 and threatNexts.issubset(usNexts):
-                if interceptionPath.start.tile.army // 2 - 2 < threatArmy:
-                    shouldDelay = True
-                else:
-                    shouldSplit = True
+        if len(threatNexts) > 1 and len(usNexts) > 1 and threatNexts.issubset(usNexts):
+            if not allowSplit:
+                shouldDelay = True
+            else:
+                shouldSplit = True
+
+        # cant do both, and delay wins. After we delay, we can decide whether to split again next turn.
+        if shouldDelay:
+            shouldSplit = False
 
         return shouldDelay, shouldSplit
 

@@ -101,7 +101,7 @@ class ArmyTracker(object):
 
         self.fogPaths = []
         # TODO replace me with mapmatrix, emergenceLocationMap\[([^\]]+).x\]\[[^\]]+.y\]  -> emergenceLocationMap[$1]
-        self.emergenceLocationMap: typing.List[MapMatrix[float]] = [MapMatrix(self.map, 0.0) for z in range(len(self.map.players))]
+        self.emergenceLocationMap: typing.List[MapMatrixInterface[float]] = [MapMatrix(self.map, 0.0) for z in range(len(self.map.players))]
         """List by player of emergence values."""
 
         self.player_targets: typing.List[Tile] = []
@@ -1149,7 +1149,7 @@ class ArmyTracker(object):
 
         armyPlayerObj = self.map.players[cityPlayer]
         missingCities = armyPlayerObj.cityCount - 1 - len(armyPlayerObj.cities)
-        if missingCities == 0:
+        if missingCities <= 0:
             return
 
         gen = self.map.players[self.map.player_index].general
@@ -1360,8 +1360,12 @@ class ArmyTracker(object):
 
             self.resolve_entangled_armies(maxArmy)
             logbook.info(f'set fog source for {str(fogTile)} to {str(maxArmy)}')
+            if maxArmy.scrapped:
+                # sometimes we can inadvertently scrap this army during this process, but this is the one we definitely want to keep.
+                maxArmy.scrapped = False
             maxArmy.update_tile(fogTile)
             maxArmy.update()
+            maxArmy.last_moved_turn = self.map.turn - 1
             # maxArmy.player = fogTile.player
             # self.armies[fogTile] = maxArmy
             maxArmy.path = sourceFogArmyPath
@@ -2117,11 +2121,12 @@ class ArmyTracker(object):
         if not city.visible:
             cityOwner = city.player
 
-        cityPlayer = self.map.players[city.player]
+        cityPlayer = self.map.players[cityOwner]
 
         newCity = self.find_next_fog_city_candidate_near_tile(cityOwner, city)
         if not city.discovered:
             city.reset_wrong_undiscovered_fog_guess()
+        if not city.isCity or cityOwner != city.player:
             cityPlayer.cities = [c for c in cityPlayer.cities if c != city]
 
         if newCity:
@@ -2159,6 +2164,8 @@ class ArmyTracker(object):
             if self.emergenceLocationMap[armyPlayer][sourceTile] <= 0:
                 return False
             if sourceTile.visible:
+                return False
+            if sourceTile == tile:
                 return False
 
             return True
@@ -2732,7 +2739,7 @@ class ArmyTracker(object):
                     if distances[tile] == 1000:
                         self.valid_general_positions_by_player[player.index].discard(tile)
 
-    def find_territory_bisection_paths(self, targetPlayer: int) -> typing.Tuple[MapMatrix[bool], MapMatrix[int], typing.List[Path]]:
+    def find_territory_bisection_paths(self, targetPlayer: int) -> typing.Tuple[MapMatrixInterface[bool], MapMatrixInterface[int], typing.List[Path]]:
         bisectPaths = []
 
         bisectCandidates = MapMatrix(self.map, False)

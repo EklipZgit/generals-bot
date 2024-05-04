@@ -65,21 +65,21 @@ class ArmyAnalyzer:
             self.tileB: Tile = armyB
 
         # path chokes are relative to the paths between A and B
-        self.pathWayLookupMatrix: MapMatrix[PathWay | None] = MapMatrix(map, initVal=None)
+        self.pathWayLookupMatrix: MapMatrixInterface[PathWay | None] = MapMatrix(map, initVal=None)
         self.pathWays: typing.List[PathWay] = []
         self.shortestPathWay: PathWay = INF_PATH_WAY
-        self.chokeWidths: MapMatrix[int] = MapMatrix(map)
+        self.chokeWidths: MapMatrixInterface[int] = MapMatrix(map)
         """
         If the army were to path through this tile, this is the number of alternate nearby tiles the army could also be at. So if the army has to make an extra wide path to get here, wasting moves, this will be chokeWidth1 even if the actual choke is 2 wide.
         """
 
-        self.interceptChokes: MapMatrix[int] = MapMatrix(map)
+        self.interceptChokes: MapMatrixInterface[int] = MapMatrix(map)
         """The value in here for a tile represents the number of additional moves necessary for worst case intercept, for an army that reaches this tile on the earliest turn the bTile army could reach this. It is effectively the difference between the best case and worst case intercept turns for an intercept reaching this tile."""
 
-        self.interceptTurns: MapMatrix[int] = MapMatrix(map)
+        self.interceptTurns: MapMatrixInterface[int] = MapMatrix(map)
         """This represents the raw turns into the intercept of an army that another army army must reach this tile to successfully achieve an intercept, ASSUMING the enemy army goes this way."""
 
-        self.interceptDistances: MapMatrix[int] = MapMatrix(map)
+        self.interceptDistances: MapMatrixInterface[int] = MapMatrix(map)
         """The number of moves you will waste to achieve the intercept, worst case, regardless of which way the enemy army goes."""
 
         self.tileDistancesLookup: typing.Dict[int, typing.List[Tile]] = {}
@@ -87,8 +87,8 @@ class ArmyAnalyzer:
 
         logbook.info(f"ArmyAnalyzer analyzing {self.tileA} and {self.tileB}")
 
-        self.aMap: MapMatrix[int]
-        self.bMap: MapMatrix[int]
+        self.aMap: MapMatrixInterface[int]
+        self.bMap: MapMatrixInterface[int]
 
         if bypassRetraverseThreshold <= 0:
             self.aMap = map.distance_mapper.get_tile_dist_matrix(self.tileA)

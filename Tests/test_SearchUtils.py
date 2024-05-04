@@ -15,7 +15,7 @@ from SearchUtils import dest_breadth_first_target
 from Sim.GameSimulator import GameSimulatorHost, GameSimulator
 from Tests.TestBase import TestBase
 from ViewInfo import PathColorer
-from base.client.map import Tile, MapBase
+from base.client.tile import Tile, MapBase
 from base.viewer import GeneralsViewer
 from DangerAnalyzer import DangerAnalyzer
 

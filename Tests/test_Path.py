@@ -3,7 +3,7 @@ import unittest
 
 from Path import Path
 from Tests.TestBase import TestBase
-from base.client.map import Tile, TILE_EMPTY, MapBase
+from base.client.tile import Tile, TILE_EMPTY, MapBase
 from base.viewer import GeneralsViewer
 from DangerAnalyzer import DangerAnalyzer
 

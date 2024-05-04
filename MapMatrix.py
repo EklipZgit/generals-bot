@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import typing
-from typing import TypeVar, Generic
+from typing import TypeVar
 
+from Interfaces import MapMatrixInterface, TileSet
 from base.client.map import Tile, MapBase
 
 T = TypeVar('T')
@@ -27,7 +28,7 @@ TODO not actually benched yet. ^
 """
 
 
-class MapMatrix(Generic[T]):
+class MapMatrix(MapMatrixInterface[T]):
     __slots__ = ("empty_val", "raw", "map")
 
     def __init__(self, map: MapBase, initVal: T = None, emptyVal: T | None | str = 'PLACEHOLDER'):
@@ -79,7 +80,7 @@ class MapMatrix(Generic[T]):
                 allKeys.append(self.map.get_tile_by_tile_index(idx))
         return allKeys
 
-    def copy(self) -> MapMatrix[T]:
+    def copy(self) -> MapMatrixInterface[T]:
         """
         cost on 1v1 size map is about 0.00222ms
         @return:
@@ -111,7 +112,7 @@ class MapMatrix(Generic[T]):
         return str(self)
 
     @classmethod
-    def get_summed(cls, matrices: typing.List[MapMatrix[float]]) -> MapMatrix[float]:
+    def get_summed(cls, matrices: typing.List[MapMatrixInterface[float]]) -> MapMatrixInterface[float]:
         if len(matrices) == 0:
             raise AssertionError('cant sum zero matrices')
         newMatrix = matrices[0].copy()
@@ -123,12 +124,12 @@ class MapMatrix(Generic[T]):
         return newMatrix
 
     @classmethod
-    def add_to_matrix(cls, matrixToModify: MapMatrix[float], matrixToAdd: MapMatrix[float]):
+    def add_to_matrix(cls, matrixToModify: MapMatrixInterface[float], matrixToAdd: MapMatrixInterface[float]):
         for idx, val in enumerate(matrixToAdd.raw):
             matrixToModify.raw[idx] += val
 
     @classmethod
-    def subtract_from_matrix(cls, matrixToModify: MapMatrix[float], matrixToSubtract: MapMatrix[float]):
+    def subtract_from_matrix(cls, matrixToModify: MapMatrixInterface[float], matrixToSubtract: MapMatrixInterface[float]):
         for idx, val in enumerate(matrixToSubtract.raw):
             matrixToModify.raw[idx] -= val
 
@@ -206,39 +207,3 @@ class MapMatrixSet(object):
 
     def __repr__(self) -> str:
         return str(self)
-
-
-class MetaTileSet(typing.Protocol):
-
-    def add(self, item: Tile):
-        pass
-
-    def __getitem__(self, key: Tile) -> bool:
-        pass
-
-    def __iter__(self) -> typing.Iterable[Tile]:
-        pass
-
-    def update(self, tiles: typing.Iterable[Tile]):
-        pass
-
-    def copy(self) -> MetaTileSet:
-        pass
-
-    def __delitem__(self, key: Tile):
-        pass
-
-    def discard(self, key: Tile):
-        pass
-
-    def __contains__(self, tile: Tile) -> bool:
-        pass
-
-    def __str__(self) -> str:
-        pass
-
-    def __repr__(self) -> str:
-        pass
-
-
-TileSet = typing.Union[MetaTileSet | typing.Set[Tile]]

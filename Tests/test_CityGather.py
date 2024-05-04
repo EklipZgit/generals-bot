@@ -1739,3 +1739,46 @@ class CityGatherTests(TestBase):
 
         city = playerMap.GetTile(0, 8)
         self.assertOwned(general.player, city)
+    
+    def test_shouldnt_take_neutral_city_when_absolutely_not_safe(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_take_neutral_city_when_absolutely_not_safe___9Szjn7h0e---0--374.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 374, fill_out_tiles=True)
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 6, 16)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=374)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        city = playerMap.GetTile(15, 8)
+        self.assertOwned(-1, city, 'should NOT have taken this city, SUPER unsafe when opps been gathering 60+ army this whole time')
+
+    def test_can_take_city_near_end_of_round_when_not_attacked(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_take_neutral_city_when_absolutely_not_safe___9Szjn7h0e---0--374.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 374, fill_out_tiles=True)
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 6, 16)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=374)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=24)
+        self.assertNoFriendliesKilled(map, general)
+
+        city = playerMap.GetTile(15, 8)
+        if city.player != general.player:
+            self.assertTileDifferentialGreaterThan(24, simHost, 'if didnt take the city by end of round, then shoulda capped hella tiles instead')

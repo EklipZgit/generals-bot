@@ -11,12 +11,12 @@ import queue
 
 import logbook
 import typing
-import math
 from DataModels import GatherTreeNode, Move
 from collections import deque
 
 from Interfaces.TilePlanInterface import TilePlanInterface
-from base.client.map import Tile, MapBase
+from base.client.tile import Tile
+from base.client.map import MapBase
 
 
 class PathMove(object):

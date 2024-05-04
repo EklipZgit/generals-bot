@@ -627,23 +627,8 @@ player_index=0
         if debugMode:
             self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
         bestOpt = self.assert_no_best_intercept_option(plan)
+        self.skipTest(f'TODO figure out what this was trying to test, test was never completed.')
 
-    # def test_should_not_mis_evaluate_intercept_value_blocked_damage__true_unit(self):
-    #     debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-    #     mapFile = 'GameContinuationEntries/should_not_mis_evaluate_intercept_value_blocked_damage___Human.exe-TEST__f7bcf26d-70ff-4e1e-9c87-e0022affe96f---1--348.txtmap'
-    #     map, general, enemyGeneral = self.load_map_and_generals(mapFile, 348, fill_out_tiles=True)
-    #
-    #     plan = self.get_interception_plan(map, general, enemyGeneral)
-    #
-    #     if debugMode:
-    #         self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
-    #     bestOpt = self.get_best_intercept_option(plan)
-    #
-    #     path = Path.from_string(map, '8,8->8,9')
-    #     plan.
-    #
-    #     self.assertTrue(bestOpt.path.start.move_half or bestOpt.requiredDelay > 0, 'should EITHER delay or move half TODO figure out which is optimal?')
-    
     def test_should_not_split_randomly(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_split_randomly___-Zrosee5X---0--81.txtmap'
@@ -776,3 +761,70 @@ player_index=0
 # 18f, 17p, 0s
 # 19f, 17p, 0s  before fixing  test_should_intercept_obvious_intercept_use_case
 # 26f, 17p, 0s  after reworking a bunch of stuff and better unit testing. Prior to fixing other tests that may be asserting incorrectly. Broke splitting and started disregarding tile-blocking, for now.
+
+    def test_should_delay_any_intercept_from_general_that_could_die__unit(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        for path in [
+            '12,4->11,4->11,3',
+            '12,4->12,3->11,3',
+            '12,4->9,4',
+            None,
+        ]:
+            for canSplit in [True, False]:
+                with self.subTest(path=path, canSplit=canSplit):
+                    mapFile = 'GameContinuationEntries/should_delay_any_intercept_from_general_that_could_die___INbO_bt38---0--342.txtmap'
+                    map, general, enemyGeneral = self.load_map_and_generals(mapFile, 342, fill_out_tiles=True)
+
+                    if not canSplit:
+                        general.army -= 4
+
+                    plan = self.get_interception_plan(map, general, enemyGeneral, enTile=map.GetTile(12, 4), fromTile=map.GetTile(12, 5), additionalPath=path)
+
+                    if debugMode:
+                        self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
+
+                    # we SHOULD find an intercept, but plan to delay it.
+                    bestOpt = self.get_best_intercept_option(plan)
+                    self.assertIsNotNone(bestOpt)
+                    self.assertEqual((11, 3), bestOpt.path.start.tile.coords, 'should be intercepting from general')
+                    if canSplit:
+                        self.assertTrue(bestOpt.path.start.move_half, 'Should prefer splitting to delaying (TODO MAY CHANGE IN FUTURE, THEYRE PRETTY MUCH EVEN IN THIS INSTANCE).')
+                        self.assertEqual(0, bestOpt.requiredDelay, 'Should prefer splitting to delaying (TODO MAY CHANGE IN FUTURE, THEYRE PRETTY MUCH EVEN IN THIS INSTANCE).')
+                    else:
+                        self.assertFalse(bestOpt.path.start.move_half, 'splitting dies here.')
+                        self.assertGreater(bestOpt.requiredDelay, 0, 'MUST delay a move to be safe, here.')
+
+    def test_should_NOT_delay_any_intercept_from_general_that_could_not_yet_die(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for path in [
+            '12,5->12,3->11,3',
+            '12,5->12,4->11,4->11,3',
+            '12,5->12,4->9,4',
+            None,
+        ]:
+            for canSplit in [True, False]:
+                with self.subTest(path=path, canSplit=canSplit):
+                    mapFile = 'GameContinuationEntries/should_delay_any_intercept_from_general_that_could_die___INbO_bt38---0--342.txtmap'
+                    map, general, enemyGeneral = self.load_map_and_generals(mapFile, 342, fill_out_tiles=True)
+                    map.GetTile(12, 4).army = 1
+                    map.GetTile(12, 4).player = general.player
+                    map.GetTile(12, 5).army = 9
+                    map.GetTile(12, 5).player = enemyGeneral.player
+
+                    if not canSplit:
+                        general.army -= 4
+
+                    plan = self.get_interception_plan(map, general, enemyGeneral, enTile=map.GetTile(12, 5), fromTile=map.GetTile(11, 5), additionalPath=path)
+
+                    if debugMode:
+                        self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
+
+                    # we SHOULD find an intercept, but plan to delay it.
+                    bestOpt = self.get_best_intercept_option(plan)
+                    self.assertIsNotNone(bestOpt)
+                    self.assertEqual((11, 3), bestOpt.path.start.tile.coords, 'should be intercepting from general')
+                    self.assertEqual(bestOpt.requiredDelay, 0, 'must NOT delay a move to be safe, here.')
+                    self.assertFalse(bestOpt.path.start.move_half)
+                    # TODO we need some property for this, for indicating when an intercept could not be delayed without taking the extra damage.
+                    #   Sometimes it's better to wait when they have no turnaround options, other times like now we MUST not wait.
+                    # self.assertEqual(bestOpt.allowedDelay, 0, 'must NOT delay a move to be safe (and prevent econ damage), here.')

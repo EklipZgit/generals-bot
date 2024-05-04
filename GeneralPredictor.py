@@ -19,6 +19,6 @@ class GeneralPredictor(object):
     def __init__(self, map: MapBase):
         self.is_2v2 = map.is_2v2
         self.map: MapBase = map
-        self.eliminated_by_player: typing.List[MapMatrix[bool]] = [MapMatrix(map, False) for player in map.players]
+        self.eliminated_by_player: typing.List[MapMatrixInterface[bool]] = [MapMatrix(map, False) for player in map.players]
         self.teams: typing.List[int] = MapBase.get_teams_array(map)
 

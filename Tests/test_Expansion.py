@@ -6,7 +6,7 @@ from ExpandUtils import get_round_plan_with_expansion
 from Interfaces import TilePlanInterface
 from Sim.GameSimulator import GameSimulatorHost
 from Tests.TestBase import TestBase
-from base.client.map import Tile, MapBase
+from base.client.tile import Tile, MapBase
 from bot_ek0x45 import EklipZBot
 
 

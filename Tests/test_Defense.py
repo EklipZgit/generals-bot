@@ -3,7 +3,7 @@ import GatherUtils
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
-from base.client.map import TILE_MOUNTAIN, TILE_EMPTY
+from base.client.tile import Tile_MOUNTAIN, TILE_EMPTY
 from bot_ek0x45 import EklipZBot
 
 
@@ -66,6 +66,7 @@ class DefenseTests(TestBase):
         simHost.queue_player_moves_str(enemyGeneral.player, '1,6->1,5->1,4->1,3->1,2')
 
         ekBot = simHost.bot_hosts[general.player].eklipz_bot
+        ekBot.select_move()
 
         threat = ekBot.dangerAnalyzer.fastestThreat
         self.assertIsNotNone(threat)
@@ -114,6 +115,7 @@ class DefenseTests(TestBase):
         simHost.queue_player_moves_str(enemyGeneral.player, '1,5->1,4->1,3->1,2')
 
         ekBot = simHost.bot_hosts[general.player].eklipz_bot
+        ekBot.select_move()
 
         threat = ekBot.dangerAnalyzer.fastestThreat
         self.assertIsNotNone(threat)
@@ -164,6 +166,7 @@ class DefenseTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         ekBot = simHost.bot_hosts[general.player].eklipz_bot
+        ekBot.select_move()
 
         threat = ekBot.dangerAnalyzer.fastestThreat
         self.assertIsNotNone(threat)
@@ -207,6 +210,7 @@ class DefenseTests(TestBase):
         simHost.queue_player_moves_str(enemyGeneral.player, '1,10->1,9->1,8->1,7->1,6->1,5->1,4->1,3->1,2')
 
         ekBot = simHost.bot_hosts[general.player].eklipz_bot
+        ekBot.select_move()
 
         threat = ekBot.dangerAnalyzer.fastestThreat
         self.assertIsNotNone(threat)
@@ -247,6 +251,7 @@ class DefenseTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         ekBot = simHost.bot_hosts[general.player].eklipz_bot
+        ekBot.select_move()
 
         threat = ekBot.dangerAnalyzer.fastestThreat
         self.assertIsNotNone(threat)
@@ -290,6 +295,7 @@ class DefenseTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         ekBot = simHost.bot_hosts[general.player].eklipz_bot
+        ekBot.select_move()
 
         threat = ekBot.dangerAnalyzer.fastestThreat
         self.assertIsNotNone(threat)
@@ -335,6 +341,7 @@ class DefenseTests(TestBase):
         simHost.queue_player_moves_str(enemyGeneral.player, '1,5->1,4->1,3->1,2')
 
         ekBot = simHost.bot_hosts[general.player].eklipz_bot
+        ekBot.select_move()
 
         threat = ekBot.dangerAnalyzer.fastestThreat
         self.assertIsNotNone(threat)
@@ -376,6 +383,7 @@ class DefenseTests(TestBase):
         simHost.queue_player_moves_str(enemyGeneral.player, '15,6->16,6->16,5->16,4->16,3->16,2->16,1->15,1')
 
         ekBot = simHost.bot_hosts[general.player].eklipz_bot
+        ekBot.select_move()
 
         threat = ekBot.dangerAnalyzer.fastestThreat
         self.assertIsNotNone(threat)
@@ -406,6 +414,7 @@ class DefenseTests(TestBase):
         simHost.queue_player_moves_str(general.player, '16,1->15,1')
 
         ekBot = simHost.bot_hosts[general.player].eklipz_bot
+        ekBot.select_move()
 
         threat = ekBot.dangerAnalyzer.fastestThreat
         self.assertIsNotNone(threat)
@@ -437,6 +446,7 @@ class DefenseTests(TestBase):
         simHost.queue_player_moves_str(enemyGeneral.player, '15,6->16,6->16,5->16,4->16,3->16,2->16,1->15,1')
 
         ekBot = simHost.bot_hosts[general.player].eklipz_bot
+        ekBot.select_move()
         ekBot.engine_army_nearby_tiles_range = 8
 
         threat = ekBot.dangerAnalyzer.fastestThreat
@@ -2165,22 +2175,6 @@ class DefenseTests(TestBase):
                 self.begin_capturing_logging()
                 winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
                 self.assertNoFriendliesKilled(map, general)
-
-
-    # 36-69-5 as of tweaking chokes and honoring allowNonChoke
-    # 31-74-5 reverted chokeWidth reduction to -2 from -1, which i'm like 100% sure is wrong but it makes the 'one too far' tests pass, lmao.
-    # 50-55 if i switch to gathering to shortest pathway tiles with pathwidth offset
-    # 34-71
-    # 57-49 with chokewidth -1 instead of -2 and the choke defense changes in place
-    # 53-53
-    # 63f-26p-9skip after everything fucked by intercept
-    # 44f-45p-5skip fixed assertion float rounding failures by casting to int lol
-    # 59f 66p 5s with i think broken stuff as far as priority offset goes
-    # 58f, 72p, 5s with fix to intercept overriding defense
-    # 56f, 74p, 5s with another ^
-    # 53f, 77p, 5s still more tweaks to ^
-    # 58f, 72p, 5s LITERALLY THE SAME CODE AS ^
-    # 77f, 64p, 5s after fucking with the intercept instead of chokewidth in distDict and changing the gather-leaf-defense-move-priority-order which needs to be fixed, see test above. TODO
     
     def test_should_defend_city_what_the_fuck(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -2201,3 +2195,114 @@ class DefenseTests(TestBase):
 
         city = playerMap.GetTile(5, 15)
         self.assertOwned(general.player, city)
+    
+    def test_should_not_let_runaround_mountain_kill_with_wonky_defense_gather_calc_that_doesnt_even_save(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_let_runaround_mountain_kill_with_wonky_defense_gather_calc_that_doesnt_even_save___2a6P3AjJp---1--80.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 80, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=80)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '6,9->6,8->9,8->9,11->8,11')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        self.assertNoFriendliesKilled(map, general)
+
+    def test_should_not_dead_explore_for_threats_against_cities(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_dead_explore_for_threats_against_cities___am36fHtj9---0--268.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 268, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=268)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '14,9->16,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertEqual(42, playerMap.GetTile(17, 9).army)
+    
+    def test_defense_should_kick_in_at_the_point_of_death_what_the_fuck(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/defense_should_kick_in_at_the_point_of_death_what_the_fuck___G3AsU8h9C---0--289.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 289, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=289)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '7,2->3,2->3,3')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
+        self.assertNoFriendliesKilled(map, general)
+
+    # 36-69-5 as of tweaking chokes and honoring allowNonChoke
+    # 31-74-5 reverted chokeWidth reduction to -2 from -1, which i'm like 100% sure is wrong but it makes the 'one too far' tests pass, lmao.
+    # 50-55 if i switch to gathering to shortest pathway tiles with pathwidth offset
+    # 34-71
+    # 57-49 with chokewidth -1 instead of -2 and the choke defense changes in place
+    # 53-53
+    # 63f-26p-9skip after everything fucked by intercept
+    # 44f-45p-5skip fixed assertion float rounding failures by casting to int lol
+    # 59f 66p 5s with i think broken stuff as far as priority offset goes
+    # 58f, 72p, 5s with fix to intercept overriding defense
+    # 56f, 74p, 5s with another ^
+    # 53f, 77p, 5s still more tweaks to ^
+    # 58f, 72p, 5s LITERALLY THE SAME CODE AS ^
+    # 77f, 64p, 5s after fucking with the intercept instead of chokewidth in distDict and changing the gather-leaf-defense-move-priority-order which needs to be fixed,
+    #         see test test_should_wait_to_gather_tiles_that_are_in_the_shortest_pathway_for_last (?) above. TODO
+    # 88f, 60p, 2s after hating my life. Intercept still fucking things up pretty sure
+    
+    def test_should_never_be_able_to_gather_to_the_tile_the_threat_came_from(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_never_be_able_to_gather_to_the_tile_the_threat_came_from___2GnaZ00Oh---1--191.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 191, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=191)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '12,4->13,4')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertGreater(playerMap.GetTile(11, 6).army, 47, 'should have moved army down, i dont understand how we could ever gather upwards')
+    
+    def test_should_defend_city_cluster_adequately(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_defend_city_cluster_adequately___FAG8TLWJt---0--308.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 308, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=308)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '2,13->1,13->1,15->2,15->2,16->8,16->8,15->12,15')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        GatherUtils.USE_DEBUG_ASSERTS = False
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=20)
+        self.assertNoFriendliesKilled(map, general)
+
+        city = playerMap.GetTile(12, 15)
+        self.assertOwned(general.player, city)
+

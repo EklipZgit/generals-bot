@@ -10,7 +10,7 @@ from Algorithms import MapSpanningUtils
 from SearchUtils import dest_breadth_first_target
 from Sim.GameSimulator import GameSimulatorHost
 from Tests.TestBase import TestBase
-from base.client.map import Tile
+from base.client.tile import Tile
 from base.viewer import GeneralsViewer
 from DangerAnalyzer import DangerAnalyzer
 

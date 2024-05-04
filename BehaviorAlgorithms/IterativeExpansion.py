@@ -162,7 +162,7 @@ class ArmyFlowExpander(object):
             # boundFunc=None,
             # allowLeafMoves=True,
             # useLeafMovesFirst: bool = False,
-            bonusCapturePointMatrix: MapMatrix[float] | None = None,
+            bonusCapturePointMatrix: MapMatrixInterface[float] | None = None,
             # colors: typing.Tuple[int, int, int] = (235, 240, 50),
             # additionalOptionValues: typing.List[typing.Tuple[float, int, Path]] | None = None,
             perfTimer: PerformanceTimer | None = None,
@@ -592,8 +592,8 @@ class ArmyFlowExpander(object):
         """
         # TODO we want to keep our moves as wide across any borders as possible, if we combine everything into one big tile then we have the potential to waste moves.
         # need to build our initial lines outwards from the border as straight as possible, then combine as needed as captures fail.
-        # fromMatrix: MapMatrix[Tile] = MapMatrix(self.map)
-        # fromArmy: MapMatrix[int] = MapMatrix(self.map)
+        # fromMatrix: MapMatrixInterface[Tile] = MapMatrix(self.map)
+        # fromArmy: MapMatrixInterface[int] = MapMatrix(self.map)
 
         # border = set(itertools.chain.from_iterable(t.movable for t in target.tile_set if t in source.tile_set))
         capping = set()

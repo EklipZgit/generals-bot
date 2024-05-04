@@ -11,7 +11,7 @@ import KnapsackUtils
 import SearchUtils
 from DataModels import Move, GatherTreeNode
 from Interfaces import TilePlanInterface
-from MapMatrix import MapMatrix, MapMatrixSet, TileSet
+from MapMatrix import MapMatrixInterface, MapMatrixSet, TileSet
 from Path import Path
 from SearchUtils import where
 from ViewInfo import ViewInfo
@@ -36,18 +36,18 @@ class TreeBuilder(typing.Generic[T]):
 
     def build_gather_capture_tree_from_tile_sets(
             self,
-            gatherTiles: MapMatrix[float | None],
-            captureTiles: MapMatrix[float | None],
+            gatherTiles: MapMatrixInterface[float | None],
+            captureTiles: MapMatrixInterface[float | None],
             startTiles: typing.List[Tile] | None = None
     ) -> GatherCapturePlan:
         nodeMatrix = self.build_mst_gather_from_matrices(gatherTiles, captureTiles, startTiles)
 
     def build_mst_gather_from_matrices(
             self,
-            gatherTiles: MapMatrix[float | None],
-            captureTiles: MapMatrix[float | None],
+            gatherTiles: MapMatrixInterface[float | None],
+            captureTiles: MapMatrixInterface[float | None],
             startTiles: typing.List[Tile]
-    ) -> MapMatrix[GatherTreeNode]:
+    ) -> MapMatrixInterface[GatherTreeNode]:
         """
         Outputs
         @param gatherTiles:
@@ -57,7 +57,7 @@ class TreeBuilder(typing.Generic[T]):
         """
 
         # kay need to bi-directional BFS to gather all the nodes...
-        nodeMatrix: MapMatrix[GatherTreeNode] = MapMatrix(self.map)
+        nodeMatrix: MapMatrixInterface[GatherTreeNode] = MapMatrix(self.map)
 
         # build dumb gather mst
         frontier: SearchUtils.HeapQueue[typing.Tuple[int, Tile, GatherTreeNode | None, int, float, int]] = SearchUtils.HeapQueue()
@@ -309,7 +309,7 @@ class GatherCapturePlan(TilePlanInterface):
             negativeTiles: typing.Set[Tile] | None,
             searchingPlayer: int,
             onlyCalculateFriendlyArmy=False,
-            priorityMatrix: MapMatrix[float] | None = None,
+            priorityMatrix: MapMatrixInterface[float] | None = None,
             includeGatherPriorityAsEconValues: bool = False,
             includeCapturePriorityAsEconValues: bool = True,
             viewInfo=None,
@@ -416,7 +416,7 @@ class GatherCapturePlan(TilePlanInterface):
             searchingPlayer: int,
             frPlayers: typing.List[int],
             onlyCalculateFriendlyArmy=False,
-            priorityMatrix: MapMatrix[float] | None = None,
+            priorityMatrix: MapMatrixInterface[float] | None = None,
             includeGatherPriorityAsEconValues: bool = False,
             includeCapturePriorityAsEconValues: bool = True,
     ):
@@ -571,7 +571,7 @@ def get_sub_knapsack_gather(
         preferNeutral,
         logEntries: typing.List[str],
         useTrueValueGathered: bool = False,
-        priorityMatrix: MapMatrix[float] | None = None,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
         shouldLog: bool = False,
 ) -> typing.Tuple[int, typing.List[Path]]:
     subSkip = skipFunc
@@ -734,7 +734,7 @@ def build_tree_node_lookup(
         teams: typing.List[int],
         # skipTiles: typing.Set[Tile],
         shouldLog: bool = False,
-        priorityMatrix: MapMatrix[float] | None = None,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
 ) -> typing.Dict[Tile, GatherTreeNode]:
     gatherTreeNodeLookup: typing.Dict[Tile, GatherTreeNode] = {}
     return extend_tree_node_lookup(
@@ -761,7 +761,7 @@ def extend_tree_node_lookup(
         useTrueValueGathered: bool = False,
         shouldLog: bool = False,
         force: bool = False,
-        priorityMatrix: MapMatrix[float] | None = None,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
 ) -> typing.Dict[Tile, GatherTreeNode]:
     """
     Returns the remaining turns after adding the paths, and the new tree nodes list, and the new startingTileDict.
@@ -1257,7 +1257,7 @@ def _knapsack_levels_gather_iterative_prune(
         viewInfo=None,
         distPriorityMap=None,
         useTrueValueGathered=False,
-        priorityMatrix: MapMatrix[float] | None = None,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
         logEntries: typing.List[str] | None = None,
         includeGatherTreeNodesThatGatherNegative=False,
         shouldLog=False,
@@ -1571,7 +1571,7 @@ def knapsack_levels_backpack_gather(
         distPriorityMap=None,
         useTrueValueGathered=False,
         includeGatherTreeNodesThatGatherNegative=False,
-        priorityMatrix: MapMatrix[float] | None = None,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
         cutoffTime: float | None = None,
         shouldLog=False,
         fastMode: bool = False
@@ -1666,7 +1666,7 @@ def knapsack_levels_backpack_gather_with_value(
         includeGatherTreeNodesThatGatherNegative=False,
         shouldLog=False,  # DebugHelper.IS_DEBUGGING
         useRecurse=False,
-        priorityMatrix: MapMatrix[float] | None = None,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
         cutoffTime: float | None = None,
         fastMode: bool = False
 ) -> typing.Tuple[int, typing.List[GatherTreeNode]]:
@@ -2407,7 +2407,7 @@ def recalculate_tree_values(
         searchingPlayer: int,
         teams: typing.List[int],
         onlyCalculateFriendlyArmy=False,
-        priorityMatrix: MapMatrix[float] | None = None,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
         viewInfo=None,
         shouldAssert=False
 ) -> typing.Tuple[int, int]:
@@ -2493,7 +2493,7 @@ def _recalculate_tree_values_recurse(
         searchingPlayer: int,
         teams: typing.List[int],
         onlyCalculateFriendlyArmy=False,
-        priorityMatrix: MapMatrix[float] | None = None,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
         viewInfo=None,
         shouldAssert=False
 ):
@@ -3599,7 +3599,7 @@ def get_tree_leaves(gathers: typing.List[GatherTreeNode]) -> typing.List[GatherT
 
 def get_tree_leaves_further_than_distance(
         gatherNodes: typing.List[GatherTreeNode],
-        distMap: MapMatrix[int],
+        distMap: MapMatrixInterface[int],
         dist: int,
         minArmy: int = 1,
         curArmy: int = 0
@@ -3638,7 +3638,7 @@ def convert_contiguous_tiles_to_gather_tree_nodes_with_values(
         tiles: TileSet,
         negativeTiles: TileSet | None,
         searchingPlayer: int,
-        priorityMatrix: MapMatrix[float] | None = None,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
         useTrueValueGathered: bool = True,
         includeGatherPriorityAsEconValues: bool = False,
         includeCapturePriorityAsEconValues: bool = True,
@@ -3658,47 +3658,7 @@ def convert_contiguous_tiles_to_gather_tree_nodes_with_values(
     @param viewInfo: if included, gather values will be written the viewInfo debug output
     @return:
     """
-    visited = MapMatrixSet(map)
-
-    q = deque()
-    for tile in rootTiles:
-        q.appendleft((tile, None, None))
-
-    rootNodes = []
-
-    tile: Tile
-    fromTile: Tile | None
-    fromNode: GatherTreeNode | None
-    while True:
-        (tile, fromTile, fromNode) = q.pop()
-        if visited.raw[tile.tile_index]:
-            continue
-        if fromTile:
-            # break and continue in the next loop. The double loop lets us be hyper efficient here
-            q.append((tile, fromTile, fromNode))
-            break
-
-        newNode = GatherTreeNode(tile, fromTile)
-        rootNodes.append(newNode)
-        visited.raw[tile.tile_index] = True
-
-        for t in tile.movable:
-            if t in tiles:
-                q.appendleft((t, tile, newNode))
-
-    while q:
-        (tile, fromTile, fromNode) = q.pop()
-        if visited.raw[tile.tile_index]:
-            continue
-
-        newNode = GatherTreeNode(tile, fromTile)
-        visited.raw[tile.tile_index] = True
-
-        fromNode.children.append(newNode)
-
-        for t in tile.movable:
-            if t in tiles:
-                q.appendleft((t, tile, newNode))
+    rootNodes = build_mst_from_root_and_contiguous_tiles(map, rootTiles, tiles)
 
     return GatherCapturePlan.build_from_root_nodes(
         map,
@@ -3737,6 +3697,54 @@ def convert_contiguous_tiles_to_gather_tree_nodes_with_values(
     # )
 
 
+def build_mst_from_root_and_contiguous_tiles(map: MapBase, rootTiles: typing.Iterable[Tile], tiles: TileSet, maxDepth: int = 1000) -> typing.List[GatherTreeNode]:
+    """Does NOT calculate values"""
+    visited = MapMatrixSet(map)
+
+    q = deque()
+    for tile in rootTiles:
+        q.appendleft((tile, None, None, 0))
+
+    rootNodes = []
+    tile: Tile
+    fromTile: Tile | None
+    fromNode: GatherTreeNode | None
+    while True:
+        (tile, fromTile, fromNode, fromDepth) = q.pop()
+        if visited.raw[tile.tile_index]:
+            continue
+        if fromTile:
+            # break and continue in the next loop. The double loop lets us be hyper efficient here
+            q.append((tile, fromTile, fromNode, fromDepth))
+            break
+
+        newNode = GatherTreeNode(tile, fromTile)
+        rootNodes.append(newNode)
+        visited.raw[tile.tile_index] = True
+
+        for t in tile.movable:
+            if t in tiles:
+                q.appendleft((t, tile, newNode, 1))
+
+    while q:
+        (tile, fromTile, fromNode, fromDepth) = q.pop()
+        if visited.raw[tile.tile_index]:
+            continue
+        if fromDepth > maxDepth:
+            break
+
+        newNode = GatherTreeNode(tile, fromTile)
+        visited.raw[tile.tile_index] = True
+
+        fromNode.children.append(newNode)
+
+        for t in tile.movable:
+            if t in tiles:
+                q.appendleft((t, tile, newNode, fromDepth + 1))
+
+    return rootNodes
+
+
 def clone_nodes(gatherNodes: typing.List[GatherTreeNode]) -> typing.List[GatherTreeNode]:
     return [n.deep_clone() for n in gatherNodes]
 
@@ -3746,8 +3754,8 @@ def build_gather_plan_from_desired_nodes(
     rootTiles: typing.Iterable[Tile],
     tiles: typing.Iterable[Tile],
     asPlayer: int = -1,
-    gatherMatrix: MapMatrix[float | None] = None,
-    captureMatrix: MapMatrix[float | None] = None,
+    gatherMatrix: MapMatrixInterface[float | None] = None,
+    captureMatrix: MapMatrixInterface[float | None] = None,
     negativeTiles: TileSet | None = None,
     prioritizeCaptureHighArmyTiles: bool = False,
     useTrueValueGathered: bool = True,

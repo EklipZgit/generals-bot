@@ -5,7 +5,7 @@ from MapMatrix import MapMatrix
 
 class GatherAnalyzer(object):
     def __init__(self, map: MapBase):
-        self.gather_locality_map: MapMatrix[int] = MapMatrix(map, 0)
+        self.gather_locality_map: MapMatrixInterface[int] = MapMatrix(map, 0)
         self.map = map
 
     def __getstate__(self):
@@ -25,7 +25,7 @@ class GatherAnalyzer(object):
         @return:
         """
 
-        self.gather_locality_map: MapMatrix[int] = MapMatrix(self.map, 0)
+        self.gather_locality_map: MapMatrixInterface[int] = MapMatrix(self.map, 0)
         for tile in self.map.pathableTiles:
             if tile.player != self.map.player_index:
                 continue

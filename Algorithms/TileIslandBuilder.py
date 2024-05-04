@@ -114,24 +114,24 @@ class TileIslandBuilder(object):
     def __init__(self, map: MapBase, averageTileIslandSize: int = 4):
         self.map: MapBase = map
         self.teams: typing.List[int] = MapBase.get_teams_array(map)
-        # self.expandability_tiles_matrix: MapMatrix[int] = MapMatrix(map, 0)
-        # self.expandability_army_matrix: MapMatrix[int] = MapMatrix(map, 0)
+        # self.expandability_tiles_matrix: MapMatrixInterface[int] = MapMatrix(map, 0)
+        # self.expandability_army_matrix: MapMatrixInterface[int] = MapMatrix(map, 0)
         self.desired_tile_island_size: int = averageTileIslandSize
 
-        self.tile_island_lookup: MapMatrix[TileIsland] = MapMatrix(self.map, None)
+        self.tile_island_lookup: MapMatrixInterface[TileIsland] = MapMatrix(self.map, None)
         self.all_tile_islands: typing.List[TileIsland] = []
         self.tile_islands_by_player: typing.List[typing.List[TileIsland]] = [[] for _ in self.map.players]
         self.tile_islands_by_player.append([])  # for -1 player
         self.tile_islands_by_team_id: typing.List[typing.List[TileIsland]] = [[] for _ in self.teams]
         self.large_tile_islands_by_team: typing.List[typing.Set[TileIsland]] = [set() for _ in self.teams]
-        self.large_tile_island_distances_by_team: typing.List[MapMatrix[int] | None] = [MapMatrix(map, 1000) for _ in self.teams]
+        self.large_tile_island_distances_by_team: typing.List[MapMatrixInterface[int] | None] = [MapMatrix(map, 1000) for _ in self.teams]
         self._team_stats_by_player: typing.List[TeamStats] = []
         self._team_stats_by_team_id: typing.List[TeamStats] = []
 
     def recalculate_tile_islands(self, enemyGeneralExpectedLocation: Tile | None, mode: IslandBuildMode = IslandBuildMode.GroupByArmy):
         logbook.info('recalculate_tile_islands starting')
         start = time.perf_counter()
-        self.tile_island_lookup: MapMatrix[TileIsland] = MapMatrix(self.map, None)
+        self.tile_island_lookup: MapMatrixInterface[TileIsland] = MapMatrix(self.map, None)
         for teamArray in self.tile_islands_by_player:
             teamArray.clear()
         for teamArray in self.tile_islands_by_team_id:
@@ -498,7 +498,7 @@ def bifurcate_set_into_n_contiguous(
 
     maxDepth = 1000
 
-    visitedSetLookup: MapMatrix[SetHolder | None] = MapMatrix(map, None)
+    visitedSetLookup: MapMatrixInterface[SetHolder | None] = MapMatrix(map, None)
 
     frontier = deque()
     allSets = set()
@@ -681,7 +681,7 @@ def bifurcate_set_into_n_contiguous_by_army(
 
     maxDepth = 1000
 
-    visitedSetLookup: MapMatrix[SetHolder | None] = MapMatrix(map, None)
+    visitedSetLookup: MapMatrixInterface[SetHolder | None] = MapMatrix(map, None)
 
     frontier = SearchUtils.HeapQueue()
     allSets = set()
@@ -801,7 +801,7 @@ def bifurcate_set_into_n_contiguous_by_army(
     return reMergedSets
 
 
-def _recombine_sets_by_army(numBreaks: int, completedSets: typing.List[SetHolder], visitedSetLookup: MapMatrix[SetHolder | None]) -> typing.List[SetHolder]:
+def _recombine_sets_by_army(numBreaks: int, completedSets: typing.List[SetHolder], visitedSetLookup: MapMatrixInterface[SetHolder | None]) -> typing.List[SetHolder]:
     finalSets = []
     while len(finalSets) + len(completedSets) > numBreaks and len(completedSets) > 0:
         smallest = min(completedSets, key=lambda s: s.length)
@@ -836,7 +836,7 @@ def _recombine_sets_by_army(numBreaks: int, completedSets: typing.List[SetHolder
 
 def _get_tiles_with_no_other_options(bifurcationMatrix: MapMatrixSet, setToBifurcate: typing.Set[Tile], breakThreshold: int) -> typing.Set[Tile]:
     halfBreak = breakThreshold // 2
-    noOptionsMatrix: MapMatrix[typing.Tuple[int, int]] = MapMatrix(bifurcationMatrix.map)
+    noOptionsMatrix: MapMatrixInterface[typing.Tuple[int, int]] = MapMatrix(bifurcationMatrix.map)
     noOptionsStarter = {}
     i = 1
     for t in setToBifurcate:

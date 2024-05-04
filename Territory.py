@@ -21,11 +21,11 @@ class TerritoryClassifier(object):
     def __init__(self, map: MapBase):
         self.map: MapBase = map
         self.lastCalculatedTurn = -1
-        self.territoryMap: MapMatrix[int] = MapMatrix(self.map, -1)
+        self.territoryMap: MapMatrixInterface[int] = MapMatrix(self.map, -1)
         self.needToUpdateAroundTiles = set()
         self.team_indexes: typing.List[int] = list(set(MapBase.get_teams_array(self.map)))
-        self.territoryDistances: typing.List[MapMatrix[int]] = [MapMatrix(map, 1000) for p in map.players]
-        self.territoryTeamDistances: typing.List[MapMatrix[int]] = [MapMatrix(map, 1000) for p in self.team_indexes]
+        self.territoryDistances: typing.List[MapMatrixInterface[int]] = [MapMatrix(map, 1000) for p in map.players]
+        self.territoryTeamDistances: typing.List[MapMatrixInterface[int]] = [MapMatrix(map, 1000) for p in self.team_indexes]
         for tile in self.map.pathableTiles:
             self.needToUpdateAroundTiles.add(tile)
 

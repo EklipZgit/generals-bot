@@ -5,7 +5,7 @@ from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
 from ViewInfo import ViewInfo
-from base.client.map import TILE_MOUNTAIN, TILE_EMPTY, MapBase
+from base.client.tile import Tile_MOUNTAIN, TILE_EMPTY, MapBase
 
 
 class BoardAnalyzerUnitTests(TestBase):

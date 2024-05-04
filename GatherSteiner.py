@@ -6,7 +6,7 @@ import networkx as nx
 import logbook
 from pcst_fast import pcst_fast
 
-from MapMatrix import MapMatrix, MapMatrixSet
+from MapMatrix import MapMatrixInterface, MapMatrixSet
 from base.client.map import MapBase, Tile
 
 
@@ -14,7 +14,7 @@ def build_network_x_steiner_tree(
         map: MapBase,
         includingTiles: typing.Iterable[Tile],
         searchingPlayer=-2,
-        weightMod: MapMatrix[float] | None = None,
+        weightMod: MapMatrixInterface[float] | None = None,
         baseWeight: int = 1,
         bannedTiles: typing.Container[Tile] | None = None
 ) -> typing.List[Tile]:
@@ -55,7 +55,7 @@ def plot_mst(g: nx.Graph):
 
 def build_networkX_graph(
         map: MapBase,
-        weightMod: MapMatrix[float] | None = None,
+        weightMod: MapMatrixInterface[float] | None = None,
         baseWeight: int = 1,
         bannedTiles: typing.Container[Tile] | None = None
 ) -> nx.Graph:

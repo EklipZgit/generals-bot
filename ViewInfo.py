@@ -92,13 +92,13 @@ class ViewInfo(object):
         self.cols = map.cols
         self.rows = map.rows
         self.paths: typing.Deque[PathColorer] = deque()
-        self.topRightGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
-        self.midRightGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
-        self.bottomMidRightGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
-        self.bottomRightGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
-        self.bottomLeftGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
-        self.bottomMidLeftGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
-        self.midLeftGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
+        self.topRightGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
+        self.midRightGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
+        self.bottomMidRightGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
+        self.bottomRightGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
+        self.bottomLeftGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
+        self.bottomMidLeftGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
+        self.midLeftGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
         self.lastMoveDuration = 0.0
         self.addlTimingsLineText: str = ""
         self.addlInfoLines: typing.List[str] = []
@@ -146,13 +146,13 @@ class ViewInfo(object):
         self.timings: Timings | None = None
         self.allInCounter: int = 0
         self.targetPlayer: int = -1
-        self.topRightGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
-        self.midRightGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
-        self.bottomMidRightGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
-        self.bottomRightGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
-        self.bottomLeftGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
-        self.bottomMidLeftGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
-        self.midLeftGridText: MapMatrix[str | None] = MapMatrix(self.map, None)
+        self.topRightGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
+        self.midRightGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
+        self.bottomMidRightGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
+        self.bottomRightGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
+        self.bottomLeftGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
+        self.bottomMidLeftGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
+        self.midLeftGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
         # countHist = len(self.redTargetedTileHistory)
         # for i in range(countHist):
         #     if (i == countHist - 2):
@@ -185,7 +185,12 @@ class ViewInfo(object):
         self._zones.append((zoneMatrix, color, alpha))
 
     def color_path(self, pathColorer: PathColorer, renderOnBottom: bool = False):
-        """Last path added = last path drawn, so later paths cover up earlier paths. If renderOnBottom = True, this path will be added to the bottom of the stack instead of the top."""
+        """
+        Last path added = last path drawn, so later paths cover up earlier paths.
+        If renderOnBottom = True, this path will be added to the bottom of the stack instead of the top.
+
+        @param renderOnBottom: If renderOnBottom = True, this path will be added to the bottom of the stack instead of the top.
+        """
         if not renderOnBottom:
             self.paths.append(pathColorer)
         else:

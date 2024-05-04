@@ -5,7 +5,7 @@ import typing
 from collections import deque
 
 import SearchUtils
-from MapMatrix import MapMatrix, MapMatrixSet, TileSet
+from Interfaces import MapMatrixInterface, TileSet
 from base.client.map import Tile, MapBase
 
 USE_DEBUG_ASSERTS = False
@@ -23,8 +23,8 @@ class TileNode(typing.Generic[T]):
 
 
 class TileGraph(typing.Generic[T]):
-    def __init__(self, graph: MapMatrix[TileNode]):
-        self.nodes: MapMatrix[TileNode[T] | None] = graph
+    def __init__(self, graph: MapMatrixInterface[TileNode]):
+        self.nodes: MapMatrixInterface[TileNode[T] | None] = graph
 
     def reduce_to_tiles(self, bannedTiles: typing.List[Tile], tiles: typing.List[Tile]):
         for tile in bannedTiles:
@@ -38,7 +38,7 @@ class TileGraph(typing.Generic[T]):
 
 
 def get_map_as_graph(map: MapBase) -> TileGraph:
-    table: MapMatrix[TileNode] = MapMatrix(map, None)
+    table: MapMatrixInterface[TileNode] = MapMatrix(map, None)
 
     for tile in map.reachableTiles:
         node = TileNode(tile)

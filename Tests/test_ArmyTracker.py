@@ -10,7 +10,7 @@ from Algorithms import MapSpanningUtils
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
-from base.client.map import TILE_EMPTY, Tile
+from base.client.tile import Tile_EMPTY, Tile
 from bot_ek0x45 import EklipZBot
 
 
@@ -2403,3 +2403,37 @@ a1   b1   b1   bG1
 
                 armies = bot.armyTracker.get_unique_armies_by_player(enemyGeneral.player)
                 self.assertEqual(2, len(armies), f'expected handling {description}')
+    
+    def test_should_not_multiply_cities_in_the_fog(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_multiple_cities_in_the_fog___iWHddWDYA---1--143.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 143, fill_out_tiles=True)
+        self.assertEqual(2, map.players[enemyGeneral.player].cityCount)
+        self.assertEqual(1, len(map.players[enemyGeneral.player].cities))
+
+        map.GetTile(7, 11).reset_wrong_undiscovered_fog_guess()
+        map.GetTile(6, 10).army = 4
+        map.GetTile(6, 10).isCity = True
+        map.GetTile(6, 10).tile = TILE_EMPTY
+        map.GetTile(6, 10).player = enemyGeneral.player
+        map.GetTile(6, 10).isMountain = False
+        map.players[enemyGeneral.player].cities = [map.GetTile(6, 10)]
+        map.players[enemyGeneral.player].tiles.remove(map.GetTile(7, 11))
+        map.players[enemyGeneral.player].tiles.append(map.GetTile(6, 10))
+        self.assertEqual(2, map.players[enemyGeneral.player].cityCount)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=143)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '6,10->7,10')
+        simHost.queue_player_moves_str(general.player, '8,9->8,10')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertEqual(1, len(playerMap.players[enemyGeneral.player].cities))
+

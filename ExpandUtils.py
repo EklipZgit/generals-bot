@@ -11,8 +11,7 @@ from Algorithms import TileIslandBuilder, TileIsland
 from Behavior.ArmyInterceptor import InterceptionOptionInfo
 from BoardAnalyzer import BoardAnalyzer
 from DataModels import Move
-from Interfaces import TilePlanInterface
-from MapMatrix import MapMatrix
+from Interfaces import TilePlanInterface, MapMatrixInterface
 from Path import Path
 from PerformanceTimer import PerformanceTimer
 from SearchUtils import breadth_first_foreach, count, where
@@ -55,7 +54,7 @@ def get_round_plan_with_expansion(
         targetPlayer: int,
         turns: int,
         boardAnalysis: BoardAnalyzer,
-        territoryMap: MapMatrix[int],
+        territoryMap: MapMatrixInterface[int],
         tileIslands: TileIslandBuilder,
         negativeTiles: typing.Set[Tile] = None,
         leafMoves: typing.Union[None, typing.List[Move]] = None,
@@ -79,7 +78,7 @@ def get_round_plan_with_expansion(
         lengthWeightOffset: float = -0.3,
         time_limit=0.2,
         useCutoff: bool = True,
-        bonusCapturePointMatrix: MapMatrix[float] | None = None,
+        bonusCapturePointMatrix: MapMatrixInterface[float] | None = None,
         colors: typing.Tuple[int, int, int] = (235, 240, 50),
         additionalOptionValues: typing.List[TilePlanInterface] | None = None,
         perfTimer: PerformanceTimer | None = None,
@@ -1244,7 +1243,7 @@ def _process_new_expansion_paths(
 def _check_should_delay(
         map: MapBase,
         path: Path,
-        distanceToLargeIslandsMap: MapMatrix[int],
+        distanceToLargeIslandsMap: MapMatrixInterface[int],
         sortedByDistToZoneTiles: typing.List[Tile],
         negativeTiles: typing.Set[Tile],
         tryAvoidSet: typing.Set[Tile],
@@ -1354,7 +1353,7 @@ def _execute_expansion_gather_to_borders(
         preferNeutral=False,
         distPriorityMap=None,
         shouldLog=False,
-        priorityMatrix: MapMatrix[float] | None = None
+        priorityMatrix: MapMatrixInterface[float] | None = None
 ) -> typing.List[Path]:
     """
     Does black magic and shits out a spiderweb with numbers in it, sometimes the numbers are even right
@@ -1605,7 +1604,7 @@ def path_has_cities_and_should_wait(
         path: TilePlanInterface | None,
         friendlyPlayers,
         negativeTiles: typing.Set[Tile],
-        territoryMap: MapMatrix[int],
+        territoryMap: MapMatrixInterface[int],
         remainingTurns: int
 ) -> bool:
     cityCount = 0
@@ -1780,7 +1779,7 @@ def _get_tile_path_value(
         generalDistMap,
         territoryMap,
         enemyDistPenaltyPoint,
-        bonusCapturePointMatrix: MapMatrix[float] | None):
+        bonusCapturePointMatrix: MapMatrixInterface[float] | None):
     value = 0.0
     if tile in negativeTiles:
         value -= 0.1
@@ -1873,7 +1872,7 @@ def knapsack_multi_paths(
         remainingTurns: int,
         pathsCrossingTiles,
         multiPathDict: typing.Dict[Tile, typing.Dict[int, typing.Tuple[float, TilePlanInterface]]],
-        territoryMap: MapMatrix[int],
+        territoryMap: MapMatrixInterface[int],
         postPathEvalFunction: typing.Callable[[Path, typing.Set[Tile]], float],
         negativeTiles: typing.Set[Tile],
         tryAvoidSet: typing.Set[Tile],
@@ -1978,7 +1977,7 @@ def knapsack_multi_paths_no_crossover(
         remainingTurns: int,
         pathsCrossingTiles,
         multiPathDict: typing.Dict[Tile, typing.Dict[int, typing.Tuple[float, TilePlanInterface]]],
-        territoryMap: MapMatrix[int],
+        territoryMap: MapMatrixInterface[int],
         postPathEvalFunction: typing.Callable[[Path, typing.Set[Tile]], float],
         negativeTiles: typing.Set[Tile],
         tryAvoidSet: typing.Set[Tile],
@@ -2660,8 +2659,8 @@ def should_consider_path_move_half(
         path: TilePlanInterface,
         negativeTiles: typing.Set[Tile],
         player: int,
-        playerDistMap: MapMatrix[int],
-        enemyDistMap: MapMatrix[int],
+        playerDistMap: MapMatrixInterface[int],
+        enemyDistMap: MapMatrixInterface[int],
         withinGenPathThreshold: int,
         tilesOnMainPathDist: int
 ) -> bool:

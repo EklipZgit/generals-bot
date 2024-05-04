@@ -3,10 +3,7 @@ from __future__ import annotations
 import logbook
 import typing
 
-import GatherUtils
 from Communication import TileCompressor, CommunicationConstants, TeammateCommunication
-from DangerAnalyzer import ThreatObj
-from DataModels import GatherTreeNode
 from base.client.map import Tile, MapBase
 
 

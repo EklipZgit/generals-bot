@@ -1116,3 +1116,5 @@ class GeneralPredictionTests(TestBase):
 # 8f, 73p
 # 17f, 73p after making lots of fixes for adding more emergence events
 # 15f, 79p after fixing the ever_owned_by_player order issue with drop_chained_bad_fog on tile-discovered-as-neutral
+
+        # TODO also need to fix where they launch in a straight line only from like, 17, and then launch in a straight line again for round 2 and wrap the whole map emerging somewhere totally unexpected at like turn 80.

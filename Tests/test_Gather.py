@@ -4,10 +4,11 @@ import typing
 
 import DebugHelper
 import GatherUtils
+import SearchUtils
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
-from base.client.map import TILE_EMPTY
+from base.client.tile import Tile_EMPTY
 from bot_ek0x45 import EklipZBot
 
 
@@ -805,3 +806,45 @@ b1   b1   b1   b1   b1   b1   bG1
             playerMap.GetTile(3, 12),
         ]:
             self.assertEqual(1, tile.army, f'tile {tile} should have been gathered or expanded, but its army was {tile.army}')
+    
+    def test_should_not_drop_obvious_gather_tile(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_drop_obvious_gather_tile___cIm1H61C5---0--122.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 122, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=122)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=12)
+        self.assertNoFriendliesKilled(map, general)
+
+        tilesShouldHaveGathered = [playerMap.GetTile(x, 3) for x in range(4, 13)]
+        tilesUngathered = [t for t in tilesShouldHaveGathered if t.army > 1]
+        self.assertEqual(0, len(tilesUngathered), f'should have gathered {" | ".join([str(t) for t in tilesUngathered])}')
+
+    def test_should_not_drop_obvious_gather_tile__short(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_drop_obvious_gather_tile___cIm1H61C5---0--122.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 122, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=122)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        self.assertNoFriendliesKilled(map, general)
+
+        tilesShouldHaveGathered = [playerMap.GetTile(x, 3) for x in range(10, 13)]
+        tilesUngathered = [t for t in tilesShouldHaveGathered if t.army > 1]
+        self.assertEqual(0, len(tilesUngathered), f'should have gathered {" | ".join([str(t) for t in tilesUngathered])}')

@@ -7,7 +7,7 @@ import GatherUtils
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
-from base.client.map import TILE_EMPTY
+from base.client.tile import Tile_EMPTY
 from bot_ek0x45 import EklipZBot
 
 

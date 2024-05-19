@@ -40,7 +40,7 @@ class ServerTileCompressor(TileCompressor):
         super().__init__(map)
 
     def compress_tile(self, tile: Tile) -> str:
-        return str(self.map.get_tile_index(tile))
+        return str(tile.tile_index)
 
     def decompress_tile(self, tileStr: str) -> Tile | None:
         try:

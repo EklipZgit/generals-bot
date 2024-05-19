@@ -10,6 +10,7 @@ from BoardAnalyzer import BoardAnalyzer
 from CityAnalyzer import CityAnalyzer
 from DataModels import GatherTreeNode
 from MapMatrix import TileSet
+from GatherUtils import GatherCapturePlan
 from Path import Path
 from Territory import TerritoryClassifier
 from .OpponentTracker import OpponentTracker
@@ -45,9 +46,12 @@ class WinConditionAnalyzer(object):
         self.target_player_location: Tile = map.GetTile(0, 0)
         self.recommended_offense_plan_turns: int = 0
         self.recommended_city_defense_plan_turns: int = 0
+        self.our_best_attack_plan: GatherCapturePlan | None = None
+
+        self.contestable_city_offense_plans: typing.Dict[Tile, GatherCapturePlan | None] = {}
 
         self.most_forward_defense_city: Tile | None = None
-        self.target_cities: typing.Set[Tile] = set()
+        self.contestable_cities: typing.Set[Tile] = set()
         """Cities that are easy to attack that we should consider attacking."""
         self.defend_cities: typing.Set[Tile] = set()
         """Cities we own who are very likely to be attacked and should be defended."""
@@ -56,7 +60,7 @@ class WinConditionAnalyzer(object):
         self.last_viable_win_conditions = self.viable_win_conditions
         self.viable_win_conditions = set()
 
-        self.target_cities = set()
+        self.contestable_cities = set()
         self.defend_cities = set()
 
         self.target_player = targetPlayer
@@ -65,6 +69,8 @@ class WinConditionAnalyzer(object):
         if self.target_player == -1:
             self.viable_win_conditions.add(WinCondition.WinOnEconomy)
             return
+
+        self._get_rough_offense()
 
         if self.is_able_to_contest_enemy_city():
             self.viable_win_conditions.add(WinCondition.ContestEnemyCity)
@@ -93,15 +99,10 @@ class WinConditionAnalyzer(object):
 
         enTargetCities = self.city_analyzer.get_sorted_enemy_scores()
 
-        attackTime = min(remainingTurns, self.board_analysis.inter_general_distance + 5)
-
         ourOffense = 0
-
-        if self.target_player_location is not None and not self.target_player_location.isObstacle:
-            ourOffenseTurns, ourOffense = self.get_dynamic_turns_approximate_attack_against(self.target_player_location, maxTurns=attackTime, asPlayer=self.map.player_index)
-            attackTime = ourOffenseTurns
-            
-        self.recommended_offense_plan_turns = attackTime
+        attackTime = self.recommended_offense_plan_turns
+        if self.our_best_attack_plan is not None:
+            ourOffense = self.our_best_attack_plan.gathered_army
 
         # frCapThreat = self.get_rough_estimate_friendly_attack(turns=15)
         # enDefPoss = self.get_rough_estimate_enemy_defense(turns=15)
@@ -140,16 +141,21 @@ class WinConditionAnalyzer(object):
         if cityCaps >= cityCapsRequiredToReachWinningStatus:
             ableToContest = True
 
-        self.target_cities.update(currentlyOwnedContestedEnCities)
+        self.contestable_cities.update(currentlyOwnedContestedEnCities)
 
         logbook.info(f'baseFrCities {baseFrCities}, baseEnCities {baseEnCities}, cityCapsRequiredToReachWinningStatus {cityCapsRequiredToReachWinningStatus:.2f}. Cities already contested: {len(currentlyOwnedContestedEnCities)}  {str(currentlyOwnedContestedEnCities)}')
 
+        self.contestable_city_offense_plans = {}
+        # self.contestable_city_defense_plans = {}
         if len(contestableCities) > 0:
             # then we can plan around one of their cities
             for city in contestableCities:
-                ourOffense = self.get_approximate_attack_against([city], inTurns=attackTime, asPlayer=self.map.player_index)
+                ourOffensePlan = self.get_approximate_attack_plan_against([city], inTurns=attackTime, asPlayer=self.map.player_index)
+                self.contestable_city_offense_plans[city] = ourOffensePlan
+                ourOffense = ourOffensePlan.gathered_army
 
                 enDefense = self.opponent_tracker.get_approximate_fog_army_risk(self.target_player, cityLimit=4, inTurns=attackTime)
+                # TODO why we using this instead of just the get attack plan against... which should do the same thing?
                 bestVisibleDefenseTurns, bestVisibleDefenseValue = self.get_dynamic_turns_visible_defense_against([city], attackTime, asPlayer=self.target_player, minArmy=ourOffense)
                 if bestVisibleDefenseTurns > 0:
                     visibleVt = bestVisibleDefenseValue / bestVisibleDefenseTurns
@@ -163,12 +169,14 @@ class WinConditionAnalyzer(object):
 
                 if ourOffense > enDefense:
                     logbook.info(f'able to contest {str(city)} with expected enDefense {enDefense} vs our offense {ourOffense}')
-                    self.target_cities.add(city)
+                    # TODO expected control turns?
+                    self.contestable_cities.add(city)
                     cityCaps += 1
                     if cityCaps >= cityCapsRequiredToReachWinningStatus:
                         ableToContest = True
                 else:
                     logbook.info(f'NOT able to contest {str(city)} with expected enDefense {enDefense} vs our offense {ourOffense}')
+                    self.contestable_city_offense_plans.pop(city, None)
             #
             # if len(contestableCities) > 3:
             #     remainingCities = contestableCities[3:]
@@ -210,7 +218,7 @@ class WinConditionAnalyzer(object):
 
             if ourOffense > enDefense:
                 logbook.info(f'able to contest {str(self.target_player_location)} with expected enDefense {enDefense} vs our offense {ourOffense}')
-                self.target_cities.add(self.target_player_location)
+                self.contestable_cities.add(self.target_player_location)
                 cityCaps += 1
                 if cityCaps >= cityCapsRequiredToReachWinningStatus:
                     ableToContest = True
@@ -633,7 +641,7 @@ class WinConditionAnalyzer(object):
             minTurns: int = 0
     ) -> GatherUtils.GatherCapturePlan:
         """
-        returns turns, attackValue, nodes
+        returns gather capture plan.
         Max-value-per-turn known tile gather + fog option.
         Use for fog players attacking things, as well as attacking as visible / friendly players.
 
@@ -962,3 +970,14 @@ class WinConditionAnalyzer(object):
         if path is not None:
             return path.get_reversed()
         return None
+
+    def _get_rough_offense(self):
+        attackTime = min(self.map.remainingCycleTurns, self.board_analysis.inter_general_distance + 5)
+        self.our_best_attack_plan = None
+
+        if self.target_player_location is not None and not self.target_player_location.isObstacle:
+            self.our_best_attack_plan = self.get_dynamic_turns_approximate_attack_plan_against(self.target_player_location, maxTurns=attackTime, asPlayer=self.map.player_index)
+            if self.our_best_attack_plan:
+                attackTime = self.our_best_attack_plan.gather_turns
+
+        self.recommended_offense_plan_turns = attackTime

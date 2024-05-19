@@ -45,6 +45,9 @@ class CycleStatsData:
         self.approximate_fog_army_available_total: int = 0
         """The amount of army accumulated for gather emergence from fog, this PLUS fog_city_total should approximate the current risk of size of emergence from any fog flank point."""
 
+        self.approximate_fog_army_available_total_true: int = 0
+        """The unmodified absolute max expected fog army available (not down-adjusted each cycle, this should be the TRUE raw cap and if ever exceeded should mean a real bug happened.."""
+
         self.approximate_fog_city_army: int = 0
         """The amount of army probably accumulated on cities / generals currently unused. Takes into account the amount of cities they can gather per cycle etc."""
 
@@ -62,11 +65,12 @@ class CycleStatsData:
         myClone.army_annihilated_fog = self.army_annihilated_fog
         myClone.army_annihilated_total = self.army_annihilated_total
         myClone.approximate_fog_army_available_total = self.approximate_fog_army_available_total
+        myClone.approximate_fog_army_available_total_true = self.approximate_fog_army_available_total_true
         myClone.approximate_fog_city_army = self.approximate_fog_city_army
         return myClone
 
     def __str__(self) -> str:
-        return f'g:{self.approximate_army_gathered_this_cycle:3d}  Δt:{self.tiles_gained:2d}  Δc:{self.cities_gained:d}   a:{self.approximate_fog_army_available_total:3d}/c:{self.approximate_fog_city_army:2d}'
+        return f'g:{self.approximate_army_gathered_this_cycle:3d}  Δt:{self.tiles_gained:2d}  Δc:{self.cities_gained:d}   a:{self.approximate_fog_army_available_total:3d}/c:{self.approximate_fog_city_army:2d} (true {self.approximate_fog_army_available_total})'
 
 
 class PlayerMoveCategory(Enum):

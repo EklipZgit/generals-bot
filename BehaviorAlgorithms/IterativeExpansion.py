@@ -659,8 +659,6 @@ class ArmyFlowExpander(object):
         # visited = set()
         # while q
 
-
-
         # tilesToKill =
         #
         # q = deque()

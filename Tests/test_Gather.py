@@ -8,7 +8,7 @@ import SearchUtils
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
-from base.client.tile import Tile_EMPTY
+from base.client.tile import TILE_EMPTY
 from bot_ek0x45 import EklipZBot
 
 
@@ -280,6 +280,18 @@ class GatherTests(TestBase):
                 bot.is_winning_gather_cyclic = True
                 self.set_general_emergence_around(17, 5, simHost, general.player, enemyGeneral.player, 20)
                 self.set_general_emergence_around(16, 7, simHost, general.player, enemyGeneral.player, 30)
+                #
+                # bot.info_render_gather_values = False
+                # GatherUtils.USE_DEBUG_ASSERTS = False
+                # DebugHelper.IS_DEBUGGING = False
+                # self.begin_capturing_logging()
+                # _, _, _, gathers = bot.get_gather_to_target_tiles([enemyGeneral], 0.2, gatherTurns=73)
+                #
+                # viewInfo = self.get_renderable_view_info(map)
+                # # viewInfo.bottomLeftGridText = gatherMatrix
+                # # viewInfo.bottomRightGridText = captureMatrix
+                # viewInfo.gatherNodes = gathers
+                # self.render_view_info(map, viewInfo, 'not steiner???')
 
                 # self.begin_capturing_logging()
                 winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=80)

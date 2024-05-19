@@ -322,44 +322,65 @@ def get_round_plan_with_expansion(
         # expansionGather = greedy_backpack_gather(map, tilesLargerThanAverage, turns, None, valueFunc, baseCaseFunc, skipTiles, None, searchingPlayer, priorityFunc, skipFunc = None)
         if allowLeafMoves and leafMoves is not None:
             logEntries.append("Allowing leafMoves as part of optimal expansion....")
-            for leafMove in leafMoves:
-                if (leafMove.source not in negativeTiles
-                        and leafMove.dest not in negativeTiles
-                        and (leafMove.dest.player == -1 or leafMove.dest.player in targetPlayers)):
-                    if leafMove.source.army >= 30:
-                        logEntries.append(
-                            f"Did NOT add leafMove {str(leafMove)} to knapsack input because its value was high. Why wasn't it already input if it is a good move?")
-                        continue
-                    if leafMove.source.army - 1 <= leafMove.dest.army:
-                        continue
 
-                    if not move_can_cap_more(leafMove) and useLeafMovesFirst:
-                        continue  # already added first
+            _include_leaf_moves_in_exp_plan(
+                allowGatherPlanExtension=allowGatherPlanExtension,
+                alwaysIncludes=None,
+                defaultNoPathValue=defaultNoPathValue,
+                includeForGath=None,
+                leafMoves=leafMoves,
+                map=map,
+                multiPathDict=multiPathDict,
+                negativeTiles=negativeTiles,
+                paths=paths,
+                pathsCrossingTiles=pathsCrossingTiles,
+                postPathEvalFunction=postPathEvalFunction,
+                searchingPlayer=searchingPlayer,
+                targetPlayers=targetPlayers,
+                tryAvoidSet=tryAvoidSet,
+                useIterativeNegTiles=useIterativeNegTiles,
+                skipNeutrals=False,
+                bypassLeafValueSkip=True,
+                logEntries=logEntries)
 
-                    if leafMove.dest.isCity and leafMove.dest.isNeutral:
-                        continue
-
-                    logEntries.append(f"adding leafMove {str(leafMove)} to knapsack input")
-                    path = Path(leafMove.source.army - leafMove.dest.army - 1)
-                    path.add_next(leafMove.source)
-                    path.add_next(leafMove.dest)
-                    value = postPathEvalFunction(path, negativeTiles)
-                    cityCount = 0
-                    if leafMove.source.isGeneral or leafMove.source.isCity:
-                        cityCount += 1
-                    paths.append((cityCount, value, path))
-                    add_path_to_try_avoid_paths_crossing_tiles(path, negativeTiles, tryAvoidSet, pathsCrossingTiles, addToNegativeTiles=useIterativeNegTiles)
-
-                    curTileDict = multiPathDict.get(leafMove.source, {})
-                    existingMax, existingPath = curTileDict.get(path.length, defaultNoPathValue)
-                    if value > existingMax:
-                        logEntries.append(
-                            f'leafMove for {str(leafMove.source)} BETTER than existing:\r\n      new {value:.2f} {str(path)}\r\n   exist {existingMax:.2f} {str(existingPath)}')
-                        curTileDict[path.length] = (value, path)
-                    else:
-                        logEntries.append(
-                            f'leafMove for {str(leafMove.source)} worse than existing:\r\n      bad {value:.2f} {str(path)}\r\n   exist {existingMax:.2f} {str(existingPath)}')
-                    multiPathDict[leafMove.source] = curTileDict
+            # for leafMove in leafMoves:
+            #     if (leafMove.source not in negativeTiles
+            #             and leafMove.dest not in negativeTiles
+            #             and (leafMove.dest.player == -1 or leafMove.dest.player in targetPlayers)):
+            #         if leafMove.source.army >= 30:
+            #             logEntries.append(
+            #                 f"Did NOT add leafMove {str(leafMove)} to knapsack input because its value was high. Why wasn't it already input if it is a good move?")
+            #             continue
+            #         if leafMove.source.army - 1 <= leafMove.dest.army:
+            #             continue
+            #
+            #         if not move_can_cap_more(leafMove) and useLeafMovesFirst:
+            #             continue  # already added first
+            #
+            #         if leafMove.dest.isCity and leafMove.dest.isNeutral:
+            #             continue
+            #
+            #         logEntries.append(f"adding leafMove {str(leafMove)} to knapsack input")
+            #         path = Path(leafMove.source.army - leafMove.dest.army - 1)
+            #         path.add_next(leafMove.source)
+            #         path.add_next(leafMove.dest)
+            #         value = postPathEvalFunction(path, negativeTiles)
+            #         cityCount = 0
+            #         if leafMove.source.isGeneral or leafMove.source.isCity:
+            #             cityCount += 1
+            #         paths.append((cityCount, value, path))
+            #         add_path_to_try_avoid_paths_crossing_tiles(path, negativeTiles, tryAvoidSet, pathsCrossingTiles, addToNegativeTiles=useIterativeNegTiles)
+            #
+            #         curTileDict = multiPathDict.get(leafMove.source, {})
+            #         existingMax, existingPath = curTileDict.get(path.length, defaultNoPathValue)
+            #         if value > existingMax:
+            #             logEntries.append(
+            #                 f'leafMove for {str(leafMove.source)} BETTER than existing:\r\n      new {value:.2f} {str(path)}\r\n   exist {existingMax:.2f} {str(existingPath)}')
+            #             curTileDict[path.length] = (value, path)
+            #         else:
+            #             logEntries.append(
+            #                 f'leafMove for {str(leafMove.source)} worse than existing:\r\n      bad {value:.2f} {str(path)}\r\n   exist {existingMax:.2f} {str(existingPath)}')
+            #         multiPathDict[leafMove.source] = curTileDict
 
         if logStuff:
             logEntries.append(f'THE FOLLOWING WILL BE INPUT INTO KNAPSACK:')
@@ -1288,6 +1309,7 @@ def _include_leaf_moves_in_exp_plan(
         tryAvoidSet,
         useIterativeNegTiles,
         skipNeutrals: bool = False,
+        bypassLeafValueSkip: bool = False,
         logEntries: typing.List[str] | None = None
 ):
     for leafMove in leafMoves:
@@ -1308,7 +1330,7 @@ def _include_leaf_moves_in_exp_plan(
                     alwaysIncludes.append(leafMove.source)
                 continue
 
-            if leafMove.source.army - leafMove.dest.army >= 3:
+            if not bypassLeafValueSkip and leafMove.source.army - leafMove.dest.army >= 3:
                 if logEntries is not None:
                     logEntries.append(
                         f"Did NOT add leafMove {str(leafMove)} to knapsack input because its value was high. Why wasn't it already input if it is a good move?")
@@ -2267,7 +2289,7 @@ def _get_capture_counts(
                 continue
             except:
                 if path != mainPath:
-                    logbook.error(f'unable to remove path {path}...???? {traceback.format_exc()}')
+                    logbook.error(f'unable to remove path {path}...????')
                     pass
 
         if validTiles < 2 * path.length // 3 and (pNeutCap + 2 * pEnCap) / pTurnsUsed < 1.0:
@@ -2326,13 +2348,13 @@ def _get_capture_counts(
                 leafIdx += 1
 
             if len(leavesToAdd) == path.length:
-                logbook.info(f'WHOO SUBBING OUT BAD PATH WITH LEAFMOVES! Bad path len {pTurnsUsed} {path.get_first_move().source}')
+                logbook.info(f'WHOO SUBBING OUT BAD PATH WITH LEAFMOVES! Bad path len {pTurnsUsed} {path}')
                 try:
                     otherPaths.remove(path)
-                    continue
                 except:
-                    logbook.error(f'unable to remove path {path}...???? {traceback.format_exc()}')
-                    pass  # uh oh, it was path? lol
+                    logbook.error(f'unable to remove path {path}...????')
+                    pass
+
                 for move in leavesToAdd:
                     newPath = Path()
                     newPath.add_next(move.source)
@@ -2348,7 +2370,6 @@ def _get_capture_counts(
                     visited.add(move.source)
                     visited.add(move.dest)
                     otherPaths.append(newPath)
-                    continue
 
             if validTiles > 0 and valueOverrides is not None:
                 # bake in support for input plans like intercepts that achieve value greater than what their included tiles would indicate. Convert missing value into enemy tile captures

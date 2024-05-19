@@ -19,7 +19,7 @@ from heapq_max import heappush_max, heappop_max
 # from numba import jit, float32, int64
 
 from DataModels import PathNode
-from Interfaces import MapMatrixInterface
+from Interfaces import MapMatrixInterface, TileSet
 from Path import Path
 from test.test_float import INF
 from base.client.tile import Tile
@@ -266,11 +266,16 @@ def dest_breadth_first_target(
                 if isInc:
                     nextArmy += int(goalInc * 2)
 
-        if negativeTiles is None or current not in negativeTiles:
-            if isTeam:
+        notNegativeTile = negativeTiles is None or current not in negativeTiles
+
+        if isTeam:
+            if notNegativeTile:
                 nextArmy += current.army
-            else:
+        else:
+            if notNegativeTile:
                 nextArmy -= current.army
+            else:
+                nextArmy -= 1
         newDist = dist + 1
 
         visited[current.x][current.y] = (nextArmy, fromTile)
@@ -409,6 +414,7 @@ def a_star_kill(
             cost_so_far[start] = (0, 0 - startArmy)
             frontier.put((cost_so_far[start], start))
             came_from[start] = None
+
     start = time.perf_counter()
     iter = 0
     foundDist = -1
@@ -567,7 +573,7 @@ def a_star_find(
 
     if not noLog:
         logbook.info(
-            f"A* FIND SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
+            f"a_star_find SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
 
     if goal not in came_from:
         return None
@@ -575,17 +581,185 @@ def a_star_find(
     pathObject = Path()
     pathObject.add_next(goal)
     node = goal
-    dist = foundDist
     while came_from[node] is not None:
         # logbook.info("Node {},{}".format(node.x, node.y))
         node = came_from[node]
-        dist -= 1
         pathObject.add_start(node)
 
     if not noLog:
-        logbook.info(f"A* FOUND KILLPATH OF LENGTH {pathObject.length} VALUE {pathObject.value}\n{pathObject.toString()}")
+        logbook.info(f"a_star_find FOUND PATH OF LENGTH {pathObject.length} VALUE {pathObject.value}\n{pathObject}")
     # pathObject.calculate_value(startTiles[0].player, teams=map._teams)
     return pathObject
+
+
+def a_star_find_raw(
+        startTiles,
+        goal: Tile,
+        maxDepth: int = 200,
+        allowNeutralCities: bool = False,
+        noLog: bool = False) -> typing.List[Tile] | None:
+    frontier = []
+    came_from = {}
+    cost_so_far = {}
+    if isinstance(startTiles, dict):
+        for start in startTiles.keys():
+            startDist = startTiles[start]
+            if not noLog:
+                logbook.info(f"a* enqueued start tile {start.toString()}")
+            # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
+            #    startArmy = start.army / 2
+            cost_so_far[start] = startDist
+            heapq.heappush(frontier, (cost_so_far[start], start))
+            came_from[start] = None
+    else:
+        for start in startTiles:
+            if not noLog:
+                logbook.info(f"a* enqueued start tile {start.toString()}")
+            # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
+            #    startArmy = start.army / 2
+            cost_so_far[start] = 0
+            heapq.heappush(frontier, (cost_so_far[start], start))
+            came_from[start] = None
+    start = time.perf_counter()
+    iter = 0
+    foundDist = -1
+    depthEvaluated = 0
+
+    while frontier:
+        iter += 1
+        prio, current = heapq.heappop(frontier)
+        dist = cost_so_far[current]
+
+        if dist > depthEvaluated:
+            depthEvaluated = dist
+        if current == goal:
+            foundDist = dist
+            break
+
+        if dist < maxDepth:
+            for next in current.movable:  # new spots to try
+                if next == came_from[current]:
+                    continue
+                if next.isMountain or ((not next.discovered) and next.isNotPathable):
+                    # logbook.info("a* mountain")
+                    continue
+                if next.isCity and next.isNeutral and not allowNeutralCities:
+                    continue
+
+                new_cost = dist + 1
+                curNextCost = cost_so_far.get(next, None)
+                if next not in cost_so_far or new_cost < curNextCost:
+                    cost_so_far[next] = new_cost
+                    priority = dist + 1 + _shortestPathHeurTile(goal, next)
+                    heapq.heappush(frontier, (priority, next))
+                    # logbook.info("a* enqueued next")
+                    came_from[next] = current
+
+    if not noLog:
+        logbook.info(
+            f"a_star_find_raw SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
+
+    if goal not in came_from:
+        return None
+
+    tileList = [goal]
+    node = goal
+    while came_from[node] is not None:
+        node = came_from[node]
+        tileList.append(node)
+
+    if not noLog:
+        logbook.info(f"a_star_find_raw FOUND PATH OF LENGTH {len(tileList) - 1}  {tileList}")
+
+    tileList.reverse()
+    return tileList
+
+
+def a_star_find_raw_with_try_avoid(
+        startTiles,
+        goal: Tile,
+        tryAvoid: TileSet,
+        maxDepth: int = 200,
+        allowNeutralCities: bool = False,
+        noLog: bool = False) -> typing.List[Tile] | None:
+    frontier = []
+    came_from = {}
+    cost_so_far = {}
+    if isinstance(startTiles, dict):
+        for start in startTiles.keys():
+            startDist = startTiles[start]
+            if not noLog:
+                logbook.info(f"a* enqueued start tile {start.toString()}")
+            # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
+            #    startArmy = start.army / 2
+            cost_so_far[start] = startDist
+            heapq.heappush(frontier, (cost_so_far[start], start))
+            came_from[start] = None
+    else:
+        for start in startTiles:
+            if not noLog:
+                logbook.info(f"a* enqueued start tile {start.toString()}")
+            # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
+            #    startArmy = start.army / 2
+            cost_so_far[start] = 0
+            heapq.heappush(frontier, (cost_so_far[start], start))
+            came_from[start] = None
+    start = time.perf_counter()
+    iter = 0
+    depthEvaluated = 0
+
+    while frontier:
+        iter += 1
+        prio, current = heapq.heappop(frontier)
+        dist = cost_so_far[current]
+
+        if dist > depthEvaluated:
+            depthEvaluated = dist
+        if current == goal:
+            break
+
+        if dist < maxDepth:
+            for next in current.movable:  # new spots to try
+                if next == came_from[current]:
+                    continue
+                if next.isMountain or ((not next.discovered) and next.isNotPathable):
+                    # logbook.info("a* mountain")
+                    continue
+                if next.isCity and next.isNeutral and not allowNeutralCities:
+                    continue
+
+                new_cost = dist + 1
+                if next in tryAvoid:
+                    new_cost += 0.05
+                curNextCost = cost_so_far.get(next, None)
+                if next not in cost_so_far or new_cost < curNextCost:
+                    cost_so_far[next] = new_cost
+                    extraCost = 0
+                    if next in tryAvoid:
+                        extraCost = 0.3
+                    priority = dist + 1 + _shortestPathHeurTile(goal, next) + extraCost
+                    heapq.heappush(frontier, (priority, next))
+                    # logbook.info("a* enqueued next")
+                    came_from[next] = current
+
+    if not noLog:
+        logbook.info(
+            f"a_star_find_raw SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
+
+    if goal not in came_from:
+        return None
+
+    tileList = [goal]
+    node = goal
+    while came_from[node] is not None:
+        node = came_from[node]
+        tileList.append(node)
+
+    if not noLog:
+        logbook.info(f"a_star_find_raw FOUND PATH OF LENGTH {len(tileList) - 1}  {tileList}")
+
+    tileList.reverse()
+    return tileList
 
 
 def a_star_find_matrix(

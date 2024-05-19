@@ -1502,7 +1502,7 @@ class GeneralsViewer(object):
                     capMoves = teamCycleData.moves_spent_capturing_fog_tiles + teamCycleData.moves_spent_capturing_visible_tiles
 
                     # only draw team score data once
-                    playerCycleSubtext = f"{str(approxArmy).ljust(3)}  g:{teamCycleData.approximate_army_gathered_this_cycle:3d}  Δt:{teamCycleData.tiles_gained:2d}  Δc:{teamCycleData.cities_gained:d}   a:{teamCycleData.approximate_fog_army_available_total:3d}/c:{teamCycleData.approximate_fog_city_army:2d}"
+                    playerCycleSubtext = f"{str(approxArmy).ljust(3)}  g:{teamCycleData.approximate_army_gathered_this_cycle:3d}  Δt:{teamCycleData.tiles_gained:2d}  Δc:{teamCycleData.cities_gained:d}   a:{teamCycleData.approximate_fog_army_available_total:3d}/c:{teamCycleData.approximate_fog_city_army:2d} (tru:{teamCycleData.approximate_fog_army_available_total_true:3d})"
                     self._screen.blit(self._medFont.render(playerCycleSubtext, True, WHITE),
                                       (team_pos_left + 3, pos_top + 2 + 3.9 * self._medFont.get_height()))
                     playerCycleSubtext = f"MV: g{gathMoves}/c{capMoves}  fcap:{teamCycleData.moves_spent_capturing_fog_tiles:2d}  vcap:{teamCycleData.moves_spent_capturing_visible_tiles:2d}  fg:{teamCycleData.moves_spent_gathering_fog_tiles:2d}  vg:{teamCycleData.moves_spent_gathering_visible_tiles:2d}"
@@ -1516,7 +1516,7 @@ class GeneralsViewer(object):
                         gathMoves = teamLastCycleData.moves_spent_gathering_fog_tiles + teamLastCycleData.moves_spent_gathering_visible_tiles
                         capMoves = teamLastCycleData.moves_spent_capturing_fog_tiles + teamLastCycleData.moves_spent_capturing_visible_tiles
                         # only draw team score data once
-                        playerCycleSubtext = f"LAST {str(approxArmy).ljust(3)}  g:{teamLastCycleData.approximate_army_gathered_this_cycle:3d}  Δt:{teamLastCycleData.tiles_gained:2d}  Δc:{teamLastCycleData.cities_gained:d}   a:{teamLastCycleData.approximate_fog_army_available_total:3d}/c:{teamLastCycleData.approximate_fog_city_army:2d}"
+                        playerCycleSubtext = f"LAST {str(approxArmy).ljust(3)}  g:{teamLastCycleData.approximate_army_gathered_this_cycle:3d}  Δt:{teamLastCycleData.tiles_gained:2d}  Δc:{teamLastCycleData.cities_gained:d}   a:{teamLastCycleData.approximate_fog_army_available_total:3d}/c:{teamLastCycleData.approximate_fog_city_army:2d} (tru:{teamLastCycleData.approximate_fog_army_available_total_true:3d})"
                         self._screen.blit(self._medFont.render(playerCycleSubtext, True, WHITE),
                                           (team_pos_left + 3, pos_top + 2 + 5.7 * self._medFont.get_height()))
 

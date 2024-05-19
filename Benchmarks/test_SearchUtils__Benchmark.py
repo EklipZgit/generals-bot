@@ -61,7 +61,7 @@ class SearchUtilsBenchmarkTests(TestBase):
 
         ranges = [2, 4, 7, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70]
 
-        self.run_shortest_path_algo_comparison(map, ranges)
+        self.run_shortest_path_algo_comparison(map, ranges, skipFloyd=False)
 
     def test_benchmark_distmap_algos(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True

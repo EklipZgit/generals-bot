@@ -147,3 +147,28 @@ class OffensiveMicroTests(TestBase):
 
         self.assertOwned(general.player, city1)
         self.assertOwned(general.player, city2)
+    
+    def test_should_not_find_illegitimate_depth_increasing_killpaths(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for genReduction in [1, 0]:
+            with self.subTest(genReduction=genReduction):
+                mapFile = 'GameContinuationEntries/should_not_find_illegitimate_depth_increasing_killpaths___Zf2sQKKX0---1--150.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 150, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=150)
+                enemyGeneral.army -= genReduction
+                rawMap.GetTile(enemyGeneral.x, enemyGeneral.y).army -= genReduction
+
+                self.begin_capturing_logging()
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+                killMove, kingKillPath = bot.check_for_king_kills_and_races(bot.threat)
+
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+                self.assertNoFriendliesKilled(map, general)
+
+                self.assertIsNone(killMove, 'should not have found a depth increasing killpath that does not kill....')
+                self.assertIsNone(kingKillPath, 'should not have found a depth increasing killpath that does not kill....')

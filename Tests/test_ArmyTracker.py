@@ -10,7 +10,7 @@ from Algorithms import MapSpanningUtils
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
-from base.client.tile import Tile_EMPTY, Tile
+from base.client.tile import TILE_EMPTY, Tile
 from bot_ek0x45 import EklipZBot
 
 

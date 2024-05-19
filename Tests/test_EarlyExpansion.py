@@ -10,7 +10,9 @@ import typing
 import unittest
 
 import EarlyExpandUtils
+from EarlyExpandUtils import CityExpansionPlan
 import SearchUtils
+from MapMatrix import MapMatrix
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from Sim.TextMapLoader import TextMapLoader
@@ -466,7 +468,7 @@ class EarlyExpandUtilsTests(TestBase):
         paths = EarlyExpandUtils._sub_optimize_remaining_cycle_expand_from_cities(
             map,
             general,
-            11,
+            general.army,
             distToGenMap,
             weightMap,
             turn=turn,
@@ -478,6 +480,51 @@ class EarlyExpandUtilsTests(TestBase):
         value = EarlyExpandUtils.get_start_expand_captures(map, general, general.army, map.turn, paths, noLog=True)
         if debugMode:
             self.render_paths(map, paths, str(value))
+        self.assertEqual(25, value)
+
+    def test_finds_good__empty_board__corner__forced_corner_combo__force_7_launch(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        turn = 12
+        board = TextMapLoader.load_map_from_file("EarlyExpandUtilsTestMaps/forced_corner_combo__7")
+        # general = board[0][0]
+        general = board[1][1]
+        general.isGeneral = True
+        general.player = 0
+        general.army = 7
+
+        map = self.get_test_map(board, turn=turn)
+        weightMap = self.get_opposite_general_distance_map(map, general)
+
+        distToGenMap = map.distance_mapper.get_tile_dist_matrix(general)
+
+        paths = EarlyExpandUtils._sub_optimize_remaining_cycle_expand_from_cities(
+            map,
+            general,
+            general.army,
+            distToGenMap,
+            weightMap,
+            turn=turn,
+            prune_below=0,
+            allow_wasted_moves=14,
+            no_log=True,
+            cutoff_time=time.perf_counter() + 4.0)
+
+        value = EarlyExpandUtils.get_start_expand_captures(map, general, general.army, map.turn, paths, noLog=True)
+        if debugMode:
+            self.render_paths(map, paths, str(value))
+
+        visited = {general}
+        for i, path in enumerate(paths):
+            if not path:
+                continue
+            allRetraverse = True
+            for t in path.tileList:
+                if t not in visited:
+                    allRetraverse = False
+                    visited.add(t)
+
+            self.assertFalse(allRetraverse, f'path number {i} was pure retraversals: {path}')
+
         self.assertEqual(25, value)
 
     def test_finds_optimal__empty_board__corner__forced_corner_combo__10_launch_should_wait_till_11(self):
@@ -767,6 +814,7 @@ class EarlyExpandUtilsTests(TestBase):
         # 28f, 284p, 39 beat
         # 2f, 308p, 41 beat weight thresh 3
         # 0f, 309p, 42 beat after weighting for lower optimal wasted first (instead of min optimal wasted first).
+        # 0f, 308p, 43 beat after shifting reductions in timeEach stuff.
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         projRoot = pathlib.Path(__file__).parent
         folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
@@ -816,6 +864,7 @@ class EarlyExpandUtilsTests(TestBase):
         # 4f, 28p, 37 beat
         # 0f, 26p, 43 beat after optimizing around trying the optimal wasted first, with a weight thresh of 3
         # 0f, 25p, 44 beat after weighting for lower optimal wasted first (instead of min optimal wasted first).
+        # 0f, 26p, 43 beat after optimizing some stuff in something or other
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         projRoot = pathlib.Path(__file__).parent
         folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
@@ -1199,3 +1248,176 @@ class EarlyExpandUtilsTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 50, 'ref replay for successful 50 with one wasted capture due to exception, so 51 for sure possible')
+    
+    def test_should_prefer_capping_enemy_tiles_when_expanding_after_first_25(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_prefer_capping_enemy_tiles_when_expanding_after_first_25___V3qX0HRRZ---1--142.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 142, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=142)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        #proof
+        # simHost.queue_player_moves_str(general.player, '5,8->3,8  2,7->3,7->3,11')
+        # proof minus gather
+        # simHost.queue_player_moves_str(general.player, '2,7->3,7->3,11')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+        self.assertNoFriendliesKilled(map, general)
+
+        with self.subTest(careLess=False):
+            self.assertTileDifferentialGreaterThan(13, simHost)
+
+        with self.subTest(careLess=True):
+            self.assertTileDifferentialGreaterThan(14, simHost, 'if gathered the 2 unused 2s first, then this achieves 15')
+
+    def test_finds_good__empty_board__corner__forced_corner_combo__MST_TEST(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        turn = 12
+        board = TextMapLoader.load_map_from_file("EarlyExpandUtilsTestMaps/forced_corner_combo__7")
+        # general = board[0][0]
+        general = board[1][1]
+        general.isGeneral = True
+        general.player = 0
+        general.army = 7
+
+        self.begin_capturing_logging()
+        map = self.get_test_map(board, turn=turn)
+        weightMap = self.get_opposite_general_distance_map(map, general)
+
+        distToGenMap = map.distance_mapper.get_tile_dist_matrix(general)
+        # tileMinMap = distToGenMap.copy_negated()
+        tileMinMap = weightMap
+        visited = set()
+        skip = set()
+        viewInfo = self.get_renderable_view_info(map)
+        viewInfo.midLeftGridText = tileMinMap
+        #
+        # rootNode = EarlyExpandUtils.build_initial_mst_gather_root(map, general, visited, skip, distToGenMap, tileMinMap, debug_view_info=viewInfo, no_log=False)
+        # viewInfo.gatherNodes = [rootNode]
+        # self.render_view_info(map, viewInfo, 'gath node')
+
+        # plan: CityExpansionPlan = EarlyExpandUtils.build_expansion_plan_mst_iterative(
+        plan, val = EarlyExpandUtils.build_expansion_plan_mst_iterative(
+            map,
+            general,
+            dist_to_gen_map=distToGenMap,
+            tile_minimization_map=tileMinMap,
+            cutoff_time=time.perf_counter() + 4.0,
+            prune_below=0,
+            visited_set=visited,
+            skip_tiles=skip,
+            debug_view_info=None,
+            no_log=False,
+        )
+
+        logbook.info(val)
+
+        #
+        # paths = EarlyExpandUtils._sub_optimize_remaining_cycle_expand_from_cities(
+        #     map,
+        #     general,
+        #     general.army,
+        #     distToGenMap,
+        #     weightMap,
+        #     turn=turn,
+        #     prune_below=0,
+        #     allow_wasted_moves=14,
+        #     no_log=True,
+        #     cutoff_time=time.perf_counter() + 4.0)
+        #
+        # value = EarlyExpandUtils.get_start_expand_captures(map, general, general.army, map.turn, paths, noLog=True)
+        # if debugMode:
+        #     self.render_paths(map, paths, str(value))
+        #
+        # visited = {general}
+        # for i, path in enumerate(paths):
+        #     if not path:
+        #         continue
+        #     allRetraverse = True
+        #     for t in path.tileList:
+        #         if t not in visited:
+        #             allRetraverse = False
+        #             visited.add(t)
+        #
+        #     self.assertFalse(allRetraverse, f'path number {i} was pure retraversals: {path}')
+        #
+        # self.assertEqual(25, value)
+
+    def test_finds_good__empty_board__corner__forced_corner_combo__MST_TEST_SMALL(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        turn = 44
+        board = TextMapLoader.load_map_from_file("EarlyExpandUtilsTestMaps/forced_corner_combo__7")
+        # general = board[0][0]
+        general = board[1][1]
+        general.isGeneral = True
+        general.player = 0
+        general.army = 4
+
+        self.begin_capturing_logging()
+        map = self.get_test_map(board, turn=turn)
+        weightMap = self.get_opposite_general_distance_map(map, general)
+
+        distToGenMap = map.distance_mapper.get_tile_dist_matrix(general)
+        # tileMinMap = distToGenMap.copy_negated()
+        tileMinMap = weightMap
+        visited = set()
+        skip = set()
+        viewInfo = self.get_renderable_view_info(map)
+        viewInfo.midLeftGridText = tileMinMap
+
+        # rootNode = EarlyExpandUtils.build_initial_mst_gather_root(map, general, visited, skip, distToGenMap, tileMinMap, debug_view_info=viewInfo, no_log=False)
+        # viewInfo.gatherNodes = [rootNode]
+        # self.render_view_info(map, viewInfo, 'gath node')
+        # self.assertEqual(general, rootNode.tile)
+
+        # plan: CityExpansionPlan = EarlyExpandUtils.build_expansion_plan_mst_iterative(
+        plan, val = EarlyExpandUtils.build_expansion_plan_mst_iterative(
+            map,
+            general,
+            dist_to_gen_map=distToGenMap,
+            tile_minimization_map=tileMinMap,
+            cutoff_time=time.perf_counter() + 4.0,
+            prune_below=0,
+            visited_set=visited,
+            skip_tiles=skip,
+            debug_view_info=None,
+            no_log=False,
+        )
+
+        logbook.info(val)
+
+        #
+        # paths = EarlyExpandUtils._sub_optimize_remaining_cycle_expand_from_cities(
+        #     map,
+        #     general,
+        #     general.army,
+        #     distToGenMap,
+        #     weightMap,
+        #     turn=turn,
+        #     prune_below=0,
+        #     allow_wasted_moves=14,
+        #     no_log=True,
+        #     cutoff_time=time.perf_counter() + 4.0)
+        #
+        # value = EarlyExpandUtils.get_start_expand_captures(map, general, general.army, map.turn, paths, noLog=True)
+        # if debugMode:
+        #     self.render_paths(map, paths, str(value))
+        #
+        # visited = {general}
+        # for i, path in enumerate(paths):
+        #     if not path:
+        #         continue
+        #     allRetraverse = True
+        #     for t in path.tileList:
+        #         if t not in visited:
+        #             allRetraverse = False
+        #             visited.add(t)
+        #
+        #     self.assertFalse(allRetraverse, f'path number {i} was pure retraversals: {path}')
+        #
+        # self.assertEqual(25, value)

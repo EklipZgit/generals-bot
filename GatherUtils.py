@@ -11,7 +11,7 @@ import KnapsackUtils
 import SearchUtils
 from DataModels import Move, GatherTreeNode
 from Interfaces import TilePlanInterface
-from MapMatrix import MapMatrixInterface, MapMatrixSet, TileSet
+from MapMatrix import MapMatrixInterface, MapMatrixSet, TileSet, MapMatrix
 from Path import Path
 from SearchUtils import where
 from ViewInfo import ViewInfo
@@ -1359,7 +1359,7 @@ def _knapsack_levels_gather_iterative_prune(
 
             if len(newPaths) == 0:
                 logEntries.append('no new paths found, breaking knapsack stuff')
-                break
+                break  # gatherTreeNodeLookup[map.GetTile(15,9)].children[0] == gatherTreeNodeLookup[map.GetTile(16,9)]
             # elif DebugHelper.IS_DEBUGGING:
             #     logEntries.append(f'  returned:')
             #     logEntries.extend([f'\r\n    {p}' for p in newPaths])
@@ -1386,6 +1386,8 @@ def _knapsack_levels_gather_iterative_prune(
                 rootNode = gatherTreeNodeLookup.get(path.start.tile, None)
                 if rootNode is not None:
                     (startPriorityObject, distance) = newStartTilesDict[rootNode.tile]
+                    if DebugHelper.IS_DEBUGGING:
+                        logEntries.append(f'  add_tree_nodes_to_start_tiles_dict_recurse {rootNode} @ dist {distance}')
                     add_tree_nodes_to_start_tiles_dict_recurse(
                         rootNode,
                         newStartTilesDict,
@@ -1399,7 +1401,7 @@ def _knapsack_levels_gather_iterative_prune(
 
             if USE_DEBUG_ASSERTS:
                 # rootNodes = [gatherTreeNodeLookup[tile] for tile in origStartTilesDict]
-                logEntries.append('doing second recalc after adding to start dict')
+                logEntries.append('doing recalc after adding to start dict')
 
                 recalcTotalTurns, recalcTotalValue = recalculate_tree_values(
                     logEntries,
@@ -1768,6 +1770,12 @@ def knapsack_levels_backpack_gather_with_value(
                 numPrioTiles
             ) = priorityObject
 
+            key = (currentTile.tile_index, depthDist)
+            priosByTile[key] = priorityObject
+            # existingPrio = priosByTile.get(key, None)
+            # if existingPrio is None or existingPrio > priorityObject:
+            #     priosByTile[key] = prioObj
+
             if negArmySum >= 0 and not includeGatherTreeNodesThatGatherNegative:
                 return None
             if negGatheredSum >= 0:
@@ -1850,7 +1858,6 @@ def knapsack_levels_backpack_gather_with_value(
             )
             if shouldLog or USE_DEBUG_ASSERTS:
                 logEntries.append(f'PRIO {str(nextTile)} : {str(prioObj)}')
-            priosByTile[(nextTile.tile_index, depthDist)] = prioObj
             # logbook.info("prio: nextTile {} got realDist {}, negNextArmy {}, negDistanceSum {}, newDist {}, xSum {}, ySum {}".format(nextTile.toString(), realDist + 1, 0-nextArmy, negDistanceSum, dist + 1, xSum + nextTile.x, ySum + nextTile.y))
             return prioObj
 
@@ -3404,10 +3411,7 @@ def prune_mst_until(
                     # Thus we should break. Otherwise if validMove == 0, we want to keep popping invalid moves off until they're valid again.
                     continue
             elif not noLog:
-                logEntries.append(f'pruning extra invalid tree node despite untilFunc == True: {str(current)}')
-
-            if not noLog:
-                logEntries.append(f'pruning tree node {str(current)}')
+                logEntries.append(f'Intending to prune extra invalid tree node regardless of untilFunc: {str(current)}')
 
             if pruneOverrideFunc is not None and pruneOverrideFunc(current, prioObj, count, curValue):
                 if not noLog:
@@ -3429,6 +3433,9 @@ def prune_mst_until(
                             f'requeued {str(current)} (prio went from {str(prioObj)} to {str(doubleCheckPrioObj)})')
                     continue
 
+            if not noLog:
+                logEntries.append(f'pruning tree node {str(current)}')
+
             # now remove this leaf from its parent and bubble the value change all the way up
             curValue -= current.value
             parent: GatherTreeNode | None = nodeMap.get(current.toTile, None)
@@ -3441,7 +3448,6 @@ def prune_mst_until(
                     logEntries.append(f'child {str(current)} already not present on {str(parent)}')
                     if USE_DEBUG_ASSERTS:
                         raise AssertionError(f'child {str(current)} already not present on {str(parent)}')
-                    pass
                 parent.pruned.append(current)
 
             while parent is not None:
@@ -3745,11 +3751,36 @@ def build_mst_from_root_and_contiguous_tiles(map: MapBase, rootTiles: typing.Ite
     return rootNodes
 
 
+def build_mst_to_root_from_path_and_contiguous_tiles(map: MapBase, rootPath: Path, tiles: TileSet, maxDepth: int, reversePath: bool = False) -> GatherTreeNode:
+    """Does NOT calculate values"""
+    inputList = rootPath.tileList
+
+    rootTiles = build_mst_from_root_and_contiguous_tiles(map, rootTiles=inputList, tiles=tiles, maxDepth=maxDepth)
+
+    if reversePath:
+        rootTiles = list(reversed(rootTiles))
+
+    prev = None
+    # if not reversePath:
+    for node in rootTiles:
+        if prev:
+            prev.fromGather = node
+            # logbook.info(f'setting {node.tile} fromGather to {prev.tile}')
+            # logbook.info(f'appending {node.tile} to {prev.tile}s children')
+            logbook.info(f'setting {prev.tile} fromGather to {node.tile}')
+            logbook.info(f'appending {prev.tile} to {node.tile}s children')
+            node.children.append(prev)
+            prev.toTile = node.tile
+        prev = node
+
+    return rootTiles[-1]
+
+
 def clone_nodes(gatherNodes: typing.List[GatherTreeNode]) -> typing.List[GatherTreeNode]:
     return [n.deep_clone() for n in gatherNodes]
 
 
-def build_gather_plan_from_desired_nodes(
+def build_max_value_gather_tree_linking_specific_nodes(
     map: MapBase,
     rootTiles: typing.Iterable[Tile],
     tiles: typing.Iterable[Tile],
@@ -3830,6 +3861,83 @@ def build_gather_plan_from_desired_nodes(
     )
 
     usedTime = time.perf_counter()-startTime
-    logbook.info(f'build_gather_plan_from_desired_nodes complete in {usedTime:.4f}s with {plan}')
+    logbook.info(f'build_max_value_gather_tree_linking_specific_nodes complete in {usedTime:.4f}s with {plan}')
+
+    return plan
+
+
+def gather_approximate_turns_to_tile(
+    map: MapBase,
+    rootTile: Tile,
+    approximateTargetTurns: int,
+    asPlayer: int = -1,
+    gatherMatrix: MapMatrixInterface[float | None] = None,
+    captureMatrix: MapMatrixInterface[float | None] = None,
+    negativeTiles: TileSet | None = None,
+    prioritizeCaptureHighArmyTiles: bool = False,
+    useTrueValueGathered: bool = True,
+    includeGatherPriorityAsEconValues: bool = False,
+    includeCapturePriorityAsEconValues: bool = True,
+    logDebug: bool = False,
+    viewInfo=None,
+) -> GatherCapturePlan:
+    """
+    When you want to gather a max amount to some specific tile in some rough number of turns.
+
+    @param map:
+    @param rootTile: The tile that will be the destination of the gather.
+    @param asPlayer:
+    @param gatherMatrix: Priority values for gathered tiles. Only applies to friendly tiles.
+    @param captureMatrix: Priority values for captured tiles. Only applies to non-friendly tiles.
+    @param prioritizeCaptureHighArmyTiles: If true, we'll value pathing through large army enemy territory over pathing through small army enemy territory.
+    @param negativeTiles: The negative tile set, as with any other gather. Does not bypass the capture/gather priority matrix values.
+    @param useTrueValueGathered: if True, the gathered_value will be the RAW army that ends up on the target tile(s) rather than just the sum of friendly army gathered, excluding army lost traversing enemy tiles.
+    @param includeGatherPriorityAsEconValues: if True, the priority matrix values of gathered nodes will be included in the econValue of the plan for gatherNodes.
+    @param includeCapturePriorityAsEconValues: if True, the priority matrix values of CAPTURED nodes will be included in the econValue of the plan for enemy tiles in the plan.
+    @param logDebug:
+    @param viewInfo: if provided, debug output will be written to the view info tile zones.
+    @return:
+    """
+    startTime = time.perf_counter()
+
+    if asPlayer == -1:
+        asPlayer = map.player_index
+
+    weightMatrix = MapMatrix(map, 0.0)
+
+    for t in map.get_all_tiles():
+        if map.is_tile_on_team_with(t, asPlayer):
+            # weightMatrix.raw[t.tile_index] += t.army
+            if gatherMatrix:
+                weightMatrix.raw[t.tile_index] += gatherMatrix.raw[t.tile_index]
+        else:
+            # if prioritizeCaptureHighArmyTiles:
+            #     weightMatrix.raw[t.tile_index] += t.army
+            # else:
+            #     weightMatrix.raw[t.tile_index] -= t.army
+
+            if captureMatrix:
+                weightMatrix.raw[t.tile_index] += captureMatrix.raw[t.tile_index]
+
+        if logDebug:
+            logbook.info(f'tile {t} weight: {weightMatrix.raw[t.tile_index]:.3f}')
+
+    steinerNodes = GatherSteiner.get_prize_collecting_gather_mapmatrix(map, asPlayer, rootTile, approximateTargetTurns, gatherMatrix, captureMatrix)
+
+    plan = convert_contiguous_tiles_to_gather_tree_nodes_with_values(
+        map,
+        rootTiles=[rootTile],
+        tiles=steinerNodes,
+        negativeTiles=negativeTiles,
+        searchingPlayer=asPlayer,
+        priorityMatrix=weightMatrix,
+        useTrueValueGathered=useTrueValueGathered,
+        includeGatherPriorityAsEconValues=includeGatherPriorityAsEconValues,
+        includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
+        viewInfo=viewInfo,
+    )
+
+    usedTime = time.perf_counter()-startTime
+    logbook.info(f'gather_approximate_turns_to_tile complete in {usedTime:.4f}s with {plan}')
 
     return plan

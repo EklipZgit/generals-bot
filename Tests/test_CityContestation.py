@@ -547,7 +547,7 @@ class CityContestationTests(TestBase):
 
         city = playerMap.GetTile(10, 19)
         self.assertIn(WinCondition.ContestEnemyCity, bot.win_condition_analyzer.viable_win_conditions)
-        self.assertIn(city, bot.win_condition_analyzer.target_cities)
+        self.assertIn(city, bot.win_condition_analyzer.contestable_cities)
 
     def test_should_continue_to_contest_this_city_through_fog_en_tiles(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -569,7 +569,7 @@ class CityContestationTests(TestBase):
         city = playerMap.GetTile(10, 19)
         self.assertGreater(bot.sum_player_standing_army_near_or_on_tiles([city], distance=4), 250)
         self.assertIn(WinCondition.ContestEnemyCity, bot.win_condition_analyzer.viable_win_conditions)
-        self.assertIn(city, bot.win_condition_analyzer.target_cities)
+        self.assertIn(city, bot.win_condition_analyzer.contestable_cities)
         self.assertPlayerTileCountGreater(simHost, general.player, 116)
     
     def test_should_hold_enough_on_cities_to_not_lose_group(self):

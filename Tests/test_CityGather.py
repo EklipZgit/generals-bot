@@ -1648,13 +1648,6 @@ class CityGatherTests(TestBase):
 
         city = playerMap.GetTile(1, 12)
         self.assertOwned(general.player, city)
-
-# 14f 38p 6s
-# 21f 36p 6s
-# 28f 32p
-# 30f 44p 9s
-# 32f 41p 9s (after removing prioFunc from get_tree_move and switching to MaxHeap and friends)
-# 40f, 39p 8s after redoing neutral city gather safety calculations
     
     def test_should_complete_capture_of_city_instead_of_stopping_for_no_reason(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1782,3 +1775,54 @@ class CityGatherTests(TestBase):
         city = playerMap.GetTile(15, 8)
         if city.player != general.player:
             self.assertTileDifferentialGreaterThan(24, simHost, 'if didnt take the city by end of round, then shoulda capped hella tiles instead')
+    
+    def test_should_not_attack_unattackable_city_even_if_seen__unit(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_attack_unattackable_city_even_if_seen___2nPVyCF3q---1--254.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 254, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=254)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        bot.select_move()
+        city = playerMap.GetTile(13, 15)
+        plan = bot.win_condition_analyzer.contestable_city_offense_plans.get(city, None)
+        if plan is not None and debugMode:
+            vi = self.get_renderable_view_info(playerMap)
+            vi.gatherNodes = plan.root_nodes
+            self.render_view_info(playerMap, vi)
+        self.assertIsNone(plan, f'the city {city} should absolutely not be contestable, lmao')
+
+    def test_should_not_attack_unattackable_city_even_if_seen(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_attack_unattackable_city_even_if_seen___2nPVyCF3q---1--254.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 254, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=254)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        expectedCity = playerMap.GetTile(14, 8)
+
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=12)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertOwned(general.player, expectedCity)
+
+# 14f 38p 6s
+# 21f 36p 6s
+# 28f 32p
+# 30f 44p 9s
+# 32f 41p 9s (after removing prioFunc from get_tree_move and switching to MaxHeap and friends)
+# 40f, 39p 8s after redoing neutral city gather safety calculations
+# 43f, 43p, 9s

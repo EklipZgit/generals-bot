@@ -1135,7 +1135,16 @@ class ArmyTracker(object):
             logbook.info(f"        NO fog source path for new army at {str(tile)}")
         return fogSourcePath
 
-    def find_next_fog_city_candidate_near_tile(self, cityPlayer: int, tile: Tile, cutoffDist: int = 10, distanceWeightReduction: int = 3, wallBreakWeight: float = 2.0, emergenceWeight: float = 1.0) -> Tile | None:
+    def find_next_fog_city_candidate_near_tile(
+            self,
+            cityPlayer: int,
+            tile: Tile,
+            cutoffDist: int = 10,
+            distanceWeightReduction: int = 3,
+            wallBreakWeight: float = 2.0,
+            emergenceWeight: float = 1.0,
+            doNotConvert: bool = False
+    ) -> Tile | None:
         """
         Looks for a fog city candidate nearby a given tile, and convert it to player owned if so.
 
@@ -1144,6 +1153,7 @@ class ArmyTracker(object):
         @param cutoffDist:
         @param distanceWeightReduction: the larger this number, the less distance will scale the result (and the more emergenceVal / wall_break_val will scale it).
         @param wallBreakWeight: the larger this number, the more wallbreak value will matter.
+        @param doNotConvert: if True, this method will not convert the city to player owned for you.
         @return:
         """
 
@@ -1248,8 +1258,8 @@ class ArmyTracker(object):
             noLog=False)
         if fogSourcePath is not None:
             newFogCity = fogSourcePath.tail.tile
-            self.convert_fog_city_to_player_owned(newFogCity, cityPlayer)
-            newFogCity.isTempFogPrediction = True
+            if not doNotConvert:
+                self.convert_fog_city_to_player_owned(newFogCity, cityPlayer)
             logbook.info(
                 f"        Found new fog city!???? {str(newFogCity)}")
             return newFogCity
@@ -2037,11 +2047,11 @@ class ArmyTracker(object):
     def convert_fog_city_to_player_owned(self, tile: Tile, player: int, isTempFogPrediction: bool = True):
         if player == -1:
             raise AssertionError(f'lol player -1 in convert_fog_city_to_player_owned for tile {str(tile)}')
-        wasUndiscObst = tile.isUndiscoveredObstacle
+        wasUndisc = not tile.discovered
         tile.update(self.map, player, army=1, isCity=True, isGeneral=False)
         tile.update(self.map, TILE_OBSTACLE, army=0, isCity=False, isGeneral=False)
         tile.delta = TileDelta()
-        if wasUndiscObst:
+        if wasUndisc:
             tile.discovered = False
             tile.discoveredAsNeutral = False
             tile.isTempFogPrediction = isTempFogPrediction

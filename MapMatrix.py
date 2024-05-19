@@ -92,9 +92,16 @@ class MapMatrix(MapMatrixInterface[T]):
 
         return myClone
 
-    def negate(self):
+    def negate_in_place(self):
         for idx, val in enumerate(self.raw):
             self.raw[idx] = 0 - val
+
+    def copy_negated(self) -> MapMatrix[T]:
+        copy = MapMatrix(None)
+        copy.raw = [0 - val for val in self.raw]
+        copy.map = self.map
+        copy.empty_val = self.empty_val
+        return copy
 
     def __delitem__(self, key: Tile):
         self.raw[key.tile_index] = self.empty_val

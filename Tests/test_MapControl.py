@@ -4,7 +4,7 @@ from DataModels import Move
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
-from base.client.tile import Tile_MOUNTAIN, TILE_EMPTY
+from base.client.tile import TILE_MOUNTAIN, TILE_EMPTY
 from bot_ek0x45 import EklipZBot
 
 

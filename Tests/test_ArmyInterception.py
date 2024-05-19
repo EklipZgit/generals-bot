@@ -1951,3 +1951,23 @@ class ArmyInterceptionTests(TestBase):
                 self.assertNoFriendliesKilled(map, general)
 
                 self.assertTileDifferentialGreaterThan(18, simHost)
+    
+    def test_should_not_intercept_when_does_not_block_any_damage_this_round(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_intercept_when_does_not_block_any_damage_this_round___lkkXgBKgj---0--195.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 195, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=195)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '11,13->5,13')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertEqual(71, playerMap.players[general.player].tileCount, 'should have capped a neutral tile every single move, since interception does nothing.')
+

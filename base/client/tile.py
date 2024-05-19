@@ -397,7 +397,7 @@ class Tile(object):
     def __eq__(self, other):
         if other is None:
             return False
-        return self.x == other.x and self.y == other.y
+        return self.tile_index == other.tile_index
 
     def was_not_visible_last_turn(self):
         return self.delta.gainedSight or (not self.visible and not self.delta.lostSight)

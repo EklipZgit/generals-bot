@@ -51,7 +51,7 @@ class ArmyFlowExpanderUnitTests(TestBase):
 
     def run_army_flow_expansion(self, map: MapBase, general: Tile, enemyGeneral: Tile, turns: int, negativeTiles: typing.Set[Tile] | None = None):
         builder = TileIslandBuilder(map)
-        builder.recalculate_tile_islands()
+        builder.recalculate_tile_islands(enemyGeneral)
         analysis = BoardAnalyzer(map, general)
         analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
 

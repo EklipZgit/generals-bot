@@ -1175,7 +1175,7 @@ class ArmyInterceptor(object):
             # then either we didn't fully block at the intercept, or something else weird happened.
             if enemyArmyLeftAtInterceptPointBeforeRemainingCapture <= 0:
                 if self.log_debug:
-                    logbook.error(f'wtf broke somewhere other than the expected intercept spot? node.tile {node.tile} vs enInterceptPointTile {enInterceptPointTile}')
+                    logbook.error(f'wtf broke somewhere other than the expected intercept spot? node.tile {node.tile} vs enInterceptPointTile {enInterceptPointTile}. enemyArmyLeftAtInterceptPointBeforeRemainingCapture {enemyArmyLeftAtInterceptPointBeforeRemainingCapture}')
 
         if self.log_debug:
             logbook.info(f'blocked {econValueBlocked} econ dmg, ({armyAccumulatedByInterceptPath} army), at interceptDist {interceptDistFromTarget}, enemy army left at intercept {enemyArmyLeftAtInterceptPointBeforeRemainingCapture}: path {str(interceptPath)}')
@@ -1411,24 +1411,25 @@ class ArmyInterceptor(object):
         threatNexts = set()
         usNexts = set()
         for threatInfo in threats:
-            tilesAtDist = threatInfo.threat.armyAnalysis.tileDistancesLookup[1]
+            tilesAtDist = threatInfo.threat.armyAnalysis.tileDistancesLookup.get(1, None)
 
             threatBase = threatInfo.threat.path.start.tile.army
 
-            for threatNext in tilesAtDist:
-                if self.map.is_tile_on_team_with(threatNext, threatInfo.threat.threatPlayer):
-                    threatArmy = threatBase + threatNext.army - 1
-                else:
-                    threatArmy = threatBase - threatNext.army - 1
+            if tilesAtDist:
+                for threatNext in tilesAtDist:
+                    if self.map.is_tile_on_team_with(threatNext, threatInfo.threat.threatPlayer):
+                        threatArmy = threatBase + threatNext.army - 1
+                    else:
+                        threatArmy = threatBase - threatNext.army - 1
 
-                halfLower = interceptionPath.start.tile.army // 2
-                # if halfLower - 2 < threatArmy:  # TODO dunno why this was -2, but making this over-split to find counter-examples where we dont want it to, I guess.
-                if halfLower < threatArmy - 1:
-                    allowSplit = False
+                    halfLower = interceptionPath.start.tile.army // 2
+                    # if halfLower - 2 < threatArmy:  # TODO dunno why this was -2, but making this over-split to find counter-examples where we dont want it to, I guess.
+                    if halfLower < threatArmy - 1:
+                        allowSplit = False
 
-                threatNexts.add(threatNext)
-                if threatNext in interceptionPath.start.tile.movable:
-                    usNexts.add(threatNext)
+                    threatNexts.add(threatNext)
+                    if threatNext in interceptionPath.start.tile.movable:
+                        usNexts.add(threatNext)
 
         if len(threatNexts) > 1 and len(usNexts) > 1 and threatNexts.issubset(usNexts):
             if not allowSplit:

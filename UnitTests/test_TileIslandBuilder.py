@@ -153,6 +153,7 @@ class TileIslandBuilderUnitTests(TestBase):
         self.assertAllIslandsContiguous(builder, debugMode)
 
         if debugMode:
+            self.render_map(map)
             self.render_tile_islands(map, builder)
 
         topLeftEnIsland = builder.tile_island_lookup[map.GetTile(0, 0)]

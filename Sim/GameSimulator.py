@@ -577,6 +577,7 @@ class GameSimulatorHost(object):
             botHost.eklipz_bot.timings = None
             botHost.eklipz_bot.curPath = None
             botHost.eklipz_bot.cached_scrims.clear()
+            botHost.eklipz_bot._expansion_value_matrix = None
             botHost.eklipz_bot.targetingArmy = None
             botHost.eklipz_bot.armyTracker.lastTurn = map.turn
             botHost.last_init_turn = map.turn - 1

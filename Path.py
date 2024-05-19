@@ -197,7 +197,7 @@ class Path(TilePlanInterface):
             self._adjacentSet.update(startTile.adjacents)
         self._pathQueue.appendleft(move)
 
-    def remove_start(self) -> PathMove:
+    def remove_start(self):
         if len(self._pathQueue) == 0:
             raise ", bitch? Why you tryin to remove_start when there aint no moves to made?"
 
@@ -205,16 +205,16 @@ class Path(TilePlanInterface):
         self._tileList = None
         self._adjacentSet = None
         self.start = self.start.next
-        return self._pathQueue.popleft()
+        self._pathQueue.popleft()
 
-    def get_first_move(self) -> Move:
+    def get_first_move(self) -> Move | None:
         if len(self._pathQueue) <= 1:
             raise queue.Empty(f", bitch? Path length {len(self._pathQueue)}: Why you tryin to get_first_move when there aint no moves to made?")
 
         move = Move(self.start.tile, self.start.next.tile, self.start.move_half)
         return move
 
-    def pop_first_move(self) -> Move:
+    def pop_first_move(self) -> Move | None:
         move = self.get_first_move()
         self._tileSet = None
         self._tileList = None
@@ -223,7 +223,7 @@ class Path(TilePlanInterface):
         self._pathQueue.popleft()
         return move
 
-    def remove_end(self) -> PathMove | None:
+    def remove_end(self):
         if len(self._pathQueue) == 0:
             logbook.info(", bitch? Removing nothing??")
             return None
@@ -234,7 +234,6 @@ class Path(TilePlanInterface):
         self.tail = self.tail.prev
         if self.tail is not None:
             self.tail.next = None
-        return move
 
     def convert_to_dist_dict(self, offset: int = 0) -> typing.Dict[Tile, int]:
         """
@@ -697,18 +696,16 @@ class MoveListPath(Path):
         if nextNode:
             self._pathQueue.appendleft(Move(startTile, nextNode.tile))
 
-    def remove_start(self) -> PathMove:
-        pm, move = self._remove_start()
-        return pm
+    def remove_start(self):
+        self._remove_start()
 
-    def _remove_start(self) -> typing.Tuple[PathMove, Move]:
+    def _remove_start(self) -> Move:
         if len(self._pathQueue) == 0:
             raise ", bitch? Why you tryin to remove_start when there aint no moves to made?"
 
         self._tileSet = None
         self._tileList = None
         self._adjacentSet = None
-        toRet = self.start
         self.start = self.start.next
         move = self._pathQueue.popleft()
         if self.start and self._pathQueue and self._pathQueue[0] and self._pathQueue[0].source != self.start.tile:
@@ -716,40 +713,38 @@ class MoveListPath(Path):
         # this wasn't / isn't here in main path impl
         if self.start is not None:
             self.start.prev = None
-        return toRet, move
+        return move
 
-    def get_first_move(self) -> Move:
+    def get_first_move(self) -> Move | None:
         if len(self._pathQueue) <= 0:
-            raise queue.Empty(f", bitch? Path length {len(self._pathQueue)}: Why you tryin to get_first_move when there aint no moves to made?")
+            return None
 
         return self._pathQueue[0]
 
     def pop_first_move(self) -> Move:
-        pm, move = self._remove_start()
+        move = self._remove_start()
         return move
 
-    def _remove_end(self) -> typing.Tuple[PathMove | None, Move | None]:
+    def _remove_end(self) -> Move | None:
         if len(self._pathQueue) == 0:
             logbook.info(", bitch? Removing nothing??")
-            return None, None
+            return None
         self._tileSet = None
         self._tileList = None
         self._adjacentSet = None
-        oldTail = self.tail
         self.tail = self.tail.prev
         move = self._pathQueue.pop()
         if self.tail and self._pathQueue and self._pathQueue[-1].dest != self.tail.tile:
             self.tail = self.tail.prev
         if self.tail:
             self.tail.next = None
-        return oldTail, move
+        return move
 
-    def remove_end(self) -> PathMove | None:
-        pm, move = self._remove_end()
-        return pm
+    def remove_end(self):
+        self._remove_end()
 
     def remove_end_move(self) -> Move | None:
-        pm, move = self._remove_end()
+        move = self._remove_end()
         return move
 
     def calculate_value(

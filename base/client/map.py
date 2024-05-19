@@ -169,7 +169,7 @@ class MapBase(object):
                  replay_id: typing.Union[None, str] = None
                  ):
         # Start Data
-        # self.USE_OLD_MOVEMENT_DETECTION = True
+        self.remainingCycleTurns: int = 0
         self.distance_mapper: DistanceMapper = DistanceMapper()
         self.last_player_index_submitted_move: typing.Tuple[Tile, Tile, bool] | None = None
         self.player_index: int = player_index  # Integer Player Index
@@ -291,6 +291,8 @@ class MapBase(object):
         else:
             self.is_army_bonus_turn = False
             self.is_city_bonus_turn = False
+
+        self.remainingCycleTurns = 50 - val % 50
 
         self._turn = val
 
@@ -2257,9 +2259,6 @@ class MapBase(object):
         self.complete = True
         if killer >= 0:
             self.players[self.player_index].capturedBy = killer
-
-    def get_tile_index(self, tile: Tile) -> int:
-        return tile.y * self.cols + tile.x
 
     def get_tile_index_by_x_y(self, x: int, y: int) -> int:
         return y * self.cols + x

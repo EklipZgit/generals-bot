@@ -34,7 +34,10 @@ class MapMatrixInterface(typing.Generic[T]):
     def copy(self) -> MapMatrixInterface[T]:
         pass
 
-    def negate(self):
+    def negate_in_place(self):
+        pass
+
+    def copy_negated(self) -> MapMatrixInterface[T]:
         pass
 
     def __delitem__(self, key: Tile):

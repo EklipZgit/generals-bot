@@ -819,7 +819,7 @@ class ArmyTracker(object):
 
                 # if tile WAS bordered by fog find the closest fog army and remove it (not tile.visible or tile.delta.gainedSight)
 
-    def new_army_emerged(self, emergedTile: Tile, armyEmergenceValue: float, emergingPlayer: int = -1):
+    def new_army_emerged(self, emergedTile: Tile, armyEmergenceValue: float, emergingPlayer: int = -1, distance: int | None = None):
         """
         when an army can't be resolved to coming from the fog from a known source, this method gets called to track its emergence location.
         @param emergedTile:
@@ -841,7 +841,8 @@ class ArmyTracker(object):
         # largestTile = [None]
 
         if not self.has_perfect_information_of_player_cities_and_general(emergingPlayer):
-            distance = self.min_spawn_distance + 1
+            if distance is None:
+                distance = self.min_spawn_distance + 1
 
             armyEmergenceValue = 2 + (armyEmergenceValue ** 0.75)
 
@@ -869,7 +870,8 @@ class ArmyTracker(object):
 
             breadth_first_foreach_dist(self.map, [emergedTile], distance, foreachFunc, bypassDefaultSkip=True)
 
-            if len(self.uneliminated_emergence_events[emergedTile.player]) < 5:
+            if len(self.uneliminated_emergence_events[emergedTile.player]) < 8:
+                logbook.info(f'new_army_emerged calling limit_gen_position_from_emergence because less than 8 so far')
                 self.limit_gen_position_from_emergence(self.map.players[emergedTile.player], emergedTile, emergenceAmount=armyEmergenceValue)
 
         for handler in self.notify_unresolved_army_emerged:
@@ -928,7 +930,7 @@ class ArmyTracker(object):
         for incTile, dist in incTiles:
             self.emergenceLocationMap[player][incTile] += incAmount
 
-    def find_fog_source(self, armyPlayer: int, tile: Tile, delta: int | None = None) -> Path | None:
+    def find_fog_source(self, armyPlayer: int, tile: Tile, delta: int | None = None, depthLimit: int | None = None) -> Path | None:
         """
         Looks for a fog source to this tile that produces the provided (positive) delta, or if none provided, the
         (positive) delta from the tile this turn.
@@ -940,6 +942,14 @@ class ArmyTracker(object):
             delta = abs(tile.delta.armyDelta)
 
         armyPlayerObj = self.map.players[armyPlayer]
+        standingArmy = armyPlayerObj.standingArmy
+
+        if depthLimit is None:
+            depthLimit = self.min_spawn_distance
+
+            if self.map.turn > 75:
+                depthLimit += 15
+
         missingCities = max(0, armyPlayerObj.cityCount - 1 - len(where(armyPlayerObj.cities, lambda c: c.discovered)))
 
         allowVisionlessObstaclesAndCities = False
@@ -1111,8 +1121,6 @@ class ArmyTracker(object):
         logbook.info(f"Looking for fog army path of value {delta} to tile {str(tile)}, prioritizeCityWallSource {prioritizeCityWallSource}")
         # we want the path to get army up to 0, so start it at the negative delta (positive)
         inputTiles[tile] = ((0, 0, delta, 0, 0, 0, 0, False), 0)
-
-        depthLimit = self.min_spawn_distance
 
         fogSourcePath = breadth_first_dynamic_max(
             self.map,
@@ -1317,7 +1325,7 @@ class ArmyTracker(object):
             self,
             player: int,
             sourceFogArmyPath: Path,
-            fogTile: Tile
+            fogTile: Tile,
     ) -> Army | None:
         existingArmy = None
         armiesFromFog = []
@@ -1684,6 +1692,14 @@ class ArmyTracker(object):
         armyRealTileDelta = 0 - unexplainedSourceDelta
         unexplainedAdjDelta = self.unaccounted_tile_diffs.get(adjacent, 0)
         positiveUnexplainedAdjDelta = 0 - unexplainedAdjDelta
+        adjacentIncludesArmy = SearchUtils.any_where(army.entangledArmies, lambda a: a.tile == adjacent)
+        if adjacentIncludesArmy:
+            logbook.info(f"    Army skipping {str(army)} -> {adjacent} because there was already an entangled army at this tile.")
+            return False
+
+        if adjacent.delta.gainedSight and adjacent.army < positiveUnexplainedAdjDelta // 2:
+            logbook.info(f"    Army skipping {str(army)} -> {adjacent} because gained sight and doesn't have much army.")
+            return False
 
         # only works when the source army is still visible
         if armyRealTileDelta > 0 and abs(unexplainedAdjDelta) - abs(armyRealTileDelta) == 0:
@@ -1725,11 +1741,13 @@ class ArmyTracker(object):
 
         return False
 
-    def use_fog_source_path(
+    def use_fog_source_path_and_increase_emergence(
             self,
             armyTile: Tile,
             sourceFogArmyPath: Path,
-            delta: int
+            delta: int,
+            emergingPlayer: int = -1,
+            depthLimit: int | None = None,
     ) -> bool:
         """
         Verifies whether a fog source path was good or not and returns True if good, False otherwise.
@@ -1768,7 +1786,7 @@ class ArmyTracker(object):
             armyEmergenceValue = max(4.0, delta - emergenceValueCovered)
             logbook.info(
                 f"  WAS POOR RESOLUTION! Adding emergence for player {armyTile.player} armyTile {armyTile.toString()} value {armyEmergenceValue}")
-            self.new_army_emerged(armyTile, armyEmergenceValue)
+            self.new_army_emerged(armyTile, armyEmergenceValue, emergingPlayer=emergingPlayer, distance=depthLimit)
         else:
             # Make the emerged tile path be permanent...?
             for t in fogPath.tileList:
@@ -2061,7 +2079,7 @@ class ArmyTracker(object):
 
     def handle_unaccounted_delta(self, tile: Tile, player: int, unaccountedForDelta: int) -> Army | None:
         """
-        Sources a delta army amount from fog and announces army emergence if not well-resolved.
+        Sources a (positive) delta army amount from fog and announces army emergence if not well-resolved.
         Returns an army the army resolved to be, if one is found.
         DOES NOT create an army if a source fog army is not found.
         """
@@ -2069,16 +2087,35 @@ class ArmyTracker(object):
         if tile.delta.discovered and not tile.army > self.track_threshold and not unaccountedForDelta > self.track_threshold and len(self.map.players[player].tiles) > 4:
             return None
 
-        sourceFogArmyPath = self.find_fog_source(player, tile, unaccountedForDelta)
+        depthLimit = self.get_emergence_max_depth_to_general_or_none(player, tile, unaccountedForDelta)
+
+        sourceFogArmyPath = self.find_fog_source(player, tile, unaccountedForDelta, depthLimit=depthLimit)
         if sourceFogArmyPath is not None:
             self.unaccounted_tile_diffs.pop(tile, 0)
 
             if tile not in self.skip_emergence_tile_pathings:
-                self.use_fog_source_path(tile, sourceFogArmyPath, unaccountedForDelta)
+                if depthLimit is not None and depthLimit < 40 and tile.delta.toTile is None:
+                    logbook.info(f'WHOO LIMITING GENERAL BY {depthLimit} BASED ON SHEER STANDING ARMY EMERGENCE')
+
+                    maxDistToGen = depthLimit
+                    self._limit_general_position_to_within_tile_and_distance(player, tile, maxDistToGen, alsoIncreaseEmergence=True, skipIfLongerThanExisting=True, emergenceAmount=unaccountedForDelta)
+
+                self.use_fog_source_path_and_increase_emergence(tile, sourceFogArmyPath, unaccountedForDelta, depthLimit=depthLimit)
 
                 return self.resolve_fog_emergence(player, sourceFogArmyPath, tile)
 
         return None
+
+    def get_emergence_max_depth_to_general_or_none(self, player: int, tile: Tile, unaccountedForDelta: int = -1):
+        if unaccountedForDelta == -1:
+            unaccountedForDelta = abs(tile.delta.armyDelta)
+        armyPlayerObj = self.map.players[player]
+        depthLimit = None
+        armyInFog = armyPlayerObj.standingArmy - armyPlayerObj.visibleStandingArmy
+        if unaccountedForDelta > 2 * armyInFog - 4:
+            depthLimit = self._calculate_maximum_general_distance_for_raw_fog_standing_army(armyPlayerObj, armyInFog)
+
+        return depthLimit
 
     def add_need_to_track_city(self, city: Tile):
         logbook.info(f'armytracker tracking updated city for next scan: {str(city)}')
@@ -2554,9 +2591,12 @@ class ArmyTracker(object):
                         maxExtraDist = min(maxExtraDist, tilesCapturedInAddlLaunches)
                         maxDist = min(maxDist, cycle1Trail1DistLimitAkaStartArmy + maxExtraDist)
                         # then they can be further away than their initial trail was as they could have retraversed.
-                    else:
+                    elif trail1EndTurn < 44:
                         # then this is their second trail, but they don't have time to get further than original launch dist so, we can still limit by that..
                         maxDist = min(maxDist, cycle1Trail1DistLimitAkaStartArmy)
+                    else:
+                        logbook.info(f'because of weird nonstandard launch, they may be full retraversing, so using their tile count as limit in order to not over-limit')
+                        maxDist = p.tileCount
                 else:
                     # otherwise, they've been capturing tiles, meaning we can limit by the max of either original launch limit or their max second launch limit
                     maxDist = min(maxDist, tilesCapturedInAddlLaunches)
@@ -2566,7 +2606,13 @@ class ArmyTracker(object):
             else:
                 maxDist = min(maxDist, cycle1Trail1DistLimitAkaStartArmy - trailOffset)
 
-        increaseEmergence = self.map.turn < 51
+        limitByRawStandingArmy = self.get_emergence_max_depth_to_general_or_none(p.index, tile, emergenceAmount)
+        if limitByRawStandingArmy is not None and maxDist > limitByRawStandingArmy:
+            logbook.info(f'WHOO LIMITING PLAYER {p.index} GENERAL BY {limitByRawStandingArmy} BASED ON SHEER STANDING ARMY EMERGENCE AT {tile}')
+            # this function doesn't expect you to include the emerging tile, where our calculation above does.
+            maxDist = limitByRawStandingArmy
+
+        increaseEmergence = self.map.turn < 51 or maxDist < 5
         if len(playerPreviouslyVisibleTiles) == 0:
             # throw out the army emergence deltas for the very first emergence, as we want to use the dist limiter exclusively for first contact.
             self._reset_player_emergences(p.index)
@@ -2590,21 +2636,24 @@ class ArmyTracker(object):
     def _handle_flipped_discovered_as_neutrals(self):
         with self.perf_timer.begin_move_event('handling discovered-as-neutral'):
             alreadyRan = set()
+
             for tile in self._flipped_tiles:
-                if tile.player == -1 and not tile.isMountain and not tile.isCity and tile.delta.discovered and tile not in alreadyRan:
-                    alreadyRan.add(tile)
-                    self.tile_discovered_neutral(tile)
-
-                for adj in tile.adjacents:
-                    if adj.player == -1 and not adj.isMountain and not adj.isCity and adj.delta.discovered and adj not in alreadyRan:
-                        alreadyRan.add(adj)
-                        self.tile_discovered_neutral(adj)
-
                 # this doesn't seem right...? Why is this here...?
                 if tile.delta.lostSight:
                     for adj in tile.adjacents:
                         if adj.delta.lostSight and tile.player != -1:
                             self.tiles_ever_owned_by_player[tile.player].add(adj)
+
+            for tile in self._flipped_tiles:
+                if tile.player == -1 and not tile.isMountain and not tile.isCity and tile.delta.discovered and tile not in alreadyRan:
+                    alreadyRan.add(tile)
+                    self.tile_discovered_neutral(tile)
+
+            for tile in self._flipped_tiles:
+                for adj in tile.adjacents:
+                    if adj.player == -1 and not adj.isMountain and not adj.isCity and adj.delta.discovered and adj not in alreadyRan:
+                        alreadyRan.add(adj)
+                        self.tile_discovered_neutral(adj)
 
             if len(alreadyRan) > 0 and self.map.turn < 150:
                 with self.perf_timer.begin_move_event('gen re-limit'):
@@ -3226,8 +3275,8 @@ class ArmyTracker(object):
         # if len(requiredTiles) == 0:
         #     logbook.warn(f'ArmyTracker found no tiles to build fog land from for player {player}')
         #     return
-        with self.perf_timer.begin_move_event(f'Fog land build get_map_as_graph_from_tiles p{player} (num required {len(requiredTiles)})'):
-            connectedSet, missingRequired = MapSpanningUtils.get_spanning_tree_matrix_from_tile_lists(self.map, requiredTiles, bannedTiles)
+        with self.perf_timer.begin_move_event(f'Fog land build get_spanning_tree_set_from_tile_lists p{player} (num required {len(requiredTiles)})'):
+            connectedSet, missingRequired = MapSpanningUtils.get_spanning_tree_set_from_tile_lists(self.map, requiredTiles, bannedTiles)
             # connectedTiles = [t for t in connectedSet]
             self.unconnectable_tiles[player] = missingRequired
         # with self.perf_timer.begin_move_event(f'ArmyTracker build_network_x_steiner_tree p{player} (num banned {len(bannedTileList)}, required {len(requiredTiles)})'):
@@ -3604,3 +3653,24 @@ class ArmyTracker(object):
                 armies.append(army)
 
         return armies
+
+    def _calculate_maximum_general_distance_for_raw_fog_standing_army(self, player: Player, armyInFog: int) -> int:
+        cityCount = player.cityCount
+        # walk backward through turn order till we go negative
+        maxDist = 0
+        armyLeft = armyInFog  # - (player.cityCount - 1) // 2  # for each 2 cities (after general), they must leave behind a 2 instead of a 1, so
+        turn = self.map.turn
+        while True:
+            if turn & 1 == 0:
+                if armyLeft <= 0:
+                    break
+                armyLeft -= cityCount
+
+            if turn % 50 == 0:
+                armyLeft -= player.tileCount - SearchUtils.count(player.tiles, lambda t: t.visible)
+
+            turn -= 1
+            maxDist += 1
+
+        return maxDist
+

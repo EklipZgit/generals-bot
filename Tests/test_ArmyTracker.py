@@ -2437,3 +2437,45 @@ a1   b1   b1   bG1
 
         self.assertEqual(1, len(playerMap.players[enemyGeneral.player].cities))
 
+    def test_should_not_drop_important_fog_armies_when_discovering_neutrals(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_drop_important_fog_armies_when_discovering_neutrals___ZAYWfdQDk---1--137.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 137, fill_out_tiles=True)
+        map.GetTile(3, 8).reset_wrong_undiscovered_fog_guess()
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=137)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '4,9->2,9->2,8->1,8->1,3->5,3')
+        simHost.queue_player_moves_str(general.player, '5,7->5,9->5,8->4,8')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        self.assertNoFriendliesKilled(map, general)
+
+        army = bot.get_army_at_x_y(1, 8)
+        self.assertIsNotNone(army)
+        self.assertEqual(enemyGeneral.player, army.player)
+        self.assertEqual(44, army.value)
+
+    def test_should_not_drop_important_fog_armies_when_discovering_neutrals__full_defense(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_drop_important_fog_armies_when_discovering_neutrals___ZAYWfdQDk---1--137.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 137, fill_out_tiles=True)
+        map.GetTile(3, 8).reset_wrong_undiscovered_fog_guess()
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=137)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '4,9->2,9->2,8->1,8->1,3->5,3')
+        simHost.queue_player_moves_str(general.player, '5,7->5,9->5,8->4,8')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=14)
+        self.assertNoFriendliesKilled(map, general)

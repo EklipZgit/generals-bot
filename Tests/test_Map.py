@@ -1,11 +1,10 @@
 import typing
 
-import SearchUtils
-from DataModels import Move
 from Sim.GameSimulator import GameSimulatorHost
 from Sim.TextMapLoader import TextMapLoader
 from TestBase import TestBase
-from base.client.tile import Tile_FOG, TILE_OBSTACLE, TILE_MOUNTAIN, Score
+from base.client.map import Score
+from base.client.tile import TILE_FOG, TILE_OBSTACLE, TILE_MOUNTAIN
 from test_MapBaseClass import MapTestsBase
 
 
@@ -987,18 +986,6 @@ player_index=0
                 self.assertNoFriendliesKilled(map, general)
 
                 self.assertCorrectArmyDeltas(simHost, general.player)
-
-    # THIS IS ALL BEFORE SPLITTING 2v2 OUT
-    # 4590 failed, 23,663 passed
-    # 4904 failed, 23,353 passed after fixing move into fog issue
-    # 4904 failed, 23,354 passed after fixing city capture at fog border issue
-    # 5095 failed, 23,177 passed after ??? changes that were made since last test run....
-    # 8485 failed, 19,787 passed with the current changes
-
-    # AFTER SPLITTING 2v2 OUT
-    # 295f, 19,187p
-    # 297f 19189p w/ pre neutral tile collision fix
-    # 277 after FUCKING TWO WHOLE GODDAMN DAYS OF TRYING TO FUCKING FJKDSF:LKJFDS:JLKFDSGLJK:HRSW:JMNKLGWR GOD I HATE TILE TRACKING, BRUTE FORCE WOULD HAVE BEEN SO MUCH BETTER
     
     def test_should_not_duplicate_armies_back_into_fog(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1019,3 +1006,16 @@ player_index=0
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
+
+    # THIS IS ALL BEFORE SPLITTING 2v2 OUT
+    # 4590 failed, 23,663 passed
+    # 4904 failed, 23,353 passed after fixing move into fog issue
+    # 4904 failed, 23,354 passed after fixing city capture at fog border issue
+    # 5095 failed, 23,177 passed after ??? changes that were made since last test run....
+    # 8485 failed, 19,787 passed with the current changes
+
+    # AFTER SPLITTING 2v2 OUT
+    # 295f, 19,187p
+    # 297f 19189p w/ pre neutral tile collision fix
+    # 277 after FUCKING TWO WHOLE GODDAMN DAYS OF TRYING TO FUCKING FJKDSF:LKJFDS:JLKFDSGLJK:HRSW:JMNKLGWR GOD I HATE TILE TRACKING, BRUTE FORCE WOULD HAVE BEEN SO MUCH BETTER
+    # 279 after fixing incorrect delta on neutral(fog)->neutral(visible) from fog move

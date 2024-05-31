@@ -69,7 +69,10 @@ class GatherTreeNode(typing.Generic[T]):
     ):
         self.tile: Tile = tile
         self.toTile: Tile | None = toTile
-        self.fromGather: GatherTreeNode | None = None
+        """The singular tile that this gather tile will move TO in this gather."""
+        self.toGather: GatherTreeNode | None = None
+        """The singular gather node that this gather tile will move TO in this gather. For each child in xyzNode.children, each of the childrens .toGathers should be xyzNode."""
+
         self.value: int = 0
         """The army value gathered by this point in the tree."""
         self.points: float = 0.0
@@ -120,7 +123,7 @@ class GatherTreeNode(typing.Generic[T]):
     def __setstate__(self, state):
         self.__dict__.update(state)
         for child in self.children:
-            child.fromGather = self
+            child.toGather = self
 
     def deep_clone(self):
         newNode = GatherTreeNode(self.tile, self.toTile, self.stateObj)
@@ -130,18 +133,18 @@ class GatherTreeNode(typing.Generic[T]):
         newNode.trunkDistance = self.trunkDistance
         newNode.children = [node.deep_clone() for node in self.children]
         for child in newNode.children:
-            child.fromGather = newNode
+            child.toGather = newNode
         newNode.pruned = [node.deep_clone() for node in self.pruned]
         for child in newNode.pruned:
-            child.fromGather = newNode
+            child.toGather = newNode
         return newNode
 
     def populate_from_nodes(self):
         for child in self.children:
-            child.fromGather = self
+            child.toGather = self
             child.populate_from_nodes()
         for child in self.pruned:
-            child.fromGather = self
+            child.toGather = self
             child.populate_from_nodes()
 
     def strip_all_prunes(self):

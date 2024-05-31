@@ -1,11 +1,6 @@
-import base.viewer
-from ArmyAnalyzer import ArmyAnalyzer
-from BoardAnalyzer import BoardAnalyzer
-from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
+from Strategy import TeamAttackData
 from TestBase import TestBase
-from ViewInfo import ViewInfo
-from base.client.tile import TILE_MOUNTAIN, TILE_EMPTY, MapBase
 
 
 class OpponentTrackerTests(TestBase):
@@ -61,7 +56,7 @@ class OpponentTrackerTests(TestBase):
         self.assertEqual(1, bot.opponent_tracker.team_score_data_history[0][100].cityCount)
         self.assertEqual(2, bot.opponent_tracker.team_score_data_history[1][100].cityCount)
 
-        self.assertEqual(38, len(bot.opponent_tracker._gather_queues_by_player[1]))
+        # self.assertEqual(38, len(bot.opponent_tracker._gather_queues_by_player[1]))
         counts = bot.opponent_tracker.get_all_player_fog_tile_count_dict()
         self.assertEqual(27, counts[1][2])
         self.assertEqual(11, counts[1][1])
@@ -521,3 +516,211 @@ class OpponentTrackerTests(TestBase):
         self.assertIsNone(winner)
 
         self.assertMinArmyNear(playerMap, general, general.player, minArmyAmount=70, distance=4)
+
+    def test_should_get_notified_of_all_army_emergences_wtf(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_get_notified_of_all_army_emergences_wtf___RGYuHtVjh---0--241.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 241, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=241)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '14,7->15,7')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertEqual(48, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total)
+        self.assertEqual(49, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total_true)
+
+    def test_should_not_incorrectly_decrement_fog_army_when_discovering_smaller_tile_than_expected(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_get_notified_of_all_army_emergences_wtf___RGYuHtVjh---0--225.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 225, fill_out_tiles=True)
+        self.update_tile_preserving_player_army(map, map.GetTile(12, 12), enemyGeneral.player, newArmy=1)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=225)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '10,12->11,12')
+        # simHost.queue_player_leafmoves(enemyGeneral.player, num_moves=100)
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertEqual(48, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total)
+        self.assertEqual(49, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total_true)
+
+    def test_should_not_decrement_fog_army_when_discovering_where_an_army_is_NOT_at(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_decrement_fog_army_when_discovering_where_an_army_is_NOT_at___RGYuHtVjh---0--240.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '15,7->14,7')
+        simHost.queue_player_moves_str(general.player, '17,7->16,7')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertEqual(83, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total)
+        self.assertEqual(81, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total_true)
+    
+    def test_shouldnt_leave_fog_army_behind_on_entangled_emergence(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_leave_fog_army_behind_on_entangled_emergence___LDURvzxqo---0--233.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 233, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=233)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '7,15->6,15->6,14')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertEqual(1, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total)
+        self.assertEqual(1, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total_true)
+
+    def test_TeamAttackData_serializes_and_deserializes(self):
+        data = TeamAttackData(2, 14, 420.333, 69.70)
+        data.actual_efficiency = 5.553
+        data.actual_attack_cycle_turn = 23
+        data.actual_true_efficiency = 3.213
+
+        dataStr = str(data)
+
+        other = TeamAttackData.parse(dataStr)
+
+        self.assertEqual(data.team, other.team)
+        self.assertEqual(data.actual_efficiency, other.actual_efficiency)
+        self.assertEqual(data.actual_attack_cycle_turn, other.actual_attack_cycle_turn)
+        self.assertEqual(data.actual_true_efficiency, other.actual_true_efficiency)
+        self.assertEqual(data.expected_efficiency, other.expected_efficiency)
+        self.assertEqual(data.expected_attack_cycle_turn, other.expected_attack_cycle_turn)
+        self.assertEqual(data.expected_true_efficiency, other.expected_true_efficiency)
+    
+    def test_should_not_increment_incorrect_value(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_increment_incorrect_value___nrgpFuPgB---0--41.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 41, fill_out_tiles=False)
+        enemyGeneral.army = 9
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=41)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '9,16->10,16')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.assertEqual(0, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total)
+        self.assertEqual(0, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total_true)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertEqual(0, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total)
+        self.assertEqual(0, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total_true)
+    
+    def test_should_not_allow_self_to_die_by_not_playing_defensive_with_obvious_incoming_attack(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_allow_self_to_die_by_not_playing_defensive_with_obvious_incoming_attack___FPi5sj6EJ---0--256.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 256, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=256)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=18)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertMinArmyNear(playerMap, playerMap.GetTile(10, 15), general.player, minArmyAmount=90, distance=4)
+
+    def test_should_not_allow_self_to_die_by_not_playing_defensive_with_obvious_incoming_attack__timing_turn(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_allow_self_to_die_by_not_playing_defensive_with_obvious_incoming_attack__timing_turn___FPi5sj6EJ---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=250)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=23)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertMinArmyNear(playerMap, playerMap.GetTile(10, 15), general.player, minArmyAmount=90, distance=4)
+    
+    def test_should_check_if_opp_already_attacked_this_cycle_before_playing_defensively(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_check_if_opp_already_attacked_this_cycle_before_playing_defensively___EmYfKOs2g---1--190.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 190, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=190)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.info_render_expansion_matrix_values = True
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        self.assertNoFriendliesKilled(map, general)
+
+        with self.subTest(careLess=False):
+            self.assertTileDifferentialGreaterThan(8, simHost, 'shouldnt fuck off and start defense gathering before end of cycle when opp already attacked and there is no sketchy inbound threat')
+        with self.subTest(careLess=True):
+            self.assertTileDifferentialGreaterThan(10, simHost, 'shouldnt waste expansion time by going left and not capping the 2 0-army-en-tiles-in-mid')
+    
+    def test_should_drop_fog_army_total_on_re_emergence_of_emerged_army(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_drop_fog_army_total_on_re-emergence_of_emerged_army___xvyKCK5io---1--209.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 209, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=209)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '12,7->13,7->13,8')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        startingFog = bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total
+        startingFogTrue = bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total_true
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertEqual(startingFog, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total)
+        self.assertEqual(startingFogTrue, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total_true)

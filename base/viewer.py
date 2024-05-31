@@ -12,6 +12,7 @@ import sys
 import traceback
 from multiprocessing import Queue
 
+import Utils
 from Interfaces import TilePlanInterface
 from base.Colors import *
 
@@ -27,23 +28,6 @@ from base.client.map import MapBase, Score
 MIN_WINDOW_WIDTH = 16
 
 # Color Definitions
-
-
-# P_BRIGHT_GREEN = (10,225,90)
-PLAYER_COLORS = [
-    P_RED,
-    P_BLUE,
-    P_GREEN,
-    P_PURPLE,
-    P_TEAL,
-    P_DARK_GREEN,
-    P_YELLOW,
-    P_DARK_RED,
-    ORANGE,
-    LIGHT_BLUE,
-    LIGHT_PINK,
-    P_LIGHT_PURPLE,
-]
 FOG_COLOR_OFFSET = 25
 KING_COLOR_OFFSET = 35
 
@@ -207,20 +191,26 @@ class GeneralsViewer(object):
     def _initViewier(self, alignTop: bool, alignLeft: bool):
         bottomPos, leftPos, rightPos, topPos = self.get_config_positions()
 
-        self.infoLineHeight = 17
+        self.infoLineHeight = 16
         self.infoRowHeight = 350
         self.statsWidth = 650
 
+        scoreCellHeightMult = 3.5
+
         if self.cellHeight is None:
-            self.cellHeight = min(85, (1080 - self.infoRowHeight - self.scoreRowHeight) // (self._map.rows + 1))
+            self.cellHeight = min(85, int((1080 - self.scoreRowHeight) / (self._map.rows + 4 + scoreCellHeightMult)))
+            # self.cellHeight = min(85, (1080 - self.infoRowHeight - self.scoreRowHeight) // (self._map.rows + 1))
             self.cellHeight = max(29, self.cellHeight)
             self.cellWidth = self.cellHeight
+
+        self.cellHeightOverTwo = self.cellHeight / 2
+        self.cellWidthOverTwo = self.cellWidth / 2
 
         self.board_width_px = self._map.cols * (self.cellWidth + CELL_MARGIN) + CELL_MARGIN
 
         self.window_width_px = self.board_width_px + self.statsWidth
 
-        self.scoreRowHeight = int((self.cellHeight + 2) * 3.5)
+        self.scoreRowHeight = int((self.cellHeight + 2) * scoreCellHeightMult)
 
         self.tile_surface = pygame.Surface((self.cellWidth, self.cellHeight))
         self.player_fight_indicator_width = 2 * self.cellWidth
@@ -329,7 +319,6 @@ class GeneralsViewer(object):
         MapBase.DO_NOT_RANDOMIZE = True
         termSec = 600
         if not self.noLog:
-            import logging
             BotLogging.set_up_logger(logbook.INFO, mainProcess=False, queue=loggingQueue)
         while not self._receivedUpdate:  # Wait for first update
             try:
@@ -785,6 +774,8 @@ class GeneralsViewer(object):
 
             self.draw_emergences()
 
+            self._draw_arrows()
+
             # draw text
             for row in range(self._map.rows):
                 for column in range(self._map.cols):
@@ -1014,7 +1005,7 @@ class GeneralsViewer(object):
         for player in included:
             self._viewInfo.add_map_division(self._viewInfo.armyTracker.valid_general_positions_by_player[player.index], PLAYER_COLORS[player.index], alpha=190)
 
-            whitenedPlayerColor = rescale_color(
+            whitenedPlayerColor = Utils.rescale_color(
                 valToScale=0.2,
                 valueMin=0.0,
                 valueMax=1.0,
@@ -1036,7 +1027,7 @@ class GeneralsViewer(object):
             if tile.player != emergencePlayer:
                 (playerR, playerG, playerB) = PLAYER_COLORS[emergencePlayer]
 
-            alpha = min(alphaMin, max(255, rescale_value(abs(emergenceValue), 0, 50, alphaMin, 255)))
+            alpha = min(alphaMin, max(255, int(Utils.rescale_value(abs(emergenceValue), 0, 50, alphaMin, 255))))
             # playerR = (playerR + 256) // 2
             # playerG = (playerG + 256) // 2
             # playerB = (playerB + 256) // 2
@@ -1122,7 +1113,7 @@ class GeneralsViewer(object):
                             continue
                         if adj not in drawnFrom:
                             if adj in pathWay.tiles:
-                                (r, g, b) = rescale_color(pathWay.distance, minLength, maxLength, shortestColor, longestColor)
+                                (r, g, b) = Utils.rescale_color(pathWay.distance, minLength, maxLength, shortestColor, longestColor)
                                 self.draw_line_between_tiles(tile, adj, (r, g, b), 210)
                                 drawingFrontier.appendleft(adj)
                         # elif adj in pathways: # then check for closer path merge
@@ -1269,13 +1260,18 @@ class GeneralsViewer(object):
             s.set_alpha(alpha)
             self._screen.blit(s, (pos_left - 1, pos_top - 1))
 
-    def getCenter(self, tile):
+    def getCenter(self, tile) -> typing.Tuple[float, float]:
         left, top = self.getTopLeft(tile)
         return left + self.cellWidth / 2, top + self.cellHeight / 2
 
-    def getTopLeft(self, tile):
+    def getTopLeft(self, tile) -> typing.Tuple[float, float]:
         pos_left = (CELL_MARGIN + self.cellWidth) * tile.x + CELL_MARGIN
         pos_top = (CELL_MARGIN + self.cellHeight) * tile.y + CELL_MARGIN
+        return pos_left, pos_top
+
+    def getTopLeftTileFloats(self, x: float, y: float) -> typing.Tuple[float, float]:
+        pos_left = (CELL_MARGIN + self.cellWidth) * x + CELL_MARGIN
+        pos_top = (CELL_MARGIN + self.cellHeight) * y + CELL_MARGIN
         return pos_left, pos_top
 
     def get_font_color(self, tile) -> typing.Tuple[int, int, int]:
@@ -1349,7 +1345,7 @@ class GeneralsViewer(object):
         # adjust color by map divisions:
         for (divisionMatrix, (r, g, b), alpha) in self._viewInfo._zones:
             if tile in divisionMatrix:
-                pColor = rescale_color(alpha, 0, 255, pColor, (r, g, b))
+                pColor = Utils.rescale_color(alpha, 0, 255, pColor, (r, g, b))
 
         return pColor
 
@@ -1443,7 +1439,7 @@ class GeneralsViewer(object):
                 score_color = PLAYER_COLORS[player.index]
                 if player.leftGame:
                     # make them 70% black after leaving game
-                    score_color = rescale_color(0.6, 0, 1.0, score_color, GRAY)
+                    score_color = Utils.rescale_color(0.6, 0, 1.0, score_color, GRAY)
 
                 curScoreWidth = alive_score_width
                 if player.dead:
@@ -1524,35 +1520,105 @@ class GeneralsViewer(object):
                         self._screen.blit(self._medFont.render(playerCycleSubtext, True, WHITE),
                                           (team_pos_left + 3, pos_top + 2 + 6.6 * self._medFont.get_height()))
 
+    def _draw_arrows(self):
+        for fromX, fromY, toX, toY, label, color, alpha, isBidir in self._viewInfo.arrows:
+            self.draw_arrow_between(fromX, fromY, toX, toY, label, color, alpha, isBidir)
 
+    def draw_arrow_between(self, fromX: float, fromY: float, toX: float, toY: float, label: str | None, color: typing.Tuple[int, int, int], alpha: int, isBidir: bool):
+        trueFromX, trueFromY = self.getTopLeftTileFloats(fromX, fromY)
+        trueToX, trueToY = self.getTopLeftTileFloats(toX, toY)
 
-def rescale_color(
-        valToScale,
-        valueMin,
-        valueMax,
-        colorMin: typing.Tuple[int, int, int],
-        colorMax: typing.Tuple[int, int, int]
-) -> typing.Tuple[int, int, int]:
-    rMin, gMin, bMin = colorMin
-    rMax, gMax, bMax = colorMax
+        fromVec = Vector2(trueFromX + self.cellWidthOverTwo, trueFromY + self.cellHeightOverTwo)
+        toVec = Vector2(trueToX + self.cellWidthOverTwo, trueToY + self.cellHeightOverTwo)
 
-    r = int(rescale_value(valToScale, valueMin, valueMax, rMin, rMax))
-    g = int(rescale_value(valToScale, valueMin, valueMax, gMin, gMax))
-    b = int(rescale_value(valToScale, valueMin, valueMax, bMin, bMax))
+        r, g, b = color
+        self._draw_arrow_raw(self._screen, fromVec, toVec, Color(r, g, b, alpha), body_width=2, head_width=7, head_height=11, label=label)
+        if isBidir:
+            self._draw_arrow_raw(self._screen, toVec, fromVec, Color(r, g, b, alpha), body_width=2, head_width=7, head_height=11)
 
-    return r, g, b
+    def _draw_arrow_raw(
+            self,
+            surface: pygame.Surface,
+            start: pygame.Vector2,
+            end: pygame.Vector2,
+            color: pygame.Color,
+            body_width: int = 1,
+            head_width: int = 4,
+            head_height: int = 2,
+            label: str | None = None
+    ):
+        """Draw an arrow between start and end with the arrow head at the end.
+        https://www.reddit.com/r/pygame/comments/v3ofs9/draw_arrow_function/
 
+        Args:
+            surface (pygame.Surface): The surface to draw on
+            start (pygame.Vector2): Start position
+            end (pygame.Vector2): End position
+            color (pygame.Color): Color of the arrow
+            body_width (int, optional): Defaults to 2.
+            head_width (int, optional): Defaults to 4.
+            head_height (float, optional): Defaults to 2.
+        """
+        arrow = start - end
+        angle = arrow.angle_to(pygame.Vector2(0, -1))
+        body_length = arrow.length() - head_height
 
-def rescale_value(valToScale, valueMin, valueMax, newScaleMin, newScaleMax):
-    # Figure out how 'wide' each range is
-    leftSpan = valueMax - valueMin
-    rightSpan = newScaleMax - newScaleMin
+        # if label:
+        #     midPoint = (fromVec + toVec) / 2
+        #     self._screen.blit(,
+        #                       (midPoint.x + 3, midPoint.y + 2))
 
-    if leftSpan == 0:
-        leftSpan = 1
+        # Create the triangle head around the origin
+        head_verts = [
+            pygame.Vector2(0, head_height / 2),  # Center
+            pygame.Vector2(head_width / 2, -head_height / 2),  # Bottomright
+            pygame.Vector2(-head_width / 2, -head_height / 2),  # Bottomleft
+        ]
+        # Rotate and translate the head into place
+        translation = pygame.Vector2(0, arrow.length() - (head_height / 2)).rotate(-angle)
+        for i in range(len(head_verts)):
+            head_verts[i].rotate_ip(-angle)
+            head_verts[i] += translation
+            head_verts[i] += start
 
-    # Convert the left range into a 0-1 range (float)
-    valueScaled = float(valToScale - valueMin) / float(leftSpan)
+        pygame.draw.polygon(surface, color, head_verts)
 
-    # Convert the 0-1 range into a value in the right range.
-    return newScaleMin + (valueScaled * rightSpan)
+        # Stop weird shapes when the arrow is shorter than arrow head
+        if arrow.length() >= head_height:
+            # Calculate the body rect, rotate and translate into place
+            body_verts = [
+                pygame.Vector2(-body_width / 2, body_length / 2),  # Topleft
+                pygame.Vector2(body_width / 2, body_length / 2),  # Topright
+                pygame.Vector2(body_width / 2, -body_length / 2),  # Bottomright
+                pygame.Vector2(-body_width / 2, -body_length / 2),  # Bottomleft
+            ]
+            translation = pygame.Vector2(0, body_length / 2).rotate(-angle)
+            for i in range(len(body_verts)):
+                body_verts[i].rotate_ip(-angle)
+                body_verts[i] += translation
+                body_verts[i] += start
+
+            pygame.draw.polygon(surface, color, body_verts)
+
+        if label:
+            # original line was flat, so to do the same rotation on the text start flat
+            color.a = (color.a + 255) // 2
+            labelThing = self._smallFont.render(label, True, color)
+            # fontAngle = (angle + 360) % 180
+            fontAngle = (angle) % 180
+            # fontAngle = angle
+            heightOffset = self._smallFontWidth
+            point = pygame.Vector2(0, -heightOffset)
+            point.rotate_ip(fontAngle)
+            # point += translation
+            midPoint = (start + end) / 2
+            point += midPoint
+
+            # translation = pygame.transform.rotozoom(labelThing, fontAngle, 1.0)
+            translation = labelThing
+            # print(-angle)
+            self._screen.blit(translation,
+                              (point.x, point.y))
+            self._screen.blit(translation,
+                              (point.x, point.y))
+

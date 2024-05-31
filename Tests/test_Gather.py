@@ -17,6 +17,7 @@ class GatherTests(TestBase):
         bot = super().get_debug_render_bot(simHost, player)
 
         bot.info_render_gather_values = True
+        bot.gather_use_pcst = True
         # bot.info_render_centrality_distances = True
         GatherUtils.USE_DEBUG_ASSERTS = True
         DebugHelper.IS_DEBUGGING = True
@@ -313,6 +314,9 @@ class GatherTests(TestBase):
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=864)
         
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        bot = simHost.get_bot(general.player)
+        # bot.timings = bot.get_timings()
+        # bot.timings.splitTurns = 25
 
         # simHost.make_player_afk(enemyGeneral.player)
 
@@ -325,7 +329,7 @@ class GatherTests(TestBase):
         self.skipTest("TODO add asserts")  #  for random_large_gather_test
 
     def test_should_not_produce_invalid_path_during_gather(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_produce_invalid_path_during_gather___b-TEST__10ec1926-ef6a-4efb-a6e6-d7a3a9017f00---b--553.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 560, fill_out_tiles=True)
 

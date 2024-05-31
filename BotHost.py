@@ -16,11 +16,12 @@ from DataModels import Move
 from MapMatrix import MapMatrix
 from PerformanceTimer import PerformanceTimer, NS_CONVERTER
 from Sim.TextMapLoader import TextMapLoader
-from Viewer.ViewerProcessHost import ViewerHost
 from base import bot_base
 from base.client.generals import ChatUpdate
 from base.client.map import MapBase, Tile
 from bot_ek0x45 import EklipZBot
+
+from Viewer.ViewerProcessHost import ViewerHost
 
 FORCE_NO_VIEWER = False  # if you want the bot GUI to stop distracting you from work but you dont want to stop and restart all the bot shells with noUI, flip this flag and it will force the GUI off :)
 FORCE_PRIVATE = False  # if you're making changes that are gonna break the bot and want to force it to only play in private rooms temporarily but dont want to kill all the shell loops, flip this flag, and it will keep restarting and wait for the flag to be flipped back before queuing again (except private games).
@@ -67,7 +68,6 @@ class BotHostBase(object):
 
         self.align_bottom: bool = alignBottom
         self.align_right: bool = alignRight
-
         self._viewer: ViewerHost | None = None
         self.rethrow: bool = throw
         self.noLog: bool = noLog
@@ -84,11 +84,11 @@ class BotHostBase(object):
         now = (time.time_ns() / NS_CONVERTER)
         diff = now - updateReceivedTime
         if diff > 0.3:
-            logbook.info(f'MISSED MOVE receiving turn {currentMap.turn}, update diff {diff:.3f}, (now {now:.3f} - updateReceivedTime {updateReceivedTime:.3f})')
+            logbook.info(f'MISSED MOVE receiving turn {currentMap.turn}, update diff {diff:.5f}, (now {now:.5f} - updateReceivedTime {updateReceivedTime:.5f})')
             self.receive_update_no_move(currentMap, updateReceivedTime)
             return
         else:
-            logbook.info(f'receiving turn {currentMap.turn}, update diff {diff:.3f}, (now {now:.3f} - updateReceivedTime {updateReceivedTime:.3f})')
+            logbook.info(f'receiving turn {currentMap.turn}, update diff {diff:.5f}, (now {now:.5f} - updateReceivedTime {updateReceivedTime:.5f})')
 
         timer.record_update(currentMap.turn, updateReceivedTime)
 

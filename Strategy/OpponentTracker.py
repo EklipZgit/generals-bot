@@ -42,6 +42,9 @@ class FogGatherQueue(object):
 
         self.total_sum -= tileSize * existingAmt
         self.total_sum += tileSize * numTiles
+        self.length -= existingAmt
+        if tileSize > 1:
+            self.gatherable_length -= existingAmt
 
         self._gather_amts[tileSize] = numTiles
 
@@ -51,6 +54,10 @@ class FogGatherQueue(object):
         else:
             if self._gather_amt_max == tileSize:
                 self._gather_amt_max = self.find_next_max_amount_under(tileSize)
+
+        self.length += numTiles
+        if tileSize > 1:
+            self.gatherable_length += numTiles
 
     def append(self, tileSize: int):
         if tileSize > self._gather_amt_max:
@@ -203,6 +210,56 @@ class FogGatherQueue(object):
             self._gather_amt_max = self.find_next_max_amount_under(self._gather_amt_max)
 
 
+class TeamAttackData(object):
+    def __init__(self, team: int, expectedAttackTurn: int, expectedEfficiency: float, expectedTrueEfficiency: float):
+        """
+
+        @param team:
+        @param expectedAttackTurn: This should be the turn (in the cycle) of emergence PLUS the distance to our general of that emergence (so that our depth of fog vision doesn't affect the actual attack timing calculation).
+        @param expectedEfficiency: This is the fog gather efficiency expected based on past attacks.
+        @param expectedTrueEfficiency: This is the fog gather efficiency expected based on past attacks (of the True fog army total).
+        """
+        self.team: int = team
+        self.expected_attack_cycle_turn: int = int(expectedAttackTurn)
+        self.expected_efficiency: float = expectedEfficiency
+        self.expected_true_efficiency: float = expectedTrueEfficiency
+        self.actual_attack_cycle_turn: int = -1
+        self.actual_true_efficiency: float = -1.0
+        self.actual_efficiency: float = -1.0
+        # self.army_fog_ratio: float = -1.0
+
+    def serialize(self) -> str:
+        return f'{{ t{self.team}: attk e{self.expected_attack_cycle_turn}/a{self.actual_attack_cycle_turn}, eff e{self.expected_efficiency:.6f}/a{self.actual_efficiency:.6f}, effTr e{self.expected_true_efficiency:.6f}/a{self.actual_true_efficiency:.6f} }}'
+
+    def __str__(self) -> str:
+        return f'{{ t{self.team}: attk e{self.expected_attack_cycle_turn}/a{self.actual_attack_cycle_turn}, eff e{self.expected_efficiency:.3f}/a{self.actual_efficiency:.3f}, effTr e{self.expected_true_efficiency:.3f}/a{self.actual_true_efficiency:.3f} }}'
+
+    def __repr__(self) -> str:
+        return str(self)
+
+    @staticmethod
+    def parse(input: str) -> TeamAttackData:
+        data = TeamAttackData(0, 0, 0, 0)
+        input = input.strip('{} t')
+
+        split = input.split(' ')
+
+        data.team = int(split[0].strip(':'))
+        attkTurnSplit = split[2].split('/')
+        data.expected_attack_cycle_turn = float(attkTurnSplit[0].strip('e'))
+        data.actual_attack_cycle_turn = float(attkTurnSplit[1].strip('a,'))
+
+        efficiencySplit = split[4].split('/')
+        data.expected_efficiency = float(efficiencySplit[0].strip('e'))
+        data.actual_efficiency = float(efficiencySplit[1].strip('a,'))
+
+        efficiencyTrueSplit = split[6].split('/')
+        data.expected_true_efficiency = float(efficiencyTrueSplit[0].strip('e'))
+        data.actual_true_efficiency = float(efficiencyTrueSplit[1].strip('a,'))
+
+        return data
+
+
 class OpponentTracker(object):
     def __init__(self, map: MapBase, viewInfo: ViewInfo | None = None):
         self.outbound_emergence_notifications: typing.List[typing.Callable[[int, Tile, bool], None]] = []
@@ -223,9 +280,11 @@ class OpponentTracker(object):
         self.current_team_cycle_stats: typing.Dict[int, CycleStatsData] = {}
 
         self.assumed_player_average_tile_values: typing.List[float] = [0.0 for _ in map.players]
+        """The assumed average value of land the player owns, used when looking at attacks that happen against the player in the fog, whether by us or someone else."""
         self.assumed_player_average_tile_values.append(0.0)
 
-        """The assumed average value of land the player owns, used when looking at attacks that happen against the player in the fog, whether by us or someone else."""
+        self.team_attack_cycle_timings: typing.List[typing.List[TeamAttackData]] = [[TeamAttackData(t, 43, expectedEfficiency=0.5, expectedTrueEfficiency=0.5)] for t in range(max(map._teams) + 2)]
+        """The turn the player / team attacked historically per cycle"""
 
         self.last_player_move_type: typing.Dict[int, PlayerMoveCategory] = {}
 
@@ -317,6 +376,38 @@ class OpponentTracker(object):
                 teamStats.approximate_fog_army_available_total = round(0.96 * teamStats.approximate_fog_army_available_total + 0.49)
                 self.view_info.add_info_line(f'Updated team {team} approx fog army from {oldTotal} to {teamStats.approximate_fog_army_available_total} (true total {teamStats.approximate_fog_army_available_total_true})')
 
+        expectedEfficiency = 0.9
+        expectedTrueEfficiency = 0.85
+        expectedAttackTurn = 40
+        attackHist = self.team_attack_cycle_timings[team]
+        curCycle = self.get_cycle_index()
+
+        if curCycle > 1:
+            start = max(1, curCycle - 4)
+            numIncluded = 0
+            sumAttackTurn = 0
+            sumEfficiency = 0.0
+            sumTrueEfficiency = 0.0
+            for hist in attackHist[start:]:
+                if hist.actual_attack_cycle_turn != -1:
+                    numIncluded += 1
+                    sumAttackTurn += hist.actual_attack_cycle_turn
+                    sumEfficiency += hist.actual_efficiency
+                    sumTrueEfficiency += hist.actual_true_efficiency
+
+            if numIncluded > 0:
+                expectedAttackTurn = sumAttackTurn / numIncluded
+                expectedEfficiency = sumEfficiency / numIncluded
+                expectedTrueEfficiency = sumTrueEfficiency / numIncluded
+
+        attackHist.append(TeamAttackData(
+            team,
+            expectedAttackTurn,
+            expectedEfficiency,
+            expectedTrueEfficiency
+        ))
+        self.view_info.add_info_line(f'Appended {team} attack history, len now {len(attackHist)}')
+
     def get_current_cycle_end_turn(self) -> int | None:
         """
 
@@ -377,7 +468,7 @@ class OpponentTracker(object):
         @return:
         """
         em = (tile, emergingPlayer, emergenceAmount)
-        logbook.info(f'OppTrack EM: queued {repr(em)}')
+        logbook.info(f'OppTrack NEM: queued {repr(em)}')
         self._emergences.append(em)
 
     def notify_player_tile_revealed(self, tile: Tile):
@@ -387,13 +478,13 @@ class OpponentTracker(object):
         @param tile:
         @return:
         """
-        logbook.info(f'OppTrack V+: queued {repr(tile)}')
+        logbook.info(f'OppTrack NV+: queued {repr(tile)}')
 
         self._revealed.add(tile)
 
     def notify_player_tile_vision_lost(self, tile: Tile):
         if tile.player >= 0:
-            logbook.info(f'OppTrack V-: queued {repr(tile)}')
+            logbook.info(f'OppTrack NV-: queued {repr(tile)}')
             self._vision_losses.add(tile)
 
     def dump_to_string_data(self) -> str:
@@ -448,10 +539,27 @@ class OpponentTracker(object):
                     data.append(f'ot_{team}_c_{cycleTurn}_stats_approximate_fog_army_available_total_true={stats.approximate_fog_army_available_total_true}')
                     data.append(f'ot_{team}_c_{cycleTurn}_stats_approximate_fog_city_army={stats.approximate_fog_city_army}')
 
+        curCycle = self.get_cycle_index()
+        for team, hist in enumerate(self.team_attack_cycle_timings):
+            for i in range(0, 6):
+                cycle = curCycle - i
+                if cycle < 0:
+                    break
+
+                if cycle >= len(hist):
+                    continue
+
+                cycleTurn = self.get_last_cycle_end_turn(cyclesToGoBack=i)
+                data.append(f'ot_{team}_ah_{cycleTurn}={hist[cycle].serialize()}')
+
         return '\n'.join(data)
 
     def load_from_map_data(self, data: typing.Dict[str, str]):
-        for i in range(5):
+        for c in range(self.get_cycle_index()):
+            for t, hist in enumerate(self.team_attack_cycle_timings):
+                hist.append(TeamAttackData(t, 0, 0.0, 0.0))
+
+        for i in range(6):
             cycleTurn = self.get_last_cycle_end_turn_raw(cyclesToGoBack=i)
             if cycleTurn is None:
                 break
@@ -484,6 +592,9 @@ class OpponentTracker(object):
                         stats.approximate_fog_army_available_total_true = int(data[f'ot_{team}_c_{cycleTurn}_stats_approximate_fog_army_available_total'])
                     stats.approximate_fog_city_army = int(data[f'ot_{team}_c_{cycleTurn}_stats_approximate_fog_city_army'])
                     self.team_cycle_stats_history[team][cycleTurn] = stats
+
+                if f'ot_{team}_ah_{cycleTurn}' in data:
+                    self.team_attack_cycle_timings[team][self.get_cycle_index(cycleTurn - 1)] = TeamAttackData.parse(data[f'ot_{team}_ah_{cycleTurn}'])
 
         for team in self._team_indexes:
             stats = self.current_team_cycle_stats[team]
@@ -565,12 +676,12 @@ class OpponentTracker(object):
         # lastCycleStats = self.team_cycle_stats_history[team].get(lastCycleEndTurn, None)
 
         if not skipTurn:
+            self._handle_reveals(currentCycleStats)
             self._handle_emergences(currentCycleStats)
             self._handle_moves_into_fog(currentCycleStats)
             self._update_team_cycle_stats_based_on_turn_deltas(currentCycleStats, currentTeamStats=curTurnScores, lastTurnTeamStats=lastTurnScores)
-
-            self._handle_reveals(currentCycleStats)
             self._handle_vision_losses(currentCycleStats)
+
         self._update_team_cycle_stats_relative_to_last_cycle(currentCycleStats, currentTeamStats=curTurnScores, lastCycleScores=lastCycleScores)
 
         return currentCycleStats, lastCycleScores
@@ -617,10 +728,11 @@ class OpponentTracker(object):
         #     return
         #
         # elif player.unexplainedTileDelta > 0:
-        playerAnnihilated = player.expectedScoreDelta - player.actualScoreDelta
+        knownDelta = player.knownScoreDelta
+        playerAnnihilated = knownDelta - player.actualScoreDelta
 
         hasPerfectPlayerInfo = self.map.remainingPlayers == 2 or self.map.is_2v2
-        isPotentialMultiPartFogCap = player.tileCount > 0 and (playerAnnihilated > player.standingArmy // player.tileCount or (playerAnnihilated > 1 and hasPerfectPlayerInfo))
+        isPotentialMultiPartFogCap = player.tileCount > 0 and ((player.standingArmy > 30 and playerAnnihilated > player.standingArmy // player.tileCount) or (playerAnnihilated > 1 and hasPerfectPlayerInfo))
 
         if player.unexplainedTileDelta > 0 and currentTeamStats.unexplainedTileDelta >= 0:
             teamAnnihilatedFog = self._get_team_annihilated_fog_internal(currentTeamStats, player)
@@ -903,16 +1015,24 @@ class OpponentTracker(object):
         return nextStats
 
     def _handle_emergences(self, currentCycleStats: CycleStatsData):
-        handled = set()
+        toKeep = {}
         for tile, emergingPlayer, emergence in self._emergences:
-            if tile in handled:
-                continue
+            key = (tile, emergingPlayer)
+            exist = toKeep.get(key, None)
+            if exist is not None:
+                _, __, existEmergence = exist
+                if emergence <= existEmergence:
+                    continue
 
+            toKeep[key] = (tile, emergingPlayer, emergence)
+        #
+        # sumByPlayer = [0 for _ in self.map.players]
+        # for tile, emergingPlayer, emergence in toKeep.values():
+        #     sumByPlayer[emergingPlayer] += emergence
+
+        for tile, emergingPlayer, emergence in sorted(toKeep.values(), key=lambda tup: tup[2]):
             logbook.info(f'oppTracker _handle_emergences: {tile} for p{emergingPlayer}, amount {emergence}')
 
-            handled.add(tile)
-            if tile.delta.gainedSight:
-                continue  # handled by revealed handler
             if emergence < 0:
                 emergence = abs(emergence) - 1
 
@@ -947,16 +1067,20 @@ class OpponentTracker(object):
 
             armyToUse = max(abs(tile.delta.unexplainedDelta), tile.army)
 
+            if tile.delta.gainedSight and tile.army < armyThresh:
+                # eg we gained vision of what we thought was a 5, and its actually a 1, this is triggered with a 3
+                continue
+
             if tile.isCity or tile.isGeneral:
-                logbook.info(f'V+: {repr(tile)} - team[{currentCycleStats.team}] city/gen revealed, reducing fog city amt by that.')
+                logbook.info(f'HV+: {repr(tile)} - team[{currentCycleStats.team}] city/gen revealed, reducing fog city amt by that.')
                 currentCycleStats.approximate_fog_city_army -= armyToUse
             elif gathQueue.length > fogTileCount - fogCityCount:
-                logbook.info(f'V+: {repr(tile)} - removing p{tile.player} queued gather closest to army {armyToUse}, gathQueue.length {gathQueue.length} > fogTileCount {fogTileCount} - fogCityCount {fogCityCount}')
+                logbook.info(f'HV+: {repr(tile)} - removing p{tile.player} queued gather closest to army {armyToUse}, gathQueue.length {gathQueue.length} > fogTileCount {fogTileCount} - fogCityCount {fogCityCount}')
                 self._remove_queued_gather_closest_to_amount(tile.player, armyToUse, leaveOne=False)
 
             if armyToUse > armyThresh:
-                logbook.info(f'V+: {repr(tile)} - team[{currentCycleStats.team}] large tile revealed {armyToUse} > {armyThresh}, reducing fog army by that.')
-                self._execute_emergence(currentCycleStats, tile, armyToUse - 1)
+                logbook.info(f'HV+: {repr(tile)} - team[{currentCycleStats.team}] large tile revealed {armyToUse} > {armyThresh}, reducing fog army by that.')
+                self.notify_emerged_army(tile, tile.player, armyToUse - 1)
 
     def _handle_vision_losses(self, currentCycleStats: CycleStatsData):
         """
@@ -1188,16 +1312,59 @@ class OpponentTracker(object):
     def get_current_team_scores_by_player(self, player: int) -> TeamStats:
         return self.current_team_scores[self._team_lookup_by_player[player]]
 
-    def _execute_emergence(self, currentCycleStats: CycleStatsData, tile: Tile, emergence: int, player: int = -2):
+    def _execute_emergence(self, currentCycleStats: CycleStatsData, tile: Tile, emergence: int, player: int):
         if player == -2:
             player = tile.player
 
         teamScores = self.current_team_scores[currentCycleStats.team]
-        teamTotalFogEmergenceEst = currentCycleStats.approximate_fog_army_available_total + currentCycleStats.approximate_fog_city_army - max(0, 3 * (teamScores.cityCount - 1)) - max(0, 6 * (teamScores.cityCount - 2))
+        cityDistanceWasteApprox = max(0, 3 * (teamScores.cityCount - 1)) - max(0, 6 * (teamScores.cityCount - 2))
+        cityOffset = currentCycleStats.approximate_fog_city_army - cityDistanceWasteApprox
+        teamTotalFogEmergenceEstTrue = currentCycleStats.approximate_fog_army_available_total_true + cityOffset
+        teamTotalFogEmergenceEst = currentCycleStats.approximate_fog_army_available_total + cityOffset
+
+        visibleArmyLarge = 0
+        for pIdx in teamScores.livingPlayers:
+            teamPlayer = self.map.players[pIdx]
+            tileCutoff = self.assumed_player_average_tile_values[pIdx] * 1.5 + 1.0
+            for t in teamPlayer.tiles:
+                if not t.visible:
+                    continue
+                if t.army <= tileCutoff:
+                    continue
+                if t.isCity:
+                    continue
+                if t == tile:
+                    visibleArmyLarge += max(1, tile.army - emergence) - 1
+                    continue
+
+                visibleArmyLarge += tile.army - 1
+
+        possibleArmyTrue = teamTotalFogEmergenceEstTrue + visibleArmyLarge
+        possibleArmy = teamTotalFogEmergenceEst + visibleArmyLarge
+
+        efficiencyRatio = 1.00
+        if possibleArmy > 0:
+            efficiencyRatio = (emergence + visibleArmyLarge) / possibleArmy
+        efficiencyRatioTrue = 1.00
+        if possibleArmyTrue > 0:
+            efficiencyRatioTrue = (emergence + visibleArmyLarge) / possibleArmyTrue
+
+        if self.view_info:
+            self.view_info.add_info_line(f'team{teamScores.teamId} emg {emergence} from {tile}: {visibleArmyLarge} visArmy, effRat {efficiencyRatio:.3f} ({efficiencyRatioTrue:.3f}), possibleArmy {possibleArmy} (true {possibleArmyTrue})')
+
+        gen = self.map.players[self.map.player_index].general
+        # mainAttackThresh = teamTotalFogEmergenceEst * 0.7
+        if efficiencyRatio > 0.7:
+            self.set_player_attack_timing(
+                player,
+                self.map.turn,
+                self.map.get_distance_between(gen, tile),
+                # emergence=emergence,
+                efficiencyRatio=efficiencyRatio,
+                efficiencyRatioTrue=efficiencyRatioTrue)
 
         # .90 seemed high
         thresh = (teamTotalFogEmergenceEst - 1) * 0.87
-
         fullFogReset = False
         if emergence > thresh:
             logbook.info(
@@ -1209,9 +1376,9 @@ class OpponentTracker(object):
                     self.view_info.add_info_line(msg)
                     self.view_info.add_targeted_tile(tile, TargetStyle.ORANGE)
             fullFogReset = True
-            if emergence > teamTotalFogEmergenceEst - 4 and not (tile.delta.gainedSight and tile.army < emergence):
-                maxDist = max(1, teamTotalFogEmergenceEst - emergence + 1) * 2
-                self.view_info.add_info_line(f'BC emgnce {emergence} VS teamTotalFogEmergenceEst {teamTotalFogEmergenceEst}, CONF WITHIN {maxDist} {tile}')
+            if emergence >= teamTotalFogEmergenceEst + cityDistanceWasteApprox - 4 and not (tile.delta.gainedSight and tile.army < emergence):
+                maxDist = max(1, teamTotalFogEmergenceEst + cityDistanceWasteApprox - emergence + 2) * 2
+                self.view_info.add_info_line(f'BC emgnce {emergence} VS teamTotalFogEmergenceEst {teamTotalFogEmergenceEst}+cityWaste{cityDistanceWasteApprox}, CONF WITHIN {maxDist} {tile}')
                 self.send_general_distance_notification(maxDist, tile, generalConfidence=teamScores.cityCount == 1)
 
         logbook.info(
@@ -1235,13 +1402,13 @@ class OpponentTracker(object):
                 # TODO figure out how many incorrect assumption gathered tiles we assumed and put them back in the queue...?
 
         if currentCycleStats.approximate_fog_army_available_total < 0:
-            self.view_info.add_info_line(f'team{currentCycleStats.team} approximate_fog_army_available_total NEGATIVE?? {currentCycleStats.approximate_fog_army_available_total} setting 0')
+            self.view_info.add_info_line(f'team{currentCycleStats.team} approximate_fog_army_available_total NEG?? {currentCycleStats.approximate_fog_army_available_total} setting 0')
             currentCycleStats.approximate_fog_army_available_total = 0
         if currentCycleStats.approximate_fog_army_available_total_true < 0:
-            self.view_info.add_info_line(f'team{currentCycleStats.team} approximate_fog_army_available_total_true NEGATIVE?? {currentCycleStats.approximate_fog_army_available_total_true} setting 0')
+            self.view_info.add_info_line(f'team{currentCycleStats.team} approximate_fog_army_available_total_true NEG?? {currentCycleStats.approximate_fog_army_available_total_true} setting 0')
             currentCycleStats.approximate_fog_army_available_total_true = 0
         if currentCycleStats.approximate_fog_city_army < 0:
-            self.view_info.add_info_line(f'team{currentCycleStats.team} approximate_fog_city_army NEGATIVE?? {currentCycleStats.approximate_fog_city_army} setting 0')
+            self.view_info.add_info_line(f'team{currentCycleStats.team} approximate_fog_city_army NEG?? {currentCycleStats.approximate_fog_city_army} setting 0')
             currentCycleStats.approximate_fog_city_army = teamScores.cityCount
 
     def check_gather_move_differential(self, player: int, otherPlayer: int) -> int:
@@ -1562,3 +1729,45 @@ class OpponentTracker(object):
                     unkCount -= 1
 
         return unkCount
+
+    def get_cycle_index(self, overrideTurn: int | None = None) -> int:
+        """
+        Returns the index of the current cycle (for things tracked cycle by cycle).
+
+        @param overrideTurn:
+        @return:
+        """
+
+        if overrideTurn is None:
+            overrideTurn = self.map.turn
+
+        return overrideTurn // 50
+
+    def set_player_attack_timing(
+            self,
+            player: int,
+            turn: int,
+            distance: int,
+            # emergence: int,
+            efficiencyRatio: float,
+            efficiencyRatioTrue: float
+    ):
+        cycleIndex = self.get_cycle_index(turn - 1)
+        if player == -1:
+            return
+
+        cycleTurn = turn % 50
+
+        team = self.map.players[player].team
+
+        teamHistory = self.team_attack_cycle_timings[team]
+        if cycleIndex >= len(teamHistory):
+            raise AssertionError(f'p{player} tm{team} cycleIndex {cycleIndex} (turn {turn}) was oob teamHistory len{len(teamHistory)} (last {teamHistory[-1]})')
+
+        thisCycleTiming = teamHistory[cycleIndex]
+        turnWithDist = cycleTurn + distance
+
+        if thisCycleTiming.actual_attack_cycle_turn < turnWithDist and efficiencyRatio >= thisCycleTiming.actual_efficiency:
+            thisCycleTiming.actual_efficiency = efficiencyRatio
+            thisCycleTiming.actual_true_efficiency = efficiencyRatioTrue
+            thisCycleTiming.actual_attack_cycle_turn = turnWithDist

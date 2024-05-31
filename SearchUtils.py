@@ -917,23 +917,22 @@ def a_star_find_dist(
 def breadth_first_dynamic(
         map,
         startTiles,
-        goalFunc,
-        maxTime=0.2,
+        goalFunc: typing.Callable[[Tile, typing.Tuple], bool],
         maxDepth=100,
-        noNeutralCities=True,
-        negativeTiles=None,
-        skipTiles=None,
-        searchingPlayer=-2,
-        priorityFunc=None,
-        skipFunc=None,
-        ignoreStartTile=False,
-        incrementBackward=False,
-        preferNeutral=False):
+        noNeutralCities: bool = True,
+        negativeTiles: TileSet | None = None,
+        skipTiles: TileSet | None = None,
+        searchingPlayer: int = -2,
+        priorityFunc: typing.Callable[[Tile, typing.Tuple], typing.Tuple | None] = None,
+        ignoreStartTile: bool = False,
+        incrementBackward: bool = False,
+        noLog: bool = False
+) -> Path:
     """
     Finds a path to a goal, dynamically. Doesn't search past when it found the goal, unlike _max equivalents.
     startTiles dict is (startPriorityObject, distance) = startTiles[tile]
     goalFunc is (currentTile, priorityObject) -> True or False
-    priorityFunc is (nextTile, currentPriorityObject) -> nextPriorityObject
+    priorityFunc is (nextTile, currentPriorityObject) -> nextPriorityObject | None
 
     # make sure to initialize the initial base values and account for first priorityObject being None.
     def default_priority_func(nextTile, currentPriorityObject):
@@ -1022,9 +1021,6 @@ def breadth_first_dynamic(
     qq = frontier.queue
     while qq:
         iter += 1
-        if iter % 1000 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
-            logbook.info("BFS-DYNAMIC BREAKING")
-            break
 
         (prioVals, dist, current, parent) = frontier.get()
         if dist not in visited[current.x][current.y] or visited[current.x][current.y][dist][0] > prioVals:
@@ -1052,12 +1048,12 @@ def breadth_first_dynamic(
                     continue
                 newDist = dist + 1
                 nextVal = priorityFunc(next, prioVals)
-                if skipFunc is not None and skipFunc(next, nextVal):
-                    continue
-                frontier.put((nextVal, newDist, next, current))
+                if nextVal is not None:
+                    frontier.put((nextVal, newDist, next, current))
 
-    logbook.info(
-        f"BFS-DYNAMIC ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
+    if not noLog:
+        logbook.info(
+            f"BFS-DYNAMIC ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
         return None
 
@@ -1090,8 +1086,9 @@ def breadth_first_dynamic(
         searchingPlayer,
         teams=map._teams,
         incrementBackwards=incrementBackward)
-    logbook.info(
-        f"DYNAMIC BFS FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}\n   {pathObject.toString()}")
+    if not noLog:
+        logbook.info(
+            f"DYNAMIC BFS FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}\n   {pathObject}")
     return pathObject
 
 

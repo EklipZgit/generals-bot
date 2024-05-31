@@ -1,11 +1,5 @@
-import base.viewer
-from ArmyAnalyzer import ArmyAnalyzer
-from BoardAnalyzer import BoardAnalyzer
-from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
-from ViewInfo import ViewInfo
-from base.client.tile import TILE_MOUNTAIN, TILE_EMPTY, MapBase
 
 
 class BoardAnalyzerTests(TestBase):    

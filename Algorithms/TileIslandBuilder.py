@@ -9,13 +9,13 @@ from enum import Enum
 import logbook
 
 import SearchUtils
+from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrix, MapMatrixSet
 from base.client.map import MapBase, Tile, TeamStats
 
 
 class TileIsland(object):
-    def __init__(self, tiles: typing.Iterable[Tile], team: int, tileCount: int | None = None, armySum: int | None = None):
-        self.full_island = None
+    def __init__(self, tiles: typing.Iterable[Tile], team: int, tileCount: int | None = None, armySum: int | None = None, overrideUniqueId: int | None = None):
         if isinstance(tiles, set):
             self.tile_set: typing.Set[Tile] = tiles
         else:
@@ -67,6 +67,10 @@ class TileIsland(object):
 
         self.name: str | None = None
 
+        self.unique_id: int = overrideUniqueId
+        if self.unique_id is None:
+            self.unique_id = IslandNamer.get_int()
+
     def __str__(self) -> str:
         return f'{{t{self.team} {self.name}: {self.tile_count}t {self.sum_army}a ({next(iter(self.tile_set))})}}'
 
@@ -83,12 +87,39 @@ class TileIsland(object):
         #     return True
         return self.sum_army > other.sum_army
 
+    def clone(self, copyId: bool = False) -> TileIsland:
+        # TODO this does not yet handle safely cloning all the bordered / full_island parent connections; they will be the originals still.
+        overrideId = None
+        if copyId:
+            overrideId = self.unique_id
+        copy = TileIsland([], -2, 0, 0, overrideUniqueId=overrideId)
+        copy.tile_set = self.tile_set
+        copy.team = self.team
+        copy.tile_count = self.tile_count
+        copy.sum_army = self.sum_army
+        copy.bordered = self.bordered
+        copy.tile_count_all_adjacent_friendly = self.tile_count_all_adjacent_friendly
+        copy.sum_army_all_adjacent_friendly = self.sum_army_all_adjacent_friendly
+        copy.tiles_by_army = self.tiles_by_army
+        copy.cities = self.cities
+        copy.child_islands = self.child_islands
+        copy.full_island = self.full_island
+
+        if copyId:
+            copy.name = self.name
+        elif self.name:
+            copy.name = IslandNamer.get_letter()
+
+        return copy
+
 
 class IslandNamer(object):
     letterStart: int = ord('A')
     letterEnd: int = ord('z')
     curLetter: int = letterStart
     letterSkips: typing.List[int] = [ord('['), ord('\\'), ord(']'), ord('^'), ord('_'), ord('`')]
+
+    curInt: int = 0
 
     @staticmethod
     def get_letter() -> chr:
@@ -103,6 +134,12 @@ class IslandNamer(object):
         IslandNamer.curLetter = ch
 
         return chr(ch)
+
+    @staticmethod
+    def get_int() -> int:
+        IslandNamer.curInt += 1
+
+        return IslandNamer.curInt
 
 
 class IslandBuildMode(Enum):
@@ -120,6 +157,8 @@ class TileIslandBuilder(object):
 
         self.tile_island_lookup: MapMatrixInterface[TileIsland] = MapMatrix(self.map, None)
         self.all_tile_islands: typing.List[TileIsland] = []
+        """Does not include unreachable islands"""
+
         self.tile_islands_by_player: typing.List[typing.List[TileIsland]] = [[] for _ in self.map.players]
         self.tile_islands_by_player.append([])  # for -1 player
         self.tile_islands_by_team_id: typing.List[typing.List[TileIsland]] = [[] for _ in self.teams]
@@ -127,6 +166,7 @@ class TileIslandBuilder(object):
         self.large_tile_island_distances_by_team: typing.List[MapMatrixInterface[int] | None] = [MapMatrix(map, 1000) for _ in self.teams]
         self._team_stats_by_player: typing.List[TeamStats] = []
         self._team_stats_by_team_id: typing.List[TeamStats] = []
+        self.break_apart_neutral_islands: bool = True
 
     def recalculate_tile_islands(self, enemyGeneralExpectedLocation: Tile | None, mode: IslandBuildMode = IslandBuildMode.GroupByArmy):
         logbook.info('recalculate_tile_islands starting')
@@ -144,7 +184,7 @@ class TileIslandBuilder(object):
         newIslands = []
         gen = self.map.generals[self.map.player_index]
 
-        tiles = [t for t in self.map.get_all_tiles()]
+        tiles = [t for t in self.map.reachableTiles]  # get_all_tiles()
         if mode == IslandBuildMode.BuildByDistance:
             tiles = sorted(tiles, key=lambda t: (t.player, self.map.distance_mapper.get_distance_between(gen, t), t.x, t.y))
         elif mode == IslandBuildMode.GroupByArmy:
@@ -153,6 +193,8 @@ class TileIslandBuilder(object):
         for tile in tiles:
             if tile.isObstacle:
                 continue
+            # if tile not in self.map.reachableTiles:
+            #     continue
 
             existingIsland = self.tile_island_lookup[tile]
             if existingIsland is not None:
@@ -252,7 +294,7 @@ class TileIslandBuilder(object):
     def _break_apart_island_if_too_large(self, island: TileIsland) -> typing.List[TileIsland]:
         # stats = self._team_stats_by_team_id[island.team]
         tile_island_split_cutoff: int = int(self.desired_tile_island_size * 1.5)
-        if island.team != -1 and island.tile_count > tile_island_split_cutoff:
+        if island.tile_count > tile_island_split_cutoff and (island.team != -1 or self.break_apart_neutral_islands):
             # Ok, break the island up.
             breakIntoSubCount = round(island.tile_count / self.desired_tile_island_size)
             if breakIntoSubCount <= 1:
@@ -262,9 +304,11 @@ class TileIslandBuilder(object):
 
             largestEnemyBorder: TileIsland | None = None
             self._build_island_borders(island)
+            # find largest enemy border
             for border in island.bordered:
                 if border.team == island.team or border.team == -1:
                     continue
+
                 if border.full_island:
                     border = border.full_island
 

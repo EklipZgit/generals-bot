@@ -1970,4 +1970,66 @@ class ArmyInterceptionTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
 
         self.assertEqual(71, playerMap.players[general.player].tileCount, 'should have capped a neutral tile every single move, since interception does nothing.')
+    
+    def test_should_intercept_threat_when_defense_moves_are_objectively_worse_and_int_caps(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for i in range(5):
+            mapFile = 'GameContinuationEntries/should_intercept_threat_when_defense_moves_are_objectively_worse_and_int_caps___CPBZGsHkn---1--284.txtmap'
+            map, general, enemyGeneral = self.load_map_and_generals(mapFile, 284, fill_out_tiles=True)
 
+            rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=284)
+
+            self.enable_search_time_limits_and_disable_debug_asserts()
+            simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+            simHost.queue_player_moves_str(enemyGeneral.player, '11,5->12,5->12,8->17,8->17,6')
+            bot = self.get_debug_render_bot(simHost, general.player)
+            playerMap = simHost.get_player_map(general.player)
+
+            self.begin_capturing_logging()
+            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+            self.assertNoFriendliesKilled(map, general)
+
+            self.assertTileDifferentialGreaterThan(20, simHost)
+            debugMode = False
+    
+    def test_should_intercept_threat_when_defense_moves_are_objectively_worse_and_int_caps__other(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for i in range(5):
+            mapFile = 'GameContinuationEntries/should_intercept_threat_when_defense_moves_are_objectively_worse_and_int_caps__other___CPBZGsHkn---1--134.txtmap'
+            map, general, enemyGeneral = self.load_map_and_generals(mapFile, 134, fill_out_tiles=True)
+
+            rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=134)
+
+            self.enable_search_time_limits_and_disable_debug_asserts()
+            simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+            simHost.queue_player_moves_str(enemyGeneral.player, '16,5->16,7->14,7')
+            bot = self.get_debug_render_bot(simHost, general.player)
+            playerMap = simHost.get_player_map(general.player)
+
+            self.begin_capturing_logging()
+            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
+            self.assertNoFriendliesKilled(map, general)
+
+            self.assertTileDifferentialGreaterThan(10, simHost)
+            debugMode = False
+    
+    def test_should_intercept_threat_when_defense_moves_are_objectively_worse_and_int_caps__gen_adjacent(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for i in range(5):
+            mapFile = 'GameContinuationEntries/should_intercept_threat_when_defense_moves_are_objectively_worse_and_int_caps__gen_adjacent___CPBZGsHkn---1--240.txtmap'
+            map, general, enemyGeneral = self.load_map_and_generals(mapFile, 240, fill_out_tiles=True)
+
+            rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=240)
+
+            self.enable_search_time_limits_and_disable_debug_asserts()
+            simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+            simHost.queue_player_moves_str(enemyGeneral.player, '16,6->16,7->18,7->18,6->17,6')
+            bot = self.get_debug_render_bot(simHost, general.player)
+            playerMap = simHost.get_player_map(general.player)
+
+            self.begin_capturing_logging()
+            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+            self.assertNoFriendliesKilled(map, general)
+
+            self.assertTileDifferentialGreaterThan(5, simHost)
+            debugMode = False

@@ -17,12 +17,13 @@ from base.client.map import MapBase, Tile
 # TODO remove me once things fixed
 DEBUG_BYPASS_BAD_INTERCEPTIONS = True
 
-TARGET_CAP_VALUE = 2.0
+TARGET_CAP_VALUE = 2.21
 OTHER_PARTY_CAP_VALUE = 0.5
 NEUTRAL_CAP_VALUE = 1.0
 GENERAL_CAP_VALUE = 25.0
 TARGET_CITY_FLAT_BONUS = 2.5
-RECAPTURE_VALUE = 2.0
+# needs to be high enough to outperform normal expand, or normal expand will try to skip the intercept in favor of dodging the army for captures lmao
+RECAPTURE_VALUE = 2.21
 
 
 class ThreatValueInfo(object):

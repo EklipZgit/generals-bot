@@ -241,13 +241,14 @@ class Path(TilePlanInterface):
         @param offset:
         @return:
         """
-        dist = offset
+        dist = offset  # + 0.00001
         dict = {}
         node = self.start
         while node is not None:
             dict[node.tile] = dist
             node = node.next
             dist += 1
+            # dist += 1.0001
         return dict
 
     def calculate_value(
@@ -537,6 +538,13 @@ class Path(TilePlanInterface):
         if path.tail.tile.visible:
             logbook.warn(f'couldn\'t successfully get_subsegment_excluding_trailing_visible because even the first move in the path was visible. Returning the length 1 subsegment: {path}')
 
+        return path
+
+    @classmethod
+    def from_move(cls, move: Move) -> Path:
+        path = Path()
+        path.add_next(move.source)
+        path.add_next(move.dest, move.move_half)
         return path
 
 

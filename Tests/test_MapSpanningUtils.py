@@ -29,23 +29,13 @@ class MapSpanningUtilsTests(TestBase):
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = bot._map
 
-        banned = [t for t in playerMap.get_all_tiles() if t.visible]
+        banned = {t for t in playerMap.get_all_tiles() if t.visible}
         t1 = playerMap.GetTile(13, 11)
         t2 = playerMap.GetTile(9, 3)
         required = [t1, t2]
 
-        graph = MapSpanningUtils.get_spanning_tree_from_tile_lists(playerMap, banned, required)
+        inclTiles, missingTiles = MapSpanningUtils.get_spanning_tree_from_tile_lists(playerMap, required, banned)
 
-        base1 = graph.graph[t1]
-        base2 = graph.graph[t2]
-
-        self.assertIsNotNone(base1)
-        self.assertIsNotNone(base2)
-
-        self.assertIsNotNone(graph.graph[playerMap.GetTile(12, 11)])
-        self.assertIsNotNone(graph.graph[playerMap.GetTile(11, 11)])
-        self.assertIsNotNone(graph.graph[playerMap.GetTile(8, 3)])
-
-        # self.assertOwned(1, rawMap.GetTile(12, 11))
-        # self.assertOwned(1, rawMap.GetTile(11, 11))
-        # self.assertOwned(1, rawMap.GetTile(8, 3))
+        self.assertIn(t1, inclTiles)
+        self.assertIn(t2, inclTiles)
+        self.assertEqual(0, len(missingTiles))

@@ -4,6 +4,7 @@
     Generals.io Automated Client - https://github.com/harrischristiansen/generals-bot
     EklipZ bot - Tries to play generals lol
 """
+import random
 
 import logbook
 import typing
@@ -11,6 +12,7 @@ from collections import deque
 from enum import Enum
 
 from Army import Army
+from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrixSet, MapMatrix
 from base.Colors import *
 
@@ -38,7 +40,7 @@ class TargetStyle(Enum):
 
 
 class PathColorer(object):
-    def __init__(self, path, r, g, b, alpha = 255, alphaDecreaseRate = 10, alphaMinimum = 100):
+    def __init__(self, path, r, g, b, alpha=255, alphaDecreaseRate=10, alphaMinimum=100):
         self.path = path
         self.color = (r, g, b)
         self.alpha = alpha
@@ -102,6 +104,8 @@ class ViewInfo(object):
         self.lastMoveDuration = 0.0
         self.addlTimingsLineText: str = ""
         self.addlInfoLines: typing.List[str] = []
+        self.arrows: typing.List[typing.Tuple[float, float, float, float, str, typing.Tuple[int, int, int], int, bool]] = []
+        """(from, to, label, color, alpha, isBidirectional)"""
         self.statsLines: typing.List[str] = []
 
     @staticmethod
@@ -153,6 +157,7 @@ class ViewInfo(object):
         self.bottomLeftGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
         self.bottomMidLeftGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
         self.midLeftGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
+        self.arrows = []
         # countHist = len(self.redTargetedTileHistory)
         # for i in range(countHist):
         #     if (i == countHist - 2):
@@ -195,3 +200,77 @@ class ViewInfo(object):
             self.paths.append(pathColorer)
         else:
             self.paths.appendleft(pathColorer)
+
+    def draw_diagonal_arrow_between_xy(
+            self,
+            fromX: float,
+            fromY: float,
+            toX: float,
+            toY: float,
+            label: str,
+            color: typing.Tuple[int, int, int] | TargetStyle | int | None = None,
+            alpha: int = 255,
+            bidir: bool = False,
+            colorFloor: int = 90
+    ):
+        """
+        color can be a tuple of ints, a targetstyle, or an int seed to use for the random color
+        @param fromX:
+        @param fromY:
+        @param toX:
+        @param toY
+        @param label:
+        @param color:
+        @param alpha:
+        @param bidir:
+        @param colorFloor:
+        @return:
+        """
+        colorRem = 256 - colorFloor
+        hashBase = 0
+        if color is None:
+            if label:
+                hashBase = hash(label)
+            else:
+                hashBase = random.randint(-1000000, 1000000)
+        elif isinstance(color, TargetStyle):
+            color = self.get_color_from_target_style(color)
+        elif isinstance(color, int):
+            hashBase = color
+            color = None
+
+        if color is None:
+            r = abs((hashBase << 1) ^ 213415235)
+            g = abs((hashBase >> 1) ^ 31532143)
+            b = abs(hashBase ^ 814235423)
+
+            color = colorFloor + r % colorRem, colorFloor + g % colorRem, colorFloor + b % colorRem
+
+        self.arrows.append((fromX, fromY, toX, toY, label, color, alpha, bidir))
+
+    def draw_diagonal_arrow_between(
+            self,
+            fromTile: Tile,
+            toTile: Tile,
+            label: str,
+            color: typing.Tuple[int, int, int] | TargetStyle | int | None = None,
+            alpha: int = 255,
+            bidir: bool = False,
+            colorFloor: int = 90
+    ):
+        """
+        color can be a tuple of ints, a targetstyle, or an int seed to use for the random color
+        @param fromTile:
+        @param toTile:
+        @param label:
+        @param color:
+        @param alpha:
+        @param bidir:
+        @param colorFloor:
+        @return:
+        """
+
+        self.draw_diagonal_arrow_between_xy(fromTile.x, fromTile.y, toTile.x, toTile.y, label, color, alpha, bidir, colorFloor)
+
+
+

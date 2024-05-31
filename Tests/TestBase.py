@@ -37,6 +37,9 @@ from base.client.map import MapBase, Tile, Score, Player, TILE_FOG, TILE_OBSTACL
 from bot_ek0x45 import EklipZBot
 
 
+__unittest = True
+
+
 class TestBase(unittest.TestCase):
     GLOBAL_BYPASS_REAL_TIME_TEST = False
     """Change to True to have NO TEST bring up a viewer at all"""
@@ -806,6 +809,8 @@ class TestBase(unittest.TestCase):
         return ViewerProcessHost.get_renderable_view_info(map)
 
     def render_view_info(self, map: MapBase, viewInfo: ViewInfo, infoString: str | None = None):
+        if infoString:
+            logbook.info(infoString)
         # titleString = infoString
         # if titleString is None:
         titleString = self._testMethodName.replace('test_', '')
@@ -1006,6 +1011,7 @@ class TestBase(unittest.TestCase):
             reason = f': {reason}'
 
         self.assertGreater(counter.value, minArmyAmount - 1, f'Expected {str(tile)} to have at least {minArmyAmount} army within {distance} tiles of it for player {player}, instead found {counter.value}{reason}')
+        logbook.info(f'{str(tile)} had {counter.value} army within {distance} (min was {minArmyAmount}) for player {player}')
 
     def assertTileNearOtherTile(self, playerMap: MapBase, expectedLocation: Tile, actualLocation: Tile, distance: int = 3):
         found = SearchUtils.breadth_first_find_queue(playerMap, [expectedLocation], lambda t, a, d: t == actualLocation, maxDepth=1000, noNeutralCities=True)
@@ -1013,6 +1019,63 @@ class TestBase(unittest.TestCase):
             self.fail(f'Expected {str(expectedLocation)} to be within {distance} of {str(actualLocation)}, but no path was found at all.')
 
         self.assertLess(found.length, distance + 1, f'Expected {str(expectedLocation)} to be within {distance} of {str(actualLocation)}, but found {found.length}')
+
+    def assertEmergenceLessThanXY(self, bot: EklipZBot, x: int, y: int, thanValue: float, emergencePlayer: int = -1):
+        if emergencePlayer == -1:
+            emergencePlayer = bot.targetPlayer
+        if emergencePlayer == -1:
+            self.fail(f'bot target player was {bot.targetPlayer}; you\'ll need to explicitly specify the emergencePlayer for this call.')
+
+        tile = bot._map.GetTile(x, y)
+        emg = bot.armyTracker.get_tile_emergence_for_player(tile, emergencePlayer)
+        self.assertLess(emg, thanValue, f'expected {emergencePlayer} emergence on {tile} to be less than {thanValue}; found {emg}')
+
+    def assertEmergenceGreaterThanXY(self, bot: EklipZBot, x: int, y: int, thanValue: float, emergencePlayer: int = -1):
+        if emergencePlayer == -1:
+            emergencePlayer = bot.targetPlayer
+        if emergencePlayer == -1:
+            self.fail(f'bot target player was {bot.targetPlayer}; you\'ll need to explicitly specify the emergencePlayer for this call.')
+
+        tile = bot._map.GetTile(x, y)
+        emg = bot.armyTracker.get_tile_emergence_for_player(tile, emergencePlayer)
+        self.assertGreater(emg, thanValue, f'expected {emergencePlayer} emergence on {tile} to be greater than {thanValue}; found {emg}')
+
+    def assertEmergenceLessThan(self, bot: EklipZBot, tile: Tile, thanValue: float, emergencePlayer: int = -1):
+        self.assertEmergenceLessThanXY(bot, tile.x, tile.y, thanValue, emergencePlayer)
+
+    def assertEmergenceGreaterThan(self, bot: EklipZBot, tile: Tile, thanValue: float, emergencePlayer: int = -1):
+        self.assertEmergenceGreaterThanXY(bot, tile.x, tile.y, thanValue, emergencePlayer)
+
+    def assertValidGeneralPosition(self, bot: EklipZBot, tile: Tile, enemyPlayer: int = -1):
+        if enemyPlayer == -1:
+            enemyPlayer = bot.targetPlayer
+        if enemyPlayer == -1:
+            self.fail(f'bot target player was {bot.targetPlayer}; you\'ll need to explicitly specify the enemyPlayer for this call.')
+
+        self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyPlayer][tile], f'expected {tile} to be a valid general location for player {enemyPlayer}, however it was invalid.')
+
+    def assertInvalidGeneralPosition(self, bot: EklipZBot, tile: Tile, enemyPlayer: int = -1):
+        if enemyPlayer == -1:
+            enemyPlayer = bot.targetPlayer
+        if enemyPlayer == -1:
+            self.fail(f'bot target player was {bot.targetPlayer}; you\'ll need to explicitly specify the enemyPlayer for this call.')
+
+        self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyPlayer][tile], f'expected {tile} to be an invalid general location for player {enemyPlayer}, however it was valid.')
+
+    def assertValidGeneralPositionXY(self, bot: EklipZBot, x: int, y: int, enemyPlayer: int = -1):
+        self.assertValidGeneralPosition(bot, bot._map.GetTile(x, y), enemyPlayer)
+
+    def assertInvalidGeneralPositionXY(self, bot: EklipZBot, x: int, y: int, enemyPlayer: int = -1):
+        self.assertInvalidGeneralPosition(bot, bot._map.GetTile(x, y), enemyPlayer)
+
+    def get_emergence_xy(self, bot, x, y, emergencePlayer: int = -1) -> float:
+        if emergencePlayer == -1:
+            emergencePlayer = bot.targetPlayer
+        if emergencePlayer == -1:
+            self.fail(f'bot target player was {bot.targetPlayer}; you\'ll need to explicitly specify the emergencePlayer for this call.')
+
+        tile = bot._map.GetTile(x, y)
+        return bot.armyTracker.get_tile_emergence_for_player(tile, emergencePlayer)
 
     def get_player_tile(self, x: int, y: int, sim: GameSimulator, player_index: int) -> Tile:
         player = sim.players[player_index]

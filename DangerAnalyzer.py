@@ -529,7 +529,6 @@ class DangerAnalyzer(object):
                 self.map,
                 startTiles,
                 goalFunc,
-                0.2,
                 depth,
                 noNeutralCities=army.value < 150,
                 searchingPlayer=army.player,

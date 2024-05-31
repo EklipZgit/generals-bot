@@ -83,4 +83,36 @@ class MetaTileSet(typing.Protocol):
         pass
 
 
-TileSet = typing.Union[MetaTileSet | typing.Set[Tile]]
+class EmptySet(typing.Set[Tile]):
+    def add(self, item: Tile):
+        raise NotImplemented()
+
+    def __getitem__(self, key: Tile) -> bool:
+        return False
+
+    def __iter__(self) -> typing.Iterable[Tile]:
+        return []
+
+    def update(self, tiles: typing.Iterable[Tile]):
+        raise NotImplemented()
+
+    def copy(self) -> MetaTileSet:
+        return set()
+
+    def __delitem__(self, key: Tile):
+        pass
+
+    def discard(self, key: Tile):
+        pass
+
+    def __contains__(self, tile: Tile) -> bool:
+        return False
+
+    def __str__(self) -> str:
+        return 'EmptySet'
+
+    def __repr__(self) -> str:
+        return 'EmptySet'
+
+
+TileSet = typing.Union[MetaTileSet | typing.Set[Tile]]  # | EmptySet

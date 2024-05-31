@@ -42,14 +42,11 @@ class ViewerHost(object):
             logbook.info("getting mgr queues")
         self._update_queue: "Queue[typing.Tuple[ViewInfo | None, MapBase | None, bool]]" = self.mgr.Queue()
         self._viewer_event_queue: "Queue[typing.Tuple[str, typing.Any]]" = self.mgr.Queue()
-        logbook.info("importing GeneralsViewer")
-        from base.viewer import GeneralsViewer
-        logbook.info("newing up GeneralsViewer")
-        self._viewer = GeneralsViewer(self._update_queue, self._viewer_event_queue, window_title, cell_width=cell_width, cell_height=cell_height, no_log=noLog)
         self._closed_by_user: bool | None = None
         logbook.info("newing up viewer process")
-        self.process: BaseProcess = self.ctx.Process(target=self._viewer.run_main_viewer_loop, args=(alignTop, alignLeft, BotLogging.LOGGING_QUEUE))
+        self.process: BaseProcess = self.ctx.Process(target=_run_main_viewer_loop, args=(self._update_queue, self._viewer_event_queue, window_title, cell_width, cell_height, noLog, alignTop, alignLeft, BotLogging.LOGGING_QUEUE))
         self.no_log: bool = noLog
+        self._started: bool = False
 
     def __getstate__(self):
         raise AssertionError('this should never get serialized')
@@ -60,6 +57,7 @@ class ViewerHost(object):
     def start(self):
         logbook.info("starting viewer process")
         self.process.start()
+        self._started = True
 
     def kill(self):
         logbook.info("putting Complete viewer update in queue")
@@ -75,10 +73,10 @@ class ViewerHost(object):
             self.process.kill()
 
     def check_viewer_closed(self) -> bool:
-        if self._viewer is None:
+        if not self._started:
             return True
 
-        if self._closed_by_user is not None:
+        if self.process is None:
             return True
 
         # if not self.process.is_alive():
@@ -145,6 +143,15 @@ class ViewerHost(object):
         except BrokenPipeError:
             if self._closed_by_user is None:
                 self._closed_by_user = False
+
+
+def _run_main_viewer_loop(update_queue, viewer_event_queue, window_title, cell_width, cell_height, noLog, alignTop, alignLeft, loggingQueue):
+    logbook.info("importing GeneralsViewer")
+    from base.viewer import GeneralsViewer
+    logbook.info("newing up GeneralsViewer")
+    viewer = GeneralsViewer(update_queue, viewer_event_queue, window_title, cell_width=cell_width, cell_height=cell_height, no_log=noLog)
+
+    viewer.run_main_viewer_loop(alignTop, alignLeft, loggingQueue)
 
 
 def get_renderable_view_info(map: MapBase) -> ViewInfo:

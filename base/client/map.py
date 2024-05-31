@@ -16,7 +16,7 @@ import uuid
 from collections import deque
 
 import BotLogging
-from Interfaces import MapMatrixInterface
+from Interfaces import MapMatrixInterface, TileSet
 
 ENABLE_DEBUG_ASSERTS = False
 
@@ -70,6 +70,7 @@ class Player(object):
         self.tiles: typing.List[Tile] = []
         self.tileCount: int = 0
         self.standingArmy: int = 0
+        self.visibleStandingArmy: int = 0
         self.cityCount: int = 1
         self.lastCityCount: int = 1
         self.cityLostTurn: int = 0
@@ -78,8 +79,9 @@ class Player(object):
         self.delta25score: int = 0
         self.actualScoreDelta: int = 0
         self.expectedScoreDelta: int = 0
-
-        self.fighting_with_player_history: typing.List[int] = []
+        """The delta expected if no annihilations were to take place based on city counts and army bonuses"""
+        self.knownScoreDelta: int = 0
+        """The score delta that we understood including expected score delta and visible annihilations"""
 
         self.fighting_with_player: int = -1
         """
@@ -170,6 +172,7 @@ class MapBase(object):
                  ):
         # Start Data
         self.remainingCycleTurns: int = 0
+        self.cycleTurn: int = 0
         self.distance_mapper: DistanceMapper = DistanceMapper()
         self.last_player_index_submitted_move: typing.Tuple[Tile, Tile, bool] | None = None
         self.player_index: int = player_index  # Integer Player Index
@@ -270,6 +273,10 @@ class MapBase(object):
 
         self.modifiers: typing.Set[str] = set()
 
+        self.tiles_by_index: typing.List[Tile] = [None] * (len(map_grid_y_x) * len(map_grid_y_x[0]))
+        for tile in self.get_all_tiles():
+            self.tiles_by_index[tile.tile_index] = tile
+
     def __repr__(self):
         return str(self)
 
@@ -292,7 +299,8 @@ class MapBase(object):
             self.is_army_bonus_turn = False
             self.is_city_bonus_turn = False
 
-        self.remainingCycleTurns = 50 - val % 50
+        self.cycleTurn = val % 50
+        self.remainingCycleTurns = 50 - self.cycleTurn
 
         self._turn = val
 
@@ -604,6 +612,12 @@ class MapBase(object):
 
         return False
 
+    def iterate_tile_set(self, tileSet: TileSet) -> typing.Iterator[Tile]:
+        if isinstance(tileSet, set):
+            return iter(tileSet)
+
+        return (self.tiles_by_index[i] for i, isInSet in enumerate(tileSet.raw) if isInSet)
+
     # Emulates a tile update event from the server. Changes player tile ownership, or mountain to city, etc, and fires events
     def update_visible_tile(
             self,
@@ -680,6 +694,9 @@ class MapBase(object):
 
         for player in self.players:
             player.lastCityCount = player.cityCount
+            player.knownScoreDelta = 0
+            # player.last_fighting_with_player = player.fighting_with_player
+            # player.fighting_with_player = -1
 
         if self.complete and not self.result and self.remainingPlayers > 2:  # Game Over - Ignore Empty Board Updates in FFA
             return self
@@ -711,6 +728,7 @@ class MapBase(object):
             if player is not None:
                 player.cities = []
                 player.tiles = []
+                player.visibleStandingArmy = 0
 
         # right now all tile deltas are completely raw, as applied by the raw server update, with the exception of lost-vision-fog.
 
@@ -720,6 +738,8 @@ class MapBase(object):
 
                 if curTile.player >= 0:
                     self.players[curTile.player].tiles.append(curTile)
+                    if curTile.visible:
+                        self.players[curTile.player].visibleStandingArmy += curTile.army - 1
 
                 if curTile.isCity and curTile.player != -1:
                     self.players[curTile.player].cities.append(curTile)
@@ -920,6 +940,7 @@ class MapBase(object):
                     fromTile.isMountain = False
                     fromTile.discovered = True
                     fromTile.delta.discovered = True
+                    fromTile.isTempFogPrediction = False
 
                 if fromTile.isCity:
                     byPlayerObj.cities.append(fromTile)
@@ -1015,6 +1036,12 @@ class MapBase(object):
                 logbook.info(f'   captured a tile, dropping the player tileDelta from unexplained for capturer p{movingPlayer.index} ({movingPlayer.unexplainedTileDelta + 1}->{movingPlayer.unexplainedTileDelta}).')
                 if toTile.delta.oldOwner != -1:
                     attackedPlayer = self.players[toTile.delta.oldOwner]
+                    if movingPlayer.team != attackedPlayer.team:
+                        armyAmt = fromTile.delta.armyDelta
+                        armyAmt = max(0 - toTile.delta.oldArmy, armyAmt)
+                        movingPlayer.knownScoreDelta += armyAmt
+                        attackedPlayer.knownScoreDelta += armyAmt
+
                     attackedPlayer.unexplainedTileDelta += 1
                     logbook.info(f'   captured a tile, dropping the player tileDelta from unexplained for capturee p{attackedPlayer.index} ({attackedPlayer.unexplainedTileDelta - 1}->{attackedPlayer.unexplainedTileDelta}).')
 
@@ -1099,6 +1126,7 @@ class MapBase(object):
         sameOwnerMove = source.delta.oldOwner == dest.delta.oldOwner and source.delta.oldOwner != -1  # and (dest.player == source.delta.oldOwner or dest.player != self.player_index)
         attackedFlippedTile = dest.delta.oldOwner != dest.player and source.delta.oldOwner != dest.player and dest.visible
         teamMateMove = source.delta.oldOwner != dest.delta.oldOwner and self._teams[source.delta.oldOwner] == self._teams[dest.delta.oldOwner]
+        bypassNeutFogSource = False
         if not source.visible:
             if not source.delta.lostSight:
                 sourceDelta = dest.delta.unexplainedDelta
@@ -1113,16 +1141,19 @@ class MapBase(object):
                 if moveHalf:
                     sourceDelta = 0 - source.delta.oldArmy // 2
 
+            # how the fuck does this make sense
+            sourceNeut = bypassNeutFogSource = source.player == -1
             # TODO does this need to get fancier with potential movers vs the dest owner...?
             # TODO try commenting this out...?
-            sameOwnerMove = (sameOwnerMove or (source.player == -1 and not source.delta.lostSight)) and dest.delta.oldOwner != -1
+            sameOwnerMove = (sameOwnerMove or (sourceNeut and not source.delta.lostSight)) and dest.delta.oldOwner != -1
+
             # TODO should check move-half too probably
             # if source.player == -1:
             #     # then just assume same owner move...?
             #     sourceDelta = dest.delta.unexplainedDelta
         elif moveHalf:
             raise AssertionError(f'cannot provide moveHalf directive for visible tile {str(source)}, visible tiles exclusively use tile deltas.')
-        if sameOwnerMove or attackedFlippedTile:
+        if sameOwnerMove or (attackedFlippedTile and not bypassNeutFogSource):
             return 0 - sourceDelta
         if teamMateMove:
             if not dest.isGeneral:
@@ -1606,7 +1637,6 @@ class MapBase(object):
                     teamPlayer.expectedScoreDelta = 0
                     teamPlayer.actualScoreDelta = 0
                     teamPlayer.cityCount = 0
-                    teamPlayer.fighting_with_player = -1
                     teamPlayer.unexplainedTileDelta = 0
                     continue
 
@@ -1626,6 +1656,7 @@ class MapBase(object):
 
                 teamPlayer.actualScoreDelta = teamPlayer.score - lastScores[teamPlayer.index].total
                 teamPlayer.expectedScoreDelta = expectedEnemyDelta
+                teamPlayer.knownScoreDelta += expectedEnemyDelta
                 expectedEnemyTeamDelta += expectedEnemyDelta
 
                 # potentialEnemyCities = teamPlayer.actualScoreDelta - teamPlayer.
@@ -1715,7 +1746,7 @@ class MapBase(object):
                 raise AssertionError('INFINITE LOOPED IN TEAM CITY HANDLER')
 
         for player in self.players:
-            playerDeltaDiff = player.actualScoreDelta - player.expectedScoreDelta
+            playerDeltaDiff = player.actualScoreDelta - player.knownScoreDelta
             if playerDeltaDiff < 0:
                 # either they're fighting someone, attacking a neutral city, attacking neutral tiles, or someone captured one of their cities.
                 # first try whoever they were fighting last turn if any:
@@ -1739,7 +1770,7 @@ class MapBase(object):
                         # then these two are probably fighting each other!?!?!?!?
                         teamPlayer.fighting_with_player = player.index
                         player.fighting_with_player = teamPlayer.index
-            else:
+            elif player.knownScoreDelta == player.expectedScoreDelta:
                 player.fighting_with_player = -1
 
     def _move_would_violate_known_player_deltas(self, source: Tile, dest: Tile):
@@ -2188,18 +2219,7 @@ class MapBase(object):
                             and self._is_exact_army_movement_delta_match(exclusiveSrc, destTile)
                     )
 
-                    # if False and not exclusiveSrc.visible and destTile.delta.unexplainedDelta < 0 and not destTile.delta.gainedSight:
-                    #     # then they moved into fog idiot, way more likely than being attacked on the edge of your vision by a player that isn't you...
-                    #     self.set_tile_moved(
-                    #         toTile=exclusiveSrc,
-                    #         fromTile=destTile,
-                    #         fullFromDiffCovered=exactMatch,
-                    #         fullToDiffCovered=exactMatch,
-                    #         byPlayer=destTile.delta.oldOwner)
-                    # else:
                     byPlayer = exclusiveSrc.delta.oldOwner
-                    # if self.was_captured_this_turn(destTile) and byPlayer == -1:
-                    #     byPlayer = destTile.player
                     if byPlayer == -1:
                         # we can get here if they attacked a neutral city from fog
                         for adj in exclusiveSrc.movable:
@@ -2264,8 +2284,7 @@ class MapBase(object):
         return y * self.cols + x
 
     def get_tile_by_tile_index(self, tileIndex: int) -> Tile:
-        x, y = self.convert_tile_server_index_to_x_y(tileIndex)
-        return self.GetTile(x, y)
+        return self.tiles_by_index[tileIndex]
 
     def convert_tile_server_index_to_x_y(self, tileIndex: int) -> typing.Tuple[int, int]:
         y = tileIndex // self.cols

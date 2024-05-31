@@ -2329,4 +2329,28 @@ class DefenseTests(TestBase):
     #         see test test_should_wait_to_gather_tiles_that_are_in_the_shortest_pathway_for_last (?) above. TODO
     # 88f, 60p, 2s after hating my life. Intercept still fucking things up pretty sure
     # 97f, 54p, 5s after still hating my life, un-broke the threat dist stuff (but it may be wrong).
-    # 94, 57p, 5s
+    # 94f, 57p, 5s
+    # 82f, 74p, 5s after preventing gather
+    def test_should_make_defense_moves_in_correct_order(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for path in [
+            '14,4->15,4->16,4->16,7->17,7',
+            '14,4->15,4->17,4->17,7',
+            '14,4->15,4->15,5->16,5->16,7->17,7',
+            '14,4->15,4->15,5->17,5->17,7',
+        ]:
+            with self.subTest(path=path):
+                mapFile = 'GameContinuationEntries/should_make_defense_moves_in_correct_order___mTnwfCy48---1--146.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 143, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=143)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, path)
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
+                self.assertNoFriendliesKilled(map, general)

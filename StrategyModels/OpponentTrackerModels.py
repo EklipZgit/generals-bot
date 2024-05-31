@@ -42,14 +42,31 @@ class CycleStatsData:
         self.army_annihilated_total: int = 0
         """The exact amount of army annihilated for the team, assuming we have their city count correct."""
 
-        self.approximate_fog_army_available_total: int = 0
+        self._approximate_fog_army_available_total: int = 0
         """The amount of army accumulated for gather emergence from fog, this PLUS fog_city_total should approximate the current risk of size of emergence from any fog flank point."""
 
-        self.approximate_fog_army_available_total_true: int = 0
+        self._approximate_fog_army_available_total_true: int = 0
         """The unmodified absolute max expected fog army available (not down-adjusted each cycle, this should be the TRUE raw cap and if ever exceeded should mean a real bug happened.."""
 
         self.approximate_fog_city_army: int = 0
         """The amount of army probably accumulated on cities / generals currently unused. Takes into account the amount of cities they can gather per cycle etc."""
+
+    # FOR DEBUGGING
+    @property
+    def approximate_fog_army_available_total(self) -> int:
+        return self._approximate_fog_army_available_total
+
+    @approximate_fog_army_available_total.setter
+    def approximate_fog_army_available_total(self, val: int):
+        self._approximate_fog_army_available_total = val
+
+    @property
+    def approximate_fog_army_available_total_true(self) -> int:
+        return self._approximate_fog_army_available_total_true
+
+    @approximate_fog_army_available_total_true.setter
+    def approximate_fog_army_available_total_true(self, val: int):
+        self._approximate_fog_army_available_total_true = val
 
     def clone(self) -> CycleStatsData:
         myClone = CycleStatsData(self.team, self.players)

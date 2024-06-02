@@ -194,17 +194,17 @@ class MapBase(object):
         self.usernames: typing.List[str] = user_names  # List of String Usernames
         self.players: typing.List[Player] = [Player(x) for x in range(len(self.usernames))]
 
-        self._teams = MapBase._build_teams_array(self)
-        for p, t in enumerate(self._teams):
+        self.team_ids_by_player_index = MapBase._build_teams_array(self)
+        for p, t in enumerate(self.team_ids_by_player_index):
             if t != -1:
                 self.players[p].team = t
-        self._teammates_by_player: typing.List[typing.List[int]] = [[p.index for p in self.players if p.team == t] for t in self._teams]
+        self._teammates_by_player: typing.List[typing.List[int]] = [[p.index for p in self.players if p.team == t] for t in self.team_ids_by_player_index]
         self._teammates_by_player[-1].append(-1)  # neutrals only teammate is neutral
-        self._teammates_by_player_no_self: typing.List[typing.List[int]] = [[p.index for p in self.players if p.team == t if p.index != pIdx] for pIdx, t in enumerate(self._teams)]
-        self._teammates_by_team = [[p.index for p in self.players if p.team == i] for i in range(max(self._teams) + 2)]  # +2 so we have an entry for each time ID AND -1
+        self._teammates_by_player_no_self: typing.List[typing.List[int]] = [[p.index for p in self.players if p.team == t if p.index != pIdx] for pIdx, t in enumerate(self.team_ids_by_player_index)]
+        self._teammates_by_team = [[p.index for p in self.players if p.team == i] for i in range(max(self.team_ids_by_player_index) + 2)]  # +2 so we have an entry for each time ID AND -1
         self._teammates_by_team[-1].append(-1)  # neutrals only teammate is neutral
-        self._team_stats: typing.List[TeamStats | None] = [None for i in range(max(self._teams) + 2)]  # +2 so we have an entry for each time ID AND -1
-        self.friendly_team: int = self._teams[player_index]
+        self._team_stats: typing.List[TeamStats | None] = [None for i in range(max(self.team_ids_by_player_index) + 2)]  # +2 so we have an entry for each time ID AND -1
+        self.friendly_team: int = self.team_ids_by_player_index[player_index]
 
         self.pathableTiles: typing.Set[Tile] = set()
         """Tiles PATHABLE from the general spawn on the map, including neutral cities but not including mountains/undiscovered obstacles"""
@@ -525,7 +525,7 @@ class MapBase(object):
             return curStats
 
         if curStats is None or curStats.turn != self.turn:
-            for curTeamId in self._teams:
+            for curTeamId in self.team_ids_by_player_index:
                 tileCount = 0
                 score = 0
                 standingArmy = 0
@@ -575,39 +575,39 @@ class MapBase(object):
         return self.get_team_stats_by_team_id(targetTeam)
 
     def is_player_friendly(self, player: int):
-        return self._teams[player] == self.friendly_team
+        return self.team_ids_by_player_index[player] == self.friendly_team
 
     def is_tile_friendly(self, tile: Tile) -> bool:
-        if self.friendly_team == self._teams[tile._player]:
+        if self.friendly_team == self.team_ids_by_player_index[tile._player]:
             return True
         return False
 
     def is_tile_enemy(self, tile: Tile) -> bool:
-        if self._teams[tile._player] != self.friendly_team and tile._player >= 0:
+        if self.team_ids_by_player_index[tile._player] != self.friendly_team and tile._player >= 0:
             return True
 
         return False
 
     def is_tile_on_team_with(self, tile: Tile, player: int) -> bool:
-        if self._teams[player] == self._teams[tile._player]:
+        if self.team_ids_by_player_index[player] == self.team_ids_by_player_index[tile._player]:
             return True
 
         return False
 
     def is_tile_on_team(self, tile: Tile, team: int) -> bool:
-        if team == self._teams[tile._player]:
+        if team == self.team_ids_by_player_index[tile._player]:
             return True
 
         return False
 
     def is_player_on_team_with(self, player1: int, player2: int) -> bool:
-        if self._teams[player1] == self._teams[player2]:
+        if self.team_ids_by_player_index[player1] == self.team_ids_by_player_index[player2]:
             return True
 
         return False
 
     def is_player_on_team(self, player: int, team: int) -> bool:
-        if self._teams[player] == team:
+        if self.team_ids_by_player_index[player] == team:
             return True
 
         return False
@@ -1125,7 +1125,7 @@ class MapBase(object):
         sourceDelta = source.delta.unexplainedDelta
         sameOwnerMove = source.delta.oldOwner == dest.delta.oldOwner and source.delta.oldOwner != -1  # and (dest.player == source.delta.oldOwner or dest.player != self.player_index)
         attackedFlippedTile = dest.delta.oldOwner != dest.player and source.delta.oldOwner != dest.player and dest.visible
-        teamMateMove = source.delta.oldOwner != dest.delta.oldOwner and self._teams[source.delta.oldOwner] == self._teams[dest.delta.oldOwner]
+        teamMateMove = source.delta.oldOwner != dest.delta.oldOwner and self.team_ids_by_player_index[source.delta.oldOwner] == self.team_ids_by_player_index[dest.delta.oldOwner]
         bypassNeutFogSource = False
         if not source.visible:
             if not source.delta.lostSight:
@@ -2033,7 +2033,7 @@ class MapBase(object):
 
                 potentialSources = []
                 # destWasAttackedNonLethalOrVacatedOrUnmoved = destTile.delta.unexplainedDelta <= 0 and self._teams[destTile.delta.oldOwner] != self._teams[destTile.delta.newOwner]
-                wasFriendlyMove = self._teams[destTile.delta.oldOwner] == self._teams[destTile.delta.newOwner] and destTile.delta.oldOwner != destTile.delta.newOwner
+                wasFriendlyMove = self.team_ids_by_player_index[destTile.delta.oldOwner] == self.team_ids_by_player_index[destTile.delta.newOwner] and destTile.delta.oldOwner != destTile.delta.newOwner
                 destWasAttackedNonLethalOrVacatedOrUnmoved = destTile.delta.unexplainedDelta <= 0 and not wasFriendlyMove
                 if destWasAttackedNonLethalOrVacatedOrUnmoved:
                     logbook.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} SKIPPED BECAUSE destWasAttackedNonLethalOrVacatedOrUnmoved {destWasAttackedNonLethalOrVacatedOrUnmoved}')
@@ -2056,7 +2056,7 @@ class MapBase(object):
                     #     continue
                     if potentialSource.delta.oldOwner in skipCapturedPlayers:
                         continue
-                    if potentialSource.was_visible_last_turn() and self._teams[potentialSource.delta.oldOwner] != self._teams[destTile.delta.oldOwner] and self.player_index != destTile.player:
+                    if potentialSource.was_visible_last_turn() and self.team_ids_by_player_index[potentialSource.delta.oldOwner] != self.team_ids_by_player_index[destTile.delta.oldOwner] and self.player_index != destTile.player:
                         # only the player who owns the resulting tile can move one of their own tiles into it. TODO 2v2...?
                         logbook.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} <- SRC {repr(potentialSource)} SKIPPED BECAUSE potentialSource.was_visible_last_turn() and potentialSource.delta.oldOwner != destTile.player')
                         continue
@@ -2155,7 +2155,7 @@ class MapBase(object):
                     continue
 
                 potentialSources = []
-                wasFriendlyMove = self._teams[destTile.delta.oldOwner] == self._teams[destTile.delta.newOwner]
+                wasFriendlyMove = self.team_ids_by_player_index[destTile.delta.oldOwner] == self.team_ids_by_player_index[destTile.delta.newOwner]
                 destWasAttackedNonLethalOrVacated = destTile.delta.armyDelta < 0 and wasFriendlyMove
                 # destWasAttackedNonLethalOrVacated = True
                 # destWasAttackedNonLethalOrVacated = destTile.delta.oldArmy + destTile.delta.armyDelta < destTile.delta.oldArmy
@@ -2174,7 +2174,7 @@ class MapBase(object):
                             f'ATTK DELTA SCAN{fogFlag} DEST {repr(destTile)}: SRC {repr(potentialSource)} SKIPPED BECAUSE GATHERED TO, NOT ATTACKED. potentialSource.delta.armyDelta > 0')
                         # then this was DEFINITELY gathered to, which would make this not a potential source. 2v2 violates this
                         continue
-                    wasFriendlyMove = self._teams[potentialSource.delta.oldOwner] == self._teams[potentialSource.delta.newOwner] and potentialSource.delta.oldOwner != potentialSource.delta.newOwner
+                    wasFriendlyMove = self.team_ids_by_player_index[potentialSource.delta.oldOwner] == self.team_ids_by_player_index[potentialSource.delta.newOwner] and potentialSource.delta.oldOwner != potentialSource.delta.newOwner
                     sourceWasAttackedNonLethalOrVacated = (
                             (potentialSource.delta.unexplainedDelta <= 0 and not wasFriendlyMove)
                             or potentialSource.delta.lostSight
@@ -2321,7 +2321,7 @@ class MapBase(object):
         return self.distance_mapper.get_tile_dist_matrix(tile)
 
     def is_tile_visible_to(self, tile: Tile, player: int) -> bool:
-        team = self._teams[player]
+        team = self.team_ids_by_player_index[player]
         for adj in tile.adjacents:
             if self.is_tile_on_team(adj, team):
                 return True
@@ -2340,7 +2340,7 @@ class MapBase(object):
 
     @staticmethod
     def get_teams_array(map: MapBase) -> typing.List[int]:
-        return map._teams
+        return map.team_ids_by_player_index
 
     def get_teammates(self, player: int) -> typing.List[int]:
         """

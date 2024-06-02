@@ -1,4 +1,5 @@
 import time
+import typing
 from collections import deque
 
 import logbook
@@ -6,11 +7,13 @@ import logbook
 import SearchUtils
 from Algorithms import TileIslandBuilder
 from Algorithms.TileIslandBuilder import IslandBuildMode
-from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander
+from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander, IslandFlowNode
+from BoardAnalyzer import BoardAnalyzer
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
 from ViewInfo import ViewInfo
 from base.client.map import MapBase
+from base.client.tile import Tile
 from base.viewer import PLAYER_COLORS
 from bot_ek0x45 import EklipZBot
 
@@ -277,3 +280,18 @@ a2                  b1
         self.assertLess(maxVt, 2.3, 'this method of capture calculation should not be possible to acquire much more than 2 econ value per turn even with priomatrix bonuses')
         # self.assertEqual(5, maxOpt.length, 'should be 5 turns to pull 3x 2s and capture 3x 1s')
         # self.assertEqual(6, round(maxOpt.econValue), 'should be 6 econ roughly to capture 3 enemy tiles.')
+
+    def test_should_recognize_gather_into_top_path_is_best(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        # if debugMode:
+        #     self.render_map(map)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=50, debugMode=debugMode, renderThresh=700, tileIslandSize=4)
+        self.assertNotEqual(0, len(opts))
+        self.assertGreater(opts[0].econValue / opts[0].length, 1.5, 'should find a plan with pretty high value per turn')

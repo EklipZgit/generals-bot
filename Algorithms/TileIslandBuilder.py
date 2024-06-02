@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+import random
 import time
 import typing
 from collections import deque
@@ -33,7 +34,7 @@ class TileIsland(object):
             for t in self.tile_set:
                 self.sum_army += t.army
 
-        self.bordered: typing.Set[TileIsland] = set()
+        self.border_islands: typing.Set[TileIsland] = set()
         """
         Tile islands that border this island.
         """
@@ -53,6 +54,8 @@ class TileIsland(object):
 
         # adds about 1/10th of a millisecond to a tile island build
         self.tiles_by_army: typing.List[Tile] = [t for t in sorted(tiles, key=lambda tile: tile.army, reverse=True)]
+        """Sorted from largest army to smallest army"""
+
         self.cities: typing.List[Tile] = [t for t in self.tiles_by_army if t.isCity]
 
         self.child_islands: typing.List[TileIsland] | None = None
@@ -72,7 +75,7 @@ class TileIsland(object):
             self.unique_id = IslandNamer.get_int()
 
     def __str__(self) -> str:
-        return f'{{t{self.team} {self.name}: {self.tile_count}t {self.sum_army}a ({next(iter(self.tile_set))})}}'
+        return f'{{t{self.team} {self.unique_id}/{self.name}: {self.tile_count}t {self.sum_army}a ({next(iter(self.tile_set))})}}'
 
     def __repr__(self) -> str:
         return str(self)
@@ -87,6 +90,14 @@ class TileIsland(object):
         #     return True
         return self.sum_army > other.sum_army
 
+    def __hash__(self) -> int:
+        return self.unique_id
+
+    def __eq__(self, other: TileIsland):
+        if other is None:
+            return False
+        return self.unique_id == other.unique_id
+
     def clone(self, copyId: bool = False) -> TileIsland:
         # TODO this does not yet handle safely cloning all the bordered / full_island parent connections; they will be the originals still.
         overrideId = None
@@ -97,7 +108,7 @@ class TileIsland(object):
         copy.team = self.team
         copy.tile_count = self.tile_count
         copy.sum_army = self.sum_army
-        copy.bordered = self.bordered
+        copy.border_islands = self.border_islands
         copy.tile_count_all_adjacent_friendly = self.tile_count_all_adjacent_friendly
         copy.sum_army_all_adjacent_friendly = self.sum_army_all_adjacent_friendly
         copy.tiles_by_army = self.tiles_by_army
@@ -148,7 +159,9 @@ class IslandBuildMode(Enum):
 
 
 class TileIslandBuilder(object):
-    def __init__(self, map: MapBase, averageTileIslandSize: int = 4):
+    def __init__(self, map: MapBase, averageTileIslandSize: int | None = None):
+        if averageTileIslandSize is None:
+            averageTileIslandSize = 4
         self.map: MapBase = map
         self.teams: typing.List[int] = MapBase.get_teams_array(map)
         # self.expandability_tiles_matrix: MapMatrixInterface[int] = MapMatrix(map, 0)
@@ -159,19 +172,25 @@ class TileIslandBuilder(object):
         self.all_tile_islands: typing.List[TileIsland] = []
         """Does not include unreachable islands"""
 
+        # TODO examine networkX.algorithms.minors.blockmodel (aka quotient_graph with relabel=True and create_using=nx.MultiGraph()
+
         self.tile_islands_by_player: typing.List[typing.List[TileIsland]] = [[] for _ in self.map.players]
         self.tile_islands_by_player.append([])  # for -1 player
         self.tile_islands_by_team_id: typing.List[typing.List[TileIsland]] = [[] for _ in self.teams]
+        self.tile_islands_by_unique_id: typing.Dict[int, TileIsland] = {}
         self.large_tile_islands_by_team: typing.List[typing.Set[TileIsland]] = [set() for _ in self.teams]
         self.large_tile_island_distances_by_team: typing.List[MapMatrixInterface[int] | None] = [MapMatrix(map, 1000) for _ in self.teams]
         self._team_stats_by_player: typing.List[TeamStats] = []
         self._team_stats_by_team_id: typing.List[TeamStats] = []
         self.break_apart_neutral_islands: bool = True
+        self.borders_by_island: typing.Dict[int, typing.Dict[int, typing.Set[Tile]]] = {}
 
     def recalculate_tile_islands(self, enemyGeneralExpectedLocation: Tile | None, mode: IslandBuildMode = IslandBuildMode.GroupByArmy):
         logbook.info('recalculate_tile_islands starting')
         start = time.perf_counter()
-        self.tile_island_lookup: MapMatrixInterface[TileIsland] = MapMatrix(self.map, None)
+        self.borders_by_island = {}
+        self.tile_islands_by_unique_id = {}
+        self.tile_island_lookup = MapMatrix(self.map, None)
         for teamArray in self.tile_islands_by_player:
             teamArray.clear()
         for teamArray in self.tile_islands_by_team_id:
@@ -225,6 +244,7 @@ class TileIslandBuilder(object):
         for island in self.all_tile_islands:
             # if not island.bordered:
             self._build_island_borders(island)
+            self.tile_islands_by_unique_id[island.unique_id] = island
 
         logbook.info(f'building large island distances and sets ({time.perf_counter() - start:.5f}s in)')
         for team in self.teams:
@@ -276,7 +296,7 @@ class TileIslandBuilder(object):
         return island
 
     def _build_island_borders(self, island: TileIsland):
-        island.bordered.clear()  # in case its already populated. TODO eventually optimize this away if this is at all slow.
+        island.border_islands.clear()  # in case its already populated. TODO eventually optimize this away if this is at all slow.
         # island.border_tiles = set()
         for tile in island.tile_set:
             for movable in tile.movable:
@@ -289,7 +309,7 @@ class TileIslandBuilder(object):
 
                 # island.border_tiles.add(movable)
 
-                island.bordered.add(adjIsland)
+                island.border_islands.add(adjIsland)
 
     def _break_apart_island_if_too_large(self, island: TileIsland) -> typing.List[TileIsland]:
         # stats = self._team_stats_by_team_id[island.team]
@@ -305,7 +325,7 @@ class TileIslandBuilder(object):
             largestEnemyBorder: TileIsland | None = None
             self._build_island_borders(island)
             # find largest enemy border
-            for border in island.bordered:
+            for border in island.border_islands:
                 if border.team == island.team or border.team == -1:
                     continue
 
@@ -316,7 +336,7 @@ class TileIslandBuilder(object):
                     largestEnemyBorder = border
 
             if largestEnemyBorder is None:
-                largestEnemyBorder = next(iter(island.bordered))
+                largestEnemyBorder = next(iter(island.border_islands))
 
             sets = bifurcate_set_into_n_contiguous(self.map, largestEnemyBorder.tile_set, island.tile_set, breakIntoSubCount)
             logbook.info(f'bifurcated into {len(sets)} sets (desired {breakIntoSubCount}, totalTiles {sum(itertools.chain(len(s.set) for s in sets))})')
@@ -350,7 +370,7 @@ class TileIslandBuilder(object):
 
             largestEnemyBorder: TileIsland | None = None
             self._build_island_borders(island)
-            for border in island.bordered:
+            for border in island.border_islands:
                 if border.team == island.team or border.team == -1:
                     continue
                 if border.full_island:
@@ -360,7 +380,7 @@ class TileIslandBuilder(object):
                     largestEnemyBorder = border
 
             if largestEnemyBorder is None:
-                largestEnemyBorder = next(iter(island.bordered))
+                largestEnemyBorder = next(iter(island.border_islands))
 
             sets = bifurcate_set_into_n_contiguous_by_army(self.map, largestEnemyBorder.tile_set, island.tile_set, breakIntoSubCount)
             logbook.info(f'bifurcated into {len(sets)} sets (desired {breakIntoSubCount}, totalTiles {sum(itertools.chain(len(s.set) for s in sets))})')
@@ -383,7 +403,7 @@ class TileIslandBuilder(object):
             return [island]
 
     def _build_large_island_distances_for_team(self, team: int):
-        targetTeam = self.map._teams[team]
+        targetTeam = self.map.team_ids_by_player_index[team]
 
         tileMinimum = min(12, self.map.players[self.map.player_index].tileCount // 3)
 
@@ -426,6 +446,76 @@ class TileIslandBuilder(object):
         self.large_tile_islands_by_team[team] = largeIslandSet
 
         logbook.info(f'LARGE TILE ISLANDS (targetTeam {targetTeam}) ARE {", ".join([i.name for i in largeIslands])}')
+
+    def get_inner_border_tiles(self, islandWhoseBorderTilesToReturn: TileIsland, islandTilesMustBorder: TileIsland | None = None, skipFriendlyBorders: bool = True) -> typing.Set[Tile]:
+        """
+        Returns the border tiles of a tile island.
+        If islandTilesMustBorder is None (the default) then returns all tiles in the island that border an un-friendly island.
+        Safe to modify the output of this. The output is always a copy of original sets.
+
+        @param islandWhoseBorderTilesToReturn:
+        @param islandTilesMustBorder:
+        @param skipFriendlyBorders: if True (default) then when islandTilesMustBorder is not provided, this will not return tiles that only border friendly islands. If false, all borders will be returned. Ignored if islandTilesMustBorder is provided.
+        @return:
+        """
+
+        borderLookup: typing.Dict[int, typing.Set[Tile]] = self.get_island_border_tile_lookup(islandWhoseBorderTilesToReturn)
+
+        borderTiles: typing.Set[Tile] = set()
+        if islandTilesMustBorder is not None:
+            borderTiles.update(borderLookup[islandTilesMustBorder.unique_id])
+        else:
+            for borderIslandId, borderSet in borderLookup.items():
+                bi = self.tile_islands_by_unique_id[borderIslandId]
+                if skipFriendlyBorders and bi.team == islandWhoseBorderTilesToReturn.team:
+                    continue
+                borderTiles.update(borderSet)
+
+        return borderTiles
+
+    def get_island_border_tile_lookup(self, islandTilesMustBorder: TileIsland) -> typing.Dict[int, typing.Set[Tile]]:
+        borderLookup = self.borders_by_island.get(islandTilesMustBorder.unique_id, None)
+        if borderLookup is None:
+            borderLookup = {}
+            for tile in islandTilesMustBorder.tile_set:
+                for mv in tile.movable:
+                    borderIsland = self.tile_island_lookup.raw[mv.tile_index]
+                    if borderIsland is None:
+                        continue
+                    if borderIsland == islandTilesMustBorder:
+                        continue
+                    borderSet: typing.Set[Tile] = borderLookup.get(borderIsland.unique_id, None)
+                    if not borderSet:
+                        borderSet = {tile}
+                        borderLookup[borderIsland.unique_id] = borderSet
+                    else:
+                        borderSet.add(tile)
+            self.borders_by_island[islandTilesMustBorder.unique_id] = borderLookup
+
+        return borderLookup
+
+    def add_tile_islands_to_view_info(self, viewInfo, printIslandInfoLines: bool = False, printIslandNames: bool = True):
+        for island in sorted(self.all_tile_islands, key=lambda i: (i.team, i.unique_id)):
+            color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+            zoneAlph = 80
+            divAlph = 200
+            if island.team == -1:
+                zoneAlph //= 2
+                divAlph //= 2
+
+            viewInfo.add_map_zone(island.tile_set, color, alpha=zoneAlph)
+            viewInfo.add_map_division(island.tile_set, color, alpha=divAlph)
+
+            if island.name and printIslandNames:
+                for tile in island.tile_set:
+                    if viewInfo.bottomRightGridText[tile]:
+                        viewInfo.midRightGridText[tile] = island.name
+                    else:
+                        viewInfo.bottomRightGridText[tile] = island.name
+                    viewInfo.topRightGridText[tile] = island.unique_id
+
+            if printIslandInfoLines:
+                viewInfo.add_info_line(f'{island.team}: island {island.unique_id}/{island.name} - {island.sum_army}a/{island.tile_count}t ({island.sum_army_all_adjacent_friendly}a/{island.tile_count_all_adjacent_friendly}t) {str(island.tile_set)}')
 
 
 class SetHolder(object):
@@ -915,7 +1005,4 @@ def _get_tiles_with_no_other_options(bifurcationMatrix: MapMatrixSet, setToBifur
 
         # and SearchUtils.count(tile.movable, lambda m: m != fromTile and m in bifurcationMatrix) <= 1:
 
-
-
     SearchUtils.breadth_first_foreach_with_state(bifurcationMatrix.map, noOptionsStarter, maxDepth=1000, foreachFunc=foreachFunc)
-

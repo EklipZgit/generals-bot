@@ -304,7 +304,7 @@ class TextMapLoader(object):
                 player.cityLostTurn = int(data[f'{char}CityLostTurn'])
             if f'{char}LastSeenMoveTurn' in data:
                 player.last_seen_move_turn = int(data[f'{char}LastSeenMoveTurn'])
-            player.team = map._teams[player.index]
+            player.team = map.team_ids_by_player_index[player.index]
 
         for tile in map.get_all_tiles():
             tile.turn_captured = 0

@@ -521,7 +521,7 @@ class Path(TilePlanInterface):
                 prevTile = currentTile
                 moveHalf = False
 
-        path.calculate_value(forPlayer=path.start.tile.player, teams=map._teams)
+        path.calculate_value(forPlayer=path.start.tile.player, teams=map.team_ids_by_player_index)
 
         return path
 

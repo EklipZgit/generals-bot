@@ -283,7 +283,7 @@ class OpponentTracker(object):
         """The assumed average value of land the player owns, used when looking at attacks that happen against the player in the fog, whether by us or someone else."""
         self.assumed_player_average_tile_values.append(0.0)
 
-        self.team_attack_cycle_timings: typing.List[typing.List[TeamAttackData]] = [[TeamAttackData(t, 43, expectedEfficiency=0.5, expectedTrueEfficiency=0.5)] for t in range(max(map._teams) + 2)]
+        self.team_attack_cycle_timings: typing.List[typing.List[TeamAttackData]] = [[TeamAttackData(t, 43, expectedEfficiency=0.5, expectedTrueEfficiency=0.5)] for t in range(max(map.team_ids_by_player_index) + 2)]
         """The turn the player / team attacked historically per cycle"""
 
         self.last_player_move_type: typing.Dict[int, PlayerMoveCategory] = {}

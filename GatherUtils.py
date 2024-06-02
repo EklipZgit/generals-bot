@@ -144,6 +144,7 @@ class GatherCapturePlan(TilePlanInterface):
         self._map: MapBase = map
         self.value_func: typing.Callable[[Tile, typing.Tuple], typing.Tuple | None] = minValueFunc
         self.has_more_moves: bool = len(rootNodes) > 0
+        self.approximate_capture_tiles: typing.Set[Tile] = set()
 
         if not self.value_func:  # emptyVal value func, gathers based on cityCount then distance from general
             frPlayers = map.get_teammates(asPlayer)
@@ -227,7 +228,7 @@ class GatherCapturePlan(TilePlanInterface):
             if self._tileList is not None:
                 self._tileSet = set(self._tileList)
             else:
-                self._tileSet = set()
+                self._tileSet = self.approximate_capture_tiles.copy()
                 foreach_tree_node(self.root_nodes, lambda n: self._tileSet.add(n.tile))
 
         return self._tileSet
@@ -240,7 +241,14 @@ class GatherCapturePlan(TilePlanInterface):
     def tileList(self) -> typing.List[Tile]:
         if self._tileList is None:
             self._tileList = []
-            foreach_tree_node(self.root_nodes, lambda n: self._tileList.append(n.tile))
+            self._tileSet = set()
+            for n in iterate_tree_nodes(self.root_nodes):
+                self._tileList.append(n.tile)
+                self._tileSet.add(n.tile)
+            for t in self.approximate_capture_tiles:
+                if t not in self._tileSet:
+                    self.tileList.append(t)
+                    self.tileSet.add(t)
         return self._tileList
 
     @property
@@ -301,6 +309,13 @@ class GatherCapturePlan(TilePlanInterface):
         self.fog_gather_turns += fogTurns
         self.fog_gather_army += fogGatherValue
 
+    def include_approximate_capture_tiles(self, captures: typing.Iterable[Tile]):
+        preCount = len(self.approximate_capture_tiles)
+        self.approximate_capture_tiles.update(captures)
+        if len(self.approximate_capture_tiles) != preCount:
+            self._tileSet = None
+            self._tileList = None
+
     @staticmethod
     def build_from_root_nodes(
             map: MapBase,
@@ -312,6 +327,7 @@ class GatherCapturePlan(TilePlanInterface):
             priorityMatrix: MapMatrixInterface[float] | None = None,
             includeGatherPriorityAsEconValues: bool = False,
             includeCapturePriorityAsEconValues: bool = True,
+            captures: typing.Set[Tile] | None = None,
             viewInfo=None,
             cloneNodes: bool = False
     ) -> GatherCapturePlan:
@@ -326,6 +342,7 @@ class GatherCapturePlan(TilePlanInterface):
         @param priorityMatrix: The priority matrix for both gathered and captured nodes. Always added to the 'gatherPoints' sum. Optionally also included in the econ value calculation.
         @param includeGatherPriorityAsEconValues: if True, the priority matrix values of gathered nodes will be included in the econValue of the plan for gatherNodes.
         @param includeCapturePriorityAsEconValues: if True, the priority matrix values of CAPTURED nodes will be included in the econValue of the plan for enemy tiles in the plan.
+        @param captures: a set of tiles to include as approximate captures in this gather capture plan
         @param viewInfo:
         @param cloneNodes: if True, the original root nodes will not be modified and will be cloned instead. Default is false.
         @return:
@@ -362,6 +379,18 @@ class GatherCapturePlan(TilePlanInterface):
             plan.root_nodes.append(currentNode)
             # plan.gathered_army += currentNode.value
             plan._turns += currentNode.gatherTurns
+
+        if captures:
+            GatherCapturePlan._include_capture_estimation_in_calculation(
+                plan,
+                captures,
+                searchingPlayer,
+                frPlayers,
+                negativeTiles,
+                onlyCalculateFriendlyArmy,
+                priorityMatrix,
+                includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
+            )
 
         # find the leaves and build the trunk values.
         leaves = []
@@ -465,7 +494,10 @@ class GatherCapturePlan(TilePlanInterface):
             prioVal = priorityMatrix.raw[currentTile.tile_index]
             if not isStartNode:
                 sumPoints += prioVal
-                if isTileFriendly and includeGatherPriorityAsEconValues:
+                if isTileFriendly:
+                    if includeGatherPriorityAsEconValues:
+                        econValue += prioVal
+                elif includeCapturePriorityAsEconValues:
                     econValue += prioVal
             elif not isTileFriendly and includeCapturePriorityAsEconValues:
                 econValue += prioVal
@@ -506,6 +538,120 @@ class GatherCapturePlan(TilePlanInterface):
         # _econ_value  # covered above.
         # _turns  # covered by the outer rootnodes loop
         # gather_turns   # covered in if above
+
+    @staticmethod
+    def _include_capture_estimation_in_calculation(
+            plan: GatherCapturePlan,
+            captures: typing.Set[Tile],
+            searchingPlayer: int,
+            frPlayers: typing.List[int],
+            negativeTiles: typing.Set[Tile] | None = None,
+            onlyCalculateFriendlyArmy=False,
+            priorityMatrix: MapMatrixInterface[float] | None = None,
+            includeCapturePriorityAsEconValues: bool = True
+    ):
+        """
+        Adds captures to the value of the plan.
+
+        @param plan:
+        @param negativeTiles:
+        @param searchingPlayer:
+        @param frPlayers:
+        @param onlyCalculateFriendlyArmy:
+        @param priorityMatrix:
+        @param includeCapturePriorityAsEconValues:
+        @return:
+        """
+        plan.include_approximate_capture_tiles(captures)
+
+        q = deque()
+        for rn in plan.root_nodes:
+            for mv in rn.tile.movable:
+                if mv in captures:
+                    q.append((mv, rn))
+
+        fromRoot: GatherTreeNode
+        toCap: Tile
+
+        vis = set()
+        while q:
+            (toCap, fromRoot) = q.popleft()
+
+            if toCap.tile_index in vis or toCap not in captures:
+                continue
+
+            vis.add(toCap.tile_index)
+
+            # we leave one node behind at each tile, except the root tile.
+            sumArmy = -1
+            sumPoints = -1
+            econValue = 0.0
+            currentTile = toCap
+            isTileFriendly = currentTile.player in frPlayers
+
+            # elif priorityMatrix:
+            #     sum += priorityMatrix[currentTile]
+
+            if not negativeTiles or currentTile not in negativeTiles:
+                if isTileFriendly:
+                    sumArmy += currentTile.army
+                    # sumPoints += currentTile.army
+                    if currentTile.isCity:
+                        plan.friendly_city_count += 1
+                else:
+                    if not onlyCalculateFriendlyArmy:
+                        sumArmy -= currentTile.army
+                        # sumPoints -= currentTile.army
+                    if currentTile.player >= 0:
+                        econValue += 2.2
+                        if currentTile.isCity:
+                            plan.enemy_city_count += 1
+                    else:
+                        econValue += 1.0
+
+            if priorityMatrix:
+                prioVal = priorityMatrix.raw[currentTile.tile_index]
+                sumPoints += prioVal
+                if includeCapturePriorityAsEconValues:
+                    econValue += prioVal
+                # if USE_DEBUG_ASSERTS:
+                #     logbook.info(f'appending {currentTile}  {currentTile.army}a  matrix {priorityMatrix[currentTile]:.3f} -> {sumArmy:.3f}')
+
+            # we do econValue BEFORE the children because the children will sum their own econ value
+            sumPoints += sumArmy
+            plan.gathered_army += sumArmy
+            plan.econValue += econValue
+            plan.gather_capture_points += sumPoints
+            plan._turns += 1
+            if isTileFriendly:
+                plan.gather_turns += 1
+            #
+            # for child in currentNode.children:
+            #     GatherCapturePlan._recalculate_gather_plan_values(
+            #         plan,
+            #         child,
+            #         negativeTiles,
+            #         searchingPlayer,
+            #         frPlayers,
+            #         onlyCalculateFriendlyArmy,
+            #         priorityMatrix,
+            #         includeGatherPriorityAsEconValues,
+            #         includeCapturePriorityAsEconValues)
+            #     sumArmy += child.value
+            #     sumPoints += child.points
+            #     turns += child.gatherTurns
+
+            fromRoot.value += sumArmy
+            # old behavior was tile 'values' were points, not army. Safe to not preserve that...?
+            fromRoot.points += sumPoints
+            fromRoot.gatherTurns += 1
+            # plan.gather_capture_points += sumPoints
+            # plan.econValue +=
+
+            for mv in toCap.movable:
+                q.append((mv, fromRoot))
+
+        # for root in plan.root_nodes:
 
 
 def knapsack_gather_iteration(
@@ -3662,6 +3808,7 @@ def convert_contiguous_tiles_to_gather_tree_nodes_with_values(
         useTrueValueGathered: bool = True,
         includeGatherPriorityAsEconValues: bool = False,
         includeCapturePriorityAsEconValues: bool = True,
+        captures: typing.Iterable[Tile] | None = None,
         viewInfo=None,
 ) -> GatherCapturePlan:
     """
@@ -3675,12 +3822,13 @@ def convert_contiguous_tiles_to_gather_tree_nodes_with_values(
     @param useTrueValueGathered: if True, the gathered_value will be the RAW army that ends up on the target tile(s) rather than just the sum of friendly army gathered, excluding army lost traversing enemy tiles.
     @param includeGatherPriorityAsEconValues: if True, the priority matrix values of gathered nodes will be included in the econValue of the plan for gatherNodes.
     @param includeCapturePriorityAsEconValues: if True, the priority matrix values of CAPTURED nodes will be included in the econValue of the plan for enemy tiles in the plan.
+    @param captures: if provided, route a TSP to try to capture these tiles as best as possible
     @param viewInfo: if included, gather values will be written the viewInfo debug output
     @return:
     """
-    rootNodes = build_mst_from_root_and_contiguous_tiles(map, rootTiles, tiles)
+    rootNodes = build_mst_from_root_and_contiguous_tiles(map, rootTiles, tiles, ignoreTiles=captures)
 
-    return GatherCapturePlan.build_from_root_nodes(
+    plan = GatherCapturePlan.build_from_root_nodes(
         map,
         rootNodes,
         negativeTiles,
@@ -3689,9 +3837,13 @@ def convert_contiguous_tiles_to_gather_tree_nodes_with_values(
         priorityMatrix=priorityMatrix,
         includeGatherPriorityAsEconValues=includeGatherPriorityAsEconValues,
         includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
+        captures=captures,
         viewInfo=viewInfo,
         cloneNodes=False,
     )
+
+    return plan
+
     # logs = []
     # totalTurns, totalValue = recalculate_tree_values(
     #     logs,
@@ -3717,19 +3869,22 @@ def convert_contiguous_tiles_to_gather_tree_nodes_with_values(
     # )
 
 
-def build_mst_from_root_and_contiguous_tiles(map: MapBase, rootTiles: typing.Iterable[Tile], tiles: TileSet, maxDepth: int = 1000) -> typing.List[GatherTreeNode]:
+def build_mst_from_root_and_contiguous_tiles(map: MapBase, rootTiles: typing.Iterable[Tile], tiles: TileSet, maxDepth: int = 1000, ignoreTiles: typing.Iterable[Tile] | None = None) -> typing.List[GatherTreeNode]:
     """Does NOT calculate values"""
-    visited = MapMatrixSet(map)
+    visited = MapMatrixSet(map, ignoreTiles)
 
     q = deque()
     for tile in rootTiles:
         q.appendleft((tile, None, None, 0))
 
+    if not q:
+        return []
+
     rootNodes = []
     tile: Tile
     fromTile: Tile | None
     fromNode: GatherTreeNode | None
-    while True:
+    while q:
         (tile, fromTile, fromNode, fromDepth) = q.pop()
         if visited.raw[tile.tile_index]:
             continue

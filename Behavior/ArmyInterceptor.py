@@ -589,7 +589,7 @@ class ArmyInterceptor(object):
     def ensure_threat_army_analysis(self, threat: ThreatObj) -> bool:
         """returns True if the army analysis was built"""
         if threat.path.value == 0:
-            threat.path.calculate_value(threat.threatPlayer, self.map._teams)
+            threat.path.calculate_value(threat.threatPlayer, self.map.team_ids_by_player_index)
         if threat.armyAnalysis is None:
             threat.armyAnalysis = ArmyAnalyzer.build_from_path(self.map, threat.path, bypassRetraverse=threat.threatType == ThreatType.Econ)
             return True
@@ -1348,7 +1348,7 @@ class ArmyInterceptor(object):
             #
             #     blockingTiles.add(chokeTile)
             for threat in otherThreats:
-                realThreatVal = threat.path.calculate_value(threat.threatPlayer, self.map._teams, doNotSaveToPath=True)
+                realThreatVal = threat.path.calculate_value(threat.threatPlayer, self.map.team_ids_by_player_index, doNotSaveToPath=True)
                 self.ensure_threat_army_analysis(threat)
                 gen = self.map.generals[self.map.player_index]
                 towardsUs = self.map.get_distance_between(gen, threat.path.start.tile) - self.map.get_distance_between(gen, threat.path.tail.tile) > 0

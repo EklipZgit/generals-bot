@@ -1,4 +1,6 @@
+import itertools
 import sys
+from collections import deque
 
 import logbook
 import random
@@ -20,7 +22,7 @@ import base
 from ArmyEngine import ArmySimResult
 from ArmyTracker import Army, ArmyTracker
 from Behavior.ArmyInterceptor import ArmyInterception, ArmyInterceptor, InterceptionOptionInfo
-from BehaviorAlgorithms.IterativeExpansion import FlowExpansionPlanOption
+from BehaviorAlgorithms.IterativeExpansion import FlowExpansionPlanOption, IslandFlowNode, ArmyFlowExpander, IslandMaxFlowGraph
 from BoardAnalyzer import BoardAnalyzer
 from DangerAnalyzer import ThreatType, ThreatObj
 from DataModels import Move
@@ -33,6 +35,7 @@ from Sim.TextMapLoader import TextMapLoader
 from ViewInfo import ViewInfo, PathColorer, TargetStyle
 from Viewer import ViewerProcessHost
 from Viewer.ViewerProcessHost import ViewerHost
+from base import Colors
 from base.client.map import MapBase, Tile, Score, Player, TILE_FOG, TILE_OBSTACLE
 from bot_ek0x45 import EklipZBot
 
@@ -100,7 +103,7 @@ class TestBase(unittest.TestCase):
         general = next(t for t in map.pathableTiles if t.isGeneral)
         general.army = 1
         map.player_index = general.player
-        map.friendly_team = map._teams[general.player]
+        map.friendly_team = map.team_ids_by_player_index[general.player]
         map.generals[general.player] = general
         map.players[general.player].tiles = [general]
 
@@ -124,7 +127,7 @@ class TestBase(unittest.TestCase):
         TextMapLoader.load_map_data_into_map(map, data)
         general = next(t for t in map.pathableTiles if t.isGeneral and (t.player == player_index or player_index == -1))
         map.player_index = general.player
-        map.friendly_team = map._teams[general.player]
+        map.friendly_team = map.team_ids_by_player_index[general.player]
         map.generals[general.player] = general
         map.resume_data = data
 
@@ -491,21 +494,8 @@ class TestBase(unittest.TestCase):
 
     def render_tile_islands(self, map: MapBase, builder: TileIslandBuilder, viewInfoMod: typing.Callable[[ViewInfo], None] | None = None):
         viewInfo = self.get_renderable_view_info(map)
-        # colors = PLAYER_COLORS
-        # i = 0
-        for island in sorted(builder.all_tile_islands, key=lambda i: (i.team, str(i.name))):
-            color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
 
-            viewInfo.add_map_zone(island.tile_set, color, alpha=80)
-            viewInfo.add_map_division(island.tile_set, color, alpha=200)
-            if island.name:
-                for tile in island.tile_set:
-                    if viewInfo.bottomRightGridText[tile]:
-                        viewInfo.midRightGridText[tile] = island.name
-                    else:
-                        viewInfo.bottomRightGridText[tile] = island.name
-
-            viewInfo.add_info_line_no_log(f'{island.team}: island {island.name} - {island.sum_army}a/{island.tile_count}t ({island.sum_army_all_adjacent_friendly}a/{island.tile_count_all_adjacent_friendly}t) {str(island.tile_set)}')
+        builder.add_tile_islands_to_view_info(viewInfo, printIslandInfoLines=True, printIslandNames=True)
 
         if viewInfoMod:
             viewInfoMod(viewInfo)
@@ -771,7 +761,7 @@ class TestBase(unittest.TestCase):
         map.generals = [general, enemyGen]
         map.usernames = ['a', 'b']
         map.player_index = 0
-        map.friendly_team = map._teams[map.player_index]
+        map.friendly_team = map.team_ids_by_player_index[map.player_index]
 
         map.players = [Player(i) for i in range(2)]
         map.scores = [Score(player.index, total=0, tiles=1, dead=False) for player in map.players]
@@ -1379,6 +1369,51 @@ class TestBase(unittest.TestCase):
         for player in simHost.sim.sim_map.players:
             if not player.dead and player.index != simHost.sim.sim_map.player_index:
                 simHost.queue_player_leafmoves(player.index)
+
+    def run_army_flow_expansion(self, map: MapBase, general: Tile, enemyGeneral: Tile, turns: int, negativeTiles: typing.Set[Tile] | None = None, debugMode: bool = False, renderThresh: int = 10000, tileIslandSize: int | None = None) -> typing.List[FlowExpansionPlanOption]:
+        builder = TileIslandBuilder(map, averageTileIslandSize=tileIslandSize)
+        builder.recalculate_tile_islands(enemyGeneral)
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+
+        if debugMode:
+            self.render_tile_islands(map, builder)
+
+        expander = ArmyFlowExpander(map)
+        expander.friendlyGeneral = general
+        expander.enemyGeneral = enemyGeneral
+        expander.debug_render_capture_count_threshold = renderThresh
+        expander.log_debug = debugMode
+        expander.log_debug = False
+
+        opts = expander.get_expansion_options(
+            islands=builder,
+            asPlayer=general.player,
+            targetPlayer=enemyGeneral.player,
+            turns=turns,
+            boardAnalysis=analysis,
+            territoryMap=None,
+            negativeTiles=negativeTiles,
+        )
+
+        if debugMode:
+            vi = self.get_renderable_view_info(map)
+
+            bestOpt = opts[0]
+            ArmyFlowExpander.add_flow_expansion_option_to_view_info(map, bestOpt, general.player, enemyGeneral.player, vi)
+
+            flowGraph = expander.flow_graph
+            if flowGraph is not None:
+                ArmyFlowExpander.add_flow_graph_to_view_info(flowGraph, vi)
+
+            tgPlayer = enemyGeneral.player
+            sourcePlayer = general.player
+
+            builder.add_tile_islands_to_view_info(vi, printIslandInfoLines=True, printIslandNames=True)
+
+            self.render_view_info(map, vi)
+
+        return opts
 
     def a_b_test(
             self,

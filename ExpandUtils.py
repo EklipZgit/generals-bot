@@ -471,12 +471,12 @@ def get_round_plan_with_expansion(
 
         if isinstance(path, Path):
             path.start.move_half = True
-            value = path.calculate_value(searchingPlayer, map._teams, originalNegativeTiles)
+            value = path.calculate_value(searchingPlayer, map.team_ids_by_player_index, originalNegativeTiles)
             if viewInfo:
                 viewInfo.add_info_line(f'path move_half value was {value} (path {str(path)})')
             if value <= 0:
                 path.start.move_half = False
-                value = path.calculate_value(searchingPlayer, map._teams, originalNegativeTiles)
+                value = path.calculate_value(searchingPlayer, map.team_ids_by_player_index, originalNegativeTiles)
 
         return plan
 
@@ -1138,7 +1138,7 @@ def _process_new_expansion_paths(
         logStuff,
         multiPathDict,
         negativeTiles,
-        newPathDict,
+        newPathDict: typing.Dict[Tile, typing.List[Path]],
         postPathEvalFunction,
         searchingPlayer,
         tileIslands,

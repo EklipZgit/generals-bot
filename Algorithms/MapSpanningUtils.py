@@ -246,8 +246,8 @@ def get_max_gather_spanning_tree_set_from_tile_lists(
     @return:
     """
     # Determine the bare minimum that we can do with no prioritization
-    # TODO output cost-per-tile so that we can approximate the cost to include each of the missing un-included tiles and weigh how much extra we've 'wasted' vs how much we expect to waste
     minIncluded, unconnectable, costPer = get_spanning_tree_set_from_tile_lists_with_cost_per(map, requiredTiles, bannedSet)
+
     bareMinTurns = len(minIncluded)
     excessTurns = maxTurns - bareMinTurns
 
@@ -265,7 +265,7 @@ def get_max_gather_spanning_tree_set_from_tile_lists(
 
     expectedMinRemaining = 0
     for tile in missingIncluded:
-        expectedMinRemaining += costPer[tile]
+        expectedMinRemaining += costPer.get(tile, 0)
 
     logbook.info(f'bareMinTurns {bareMinTurns}, excessTurns {excessTurns}, expectedMinRemaining {expectedMinRemaining}')
 
@@ -303,7 +303,7 @@ def get_max_gather_spanning_tree_set_from_tile_lists(
         closestDist = maxTurns
         closest = None
         for tile in missingIncluded:
-            cost = costPer[tile]
+            cost = costPer.get(tile, 0)
             expectedMinRemaining += cost
             if 1 < cost < closestDist:
                 closestDist = cost
@@ -355,7 +355,6 @@ def get_max_gather_spanning_tree_set_from_tile_lists(
             )
 
         path = SearchUtils.breadth_first_dynamic(map, usefulStartSet, findFunc, negativeTiles=negativeTiles, skipTiles=bannedSet, priorityFunc=prioFunc, noLog=not LOG_VERBOSE)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
-        logbook.info(f'    found {path.start.tile}->{path.tail.tile} len {path.length} (closest {closest} len {closestDist}) {path}')
         if path is None:
             if LOG_VERBOSE:
                 logbook.info(f'  Path NONE! Performing altBanned set')
@@ -373,6 +372,8 @@ def get_max_gather_spanning_tree_set_from_tile_lists(
         # else:
         #     if LOG_VERBOSE:
         #         logbook.info(f'  Path len {path.length}')
+
+        logbook.info(f'    found {path.start.tile}->{path.tail.tile} len {path.length} (closest {closest} len {closestDist}) {path}')
 
         lastTile: Tile | None = None
 

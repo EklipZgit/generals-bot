@@ -501,7 +501,7 @@ def a_star_kill(
         dist -= 1
         pathObject.add_start(node)
     logbook.info(f"A* FOUND KILLPATH OF LENGTH {pathObject.length} VALUE {pathObject.value}\n{pathObject.toString()}")
-    pathObject.calculate_value(startTiles[0].player, teams=map._teams)
+    pathObject.calculate_value(startTiles[0].player, teams=map.team_ids_by_player_index)
     if pathObject.value < requireExtraArmy:
         logbook.info(f"A* path {pathObject.toString()} wasn't good enough, returning none")
         return None
@@ -1084,7 +1084,7 @@ def breadth_first_dynamic(
     #         path = PathNode(node, path, army, dist, -1, None)
     pathObject.calculate_value(
         searchingPlayer,
-        teams=map._teams,
+        teams=map.team_ids_by_player_index,
         incrementBackwards=incrementBackward)
     if not noLog:
         logbook.info(
@@ -1409,7 +1409,7 @@ def breadth_first_dynamic_max(
     else:
         pathObject.calculate_value(
             searchingPlayer,
-            teams=map._teams,
+            teams=map.team_ids_by_player_index,
             negativeTiles=pathNegs,
             ignoreNonPlayerArmy=ignoreNonPlayerArmy,
             incrementBackwards=incrementBackward,
@@ -1740,7 +1740,7 @@ def breadth_first_dynamic_max_per_tile(
 
         pathObject.calculate_value(
             searchingPlayer,
-            teams=map._teams,
+            teams=map.team_ids_by_player_index,
             negativeTiles=pathNegs,
             ignoreNonPlayerArmy=ignoreNonPlayerArmy,
             incrementBackwards=incrementBackward,
@@ -2095,7 +2095,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
             else:
                 pathObject.calculate_value(
                     searchingPlayer,
-                    teams=map._teams,
+                    teams=map.team_ids_by_player_index,
                     negativeTiles=pathNegs,
                     ignoreNonPlayerArmy=ignoreNonPlayerArmy,
                     incrementBackwards=incrementBackward,
@@ -2436,7 +2436,7 @@ def breadth_first_dynamic_max_global_visited(
             pathNegs = negativeTiles.union(startTiles)
         pathObject.calculate_value(
             searchingPlayer,
-            teams=map._teams,
+            teams=map.team_ids_by_player_index,
             negativeTiles=pathNegs,
             ignoreNonPlayerArmy=ignoreNonPlayerArmy,
             incrementBackwards=incrementBackward,
@@ -2760,7 +2760,7 @@ def breadth_first_dynamic_max_per_tile_global_visited(
 
         pathObject.calculate_value(
             searchingPlayer,
-            teams=map._teams,
+            teams=map.team_ids_by_player_index,
             negativeTiles=pathNegs,
             ignoreNonPlayerArmy=ignoreNonPlayerArmy,
             incrementBackwards=incrementBackward,
@@ -3116,7 +3116,7 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
             else:
                 pathObject.calculate_value(
                     searchingPlayer,
-                    teams=map._teams,
+                    teams=map.team_ids_by_player_index,
                     negativeTiles=pathNegs,
                     ignoreNonPlayerArmy=ignoreNonPlayerArmy,
                     incrementBackwards=incrementBackward,
@@ -3317,7 +3317,7 @@ def bidirectional_breadth_first_dynamic(
     #     if (node != None):
     #         dist -= 1
     #         path = PathNode(node, path, army, dist, -1, None)
-    pathObject.calculate_value(searchingPlayer, teams=map._teams, incrementBackwards=incrementBackward)
+    pathObject.calculate_value(searchingPlayer, teams=map.team_ids_by_player_index, incrementBackwards=incrementBackward)
     logbook.info(
         f"BI-DIR DYNAMIC BFS FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}\n   {pathObject.toString()}")
     return pathObject

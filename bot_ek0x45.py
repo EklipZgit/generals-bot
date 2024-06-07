@@ -3474,7 +3474,6 @@ class EklipZBot(object):
         if self._map.turn < 100:
             return None
 
-        # this thing isn't working right...?
         path = self.get_optimal_exploration(turns, negativeTiles, minArmy=minArmy, maxTime=maxTime)
         if path:
             logbook.info(f"Oh no way, explore found a path lol? {str(path)}")
@@ -6502,12 +6501,22 @@ class EklipZBot(object):
                 if threat is not None:
                     enemyNegTiles.append(threat.path.start.tile)
                 enemySavePath = self.get_best_defense(enemyGeneral, depth - 1, enemyNegTiles)
+                defTurnsLeft = depth - 1
+                depthTargetArmy = targetArmy
                 if enemySavePath is not None:
-                    targetArmy = 1 + enemySavePath.value + nonGenArmy
+                    defTurnsLeft -= enemySavePath.length
+                    depthTargetArmy = max(enemySavePath.value + nonGenArmy, depthTargetArmy)
+                    if not enemyGeneral.visible:
+                        depthTargetArmy = max(depthTargetArmy, enemySavePath.value + nonGenArmy + self.determine_fog_defense_amount_available_for_tiles(altEnGenPositions, enPlayer, fogDefenseTurns=defTurnsLeft))
                     logbook.info(f"  targetArmy {targetArmy}, enemySavePath {enemySavePath.toString()}")
                     attackNegTiles = enemySavePath.tileSet.copy()
                     attackNegTiles.remove(enemyGeneral)
-                logbook.info(f"  targetArmy to add to enemyGeneral kill = {targetArmy}")
+
+                if not enemyGeneral.visible:
+                    # remove fog army that can't reach gen
+                    depthTargetArmy = max(depthTargetArmy, self.determine_fog_defense_amount_available_for_tiles(altEnGenPositions, enPlayer, fogDefenseTurns=depth - 1))
+
+                logbook.info(f"  targetArmy to add to enemyGeneral kill = {depthTargetArmy}")
                 shouldPrioritizeTileCaps = (
                         not self.is_all_in()
                         and not self.is_ffa_situation()
@@ -6516,7 +6525,7 @@ class EklipZBot(object):
                 killPath = SearchUtils.dest_breadth_first_target(
                     self._map,
                     altEnGenPositions,
-                    max(targetArmy, 1),
+                    max(depthTargetArmy, 1),
                     0.05,
                     depth,
                     attackNegTiles,
@@ -6911,7 +6920,8 @@ class EklipZBot(object):
         notEnoughDamageBlocked = False
         armyLeftOver = False
         if interceptingOption is not None:
-            notEnoughDamageBlocked = interceptingOption.damage_blocked < threat.threatValue
+            # notEnoughDamageBlocked = interceptingOption.damage_blocked < threat.threatValue
+            notEnoughDamageBlocked = False
             armyLeftOver = interceptingOption.intercepting_army_remaining > 0
             if threat.path.tail.tile.isGeneral:
                 if tookTooLong or notEnoughDamageBlocked or armyLeftOver:
@@ -8565,7 +8575,7 @@ class EklipZBot(object):
                     if plan is not None:
                         interceptions[tile] = plan
 
-            interceptionsEvent.event_name = f'INTERCEPTIONS ({len(threatsByTile)}, skipped {len(skippedIntercepts)})'
+            interceptionsEvent.event_name = f'INTERCEPTIONS ({len(threatsWeCareAboutByTile)}, skipped {len(skippedIntercepts)})'
 
         if len(skippedIntercepts) > 0:
             self.viewInfo.add_info_line(f'SKIPPED {len(skippedIntercepts)} INTERCEPTS OVER LIMIT {limit}! Skipped: {" - ".join([str(t) for t in skippedIntercepts])}')

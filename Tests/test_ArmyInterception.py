@@ -1840,19 +1840,6 @@ class ArmyInterceptionTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
 
         self.assertTileDifferentialGreaterThan(2, simHost, 'should have launched off general immediately to intercept to prevent damage')
-
-# 22-12 with everything bad
-# 11f 19p - hacked defense intercept
-# 10-20 with defense -1 instead of -2
-# 17f 18p - initial intercept/expand impl
-# 43f 38p
-# 56f 63p 1s, lots are only failing by 1-2 econ dropped, too, instead of 10-20
-# 70f 59p 4s after "new" expansion revamp (RoundPlan)
-# 86f 55p 4s after reworking a bunch of stuff and better unit testing. Prior to fixing other tests that may be asserting incorrectly. Broke splitting and started disregarding tile-blocking, for now.
-        # DO NOT COMMIT UNTIL SPLITTING FIXED, SEE
-            # test_should_split_when_necessary_to_defend_multiple_targets
-            # test_should_split_or_delay_when_appropriate
-            # test_should_split_to_avoid_repetition_behind_on_tiles
     
     def test_shouldnt_intercept_wrong_army_or_whatever_the_fuck_its_doing_here(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -2033,3 +2020,45 @@ class ArmyInterceptionTests(TestBase):
 
             self.assertTileDifferentialGreaterThan(5, simHost)
             debugMode = False
+
+    def test_should_complete_intercept_one_tile_away(self):
+        for path in [
+            '8,18->9,18->9,19',
+            '8,18->8,19->9,19',
+        ]:
+            debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+            with self.subTest(path=path):
+                for i in range(5):
+                    mapFile = 'GameContinuationEntries/should_complete_intercept_one_tile_away___feiTt7n7t---5--765.txtmap'
+                    map, general, enemyGeneral = self.load_map_and_generals(mapFile, 765, fill_out_tiles=True)
+
+                    rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=765)
+
+                    self.enable_search_time_limits_and_disable_debug_asserts()
+                    simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                    simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+                    bot = self.get_debug_render_bot(simHost, general.player)
+                    playerMap = simHost.get_player_map(general.player)
+
+                    self.begin_capturing_logging()
+                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+                    self.assertNoFriendliesKilled(map, general)
+                    debugMode = False
+
+                    tile = playerMap.GetTile(8, 18)
+                    self.assertOwned(general.player, tile)
+
+# 22-12 with everything bad
+# 11f 19p - hacked defense intercept
+# 10-20 with defense -1 instead of -2
+# 17f 18p - initial intercept/expand impl
+# 43f 38p
+# 56f 63p 1s, lots are only failing by 1-2 econ dropped, too, instead of 10-20
+# 70f 59p 4s after "new" expansion revamp (RoundPlan)
+# 86f 55p 4s after reworking a bunch of stuff and better unit testing. Prior to fixing other tests that may be asserting incorrectly. Broke splitting and started disregarding tile-blocking, for now.
+        # DO NOT COMMIT UNTIL SPLITTING FIXED, SEE
+            # test_should_split_when_necessary_to_defend_multiple_targets
+            # test_should_split_or_delay_when_appropriate
+            # test_should_split_to_avoid_repetition_behind_on_tiles
+# 87f 69p 4s, after adding a bunch of new tests and NOT fixing splitting above (lol).
+# 83f 75p 4s, after VERY FIRST attempt at pruning intercept points based on distance to average tile position...? No way that stuff is even right

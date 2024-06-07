@@ -568,14 +568,14 @@ class GatherCapturePlan(TilePlanInterface):
         for rn in plan.root_nodes:
             for mv in rn.tile.movable:
                 if mv in captures:
-                    q.append((mv, rn))
+                    q.append((mv, rn, rn.value + rn.tile.army - 1))
 
         fromRoot: GatherTreeNode
         toCap: Tile
 
         vis = set()
         while q:
-            (toCap, fromRoot) = q.popleft()
+            (toCap, fromRoot, armyAmt) = q.popleft()
 
             if toCap.tile_index in vis or toCap not in captures:
                 continue
@@ -586,6 +586,7 @@ class GatherCapturePlan(TilePlanInterface):
             sumArmy = -1
             sumPoints = -1
             econValue = 0.0
+            armyAmt -= 1
             currentTile = toCap
             isTileFriendly = currentTile.player in frPlayers
 
@@ -595,10 +596,12 @@ class GatherCapturePlan(TilePlanInterface):
             if not negativeTiles or currentTile not in negativeTiles:
                 if isTileFriendly:
                     sumArmy += currentTile.army
+                    armyAmt += currentTile.army
                     # sumPoints += currentTile.army
                     if currentTile.isCity:
                         plan.friendly_city_count += 1
                 else:
+                    armyAmt -= currentTile.army
                     if not onlyCalculateFriendlyArmy:
                         sumArmy -= currentTile.army
                         # sumPoints -= currentTile.army
@@ -645,13 +648,19 @@ class GatherCapturePlan(TilePlanInterface):
             # old behavior was tile 'values' were points, not army. Safe to not preserve that...?
             fromRoot.points += sumPoints
             fromRoot.gatherTurns += 1
+            if armyAmt < 0:
+                # then we must waste at least one turn shuffling army around, borrowing gathered army from a different root node inlet
+                plan.gather_turns += 1
             # plan.gather_capture_points += sumPoints
             # plan.econValue +=
 
             for mv in toCap.movable:
-                q.append((mv, fromRoot))
+                q.append((mv, fromRoot, armyAmt))
 
         # for root in plan.root_nodes:
+
+    def shortInfo(self) -> str:
+        return f'{self._econ_value:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt), armyGath {self.gathered_army} {self.root_nodes[0].tile}'
 
 
 def knapsack_gather_iteration(
@@ -3798,7 +3807,7 @@ def get_tree_leaves_further_than_distance(
     return leavesToInclude
 
 
-def convert_contiguous_tiles_to_gather_tree_nodes_with_values(
+def convert_contiguous_tiles_to_gather_capture_plan(
         map: MapBase,
         rootTiles: typing.Iterable[Tile],
         tiles: TileSet,
@@ -4016,7 +4025,7 @@ def build_max_value_gather_tree_linking_specific_nodes(
     steinerNodes = GatherSteiner.build_network_x_steiner_tree(map, tiles, asPlayer, weightMod=weightMatrix, baseWeight=1000)
     # steinerMatrix = MapMatrixSet(map, steinerNodes)
 
-    plan = convert_contiguous_tiles_to_gather_tree_nodes_with_values(
+    plan = convert_contiguous_tiles_to_gather_capture_plan(
         map,
         rootTiles=rootTiles,
         tiles=steinerNodes,
@@ -4115,7 +4124,7 @@ def gather_approximate_turns_to_tiles(
         logbook.info(f'gather_approximate_turns_to_tile complete in {usedTime:.4f}s with NO PLAN')
         return None
 
-    plan = convert_contiguous_tiles_to_gather_tree_nodes_with_values(
+    plan = convert_contiguous_tiles_to_gather_capture_plan(
         map,
         rootTiles=rootTiles,
         tiles=steinerNodes,

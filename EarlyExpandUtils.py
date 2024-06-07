@@ -22,6 +22,11 @@ ALLOW_RANDOM_SKIPS = False
 EMPTY_COMBINATION = (0, 0, 0, 0)
 
 
+# TODO alt approach
+#  Get all possible paths from general of length 5 (cant be that many, right?)
+#  Figure out which ones combine together to achieve the things we want and lead to tile islands with enough capturable material?
+
+
 class CityExpansionPlan(object):
     def __init__(self, tile_captures: int, plan_paths: typing.List[Path | None], launch_turn: int, core_tile: Tile):
         self.core_tile: Tile = core_tile
@@ -377,7 +382,7 @@ def optimize_first_25(
                 distToGenMap,
                 tile_minimization_map,
                 turn=map.turn,
-                allow_wasted_moves=-20,  # force no wasted moves for this attempt
+                max_allow_wasted_moves=-20,  # force no wasted moves for this attempt
                 debug_view_info=debug_view_info,
                 visited_set=alreadyOwned,
                 prune_below=maxTiles,
@@ -394,7 +399,7 @@ def optimize_first_25(
             prune_cutoff = 16
 
     if cramped:
-        # genArmy, turn, optimalMaxWasteMoves
+        # genArmy, optimalMaxWasteMoves
         combinationsWithMaxOptimal = [
             None,  # buys 11 more time
             (11, 8),
@@ -467,7 +472,7 @@ def optimize_first_25(
             tile_minimization_map,
             turn=launchTurn,
             try_bi_directional_first_launch=True,  # required to pass test_can_attempt_backwards_initial_paths_for_higher_land_count
-            allow_wasted_moves=optimalWastedMoves + 3,
+            max_allow_wasted_moves=optimalWastedMoves + 3,
             debug_view_info=debug_view_info,
             visited_set=alreadyOwned,
             prune_below=maxTiles,
@@ -532,7 +537,7 @@ def optimize_city_expand(alreadyOwned, cutoff_time, debug_view_info, distToGenMa
         turn=turnInCycle,  # TODO is this +1 right...?
         visited_set=alreadyOwned,
         prune_below=prune_cutoff,
-        allow_wasted_moves=allowWasted,
+        max_allow_wasted_moves=allowWasted,
         shuffle_launches=shuffle_launches,
         dont_force_first=True,
         debug_view_info=debug_view_info,
@@ -729,7 +734,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
         dist_to_gen_map: MapMatrixInterface[int],
         tile_weight_map: MapMatrixInterface[int],
         turn: int,
-        allow_wasted_moves: int,
+        max_allow_wasted_moves: int,
         prune_below: int,
         cutoff_time: float,
         visited_set: typing.Set[Tile] = None,
@@ -750,7 +755,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
     @param dist_to_gen_map: higher = better priority
     @param tile_weight_map: lower = better priority
     @param turn: turn launch is from (used to cap paths at turn 50)
-    @param allow_wasted_moves: number of tiles ALLOWED to be repeated / moves allowed to be wasted.
+    @param max_allow_wasted_moves: number of tiles ALLOWED to be repeated / moves allowed to be wasted.
     @param visited_set:
     @param shuffle_launches: if set to True, will randomize launch combinations
     @param dont_force_first:
@@ -772,26 +777,28 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
 
     turn = turn % 50
 
+    allowWastedMoves = max_allow_wasted_moves
+
     skipMoveCount = 0
     if not dont_force_first:
         if gen_army == 1:
             gen_army = 2
             turn += 1
-            allow_wasted_moves -= 1
+            allowWastedMoves -= 1
             skipMoveCount += 1
             # if we didn't actually increment enough to get to the next gen army
             if turn & 1 == 1:
                 turn += 1
-                allow_wasted_moves -= 1
+                allowWastedMoves -= 1
                 skipMoveCount += 1
     turnsLeft = 50 - turn
 
     if turnsLeft <= 0:
         return []
 
-    minWastedMovesThisLaunch = max(0, allow_wasted_moves // 2 - 2)
+    minWastedMovesThisLaunch = max(0, allowWastedMoves // 2 - 2)
 
-    maxForce = allow_wasted_moves + 4
+    maxForce = allowWastedMoves + 4
     # prevent maxForce from retraversing the whole launch path.
     visitLen = len(visited_set)
     if visitLen > 6 and maxForce > visitLen - 1:
@@ -811,11 +818,11 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
     # THIS IMPL ORDERS FROM CLOSEST TO 'allow_wasted_moves' TO FURTHEST RATHER THAN LEAST WASTED TO MOST, WHICH MAY BE PREFERABLE.
     forced = []
     # start low, move up into optimal allow wasted, and further up into max wasted stuff.
-    baseline = max(0, allow_wasted_moves - 1)
+    baseline = max(0, allowWastedMoves - 1)
 
     # this prevents the bot from preferring paths that waste more moves than the initial launch.
-    if baseline > 6:
-        baseline = 6
+    if baseline > 5:
+        baseline = 5
 
     curLess = baseline - 1
     curMore = baseline
@@ -879,7 +886,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
         if bestCaseResult < prune_below:
             if not no_log:
                 logbook.info(f'pruning due to bestCaseResult {bestCaseResult} compared to prune_below {prune_below}')
-            break
+            continue
 
         if time.perf_counter() > cutoff_time:
             if not no_log:
@@ -899,7 +906,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
             tile_weight_map=tile_weight_map,
             turn=turn,
             force_wasted_moves=force_wasted_moves,
-            allow_wasted_moves=allow_wasted_moves,
+            allow_wasted_moves=allowWastedMoves,
             prune_below=prune_below,
             visited_set=visited_set,
             skip_tiles=skip_tiles,
@@ -943,7 +950,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
                             tile_weight_map=tile_weight_map,
                             turn=turn,
                             force_wasted_moves=force_wasted_moves,
-                            allow_wasted_moves=allow_wasted_moves,
+                            allow_wasted_moves=allowWastedMoves,
                             prune_below=prune_below,
                             visited_set=visited_set,
                             shuffle_launches=shuffle_launches,
@@ -987,7 +994,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
                         tile_weight_map=tile_weight_map,
                         turn=turn,
                         force_wasted_moves=force_wasted_moves,
-                        allow_wasted_moves=allow_wasted_moves,
+                        allow_wasted_moves=allowWastedMoves,
                         prune_below=prune_below,
                         visited_set=visited_set,
                         shuffle_launches=shuffle_launches,
@@ -1261,7 +1268,7 @@ def _sub_optimize_first_25_specific_wasted__reverse(
         pathList = []
         curAttemptGenArmy = gen_army
 
-        curTurn = turn
+        curTurn = turn  #turnsConsumed?
         capped = EMPTY_COMBINATION
 
         if time.perf_counter() > cutoff_time:
@@ -2047,7 +2054,7 @@ def optimize_first_25__start_end_precalc(
                 distToGenMap,
                 tile_minimization_map,
                 turn=map.turn,
-                allow_wasted_moves=-20,  # force no wasted moves for this attempt
+                max_allow_wasted_moves=-20,  # force no wasted moves for this attempt
                 debug_view_info=debug_view_info,
                 visited_set=alreadyOwned,
                 prune_below=maxTiles,
@@ -2147,7 +2154,7 @@ def optimize_first_25__start_end_precalc(
             tile_minimization_map,
             turn=launchTurn,
             try_bi_directional_first_launch=True,  # required to pass test_can_attempt_backwards_initial_paths_for_higher_land_count
-            allow_wasted_moves=optimalWastedMoves + 3,
+            max_allow_wasted_moves=optimalWastedMoves + 3,
             debug_view_info=debug_view_info,
             visited_set=alreadyOwned,
             prune_below=maxTiles,

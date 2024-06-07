@@ -1376,8 +1376,8 @@ class TestBase(unittest.TestCase):
         analysis = BoardAnalyzer(map, general)
         analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
 
-        if debugMode:
-            self.render_tile_islands(map, builder)
+        # if debugMode:
+        #     self.render_tile_islands(map, builder)
 
         expander = ArmyFlowExpander(map)
         expander.friendlyGeneral = general
@@ -1385,8 +1385,14 @@ class TestBase(unittest.TestCase):
         expander.debug_render_capture_count_threshold = renderThresh
         expander.log_debug = debugMode
         expander.log_debug = False
+        expander.use_debug_asserts = debugMode
+        # expander.use_debug_asserts = False
 
-        opts = expander.get_expansion_options(
+        renderAll = False
+        renderAll = True
+        # expander.use_all_pairs_visited = True
+
+        optCollection = expander.get_expansion_options(
             islands=builder,
             asPlayer=general.player,
             targetPlayer=enemyGeneral.player,
@@ -1396,18 +1402,44 @@ class TestBase(unittest.TestCase):
             negativeTiles=negativeTiles,
         )
 
+        opts = optCollection.flow_plans
+
         if debugMode:
             vi = self.get_renderable_view_info(map)
 
-            bestOpt = opts[0]
-            ArmyFlowExpander.add_flow_expansion_option_to_view_info(map, bestOpt, general.player, enemyGeneral.player, vi)
+            expander.ensure_flow_graph_exists(builder)
+
+            bestOpts = []
+            if not renderAll:
+                try:
+                    bestOpt = next(filter(lambda opt: opt.length > turns // 4, opts))
+                except:
+                    try:
+                        bestOpt = next(filter(lambda opt: opt.length > turns // 8, opts))
+                    except:
+                        try:
+                            bestOpt = next(filter(lambda opt: opt.length > 3, opts))
+                        except:
+                            bestOpt = opts[0]
+
+                logbook.info(f'best opt {bestOpt}')
+                bestOpts = [bestOpt]
+            else:
+                for supersetPlan in optCollection.superset_flow_plans:
+                    bestOpts.append(supersetPlan)
+                # visited = set()
+                # for tile in map.get_all_tiles():
+                #     plan = optCollection.flow_plan_supersets_by_tile.raw[tile.tile_index]
+                #     if plan is not None and plan not in visited:
+                #         visited.add(plan)
+                #         bestOpts.append(plan)
+
+            for bestOpt in bestOpts:
+                ArmyFlowExpander.add_flow_expansion_option_to_view_info(map, bestOpt, general.player, enemyGeneral.player, vi)
 
             flowGraph = expander.flow_graph
             if flowGraph is not None:
                 ArmyFlowExpander.add_flow_graph_to_view_info(flowGraph, vi)
-
-            tgPlayer = enemyGeneral.player
-            sourcePlayer = general.player
 
             builder.add_tile_islands_to_view_info(vi, printIslandInfoLines=True, printIslandNames=True)
 
@@ -1744,6 +1776,9 @@ class TestBase(unittest.TestCase):
 
     def get_best_intercept_option_path_values_or_none(self, plan: ArmyInterception, maxDepth=200) -> typing.Tuple[int, int, Path] | None:
         """Returns value, effectiveTurns, path"""
+        if plan is None:
+            return None
+
         bestOpt = None
         bestOptAmt = 0
         bestOptDist = 0

@@ -292,6 +292,172 @@ a2                  b1
         self.enable_search_time_limits_and_disable_debug_asserts()
         self.begin_capturing_logging()
 
-        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=50, debugMode=debugMode, renderThresh=700, tileIslandSize=4)
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=40, debugMode=debugMode, renderThresh=700, tileIslandSize=5)
+        self.assertNotEqual(0, len(opts))
+        self.assertGreater(opts[0].econValue / opts[0].length, 1.5, 'should find a plan with pretty high value per turn')
+
+    def test_should_not_produce_invalid_plan__enemy_cluster_crossing_neutral_tile(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        map.GetTile(12, 8).isMountain = True
+        map.GetTile(12, 9).isMountain = True
+        map.GetTile(12, 10).isMountain = True
+        map.GetTile(12, 11).isMountain = True
+        map.GetTile(10, 11).isMountain = True
+        map.GetTile(10, 12).isMountain = True
+        map.GetTile(10, 13).isMountain = True
+        map.GetTile(5, 1).isMountain = True
+        map.GetTile(8, 10).isMountain = True
+        map.GetTile(8, 11).isMountain = True
+        map.GetTile(8, 12).isMountain = True
+        map.GetTile(3, 3).isMountain = True
+        map.GetTile(2, 1).isMountain = True
+        map.GetTile(2, 2).isMountain = True
+        map.GetTile(5, 0).isMountain = True
+        map.GetTile(14, 1).isMountain = True
+        map.GetTile(13, 0).isMountain = True
+        map.GetTile(14, 4).isMountain = True
+        map.GetTile(14, 8).isMountain = True
+        map.GetTile(15, 10).isMountain = True
+        map.GetTile(15, 11).isMountain = True
+        map.GetTile(14, 12).isMountain = True
+        map.GetTile(11, 8).isMountain = True
+        for i in range(12, 16):
+            map.GetTile(7, i).isMountain = True
+        for i in range(6, 11):
+            map.GetTile(10, i).isMountain = True
+        for i in range(7, 10):
+            map.GetTile(i, 15).isMountain = True
+
+        # if debugMode:
+        #     self.render_map(map)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=40, debugMode=debugMode, renderThresh=700, tileIslandSize=5)
+        self.assertNotEqual(0, len(opts))
+        self.assertGreater(opts[0].econValue / opts[0].length, 0.99, 'should find a plan with pretty high value per turn with one-move-cap')
+
+        optWithCaps = SearchUtils.where(opts, lambda o: SearchUtils.any_where(o.tileSet, lambda t: t.player == enemyGeneral.player))
+        self.assertGreater(len(optWithCaps), 0)
+        self.assertGreater(optWithCaps[0].econValue, 0.8)
+
+    def test_should_not_produce_invalid_plan__neutral_cap(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        map.GetTile(12, 8).isMountain = True
+        map.GetTile(12, 9).isMountain = True
+        map.GetTile(12, 10).isMountain = True
+        map.GetTile(12, 11).isMountain = True
+        map.GetTile(10, 11).isMountain = True
+        map.GetTile(10, 12).isMountain = True
+        map.GetTile(10, 13).isMountain = True
+        map.GetTile(5, 1).isMountain = True
+        map.GetTile(8, 10).isMountain = True
+        map.GetTile(8, 11).isMountain = True
+        map.GetTile(8, 12).isMountain = True
+        map.GetTile(3, 3).isMountain = True
+        map.GetTile(2, 1).isMountain = True
+        map.GetTile(2, 2).isMountain = True
+        map.GetTile(5, 0).isMountain = True
+        # map.GetTile(14, 1).isMountain = True
+        # map.GetTile(13, 0).isMountain = True
+        # map.GetTile(14, 4).isMountain = True
+        map.GetTile(14, 8).isMountain = True
+        map.GetTile(15, 10).isMountain = True
+        map.GetTile(15, 11).isMountain = True
+        map.GetTile(14, 12).isMountain = True
+        map.GetTile(11, 8).isMountain = True
+        map.GetTile(13, 10).isMountain = True
+        map.GetTile(13, 11).isMountain = True
+        map.GetTile(13, 1).isMountain = True
+        map.GetTile(15, 14).isMountain = True
+        map.GetTile(13, 16).isMountain = True
+        map.GetTile(11, 16).isMountain = True
+        map.GetTile(10, 16).isMountain = True
+        map.GetTile(8, 17).isMountain = True
+        for i in range(12, 16):
+            map.GetTile(7, i).isMountain = True
+        for i in range(6, 11):
+            map.GetTile(10, i).isMountain = True
+        for i in range(7, 10):
+            map.GetTile(i, 15).isMountain = True
+
+        # if debugMode:
+        #     self.render_map(map)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=40, debugMode=debugMode, renderThresh=700, tileIslandSize=5)
+        self.assertNotEqual(0, len(opts))
+        self.assertGreater(opts[0].econValue / opts[0].length, 0.99, 'should find a plan with pretty high value per turn')
+
+    def test_should_not_produce_invalid_enemy_captures(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        map.GetTile(12, 8).isMountain = True
+        map.GetTile(12, 9).isMountain = True
+        map.GetTile(12, 10).isMountain = True
+        map.GetTile(12, 11).isMountain = True
+        # map.GetTile(10, 11).isMountain = True
+        map.GetTile(10, 12).isMountain = True
+        map.GetTile(10, 13).isMountain = True
+        map.GetTile(5, 1).isMountain = True
+        # map.GetTile(8, 10).isMountain = True
+        # map.GetTile(8, 11).isMountain = True
+        # map.GetTile(8, 12).isMountain = True
+        map.GetTile(3, 3).isMountain = True
+        map.GetTile(2, 1).isMountain = True
+        map.GetTile(2, 2).isMountain = True
+        map.GetTile(5, 0).isMountain = True
+        # map.GetTile(14, 1).isMountain = True
+        # map.GetTile(13, 0).isMountain = True
+        map.GetTile(14, 4).isMountain = True
+        map.GetTile(14, 8).isMountain = True
+        map.GetTile(15, 10).isMountain = True
+        map.GetTile(15, 11).isMountain = True
+        map.GetTile(14, 12).isMountain = True
+        map.GetTile(11, 8).isMountain = True
+        map.GetTile(13, 10).isMountain = True
+        map.GetTile(13, 11).isMountain = True
+        map.GetTile(13, 1).isMountain = True
+        map.GetTile(15, 14).isMountain = True
+        map.GetTile(13, 16).isMountain = True
+        map.GetTile(11, 16).isMountain = True
+        map.GetTile(10, 16).isMountain = True
+        map.GetTile(10, 12).isMountain = True
+        map.GetTile(8, 17).isMountain = True
+        # map.GetTile(7, 14).isMountain = True
+        # map.GetTile(9, 10).isMountain = True
+        map.GetTile(10, 10).isMountain = True
+        map.GetTile(6, 12).isMountain = True
+        map.GetTile(5, 16).isMountain = True
+        map.GetTile(5, 13).isMountain = True
+        # map.GetTile(3, 15).isMountain = True
+        # map.GetTile(2, 14).isMountain = True
+        # map.GetTile(3, 13).isMountain = True
+        map.GetTile(7, 10).isMountain = True
+        # for i in range(12, 16):
+        #     map.GetTile(7, i).isMountain = True
+        for i in range(6, 11):
+            map.GetTile(10, i).isMountain = True
+        # for i in range(6, 10):
+        #     map.GetTile(i, 15).isMountain = True
+
+        # if debugMode:
+        #     self.render_map(map)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=40, debugMode=debugMode, renderThresh=700, tileIslandSize=5)
         self.assertNotEqual(0, len(opts))
         self.assertGreater(opts[0].econValue / opts[0].length, 1.5, 'should find a plan with pretty high value per turn')

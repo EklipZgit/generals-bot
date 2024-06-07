@@ -473,7 +473,7 @@ class EarlyExpandUtilsTests(TestBase):
             weightMap,
             turn=turn,
             prune_below=0,
-            allow_wasted_moves=6,
+            max_allow_wasted_moves=6,
             no_log=True,
             cutoff_time=time.perf_counter() + 4.0)
 
@@ -505,7 +505,7 @@ class EarlyExpandUtilsTests(TestBase):
             weightMap,
             turn=turn,
             prune_below=0,
-            allow_wasted_moves=14,
+            max_allow_wasted_moves=14,
             no_log=True,
             cutoff_time=time.perf_counter() + 4.0)
 
@@ -549,7 +549,7 @@ class EarlyExpandUtilsTests(TestBase):
             weightMap,
             turn=turn,
             prune_below=0,
-            allow_wasted_moves=8,
+            max_allow_wasted_moves=8,
             dont_force_first=True,
             no_log=True,
             cutoff_time=time.perf_counter() + 4.0)
@@ -587,7 +587,7 @@ class EarlyExpandUtilsTests(TestBase):
                         weightMap,
                         prune_below=0,
                         turn=launchTurn,
-                        allow_wasted_moves=6,
+                        max_allow_wasted_moves=6,
                         cutoff_time=time.perf_counter() + 4.0)
 
                     for _ in range(map.turn, launchTurn):
@@ -743,7 +743,7 @@ class EarlyExpandUtilsTests(TestBase):
             weightMap,
             prune_below=23,
             turn=launchTurn,
-            allow_wasted_moves=6,
+            max_allow_wasted_moves=6,
             no_log=False,
             cutoff_time=time.perf_counter() + 4.0)
 
@@ -815,6 +815,7 @@ class EarlyExpandUtilsTests(TestBase):
         # 2f, 308p, 41 beat weight thresh 3
         # 0f, 309p, 42 beat after weighting for lower optimal wasted first (instead of min optimal wasted first).
         # 0f, 308p, 43 beat after shifting reductions in timeEach stuff.
+        # 0f, 308p, 43 beat after tweaking back down the max optimal retraverses the algo checks first
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         projRoot = pathlib.Path(__file__).parent
         folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
@@ -865,6 +866,7 @@ class EarlyExpandUtilsTests(TestBase):
         # 0f, 26p, 43 beat after optimizing around trying the optimal wasted first, with a weight thresh of 3
         # 0f, 25p, 44 beat after weighting for lower optimal wasted first (instead of min optimal wasted first).
         # 0f, 26p, 43 beat after optimizing some stuff in something or other
+        # 0f, 25p, 44 beat after tweaking back down the max optimal retraverses the algo checks first
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         projRoot = pathlib.Path(__file__).parent
         folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'

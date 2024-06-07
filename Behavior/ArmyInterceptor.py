@@ -71,6 +71,9 @@ class InterceptPointTileInfo(object):
         self.max_intercept_turn_offset: int = maxInterceptTurnOffset
         """Mostly useless? The max offset based on chokewidths and distances to chokes, used to calculate the max_delay_turns"""
 
+        self.max_search_dist: int = 1000
+        """Used to limit time spent searching mediocre intercept points."""
+
     def __str__(self) -> str:
         return f'{self.tile} - it{self.max_delay_turns}, cw{self.max_choke_width}, ic{self.max_intercept_turn_offset}, im{self.max_extra_moves_to_capture}'
 
@@ -767,25 +770,23 @@ class ArmyInterceptor(object):
             averageEnemyPositionByTurn[i] = avgAllThreatsX, avgAllThreatsY
             logbook.info(f'avgPos dist {i} = {avgAllThreatsX:.1f},{avgAllThreatsY:.1f}')
 
+        logbook.info(f'filtering out poor intercept points and setting search depths by intercept tile')
+        self.filter_interception_best_points(interception, maxDepth, positionsByTurn=averageEnemyPositionByTurn)
+
         bestInterceptTable: typing.Dict[int, InterceptionOptionInfo] = {}
 
         logbook.info(f'getting intercept paths at maxDepth {maxDepth}, threatDistFromCommon {threatDistFromCommon}')
-        # TODO sort by earliest intercept + chokeWidth?
+
         tile: Tile
         interceptInfo: InterceptPointTileInfo
         for tile, interceptInfo in interception.common_intercept_chokes.items():
             if tile.isCity and tile.isNeutral:
                 continue
-            # # TODO where does this 3 come from...? I think this lets the intercept chase, slightly...?
-            # # THE 3 is necessary to chase 1 tile behind. I'm not sure why, though...
-            # arbitraryOffset = 3
-            # # TODO for final tile in the path, if tile is recapturable (city, normal tile) then increase maxDepth to turnsLeftInCycle
+
             turnsToIntercept = interceptInfo.max_delay_turns
-
-            depth = min(maxDepth, turnsToIntercept)
-
+            depth = interceptInfo.max_search_dist
             if self.log_debug:
-                logbook.info(f'\r\n\r\nChecking tile {str(tile)} with depth {depth} / threatDistFromCommon {threatDistFromCommon} / min(maxDepth={maxDepth}, turnsToIntercept={turnsToIntercept}) ')
+                logbook.info(f'\r\n\r\nChecking tile {str(tile)} with depth {depth} / threatDistFromCommon {threatDistFromCommon} / min(maxDepth={maxDepth}, turnsToIntercept={turnsToIntercept}')
 
             interceptPaths = self._get_intercept_paths(
                 tile,
@@ -930,6 +931,60 @@ class ArmyInterceptor(object):
                     logbook.info(f'best turns {i} = NONE')
 
         return bestInterceptTable
+
+    def filter_interception_best_points(
+            self,
+            interception,
+            maxDepth,
+            positionsByTurn: typing.Dict[int, typing.Tuple[float, float]]
+    ):
+        # TODO sort by earliest intercept + chokeWidth?
+        # goodInterceptPoints: typing.Dict[Tile, InterceptPointTileInfo] = {}
+        for tile, interceptInfo in interception.common_intercept_chokes.items():
+            if tile.isCity and tile.isNeutral:
+                continue
+            # # TODO where does this 3 come from...? I think this lets the intercept chase, slightly...?
+            # # THE 3 is necessary to chase 1 tile behind. I'm not sure why, though...
+            # arbitraryOffset = 3
+            # # TODO for final tile in the path, if tile is recapturable (city, normal tile) then increase maxDepth to turnsLeftInCycle
+            turnsToIntercept = interceptInfo.max_delay_turns
+
+            depth = min(maxDepth, turnsToIntercept)
+            interceptInfo.max_search_dist = depth
+
+        # return
+
+        toBypassFullSearch = []
+        for tile, interceptInfo in interception.common_intercept_chokes.items():
+            if tile.isCity and tile.isNeutral:
+                continue
+
+            depth = interceptInfo.max_search_dist
+            currentDist = self.map.get_distance_between(interception.target_tile, tile)
+            euclidIntDist = 5
+            if currentDist in positionsByTurn:
+                (x, y) = positionsByTurn[currentDist]
+                euclidIntDist = ((x - tile.x)**2 + (y - tile.y)**2) ** 0.5
+
+            for adj in tile.movable:
+                intInf = interception.common_intercept_chokes.get(adj, None)
+                if intInf is None:
+                    continue
+                altDist = self.map.get_distance_between(interception.target_tile, adj)
+                euclidAltIntDist = 5
+                if altDist in positionsByTurn:
+                    (altX, altY) = positionsByTurn[altDist]
+                    euclidAltIntDist = ((altX - adj.x)**2 + (altY - adj.y)**2) ** 0.5
+
+                # TODO there is no way this is right but it already makes more tests pass than did before...?
+                if intInf.max_search_dist - euclidIntDist < depth - euclidAltIntDist:
+                    # then we would ALWAYS intercept at the other adjacent, and can skip this one.
+                    logbook.info(f'\r\n    Skipping full search intercept calculation at {str(tile)} depth {depth} + sourceDist {euclidIntDist:.2f} due to adjacent {adj} depth {intInf.max_search_dist} + altDist {euclidAltIntDist:.2f}')
+                    toBypassFullSearch.append(interceptInfo)
+                    break
+
+        for intInfo in toBypassFullSearch:
+            intInfo.max_search_dist = min(intInfo.max_search_dist, 1)
 
     def _get_intercept_paths(
             self,

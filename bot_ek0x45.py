@@ -1525,7 +1525,7 @@ class EklipZBot(object):
                 self.gatherNodes = gatherNodes
 
                 if self.info_render_gather_values and priorityMatrix:
-                    for t in self._map.reachableTiles:
+                    for t in self._map.reachable_tiles:
                         val = priorityMatrix[t]
                         if val:
                             self.viewInfo.topRightGridText[t] = f'g{str(round(val, 3)).lstrip("0").replace("-0", "-")}'
@@ -2267,7 +2267,7 @@ class EklipZBot(object):
                     if self._map.is_tile_enemy(tile):
                         keyTiles.add(tile)
 
-        for tile in self._map.pathableTiles:
+        for tile in self._map.pathable_tiles:
             if self._map.is_tile_enemy(tile):
                 if self.distance_from_general(tile) < priorityDist:
                     keyTiles.add(tile)
@@ -5371,7 +5371,7 @@ class EklipZBot(object):
             genDist = 1000
 
             if gen is None and generalApproximations[i][2] > 0:
-                for tile in self._map.pathableTiles:
+                for tile in self._map.pathable_tiles:
                     if not tile.discovered and not tile.isNotPathable:
                         tileDist = self.euclidDist(generalApproximations[i][0], generalApproximations[i][1], tile.x, tile.y)
                         if tileDist < genDist and self.distance_from_general(tile) < 1000:
@@ -5449,7 +5449,7 @@ class EklipZBot(object):
         def tile_meets_criteria_for_general(t: Tile) -> bool:
             return tile_meets_criteria_for_value_around_general(t) and self.distance_from_general(t) >= minSpawnDistance and (self.teammate_general is None or self.distance_from_teammate(t) >= minSpawnDistance)
 
-        for tile in self._map.pathableTiles:
+        for tile in self._map.pathable_tiles:
             if tile_meets_criteria_for_general(tile):
                 # if not divide by 2, overly weights far tiles. Prefer mid-far central tiles
                 genDist = self.distance_from_general(tile) / 2
@@ -5493,7 +5493,7 @@ class EklipZBot(object):
 
         splitTurn = self.timings.get_turn_in_cycle(self._map.turn)
         tilesUngathered = SearchUtils.count(
-            self._map.pathableTiles,
+            self._map.pathable_tiles,
             lambda tile: (
                     tile.player == self.general.player
                     and tile not in self.target_player_gather_path.tileSet
@@ -5548,7 +5548,7 @@ class EklipZBot(object):
 
         maxAmount = 0
 
-        for tile in self._map.pathableTiles:
+        for tile in self._map.pathable_tiles:
             if tile.discovered or tile.isMountain or tile.isNotPathable or tile.isCity:
                 continue
 
@@ -6146,7 +6146,7 @@ class EklipZBot(object):
             negatives.update(negatives)
 
         prioMatrix = MapMatrix(self._map, 0.0)
-        for tile in self._map.pathableTiles:
+        for tile in self._map.pathable_tiles:
             prioMatrix[tile] = 0.0001 * threats[0].armyAnalysis.aMap[tile]  # reward distances further from the threats target, pushing us to intercept further up the path. In theory?
 
         if timeLimit is None:
@@ -7723,7 +7723,7 @@ class EklipZBot(object):
 
         if self.armyTracker is not None:
             if self.info_render_army_emergence_values:
-                for tile in self._map.reachableTiles:
+                for tile in self._map.reachable_tiles:
                     val = self.armyTracker.emergenceLocationMap[self.targetPlayer][tile]
                     if val != 0:
                         textVal = f"e{val:.0f}"
@@ -7736,7 +7736,7 @@ class EklipZBot(object):
                 self.viewInfo.add_targeted_tile(tile, TargetStyle.GREEN)
 
         if self.info_render_gather_locality_values and self.gatherAnalyzer is not None:
-            for tile in self._map.pathableTiles:
+            for tile in self._map.pathable_tiles:
                 if tile.player == self.general.player:
                     self.viewInfo.bottomMidRightGridText[tile] = f'g{self.gatherAnalyzer.gather_locality_map[tile]}'
 
@@ -7984,7 +7984,7 @@ class EklipZBot(object):
             turns = 25 - self._map.turn % 25
         targets = []
         if self.targetPlayer != -1:
-            for tile in self._map.pathableTiles:
+            for tile in self._map.pathable_tiles:
                 if tile.visible:
                     continue
 
@@ -7999,7 +7999,7 @@ class EklipZBot(object):
                     targets.append(tile)
         else:
             distMap = SearchUtils.build_distance_map(self._map, [self.targetPlayerExpectedGeneralLocation])
-            for tile in self._map.pathableTiles:
+            for tile in self._map.pathable_tiles:
                 if not SearchUtils.any_where(tile.movable, lambda t: not t.visible):
                     continue
 
@@ -12533,7 +12533,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
             enFrTiles = self._map.get_teammates(self.targetPlayer)
             negativeTiles = set()
-            for tile in self._map.reachableTiles:
+            for tile in self._map.reachable_tiles:
                 # what the fuck was this here for...?
                 # if not tile.discovered and self.territories.is_tile_in_player_territory(tile, self.targetPlayer):
                 #     negativeTiles.add(tile)
@@ -13990,7 +13990,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
             return False
 
-        for tile in self._map.reachableTiles:
+        for tile in self._map.reachable_tiles:
             if self._map.is_tile_on_team_with(tile, self.targetPlayer):
                 highValueSet.add(tile)
                 continue

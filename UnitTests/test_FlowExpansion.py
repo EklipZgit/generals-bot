@@ -7,6 +7,7 @@ import logbook
 import SearchUtils
 from Algorithms import TileIslandBuilder
 from Algorithms.TileIslandBuilder import IslandBuildMode
+from BehaviorAlgorithms import IterativeExpansion
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander, IslandFlowNode
 from BoardAnalyzer import BoardAnalyzer
 from Sim.GameSimulator import GameSimulatorHost
@@ -331,6 +332,8 @@ a2                  b1
         for i in range(7, 10):
             map.GetTile(i, 15).isMountain = True
 
+        map.update_reachable()
+
         # if debugMode:
         #     self.render_map(map)
 
@@ -387,6 +390,8 @@ a2                  b1
             map.GetTile(10, i).isMountain = True
         for i in range(7, 10):
             map.GetTile(i, 15).isMountain = True
+
+        map.update_reachable()
 
         # if debugMode:
         #     self.render_map(map)
@@ -452,6 +457,8 @@ a2                  b1
         # for i in range(6, 10):
         #     map.GetTile(i, 15).isMountain = True
 
+        map.update_reachable()
+
         # if debugMode:
         #     self.render_map(map)
 
@@ -461,3 +468,137 @@ a2                  b1
         opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=40, debugMode=debugMode, renderThresh=700, tileIslandSize=5)
         self.assertNotEqual(0, len(opts))
         self.assertGreater(opts[0].econValue / opts[0].length, 1.5, 'should find a plan with pretty high value per turn')
+
+
+    def test_should_gather_through_friendly_or_enemy_island_flows(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        map.GetTile(12, 11).isMountain = True
+        map.GetTile(10, 12).isMountain = True
+        map.GetTile(10, 13).isMountain = True
+        map.GetTile(7, 13).isMountain = True
+        map.GetTile(7, 14).isMountain = True
+        map.GetTile(5, 0).isMountain = True
+        map.GetTile(14, 4).isMountain = True
+        map.GetTile(14, 8).isMountain = True
+        map.GetTile(15, 10).isMountain = True
+        map.GetTile(15, 11).isMountain = True
+        map.GetTile(14, 12).isMountain = True
+        map.GetTile(11, 8).isMountain = True
+        map.GetTile(13, 10).isMountain = True
+        map.GetTile(13, 11).isMountain = True
+        map.GetTile(13, 1).isMountain = True
+        map.GetTile(15, 14).isMountain = True
+        map.GetTile(13, 16).isMountain = True
+        map.GetTile(11, 16).isMountain = True
+        map.GetTile(10, 16).isMountain = True
+        map.GetTile(10, 12).isMountain = True
+        map.GetTile(8, 17).isMountain = True
+        map.GetTile(10, 10).isMountain = True
+        map.GetTile(6, 12).isMountain = True
+        map.GetTile(5, 16).isMountain = True
+        map.GetTile(5, 13).isMountain = True
+        map.GetTile(7, 10).isMountain = True
+        # for i in range(12, 16):
+        #     map.GetTile(7, i).isMountain = True
+        for i in range(6, 11):
+            map.GetTile(10, i).isMountain = True
+        for i in range(7, 10):
+            map.GetTile(i, 15).isMountain = True
+        # for i in range(6, 10):
+        #     map.GetTile(i, 15).isMountain = True
+
+        map.update_reachable()
+
+        # if debugMode:
+        #     self.render_map(map)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=40, debugMode=debugMode, renderThresh=700, tileIslandSize=5)
+        self.assertNotEqual(0, len(opts))
+        self.assertGreater(opts[0].econValue / opts[0].length, 1.5, 'should find a plan with pretty high value per turn')
+
+    def test_should_gather_through_friendly_or_enemy_island_flows__simple_base_case(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapData = """
+|    |        
+aG12 bG1
+|    |       
+"""
+
+        for turns, bestTurns, bestEcon in [
+            (40, 1, IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL),
+            (2, 1, IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL),  # should not use the extra 7th turn when not necessary, to grab extra army...?
+            (1, 1, IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL),
+            (0, 0, 0.0),
+        ]:
+            with self.subTest(turns=turns):
+                map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+
+                # if debugMode:
+                #     self.render_map(map)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                self.begin_capturing_logging()
+
+                opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=True)
+
+                # if debugMode:
+                #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+                #     simHost.queue_player_moves_str(general.player, expectedPath)
+                #
+                #     self.begin_capturing_logging()
+                #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+
+                if bestEcon == 0.0:
+                    self.assertEqual(0, len(opts))
+                    # we shouldn't have any 0-turn options or worse, more than 0 turn options
+                    continue
+
+                self.assertNotEqual(0, len(opts))
+
+                self.assertEqual(round(bestEcon, 5), round(opts[0].econValue, 5))
+                self.assertEqual(bestTurns, opts[0].length)
+
+    def test_should_gather_through_friendly_or_enemy_island_flows__basic(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapData = """
+|    |    |    |    |    |    |    |    |    |    |    
+aG12 a8   a2   b1   a2   b2   b1   b1   b1   b1   bG1
+|    |    |    |    |    |    |    |    |    |    |    
+"""
+
+        for turns, bestTurns, bestEcon, expectedPath in [
+            (40, 10, 7 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,0->10,0'),
+            (7, 6, 4 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '1,0->7,0'),  # should not use the extra 7th turn when not necessary, to grab extra army...?
+            (6, 6, 4 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '1,0->7,0'),
+            (9, 9, 6 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,0->9,0'),
+            (8, 8, 5 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,0->8,0'),
+        ]:
+            with self.subTest(turns=turns):
+                map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+
+                # if debugMode:
+                #     self.render_map(map)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                self.begin_capturing_logging()
+
+                opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=True)
+
+                # if debugMode:
+                #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+                #     simHost.queue_player_moves_str(general.player, expectedPath)
+                #
+                #     self.begin_capturing_logging()
+                #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+
+                self.assertNotEqual(0, len(opts))
+
+                # 7 en caps, 10 moves, should be our best case scenario.
+                self.assertEqual(round(bestEcon, 5), round(opts[0].econValue, 5))
+                self.assertEqual(bestTurns, opts[0].length)

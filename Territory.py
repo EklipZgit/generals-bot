@@ -26,7 +26,7 @@ class TerritoryClassifier(object):
         self.team_indexes: typing.List[int] = list(set(MapBase.get_teams_array(self.map)))
         self.territoryDistances: typing.List[MapMatrixInterface[int]] = [MapMatrix(map, 1000) for p in map.players]
         self.territoryTeamDistances: typing.List[MapMatrixInterface[int]] = [MapMatrix(map, 1000) for p in self.team_indexes]
-        for tile in self.map.pathableTiles:
+        for tile in self.map.pathable_tiles:
             self.needToUpdateAroundTiles.add(tile)
 
     def __getstate__(self):
@@ -148,7 +148,7 @@ class TerritoryClassifier(object):
 
         for team in self.team_indexes:
             startTiles = []
-            for tile in self.map.pathableTiles:
+            for tile in self.map.pathable_tiles:
                 if self.map.is_player_on_team(self.territoryMap[tile], team):
                     startTiles.append(tile)
 

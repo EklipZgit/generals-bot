@@ -864,3 +864,52 @@ b1   b1   b1   b1   b1   b1   bG1
         tilesShouldHaveGathered = [playerMap.GetTile(x, 3) for x in range(10, 13)]
         tilesUngathered = [t for t in tilesShouldHaveGathered if t.army > 1]
         self.assertEqual(0, len(tilesUngathered), f'should have gathered {" | ".join([str(t) for t in tilesUngathered])}')
+
+    def test_build_capture_tree_contiguous(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        # if debugMode:
+        #     self.render_map(map)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+
+        gathing = {
+            map.GetTile(9, 6),
+            map.GetTile(9, 5),
+            map.GetTile(9, 7),
+        }
+
+        capping = {
+            map.GetTile(10, 6),
+            map.GetTile(10, 7),
+            map.GetTile(10, 8),
+            map.GetTile(10, 9),
+            map.GetTile(10, 10),
+            map.GetTile(11, 8),
+        }
+
+        allBorderTiles = {
+            map.GetTile(10, 6),
+            map.GetTile(10, 7),
+        }
+
+        negativeTiles = set()
+
+        plan = GatherUtils.convert_contiguous_tiles_to_gather_capture_plan(
+            map,
+            rootTiles=allBorderTiles,
+            tiles=gathing,
+            negativeTiles=negativeTiles,
+            searchingPlayer=general.player,
+            priorityMatrix=None,
+            useTrueValueGathered=True,
+            captures=capping,
+        )
+
+        self.assertEqual(plan.length, 8)
+        self.assertEqual(plan.econValue, 6 * 1.0)
+
+        # IterativeExpansion

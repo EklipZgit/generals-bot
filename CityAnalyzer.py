@@ -107,9 +107,9 @@ class CityAnalyzer(object):
             if not teammate.dead:
                 allyDistMap = self.map.distance_mapper.get_tile_dist_matrix(teammate.general)
 
-        for tile in self.map.reachableTiles:
+        for tile in self.map.reachable_tiles:
             # TODO calculate predicted enemy city locations in fog and explore mountains more in places we would WANT cities to be
-            tileMightBeUndiscCity = not tile.discovered and tile.isObstacle and tile in self.map.reachableTiles
+            tileMightBeUndiscCity = not tile.discovered and tile.isObstacle and tile in self.map.reachable_tiles
             # if not (tile.isCity or tileMightBeUndiscCity):
 
             if not tile.isCity:

@@ -82,9 +82,9 @@ class EarlyExpandUtilsTests(TestBase):
         self.assertEqual(plan.tile_captures, value)
 
     def get_tiles_capped_on_50_count_and_reset_map(self, map, general, toTurn: int = 1) -> int:
-        playerTilesToMatchOrExceed = SearchUtils.count(map.pathableTiles, lambda t: t.player == general.player)
+        playerTilesToMatchOrExceed = SearchUtils.count(map.pathable_tiles, lambda t: t.player == general.player)
         map.turn = toTurn
-        for tile in map.pathableTiles:
+        for tile in map.pathable_tiles:
             if tile.isGeneral:
                 tile.army = 1 + toTurn // 2
             else:

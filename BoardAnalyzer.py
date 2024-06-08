@@ -126,7 +126,7 @@ class BoardAnalyzer:
         lowestAvgDist = 10000000
         lowestAvgTile: Tile | None = None
 
-        for tile in self.map.pathableTiles:
+        for tile in self.map.pathable_tiles:
             tileDist = self.friendly_general_distances[tile]
 
             distSum = tileDist
@@ -210,7 +210,7 @@ class BoardAnalyzer:
         else:
             self.shortest_path_distances = SearchUtils.build_distance_map_matrix(self.map, [self.general])
 
-        for tile in self.map.reachableTiles:
+        for tile in self.map.reachable_tiles:
             tIndex = tile.tile_index
             if tile.isObstacle and not tile.isMountain:
                 self.enemy_wall_breach_scores.raw[tIndex] = self._get_wall_breach_score_enemy(tile)
@@ -318,7 +318,7 @@ class BoardAnalyzer:
             if SearchUtils.count(p.cities, lambda c: c.discovered) + 1 < p.cityCount:
                 hasPerfectInfo = False
         indexes = [p.index for p in enPlayers]
-        for t in self.map.reachableTiles:
+        for t in self.map.reachable_tiles:
             if t.visible:
                 continue
 

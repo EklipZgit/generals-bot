@@ -26,7 +26,7 @@ class GatherAnalyzer(object):
         """
 
         self.gather_locality_map: MapMatrixInterface[int] = MapMatrix(self.map, 0)
-        for tile in self.map.pathableTiles:
+        for tile in self.map.pathable_tiles:
             if tile.player != self.map.player_index:
                 continue
 

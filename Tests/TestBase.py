@@ -100,7 +100,7 @@ class TestBase(unittest.TestCase):
         board = TextMapLoader.load_map_from_file(f"{mapFileName}")
 
         map = self.get_test_map(board, turn=turn)
-        general = next(t for t in map.pathableTiles if t.isGeneral)
+        general = next(t for t in map.pathable_tiles if t.isGeneral)
         general.army = 1
         map.player_index = general.player
         map.friendly_team = map.team_ids_by_player_index[general.player]
@@ -125,7 +125,7 @@ class TestBase(unittest.TestCase):
 
         map = self.get_test_map(board, turn=turn, dont_set_seen_visible_discovered=respect_undiscovered, num_players=numPlayers)
         TextMapLoader.load_map_data_into_map(map, data)
-        general = next(t for t in map.pathableTiles if t.isGeneral and (t.player == player_index or player_index == -1))
+        general = next(t for t in map.pathable_tiles if t.isGeneral and (t.player == player_index or player_index == -1))
         map.player_index = general.player
         map.friendly_team = map.team_ids_by_player_index[general.player]
         map.generals[general.player] = general
@@ -729,7 +729,7 @@ class TestBase(unittest.TestCase):
         distMap = SearchUtils.build_distance_map_matrix(map, [general])
         maxDist = 0
         furthestTile: Tile | None = None
-        for tile in map.pathableTiles:
+        for tile in map.pathable_tiles:
             tileDist = distMap[tile]
             if tileDist > maxDist:
                 maxDist = tileDist
@@ -1125,7 +1125,7 @@ class TestBase(unittest.TestCase):
             enemyGeneralTileCount = generalTileCount
 
         enemyMap = self.get_from_general_weight_map(map, enemyGeneral)
-        countCitiesEnemy = SearchUtils.Counter(SearchUtils.count(map.pathableTiles, lambda tile: tile.player == enemyGeneral.player and (tile.isGeneral or tile.isCity)))
+        countCitiesEnemy = SearchUtils.Counter(SearchUtils.count(map.pathable_tiles, lambda tile: tile.player == enemyGeneral.player and (tile.isGeneral or tile.isCity)))
 
         if not respectPlayerVision:
             iter = 0
@@ -1139,14 +1139,14 @@ class TestBase(unittest.TestCase):
                 if iter > 30:
                     raise AssertionError('infinite looped trying to reduce enemy real fog cities')
 
-        countTilesEnemy = SearchUtils.Counter(SearchUtils.count(map.pathableTiles, lambda tile: tile.player == enemyGeneral.player))
+        countTilesEnemy = SearchUtils.Counter(SearchUtils.count(map.pathable_tiles, lambda tile: tile.player == enemyGeneral.player))
         countScoreEnemy = SearchUtils.Counter(enemyGeneral.army)
 
         newTiles = set()
 
         genDistMap = self.get_from_general_weight_map(map, general)
         countTilesGeneral = SearchUtils.Counter(
-            SearchUtils.count(map.pathableTiles, lambda tile: tile.player == general.player))
+            SearchUtils.count(map.pathable_tiles, lambda tile: tile.player == general.player))
         countScoreGeneral = SearchUtils.Counter(general.army)
 
         if enemyGeneralTileCount == -1:
@@ -1370,7 +1370,8 @@ class TestBase(unittest.TestCase):
             if not player.dead and player.index != simHost.sim.sim_map.player_index:
                 simHost.queue_player_leafmoves(player.index)
 
-    def run_army_flow_expansion(self, map: MapBase, general: Tile, enemyGeneral: Tile, turns: int, negativeTiles: typing.Set[Tile] | None = None, debugMode: bool = False, renderThresh: int = 10000, tileIslandSize: int | None = None) -> typing.List[FlowExpansionPlanOption]:
+    def run_army_flow_expansion(self, map: MapBase, general: Tile, enemyGeneral: Tile, turns: int, negativeTiles: typing.Set[Tile] | None = None, debugMode: bool = False, renderThresh: int = 10000, tileIslandSize: int | None = None, shouldRender: bool = True) -> typing.List[FlowExpansionPlanOption]:
+        start = time.perf_counter()
         builder = TileIslandBuilder(map, averageTileIslandSize=tileIslandSize)
         builder.recalculate_tile_islands(enemyGeneral)
         analysis = BoardAnalyzer(map, general)
@@ -1384,9 +1385,10 @@ class TestBase(unittest.TestCase):
         expander.enemyGeneral = enemyGeneral
         expander.debug_render_capture_count_threshold = renderThresh
         expander.log_debug = debugMode
-        expander.log_debug = False
+        # expander.log_debug = False
         expander.use_debug_asserts = debugMode
-        # expander.use_debug_asserts = False
+        expander.use_debug_asserts = False
+        # expander.use_flow_bypass = False
 
         renderAll = False
         renderAll = True
@@ -1402,9 +1404,11 @@ class TestBase(unittest.TestCase):
             negativeTiles=negativeTiles,
         )
 
+        logbook.info(f'full islands + expand completed in {time.perf_counter() - start:.5f}s in total.')
+
         opts = optCollection.flow_plans
 
-        if debugMode:
+        if debugMode and shouldRender:
             vi = self.get_renderable_view_info(map)
 
             expander.ensure_flow_graph_exists(builder)
@@ -1435,6 +1439,7 @@ class TestBase(unittest.TestCase):
                 #         bestOpts.append(plan)
 
             for bestOpt in bestOpts:
+                vi.add_info_line(str(bestOpt))
                 ArmyFlowExpander.add_flow_expansion_option_to_view_info(map, bestOpt, general.player, enemyGeneral.player, vi)
 
             flowGraph = expander.flow_graph

@@ -16,7 +16,7 @@ from base.client.tile import Tile
 
 class SearchUtils_DynamicSearch_BenchmarkTests(TestBase):
     def run_shortest_path_algo_comparison(self, map, ranges, skipFloyd: bool = True):
-        points = list(map.pathableTiles)
+        points = list(map.pathable_tiles)
         random.shuffle(points)
         points = points[0:110]
 

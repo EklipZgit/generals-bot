@@ -123,6 +123,9 @@ class TileIsland(object):
 
         return copy
 
+    def shortIdent(self) -> str:
+        return f'({self.unique_id} {next(iter(self.tile_set))})'
+
 
 class IslandNamer(object):
     letterStart: int = ord('A')
@@ -207,7 +210,7 @@ class TileIslandBuilder(object):
         newIslands = []
         gen = self.map.generals[self.map.player_index]
 
-        tiles = [t for t in self.map.reachableTiles]  # get_all_tiles()
+        tiles = [t for t in self.map.reachable_tiles]  # get_all_tiles()
         if mode == IslandBuildMode.BuildByDistance:
             tiles = sorted(tiles, key=lambda t: (t.player, self.map.distance_mapper.get_distance_between(gen, t), t.x, t.y))
         elif mode == IslandBuildMode.GroupByArmy:

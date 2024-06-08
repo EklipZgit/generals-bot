@@ -308,7 +308,7 @@ class ArmyInterceptor(object):
         for threatValueInfo in threats:
             threat = threatValueInfo.threat
             # withinOneAdditionalChecks.clear()
-            for tile in self.map.pathableTiles:
+            for tile in self.map.pathable_tiles:
                 interceptMoves = threat.armyAnalysis.interceptChokes[tile]
                 delayTurns = threat.armyAnalysis.interceptTurns[tile]
                 worstCaseExtraMoves = threat.armyAnalysis.interceptDistances[tile]

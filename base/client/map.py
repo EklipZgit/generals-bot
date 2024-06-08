@@ -206,19 +206,26 @@ class MapBase(object):
         self._team_stats: typing.List[TeamStats | None] = [None for i in range(max(self.team_ids_by_player_index) + 2)]  # +2 so we have an entry for each time ID AND -1
         self.friendly_team: int = self.team_ids_by_player_index[player_index]
 
-        self.pathableTiles: typing.Set[Tile] = set()
+        self.pathable_tiles: typing.Set[Tile] = set()
         """Tiles PATHABLE from the general spawn on the map, including neutral cities but not including mountains/undiscovered obstacles"""
 
-        self.reachableTiles: typing.Set[Tile] = set()
+        self.reachable_tiles: typing.Set[Tile] = set()
         """
         Tiles REACHABLE from the general spawn on the map, this includes EVERYTHING from pathableTiles but ALSO 
         includes mountains and undiscovered obstacles that are left/right/up/down adjacent to anything in pathableTiles
         """
 
         self.visible_tiles: typing.Set[Tile] = set()
-        """
-        All tiles that are currently visible on the map, as a set.
-        """
+        """All tiles that are currently visible on the map, as a set."""
+
+        self.unreachable_tiles: typing.Set[Tile] = set()
+        """All tiles that are not in reachable tiles."""
+
+        self.unpathable_tiles: typing.Set[Tile] = set()
+        """All tiles that are not in pathable tiles."""
+
+        self.non_visible_tiles: typing.Set[Tile] = set()
+        """All tiles that are not visible."""
 
         self.notify_tile_captures = []
         self.notify_tile_deltas = []
@@ -834,9 +841,12 @@ class MapBase(object):
                     queue.append(movable)
                     reachableTiles.add(movable)
 
-        self.pathableTiles = pathableTiles
-        self.reachableTiles = reachableTiles
+        self.pathable_tiles = pathableTiles
+        self.reachable_tiles = reachableTiles
         self.visible_tiles = visibleTiles
+        self.unreachable_tiles = {t for t in self.get_all_tiles() if t not in reachableTiles}
+        self.unpathable_tiles = {t for t in self.get_all_tiles() if t not in pathableTiles}
+        self.non_visible_tiles = {t for t in self.get_all_tiles() if t not in visibleTiles}
 
     def clear_deltas_and_score_history(self):
         self.scoreHistory = [None for i in range(50)]
@@ -865,7 +875,7 @@ class MapBase(object):
         return (turn & 1 == 0) != (player > otherPlayer)
 
     def convert_tile_to_mountain(self, tile: Tile):
-        self.pathableTiles.discard(tile)
+        self.pathable_tiles.discard(tile)
         if tile.isCity:
             for player in self.players:
                 if tile in player.cities:

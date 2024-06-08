@@ -676,7 +676,7 @@ class GeneralsViewer(object):
                     color_font = self.get_font_color(tile)
                     color_small_font = self.get_small_font_color(tile)
 
-                    if not tile in self._map.pathableTiles and not tile.isNotPathable and not tile.isCity and not tile.isMountain:
+                    if not tile in self._map.pathable_tiles and not tile.isNotPathable and not tile.isCity and not tile.isMountain:
                         textVal = "   X"
                         self._screen.blit(self._medFont.render(textVal, True, color_font),
                                           (pos_left + 2, pos_top + self.cellHeight / 4))
@@ -786,7 +786,7 @@ class GeneralsViewer(object):
                     color_font = self.get_font_color(tile)
                     color_small_font = self.get_small_font_color(tile)
 
-                    if not tile in self._map.pathableTiles and not tile.isNotPathable and not tile.isCity and not tile.isMountain:
+                    if not tile in self._map.pathable_tiles and not tile.isNotPathable and not tile.isCity and not tile.isMountain:
                         textVal = "   X"
                         self._screen.blit(self._medFont.render(textVal, True, color_font),
                                           (pos_left + 2, pos_top + self.cellHeight / 4))
@@ -1139,7 +1139,7 @@ class GeneralsViewer(object):
                                     chokeColor=interChokeColor,
                                     draw_pathways=True)
 
-        for tile in self._map.pathableTiles:
+        for tile in self._map.pathable_tiles:
             if self._viewInfo.board_analysis.innerChokes[tile]:
                 (r, g, b) = innerChokeColor
                 self.draw_square(tile, 1, r, g, b, 255, self.square_inner_2)
@@ -1521,8 +1521,22 @@ class GeneralsViewer(object):
                                           (team_pos_left + 3, pos_top + 2 + 6.6 * self._medFont.get_height()))
 
     def _draw_arrows(self):
+        combinationLookup = {}
         for fromX, fromY, toX, toY, label, color, alpha, isBidir in self._viewInfo.arrows:
-            self.draw_arrow_between(fromX, fromY, toX, toY, label, color, alpha, isBidir)
+            key = (round(fromX, 3), round(fromY, 3), round(toX, 3), round(toY, 3), isBidir)
+            existLabel, existColor, existAlpha, existCount = combinationLookup.get(key, (label, (0, 0, 0), 0, 0))
+
+            if existLabel != label:
+                label = label + " | " + existLabel
+
+            colorSums = (existColor[0] + color[0], existColor[1] + color[1], existColor[2] + color[2])
+
+            combinationLookup[key] = (label, colorSums, existAlpha + alpha, existCount + 1)
+
+        for (fromX, fromY, toX, toY, isBidir), (label, colorSum, alphaSum, count) in combinationLookup.items():
+            trueColor = (colorSum[0] // count, colorSum[1] // count, colorSum[2] // count)
+            trueAlpha = alphaSum // count
+            self.draw_arrow_between(fromX, fromY, toX, toY, label, trueColor, trueAlpha, isBidir)
 
     def draw_arrow_between(self, fromX: float, fromY: float, toX: float, toY: float, label: str | None, color: typing.Tuple[int, int, int], alpha: int, isBidir: bool):
         trueFromX, trueFromY = self.getTopLeftTileFloats(fromX, fromY)

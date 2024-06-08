@@ -11,9 +11,9 @@ def kruskals_gather(map: MapBase, targetTurns: int, rootTiles: typing.List[Tile]
    connectedTiles, missing = MapSpanningUtils.get_spanning_tree_from_tile_lists(map, rootTiles, negativeTiles)
 
    q = []
-   for tile in map.reachableTiles:
+   for tile in map.reachable_tiles:
        down = map.GetTile(tile.x, tile.y + 1)
        right = map.GetTile(tile.x + 1, tile.y)
 
-       if down in map.reachableTiles:
+       if down in map.reachable_tiles:
           heapq.heappush()

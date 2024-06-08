@@ -2442,7 +2442,7 @@ def build_initial_mst_gather_root(map, general, visited_set, skip_tiles, dist_to
             alpha=255,
         ))
 
-    generalNode = GatherUtils.build_mst_to_root_from_path_and_contiguous_tiles(map, initPath, map.pathableTiles, maxDepth=16, reversePath=True)
+    generalNode = GatherUtils.build_mst_to_root_from_path_and_contiguous_tiles(map, initPath, map.pathable_tiles, maxDepth=16, reversePath=True)
 
     turns, totalValue = GatherUtils.recalculate_tree_values(
         [],

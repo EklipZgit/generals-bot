@@ -376,8 +376,13 @@ class GatherCapturePlan(TilePlanInterface):
                 includeGatherPriorityAsEconValues=includeGatherPriorityAsEconValues,
                 includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
             )
-            plan.root_nodes.append(currentNode)
-            # plan.gathered_army += currentNode.value
+
+        #prunes invalid gather nodes.
+        rootNodes = prune_mst_to_army(rootNodes, 1000000000, searchingPlayer, map.team_ids_by_player_index, map.turn, viewInfo)
+        plan.root_nodes = rootNodes
+
+        # plan.gathered_army += currentNode.value
+        for currentNode in rootNodes:
             plan._turns += currentNode.gatherTurns
 
         if captures:
@@ -562,13 +567,20 @@ class GatherCapturePlan(TilePlanInterface):
         @param includeCapturePriorityAsEconValues:
         @return:
         """
+        captures = captures.difference(plan.tileSet)
         plan.include_approximate_capture_tiles(captures)
+        lookup = {n.tile: n for n in iterate_tree_nodes(plan.root_nodes)}
 
         q = deque()
-        for rn in plan.root_nodes:
-            for mv in rn.tile.movable:
-                if mv in captures:
-                    q.append((mv, rn, rn.value + rn.tile.army - 1))
+        # for rn in plan.root_nodes:
+        #     for mv in rn.tile.movable:
+        #         if mv in captures:
+        #             q.append((mv, rn, rn.value + rn.tile.army - 1))
+        for cap in captures:
+            for mv in cap.movable:
+                node = lookup.get(mv, None)
+                if node:
+                    q.append((cap, node, node.value + node.tile.army - 1))
 
         fromRoot: GatherTreeNode
         toCap: Tile
@@ -623,7 +635,7 @@ class GatherCapturePlan(TilePlanInterface):
             # we do econValue BEFORE the children because the children will sum their own econ value
             sumPoints += sumArmy
             plan.gathered_army += sumArmy
-            plan.econValue += econValue
+            # plan.econValue += econValue
             plan.gather_capture_points += sumPoints
             plan._turns += 1
             if isTileFriendly:
@@ -3817,7 +3829,7 @@ def convert_contiguous_tiles_to_gather_capture_plan(
         useTrueValueGathered: bool = True,
         includeGatherPriorityAsEconValues: bool = False,
         includeCapturePriorityAsEconValues: bool = True,
-        captures: typing.Iterable[Tile] | None = None,
+        captures: typing.Set[Tile] | None = None,
         viewInfo=None,
 ) -> GatherCapturePlan:
     """
@@ -3835,7 +3847,13 @@ def convert_contiguous_tiles_to_gather_capture_plan(
     @param viewInfo: if included, gather values will be written the viewInfo debug output
     @return:
     """
-    rootNodes = build_mst_from_root_and_contiguous_tiles(map, rootTiles, tiles, ignoreTiles=captures)
+    ignore = None
+    if captures:
+        ignore = captures.difference(rootTiles)
+
+    # rootNodes = build_mst_from_root_and_contiguous_tiles(map, rootTiles, tiles, ignoreTiles=captures)
+
+    rootNodes = build_capture_mst_from_root_and_contiguous_tiles(map, tiles.union(captures), searchingPlayer=searchingPlayer)  #, ignoreTiles=ignore
 
     plan = GatherCapturePlan.build_from_root_nodes(
         map,
@@ -3927,6 +3945,133 @@ def build_mst_from_root_and_contiguous_tiles(map: MapBase, rootTiles: typing.Ite
                 q.appendleft((t, tile, newNode, fromDepth + 1))
 
     return rootNodes
+
+
+def build_capture_mst_from_root_and_contiguous_tiles(map: MapBase, tiles: TileSet, searchingPlayer: int, ignoreTiles: typing.Iterable[Tile] | None = None) -> typing.List[GatherTreeNode]:
+    """Does NOT calculate values"""
+    visited = MapMatrixSet(map, ignoreTiles)
+
+    q: SearchUtils.HeapQueue[typing.Tuple[int, Tile, Tile | None, GatherTreeNode | None, int]] = SearchUtils.HeapQueue()
+
+    teams = map.team_ids_by_player_index
+    searchingTeam = teams[searchingPlayer]
+
+    for tile in tiles:
+        army = tile.army
+        if teams[tile.player] != searchingTeam:
+            army = 0 - tile.army
+        else:
+            continue
+        # army -= 1
+        q.put((army, tile, None, None, 0))
+
+        # newNode = GatherTreeNode(tile, None)
+
+    if not q:
+        return []
+
+    tile: Tile
+    fromTile: Tile | None
+    fromNode: GatherTreeNode | None
+
+    nodes = []
+
+    while q:
+        (army, tile, fromTile, fromNode, fromDepth) = q.get()
+        if visited.raw[tile.tile_index]:
+            continue
+        # if fromDepth > maxDepth:
+        #     break
+
+        newNode = GatherTreeNode(tile, fromTile)
+        nodes.append(newNode)
+        visited.raw[tile.tile_index] = True
+
+        if fromNode is not None:
+            fromNode.children.append(newNode)
+            newNode.toGather = fromNode
+
+        for t in tile.movable:
+            if t in tiles:
+                if teams[t.player] != searchingTeam:
+                    nextArmy = army + 0 - t.army
+                else:
+                    nextArmy = army + t.army
+                nextArmy -= 1
+
+                q.put((nextArmy, t, tile, newNode, fromDepth + 1))
+
+    roots = []
+    # q2 = deque()
+    for r in nodes:
+        if r.toTile is None:
+            # q2.appendleft(r)
+            roots.append(r)
+    #
+    # while q2:
+    #     r = q2.pop()
+    #
+    #     if teams[r.tile.player] != searchingPlayer:
+    #         # if r.toGather is not None:
+    #         #     r.toGather.children.remove(r)
+    #         #
+    #         for c in r.children:
+    #             q2.appendleft(c)
+    #         continue
+    #     elif r.toTile is None:
+    #         roots.append(r)
+
+    return roots
+
+
+def _prune_bad(curNode: GatherTreeNode, searchingTeam: int, teams: typing.List[int], nodeLookup: typing.Dict[Tile, GatherTreeNode]):
+    bestChild = None
+    bestArmy = -10000
+    for child in curNode.children:
+        army = child.tile.army
+        if teams[child.tile.player] != searchingTeam:
+            army = 0 - child.tile.army
+        army -= 1
+        if army > bestArmy:
+            bestChild = child
+            bestArmy = army
+            continue
+
+    if bestChild is not None:
+        curNode.children.remove(bestChild)
+        curNode.toGather = bestChild
+        if teams[bestChild.tile.player] != searchingTeam or bestChild.toGather is not None:
+            _prune_bad(bestChild, searchingTeam, teams, nodeLookup)
+        bestChild.children.append(curNode)
+        bestChild.toGather = None
+    else:
+        raise Exception(f'uh oh, no best child for {curNode}')
+    # curNode.toGather = None
+
+
+# def _swap_gather_order(curNode: GatherTreeNode, searchingTeam: int, teams: typing.List[int], nodeLookup: typing.Dict[Tile, GatherTreeNode]):
+#     bestChild = None
+#     bestArmy = -10000
+#     for child in curNode.children:
+#         army = child.tile.army
+#         if teams[child.tile.player] != searchingTeam:
+#             army = 0 - child.tile.army
+#         army -= 1
+#         if army > bestArmy:
+#             bestChild = child
+#             bestArmy = army
+#             continue
+#
+#     if bestChild is not None:
+#         curNode.children.remove(bestChild)
+#         curNode.toGather = bestChild
+#         if teams[bestChild.tile.player] != searchingTeam or bestChild.toGather is not None:
+#             _swap_gather_order(bestChild, searchingTeam, teams, nodeLookup)
+#         bestChild.children.append(curNode)
+#         bestChild.toGather = None
+#     else:
+#         raise Exception(f'uh oh, no best child for {curNode}')
+#     # curNode.toGather = None
 
 
 def build_mst_to_root_from_path_and_contiguous_tiles(map: MapBase, rootPath: Path, tiles: TileSet, maxDepth: int, reversePath: bool = False) -> GatherTreeNode:

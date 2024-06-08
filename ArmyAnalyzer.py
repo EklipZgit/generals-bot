@@ -102,7 +102,7 @@ class ArmyAnalyzer:
             def foreachFunc(tile: Tile):
                 skip.discard(tile)
 
-            SearchUtils.breadth_first_foreach_fast_no_neut_cities(map, [t for t in map.pathableTiles if map.is_tile_on_team_with(t, self.tileA.player) or t == self.tileB], maxDepth=bypassRetraverseThreshold, foreachFunc=foreachFunc)
+            SearchUtils.breadth_first_foreach_fast_no_neut_cities(map, [t for t in map.pathable_tiles if map.is_tile_on_team_with(t, self.tileA.player) or t == self.tileB], maxDepth=bypassRetraverseThreshold, foreachFunc=foreachFunc)
             logbook.info(f'building distance maps except skipping {len(skip)} tiles: {" | ".join([str(t) for t in skip])}')
 
             self.aMap = SearchUtils.build_distance_map_matrix(map, [self.tileA], skip)
@@ -151,7 +151,7 @@ class ArmyAnalyzer:
     # This is heavily optimized at this point.
     def build_chokes_and_pathways(self):
         minPath = INF_PATH_WAY
-        for tile in self.map.pathableTiles:
+        for tile in self.map.pathable_tiles:
             # build the pathway
             path = self.pathWayLookupMatrix.raw[tile.tile_index]
             if path:
@@ -363,7 +363,7 @@ class ArmyAnalyzer:
                     if existingVal is not None:
                         self.interceptChokes[tile] = existingVal + 1
 
-        for icTile in self.map.pathableTiles:
+        for icTile in self.map.pathable_tiles:
             chokeDist = self.interceptChokes[icTile]
             if chokeDist is not None:
                 aDist = self.aMap[icTile]

@@ -43,11 +43,11 @@ def get_map_as_graph(map: MapBase) -> TileGraph:
     """Unused"""
     table: MapMatrixInterface[TileNode] = MapMatrix(map, None)
 
-    for tile in map.reachableTiles:
+    for tile in map.reachable_tiles:
         node = TileNode(tile)
         table[tile] = node
 
-    for tile in map.reachableTiles:
+    for tile in map.reachable_tiles:
         node = table[tile]
         for moveable in tile.movable:
             adjNode = table[moveable]
@@ -144,7 +144,7 @@ def get_spanning_tree_set_from_tile_lists_with_cost_per(
             if LOG_VERBOSE:
                 logbook.info(f'  Path NONE! Performing altBanned set')
             altBanned = bannedSet.copy()
-            altBanned.update([t for t in map.reachableTiles if t.isMountain])
+            altBanned.update([t for t in map.reachable_tiles if t.isMountain])
             path = SearchUtils.breadth_first_find_queue(map, includedSet, findFunc, skipTiles=altBanned, bypassDefaultSkipLogic=True, noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
             if path is None:
                 if LOG_VERBOSE:

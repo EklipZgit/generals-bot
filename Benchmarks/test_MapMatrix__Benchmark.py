@@ -40,8 +40,8 @@ class MapMatrixBenchmarkTests(TestBase):
                     val = 0
                     start = time.perf_counter()
                     matrix: MapMatrixInterface[int] = MapMatrix(map, 1)
-                    for tile1 in map.pathableTiles:
-                        for tile2 in map.pathableTiles:
+                    for tile1 in map.pathable_tiles:
+                        for tile2 in map.pathable_tiles:
                             val += matrix[tile2] - matrix[tile1]
                     mapMatrixDuration = time.perf_counter() - start
                     mapMatrixTotalDur += mapMatrixDuration
@@ -49,10 +49,10 @@ class MapMatrixBenchmarkTests(TestBase):
                     val = 0
                     start = time.perf_counter()
                     dictLookup: typing.Dict[Tile, int] = {}
-                    for tile in map.pathableTiles:
+                    for tile in map.pathable_tiles:
                         dictLookup[tile] = 1
-                    for tile1 in map.pathableTiles:
-                        for tile2 in map.pathableTiles:
+                    for tile1 in map.pathable_tiles:
+                        for tile2 in map.pathable_tiles:
                             val += dictLookup[tile2] - dictLookup[tile1]
                     dictDuration = time.perf_counter() - start
                     dictTotalDuration += dictDuration
@@ -307,7 +307,7 @@ class MapMatrixBenchmarkTests(TestBase):
                             for tile in randTiles:
                                 matrix.add(tile, 1)
                             while itrLeft > 0:
-                                for tile in map.pathableTiles:
+                                for tile in map.pathable_tiles:
                                     val += matrix[last] - matrix[tile]
                                     itrLeft -= 1
                                     last = tile
@@ -326,7 +326,7 @@ class MapMatrixBenchmarkTests(TestBase):
                                 dictLookup[tile] = 1
 
                             while itrLeft > 0:
-                                for tile in map.pathableTiles:
+                                for tile in map.pathable_tiles:
                                     val += dictLookup.get(last, -1) - dictLookup.get(tile, 0)
                                     last = tile
                                     itrLeft -= 1
@@ -510,7 +510,7 @@ class MapMatrixBenchmarkTests(TestBase):
                             for tile in randTiles:
                                 matrix.raw[tile.tile_index] = 1
                             while itrLeft > 0:
-                                for tile in map.pathableTiles:
+                                for tile in map.pathable_tiles:
                                     val += matrix.raw[last.tile_index] - matrix.raw[tile.tile_index]
                                     itrLeft -= 1
                                     last = tile
@@ -529,7 +529,7 @@ class MapMatrixBenchmarkTests(TestBase):
                                 dictLookup[tile] = 1
 
                             while itrLeft > 0:
-                                for tile in map.pathableTiles:
+                                for tile in map.pathable_tiles:
                                     val += dictLookup.get(last, -1) - dictLookup.get(tile, 0)
                                     last = tile
                                     itrLeft -= 1
@@ -714,7 +714,7 @@ class MapMatrixBenchmarkTests(TestBase):
                             for tile in randTiles:
                                 matrix.add(tile)
                             while itrLeft > 0:
-                                for tile in map.pathableTiles:
+                                for tile in map.pathable_tiles:
                                     if tile in matrix:
                                         val += 1
                                     itrLeft -= 1
@@ -732,7 +732,7 @@ class MapMatrixBenchmarkTests(TestBase):
 
                             itrLeft = accesses
                             while itrLeft > 0:
-                                for tile in map.pathableTiles:
+                                for tile in map.pathable_tiles:
                                     if tile in setLookup:
                                         val += 1
                                     itrLeft -= 1
@@ -819,7 +819,7 @@ class MapMatrixBenchmarkTests(TestBase):
                             for tile in randTiles:
                                 matrix.raw[tile.tile_index] = True
                             while itrLeft > 0:
-                                for tile in map.pathableTiles:
+                                for tile in map.pathable_tiles:
                                     if matrix.raw[tile.tile_index]:
                                         val += 1
                                     itrLeft -= 1
@@ -837,7 +837,7 @@ class MapMatrixBenchmarkTests(TestBase):
 
                             itrLeft = accesses
                             while itrLeft > 0:
-                                for tile in map.pathableTiles:
+                                for tile in map.pathable_tiles:
                                     if tile in setLookup:
                                         val += 1
                                     itrLeft -= 1
@@ -1172,7 +1172,7 @@ class MapMatrixBenchmarkTests(TestBase):
                         itrLeft = size
                         dictLookup: typing.Dict[Tile, int] = {}
                         # dict only gets
-                        for tile in map.pathableTiles:
+                        for tile in map.pathable_tiles:
                             dictLookup[tile] = 1
                             itrLeft -= 1
                             if itrLeft == 0:
@@ -1231,7 +1231,7 @@ class MapMatrixBenchmarkTests(TestBase):
                         start = time.perf_counter()
                         dictLookup: typing.Dict[Tile, int] = {}
                         # dict only gets
-                        for tile in map.pathableTiles:
+                        for tile in map.pathable_tiles:
                             dictLookup[tile] = 1
                             itrLeft -= 1
                             if itrLeft == 0:
@@ -1276,7 +1276,7 @@ class MapMatrixBenchmarkTests(TestBase):
                         start = time.perf_counter()
                         matrix: MapMatrixInterface[int] = MapMatrix(map, 1)
                         while itrLeft > 0:
-                            for tile in map.pathableTiles:
+                            for tile in map.pathable_tiles:
                                 val += matrix[last] - matrix[tile]
                                 last = tile
                                 itrLeft -= 1
@@ -1290,7 +1290,7 @@ class MapMatrixBenchmarkTests(TestBase):
                         start = time.perf_counter()
                         dictLookup: typing.Dict[Tile, int] = {last: 1}
                         # dict only gets
-                        for tile in map.pathableTiles:
+                        for tile in map.pathable_tiles:
                             dictLookup[tile] = 1
                             itrLeft -= 1
                             if itrLeft == 0:
@@ -1298,7 +1298,7 @@ class MapMatrixBenchmarkTests(TestBase):
 
                         itrLeft = iterations
                         while itrLeft > 0:
-                            for tile in map.pathableTiles:
+                            for tile in map.pathable_tiles:
                                 val += dictLookup.get(last, -1) - dictLookup.get(tile, 0)
                                 last = tile
                                 itrLeft -= 1

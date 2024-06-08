@@ -2434,7 +2434,7 @@ class ArmyTracker(object):
                 for playerIndex in reTilePlayers:
                     player = self.map.players[playerIndex]
                     player.tiles = []
-                for tile in self.map.reachableTiles:
+                for tile in self.map.reachable_tiles:
                     if tile.player == -1 or tile.player not in reTilePlayers:
                         continue
 
@@ -2955,7 +2955,7 @@ class ArmyTracker(object):
             self.army_moved(army, potential[0], trackingArmies, dontUpdateOldFogArmyTile=True)
 
     def update_track_threshold(self):
-        tilesRankedByArmy = list(sorted(where(self.map.pathableTiles, filter_func=lambda t: t.player != -1), key=lambda t: t.army))
+        tilesRankedByArmy = list(sorted(where(self.map.pathable_tiles, filter_func=lambda t: t.player != -1), key=lambda t: t.army))
         percentile = 96
         percentileIndex = percentile * len(tilesRankedByArmy) // 100
         tileAtPercentile = tilesRankedByArmy[percentileIndex]
@@ -3480,14 +3480,14 @@ class ArmyTracker(object):
         validGenPos = self.valid_general_positions_by_player[player]
         numValid = 0
         lastValid = None
-        for tile in self.map.pathableTiles:
+        for tile in self.map.pathable_tiles:
             if tile in validGenPos:
                 numValid += 1
                 lastValid = tile
 
         if numValid == 0:
             logbook.error(f'having to reset general valid positions for p{player} due to over elimination')
-            for tile in self.map.pathableTiles:
+            for tile in self.map.pathable_tiles:
                 if not tile.discovered:
                     validGenPos.add(tile)
 
@@ -3626,7 +3626,7 @@ class ArmyTracker(object):
         return self.emergenceLocationMap[player][tile]
 
     def _reset_player_emergences(self, player: int):
-        for t in self.map.pathableTiles:
+        for t in self.map.pathable_tiles:
             self.emergenceLocationMap[player] = MapMatrix(self.map, 0.0)
 
     def reset_temp_tile_marked(self, curTile: Tile, noLog: bool = False):

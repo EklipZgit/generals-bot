@@ -28,7 +28,7 @@ class DistanceMapperImpl(DistanceMapper):
 
         if dist > 999:
             # TODO this is a debug assert setup...
-            if tileB in self.map.reachableTiles and tileA in self.map.reachableTiles:
+            if tileB in self.map.reachable_tiles and tileA in self.map.reachable_tiles:
                 logbook.warn(f'tileA {str(tileA)} and tileB {str(tileB)} both in reachable, but had bad distance. Force recalculating all distances...')
                 self.recalculate()
                 return self.get_distance_between(tileA, tileB)
@@ -41,7 +41,7 @@ class DistanceMapperImpl(DistanceMapper):
 
         if dist > 999:
             # TODO this is a debug assert setup...
-            if tileB in self.map.reachableTiles and tileA in self.map.reachableTiles:
+            if tileB in self.map.reachable_tiles and tileA in self.map.reachable_tiles:
                 logbook.warn(f'tileA {str(tileA)} and tileB {str(tileB)} both in reachable, but had bad distance. Force recalculating all distances...')
                 self.recalculate()
                 return self.get_distance_between(tileA, tileB)

@@ -216,7 +216,7 @@ def _build_pcst_tile_prize_matrix(
     tilePrizeMatrix = MapMatrix(map, 0.0)
     tileExtraCostMatrix = MapMatrix(map, 0.0)
 
-    for tile in map.reachableTiles:
+    for tile in map.reachable_tiles:
         prize = 0.0
         extraCost = 0.0
 

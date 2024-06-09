@@ -527,7 +527,8 @@ a2                  b1
         mapData = """
 |    |        
 aG12 bG1
-|    |       
+|    |  
+player_index=0
 """
 
         for turns, bestTurns, bestEcon in [
@@ -537,15 +538,15 @@ aG12 bG1
             (0, 0, 0.0),
         ]:
             with self.subTest(turns=turns):
+                self.begin_capturing_logging()
                 map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
                 # if debugMode:
                 #     self.render_map(map)
 
                 self.enable_search_time_limits_and_disable_debug_asserts()
-                self.begin_capturing_logging()
 
-                opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=True)
+                opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=False)
 
                 # if debugMode:
                 #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
@@ -570,6 +571,7 @@ aG12 bG1
 |    |    |    |    |    |    |    |    |    |    |    
 aG12 a8   a2   b1   a2   b2   b1   b1   b1   b1   bG1
 |    |    |    |    |    |    |    |    |    |    |    
+player_index=0
 """
 
         for turns, bestTurns, bestEcon, expectedPath in [

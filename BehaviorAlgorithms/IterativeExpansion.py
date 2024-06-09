@@ -367,7 +367,7 @@ class ArmyFlowExpander(object):
         self.use_min_cost_flow_edges_only: bool = True
         """If true, use the min-cost-max-flow flownodes to route army. Otherwise, brute force / AStar."""
 
-        self.use_back_pressure_from_enemy_general: bool = False
+        self.use_backpressure_from_enemy_general: bool = False
         """If True, lets the enemy general push back."""
 
         self.block_cross_gather_from_enemy_borders: bool = False
@@ -618,6 +618,10 @@ class ArmyFlowExpander(object):
         withNeutFlowDict = self._get_island_max_flow_dict(islands, self.nxGraphData, method)
         noNeutFlowDict = self._get_island_max_flow_dict(islands, self.nxGraphDataNoNeut, method)
 
+        if self.log_debug:
+            logbook.info(f'withNeutFlowDict: {repr(withNeutFlowDict)}')
+            logbook.info(f'noNeutFlowDict: {repr(noNeutFlowDict)}')
+
         start = time.perf_counter()
 
         targetGeneralIsland: TileIsland = islands.tile_island_lookup.raw[self.enemyGeneral.tile_index]
@@ -647,24 +651,29 @@ class ArmyFlowExpander(object):
             else:
                 nodeId = -nodeId
 
-            if nodeId in self.nxGraphData.fake_nodes:
-                continue
-
-            sourceNode = withNeutGraphLookup[nodeId]
+            sourceNode = withNeutGraphLookup.get(nodeId, None)
 
             for targetNodeId, targetFlowAmount in targets.items():
-                if isThroughput:
-                    if targetNodeId != -nodeId:
-                        raise AssertionError(f'input node flowed to something other than output node...?  {sourceNode} ({targetFlowAmount}a) -> {targetNodeId}')
-                    sourceNode.army_flow_received = targetFlowAmount
+                if isThroughput and sourceNode:
+                    if targetNodeId != -nodeId:  # and targetNodeId not in self.nxGraphData.fake_nodes and nodeId not in self.nxGraphData.fake_nodes
+                        raise Exception(f'input node flowed to something other than output node...?  {sourceNode} ({targetFlowAmount}a) -> {targetNodeId}')
+                    sourceNode.army_flow_received += targetFlowAmount
                     continue
+
                 if targetFlowAmount == 0:
-                    # raise AssertionError(f'wut? Connection, but zero flow between  {sourceNode} ({targetFlowAmount}a) -> {targetNodeId}')
-                    # logbook.info(f'wut? Connection, but zero flow between  {sourceNode} ({targetFlowAmount}a) -> {targetNodeId}')
+                    # it outputs a dict entry for all edges even if it decides to flow 0 to them.
                     continue
+
                 ourSet.discard(targetNodeId)
                 targetSet.discard(targetNodeId)
-                targetNode = withNeutGraphLookup[targetNodeId]
+                targetNode = withNeutGraphLookup.get(targetNodeId, None)
+                if targetNode is None:
+                    logbook.info(f'Flow of {targetFlowAmount} to fake node {targetNodeId} from {sourceNode}')
+                    continue
+                if sourceNode is None:
+                    logbook.info(f'Flow from fake node {nodeId} of {targetFlowAmount} to {targetNode}')
+                    continue
+
                 if targetNodeId in self.nxGraphData.neutral_sinks and sourceNode.island is targetGeneralIsland:
                     edge = IslandFlowEdge(targetNode, targetFlowAmount)
                     backfillNeutEdges.append(edge)
@@ -690,26 +699,31 @@ class ArmyFlowExpander(object):
             else:
                 nodeId = -nodeId
 
-            if nodeId in self.nxGraphDataNoNeut.fake_nodes:
-                continue
-
-            sourceNode = noNeutGraphLookup[nodeId]
+            sourceNode = noNeutGraphLookup.get(nodeId, None)
 
             for targetNodeId, targetFlowAmount in targets.items():
-                if isThroughput:
+                if isThroughput and sourceNode:
                     if targetNodeId != -nodeId:
-                        raise AssertionError(f'input node flowed to something other than output node...?  {sourceNode} ({targetFlowAmount}a) -> {targetNodeId}')
-                    sourceNode.army_flow_received = targetFlowAmount
+                        raise Exception(f'input node flowed to something other than output node...?  {sourceNode} ({targetFlowAmount}a) -> {targetNodeId}')
+                    sourceNode.army_flow_received += targetFlowAmount
                     continue
                 if targetFlowAmount == 0:
-                    # raise AssertionError(f'wut? Connection, but zero flow between  {sourceNode} ({targetFlowAmount}a) -> {targetNodeId}')
+                    # raise Exception(f'wut? Connection, but zero flow between  {sourceNode} ({targetFlowAmount}a) -> {targetNodeId}')
                     # logbook.info(f'wut? Connection, but zero flow between  {sourceNode} ({targetFlowAmount}a) -> {targetNodeId}')
                     continue
                 ourSetNoNeut.discard(targetNodeId)
                 targetSetNoNeut.discard(targetNodeId)
-                targetNode = noNeutGraphLookup[targetNodeId]
+                targetNode = noNeutGraphLookup.get(targetNodeId, None)
+
+                if targetNode is None:
+                    logbook.info(f'Flow of {targetFlowAmount} to fake node {targetNodeId} from {sourceNode}')
+                    continue
+                if sourceNode is None:
+                    logbook.info(f'Flow from fake node {nodeId} of {targetFlowAmount} to {targetNode}')
+                    continue
+
                 if targetNodeId in self.nxGraphDataNoNeut.neutral_sinks and sourceNode.island is targetGeneralIsland:
-                    # raise AssertionError(f'wut? shouldnt have backfill neut edges here? No demand allowed on neuts?   {sourceNode} ({targetFlowAmount}a) -> {targetNode}')
+                    # raise Exception(f'wut? shouldnt have backfill neut edges here? No demand allowed on neuts?   {sourceNode} ({targetFlowAmount}a) -> {targetNode}')
                     edge = IslandFlowEdge(targetNode, targetFlowAmount)
                     backfillNeutNoNeutEdges.append(edge)
                     continue
@@ -1489,7 +1503,7 @@ class ArmyFlowExpander(object):
 
         if self.use_debug_asserts and copyTargetFromNode.island not in nextTargetCalculatedNode.island.border_islands:
             # TODO remove once algo reliable
-            raise AssertionError(f'Tried to add illegal edge from {copyTargetFromNode} TO {nextTargetCalculatedNode}')
+            raise Exception(f'Tried to add illegal edge from {copyTargetFromNode} TO {nextTargetCalculatedNode}')
         if self.log_debug:
             logbook.info(f'    adding target (friendly) edge from {copyTargetFromNode.island.unique_id} TO {nextTargetCalculatedNode.island.unique_id}')
         copyTargetFromNode.set_flow_to(nextTargetCalculatedNode, 0)
@@ -1504,7 +1518,7 @@ class ArmyFlowExpander(object):
         nextFriendlyUncalculatedNode = IslandFlowNode(nextFriendlyUncalculated, 0 - nextFriendlyUncalculated.sum_army + nextFriendlyUncalculated.tile_count)
         if self.use_debug_asserts and nextFriendlyUncalculatedNode.island not in copyFriendlyFromNode.island.border_islands:
             # TODO remove once algo reliable
-            raise AssertionError(f'Tried to add illegal edge from {nextFriendlyUncalculatedNode} TO {copyFriendlyFromNode}')
+            raise Exception(f'Tried to add illegal edge from {nextFriendlyUncalculatedNode} TO {copyFriendlyFromNode}')
         if self.log_debug:
             logbook.info(f'    adding friendly (target) edge from {nextFriendlyUncalculatedNode.island.unique_id} TO {copyFriendlyFromNode.island.unique_id}')
 
@@ -1715,7 +1729,7 @@ class ArmyFlowExpander(object):
 
         if copyTargetFromNode.island not in nextTargetCalculatedNode.island.border_islands:
             # TODO remove once algo reliable
-            raise AssertionError(f'Tried to add illegal edge from {copyTargetFromNode} TO {nextTargetCalculatedNode}')
+            raise Exception(f'Tried to add illegal edge from {copyTargetFromNode} TO {nextTargetCalculatedNode}')
         if self.log_debug:
             logbook.info(f'    adding target (solo) edge from {copyTargetFromNode.island.unique_id} TO {nextTargetCalculatedNode.island.unique_id}')
 
@@ -2191,7 +2205,7 @@ class ArmyFlowExpander(object):
                     sourceUnused=unusedSourceArmy,
                     plan=plan,
                     extraInfo=err)
-                raise AssertionError(err)
+                raise Exception(err)
 
         return plan
 
@@ -2339,18 +2353,26 @@ class ArmyFlowExpander(object):
             weight = dataBag['weight']
             capacity = dataBag['capacity']
 
-            fromIsland = islandBuilder.tile_islands_by_unique_id[fromId]
-            toIsland = islandBuilder.tile_islands_by_unique_id[toId]
+            if fromId in islandBuilder.tile_islands_by_unique_id:
+                fromIsland = islandBuilder.tile_islands_by_unique_id[fromId]
 
-            allSourceX = [t.x for t in fromIsland.tile_set]
-            allSourceY = [t.y for t in fromIsland.tile_set]
-            sourceX = sum(allSourceX) / len(allSourceX)
-            sourceY = sum(allSourceY) / len(allSourceY)
+                allSourceX = [t.x for t in fromIsland.tile_set]
+                allSourceY = [t.y for t in fromIsland.tile_set]
+                sourceX = sum(allSourceX) / len(allSourceX)
+                sourceY = sum(allSourceY) / len(allSourceY)
+            else:
+                sourceX = viewInfo.map.cols + 1
+                sourceY = viewInfo.map.rows + 1
 
-            allDestX = [t.x for t in toIsland.tile_set]
-            allDestY = [t.y for t in toIsland.tile_set]
-            destX = sum(allDestX) / len(allDestX)
-            destY = sum(allDestY) / len(allDestY)
+            if toId in islandBuilder.tile_islands_by_unique_id:
+                toIsland = islandBuilder.tile_islands_by_unique_id[toId]
+                allDestX = [t.x for t in toIsland.tile_set]
+                allDestY = [t.y for t in toIsland.tile_set]
+                destX = sum(allDestX) / len(allDestX)
+                destY = sum(allDestY) / len(allDestY)
+            else:
+                destX = viewInfo.map.cols + 2
+                destY = viewInfo.map.rows + 2
 
             viewInfo.draw_diagonal_arrow_between_xy(sourceX, sourceY, destX, destY, label=f'{weight}, {capacity}', color=Colors.BLACK)
 
@@ -2457,7 +2479,7 @@ class ArmyFlowExpander(object):
 
         fakeNodes = None
 
-        if self.use_back_pressure_from_enemy_general:
+        if self.use_backpressure_from_enemy_general:
             demand = demands[targetGeneralIsland.unique_id] - cumulativeDemand
             graph.add_node(targetGeneralIsland.unique_id, demand=demand)
 
@@ -2497,6 +2519,32 @@ class ArmyFlowExpander(object):
             graph.add_edge(fakeNode, frGeneralIsland.unique_id, weight=100000, capacity=1000000)
             fakeNodes = {fakeNode}
 
+        # fakeNode = random.randint(1000000, 9000000)
+        # while fakeNode in islands.tile_islands_by_unique_id:
+        #     fakeNode = random.randint(1000000, 9000000)
+
+        # graph.add_node(fakeNode, demand=-cumulativeDemand)
+
+        # weight = 10
+        # if not useNeutralFlow:
+        #     weight = 0
+
+        # backpressureWeight = weight
+        # if self.use_back_pressure_from_enemy_general:
+        #     backpressureWeight = 100
+
+        # for neutSinkId in neutSinks:
+        #     capacity = islands.tile_islands_by_unique_id[neutSinkId].tile_count
+        #     # if not useNeutralFlow:
+        #     #     capacity = islands.tile_islands_by_unique_id[neutSinkId].tile_count
+        #     graph.add_edge(fakeNode, neutSinkId, weight=weight, capacity=capacity)
+
+        # graph.add_edge(-targetGeneralIsland.unique_id, fakeNode, weight=100000, capacity=1000000)
+        # graph.add_edge(-frGeneralIsland.unique_id, fakeNode, weight=100000, capacity=1000000)
+        # graph.add_edge(fakeNode, targetGeneralIsland.unique_id, weight=backpressureWeight, capacity=1000000)
+        # graph.add_edge(fakeNode, frGeneralIsland.unique_id, weight=100000, capacity=1000000)
+        # fakeNodes = {fakeNode}
+
         return NxFlowGraphData(graph, neutSinks, demands, cumulativeDemand, fakeNodes)
 
     def _determine_initial_demands_and_split_input_output_nodes(self, graph, islands, ourSet, targetSet, includeNeutralFlow: bool):
@@ -2522,9 +2570,13 @@ class ArmyFlowExpander(object):
 
             demands[island.unique_id] = demand
 
+            if self.log_debug:
+                logbook.info(f'node {island.unique_id}: {repr(inAttrs)}')
             graph.add_node(island.unique_id, **inAttrs)
 
             # edge from in_island to out_island with the node crossing cost
+            if self.log_debug:
+                logbook.info(f'  edge {island.unique_id} -> {-island.unique_id} cost {cost}')
             graph.add_edge(island.unique_id, -island.unique_id, weight=cost, capacity=100000)
 
         return cumulativeDemand, demands

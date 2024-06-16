@@ -5,9 +5,9 @@ import logbook
 import time
 import typing
 
-import GatherUtils
+import Gather
 import SearchUtils
-from DataModels import Move, GatherTreeNode
+from Models import Move, GatherTreeNode
 from Interfaces import MapMatrixInterface, TileSet
 from MapMatrix import MapMatrix, MapMatrixSet
 from Path import Path
@@ -2442,9 +2442,9 @@ def build_initial_mst_gather_root(map, general, visited_set, skip_tiles, dist_to
             alpha=255,
         ))
 
-    generalNode = GatherUtils.build_mst_to_root_from_path_and_contiguous_tiles(map, initPath, map.pathable_tiles, maxDepth=16, reversePath=True)
+    generalNode = Gather.build_mst_to_root_from_path_and_contiguous_tiles(map, initPath, map.pathable_tiles, maxDepth=16, reversePath=True, searchingPlayer=general.player)
 
-    turns, totalValue = GatherUtils.recalculate_tree_values(
+    turns, totalValue = Gather.recalculate_tree_values(
         [],
         [generalNode],
         negativeTiles=None,
@@ -2456,7 +2456,7 @@ def build_initial_mst_gather_root(map, general, visited_set, skip_tiles, dist_to
         viewInfo=debug_view_info,
         shouldAssert=False)
 
-    for n in GatherUtils.iterate_tree_node(generalNode):
+    for n in GatherTreeNode.iterate_tree_node(generalNode):
         # smallest to largest
         n.children = sorted(n.children, key=lambda c: c.gatherTurns)
 

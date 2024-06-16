@@ -6,7 +6,7 @@
 """
 
 from SearchUtils import *
-from DataModels import *
+from Models import *
 from enum import Enum
 
 

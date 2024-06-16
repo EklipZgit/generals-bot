@@ -17,7 +17,7 @@ from numba import jit, float32, int32
 import numpy
 from scipy.special import expit
 
-from DataModels import Move
+from Models import Move
 from Engine.ArmyEngineModels import ArmySimState, ArmySimEvaluationParams
 from PerformanceTelemetry import PerformanceTelemetry
 from PerformanceTimer import PerformanceTimer

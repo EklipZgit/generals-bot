@@ -1,23 +1,25 @@
 from __future__ import annotations
 
+import random
+
 import logbook
 import time
 import typing
 from collections import deque
 
 import DebugHelper
-import GatherSteiner
 import KnapsackUtils
 import SearchUtils
-from DataModels import Move, GatherTreeNode
-from Interfaces import TilePlanInterface
+from Models import GatherTreeNode
+from . import prune_mst_to_turns_with_values, GatherSteiner
+from . import GatherCapturePlan
+from . import USE_DEBUG_ASSERTS
 from MapMatrix import MapMatrixInterface, MapMatrixSet, TileSet, MapMatrix
 from Path import Path
 from SearchUtils import where
 from ViewInfo import ViewInfo
 from base.client.map import Tile, MapBase
 
-USE_DEBUG_ASSERTS = False
 
 T = typing.TypeVar('T')
 
@@ -86,594 +88,6 @@ class TreeBuilder(typing.Generic[T]):
                     frontier.put((dist + 1, movable, treeNode, negArmyGathered, negPrioSum, negRawArmy))
 
         return nodeMatrix
-
-
-class GatherCapturePlan(TilePlanInterface):
-    def __init__(
-            self,
-            rootNodes: typing.List[GatherTreeNode],
-            map: MapBase,
-            econValue: float,
-            turnsTotalInclCap: int,
-            gatherValue: int,
-            gatherCapturePoints: float,
-            gatherTurns: int,
-            requiredDelay: int,
-            minValueFunc: typing.Callable[[Tile, typing.Tuple], typing.Tuple | None] | None = None,
-            friendlyCityCount: int | None = None,
-            enemyCityCount: int | None = None,
-            asPlayer: int = -1
-    ):
-        """
-
-        @param rootNodes:
-        @param map:
-        @param econValue:
-        @param turnsTotalInclCap:
-        @param gatherValue: The actual amount of army gathered. If this was with UseTrueValueGathered, should be the actual amount of army that WILL end up on the destination tile (excluding negative tiles).
-        @param gatherCapturePoints: The weighted-by-gather/capture-matrices value of the gather. Different from econValue, which is the expected econ payoff of using this gather/capture plan.
-        @param gatherTurns: The total number of turns this gather plan spends GATHERING (not capturing). DONT just set this to the same thing as turnsTotalInclCap.
-        @param requiredDelay: You'd usually not delay a gather unless it involved multiple cities capturing something.
-        @param minValueFunc: The move selection function for prioritizing leaf move order. Default is simply delaying cities as first priority and second priority the furthest tiles from our general.
-        @param friendlyCityCount: leave None to auto-calculate.
-        @param enemyCityCount: leave None to auto-calculate.
-        @param asPlayer: defaults to the map.player_index player if not provided.
-        """
-        if asPlayer == -1:
-            asPlayer = map.player_index
-        self.player: int = asPlayer
-        self.root_nodes: typing.List[GatherTreeNode] = rootNodes
-        self.gathered_army: int = gatherValue
-        """The actual amount of army gathered. If this was with UseTrueValueGathered=True or OnlyConsiderFriendlyArmy=False, should be the actual amount of army that WILL end up on the destination tile (excluding negative tiles). Otherwise should be the sum of friendly army gathered."""
-        self.gather_capture_points: float = gatherCapturePoints
-        """The actual amount of capture points gathered. Mimicks the same logic as gathered_army, but includes the priorityMatrix values (including negative tiles)."""
-        self._econ_value: float = econValue
-        """The expected economic payoff from performing this gather/capture plan. May or may not include priorityMatrix weight for gathered / captured tiles."""
-        self._turns: int = turnsTotalInclCap
-        self.gather_turns: int = gatherTurns
-        """The total number of turns spent GATHERING (not capturing). Use length for the total plan length instead."""
-        self.friendly_city_count: int = friendlyCityCount
-        self.enemy_city_count: int = enemyCityCount
-        self.fog_gather_turns: int = 0
-        """The number of turns this gather includes from unknown (not included in tileset/tilelist) fog tiles."""
-        self.fog_gather_army: int = 0
-        """The amount of army this gather includes from unknown (not included in tileset/tilelist) fog tiles."""
-        self._requiredDelay: int = requiredDelay
-        self._tileList: typing.List[Tile] | None = None
-        self._tileSet: typing.Set[Tile] | None = None
-        self._map: MapBase = map
-        self.value_func: typing.Callable[[Tile, typing.Tuple], typing.Tuple | None] = minValueFunc
-        self.has_more_moves: bool = len(rootNodes) > 0
-        self.approximate_capture_tiles: typing.Set[Tile] = set()
-
-        if not self.value_func:  # emptyVal value func, gathers based on cityCount then distance from general
-            frPlayers = map.get_teammates(asPlayer)
-
-            def default_value_func(currentTile, currentPriorityObject):
-                negCityCount = army = unfriendlyTileCount = 0
-                # i don't think this does anything...?
-                curIsOurCity = True
-                if currentPriorityObject is not None:
-                    (nextIsOurCity, negCityCount, unfriendlyTileCount, army, curIsOurCity) = currentPriorityObject
-                    army -= 1
-                nextIsOurCity = curIsOurCity
-                curIsOurCity = True
-                if currentTile.player in frPlayers:
-                    if currentTile.isGeneral or currentTile.isCity:
-                        negCityCount -= 1
-                    army += currentTile.army
-                else:
-                    if currentTile.isGeneral or currentTile.isCity and army + 2 <= currentTile.army:
-                        curIsOurCity = False
-                        # cityCount += 1
-                    unfriendlyTileCount += 1
-                    army -= currentTile.army
-
-                # heuristicVal = negArmy / distFromPlayArea
-                return nextIsOurCity, negCityCount, unfriendlyTileCount, army, curIsOurCity
-
-            self.value_func = default_value_func
-
-        if self.friendly_city_count is None or self.enemy_city_count is None:
-            self.friendly_city_count = 0
-            self.enemy_city_count = 0
-            frPlayers = map.get_teammates(asPlayer)
-
-            def incrementer(node: GatherTreeNode):
-                if node.tile.isCity:
-                    if node.tile.player in frPlayers:
-                        self.friendly_city_count += 1
-                    elif node.tile.player >= 0:
-                        self.enemy_city_count += 1
-
-            foreach_tree_node(self.root_nodes, incrementer)
-
-    def clone(self) -> GatherCapturePlan:
-        clone = GatherCapturePlan(
-            rootNodes=[n.deep_clone() for n in self.root_nodes],
-            map=self._map,
-            econValue=self._econ_value,
-            turnsTotalInclCap=self._turns,
-            gatherValue=self.gathered_army,
-            gatherCapturePoints=self.gather_capture_points,
-            gatherTurns=self.gather_turns,
-            friendlyCityCount=self.friendly_city_count,
-            requiredDelay=self._requiredDelay,
-            minValueFunc=self.value_func,
-            asPlayer=self.player,
-        )
-
-        if self._tileList is not None:
-            clone._tileList = self._tileList.copy()
-        if self._tileSet is not None:
-            clone._tileSet = self._tileSet.copy()
-
-        return clone
-
-    @property
-    def length(self) -> int:
-        return self._turns
-
-    @property
-    def econValue(self) -> float:
-        return self._econ_value
-
-    @econValue.setter
-    def econValue(self, econValue: float):
-        self._econ_value = econValue
-
-    @property
-    def tileSet(self) -> typing.Set[Tile]:
-        if self._tileSet is None:
-            if self._tileList is not None:
-                self._tileSet = set(self._tileList)
-            else:
-                self._tileSet = self.approximate_capture_tiles.copy()
-                foreach_tree_node(self.root_nodes, lambda n: self._tileSet.add(n.tile))
-
-        return self._tileSet
-
-    @tileSet.setter
-    def tileSet(self, value):
-        raise AssertionError("NO SETTING!")
-
-    @property
-    def tileList(self) -> typing.List[Tile]:
-        if self._tileList is None:
-            self._tileList = []
-            self._tileSet = set()
-            for n in iterate_tree_nodes(self.root_nodes):
-                self._tileList.append(n.tile)
-                self._tileSet.add(n.tile)
-            for t in self.approximate_capture_tiles:
-                if t not in self._tileSet:
-                    self.tileList.append(t)
-                    self.tileSet.add(t)
-        return self._tileList
-
-    @property
-    def requiredDelay(self) -> int:
-        return self._requiredDelay
-
-    def get_first_move(self) -> Move | None:
-        if self.value_func:
-            return get_tree_move(self.root_nodes, self.value_func)
-        else:
-            return Move(self.tileList[0], self.tileList[1])
-
-    def pop_first_move(self) -> Move | None:
-        if self.value_func:
-            move = get_tree_move(self.root_nodes, self.value_func, pop=True)
-            return move
-        else:
-            raise AssertionError(f'cannot call pop move when value_func is null (after pickling)')
-
-    def get_move_list(self) -> typing.List[Move]:
-        if self.value_func:
-            return get_tree_moves(self.root_nodes, self.value_func)
-        else:
-            raise AssertionError(f'cannot call get_move_list when value_func is null (after pickling)')
-
-    def __getstate__(self):
-        tileList = self.tileList
-        tileSet = self.tileSet
-        state = self.__dict__.copy()
-
-        # if 'notify_unresolved_army_emerged' in state:
-        #     del state['notify_unresolved_army_emerged']
-
-        if 'value_func' in state:
-            del state['value_func']
-        #
-        # if 'perf_timer' in state:
-        #     del state['perf_timer']
-
-        return state
-
-    def __setstate__(self, state):
-        self.__dict__.update(state)
-        self.notify_unresolved_army_emerged = []
-        self.notify_army_moved = []
-
-    def __str__(self):
-        return f'{self._econ_value:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt), armyGath {self.gathered_army}, del {self.requiredDelay}, tiles {self.tileList}'
-
-    def __repr__(self):
-        return str(self)
-
-    def include_additional_fog_gather(self, fogTurns: int, fogGatherValue: int):
-        self._turns += fogTurns
-        self.gather_turns += fogTurns
-        self.gathered_army += fogGatherValue
-        self.gather_capture_points += fogGatherValue
-        self.fog_gather_turns += fogTurns
-        self.fog_gather_army += fogGatherValue
-
-    def include_approximate_capture_tiles(self, captures: typing.Iterable[Tile]):
-        preCount = len(self.approximate_capture_tiles)
-        self.approximate_capture_tiles.update(captures)
-        if len(self.approximate_capture_tiles) != preCount:
-            self._tileSet = None
-            self._tileList = None
-
-    @staticmethod
-    def build_from_root_nodes(
-            map: MapBase,
-            # logEntries: typing.List[str],
-            rootNodes: typing.List[GatherTreeNode],
-            negativeTiles: typing.Set[Tile] | None,
-            searchingPlayer: int,
-            onlyCalculateFriendlyArmy=False,
-            priorityMatrix: MapMatrixInterface[float] | None = None,
-            includeGatherPriorityAsEconValues: bool = False,
-            includeCapturePriorityAsEconValues: bool = True,
-            captures: typing.Set[Tile] | None = None,
-            viewInfo=None,
-            cloneNodes: bool = False
-    ) -> GatherCapturePlan:
-        """
-        Returns the plan
-
-        @param map:
-        @param rootNodes:
-        @param negativeTiles:
-        @param searchingPlayer:
-        @param onlyCalculateFriendlyArmy: If True, captured tiles will NOT be included in the gatherValue and gatherPoints calculations (but will still be included in econValue calculations).
-        @param priorityMatrix: The priority matrix for both gathered and captured nodes. Always added to the 'gatherPoints' sum. Optionally also included in the econ value calculation.
-        @param includeGatherPriorityAsEconValues: if True, the priority matrix values of gathered nodes will be included in the econValue of the plan for gatherNodes.
-        @param includeCapturePriorityAsEconValues: if True, the priority matrix values of CAPTURED nodes will be included in the econValue of the plan for enemy tiles in the plan.
-        @param captures: a set of tiles to include as approximate captures in this gather capture plan
-        @param viewInfo:
-        @param cloneNodes: if True, the original root nodes will not be modified and will be cloned instead. Default is false.
-        @return:
-        """
-        if cloneNodes:
-            rootNodes = clone_nodes(rootNodes)
-        plan = GatherCapturePlan(
-            [],  # we dont pass the root nodes in because we're going to hand-calculate all the values and dont want it doing weird stuff.
-            map,
-            econValue=0.0,
-            turnsTotalInclCap=0,
-            gatherValue=0,
-            gatherCapturePoints=0.0,
-            gatherTurns=0,
-            requiredDelay=0,
-            friendlyCityCount=0,
-        )
-        plan._turns = 0
-        frPlayers = map.get_teammates(searchingPlayer)
-
-        for currentNode in rootNodes:
-            GatherCapturePlan._recalculate_gather_plan_values(
-                plan,
-                # logEntries,
-                currentNode,
-                negativeTiles,
-                searchingPlayer,
-                frPlayers,
-                onlyCalculateFriendlyArmy,
-                priorityMatrix,
-                includeGatherPriorityAsEconValues=includeGatherPriorityAsEconValues,
-                includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
-            )
-
-        #prunes invalid gather nodes.
-        rootNodes = prune_mst_to_army(rootNodes, 1000000000, searchingPlayer, map.team_ids_by_player_index, map.turn, viewInfo)
-        plan.root_nodes = rootNodes
-
-        # plan.gathered_army += currentNode.value
-        for currentNode in rootNodes:
-            plan._turns += currentNode.gatherTurns
-
-        if captures:
-            GatherCapturePlan._include_capture_estimation_in_calculation(
-                plan,
-                captures,
-                searchingPlayer,
-                frPlayers,
-                negativeTiles,
-                onlyCalculateFriendlyArmy,
-                priorityMatrix,
-                includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
-            )
-
-        # find the leaves and build the trunk values.
-        leaves = []
-        queue = deque()
-        for treeNode in rootNodes:
-            treeNode.trunkValue = 0
-            treeNode.trunkDistance = 0
-            queue.appendleft(treeNode)
-
-        while queue:
-            current = queue.pop()
-            if not current.children:
-                leaves.append(current)
-            for child in current.children:
-                trunkValue = current.trunkValue
-                trunkDistance = current.trunkDistance + 1
-                if not negativeTiles or child.tile not in negativeTiles:
-                    if child.tile.player in frPlayers:
-                        trunkValue += child.tile.army
-                    elif not onlyCalculateFriendlyArmy:
-                        trunkValue -= child.tile.army
-                # always leave 1 army behind.
-                trunkValue -= 1
-                child.trunkValue = trunkValue
-                child.trunkDistance = trunkDistance
-
-                queue.appendleft(child)
-
-        if viewInfo:
-            for currentNode in iterate_tree_nodes(rootNodes):
-                currentTile = currentNode.tile
-                viewInfo.midRightGridText.raw[currentTile.tile_index] = f'v{currentNode.value:.1f}'
-                viewInfo.bottomMidRightGridText.raw[currentTile.tile_index] = f'tv{currentNode.trunkValue:.1f}'
-                viewInfo.bottomRightGridText.raw[currentTile.tile_index] = f'td{currentNode.trunkDistance}'
-
-                if currentNode.trunkDistance > 0:
-                    rawValPerTurn = currentNode.value / currentNode.trunkDistance
-                    trunkValPerTurn = currentNode.trunkValue / currentNode.trunkDistance
-                    viewInfo.bottomMidLeftGridText.raw[currentTile.tile_index] = f'tt{trunkValPerTurn:.1f}'
-                    viewInfo.bottomLeftGridText.raw[currentTile.tile_index] = f'vt{rawValPerTurn:.1f}'
-
-        plan.leaves = leaves
-
-        return plan
-
-    @staticmethod
-    def _recalculate_gather_plan_values(
-            plan: GatherCapturePlan,
-            # logEntries: typing.List[str],
-            currentNode: GatherTreeNode,
-            negativeTiles: typing.Set[Tile] | None,
-            searchingPlayer: int,
-            frPlayers: typing.List[int],
-            onlyCalculateFriendlyArmy=False,
-            priorityMatrix: MapMatrixInterface[float] | None = None,
-            includeGatherPriorityAsEconValues: bool = False,
-            includeCapturePriorityAsEconValues: bool = True,
-    ):
-        if USE_DEBUG_ASSERTS:
-            logbook.info(f'RECALCING currentNode {currentNode}')
-
-        isStartNode = False
-
-        # we leave one node behind at each tile, except the root tile.
-        turns = 1
-        sumArmy = -1
-        sumPoints = -1
-        econValue = 0.0
-        currentTile = currentNode.tile
-        isTileFriendly = currentTile.player in frPlayers
-
-        if currentNode.toTile is None:
-            if USE_DEBUG_ASSERTS:
-                logbook.info(f'{currentTile} is first tile, starting at 0')
-            isStartNode = True
-            turns = 0
-            sumArmy = 0
-            sumPoints = 0
-        # elif priorityMatrix:
-        #     sum += priorityMatrix[currentTile]
-
-        if not negativeTiles or currentTile not in negativeTiles:
-            if isTileFriendly:
-                if not isStartNode:
-                    sumArmy += currentTile.army
-                    # sumPoints += currentTile.army
-                    if currentTile.isCity:
-                        plan.friendly_city_count += 1
-            else:
-                if not onlyCalculateFriendlyArmy and not isStartNode:
-                    sumArmy -= currentTile.army
-                    # sumPoints -= currentTile.army
-                if currentTile.player >= 0:
-                    econValue += 2.2
-                    if currentTile.isCity:
-                        plan.enemy_city_count += 1
-                else:
-                    econValue += 1.0
-
-        if priorityMatrix:
-            prioVal = priorityMatrix.raw[currentTile.tile_index]
-            if not isStartNode:
-                sumPoints += prioVal
-                if isTileFriendly:
-                    if includeGatherPriorityAsEconValues:
-                        econValue += prioVal
-                elif includeCapturePriorityAsEconValues:
-                    econValue += prioVal
-            elif not isTileFriendly and includeCapturePriorityAsEconValues:
-                econValue += prioVal
-            # if USE_DEBUG_ASSERTS:
-            #     logbook.info(f'appending {currentTile}  {currentTile.army}a  matrix {priorityMatrix[currentTile]:.3f} -> {sumArmy:.3f}')
-
-        # we do econValue BEFORE the children because the children will sum their own econ value
-        sumPoints += sumArmy
-        plan.gathered_army += sumArmy
-        plan.econValue += econValue
-        plan.gather_capture_points += sumPoints
-        if isTileFriendly:
-            plan.gather_turns += turns
-
-        for child in currentNode.children:
-            GatherCapturePlan._recalculate_gather_plan_values(
-                plan,
-                child,
-                negativeTiles,
-                searchingPlayer,
-                frPlayers,
-                onlyCalculateFriendlyArmy,
-                priorityMatrix,
-                includeGatherPriorityAsEconValues,
-                includeCapturePriorityAsEconValues)
-            sumArmy += child.value
-            sumPoints += child.points
-            turns += child.gatherTurns
-
-        currentNode.value = sumArmy
-        # old behavior was tile 'values' were points, not army. Safe to not preserve that...?
-        currentNode.points = sumPoints
-        currentNode.gatherTurns = turns
-        # friendly_city_count  # covered above
-        # enemy_city_count  # covered above
-        # gathered_army  # covered above
-        # gather_capture_points  # covered above
-        # _econ_value  # covered above.
-        # _turns  # covered by the outer rootnodes loop
-        # gather_turns   # covered in if above
-
-    @staticmethod
-    def _include_capture_estimation_in_calculation(
-            plan: GatherCapturePlan,
-            captures: typing.Set[Tile],
-            searchingPlayer: int,
-            frPlayers: typing.List[int],
-            negativeTiles: typing.Set[Tile] | None = None,
-            onlyCalculateFriendlyArmy=False,
-            priorityMatrix: MapMatrixInterface[float] | None = None,
-            includeCapturePriorityAsEconValues: bool = True
-    ):
-        """
-        Adds captures to the value of the plan.
-
-        @param plan:
-        @param negativeTiles:
-        @param searchingPlayer:
-        @param frPlayers:
-        @param onlyCalculateFriendlyArmy:
-        @param priorityMatrix:
-        @param includeCapturePriorityAsEconValues:
-        @return:
-        """
-        captures = captures.difference(plan.tileSet)
-        plan.include_approximate_capture_tiles(captures)
-        lookup = {n.tile: n for n in iterate_tree_nodes(plan.root_nodes)}
-
-        q = deque()
-        # for rn in plan.root_nodes:
-        #     for mv in rn.tile.movable:
-        #         if mv in captures:
-        #             q.append((mv, rn, rn.value + rn.tile.army - 1))
-        for cap in captures:
-            for mv in cap.movable:
-                node = lookup.get(mv, None)
-                if node:
-                    q.append((cap, node, node.value + node.tile.army - 1))
-
-        fromRoot: GatherTreeNode
-        toCap: Tile
-
-        vis = set()
-        while q:
-            (toCap, fromRoot, armyAmt) = q.popleft()
-
-            if toCap.tile_index in vis or toCap not in captures:
-                continue
-
-            vis.add(toCap.tile_index)
-
-            # we leave one node behind at each tile, except the root tile.
-            sumArmy = -1
-            sumPoints = -1
-            econValue = 0.0
-            armyAmt -= 1
-            currentTile = toCap
-            isTileFriendly = currentTile.player in frPlayers
-
-            # elif priorityMatrix:
-            #     sum += priorityMatrix[currentTile]
-
-            if not negativeTiles or currentTile not in negativeTiles:
-                if isTileFriendly:
-                    sumArmy += currentTile.army
-                    armyAmt += currentTile.army
-                    # sumPoints += currentTile.army
-                    if currentTile.isCity:
-                        plan.friendly_city_count += 1
-                else:
-                    armyAmt -= currentTile.army
-                    if not onlyCalculateFriendlyArmy:
-                        sumArmy -= currentTile.army
-                        # sumPoints -= currentTile.army
-                    if currentTile.player >= 0:
-                        econValue += 2.2
-                        if currentTile.isCity:
-                            plan.enemy_city_count += 1
-                    else:
-                        econValue += 1.0
-
-            if priorityMatrix:
-                prioVal = priorityMatrix.raw[currentTile.tile_index]
-                sumPoints += prioVal
-                if includeCapturePriorityAsEconValues:
-                    econValue += prioVal
-                # if USE_DEBUG_ASSERTS:
-                #     logbook.info(f'appending {currentTile}  {currentTile.army}a  matrix {priorityMatrix[currentTile]:.3f} -> {sumArmy:.3f}')
-
-            # we do econValue BEFORE the children because the children will sum their own econ value
-            sumPoints += sumArmy
-            plan.gathered_army += sumArmy
-            # plan.econValue += econValue
-            plan.gather_capture_points += sumPoints
-            plan._turns += 1
-            if isTileFriendly:
-                plan.gather_turns += 1
-            #
-            # for child in currentNode.children:
-            #     GatherCapturePlan._recalculate_gather_plan_values(
-            #         plan,
-            #         child,
-            #         negativeTiles,
-            #         searchingPlayer,
-            #         frPlayers,
-            #         onlyCalculateFriendlyArmy,
-            #         priorityMatrix,
-            #         includeGatherPriorityAsEconValues,
-            #         includeCapturePriorityAsEconValues)
-            #     sumArmy += child.value
-            #     sumPoints += child.points
-            #     turns += child.gatherTurns
-
-            fromRoot.value += sumArmy
-            # old behavior was tile 'values' were points, not army. Safe to not preserve that...?
-            fromRoot.points += sumPoints
-            fromRoot.gatherTurns += 1
-            if armyAmt < 0:
-                # then we must waste at least one turn shuffling army around, borrowing gathered army from a different root node inlet
-                plan.gather_turns += 1
-            # plan.gather_capture_points += sumPoints
-            # plan.econValue +=
-
-            for mv in toCap.movable:
-                q.append((mv, fromRoot, armyAmt))
-
-        # for root in plan.root_nodes:
-
-    def shortInfo(self) -> str:
-        return f'{self._econ_value:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt), armyGath {self.gathered_army} {self.root_nodes[0].tile}'
-
 
 def knapsack_gather_iteration(
         turns: int,
@@ -1398,10 +812,6 @@ def _knapsack_levels_gather_recurse(
         return 0, maxIterationPaths
 
     return maxIterationGatheredArmy, maxIterationPaths
-
-
-def _dump_log_entries(logEntries: typing.List[str]):
-    logbook.info('\r\n' + '\r\n'.join(logEntries))
 
 
 def _knapsack_levels_gather_iterative_prune(
@@ -2484,62 +1894,9 @@ def greedy_backpack_gather_values(
     gatherTreeNodeLookup = {}
     itr = 0
     remainingTurns = turns
-    valuePerTurnPath: Path | None = None
+    valuePerTurnPath: Path
     origStartTiles = startTilesDict.copy()
-    while remainingTurns > 0:
-        if valuePerTurnPath is not None:
-            if valuePerTurnPath.tail.tile.army <= 1 or valuePerTurnPath.tail.tile.player != searchingPlayer:
-                logbook.info(
-                    f"TERMINATING greedy-bfs-gather PATH BUILDING DUE TO TAIL TILE {valuePerTurnPath.tail.tile.toString()} THAT WAS < 1 OR NOT OWNED BY US. PATH: {valuePerTurnPath.toString()}")
-                break
-            logbook.info(
-                f"Adding valuePerTurnPath (v/t {(valuePerTurnPath.value - valuePerTurnPath.start.tile.army + 1) / valuePerTurnPath.length:.3f}): {valuePerTurnPath.toString()}")
-
-            remainingTurns = remainingTurns - valuePerTurnPath.length
-            itr += 1
-            # add the new path to startTiles, rinse, and repeat
-            node = valuePerTurnPath.start
-            # we need to factor in the distance that the last path was already at (say we're gathering to a threat,
-            # you can't keep adding gathers to the threat halfway point once you're gathering for as many turns as half the threat length
-            (startPriorityObject, distance) = startTilesDict[node.tile]
-            # TODO? May need to not continue with the previous paths priorityObjects and instead start fresh, as this may unfairly weight branches
-            #       towards the initial max path, instead of the highest actual additional value
-            # curPrioObj = startPriorityObject
-            addlDist = 1
-            # currentGatherTreeNode = None
-
-            if node.tile in gatherTreeNodeLookup:
-                currentGatherTreeNode = gatherTreeNodeLookup[node.tile]
-            else:
-                currentGatherTreeNode = GatherTreeNode(node.tile, None, distance)
-                currentGatherTreeNode.gatherTurns = 1
-            runningValue = valuePerTurnPath.value - node.tile.army
-            currentGatherTreeNode.value += runningValue
-            runningValue -= node.tile.army
-            gatherTreeNodeLookup[node.tile] = currentGatherTreeNode
-            negativeTiles.add(node.tile)
-            # skipping because first tile is actually already on the path
-            node = node.next
-            # add the new path to startTiles and then search a new path
-            while node is not None:
-                newDist = distance + addlDist
-                nextPrioObj = baseCaseFunc(node.tile, newDist)
-                startTilesDict[node.tile] = (nextPrioObj, newDist)
-                negativeTiles.add(node.tile)
-                logbook.info(
-                    f"Including tile {node.tile.x},{node.tile.y} in startTilesDict at newDist {newDist}  (distance {distance} addlDist {addlDist})")
-                # if viewInfo:
-                #    viewInfo.bottomRightGridText[node.tile] = newDist
-                nextGatherTreeNode = GatherTreeNode(node.tile, currentGatherTreeNode.tile, newDist)
-                nextGatherTreeNode.value = runningValue
-                nextGatherTreeNode.gatherTurns = 1
-                runningValue -= node.tile.army
-                currentGatherTreeNode.children.append(nextGatherTreeNode)
-                currentGatherTreeNode = nextGatherTreeNode
-                gatherTreeNodeLookup[node.tile] = currentGatherTreeNode
-                addlDist += 1
-                node = node.next
-
+    while True:
         logbook.info(f"Searching for the next path with remainingTurns {remainingTurns}")
         valuePerTurnPath = SearchUtils.breadth_first_dynamic_max_global_visited(
             map,
@@ -2563,6 +1920,61 @@ def greedy_backpack_gather_values(
         if valuePerTurnPath is None:
             break
 
+        if valuePerTurnPath.tail.tile.army <= 1 or valuePerTurnPath.tail.tile.player != searchingPlayer:
+            logbook.info(
+                f"TERMINATING greedy-bfs-gather PATH BUILDING DUE TO TAIL TILE {valuePerTurnPath.tail.tile.toString()} THAT WAS < 1 OR NOT OWNED BY US. PATH: {valuePerTurnPath.toString()}")
+            break
+        logbook.info(
+            f"Adding valuePerTurnPath (v/t {(valuePerTurnPath.value - valuePerTurnPath.start.tile.army + 1) / valuePerTurnPath.length:.3f}): {valuePerTurnPath.toString()}")
+
+        remainingTurns = remainingTurns - valuePerTurnPath.length
+        itr += 1
+        # add the new path to startTiles, rinse, and repeat
+        node = valuePerTurnPath.start
+        # we need to factor in the distance that the last path was already at (say we're gathering to a threat,
+        # you can't keep adding gathers to the threat halfway point once you're gathering for as many turns as half the threat length
+        (startPriorityObject, distance) = startTilesDict[node.tile]
+        # TODO? May need to not continue with the previous paths priorityObjects and instead start fresh, as this may unfairly weight branches
+        #       towards the initial max path, instead of the highest actual additional value
+        # curPrioObj = startPriorityObject
+        addlDist = 1
+        # currentGatherTreeNode = None
+
+        if node.tile in gatherTreeNodeLookup:
+            currentGatherTreeNode = gatherTreeNodeLookup[node.tile]
+        else:
+            currentGatherTreeNode = GatherTreeNode(node.tile, None, distance)
+            currentGatherTreeNode.gatherTurns = 1
+        runningValue = valuePerTurnPath.value - node.tile.army
+        currentGatherTreeNode.value += runningValue
+        runningValue -= node.tile.army
+        gatherTreeNodeLookup[node.tile] = currentGatherTreeNode
+        negativeTiles.add(node.tile)
+        # skipping because first tile is actually already on the path
+        node = node.next
+        # add the new path to startTiles and then search a new path
+        while node is not None:
+            newDist = distance + addlDist
+            nextPrioObj = baseCaseFunc(node.tile, newDist)
+            startTilesDict[node.tile] = (nextPrioObj, newDist)
+            negativeTiles.add(node.tile)
+            logbook.info(
+                f"Including tile {node.tile.x},{node.tile.y} in startTilesDict at newDist {newDist}  (distance {distance} addlDist {addlDist})")
+            # if viewInfo:
+            #    viewInfo.bottomRightGridText[node.tile] = newDist
+            nextGatherTreeNode = GatherTreeNode(node.tile, currentGatherTreeNode.tile, newDist)
+            nextGatherTreeNode.value = runningValue
+            nextGatherTreeNode.gatherTurns = 1
+            runningValue -= node.tile.army
+            currentGatherTreeNode.children.append(nextGatherTreeNode)
+            currentGatherTreeNode = nextGatherTreeNode
+            gatherTreeNodeLookup[node.tile] = currentGatherTreeNode
+            addlDist += 1
+            node = node.next
+
+        if remainingTurns <= 0:
+            break
+
     rootNodes = list(where(gatherTreeNodeLookup.values(), lambda gatherTreeNode: gatherTreeNode.toTile is None))
 
     turnsUsed, totalValue = recalculate_tree_values(
@@ -2576,7 +1988,7 @@ def greedy_backpack_gather_values(
         viewInfo=viewInfo)
 
     logbook.info(
-        f"Concluded greedy-bfs-gather with {itr} path segments, value {totalValue}. Duration: {time.perf_counter() - startTime:.4f}")
+        f"Concluded greedy-bfs-gather with {itr} path segments, turns {turnsUsed}/{turns} (lenStart tiles {len(startTilesDict)}) value {totalValue}. Duration: {time.perf_counter() - startTime:.4f}")
     return totalValue, turnsUsed, rootNodes
 
 
@@ -2750,1079 +2162,10 @@ def _recalculate_tree_values_recurse(
     currentNode.gatherTurns = turns
 
 
-def get_tree_move(
-        gathers: typing.List[GatherTreeNode],
-        valueFunc: typing.Callable[[Tile, typing.Tuple], typing.Tuple | None],
-        pop: bool = False
-) -> typing.Union[None, Move]:
-    moves = get_tree_moves(gathers, valueFunc, pop=pop, limit=1)
-    if moves:
-        return moves[0]
-    return None
-    # if len(gathers) == 0:
-    #     logbook.info("get_tree_move... len(gathers) == 0?")
-    #     return None
-    #
-    # # TODO this is just an iterate-all-leaves-and-keep-max function, why the hell are we using a priority queue?
-    # #  we don't call this often so who cares I guess, but wtf copy paste, normal queue would do fine.
-    # q = SearchUtils.HeapQueue()
-    #
-    # for gather in gathers:
-    #     basePrio = priorityFunc(gather.tile, None)
-    #     q.put((basePrio, gather))
-    #
-    # lookup = {}
-    #
-    # highestValue = None
-    # highestValueNode = None
-    # while q.queue:
-    #     (curPrio, curGather) = q.get()
-    #     lookup[curGather.tile] = curGather
-    #     if len(curGather.children) == 0:
-    #         # WE FOUND OUR FIRST MOVE!
-    #         thisValue = valueFunc(curGather.tile, curPrio)
-    #         if (thisValue is not None
-    #                 and curGather.fromTile is not None
-    #                 and (highestValue is None or thisValue > highestValue)
-    #         ):
-    #             highestValue = thisValue
-    #             highestValueNode = curGather
-    #             logbook.info(f"new highestValueNode {str(highestValueNode)}!")
-    #     for gather in curGather.children:
-    #         nextPrio = priorityFunc(gather.tile, curPrio)
-    #         q.put((nextPrio, gather))
-    #
-    # if highestValueNode is None:
-    #     return None
-    #
-    # if pop:
-    #     if highestValueNode.fromTile is not None:
-    #         parent = lookup[highestValueNode.fromTile]
-    #         parent.children.remove(highestValueNode)
-    #
-    # highestValueMove = Move(highestValueNode.tile, highestValueNode.fromTile)
-    # logbook.info(f"highestValueMove in get_tree_move was {highestValueMove.toString()}!")
-    # return highestValueMove
-
-
-def get_tree_moves(
-        gathers: typing.List[GatherTreeNode],
-        valueFunc: typing.Callable[[Tile, typing.Tuple | None], typing.Tuple | None],
-        limit: int = 10000,
-        pop: bool = False
-) -> typing.List[Move]:
-    if len(gathers) == 0:
-        logbook.info("get_tree_moves... len(gathers) == 0?")
-        return []
-
-    q = deque()
-
-    if not pop:
-        gathers = [g.deep_clone() for g in gathers]
-
-    for gather in gathers:
-        basePrio = valueFunc(gather.tile, None)
-        q.append((basePrio, gather))
-
-    moveQ = SearchUtils.HeapQueueMax()
-
-    prioLookup = {}
-    """Looks up each nodes priority by its tile."""
-
-    while q:
-        (curPrio, curGather) = q.popleft()
-        prioLookup[curGather.tile] = curPrio
-
-        if not curGather.children:
-            moveQ.put((curPrio, curGather))
-        else:
-            for gather in curGather.children:
-                gather.toGather = curGather
-                nextPrio = valueFunc(gather.tile, curPrio)
-                q.append((nextPrio, gather))
-
-    moves = []
-    iter = 0
-    while moveQ.queue:
-        (curPrio, curGather) = moveQ.get()
-        toGather = curGather.toGather
-        if toGather is not None:
-            moves.append(Move(curGather.tile, curGather.toTile))
-            toGather.children.remove(curGather)
-            iter += 1
-            if iter >= limit:
-                break
-
-            if not toGather.children:
-                fromPrio = prioLookup.get(toGather.toTile, None)
-                curPrio = valueFunc(toGather.tile, fromPrio)
-                moveQ.put((curPrio, toGather))
-
-    return moves
-
-
-def prune_mst_to_turns(
-        rootNodes: typing.List[GatherTreeNode],
-        turns: int,
-        searchingPlayer: int,
-        viewInfo: ViewInfo | None = None,
-        noLog: bool = True,
-        gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
-        tileDictToPrune: typing.Dict[Tile, typing.Any] | None = None,
-        preferPrune: typing.Set[Tile] | None = None,
-        allowNegative: bool = True,
-        invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
-) -> typing.List[GatherTreeNode]:
-    """
-    Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
-    O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
-
-    @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
-    @param turns: The number of turns to prune the MST down to.
-    @param searchingPlayer:
-    @param viewInfo:
-    @param noLog:
-    @param gatherTreeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
-    @param tileDictToPrune: Optionally, also prune tiles out of this dictionary
-    @param invalidMoveFunc: func(GatherTreeNode) -> bool, return true if you want a leaf GatherTreeNode to always be pruned. By emptyVal, if none is passed, then gather nodes that begin at an enemy tile or that are 1's will always be pruned as invalid.
-
-    @return: The list same list of rootnodes passed in, modified.
-    """
-    count, totalValue, rootNodes = prune_mst_to_turns_with_values(
-        rootNodes=rootNodes,
-        turns=turns,
-        searchingPlayer=searchingPlayer,
-        viewInfo=viewInfo,
-        noLog=noLog,
-        gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
-        tileDictToPrune=tileDictToPrune,
-        preferPrune=preferPrune,
-        allowNegative=allowNegative,
-        invalidMoveFunc=invalidMoveFunc,
-    )
-
-    return rootNodes
-
-
-def prune_mst_to_turns_with_values(
-        rootNodes: typing.List[GatherTreeNode],
-        turns: int,
-        searchingPlayer: int,
-        viewInfo: ViewInfo | None = None,
-        noLog: bool = True,
-        gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
-        tileDictToPrune: typing.Dict[Tile, typing.Any] | None = None,
-        invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
-        preferPrune: typing.Set[Tile] | None = None,
-        parentPruneFunc: typing.Callable[[Tile, GatherTreeNode], None] | None = None,
-        allowNegative: bool = True,
-        logEntries: typing.List[str] | None = None,
-) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
-    """
-    Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
-    O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
-    TODO optimize to reuse existing GatherTreeNode lookup map instead of rebuilding...?
-     MAKE A GATHER CLASS THAT STORES THE ROOT NODES, THE NODE LOOKUP, THE VALUE, THE TURNS
-
-    @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
-    @param turns: The number of turns to prune the MST down to.
-    @param searchingPlayer:
-    @param viewInfo:
-    @param noLog:
-    @param gatherTreeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
-    @param tileDictToPrune: Optionally, also prune tiles out of this dictionary
-    @param invalidMoveFunc: func(GatherTreeNode) -> bool, return true if you want a leaf GatherTreeNode to always be pruned. By emptyVal, if none is passed, then gather nodes that begin at an enemy tile or that are 1's will always be pruned as invalid.
-    @param parentPruneFunc: func(Tile, GatherTreeNode) When a node is pruned this function will be called for each parent tile above the node being pruned and passed the node being pruned.
-
-    @return: gatherTurns, gatherValue, rootNodes
-    """
-    start = time.perf_counter()
-
-    if logEntries is None:
-        logEntries = []
-
-    if invalidMoveFunc is None:
-        def invalid_move_func(node: GatherTreeNode):
-            if node.tile.army <= 1:
-                return True
-            if node.tile.player != searchingPlayer and len(node.children) == 0:
-                return True
-
-        invalidMoveFunc = invalid_move_func
-
-    # count, nodeMap = calculate_mst_trunk_values_and_build_leaf_queue_and_node_map(rootNodes, searchingPlayer, invalidMoveFunc, viewInfo=viewInfo, noLog=noLog)
-
-    def pruneFunc(node: GatherTreeNode, curPrioObj: typing.Tuple | None):
-        rawValPerTurn = -100
-        # trunkValPerTurn = -100
-        # trunkBehindNodeValuePerTurn = -100
-        if node.gatherTurns > 0:
-            rawValPerTurn = node.value / node.gatherTurns
-            # trunkValPerTurn = node.trunkValue / node.trunkDistance
-            # trunkValPerTurn = node.trunkValue / node.trunkDistance
-            # trunkBehindNodeValuePerTurn = trunkValPerTurn
-            # trunkBehindNodeValue = node.trunkValue - node.value
-            # trunkBehindNodeValuePerTurn = trunkBehindNodeValue / node.trunkDistance
-        elif node.value > 0:
-            if USE_DEBUG_ASSERTS:
-                raise AssertionError(f'divide by zero exception for {str(node)} with value {round(node.value, 6)} turns {node.gatherTurns}')
-        if viewInfo is not None:
-            viewInfo.midRightGridText[node.tile] = f'v{node.value:.0f}'
-            viewInfo.bottomMidRightGridText[node.tile] = f'tv{node.trunkValue:.0f}'
-            viewInfo.bottomRightGridText[node.tile] = f'td{node.trunkDistance}'
-
-            # viewInfo.bottomMidLeftGridText[node.tile] = f'tt{trunkValPerTurn:.1f}'
-            viewInfo.bottomLeftGridText[node.tile] = f'vt{rawValPerTurn:.1f}'
-
-        return rawValPerTurn, node.value, 0 - node.trunkDistance
-
-    return prune_mst_until(
-        rootNodes,
-        untilFunc=lambda node, _, turnsLeft, curValue: turnsLeft <= turns,
-        pruneOrderFunc=pruneFunc,
-        invalidMoveFunc=invalidMoveFunc,
-        pruneOverrideFunc=lambda node, _, turnsLeft, curValue: turnsLeft - node.gatherTurns < turns,
-        viewInfo=viewInfo,
-        noLog=noLog,
-        pruneBranches=True,
-        gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
-        tileDictToPrune=tileDictToPrune,
-        preferPrune=preferPrune,
-        logEntries=logEntries,
-        allowNegative=allowNegative,
-        parentPruneFunc=parentPruneFunc,
-    )
-
-
-def prune_mst_to_tiles(
-        rootNodes: typing.List[GatherTreeNode],
-        tiles: typing.Set[Tile],
-        searchingPlayer: int,
-        viewInfo: ViewInfo | None = None,
-        noLog: bool = True,
-        gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
-        tileDictToPrune: typing.Dict[Tile, typing.Any] | None = None,
-        preferPrune: typing.Set[Tile] | None = None,
-        invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
-) -> typing.List[GatherTreeNode]:
-    """
-    Prunes nodes from an MST until a set of specific nodes are encountered. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
-    O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
-
-    @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
-    @param tiles: The tiles that should be force-kept within the spanning tree
-    @param searchingPlayer:
-    @param viewInfo:
-    @param noLog:
-    @param gatherTreeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
-    @param tileDictToPrune: Optionally, also prune tiles out of this dictionary
-    @param invalidMoveFunc: func(GatherTreeNode) -> bool, return true if you want a leaf GatherTreeNode to always be pruned. By emptyVal, if none is passed, then gather nodes that begin at an enemy tile or that are 1's will always be pruned as invalid.
-
-    @return: The list same list of rootnodes passed in, modified.
-    """
-    count, totalValue, rootNodes = prune_mst_to_tiles_with_values(
-        rootNodes=rootNodes,
-        tiles=tiles,
-        searchingPlayer=searchingPlayer,
-        viewInfo=viewInfo,
-        noLog=noLog,
-        gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
-        tileDictToPrune=tileDictToPrune,
-        preferPrune=preferPrune,
-        invalidMoveFunc=invalidMoveFunc,
-    )
-
-    return rootNodes
-
-
-def prune_mst_to_tiles_with_values(
-        rootNodes: typing.List[GatherTreeNode],
-        tiles: typing.Set[Tile],
-        searchingPlayer: int,
-        viewInfo: ViewInfo | None = None,
-        noLog: bool = True,
-        gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
-        tileDictToPrune: typing.Dict[Tile, typing.Any] | None = None,
-        invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
-        preferPrune: typing.Set[Tile] | None = None,
-        parentPruneFunc: typing.Callable[[Tile, GatherTreeNode], None] | None = None,
-) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
-    """
-    Prunes nodes from an MST until a set of specific nodes are encountered. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
-    O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
-    TODO optimize to reuse existing GatherTreeNode lookup map instead of rebuilding...?
-     MAKE A GATHER CLASS THAT STORES THE ROOT NODES, THE NODE LOOKUP, THE VALUE, THE TURNS
-
-    @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
-    @param tiles: The tiles that should be force-kept within the spanning tree
-    @param searchingPlayer:
-    @param viewInfo:
-    @param noLog:
-    @param gatherTreeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
-    @param tileDictToPrune: Optionally, also prune tiles out of this dictionary
-    @param invalidMoveFunc: func(GatherTreeNode) -> bool, return true if you want a leaf GatherTreeNode to always be pruned. By emptyVal, if none is passed, then gather nodes that begin at an enemy tile or that are 1's will always be pruned as invalid.
-    @param parentPruneFunc: func(Tile, GatherTreeNode) When a node is pruned this function will be called for each parent tile above the node being pruned and passed the node being pruned.
-
-    @return: gatherTurns, gatherValue, rootNodes
-    """
-    start = time.perf_counter()
-
-    if invalidMoveFunc is None:
-        def invalid_move_func(node: GatherTreeNode):
-            if node.tile.army <= 1:
-                return True
-            if node.tile.player != searchingPlayer and len(node.children) == 0:
-                return True
-
-        invalidMoveFunc = invalid_move_func
-
-    # count, nodeMap = calculate_mst_trunk_values_and_build_leaf_queue_and_node_map(rootNodes, searchingPlayer, invalidMoveFunc, viewInfo=viewInfo, noLog=noLog)
-
-    def pruneFunc(node: GatherTreeNode, curPrioObj: typing.Tuple | None):
-        rawValPerTurn = -100
-        # trunkValPerTurn = -100
-        # trunkBehindNodeValuePerTurn = -100
-        if node.gatherTurns > 0:
-            rawValPerTurn = node.value / node.gatherTurns
-            # trunkValPerTurn = node.trunkValue / node.trunkDistance
-            # trunkValPerTurn = node.trunkValue / node.trunkDistance
-            # trunkBehindNodeValuePerTurn = trunkValPerTurn
-            # trunkBehindNodeValue = node.trunkValue - node.value
-            # trunkBehindNodeValuePerTurn = trunkBehindNodeValue / node.trunkDistance
-        elif node.value > 0:
-            if USE_DEBUG_ASSERTS:
-                raise AssertionError(f'divide by zero exception for {str(node)} with value {round(node.value, 6)} turns {node.gatherTurns}')
-
-        if viewInfo is not None:
-            viewInfo.midRightGridText[node.tile] = f'v{node.value:.1f}'
-            viewInfo.bottomMidRightGridText[node.tile] = f'tv{node.trunkValue:.1f}'
-            viewInfo.bottomRightGridText[node.tile] = f'td{node.trunkDistance}'
-
-            # viewInfo.bottomMidLeftGridText[node.tile] = f'tt{trunkValPerTurn:.1f}'
-            viewInfo.bottomLeftGridText[node.tile] = f'vt{rawValPerTurn:.1f}'
-
-        return rawValPerTurn, node.value, 0 - node.trunkDistance
-
-    return prune_mst_until(
-        rootNodes,
-        untilFunc=lambda node, _, turnsLeft, curValue: node.tile in tiles,
-        pruneOrderFunc=pruneFunc,
-        invalidMoveFunc=invalidMoveFunc,
-        pruneOverrideFunc=lambda node, _, turnsLeft, curValue: node.tile in tiles,
-        viewInfo=viewInfo,
-        noLog=noLog,
-        pruneBranches=False,
-        gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
-        tileDictToPrune=tileDictToPrune,
-        preferPrune=preferPrune,
-        parentPruneFunc=parentPruneFunc,
-    )
-
-
-def prune_mst_to_army_with_values(
-        rootNodes: typing.List[GatherTreeNode],
-        army: int,
-        searchingPlayer: int,
-        teams: typing.List[int],
-        turn: int,
-        additionalIncrement: int = 0,
-        viewInfo: ViewInfo | None = None,
-        noLog: bool = True,
-        gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
-        invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
-        preferPrune: typing.Set[Tile] | None = None,
-        allowNegative: bool = True,
-        pruneLargeTilesFirst: bool = False,
-) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
-    """
-    Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
-    O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
-
-    @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
-    @param army: The army amount to prune the MST down to
-    @param searchingPlayer:
-    @param teams: the teams array.
-    @param additionalIncrement: if need to gather extra army due to incrementing, include the POSITIVE enemy city increment or NEGATIVE allied increment value here.
-    @param turn: the current map turn, used to calculate city increment values.
-    @param viewInfo:
-    @param noLog:
-    @param gatherTreeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
-    @param invalidMoveFunc: func(GatherTreeNode) -> bool, return true if you want a leaf GatherTreeNode to always be pruned. By emptyVal, if none is passed, then gather nodes that begin at an enemy tile or that are 1's will always be pruned as invalid.
-    @param pruneLargeTilesFirst: if True (emptyVal), then largest tiles will be pruned first allowing this prune to be used to maximize leaving tiles for offense if possible.
-
-    @return: gatherTurns, gatherValue, rootNodes
-    """
-    start = time.perf_counter()
-
-    turnIncFactor = (1 + turn) & 1
-
-    cityCounter = SearchUtils.Counter(0 - additionalIncrement)
-    cityGatherDepthCounter = SearchUtils.Counter(0)
-    citySkipTiles = set()
-    for n in rootNodes:
-        if (n.tile.isCity or n.tile.isGeneral) and not n.tile.isNeutral:
-            if teams[n.tile.player] == [searchingPlayer]:
-                citySkipTiles.add(n.tile)
-
-    def cityCounterFunc(node: GatherTreeNode):
-        if (node.tile.isGeneral or node.tile.isCity) and not node.tile.isNeutral and node.tile not in citySkipTiles:
-            if teams[node.tile.player] == teams[searchingPlayer]:
-                cityCounter.add(1)
-                # each time we add one of these we must gather all the other cities in the tree first too so we lose that many increment turns + that
-                cityGatherDepthCounter.add(node.trunkDistance)
-            else:
-                cityCounter.add(-1)
-
-        for child in node.children:
-            cityCounterFunc(child)
-
-    for n in rootNodes:
-        cityCounterFunc(n)
-
-    def setCountersToPruneCitiesRecurse(node: GatherTreeNode):
-        for child in node.children:
-            setCountersToPruneCitiesRecurse(child)
-
-        if teams[node.tile.player] == teams[searchingPlayer] and (node.tile.isCity or node.tile.isGeneral):
-            cityGatherDepthCounter.add(0 - node.trunkDistance)
-            cityCounter.add(-1)
-
-    if invalidMoveFunc is None:
-        def invalid_move_func(node: GatherTreeNode):
-            if node.tile.army <= 1:
-                return True
-            if node.tile.player != searchingPlayer:
-                return True
-
-        invalidMoveFunc = invalid_move_func
-
-    def getCurrentCityIncAmount(gatherTurnsLeft: int) -> int:
-        cityIncrementAmount = (cityCounter.value * (gatherTurnsLeft - turnIncFactor)) // 2  # +1 here definitely causes it to under-gather
-        cityIncrementAmount -= cityGatherDepthCounter.value // 2
-        return cityIncrementAmount
-
-    def untilFunc(node: GatherTreeNode, _, turnsLeft: int, curValue: int):
-        turnsLeftIfPruned = turnsLeft - node.gatherTurns
-
-        # act as though we're pruning the city so we can calculate the gather value without it
-        setCountersToPruneCitiesRecurse(node)
-
-        cityIncrementAmount = getCurrentCityIncAmount(turnsLeftIfPruned)
-        armyLeftIfPruned = curValue - node.value + cityIncrementAmount
-
-        if armyLeftIfPruned < army:
-            # not pruning here, put the city increments back
-            cityCounterFunc(node)
-            return True
-
-        return False
-
-    def pruneLargeTilesFirstFunc(node: GatherTreeNode, curObj) -> typing.Tuple:
-        trunkValuePerTurn = node.trunkValue / node.trunkDistance if node.trunkDistance > 0 else 0
-        return 0 - node.value, trunkValuePerTurn, node.trunkDistance
-
-    def pruneWorstValuePerTurnFunc(node: GatherTreeNode, curObj) -> typing.Tuple:
-        trunkValuePerTurn = node.trunkValue / node.trunkDistance if node.trunkDistance > 0 else 0
-        return node.value / node.gatherTurns, trunkValuePerTurn, node.trunkDistance
-
-    prioFunc = pruneLargeTilesFirstFunc
-    if not pruneLargeTilesFirst:
-        prioFunc = pruneWorstValuePerTurnFunc
-
-    prunedTurns, noCityCalcGathValue, nodes = prune_mst_until(
-        rootNodes,
-        untilFunc=untilFunc,
-        # if we dont include trunkVal/node.trunkDistance we end up keeping shitty branches just because they have a far, large tile on the end.
-        pruneOrderFunc=prioFunc,
-        # pruneOrderFunc=lambda node, curObj: (node.value, node.trunkValue / node.trunkDistance, node.trunkDistance),
-        # pruneOrderFunc=lambda node, curObj: (node.value / node.gatherTurns, node.trunkValue / node.trunkDistance, node.trunkDistance),
-        invalidMoveFunc=invalidMoveFunc,
-        viewInfo=viewInfo,
-        noLog=noLog,
-        gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
-        preferPrune=preferPrune,
-        allowNegative=allowNegative,
-        pruneBranches=False  # if you turn this to true, test_should_not_miscount_gather_prune_at_neut_city will fail. Need to fix how mid-branch city prunes function apparently.
-    )
-
-    finalIncValue = getCurrentCityIncAmount(prunedTurns)
-    gathValue = noCityCalcGathValue + finalIncValue
-
-    return prunedTurns, gathValue, nodes
-
-
-def prune_mst_to_army(
-        rootNodes: typing.List[GatherTreeNode],
-        army: int,
-        searchingPlayer: int,
-        teams: typing.List[int],
-        turn: int,
-        viewInfo: ViewInfo | None = None,
-        noLog: bool = True,
-        gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
-        invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
-        preferPrune: typing.Set[Tile] | None = None,
-        allowNegative: bool = True,
-        pruneLargeTilesFirst: bool = False,
-) -> typing.List[GatherTreeNode]:
-    """
-    Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
-    O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
-
-    @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
-    @param army: The army amount to prune the MST down to
-    @param searchingPlayer:
-    @param viewInfo:
-    @param noLog:
-    @param gatherTreeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
-    @param invalidMoveFunc: func(GatherTreeNode) -> bool, return true if you want a leaf GatherTreeNode to always be pruned. By emptyVal, if none is passed, then gather nodes that begin at an enemy tile or that are 1's will always be pruned as invalid.
-    @param pruneLargeTilesFirst: if True, will try to prune the largest tiles out first instead of lowest value per turn.
-    Useful when pruning a defense to the minimal army set needed for example while leaving large tiles available for other things.
-
-    @return: gatherTurns, gatherValue, rootNodes
-    """
-
-    count, totalValue, rootNodes = prune_mst_to_army_with_values(
-        rootNodes=rootNodes,
-        army=army,
-        searchingPlayer=searchingPlayer,
-        teams=teams,
-        turn=turn,
-        viewInfo=viewInfo,
-        noLog=noLog,
-        gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
-        invalidMoveFunc=invalidMoveFunc,
-        preferPrune=preferPrune,
-        allowNegative=allowNegative,
-        pruneLargeTilesFirst=pruneLargeTilesFirst,
-    )
-
-    return rootNodes
-
-
-def prune_mst_to_max_army_per_turn_with_values(
-        rootNodes: typing.List[GatherTreeNode],
-        minArmy: int,
-        searchingPlayer: int,
-        teams: typing.List[int],
-        additionalIncrement: int = 0,
-        viewInfo: ViewInfo | None = None,
-        noLog: bool = True,
-        gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
-        invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
-        preferPrune: typing.Set[Tile] | None = None,
-        allowNegative: bool = True,
-        allowBranchPrune: bool = True,
-        minTurns: int = 0,
-) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
-    """
-    Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
-    O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
-
-    @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
-    @param minArmy: The minimum army amount to prune the MST down to.
-    @param searchingPlayer:
-    @param teams: the teams array to use when calculating whether a gathered tile adds or subtracts army.
-    @param additionalIncrement: if need to gather extra army due to incrementing, include the POSITIVE enemy city increment or NEGATIVE allied increment value here.
-    @param viewInfo:
-    @param noLog:
-    @param gatherTreeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
-    @param invalidMoveFunc: func(GatherTreeNode) -> bool, return true if you want a leaf GatherTreeNode to always be pruned. By emptyVal, if none is passed, then gather nodes that begin at an enemy tile or that are 1's will always be pruned as invalid.
-    @param allowBranchPrune: Optionally, pass false to disable pruning whole branches. Allowing branch prunes produces lower value per turn trees but also smaller trees.
-    @param minTurns: The minimum number of turns that can be pruned to.
-
-    @return: (totalCount, totalValue, The list same list of rootnodes passed in, modified)
-    """
-
-    cityCounter = SearchUtils.Counter(0 - additionalIncrement)
-    cityGatherDepthCounter = SearchUtils.Counter(0)
-    citySkipTiles = set()
-    totalValue = 0
-    totalTurns = 0
-    for n in rootNodes:
-        if (n.tile.isCity or n.tile.isGeneral) and not n.tile.isNeutral:
-            if teams[n.tile.player] == teams[searchingPlayer]:
-                citySkipTiles.add(n.tile)
-
-        totalTurns += n.gatherTurns
-        totalValue += n.value
-
-    if totalTurns == 0:
-        return 0, 0, rootNodes
-
-    if totalValue < minArmy:
-        return totalTurns, totalValue, rootNodes
-
-    def cityCounterFunc(node: GatherTreeNode):
-        if (node.tile.isGeneral or node.tile.isCity) and not node.tile.isNeutral and node.tile not in citySkipTiles:
-            if teams[node.tile.player] == teams[searchingPlayer]:
-                cityCounter.add(1)
-                # each time we add one of these we must gather all the other cities in the tree first too so we lose that many increment turns + that
-                cityGatherDepthCounter.add(node.trunkDistance)
-            else:
-                cityCounter.add(-1)
-
-    foreach_tree_node(rootNodes, cityCounterFunc)
-
-    if invalidMoveFunc is None:
-        def invalid_move_func(node: GatherTreeNode):
-            if node.tile.army <= 1:
-                return True
-            if node.tile.player != searchingPlayer:
-                return True
-
-        invalidMoveFunc = invalid_move_func
-
-    curValuePerTurn = SearchUtils.Counter(totalValue / totalTurns)
-
-    def untilFunc(node: GatherTreeNode, _, turnsLeft: int, curValue: int):
-        turnsLeftIfPruned = turnsLeft - node.gatherTurns
-        if turnsLeftIfPruned <= minTurns:
-            return True
-        cityIncrementAmount = cityCounter.value * ((turnsLeftIfPruned - 1) // 2)
-        cityIncrementAmount -= cityGatherDepthCounter.value // 2
-        armyLeftIfPruned = curValue - node.value + cityIncrementAmount
-        pruneValPerTurn = armyLeftIfPruned / turnsLeftIfPruned
-        if pruneValPerTurn < curValuePerTurn.value or armyLeftIfPruned < minArmy:
-            return True
-
-        if teams[node.tile.player] == teams[searchingPlayer] and (node.tile.isCity or node.tile.isGeneral):
-            cityGatherDepthCounter.add(0 - node.trunkDistance)
-            cityCounter.add(-1)
-
-        curValuePerTurn.value = pruneValPerTurn
-        return False
-
-    def pruneOrderFunc(node: GatherTreeNode, curObj):
-        if node.gatherTurns == 0 or node.trunkDistance == 0:
-            if node.toTile is not None:
-                msg = f'ERRPRUNE {repr(node)} td {node.trunkDistance} or gathTurns {node.gatherTurns}'
-                logbook.info(msg)
-                if viewInfo:
-                    viewInfo.add_info_line(msg)
-                if USE_DEBUG_ASSERTS:
-                    raise AssertionError(msg)
-            return -1, -1, -1
-        return (node.value / node.gatherTurns), node.trunkValue / node.trunkDistance, node.trunkDistance
-
-    return prune_mst_until(
-        rootNodes,
-        untilFunc=untilFunc,
-        # if we dont include trunkVal/node.trunkDistance we end up keeping shitty branches just because they have a far, large tile on the end.
-        pruneOrderFunc=pruneOrderFunc,
-        # pruneOrderFunc=lambda node, curObj: (node.value, node.trunkValue / node.trunkDistance, node.trunkDistance),
-        # pruneOrderFunc=lambda node, curObj: (node.value / node.gatherTurns, node.trunkValue / node.trunkDistance, node.trunkDistance),
-        invalidMoveFunc=invalidMoveFunc,
-        viewInfo=viewInfo,
-        noLog=noLog,
-        gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
-        preferPrune=preferPrune,
-        allowNegative=allowNegative,
-        pruneBranches=allowBranchPrune
-    )
-
-
-def prune_mst_to_max_army_per_turn(
-        rootNodes: typing.List[GatherTreeNode],
-        minArmy: int,
-        searchingPlayer: int,
-        teams: typing.List[int],
-        viewInfo: ViewInfo | None = None,
-        noLog: bool = True,
-        gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
-        invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
-        preferPrune: typing.Set[Tile] | None = None,
-        allowNegative: bool = True,
-        allowBranchPrune: bool = True
-) -> typing.List[GatherTreeNode]:
-    """
-    Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
-    O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
-
-    @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
-    @param minArmy: The minimum army amount to prune the MST down to
-    @param searchingPlayer:
-    @param viewInfo:
-    @param noLog:
-    @param gatherTreeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
-    @param invalidMoveFunc: func(GatherTreeNode) -> bool, return true if you want a leaf GatherTreeNode to always be pruned. By emptyVal, if none is passed, then gather nodes that begin at an enemy tile or that are 1's will always be pruned as invalid.
-    @param allowBranchPrune: Optionally, pass false to disable pruning whole branches.
-    Allowing branch prunes produces lower value per turn trees but also smaller trees.
-
-    @return: (totalCount, totalValue, The list same list of rootnodes passed in, modified).
-    """
-
-    count, totalValue, rootNodes = prune_mst_to_max_army_per_turn_with_values(
-        rootNodes=rootNodes,
-        minArmy=minArmy,
-        searchingPlayer=searchingPlayer,
-        teams=teams,
-        viewInfo=viewInfo,
-        noLog=noLog,
-        gatherTreeNodeLookupToPrune=gatherTreeNodeLookupToPrune,
-        invalidMoveFunc=invalidMoveFunc,
-        preferPrune=preferPrune,
-        allowNegative=allowNegative,
-        allowBranchPrune=allowBranchPrune
-    )
-
-    return rootNodes
-
-
-def _would_prune_cause_negative_root(current: GatherTreeNode, nodeMap: typing.Dict[Tile, GatherTreeNode], logEntries: typing.List[str]):
-    parent: GatherTreeNode | None = nodeMap.get(current.toTile, None)
-    nextParent = parent
-
-    while nextParent is not None:
-        parent = nextParent
-        nextParent = nodeMap.get(nextParent.toTile, None)
-
-    if logEntries:
-        logEntries.append(f'neg root? parent {parent.tile} <- current {current.tile} | parent.value {parent.value:.2f} - current.value {current.value:.2f} = {parent.value - current.value:.2f}')
-    if parent.value - current.value < 0:
-        return True
-
-    return False
-
-
-# TODO can implement prune as multiple choice knapsack, optimizing lowest weight combinations of tree prunes instead of highest weight, maybe?
-def prune_mst_until(
-        rootNodes: typing.List[GatherTreeNode],
-        untilFunc: typing.Callable[[GatherTreeNode, typing.Tuple, int, int], bool],
-        pruneOrderFunc: typing.Callable[[GatherTreeNode, typing.Tuple | None], typing.Tuple],
-        invalidMoveFunc: typing.Callable[[GatherTreeNode], bool],
-        pruneBranches: bool = False,
-        pruneOverrideFunc: typing.Callable[[GatherTreeNode, typing.Tuple, int, int], bool] | None = None,
-        viewInfo: ViewInfo | None = None,
-        noLog: bool = True,
-        gatherTreeNodeLookupToPrune: typing.Dict[Tile, typing.Any] | None = None,
-        tileDictToPrune: typing.Dict[Tile, typing.Any] | None = None,
-        preferPrune: typing.Set[Tile] | None = None,
-        parentPruneFunc: typing.Callable[[Tile, GatherTreeNode], None] | None = None,
-        allowNegative: bool = True,
-        logEntries: typing.List[str] | None = None,
-) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
-    """
-    Prunes excess / bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
-    O(n*log(n)) (builds lookup dict of whole tree, puts at most whole tree through multiple queues, bubbles up prunes through the height of the tree (where the log(n) comes from).
-
-    @param rootNodes: The MST to prune. These are NOT copied and WILL be modified.
-    @param untilFunc: Func[curNode, curPriorityObject, GatherTreeNodeCountRemaining, curValue] -> bool (should return False to continue pruning, True to return the tree).
-    @param pruneOrderFunc: Func[curNode, curPriorityObject] - min are pruned first
-    @param pruneBranches: If true, runs the prune func to prioritize nodes in the middle of the tree, not just leaves.
-    @param pruneOverrideFunc: Func[curNode, curPriorityObject, GatherTreeNodeCountRemaining, curValue] -> bool
-    If passed, a node popped from the queue will run through this function and if the function returns true, will NOT be pruned.
-    @param viewInfo:
-    @param noLog:
-    @param gatherTreeNodeLookupToPrune: Optionally, also prune tiles out of this dictionary when pruning the tree nodes, if provided.
-    @param tileDictToPrune: Optionally, also prune tiles out of this dictionary
-    @param invalidMoveFunc: func(GatherTreeNode) -> bool, return true if you want a leaf GatherTreeNode to always be pruned. By emptyVal, if none is passed, then gather nodes that begin at an enemy tile or that are 1's will always be pruned as invalid.
-    @param parentPruneFunc: func(Tile, GatherTreeNode) When a node is pruned this function will be called for each parent tile above the node being pruned and passed the node being pruned.
-
-    @return: (totalCount, totalValue, The list same list of rootnodes passed in, modified).
-    """
-    start = time.perf_counter()
-
-    nodeMap: typing.Dict[Tile, GatherTreeNode] = {}
-    pruneHeap = SearchUtils.HeapQueue()
-
-    logEnd = False
-    if logEntries is None:
-        logEntries = []
-        logEnd = True
-
-    iter = 0
-
-    def nodeInitializer(current: GatherTreeNode):
-        nodeMap[current.tile] = current
-        if current.toTile is not None and (len(current.children) == 0 or pruneBranches):
-            # then we're a leaf. Add to heap
-            # value = current.trunkValue / max(1, current.trunkDistance)
-            value = current.value
-            validMove = True
-            if invalidMoveFunc(current) and len(current.children) == 0:
-                if not noLog:
-                    logEntries.append(
-                        f"tile {current.tile.toString()} will be eliminated due to invalid move, army {current.tile.army}")
-                validMove = False
-            if not noLog:
-                logEntries.append(
-                    f"  tile {current.tile.toString()} had value {value:.1f}, trunkDistance {current.trunkDistance}")
-            pruneHeap.put((validMove, preferPrune is None or current.tile not in preferPrune, pruneOrderFunc(current, None), current))
-
-    foreach_tree_node(rootNodes, nodeInitializer)
-
-    curValue = 0
-    for node in rootNodes:
-        curValue += node.value
-
-    count = len(nodeMap) - len(rootNodes)
-    if not noLog:
-        logEntries.append(f'MST prune beginning with {count} nodes ({len(pruneHeap.queue)} nodes)')
-
-    childRecurseQueue: typing.Deque[GatherTreeNode] = deque()
-
-    initialCount = len(nodeMap)
-
-    current: GatherTreeNode
-    try:
-        # now we have all the leaves, smallest value first
-        while pruneHeap.queue:
-            validMove, isPreferPrune, prioObj, current = pruneHeap.get()
-            iter += 1
-            if iter > initialCount * 3:
-                logEntries.append("PRUNE WENT INFINITE, BREAKING")
-                if viewInfo is not None:
-                    viewInfo.add_info_line('ERR PRUNE WENT INFINITE!!!!!!!!!')
-                    viewInfo.add_info_line('ERR PRUNE WENT INFINITE!!!!!!!!!')
-                    viewInfo.add_info_line('ERR PRUNE WENT INFINITE!!!!!!!!!')
-                break
-
-            if current.toTile is None:
-                continue
-
-            if current.tile not in nodeMap:
-                # already pruned
-                continue
-            # have to recheck now that we're pruning mid branches
-            validMove = not invalidMoveFunc(current)
-            if validMove or len(current.children) > 0:
-                if untilFunc(current, prioObj, count, curValue):
-                    # Then this was a valid move, and we've pruned enough leaves out.
-                    # Thus we should break. Otherwise if validMove == 0, we want to keep popping invalid moves off until they're valid again.
-                    continue
-            elif not noLog:
-                logEntries.append(f'Intending to prune extra invalid tree node regardless of untilFunc: {str(current)}')
-
-            if pruneOverrideFunc is not None and pruneOverrideFunc(current, prioObj, count, curValue):
-                if not noLog:
-                    logEntries.append(f'SKIPPING pruning tree node {str(current)} due to pruneOverrideFunc')
-                continue
-
-            if not allowNegative and _would_prune_cause_negative_root(current, nodeMap, logEntries if not noLog else None):
-                if not noLog:
-                    logEntries.append(f'SKIPPING pruning tree node {str(current)} because would cause negative node')
-                continue
-
-            # make sure the value of this prune didn't go down, if it did, shuffle it back into the heap with new priority.
-            if validMove:
-                doubleCheckPrioObj = pruneOrderFunc(current, prioObj)
-                if doubleCheckPrioObj > prioObj:
-                    pruneHeap.put((validMove, preferPrune is None or current.tile not in preferPrune, doubleCheckPrioObj, current))
-                    if not noLog:
-                        logEntries.append(
-                            f'requeued {str(current)} (prio went from {str(prioObj)} to {str(doubleCheckPrioObj)})')
-                    continue
-
-            if not noLog:
-                logEntries.append(f'pruning tree node {str(current)}')
-
-            # now remove this leaf from its parent and bubble the value change all the way up
-            curValue -= current.value
-            parent: GatherTreeNode | None = nodeMap.get(current.toTile, None)
-            realParent: GatherTreeNode | None = parent
-
-            if parent is not None:
-                try:
-                    parent.children.remove(current)
-                except ValueError:
-                    logEntries.append(f'child {str(current)} already not present on {str(parent)}')
-                    if USE_DEBUG_ASSERTS:
-                        raise AssertionError(f'child {str(current)} already not present on {str(parent)}')
-                parent.pruned.append(current)
-
-            while parent is not None:
-                parent.value -= current.value
-                parent.gatherTurns -= current.gatherTurns
-                if parentPruneFunc is not None:
-                    parentPruneFunc(parent.tile, current)
-                if parent.toTile is None:
-                    break
-                parent = nodeMap.get(parent.toTile, None)
-
-            childRecurseQueue.append(current)
-            childIter = 0
-            while childRecurseQueue:
-                toDropFromLookup = childRecurseQueue.popleft()
-                childIter += 1
-                if childIter > initialCount * 3:
-                    logEntries.append("PRUNE CHILD WENT INFINITE, BREAKING")
-                    if viewInfo is not None:
-                        viewInfo.add_info_line('ERR PRUNE CHILD WENT INFINITE!!!!!!!!!')
-                    if USE_DEBUG_ASSERTS:
-                        queueStr = '\r\n'.join([str(i) for i in childRecurseQueue])
-                        raise AssertionError(f"PRUNE CHILD WENT INFINITE, BREAKING, {str(toDropFromLookup)}. QUEUE:\r\n{queueStr}")
-                    break
-
-                if gatherTreeNodeLookupToPrune is not None:
-                    gatherTreeNodeLookupToPrune.pop(toDropFromLookup.tile, None)
-                if tileDictToPrune is not None:
-                    tileDictToPrune.pop(toDropFromLookup.tile, None)
-                nodeMap.pop(toDropFromLookup.tile, None)
-                count -= 1
-                if not noLog:
-                    logEntries.append(
-                        f"    popped/pruned BRANCH CHILD {toDropFromLookup.tile.toString()} value {toDropFromLookup.value:.1f} count {count}")
-                for child in toDropFromLookup.children:
-                    childRecurseQueue.append(child)
-
-            if not noLog:
-                logEntries.append(f"    popped/pruned {current.tile.toString()} value {current.value:.1f} count {count}")
-
-            if realParent is not None and len(realParent.children) == 0 and realParent.toTile is not None:
-                # (value, length) = self.get_prune_point(nodeMap, realParent)
-                # value = realParent.trunkValue / max(1, realParent.trunkDistance)
-                value = realParent.value
-                parentValidMove = True
-                if invalidMoveFunc(realParent):
-                    if not noLog:
-                        logEntries.append(
-                            f"parent {str(realParent.tile)} will be eliminated due to invalid move, army {realParent.tile.army}")
-                    parentValidMove = False
-
-                if not noLog:
-                    logEntries.append(
-                        f"  Appending parent {str(realParent.tile)} (valid {parentValidMove}) had value {value:.1f}, trunkDistance {realParent.trunkDistance}")
-
-                nextPrioObj = pruneOrderFunc(realParent, prioObj)
-                pruneHeap.put((parentValidMove, preferPrune is None or realParent.tile not in preferPrune, nextPrioObj, realParent))
-
-    except Exception as ex:
-        logEntries.append('prune got an error, dumping state:')
-
-        logEntries.append(f'rootNodes: {repr(rootNodes)}')
-        # logEntries.append(f'untilFunc: {repr(untilFunc)}')
-        # logEntries.append(f'pruneOrderFunc: {repr(pruneOrderFunc)}')
-        # logEntries.append(f'invalidMoveFunc: {repr(invalidMoveFunc)}')
-        logEntries.append(f'pruneBranches: {repr(pruneBranches)}')
-        # logEntries.append(f'pruneOverrideFunc: {repr(pruneOverrideFunc)}')
-        # logEntries.append(f'viewInfo: {repr(viewInfo)}')
-        # logEntries.append(f'noLog: {repr(noLog)}')
-        logEntries.append(f'gatherTreeNodeLookupToPrune: {repr(gatherTreeNodeLookupToPrune)}')
-        logEntries.append(f'tileDictToPrune: {repr(tileDictToPrune)}')
-        if logEnd:
-            _dump_log_entries(logEntries)
-        raise
-
-    # while not leaves.empty():
-    totalValue = 0
-    for node in rootNodes:
-        # the root tree nodes need + 1 to their value
-        # node.value += 1
-        totalValue += node.value
-    if not noLog:
-        logEntries.append(
-            f"  Pruned MST to turns {count} with value {totalValue} in duration {time.perf_counter() - start:.4f}")
-
-        if logEnd:
-            _dump_log_entries(logEntries)
-
-    return count, totalValue, rootNodes
-
-
-def foreach_tree_node(
-        gatherTreeNodes: typing.List[GatherTreeNode],
-        forEachFunc: typing.Callable[[GatherTreeNode], None]
-):
-    i = 0
-    q: typing.Deque[GatherTreeNode] = deque()
-    for n in gatherTreeNodes:
-        q.append(n)
-    while q:
-        i += 1
-        cur = q.popleft()
-        forEachFunc(cur)
-        for c in cur.children:
-            q.append(c)
-        if i > 500:
-            raise AssertionError(f'iterate_tree_nodes infinite looped. Nodes in the cycle: {str([str(n) for n in q])}')
-
-
-def iterate_tree_nodes(
-        rootNodes: typing.List[GatherTreeNode],
-) -> typing.Generator[GatherTreeNode, None, None]:
-    i = 0
-    q: typing.Deque[GatherTreeNode] = deque()
-    for n in rootNodes:
-        q.append(n)
-    while q:
-        i += 1
-        cur = q.popleft()
-        yield cur
-        for c in cur.children:
-            q.append(c)
-        if i > 500:
-            raise AssertionError(f'iterate_tree_nodes infinite looped. Nodes in the cycle: {str([str(n) for n in q])}')
-
-
-def iterate_tree_node(
-        rootNode: GatherTreeNode,
-) -> typing.Generator[GatherTreeNode, None, None]:
-    i = 0
-    q: typing.Deque[GatherTreeNode] = deque()
-    q.append(rootNode)
-    while q:
-        i += 1
-        cur = q.popleft()
-        yield cur
-        for c in cur.children:
-            q.append(c)
-        if i > 500:
-            raise AssertionError(f'iterate_tree_nodes infinite looped. Nodes in the cycle: {str([str(n) for n in q])}')
-
-
-def get_tree_leaves(gathers: typing.List[GatherTreeNode]) -> typing.List[GatherTreeNode]:
-    # fuck it, do it recursively i'm too tired for this
-    combined = []
-    for gather in gathers:
-        if len(gather.children) == 0:
-            if gather.toTile is not None:
-                combined.append(gather)
-        else:
-            combined.extend(get_tree_leaves(gather.children))
-
-    return combined
-
-
-def get_tree_leaves_further_than_distance(
-        gatherNodes: typing.List[GatherTreeNode],
-        distMap: MapMatrixInterface[int],
-        dist: int,
-        minArmy: int = 1,
-        curArmy: int = 0
-) -> typing.List[GatherTreeNode]:
-    includeAll = False
-    if minArmy > curArmy:
-        includeAll = True
-
-    leavesToInclude = []
-    for n in gatherNodes:
-        leaves = get_tree_leaves([n])
-        distOffs = 0
-        if n.tile.isGeneral:
-            distOffs = 1
-        leavesGreaterThanDistance = []
-        for g in leaves:
-            if distMap[g.tile] >= dist - distOffs or (g.toTile and distMap[g.toTile] >= dist - distOffs):
-                leavesGreaterThanDistance.append(g)
-        if includeAll:
-            leavesToInclude.extend(leavesGreaterThanDistance)
-            continue
-
-        for leaf in leavesGreaterThanDistance:
-            leafContribution = (leaf.tile.army - 1)
-            if curArmy - leafContribution <= minArmy:
-                leavesToInclude.append(leaf)
-            else:
-                curArmy -= leafContribution
-
-    return leavesToInclude
-
-
-def convert_contiguous_tiles_to_gather_capture_plan(
+def convert_contiguous_capture_tiles_to_gather_capture_plan(
         map: MapBase,
         rootTiles: typing.Iterable[Tile],
-        tiles: TileSet,
+        tiles: typing.Set[Tile],
         negativeTiles: TileSet | None,
         searchingPlayer: int,
         priorityMatrix: MapMatrixInterface[float] | None = None,
@@ -3847,9 +2190,9 @@ def convert_contiguous_tiles_to_gather_capture_plan(
     @param viewInfo: if included, gather values will be written the viewInfo debug output
     @return:
     """
-    ignore = None
-    if captures:
-        ignore = captures.difference(rootTiles)
+    # ignore = None
+    # if captures:
+    #     ignore = captures.difference(rootTiles)
 
     # rootNodes = build_mst_from_root_and_contiguous_tiles(map, rootTiles, tiles, ignoreTiles=captures)
 
@@ -3896,8 +2239,58 @@ def convert_contiguous_tiles_to_gather_capture_plan(
     # )
 
 
-def build_mst_from_root_and_contiguous_tiles(map: MapBase, rootTiles: typing.Iterable[Tile], tiles: TileSet, maxDepth: int = 1000, ignoreTiles: typing.Iterable[Tile] | None = None) -> typing.List[GatherTreeNode]:
+def convert_contiguous_tile_tree_to_gather_capture_plan(
+        map: MapBase,
+        rootTiles: typing.Iterable[Tile],
+        tiles: TileSet,
+        negativeTiles: TileSet | None,
+        searchingPlayer: int,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
+        useTrueValueGathered: bool = True,
+        includeGatherPriorityAsEconValues: bool = False,
+        includeCapturePriorityAsEconValues: bool = True,
+        viewInfo=None,
+) -> GatherCapturePlan:
+    """
+    For use when the gather capture plan does not fork in any way. Will JUST build nodes to the root tiles.
+
+    @param map:
+    @param rootTiles:
+    @param tiles:
+    @param negativeTiles:
+    @param searchingPlayer:
+    @param priorityMatrix:
+    @param useTrueValueGathered: if True, the gathered_value will be the RAW army that ends up on the target tile(s) rather than just the sum of friendly army gathered, excluding army lost traversing enemy tiles.
+    @param includeGatherPriorityAsEconValues: if True, the priority matrix values of gathered nodes will be included in the econValue of the plan for gatherNodes.
+    @param includeCapturePriorityAsEconValues: if True, the priority matrix values of CAPTURED nodes will be included in the econValue of the plan for enemy tiles in the plan.
+    @param viewInfo: if included, gather values will be written the viewInfo debug output
+    @return:
+    """
+
+    rootNodes = build_mst_from_root_and_contiguous_tiles(map, rootTiles, tiles, searchingPlayer=searchingPlayer)
+
+    plan = GatherCapturePlan.build_from_root_nodes(
+        map,
+        rootNodes,
+        negativeTiles,
+        searchingPlayer,
+        onlyCalculateFriendlyArmy=not useTrueValueGathered,
+        priorityMatrix=priorityMatrix,
+        includeGatherPriorityAsEconValues=includeGatherPriorityAsEconValues,
+        includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
+        viewInfo=viewInfo,
+        cloneNodes=False,
+    )
+
+    return plan
+
+
+def build_mst_from_root_and_contiguous_tiles(map: MapBase, rootTiles: typing.Iterable[Tile], tiles: TileSet, maxDepth: int = 1000, ignoreTiles: typing.Iterable[Tile] | None = None, searchingPlayer: int = -1) -> typing.List[GatherTreeNode]:
     """Does NOT calculate values"""
+
+    if searchingPlayer == -1:
+        searchingPlayer = map.player_index
+
     visited = MapMatrixSet(map, ignoreTiles)
 
     q = deque()
@@ -3942,12 +2335,15 @@ def build_mst_from_root_and_contiguous_tiles(map: MapBase, rootTiles: typing.Ite
 
         for t in tile.movable:
             if t in tiles:
-                q.appendleft((t, tile, newNode, fromDepth + 1))
+                if t.player == searchingPlayer:
+                    q.appendleft((t, tile, newNode, fromDepth + 1))
+                else:
+                    q.append((t, tile, newNode, fromDepth + 1))
 
     return rootNodes
 
 
-def build_capture_mst_from_root_and_contiguous_tiles(map: MapBase, tiles: TileSet, searchingPlayer: int, ignoreTiles: typing.Iterable[Tile] | None = None) -> typing.List[GatherTreeNode]:
+def build_capture_mst_from_root_and_contiguous_tiles_old(map: MapBase, tiles: TileSet, searchingPlayer: int, ignoreTiles: typing.Iterable[Tile] | None = None) -> typing.List[GatherTreeNode]:
     """Does NOT calculate values"""
     visited = MapMatrixSet(map, ignoreTiles)
 
@@ -3976,6 +2372,8 @@ def build_capture_mst_from_root_and_contiguous_tiles(map: MapBase, tiles: TileSe
 
     nodes = []
 
+    valLookup = {}
+
     while q:
         (army, tile, fromTile, fromNode, fromDepth) = q.get()
         if visited.raw[tile.tile_index]:
@@ -3990,6 +2388,8 @@ def build_capture_mst_from_root_and_contiguous_tiles(map: MapBase, tiles: TileSe
         if fromNode is not None:
             fromNode.children.append(newNode)
             newNode.toGather = fromNode
+
+        # valLookup[newNode.tile] = army
 
         for t in tile.movable:
             if t in tiles:
@@ -4006,6 +2406,170 @@ def build_capture_mst_from_root_and_contiguous_tiles(map: MapBase, tiles: TileSe
     for r in nodes:
         if r.toTile is None:
             # q2.appendleft(r)
+            # rootArmy = valLookup[r.tile]
+            roots.append(r)
+    #
+    # while q2:
+    #     r = q2.pop()
+    #
+    #     if teams[r.tile.player] != searchingPlayer:
+    #         # if r.toGather is not None:
+    #         #     r.toGather.children.remove(r)
+    #         #
+    #         for c in r.children:
+    #             q2.appendleft(c)
+    #         continue
+    #     elif r.toTile is None:
+    #         roots.append(r)
+
+    return roots
+
+
+def build_capture_mst_from_root_and_contiguous_tiles(map: MapBase, tiles: typing.Set[Tile], searchingPlayer: int, ignoreTiles: typing.Iterable[Tile] | None = None) -> typing.List[GatherTreeNode]:
+    """Does NOT calculate values"""
+    dists = MapMatrix(map)
+    teams = map.team_ids_by_player_index
+    searchingTeam = teams[searchingPlayer]
+
+    qq: typing.Deque[typing.Tuple[Tile, int]] = deque()
+
+    # islands = FastDisjointSet()
+    # for t in tiles:
+    #     # found = dsIntForest.find(t.tile_index)
+    #     for adj in t.movable:
+    #         if adj.player == t.player:
+    #             islands.merge(adj.tile_index, t.tile_index)
+    #
+    # islandIntSets: typing.List[typing.Set[int]] = islands.subsets()
+    # mm = MapMatrix(map, None)
+    # for islandSet in islandIntSets:
+    #     for memberIdx in islandSet:
+    #         mm.raw[memberIdx] = islandSet
+
+    for tile in tiles:
+        if teams[tile.player] != searchingTeam:
+            continue
+        # army -= 1
+        qq.appendleft((tile, 0))
+
+    if not qq:
+        raise Exception(f'build_capture_mst_from_root_and_contiguous_tiles cannot be used when there are no friendly tiles to searchingPlayer {searchingPlayer} included. \r\ntiles {" | ".join([f"{t.x},{t.y}" for t in sorted(tiles)])}')
+        # randTile = next(iter(tiles))
+        # logbook.info(f'build_capture_mst_from_root_and_contiguous_tiles using randTile {randTile} as distance seed because no friendly tile found....?')
+        # qq.appendleft((randTile, 0))
+
+    maxDistTile = None
+    maxDist = -1
+
+    unvisited = tiles.copy()
+
+    while qq:
+        tile, dist = qq.pop()
+        if dists.raw[tile.tile_index] is not None:
+            continue
+
+        unvisited.discard(tile)
+
+        dists.raw[tile.tile_index] = dist
+        if dist > maxDist:
+            maxDist = dist
+            maxDistTile = tile
+
+        for movable in tile.movable:
+            if movable in tiles:
+                qq.appendleft((movable, dist + 1))
+
+    if unvisited:
+        logbook.warn(f'the input tiles were not fully connected to one another. disconnected tiles {" | ".join([f"{t.x},{t.y}" for t in sorted(unvisited)])}')
+        if USE_DEBUG_ASSERTS:
+            raise Exception(f'the input tiles were not fully connected to one another. disconnected tiles {" | ".join([f"{t.x},{t.y}" for t in sorted(unvisited)])}')
+
+        frTiles = [t for t in tiles if t.player == searchingPlayer]
+        addPath = SearchUtils.a_star_find(frTiles, goal=next(iter(unvisited)), noLog=True)
+        if addPath is None:
+            raise Exception(f'Unable to recover disconnected inputs, aStar find was unable to find a path to reconnect.')
+        tiles.update(addPath.tileList)
+        return build_capture_mst_from_root_and_contiguous_tiles(map, tiles, searchingPlayer, ignoreTiles)
+
+    if USE_DEBUG_ASSERTS:
+        for tile in tiles:
+            dist = dists.raw[tile.tile_index]
+            if dist is None:
+                if USE_DEBUG_ASSERTS:
+                    logbook.info(f'{tile} had dist None???? build_capture_mst_from_root_and_contiguous_tiles inputs: '
+                                 f'\r\n    searchingPlayer {searchingPlayer}'
+                                 f'\r\n    tiles {" | ".join([f"{t.x},{t.y}" for t in sorted(tiles)])}')
+                dists.raw[tile.tile_index] = maxDist
+
+    q: SearchUtils.HeapQueue[typing.Tuple[float, int, Tile, Tile | None, GatherTreeNode | None, int]] = SearchUtils.HeapQueue()
+
+    for tile in tiles:
+        if teams[tile.player] == searchingTeam:
+            continue
+
+        army = 0 - tile.army
+        d = dists.raw[tile.tile_index]
+        if d is None:
+            if USE_DEBUG_ASSERTS:
+                logbook.info(f'{tile} had dist None???? build_capture_mst_from_root_and_contiguous_tiles inputs: '
+                             f'\r\n    searchingPlayer {searchingPlayer}'
+                             f'\r\n    tiles {" | ".join([f"{t.x},{t.y}" for t in sorted(tiles)])}')
+            d = maxDist
+        q.put((-d + 0.01, army, tile, None, None, 0))
+
+        # newNode = GatherTreeNode(tile, None)
+
+    if not q.queue:
+        return []
+
+    tile: Tile
+    fromTile: Tile | None
+    fromNode: GatherTreeNode | None
+
+    nodes = []
+    visitedNodes = MapMatrix(map, None)
+
+    # valLookup = {}
+
+    while q.queue:
+        (thing, army, tile, fromTile, fromNode, fromDepth) = q.get()
+        node = visitedNodes.raw[tile.tile_index]
+        if node is not None:
+            continue
+        # logbook.info(f'popped ({thing}) {tile} <- {fromTile}  ({army}a)')
+        # if fromDepth > maxDepth:
+        #     break
+
+        if node is None:
+            node = GatherTreeNode(tile, fromTile)
+            node.gatherTurns = fromDepth
+            visitedNodes.raw[tile.tile_index] = node
+        node.data = army
+        nodes.append(node)
+
+        if fromNode is not None:
+            fromNode.children.append(node)
+            node.toGather = fromNode
+
+        # valLookup[node.tile] = army
+
+        for t in tile.movable:
+            if t in tiles:
+                if teams[t.player] != searchingTeam:
+                    nextArmy = army + 0 - t.army
+                else:
+                    nextArmy = army + t.army
+                nextArmy -= 1
+
+                # TODO thing - 0.5??? This works for straight lines but wtf does it output for diverged capture paths...?
+                q.put(((thing - dists.raw[t.tile_index]) / 2, nextArmy, t, tile, node, fromDepth + 1))
+
+    roots = []
+    # q2 = deque()
+    for r in nodes:
+        if r.toTile is None:
+            # q2.appendleft(r)
+            # rootArmy = valLookup[r.tile]
             roots.append(r)
     #
     # while q2:
@@ -4074,11 +2638,11 @@ def _prune_bad(curNode: GatherTreeNode, searchingTeam: int, teams: typing.List[i
 #     # curNode.toGather = None
 
 
-def build_mst_to_root_from_path_and_contiguous_tiles(map: MapBase, rootPath: Path, tiles: TileSet, maxDepth: int, reversePath: bool = False) -> GatherTreeNode:
+def build_mst_to_root_from_path_and_contiguous_tiles(map: MapBase, rootPath: Path, tiles: TileSet, maxDepth: int, reversePath: bool = False, searchingPlayer: int = -1) -> GatherTreeNode:
     """Does NOT calculate values"""
     inputList = rootPath.tileList
 
-    rootTiles = build_mst_from_root_and_contiguous_tiles(map, rootTiles=inputList, tiles=tiles, maxDepth=maxDepth)
+    rootTiles = build_mst_from_root_and_contiguous_tiles(map, rootTiles=inputList, tiles=tiles, maxDepth=maxDepth, searchingPlayer=searchingPlayer)
 
     if reversePath:
         rootTiles = list(reversed(rootTiles))
@@ -4099,23 +2663,238 @@ def build_mst_to_root_from_path_and_contiguous_tiles(map: MapBase, rootPath: Pat
     return rootTiles[-1]
 
 
-def clone_nodes(gatherNodes: typing.List[GatherTreeNode]) -> typing.List[GatherTreeNode]:
-    return [n.deep_clone() for n in gatherNodes]
+def prune_raw_connected_nodes_to_turns__dfs(
+        rootTiles: typing.Set[Tile],
+        tilesBeingPruned: typing.Set[Tile],
+        toTurns: int,
+        asPlayer: int,
+        weightMatrix: MapMatrixInterface[float],
+        negativeTiles: TileSet | None = None,
+        logDebug: bool = True
+):
+    startCount = len(tilesBeingPruned)
+    start = time.perf_counter()
+    while len(tilesBeingPruned) - len(rootTiles) > toTurns:
+        def pruneIter() -> Tile:
+            visited = set()
+            # Create two stacks
+
+            s1 = []
+            # s2 = []
+
+            # Push root to first stack
+            s1.extend(rootTiles)
+            prunable = []
+
+            # Run while first stack is not empty
+            while s1:
+                # Pop an item from s1 and
+                # append it to s2
+                tile = s1.pop()
+
+                if tile in visited:
+                    # then there are two ways to get to it? Prunable...? No that would make one of the two (both?) of the sources potentially prunable.
+                    continue
+
+                # s2.append(tile)
+                visited.add(tile)
+
+                # Push left and right children of
+                # removed item to s1
+                anyIncl = False
+                for adj in tile.movable:
+                    if adj not in visited and adj in tilesBeingPruned:
+                        anyIncl = True
+                        s1.append(adj)
+
+                if not anyIncl:
+                    prunable.append(tile)
+
+            # if not prunable.
+
+            prunable.sort(key=lambda t: weightMatrix.raw[t.tile_index])
+
+            return prunable[0]
+
+        tileToPrune = pruneIter()
+        if logDebug:
+            logbook.info(f'  pruning {tileToPrune} {weightMatrix.raw[tileToPrune.tile_index]:.2f}a, left {len(tilesBeingPruned)}, leftRoot {len(rootTiles)} | len(tilesBeingPruned) - len(rootTiles) {len(tilesBeingPruned) - len(rootTiles)} > {toTurns} toTurns')
+        rootTiles.discard(tileToPrune)
+        tilesBeingPruned.discard(tileToPrune)
+
+        if len(rootTiles) == 0:
+            raise Exception(f'pruned root tiles to 0 tiles remaining...? len tiles {len(tilesBeingPruned)} vs startCount {startCount}...?')
+
+    logbook.info(f'prune_raw_connected_nodes_to_turns__dfs took {time.perf_counter() - start:.5f}s to go from {startCount} to {len(tilesBeingPruned)}')
+
+
+
+def prune_raw_connected_nodes_to_turns__bfs(
+        rootTiles: typing.Set[Tile],
+        tilesBeingPruned: typing.Set[Tile],
+        toTurns: int,
+        asPlayer: int,
+        weightMatrix: MapMatrixInterface[float],
+        negativeTiles: TileSet | None = None,
+        logDebug: bool = True
+):
+    startCount = len(tilesBeingPruned)
+    start = time.perf_counter()
+    while len(tilesBeingPruned) - len(rootTiles) > toTurns:
+        def pruneIter() -> Tile:
+            visited = set()
+            # Create two stacks
+
+            s1 = deque()
+            # s2 = []
+
+            # Push root to first stack
+            for t in rootTiles:
+                s1.append((t, None))
+            # s1.extend(rootTiles)
+            prunable = set()
+
+            # Run while first stack is not empty
+            while s1:
+                # Pop an item from s1 and
+                # append it to s2
+                tile, fromTile = s1.popleft()
+
+                if tile in visited:
+                    # then there are two ways to get to it? Prunable...? No that would make one of the two (both?) of the sources potentially prunable.
+                    continue
+
+                # s2.append(tile)
+                visited.add(tile)
+
+                # Push left and right children of
+                # removed item to s1
+                anyIncl = False
+                movable = [t for t in tile.movable]
+                # movable = tile.movable
+                random.shuffle(movable)
+                # for adj in tile.movable:
+                for adj in movable:
+                    if adj in tilesBeingPruned:
+                        if adj not in visited:
+                            anyIncl = True
+                            s1.append((adj, tile))
+                        # elif adj is not fromTile:
+                        #     prunable.add(adj)
+
+                if not anyIncl:
+                    prunable.add(tile)
+
+            # if not prunable.
+
+            prunableL = sorted(prunable, key=lambda t: weightMatrix.raw[t.tile_index])
+
+            return prunableL[0]
+
+        tileToPrune = pruneIter()
+        if logDebug:
+            logbook.info(f'  pruning {tileToPrune} {weightMatrix.raw[tileToPrune.tile_index]:.2f}a, left {len(tilesBeingPruned)}, leftRoot {len(rootTiles)} | len(tilesBeingPruned) - len(rootTiles) {len(tilesBeingPruned) - len(rootTiles)} > {toTurns} toTurns')
+        rootTiles.discard(tileToPrune)
+        tilesBeingPruned.discard(tileToPrune)
+
+        if len(rootTiles) == 0:
+            raise Exception(f'pruned root tiles to 0 tiles remaining...? len tiles {len(tilesBeingPruned)} vs startCount {startCount}...?')
+
+    logbook.info(f'prune_raw_connected_nodes_to_turns__dfs took {time.perf_counter() - start:.5f}s to go from {startCount} to {len(tilesBeingPruned)}')
+
+
+
+# # An iterative function to do postorder
+# # traversal of a given binary tree
+# def postOrderIterative(root):
+#     if root is None:
+#         return
+#
+#         # Create two stacks
+#     s1 = []
+#     s2 = []
+#
+#     # Push root to first stack
+#     s1.append(root)
+#
+#     # Run while first stack is not empty
+#     while s1:
+#
+#         # Pop an item from s1 and
+#         # append it to s2
+#         node = s1.pop()
+#         s2.append(node)
+#
+#         # Push left and right children of
+#         # removed item to s1
+#         if node.left:
+#             s1.append(node.left)
+#         if node.right:
+#             s1.append(node.right)
+#
+#             # Print all elements of second stack
+#     while s2:
+#         node = s2.pop()
+#         print(node.data, end=" ")
+
+# An iterative function to do postorder
+# traversal of a given binary tree
+def postOrderIterative(rootTiles: typing.Iterable[Tile]) -> typing.List[Tile]:
+    visited = set()
+    # Create two stacks
+
+    s1 = []
+    s2 = []
+
+    # Push root to first stack
+    s1.extend(rootTiles)
+    prunable = []
+
+    # Run while first stack is not empty
+    while s1:
+        # Pop an item from s1 and
+        # append it to s2
+        tile = s1.pop()
+
+        if tile in visited:
+            continue
+
+        s2.append(tile)
+        visited.add(tile)
+
+        # Push left and right children of
+        # removed item to s1
+        anyIncl = False
+        for adj in tile.movable:
+            if adj not in visited:
+                anyIncl = True
+                s1.append(adj)
+
+        if not anyIncl:
+            prunable.append(tile)
+
+
+
+    #         # Print all elements of second stack
+    # while s2:
+    #     node = s2.pop()
+    #     print(node.data, end=" ")
+
+    return list(reversed(s2))
 
 
 def build_max_value_gather_tree_linking_specific_nodes(
         map: MapBase,
-        rootTiles: typing.Iterable[Tile],
+        rootTiles: typing.Set[Tile],
         tiles: typing.Iterable[Tile],
+        valueMatrix: MapMatrixInterface[float],
         asPlayer: int = -1,
-        gatherMatrix: MapMatrixInterface[float | None] = None,
-        captureMatrix: MapMatrixInterface[float | None] = None,
         negativeTiles: TileSet | None = None,
-        prioritizeCaptureHighArmyTiles: bool = False,
         useTrueValueGathered: bool = True,
         includeGatherPriorityAsEconValues: bool = False,
         includeCapturePriorityAsEconValues: bool = True,
-        logDebug: bool = False,
+        pruneToTurns: int | None = None,
+        skipTiles: TileSet | None = None,
         viewInfo=None,
 ) -> GatherCapturePlan:
     """
@@ -4129,14 +2908,13 @@ def build_max_value_gather_tree_linking_specific_nodes(
     @param rootTiles: The tile(s) that will be the destination(s) of the gather.
     @param tiles: The tiles that must be included in the gather.
     @param asPlayer:
-    @param gatherMatrix: Priority values for gathered tiles. Only applies to friendly tiles.
-    @param captureMatrix: Priority values for captured tiles. Only applies to non-friendly tiles.
-    @param prioritizeCaptureHighArmyTiles: If true, we'll value pathing through large army enemy territory over pathing through small army enemy territory.
+    @param valueMatrix: the raw value matrix used for gathering. Should include the army gathered, as well as the equivalent value of capturing enemy tiles (as compared to gathering army).
     @param negativeTiles: The negative tile set, as with any other gather. Does not bypass the capture/gather priority matrix values.
     @param useTrueValueGathered: if True, the gathered_value will be the RAW army that ends up on the target tile(s) rather than just the sum of friendly army gathered, excluding army lost traversing enemy tiles.
     @param includeGatherPriorityAsEconValues: if True, the priority matrix values of gathered nodes will be included in the econValue of the plan for gatherNodes.
     @param includeCapturePriorityAsEconValues: if True, the priority matrix values of CAPTURED nodes will be included in the econValue of the plan for enemy tiles in the plan.
-    @param logDebug:
+    @param pruneToTurns: if provided, will prune to turns (with branch pruning)
+    @param skipTiles: tiles to skip
     @param viewInfo: if provided, debug output will be written to the view info tile zones.
     @return:
     """
@@ -4145,48 +2923,85 @@ def build_max_value_gather_tree_linking_specific_nodes(
     if asPlayer == -1:
         asPlayer = map.player_index
 
-    # baseCostOffset = map.largest_army_tile.army + 5
-    baseCostOffset = 0
+    steinerNodes = GatherSteiner.build_network_x_steiner_tree(map, rootTiles.union(tiles), weightMod=valueMatrix, searchingPlayer=asPlayer, baseWeight=10000, bannedTiles=skipTiles)
 
-    weightMatrix = MapMatrix(map, 0 - baseCostOffset)
+    outputTiles = steinerNodes
+    if pruneToTurns is not None:
+        outputTiles = set(steinerNodes)
+        prune_raw_connected_nodes_to_turns__bfs(rootTiles, outputTiles, pruneToTurns, asPlayer, valueMatrix, negativeTiles)
 
-    for t in map.get_all_tiles():
-        # positive weights are not allowed...? Need to find the max and offset, presumably?
-        if map.is_tile_on_team_with(t, asPlayer):
-            weightMatrix.raw[t.tile_index] += t.army
-            if gatherMatrix:
-                weightMatrix.raw[t.tile_index] += gatherMatrix.raw[t.tile_index]
-        else:
-            if prioritizeCaptureHighArmyTiles:
-                weightMatrix.raw[t.tile_index] += t.army
-            else:
-                weightMatrix.raw[t.tile_index] -= t.army
 
-            if captureMatrix:
-                weightMatrix.raw[t.tile_index] += captureMatrix.raw[t.tile_index]
-        if logDebug:
-            logbook.info(f'tile {t} weight: {weightMatrix.raw[t.tile_index]:.3f}')
+        # inclTiles = set(steinerNodes)
+        # if viewInfo:
+        #     viewInfo.add_map_zone(inclTiles, (0, 155, 255), alpha=88)
+        # value, outputTiles = KruskalsSpanningGather.cutesy_chatgpt_gather(map, pruneToTurns, rootTiles, asPlayer, valueMatrix, tilesToInclude=inclTiles, viewInfo=viewInfo)
+        # if viewInfo:
+        #     viewInfo.add_map_zone(outputTiles, (255, 255, 0), alpha=75)
 
-    steinerNodes = GatherSteiner.build_network_x_steiner_tree(map, tiles, asPlayer, weightMod=weightMatrix, baseWeight=1000)
-    # steinerMatrix = MapMatrixSet(map, steinerNodes)
-
-    plan = convert_contiguous_tiles_to_gather_capture_plan(
+    plan = convert_contiguous_tile_tree_to_gather_capture_plan(
         map,
         rootTiles=rootTiles,
-        tiles=steinerNodes,
+        tiles=outputTiles,
         negativeTiles=negativeTiles,
         searchingPlayer=asPlayer,
-        priorityMatrix=weightMatrix,
+        priorityMatrix=valueMatrix,
         useTrueValueGathered=useTrueValueGathered,
         includeGatherPriorityAsEconValues=includeGatherPriorityAsEconValues,
         includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
-        viewInfo=viewInfo,
+        # viewInfo=viewInfo,
     )
 
     usedTime = time.perf_counter() - startTime
     logbook.info(f'build_max_value_gather_tree_linking_specific_nodes complete in {usedTime:.4f}s with {plan}')
 
     return plan
+
+
+def build_gather_capture_pure_value_matrix(
+        map: MapBase,
+        asPlayer: int,
+        negativeTiles: TileSet | None,
+        gatherMatrix: MapMatrixInterface[float] | None,
+        captureMatrix: MapMatrixInterface[float] | None,
+        useTrueValueGathered: bool = False,
+        prioritizeCaptureHighArmyTiles: bool = False,
+        logDebug: bool = False
+) -> MapMatrixInterface[float]:
+    """
+
+    @param map:
+    @param asPlayer:
+    @param negativeTiles:
+    @param gatherMatrix: Priority values for gathered tiles. Only applies to friendly tiles.
+    @param captureMatrix: Priority values for captured tiles. Only applies to non-friendly tiles.
+    @param prioritizeCaptureHighArmyTiles: If true, we'll value pathing through large army enemy territory over pathing through small army enemy territory.
+    @param useTrueValueGathered: if true, enemy tiles will 'subtract' in the output matrix. Cannot be combined with 'prioritizeCaptureHighArmyTiles'
+    @param logDebug:
+    @return:
+    """
+    # baseCostOffset = map.largest_army_tile.army + 5
+    baseCostOffset = 0.0
+    weightMatrix = MapMatrix(map, 0.0 - baseCostOffset)
+    for t in map.get_all_tiles():
+        # positive weights are not allowed...? Need to find the max and offset, presumably?
+        if negativeTiles is not None and t in negativeTiles:
+            weightMatrix.raw[t.tile_index] = 0.0
+        elif map.is_tile_on_team_with(t, asPlayer):
+            weightMatrix.raw[t.tile_index] += t.army - 1
+            if gatherMatrix:
+                weightMatrix.raw[t.tile_index] += gatherMatrix.raw[t.tile_index]
+        else:
+            if useTrueValueGathered:
+                weightMatrix.raw[t.tile_index] -= t.army + 1
+            elif prioritizeCaptureHighArmyTiles:
+                weightMatrix.raw[t.tile_index] += t.army
+
+            if captureMatrix:
+                weightMatrix.raw[t.tile_index] += captureMatrix.raw[t.tile_index]
+        if logDebug:
+            logbook.info(f'tile {t} weight: {weightMatrix.raw[t.tile_index]:.3f}')
+
+    return weightMatrix
 
 
 def gather_approximate_turns_to_tiles(
@@ -4209,6 +3024,7 @@ def gather_approximate_turns_to_tiles(
 ) -> GatherCapturePlan | None:
     """
     When you want to gather a max amount to some specific tile in some rough number of turns.
+    PCST impl currently.
 
     @param map:
     @param approximateTargetTurns: The turns to get the gather to be close to.
@@ -4269,7 +3085,7 @@ def gather_approximate_turns_to_tiles(
         logbook.info(f'gather_approximate_turns_to_tile complete in {usedTime:.4f}s with NO PLAN')
         return None
 
-    plan = convert_contiguous_tiles_to_gather_capture_plan(
+    plan = convert_contiguous_tile_tree_to_gather_capture_plan(
         map,
         rootTiles=rootTiles,
         tiles=steinerNodes,
@@ -4285,3 +3101,85 @@ def gather_approximate_turns_to_tiles(
     logbook.info(f'gather_approximate_turns_to_tile complete in {usedTime:.4f}s with {plan}')
 
     return plan
+
+
+def gath_set_quick(
+        map: MapBase,
+        targetTurns: int,
+        rootTiles: typing.Set[Tile],
+        searchingPlayer: int,
+        valueMatrix: MapMatrixInterface[float],
+        tilesToIncludeIfPossible: typing.Iterable[Tile] | None = None,
+        negativeTiles: TileSet | None = None,
+        useTrueValueGathered: bool = True,
+        includeGatherPriorityAsEconValues: bool = False,
+        includeCapturePriorityAsEconValues: bool = True,
+        skipTiles: TileSet | None = None,
+        viewInfo: ViewInfo | None = None,
+) -> GatherCapturePlan:
+    if tilesToIncludeIfPossible is not None:
+        visited = {t.tile_index for t in tilesToIncludeIfPossible}
+        toTryToInclude = [t for t in tilesToIncludeIfPossible]
+    else:
+        visited = set()
+        toTryToInclude = []
+
+    toSort = (t for t in map.get_all_tiles() if t.tile_index not in visited and map.is_tile_on_team_with(t, searchingPlayer))
+
+    friendlySorted = sorted(
+        toSort,
+        key=lambda t: valueMatrix.raw[t.tile_index] if negativeTiles is None or t not in negativeTiles else 0.0,
+        reverse=True)
+
+    toIdx = targetTurns - len(toTryToInclude)
+    for t in friendlySorted[0:toIdx]:
+        visited.add(t.tile_index)
+        toTryToInclude.append(t)
+
+    # searchSet = FastDisjointSet()
+    # for t in toTryToInclude:
+    #     searchSet.add(t.tile_index)
+    #     for mv in t.movable:
+    #         if mv.tile_index in visited:
+    #             searchSet.merge_fast(t.tile_index, mv.tile_index)
+    #
+    # sets = searchSet.subsets()
+    # setsWithArmy = []
+    # for gathSet in sets:
+    #     armyTotal = 0
+    #     for tIdx in gathSet:
+    #         t = map.tiles_by_index[tIdx]
+    #         armyTotal += t.army
+    #     if gatherRewardMatrix:
+    #         for tIdx in gathSet:
+    #             armyTotal += gatherRewardMatrix.raw[tIdx]
+    #
+    #     setsWithArmy.append((armyTotal, gathSet))
+    # setsWithArmySorted = sorted(setsWithArmy, reverse=True)
+
+    # TODO do something, probably calculate the shortest highish value path between all sets, perhaps?
+    #  Then build a minimum spanning tree joining all of the sets? Then prune that minimum spanning tree, but forceably leave root tiles and cities out of the prune, or something?
+    #  Then SHIP IT
+
+    setTiles = toTryToInclude
+
+    gcp = build_max_value_gather_tree_linking_specific_nodes(
+        map,
+        rootTiles=rootTiles,
+        tiles=setTiles,
+        asPlayer=searchingPlayer,
+        valueMatrix=valueMatrix,
+        negativeTiles=negativeTiles,
+        useTrueValueGathered=useTrueValueGathered,
+        includeGatherPriorityAsEconValues=includeGatherPriorityAsEconValues,
+        includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
+        pruneToTurns=targetTurns,
+        skipTiles=skipTiles,
+        viewInfo=viewInfo
+    )
+
+    return gcp
+
+
+def _dump_log_entries(logEntries: typing.List[str]):
+    logbook.info('\r\n' + '\r\n'.join(logEntries))

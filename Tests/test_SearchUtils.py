@@ -8,7 +8,7 @@ import unittest
 import logbook
 
 import SearchUtils
-from DataModels import Move
+from Models import Move
 from DistanceMapperImpl import DistanceMapperImpl
 from Path import Path
 from SearchUtils import dest_breadth_first_target

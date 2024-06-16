@@ -9,7 +9,7 @@ import SearchUtils
 from ArmyEngine import ArmyEngine, ArmySimResult
 from ArmyTracker import Army
 from BoardAnalyzer import BoardAnalyzer
-from DataModels import Move
+from Models import Move
 from Engine.ArmyEngineModels import calc_value_int, calc_econ_value, ArmySimState
 from MctsLudii import MctsDUCT, MoveSelectionFunction
 from PerformanceTelemetry import PerformanceTelemetry

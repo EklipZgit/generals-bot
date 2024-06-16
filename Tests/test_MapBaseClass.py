@@ -1,7 +1,7 @@
 import typing
 
 import SearchUtils
-from DataModels import Move
+from Models import Move
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
 from base.client.map import MapBase, Tile

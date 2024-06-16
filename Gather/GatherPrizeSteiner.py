@@ -5,6 +5,8 @@ import typing
 from base.client.tile import Tile
 
 # All of this pulled from https://arxiv.org/abs/2405.03792
+# TODO WRITTEN BY CHAT GPT, TWEAKING TO MAKE IT WORK, NEEDS TO BE TESTED
+# TODO ACTUALLY USE THIS
 def pcst_gw(root: Tile, penalties: typing.Dict[Tile, float]) -> typing.Tuple[typing.Set[Tile], typing.Set[Tile]]:
     def initialize():
         forest = set()

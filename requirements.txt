@@ -14,3 +14,7 @@ matplotlib
 heapq_max
 # heap-class  this performed poorly
 # dill
+# if ever need fast dict for int:int or str:str or int:str -> https://github.com/touqir14/Microdict?tab=readme-ov-file
+
+disjoint-set
+unionfind

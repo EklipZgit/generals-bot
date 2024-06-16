@@ -97,6 +97,8 @@ class ViewerHost(object):
 
     def send_update_to_viewer(self, viewInfo: ViewInfo, map: MapBase, isComplete: bool = False):
         try:
+            # if map.turn == 94:  # Proved the problem was contents of viewInfo
+            #     viewInfo = None
             obj = (viewInfo, map, isComplete)
             # import dill
             # try:
@@ -146,12 +148,16 @@ class ViewerHost(object):
 
 
 def _run_main_viewer_loop(update_queue, viewer_event_queue, window_title, cell_width, cell_height, noLog, alignTop, alignLeft, loggingQueue):
-    logbook.info("importing GeneralsViewer")
+    # if not noLog:
+    BotLogging.set_up_logger(logbook.INFO, mainProcess=False, queue=loggingQueue)
+
+    logbook.info("MAIN VIEWER LOOP PROC importing GeneralsViewer")
     from base.viewer import GeneralsViewer
-    logbook.info("newing up GeneralsViewer")
+    logbook.info("MAIN VIEWER LOOP PROC newing up GeneralsViewer")
     viewer = GeneralsViewer(update_queue, viewer_event_queue, window_title, cell_width=cell_width, cell_height=cell_height, no_log=noLog)
 
-    viewer.run_main_viewer_loop(alignTop, alignLeft, loggingQueue)
+    logbook.info("running run_main_viewer_loop...?")
+    viewer.run_main_viewer_loop(alignTop, alignLeft)
 
 
 def get_renderable_view_info(map: MapBase) -> ViewInfo:

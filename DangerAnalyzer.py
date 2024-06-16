@@ -8,7 +8,7 @@
 from ArmyAnalyzer import *
 from ArmyTracker import ArmyTracker
 from SearchUtils import *
-from DataModels import *
+from Models import *
 from enum import Enum
 
 

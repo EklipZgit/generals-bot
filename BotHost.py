@@ -12,7 +12,7 @@ import traceback
 import typing
 
 from ArmyAnalyzer import ArmyAnalyzer
-from DataModels import Move
+from Models import Move
 from MapMatrix import MapMatrix
 from PerformanceTimer import PerformanceTimer, NS_CONVERTER
 from Sim.TextMapLoader import TextMapLoader
@@ -144,8 +144,10 @@ class BotHostBase(object):
                     self.save_txtmap(currentMap)
 
             if self.has_viewer and self._viewer is not None:
-                with moveTimer.begin_event(f'Sending turn {currentMap.turn} update to Viewer'):
+                with moveTimer.begin_event(f'Sorting perfevents for {currentMap.turn} update to Viewer'):
                     self.eklipz_bot.viewInfo.perfEvents.extend(moveTimer.get_events_organized_longest_to_shortest(limit=40, indentSize=2))
+                with moveTimer.begin_event(f'Sending turn {currentMap.turn} update to Viewer'):
+                    # self.eklipz_bot.viewInfo.perfEvents.extend(moveTimer.get_events_organized_longest_to_shortest(limit=40, indentSize=2))
                     self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, currentMap, currentMap.complete)
 
             logbook.info(f'MOVE {currentMap.turn} TIMINGS:\r\n' + '\r\n'.join(moveTimer.get_events_organized_longest_to_shortest(limit=100, indentSize=3)))
@@ -194,7 +196,9 @@ class BotHostBase(object):
                     self.save_txtmap(currentMap)
 
             if self.has_viewer and self._viewer is not None:
-                with moveTimer.begin_event(f'Sending turn {currentMap.turn} update to Viewer'):
+                # with moveTimer.begin_event(f'Prep vi for render {currentMap.turn}'):
+                #     self.eklipz_bot.prep_view_info_for_render(None)
+                with moveTimer.begin_event(f'Sending turn {currentMap.turn} update to Viewer (no move)'):
                     self.eklipz_bot.prep_view_info_for_render(None)
                     self.eklipz_bot.viewInfo.perfEvents.extend(moveTimer.get_events_organized_longest_to_shortest(limit=15, indentSize=2))
                     self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, currentMap, currentMap.complete)

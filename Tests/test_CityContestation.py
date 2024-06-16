@@ -949,3 +949,31 @@ class CityContestationTests(TestBase):
 
         city = playerMap.GetTile(4, 11)
         self.assertOwned(general.player, city)
+    
+    def test_should_contest_en_city_but_then_immediately_recapture_own_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_contest_en_city_but_then_immediately_recapture_own_city___pRJvM4wa2---1--228.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 228, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=228)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '10,6->10,3->12,3->12,2->15,2->15,3')
+        simHost.queue_player_moves_str(general.player, '13,13->12,13')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        cityA = playerMap.GetTile(12, 13)
+
+        def betweenTurnCheck():
+            if playerMap.turn > 229:
+                self.assertOwned(general.player, cityA)
+
+        simHost.run_between_turns(betweenTurnCheck)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        self.assertNoFriendliesKilled(map, general)
+
+        cityB = playerMap.GetTile(15, 3)
+        self.assertOwned(general.player, cityB)

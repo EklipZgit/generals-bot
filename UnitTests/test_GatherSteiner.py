@@ -3,22 +3,22 @@ import time
 
 import logbook
 
-import GatherSteiner
-import GatherUtils
+from Gather import GatherSteiner
+import Gather
 from Algorithms import TileIslandBuilder, MapSpanningUtils
 from Interfaces.MapMatrixInterface import EmptySet
 from MapMatrix import MapMatrix, MapMatrixSet
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
-from ViewInfo import ViewInfo, TargetStyle
+from ViewInfo import TargetStyle
 from base.client.map import MapBase
-from base.viewer import PLAYER_COLORS
 from bot_ek0x45 import EklipZBot
 
 
 class GatherSteinerUnitTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
+        Gather.USE_DEBUG_ASSERTS = True
         super().__init__(methodName)
 
     def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
@@ -47,7 +47,7 @@ class GatherSteinerUnitTests(TestBase):
 
         viewInfo = self.get_renderable_view_info(map)
         viewInfo.add_map_division(steinerMatrix, (0, 255, 255), 200)
-        self.render_view_info(map, viewInfo, 'steiner???')
+        self.render_view_info(map, viewInfo, f'steiner')
 
     def test_should_build_steiner_prize_collection_at_enemy_general(self):
         """
@@ -89,7 +89,7 @@ class GatherSteinerUnitTests(TestBase):
         viewInfo.bottomLeftGridText = gatherMatrix
         viewInfo.bottomRightGridText = captureMatrix
         viewInfo.add_map_division(steinerMatrix, (0, 255, 255), 200)
-        self.render_view_info(map, viewInfo, 'steiner???')
+        self.render_view_info(map, viewInfo, f'steiner')
 
     def test_should_build_steiner_prize_collection_at_enemy_general__large__tile_weights(self):
         """
@@ -115,9 +115,9 @@ class GatherSteinerUnitTests(TestBase):
         viewInfo.bottomLeftGridText = gatherMatrix
         viewInfo.bottomRightGridText = captureMatrix
         viewInfo.add_map_division(steinerMatrix, (0, 255, 255), 200)
-        self.render_view_info(map, viewInfo, 'steiner???')
+        self.render_view_info(map, viewInfo, f'steiner')
 
-    def test_should_build_steiner_prize_collection_at_enemy_general__large__tile_weights__gatherUtils(self):
+    def test_should_build_steiner_prize_collection_at_enemy_general__large__tile_weights__Gather(self):
         """
         This algo seems useless, but more useful than no-enemy-territory.
         """
@@ -135,16 +135,16 @@ class GatherSteinerUnitTests(TestBase):
 
         self.begin_capturing_logging()
 
-        gathPlan = GatherUtils.gather_approximate_turns_to_tiles(map, [enemyGeneral], approximateTargetTurns=57, gatherMatrix=gatherMatrix, captureMatrix=captureMatrix)
+        gathPlan = Gather.gather_approximate_turns_to_tiles(map, [enemyGeneral], approximateTargetTurns=57, gatherMatrix=gatherMatrix, captureMatrix=captureMatrix)
 
         viewInfo = self.get_renderable_view_info(map)
         viewInfo.gatherNodes = gathPlan.root_nodes
         viewInfo.bottomLeftGridText = gatherMatrix
         viewInfo.bottomRightGridText = captureMatrix
         viewInfo.add_map_division(gathPlan.tileSet, (0, 255, 255), 200)
-        self.render_view_info(map, viewInfo, 'steiner???')
+        self.render_view_info(map, viewInfo, f'steiner {gathPlan.length}t with {gathPlan.gathered_army}')
 
-    def test_should_build_steiner_prize_collection_at_enemy_general__large__tile_weights__gatherUtils__multi_tile(self):
+    def test_should_build_steiner_prize_collection_at_enemy_general__large__tile_weights__Gather__multi_tile(self):
         """
         This algo seems useless, but more useful than no-enemy-territory.
         """
@@ -163,16 +163,16 @@ class GatherSteinerUnitTests(TestBase):
         self.begin_capturing_logging()
 
         otherTile = playerMap.GetTile(15, 1)
-        gathPlan = GatherUtils.gather_approximate_turns_to_tiles(map, [enemyGeneral, otherTile], approximateTargetTurns=57, gatherMatrix=gatherMatrix, captureMatrix=captureMatrix)
+        gathPlan = Gather.gather_approximate_turns_to_tiles(map, [enemyGeneral, otherTile], approximateTargetTurns=57, gatherMatrix=gatherMatrix, captureMatrix=captureMatrix)
 
         viewInfo = self.get_renderable_view_info(map)
         viewInfo.gatherNodes = gathPlan.root_nodes
         viewInfo.bottomLeftGridText = gatherMatrix
         viewInfo.bottomRightGridText = captureMatrix
         viewInfo.add_map_division(gathPlan.tileSet, (0, 255, 255), 200)
-        self.render_view_info(map, viewInfo, 'steiner???')
+        self.render_view_info(map, viewInfo, f'steiner {gathPlan.length}t with {gathPlan.gathered_army}')
 
-    def test_should_build_steiner_prize_collection_at_enemy_general__large__tile_weights__gatherUtils__multi_tile_short(self):
+    def test_should_build_steiner_prize_collection_at_enemy_general__large__tile_weights__Gather__multi_tile_short(self):
         """
         This algo seems useless, but more useful than no-enemy-territory.
         """
@@ -191,7 +191,7 @@ class GatherSteinerUnitTests(TestBase):
         self.begin_capturing_logging()
 
         otherTile = playerMap.GetTile(15, 1)
-        gathPlan = GatherUtils.gather_approximate_turns_to_tiles(map, [enemyGeneral, otherTile], approximateTargetTurns=30, gatherMatrix=gatherMatrix, captureMatrix=captureMatrix)
+        gathPlan = Gather.gather_approximate_turns_to_tiles(map, [enemyGeneral, otherTile], approximateTargetTurns=30, gatherMatrix=gatherMatrix, captureMatrix=captureMatrix)
 
         if debugMode:
             viewInfo = self.get_renderable_view_info(map)
@@ -202,7 +202,7 @@ class GatherSteinerUnitTests(TestBase):
             self.render_view_info(map, viewInfo, 'steiner???')
         self.assertGreaterEqual(gathPlan.gathered_army, 250)
 
-    def test_should_build_steiner_prize_collection_at_enemy_general__large__tile_weights__gatherUtils__multi_tile_short__other(self):
+    def test_should_build_steiner_prize_collection_at_enemy_general__large__tile_weights__Gather__multi_tile_short__other(self):
         """
         This algo seems useless, but more useful than no-enemy-territory.
         """
@@ -221,7 +221,7 @@ class GatherSteinerUnitTests(TestBase):
         self.begin_capturing_logging()
 
         otherTile = playerMap.GetTile(15, 1)
-        gathPlan = GatherUtils.gather_approximate_turns_to_tiles(map, [enemyGeneral, otherTile], approximateTargetTurns=43, gatherMatrix=gatherMatrix, captureMatrix=captureMatrix)
+        gathPlan = Gather.gather_approximate_turns_to_tiles(map, [enemyGeneral, otherTile], approximateTargetTurns=43, gatherMatrix=gatherMatrix, captureMatrix=captureMatrix)
 
         if debugMode:
             viewInfo = self.get_renderable_view_info(map)
@@ -232,7 +232,7 @@ class GatherSteinerUnitTests(TestBase):
             self.render_view_info(map, viewInfo, 'steiner???')
         self.assertGreaterEqual(gathPlan.gathered_army, 250)
 
-    def test_should_build_steiner_prize_collection_at_enemy_general__large__tile_weights__gatherUtils__never_exceed(self):
+    def test_should_build_steiner_prize_collection_at_enemy_general__large__tile_weights__Gather__never_exceed(self):
         """
         This algo seems useless, but more useful than no-enemy-territory.
         """
@@ -256,7 +256,7 @@ class GatherSteinerUnitTests(TestBase):
             for maxTurnOffs in range(0, 10, 2):
                 maxTurns = targetTurns + maxTurnOffs
 
-                gathPlan = GatherUtils.gather_approximate_turns_to_tiles(map, [enemyGeneral, otherTile], approximateTargetTurns=targetTurns, gatherMatrix=gatherMatrix, captureMatrix=captureMatrix, maxTurns=maxTurns)
+                gathPlan = Gather.gather_approximate_turns_to_tiles(map, [enemyGeneral, otherTile], approximateTargetTurns=targetTurns, gatherMatrix=gatherMatrix, captureMatrix=captureMatrix, maxTurns=maxTurns)
                 if gathPlan is None:
                     if targetTurns > 34:
                         self.fail(f'targetTurns {targetTurns}, maxTurns {maxTurns} produced NO gather plan')
@@ -345,7 +345,7 @@ class GatherSteinerUnitTests(TestBase):
 
         viewInfo = self.get_renderable_view_info(map)
         viewInfo.add_map_division(steinerMatrix, (0, 255, 255), 200)
-        self.render_view_info(map, viewInfo, 'steiner???')
+        self.render_view_info(map, viewInfo, f'steiner')
 
     def test_should_build_steiner_respecting_value_matrix(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -379,19 +379,144 @@ class GatherSteinerUnitTests(TestBase):
         gatherMatrix = bot.get_gather_tiebreak_matrix()
         captureMatrix = bot.get_expansion_weight_matrix()
 
-        plan = GatherUtils.build_max_value_gather_tree_linking_specific_nodes(
+        valueMatrix = Gather.build_gather_capture_pure_value_matrix(map, general.player, None, gatherMatrix, captureMatrix, prioritizeCaptureHighArmyTiles=False)
+        plan = Gather.build_max_value_gather_tree_linking_specific_nodes(
             map,
-            [enemyGeneral],
+            {enemyGeneral},
             tiles,
-            general.player,
-            gatherMatrix=gatherMatrix,
-            captureMatrix=captureMatrix,
+            valueMatrix=valueMatrix
         )
 
         viewInfo = self.get_renderable_view_info(map)
         viewInfo.add_map_division(plan.tileSet, (0, 255, 255), 200)
         viewInfo.gatherNodes = plan.root_nodes
-        self.render_view_info(map, viewInfo, 'steiner???')
+        self.render_view_info(map, viewInfo, f'steiner {plan.length}t with {plan.gathered_army}')
+
+    def test_should_build_quick_gath_max_steiner(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        # self.render_map(map)
+        self.begin_capturing_logging()
+        #
+        # tiles = [
+        #     map.GetTile(10, 5),
+        #     map.GetTile(5, 3),
+        #     map.GetTile(13, 4),
+        #     map.GetTile(13, 1),
+        #     map.GetTile(10, 0),
+        #     map.GetTile(9, 15),
+        #     map.GetTile(1, 16),
+        #     map.GetTile(9, 7),
+        #     # map.GetTile(),
+        #     # map.GetTile(),
+        #     # map.GetTile(),
+        #     # map.GetTile(),
+        #     # map.GetTile(),
+        # ]
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        gatherMatrix = bot.get_gather_tiebreak_matrix()
+        captureMatrix = bot.get_expansion_weight_matrix()
+        negs = {
+            # map.GetTile(10, 0),
+            # map.GetTile(9, 15),
+        }
+
+        valueMatrix = Gather.build_gather_capture_pure_value_matrix(map, general.player, negs, gatherMatrix, captureMatrix, prioritizeCaptureHighArmyTiles=False)
+
+        viewInfo = self.get_renderable_view_info(map)
+        plan = Gather.gath_set_quick(
+            map,
+            targetTurns=38,
+            rootTiles={enemyGeneral},
+            searchingPlayer=general.player,
+            tilesToIncludeIfPossible={general},
+            negativeTiles=negs,
+            valueMatrix=valueMatrix,
+            viewInfo=viewInfo
+        )
+
+        viewInfo.add_map_division(plan.tileSet, (0, 255, 255), 200)
+        viewInfo.gatherNodes = plan.root_nodes
+        self.render_view_info(map, viewInfo, f'steiner {plan.length}t with {plan.gathered_army}')
+
+    def test_should_build_chatgpt_max_steiner(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        # self.render_map(map)
+        self.begin_capturing_logging()
+        #
+        # tiles = [
+        #     map.GetTile(10, 5),
+        #     map.GetTile(5, 3),
+        #     map.GetTile(13, 4),
+        #     map.GetTile(13, 1),
+        #     map.GetTile(10, 0),
+        #     map.GetTile(9, 15),
+        #     map.GetTile(1, 16),
+        #     map.GetTile(9, 7),
+        #     # map.GetTile(),
+        #     # map.GetTile(),
+        #     # map.GetTile(),
+        #     # map.GetTile(),
+        #     # map.GetTile(),
+        # ]
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        gatherMatrix = bot.get_gather_tiebreak_matrix()
+        captureMatrix = bot.get_expansion_weight_matrix()
+        negs = {
+            map.GetTile(10, 0),
+            # map.GetTile(9, 15),
+        }
+
+        valueMatrix = Gather.build_gather_capture_pure_value_matrix(map, general.player, negs, gatherMatrix, captureMatrix, prioritizeCaptureHighArmyTiles=False)
+        rootTiles = {enemyGeneral}
+
+        viewInfo = self.get_renderable_view_info(map)
+
+        val, gathSet = Gather.cutesy_chatgpt_gather(
+            map,
+            targetTurns=37,
+            rootTiles=rootTiles,
+            searchingPlayer=general.player,
+            # tilesToIncludeIfPossible={general},
+            # negativeTiles=negs,
+            valueMatrix=valueMatrix,
+            viewInfo=viewInfo,
+        )
+        viewInfo.add_map_zone(gathSet, (100, 255, 100), 200)
+
+        plan = Gather.convert_contiguous_tile_tree_to_gather_capture_plan(
+            map,
+            rootTiles=rootTiles,
+            tiles=gathSet,
+            searchingPlayer=general.player,
+            priorityMatrix=valueMatrix,
+            negativeTiles=negs,
+            # useTrueValueGathered=useTrueValueGathered,
+            # includeGatherPriorityAsEconValues=includeGatherPriorityAsEconValues,
+            # includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
+            # pruneToTurns=targetTurns,
+            # skipTiles=skipTiles,
+            # captures={t for t in gathSet if not map.is_tile_on_team_with(t, general.player)},
+            viewInfo=None
+        )
+        viewInfo.add_map_division(plan.tileSet, (0, 255, 255), 200)
+        viewInfo.gatherNodes = plan.root_nodes
+        self.render_view_info(map, viewInfo, f'chatGpt steiner {plan.length}t with {plan.gathered_army}')
 
     def test_should_build_steiner_respecting_large_amount_of_subtree_nodes(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -429,13 +554,12 @@ class GatherSteinerUnitTests(TestBase):
         captureMatrix = bot.get_expansion_weight_matrix()
 
         steinerGatherStart = time.perf_counter()
-        plan = GatherUtils.build_max_value_gather_tree_linking_specific_nodes(
+        valueMatrix = Gather.build_gather_capture_pure_value_matrix(map, general.player, None, gatherMatrix, captureMatrix, prioritizeCaptureHighArmyTiles=False)
+        plan = Gather.build_max_value_gather_tree_linking_specific_nodes(
             map,
-            [enemyGeneral],
+            {enemyGeneral},
             tiles,
-            general.player,
-            gatherMatrix=gatherMatrix,
-            captureMatrix=captureMatrix,
+            valueMatrix=valueMatrix
         )
         steinerGatherTime = time.perf_counter()-steinerGatherStart
 
@@ -444,7 +568,7 @@ class GatherSteinerUnitTests(TestBase):
 
         viewInfo.add_map_division(plan.tileSet, (0, 255, 255), 200)
         viewInfo.gatherNodes = plan.root_nodes
-        self.render_view_info(map, viewInfo, f'steiner {plan.gather_turns}t in {steinerGatherTime:.5f} with {plan.gathered_army}')
+        self.render_view_info(map, viewInfo, f'steiner {plan.length}t in {steinerGatherTime:.5f} with {plan.gathered_army}')
 
     def test_network_x_steiner_should_be_faster_and_better_than_old_gather(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -500,21 +624,19 @@ class GatherSteinerUnitTests(TestBase):
         # self.render_map(map)
         self.begin_capturing_logging()
         steinerGatherStart = time.perf_counter()
-        plan = GatherUtils.build_max_value_gather_tree_linking_specific_nodes(
+        valueMatrix = Gather.build_gather_capture_pure_value_matrix(map, general.player, None, gatherMatrix, captureMatrix, prioritizeCaptureHighArmyTiles=False)
+        plan = Gather.build_max_value_gather_tree_linking_specific_nodes(
             map,
-            [enemyGeneral],
+            {enemyGeneral},
             tiles,
-            general.player,
-            gatherMatrix=gatherMatrix,
-            captureMatrix=captureMatrix,
-            prioritizeCaptureHighArmyTiles=False,
+            valueMatrix=valueMatrix,
             viewInfo=viewInfo,
         )
         steinerGatherTime = time.perf_counter()-steinerGatherStart
 
         oldGathViewInfo = self.get_renderable_view_info(map)
         oldGatherStart = time.perf_counter()
-        value, oldGatherNodes = GatherUtils.knapsack_levels_backpack_gather_with_value(
+        value, oldGatherNodes = Gather.knapsack_levels_backpack_gather_with_value(
             map,
             [enemyGeneral],
             turns=plan.length,
@@ -531,7 +653,7 @@ class GatherSteinerUnitTests(TestBase):
             priorityMatrix=equivMatrix,
             shouldLog=False)
         oldGatherTime = time.perf_counter()-oldGatherStart
-        oldPlan = GatherUtils.GatherCapturePlan.build_from_root_nodes(
+        oldPlan = Gather.GatherCapturePlan.build_from_root_nodes(
             map,
             oldGatherNodes,
             negativeTiles=None,

@@ -1,29 +1,38 @@
 import heapq
-import itertools
 import time
 import typing
 
 import networkx as nx
 
 import logbook
-import numpy as np
 from pcst_fast import pcst_fast
 
 from Interfaces import TileSet
-from MapMatrix import MapMatrixInterface, MapMatrixSet, MapMatrix
-from MctsLudii import MctsDUCT
+from MapMatrix import MapMatrixInterface, MapMatrix
 from base.client.map import MapBase, Tile
 
 
 def build_network_x_steiner_tree(
         map: MapBase,
         includingTiles: typing.Iterable[Tile],
+        weightMod: MapMatrixInterface[float],
         searchingPlayer=-2,
-        weightMod: MapMatrixInterface[float] | None = None,
         baseWeight: int = 1,
         bannedTiles: typing.Container[Tile] | None = None,
         # faster: bool = False
 ) -> typing.List[Tile]:
+    """
+    Builds an arbitrarily sized steiner tree (connected to includingTiles) based on some baseWeight.
+    Non-iterative, this just does single network x steiner tree.
+
+    @param map:
+    @param includingTiles:
+    @param searchingPlayer:
+    @param weightMod:
+    @param baseWeight:
+    @param bannedTiles:
+    @return:
+    """
     # bannedTiles = None
     start = time.perf_counter()
     ogStart = start
@@ -48,7 +57,7 @@ def build_network_x_steiner_tree(
     nextTime = time.perf_counter()
     logbook.info(f'steiner calc in {nextTime - start:.5f}s')
     start = nextTime
-    includedNodes = [map.get_tile_by_tile_index(n) for n in steinerTree.nodes]
+    includedNodes = [map.tiles_by_index[n] for n in steinerTree.nodes]
 
     nextTime = time.perf_counter()
     logbook.info(f'includedNodes in {nextTime - start:.5f}s')
@@ -57,24 +66,6 @@ def build_network_x_steiner_tree(
     logbook.info(f'networkX steiner calculated {len(includedNodes)} node subtree in {complete:.5f}s')
 
     return includedNodes
-
-
-def plot_mst(g: nx.Graph):
-    import matplotlib.pyplot as plt
-    # Find the minimum spanning tree
-    T = nx.minimum_spanning_tree(g)
-
-    # Visualize the graph and the minimum spanning tree
-    pos = nx.spring_layout(g)
-    nx.draw_networkx_nodes(g, pos, node_color="lightblue", node_size=500)
-    nx.draw_networkx_edges(g, pos, edge_color="grey")
-    nx.draw_networkx_labels(g, pos, font_size=12, font_family="sans-serif")
-    nx.draw_networkx_edge_labels(
-        g, pos, edge_labels={(u, v): d["weight"] for u, v, d in g.edges(data=True)}
-    )
-    nx.draw_networkx_edges(T, pos, edge_color="green", width=2)
-    plt.axis("off")
-    plt.show()
 
 #  SLOWER
 # def build_networkX_graph(
@@ -135,7 +126,7 @@ def plot_mst(g: nx.Graph):
 
 def build_networkX_graph_flat_add(
         map: MapBase,
-        weightMod: MapMatrixInterface[float] | None = None,
+        weightMod: MapMatrixInterface[float],
         baseWeight: int = 1,
         bannedTiles: typing.Container[Tile] | None = None
 ) -> nx.Graph:
@@ -153,8 +144,7 @@ def build_networkX_graph_flat_add(
         if tile.isObstacle or (bannedTiles is not None and tile in bannedTiles):
             fromWeight += baseWeight * 1000
 
-        if weightMod:
-            fromWeight -= weightMod.raw[tile.tile_index]
+        fromWeight -= weightMod.raw[tile.tile_index]
 
         right = map.GetTile(tile.x + 1, tile.y)
         down = map.GetTile(tile.x, tile.y + 1)
@@ -164,8 +154,7 @@ def build_networkX_graph_flat_add(
             if right.isObstacle or (bannedTiles is not None and right in bannedTiles):
                 weight += baseWeight * 1000
 
-            if weightMod:
-                weight -= weightMod.raw[right.tile_index]
+            weight -= weightMod.raw[right.tile_index]
 
             g.add_edge(tileIndex, right.tile_index, weight=weight)
         if down and not down.isObstacle:
@@ -173,8 +162,7 @@ def build_networkX_graph_flat_add(
             if down.isObstacle or (bannedTiles is not None and down in bannedTiles):
                 weight += baseWeight * 1000
 
-            if weightMod:
-                weight -= weightMod.raw[down.tile_index]
+            weight -= weightMod.raw[down.tile_index]
 
             g.add_edge(tileIndex, down.tile_index, weight=weight)
 

@@ -4,13 +4,13 @@ import typing
 from enum import Enum
 
 import DebugHelper
-import GatherUtils
+import Gather
 import SearchUtils
 from BoardAnalyzer import BoardAnalyzer
 from CityAnalyzer import CityAnalyzer
-from DataModels import GatherTreeNode
+from Models import GatherTreeNode
 from MapMatrix import TileSet
-from GatherUtils import GatherCapturePlan
+from Gather import GatherCapturePlan
 from Path import Path
 from Territory import TerritoryClassifier
 from .OpponentTracker import OpponentTracker
@@ -371,7 +371,7 @@ class WinConditionAnalyzer(object):
             forceFogRisk: bool = False,
             negativeTiles: typing.Set[Tile] | None = None,
             noLog: bool = False,
-    ) -> GatherUtils.GatherCapturePlan:
+    ) -> Gather.GatherCapturePlan:
         """
         Does NOT include the army ON the target tile.
 
@@ -397,7 +397,7 @@ class WinConditionAnalyzer(object):
         bestValue = 0
         bestFogRisk = 0
 
-        value, gatherNodes = GatherUtils.knapsack_levels_backpack_gather_with_value(
+        value, gatherNodes = Gather.knapsack_levels_backpack_gather_with_value(
             self.map,
             tiles,
             inTurns - 1,
@@ -429,8 +429,8 @@ class WinConditionAnalyzer(object):
         elif not noLog:
             logbook.info(f'<  RAW gather attack {fogRiskValue} in {inTurns}, < best {bestValue}')
 
-        prunedGatherTurns, prunedValue, prunedGatherNodes = GatherUtils.prune_mst_to_max_army_per_turn_with_values(
-            GatherUtils.clone_nodes(gatherNodes),
+        prunedGatherTurns, prunedValue, prunedGatherNodes = Gather.prune_mst_to_max_army_per_turn_with_values(
+            GatherTreeNode.clone_nodes(gatherNodes),
             minArmy=1,
             searchingPlayer=asPlayer,
             teams=MapBase.get_teams_array(self.map),
@@ -473,7 +473,7 @@ class WinConditionAnalyzer(object):
         if not noLog:
             logbook.info(f'concluded get_approximate_attack_against, value {fogRiskValue} or {prunedFogRiskValue} or {attackPathRiskVal}')
 
-        plan = GatherUtils.GatherCapturePlan.build_from_root_nodes(
+        plan = Gather.GatherCapturePlan.build_from_root_nodes(
             self.map,
             bestPlan,
             negativeTiles=negativeTiles,
@@ -523,7 +523,7 @@ class WinConditionAnalyzer(object):
             timeLimit: float = 0.05,
             minArmy: int = 1,
             negativeTiles: typing.Set[Tile] | None = None
-    ) -> GatherUtils.GatherCapturePlan:
+    ) -> Gather.GatherCapturePlan:
         """
         Max-value-per-turn known tile gather + fog option, or full gather minus fog option.
         Use for players you have full vision of, or when you do not want to include the players fogRisk army.
@@ -537,7 +537,7 @@ class WinConditionAnalyzer(object):
         if negativeTiles is not None:
             negs.update(negativeTiles)
 
-        value, gatherNodes = GatherUtils.knapsack_levels_backpack_gather_with_value(
+        value, gatherNodes = Gather.knapsack_levels_backpack_gather_with_value(
             self.map,
             tiles,
             maxTurns,
@@ -560,7 +560,7 @@ class WinConditionAnalyzer(object):
         logbook.info(f'concluded get_dynamic_visible_defense_against gather, value {value}')
 
         if value > 0:
-            prunedTurns, prunedValue, prunedNodes = GatherUtils.prune_mst_to_max_army_per_turn_with_values(
+            prunedTurns, prunedValue, prunedNodes = Gather.prune_mst_to_max_army_per_turn_with_values(
                 gatherNodes,
                 minArmy=minArmy,
                 searchingPlayer=asPlayer,
@@ -575,7 +575,7 @@ class WinConditionAnalyzer(object):
 
             logbook.info(f'concluded get_dynamic_visible_defense_against prune, value {prunedValue}')
 
-            plan = GatherUtils.GatherCapturePlan.build_from_root_nodes(
+            plan = Gather.GatherCapturePlan.build_from_root_nodes(
                 self.map,
                 prunedNodes,
                 negativeTiles=negativeTiles,
@@ -590,7 +590,7 @@ class WinConditionAnalyzer(object):
             return plan
 
         logbook.info(f'concluded get_dynamic_visible_defense_against zeros')
-        return GatherUtils.GatherCapturePlan(
+        return Gather.GatherCapturePlan(
             [],
             self.map,
             econValue=0.0,
@@ -639,7 +639,7 @@ class WinConditionAnalyzer(object):
             timeLimit: float = 0.005,
             negativeTiles: TileSet | None = None,
             minTurns: int = 0
-    ) -> GatherUtils.GatherCapturePlan:
+    ) -> Gather.GatherCapturePlan:
         """
         returns gather capture plan.
         Max-value-per-turn known tile gather + fog option.
@@ -658,7 +658,7 @@ class WinConditionAnalyzer(object):
         if DebugHelper.IS_DEBUGGING:
             timeLimit *= 4
 
-        value, gatherNodes = GatherUtils.knapsack_levels_backpack_gather_with_value(
+        value, gatherNodes = Gather.knapsack_levels_backpack_gather_with_value(
             self.map,
             curTiles,
             maxTurns,
@@ -689,7 +689,7 @@ class WinConditionAnalyzer(object):
         finalNodes = []
 
         if attackVal > 0:
-            prunedTurns, prunedValue, prunedNodes = GatherUtils.prune_mst_to_max_army_per_turn_with_values(
+            prunedTurns, prunedValue, prunedNodes = Gather.prune_mst_to_max_army_per_turn_with_values(
                 [g.deep_clone() for g in gatherNodes],
                 minArmy=1,
                 searchingPlayer=asPlayer,
@@ -717,7 +717,7 @@ class WinConditionAnalyzer(object):
         else:
             logbook.info(f'concluded get_dynamic_attack_against, zeros')
 
-        plan = GatherUtils.GatherCapturePlan.build_from_root_nodes(
+        plan = Gather.GatherCapturePlan.build_from_root_nodes(
             self.map,
             finalNodes,
             negativeTiles=negativeTiles,
@@ -779,7 +779,7 @@ class WinConditionAnalyzer(object):
             attackingPlayer: int = -1,
             defendingPlayer: int = -1,
             noLog: bool = False
-    ) -> typing.Tuple[GatherUtils.GatherCapturePlan, GatherUtils.GatherCapturePlan]:
+    ) -> typing.Tuple[Gather.GatherCapturePlan, Gather.GatherCapturePlan]:
         """
         returns attackPlan, defensePlan
 
@@ -851,7 +851,7 @@ class WinConditionAnalyzer(object):
 
         fogValue = SearchUtils.Counter(0)
 
-        for node in GatherUtils.iterate_tree_nodes(gatherNodes):
+        for node in GatherTreeNode.iterate_tree_nodes(gatherNodes):
             if node.tile.visible:
                 continue
 

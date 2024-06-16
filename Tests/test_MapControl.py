@@ -1,6 +1,6 @@
 import DebugHelper
-import GatherUtils
-from DataModels import Move
+import Gather
+from Models import Move
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
@@ -14,7 +14,7 @@ class MapControlTests(TestBase):
 
         bot.info_render_gather_values = True
         # bot.info_render_centrality_distances = True
-        GatherUtils.USE_DEBUG_ASSERTS = True
+        Gather.USE_DEBUG_ASSERTS = True
         DebugHelper.IS_DEBUGGING = True
         bot.info_render_expansion_matrix_values = True
         # bot.info_render_general_undiscovered_prediction_values = True

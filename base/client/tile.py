@@ -134,18 +134,24 @@ class TileDelta(object):
         state = self.__dict__.copy()
 
         if self.fromTile is not None:
-            state["fromTile"] = f'{self.fromTile.x},{self.fromTile.y}'
+            state["fromTile"] = f'{self.fromTile.x},{self.fromTile.y}:{self.fromTile.tile_index}'
         if self.toTile is not None:
-            state["toTile"] = f'{self.toTile.x},{self.toTile.y}'
+            state["toTile"] = f'{self.toTile.x},{self.toTile.y}:{self.toTile.tile_index}'
         return state
 
     def __setstate__(self, state):
         if state['fromTile'] is not None:
             x, y = state['fromTile'].split(',')
-            state["fromTile"] = Tile(int(x), int(y))
+            y, index = y.split(':')
+            copy = Tile(int(x), int(y))
+            copy.tile_index = int(index)
+            state["fromTile"] = copy
         if state['toTile'] is not None:
             x, y = state['toTile'].split(',')
-            state["toTile"] = Tile(int(x), int(y))
+            y, index = y.split(':')
+            copy = Tile(int(x), int(y))
+            copy.tile_index = int(index)
+            state["toTile"] = copy
         self.__dict__.update(state)
 
 

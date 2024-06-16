@@ -16,7 +16,7 @@ import DebugHelper
 from Algorithms import TileIslandBuilder
 from ArmyAnalyzer import ArmyAnalyzer
 import EarlyExpandUtils
-import GatherUtils
+import Gather
 import SearchUtils
 import base
 from ArmyEngine import ArmySimResult
@@ -25,7 +25,7 @@ from Behavior.ArmyInterceptor import ArmyInterception, ArmyInterceptor, Intercep
 from BehaviorAlgorithms.IterativeExpansion import FlowExpansionPlanOption, IslandFlowNode, ArmyFlowExpander, IslandMaxFlowGraph
 from BoardAnalyzer import BoardAnalyzer
 from DangerAnalyzer import ThreatType, ThreatObj
-from DataModels import Move
+from Models import Move
 from DistanceMapperImpl import DistanceMapperImpl
 from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrix, MapMatrixSet
@@ -44,7 +44,7 @@ __unittest = True
 
 
 class TestBase(unittest.TestCase):
-    GLOBAL_BYPASS_REAL_TIME_TEST = False
+    GLOBAL_BYPASS_REAL_TIME_TEST = True
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -670,14 +670,14 @@ class TestBase(unittest.TestCase):
     def disable_search_time_limits_and_enable_debug_asserts(self):
         SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING = DebugHelper.IS_DEBUGGING
         EarlyExpandUtils.DEBUG_ASSERTS = True
-        GatherUtils.USE_DEBUG_ASSERTS = True
+        Gather.USE_DEBUG_ASSERTS = True
         BotHost.FORCE_NO_VIEWER = False
         base.client.map.ENABLE_DEBUG_ASSERTS = True
 
     def enable_search_time_limits_and_disable_debug_asserts(self):
         SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING = False
         EarlyExpandUtils.DEBUG_ASSERTS = False
-        GatherUtils.USE_DEBUG_ASSERTS = False
+        Gather.USE_DEBUG_ASSERTS = False
         BotHost.FORCE_NO_VIEWER = False
         base.client.map.ENABLE_DEBUG_ASSERTS = False
 
@@ -918,8 +918,12 @@ class TestBase(unittest.TestCase):
         self.assertEqual(mapTile.isMountain, playerTile.isMountain, f'tile {x},{y} isMountain mismatched for p{player_index}')
         self.assertEqual(mapTile.isGeneral, playerTile.isGeneral, f'tile {x},{y} isGeneral mismatched for p{player_index}')
 
-    def assertNoFriendliesKilled(self, map: MapBase, general: Tile, allyGen: Tile | None = None):
+    def assertNoFriendliesKilled(self, map: MapBase, general: Tile | None = None, allyGen: Tile | None = None):
         """If the ally was alive at sim start (their general is not None) then assert they still own their general and that our general wasnt captured either."""
+        if general is None:
+            general = map.generals[map.player_index]
+            self.assertIsNotNone(general, "bot had no general")
+
         if allyGen is not None:
             self.assertTrue(allyGen.isGeneral, "ally was killed")
             self.assertTrue(allyGen.player in map.teammates, "ally was killed")
@@ -1327,6 +1331,13 @@ class TestBase(unittest.TestCase):
         return enemyGeneral
 
     def update_tile_army_in_place(self, map: MapBase, tile: Tile, newArmy: int):
+        """
+
+        @param map:
+        @param tile:
+        @param newArmy:
+        @return:
+        """
         oldArmy = tile.army
         diff = newArmy - oldArmy
         inc = 1 if diff < 0 else -1
@@ -1346,7 +1357,7 @@ class TestBase(unittest.TestCase):
                 raise AssertionError(f'unable to manipulate tiles, no tiles were able to be altered.')
         tile.army = newArmy
 
-    def update_tile_preserving_player_army(self, map: MapBase, tile: Tile, newPlayer: int, newArmy: int):
+    def update_tile_player_preserving_player_army(self, map: MapBase, tile: Tile, newPlayer: int, newArmy: int):
         if tile.player != -1 and tile.player != newPlayer:
             raise NotImplementedError('havent implemented converting one players tiles to the others yet, as need to increase old players other army to compensate')
 
@@ -1370,12 +1381,28 @@ class TestBase(unittest.TestCase):
             if not player.dead and player.index != simHost.sim.sim_map.player_index:
                 simHost.queue_player_leafmoves(player.index)
 
-    def run_army_flow_expansion(self, map: MapBase, general: Tile, enemyGeneral: Tile, turns: int, negativeTiles: typing.Set[Tile] | None = None, debugMode: bool = False, renderThresh: int = 10000, tileIslandSize: int | None = None, shouldRender: bool = True) -> typing.List[FlowExpansionPlanOption]:
+    def run_army_flow_expansion(
+            self,
+            map: MapBase,
+            general: Tile,
+            enemyGeneral: Tile,
+            turns: int,
+            negativeTiles: typing.Set[Tile] | None = None,
+            debugMode: bool = False,
+            renderThresh: int = 10000,
+            tileIslandSize: int | None = None,
+            shouldRender: bool = True,
+            timeLimit: float | None = None
+    ) -> typing.List[FlowExpansionPlanOption]:
+        cutoffTime = None
+        if timeLimit is not None:
+            cutoffTime = time.perf_counter() + timeLimit
         start = time.perf_counter()
         builder = TileIslandBuilder(map, averageTileIslandSize=tileIslandSize)
         builder.recalculate_tile_islands(enemyGeneral)
         analysis = BoardAnalyzer(map, general)
         analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        Gather.USE_DEBUG_ASSERTS = True
 
         # if debugMode:
         #     self.render_tile_islands(map, builder)
@@ -1385,10 +1412,10 @@ class TestBase(unittest.TestCase):
         expander.enemyGeneral = enemyGeneral
         expander.debug_render_capture_count_threshold = renderThresh
         expander.log_debug = debugMode
-        # expander.log_debug = False
+        expander.log_debug = False
         expander.use_debug_asserts = debugMode
         expander.use_debug_asserts = False
-        # expander.use_flow_bypass = False
+        # expander.use_min_cost_flow_edges_only = False
 
         renderAll = False
         renderAll = True
@@ -1402,6 +1429,7 @@ class TestBase(unittest.TestCase):
             boardAnalysis=analysis,
             territoryMap=None,
             negativeTiles=negativeTiles,
+            cutoffTime=cutoffTime,
         )
 
         logbook.info(f'full islands + expand completed in {time.perf_counter() - start:.5f}s in total.')
@@ -1985,6 +2013,24 @@ class TestBase(unittest.TestCase):
                 maxVt = vt
 
         return bestOpt
+
+    def render_gather_capture_plan(self, map: MapBase, plan: Gather.GatherCapturePlan, player: int = -1, targetPlayer: int = -1, info: str | None = None):
+        viewInfo = self.get_renderable_view_info(map)
+        if player == -1:
+            player = map.player_index
+
+        if info is None:
+            info = f'gcp {plan}'
+
+        if targetPlayer == -1:
+            for t in plan.tileSet:
+                if t.player != -1 and not map.is_tile_on_team_with(t, player):
+                    targetPlayer = t.player
+                    break
+
+        ArmyFlowExpander.add_flow_expansion_option_to_view_info(map, plan, player, tgPlayer=targetPlayer, viewInfo=viewInfo)
+
+        self.render_view_info(map, viewInfo, info)
 
     def render_intercept_plan(self, map: MapBase, plan: ArmyInterception, colorIndex: int = 0, renderIndividualAnalysis: bool = False, viewInfoMod: typing.Callable[[ViewInfo], None] | None = None):
         viewInfo = self.get_renderable_view_info(map)

@@ -180,10 +180,10 @@ class TileIslandBuilder(object):
 
         self.tile_islands_by_player: typing.List[typing.List[TileIsland]] = [[] for _ in self.map.players]
         self.tile_islands_by_player.append([])  # for -1 player
-        self.tile_islands_by_team_id: typing.List[typing.List[TileIsland]] = [[] for _ in self.teams]
+        self.tile_islands_by_team_id: typing.List[typing.List[TileIsland]] = [[] for _ in range(max(self.teams) + 2)]
         self.tile_islands_by_unique_id: typing.Dict[int, TileIsland] = {}
-        self.large_tile_islands_by_team: typing.List[typing.Set[TileIsland]] = [set() for _ in self.teams]
-        self.large_tile_island_distances_by_team: typing.List[MapMatrixInterface[int] | None] = [MapMatrix(map, 1000) for _ in self.teams]
+        self.large_tile_islands_by_team_id: typing.List[typing.Set[TileIsland]] = [set() for _ in range(max(self.teams) + 2)]
+        self.large_tile_island_distances_by_team_id: typing.List[MapMatrixInterface[int] | None] = [MapMatrix(map, 1000) for _ in range(max(self.teams) + 2)]
         self._team_stats_by_player: typing.List[TeamStats] = []
         self._team_stats_by_team_id: typing.List[TeamStats] = []
         self.break_apart_neutral_islands: bool = True
@@ -256,18 +256,21 @@ class TileIslandBuilder(object):
         logbook.info(f'building large island distances and sets ({time.perf_counter() - start:.5f}s in)')
         for team in self.teams:
             self._build_large_island_distances_for_team(team)
+        # self._build_large_island_distances_for_team(-1)
 
         complete = time.perf_counter() - start
         logbook.info(f'islands all built in {complete:.5f}s')
 
     def update_tile_islands(self, enemyGeneralExpectedLocation: Tile | None, mode: IslandBuildMode = IslandBuildMode.GroupByArmy):
-        logbook.info('update_tile_islands starting')
-        start = time.perf_counter()
-        for tile in self.map.get_all_tiles():
-            island = self.tile_island_lookup.raw[tile.tile_index]
-
-        complete = time.perf_counter() - start
-        logbook.info(f'islands updated in {complete:.5f}s')
+        # TODO do a partial recalc instead of full rebuild..
+        self.recalculate_tile_islands(enemyGeneralExpectedLocation, mode)
+        # logbook.info('update_tile_islands starting')
+        # start = time.perf_counter()
+        # for tile in self.map.get_all_tiles():
+        #     island = self.tile_island_lookup.raw[tile.tile_index]
+        #
+        # complete = time.perf_counter() - start
+        # logbook.info(f'islands updated in {complete:.5f}s')
 
     def _build_island_from_tile(self, startTile: Tile, player: int) -> TileIsland:
         mustBeSolo = startTile.isCity or startTile.isGeneral
@@ -462,8 +465,8 @@ class TileIslandBuilder(object):
 
         if len(islandsByTeam) == 0:
             logbook.info(f'NO TILE ISLANDS FOR LARGE ISLANDS (targetTeam {targetTeam})')
-            self.large_tile_island_distances_by_team[team] = None
-            self.large_tile_islands_by_team[team] = set()
+            self.large_tile_island_distances_by_team_id[team] = None
+            self.large_tile_islands_by_team_id[team] = set()
             return
 
         for pIndx in self.map.get_team_stats_by_team_id(team).livingPlayers:
@@ -491,10 +494,10 @@ class TileIslandBuilder(object):
         largeIslandSet = {i for i in largeIslands}
         distanceToLargeIslandsMap = SearchUtils.build_distance_map_matrix(self.map, islandTiles)
 
-        self.large_tile_island_distances_by_team[team] = distanceToLargeIslandsMap
-        self.large_tile_islands_by_team[team] = largeIslandSet
+        self.large_tile_island_distances_by_team_id[team] = distanceToLargeIslandsMap
+        self.large_tile_islands_by_team_id[team] = largeIslandSet
 
-        logbook.info(f'LARGE TILE ISLANDS (targetTeam {targetTeam}) ARE {", ".join([i.name for i in largeIslands])}')
+        logbook.info(f'LARGE TILE ISLANDS (targetTeam {targetTeam}) ARE {", ".join([str(i) for i in largeIslands])}')
 
     def get_inner_border_tiles(self, islandWhoseBorderTilesToReturn: TileIsland, islandTilesMustBorder: TileIsland | None = None, skipFriendlyBorders: bool = True) -> typing.Set[Tile]:
         """
@@ -523,6 +526,7 @@ class TileIslandBuilder(object):
         return borderTiles
 
     def get_island_border_tile_lookup(self, islandTilesMustBorder: TileIsland) -> typing.Dict[int, typing.Set[Tile]]:
+        """Gets a dict {borderIslandId: {setOfTilesInside_This_IslandThatBorder_borderIslandId}}"""
         borderLookup = self.borders_by_island.get(islandTilesMustBorder.unique_id, None)
         if borderLookup is None:
             borderLookup = {}

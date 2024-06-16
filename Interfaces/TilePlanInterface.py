@@ -1,12 +1,50 @@
+from __future__ import annotations
 import typing
 
 from abc import ABC, abstractmethod
-from DataModels import Move
+from Models import Move
 from base.client.tile import Tile
 
 
 T = typing.TypeVar('T', bound='Parent')  # use string
 
+
+
+class PathMove(object):
+    def __init__(self, tile: Tile, next: PathMove | None = None, prev: PathMove | None = None, move_half: bool = False):
+        self.tile: Tile = tile
+        self.next: PathMove | None = next
+        self.prev: PathMove | None = prev
+        self.move_half: bool = move_half
+
+    def clone(self) -> PathMove:
+        return PathMove(self.tile, self.next, self.prev)
+
+    def toString(self) -> str:
+        prevVal = "[]"
+        if self.prev is not None:
+            prevVal = f"[{self.prev.tile.x},{self.prev.tile.y}]"
+        nextVal = "[]"
+        if self.next is not None:
+            nextVal = f"[{self.next.tile.x},{self.next.tile.y}]"
+        myVal = f"[{self.tile.x},{self.tile.y}]"
+
+        val = f"(prev:{prevVal} me:{myVal} next:{nextVal})"
+        return val
+    #def __gt__(self, other):
+    #    if (other == None):
+    #        return True
+    #    return self.turn > other.turn
+    #def __lt__(self, other):
+    #    if (other == None):
+    #        return True
+    #    return self.turn < other.turn
+
+    def __str__(self) -> str:
+        return self.toString()
+
+    def __repr__(self) -> str:
+        return str(self)
 
 class TilePlanInterface(ABC):
     @property
@@ -48,6 +86,21 @@ class TilePlanInterface(ABC):
         """should be a deep clone of the original"""
         raise NotImplementedError()
 
+    @property
+    def tail(self) -> PathMove | None:
+        moves = self.get_move_list()
+        if not moves:
+            return None
+        lastMove = moves[-1]
+        return PathMove(lastMove.source, PathMove(lastMove.dest, None), move_half=lastMove.move_half)
+
+    @property
+    def start(self) -> PathMove | None:
+        firstMove = self.get_first_move()
+        if firstMove is None:
+            return None
+        return PathMove(firstMove.source, PathMove(firstMove.dest, None), move_half=firstMove.move_half)
+
     @abstractmethod
     def get_move_list(self) -> typing.List[Move | None]:
         """
@@ -61,9 +114,13 @@ class TilePlanInterface(ABC):
     def __gt__(self, other) -> bool:
         if other is None:
             return True
-        return self.econValue > other.econ_value
+        if self.econValue == other.econValue:
+            return self.length > other.length
+        return self.econValue > other.econValue
 
     def __lt__(self, other) -> bool:
         if other is None:
-            return True
+            return False
+        if self.econValue == other.econValue:
+            return self.length < other.length
         return self.econValue < other.econValue

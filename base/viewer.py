@@ -315,11 +315,9 @@ class GeneralsViewer(object):
 
         return bottomPos, leftPos, rightPos, topPos
 
-    def run_main_viewer_loop(self, alignTop=True, alignLeft=True, loggingQueue = None):
+    def run_main_viewer_loop(self, alignTop=True, alignLeft=True):
         MapBase.DO_NOT_RANDOMIZE = True
         termSec = 600
-        if not self.noLog:
-            BotLogging.set_up_logger(logbook.INFO, mainProcess=False, queue=loggingQueue)
         while not self._receivedUpdate:  # Wait for first update
             try:
                 viewInfo, map, isComplete = self._inbound_update_queue.get(block=True, timeout=15.0)

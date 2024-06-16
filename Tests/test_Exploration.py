@@ -2,7 +2,7 @@ import typing
 
 import EarlyExpandUtils
 from BotHost import BotHostBase
-from DataModels import Move
+from Models import Move
 from Sim.GameSimulator import GameSimulator, GameSimulatorHost
 from Sim.TextMapLoader import TextMapLoader
 from TestBase import TestBase

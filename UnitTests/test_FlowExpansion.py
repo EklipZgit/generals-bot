@@ -4,6 +4,7 @@ from collections import deque
 
 import logbook
 
+import Gather
 import SearchUtils
 from Algorithms import TileIslandBuilder
 from Algorithms.TileIslandBuilder import IslandBuildMode
@@ -22,6 +23,7 @@ from bot_ek0x45 import EklipZBot
 class FlowExpansionUnitTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
+        Gather.USE_DEBUG_ASSERTS = True
         super().__init__(methodName)
 
     def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
@@ -296,6 +298,45 @@ a2                  b1
         opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=40, debugMode=debugMode, renderThresh=700, tileIslandSize=5)
         self.assertNotEqual(0, len(opts))
         self.assertGreater(opts[0].econValue / opts[0].length, 1.5, 'should find a plan with pretty high value per turn')
+
+    def test_should_recognize_gather_into_top_path_is_best__with_time_cutoff(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for i in range(10):
+            mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+            map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+            map.GetTile(7, 12).isMountain = True
+            map.GetTile(7, 10).isMountain = True
+            map.update_reachable()
+            # if debugMode:
+            #     self.render_map(map)
+
+            self.enable_search_time_limits_and_disable_debug_asserts()
+            self.begin_capturing_logging()
+
+            timeLimit = 10
+
+            opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=50, debugMode=debugMode, renderThresh=700, tileIslandSize=4, timeLimit=timeLimit, shouldRender=False)
+            try:
+                self.assertNotEqual(0, len(opts))
+                self.assertGreater(opts[0].econValue / opts[0].length, 1.5, f'best vt low: {opts[0]}')
+            except:
+                self.render_gather_capture_plan(map, opts[0], general.player, enemyGeneral.player, f'best vt low: {opts[0]}')
+                raise
+
+            longestOpt = next(opt for opt in sorted(opts, key=lambda o: o.length, reverse=True))
+            try:
+                self.assertGreater(longestOpt.length, 34, f'longest plan too short. {longestOpt}')
+            except:
+                self.render_gather_capture_plan(map, longestOpt, general.player, enemyGeneral.player, f'longest plan too short. {longestOpt}')
+                raise
+
+            bestLongerOpt = next(opt for opt in sorted(opts, key=lambda o: (o.length > 15, o.econValue / o.length), reverse=True))
+            try:
+                self.assertGreater(bestLongerOpt.econValue / bestLongerOpt.length, 1.1, f'longerOpt vt low: {bestLongerOpt}')
+            except:
+                self.render_gather_capture_plan(map, bestLongerOpt, general.player, enemyGeneral.player, f'longerOpt vt low: {bestLongerOpt}')
+                raise
 
     def test_should_not_produce_invalid_plan__enemy_cluster_crossing_neutral_tile(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -590,6 +631,49 @@ player_index=0
                 self.enable_search_time_limits_and_disable_debug_asserts()
                 self.begin_capturing_logging()
 
+                opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=False)
+
+                # if debugMode:
+                #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+                #     simHost.queue_player_moves_str(general.player, expectedPath)
+                #
+                #     self.begin_capturing_logging()
+                #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+
+                self.assertNotEqual(0, len(opts))
+
+                longestOpt = max(opts, key=lambda opt: opt.length)
+
+                # 7 en caps, 10 moves, should be our best case scenario.
+                self.assertEqual(round(bestEcon, 5), round(longestOpt.econValue, 5))
+                self.assertEqual(bestTurns, longestOpt.length)
+
+
+    def test_should_gather_through_friendly_or_enemy_island_flows__double(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapData = """
+|    |    |    |    |    |    |    |    |    |    |    
+aG12 a8   a2   b1   a2   b2   b1   a0   b1   b1   bG1
+|    |    |    |    |    |    |    |    |    |    |    
+player_index=0
+"""
+
+        for turns, bestTurns, bestEcon, expectedPath in [
+            (40, 10, 6 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,0->10,0'),
+            # (7, 6, 4 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '1,0->7,0'),  # should not use the extra 7th turn when not necessary, to grab extra army...?
+            # (6, 6, 4 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '1,0->7,0'),
+            # (9, 9, 6 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,0->9,0'),
+            # (8, 8, 5 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,0->8,0'),
+        ]:
+            with self.subTest(turns=turns):
+                map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+
+                # if debugMode:
+                #     self.render_map(map)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                self.begin_capturing_logging()
+
                 opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=True)
 
                 # if debugMode:
@@ -601,6 +685,8 @@ player_index=0
 
                 self.assertNotEqual(0, len(opts))
 
+                longestOpt = max(opts, key=lambda opt: opt.length)
+
                 # 7 en caps, 10 moves, should be our best case scenario.
-                self.assertEqual(round(bestEcon, 5), round(opts[0].econValue, 5))
-                self.assertEqual(bestTurns, opts[0].length)
+                self.assertEqual(round(bestEcon, 5), round(longestOpt.econValue, 5))
+                self.assertEqual(bestTurns, longestOpt.length)

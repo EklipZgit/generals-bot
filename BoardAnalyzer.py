@@ -11,7 +11,7 @@ import logbook
 
 import SearchUtils
 from ArmyAnalyzer import ArmyAnalyzer
-from DataModels import Move
+from Models import Move
 from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrix, MapMatrixSet
 from base.client.map import MapBase, Tile

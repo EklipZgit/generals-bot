@@ -8,8 +8,8 @@ import SearchUtils
 from ArmyAnalyzer import ArmyAnalyzer
 from BoardAnalyzer import BoardAnalyzer
 from DangerAnalyzer import ThreatObj, ThreatType
-from DataModels import Move
-from Interfaces import TilePlanInterface
+from Models import Move
+from Interfaces import TilePlanInterface, MapMatrixInterface
 from MapMatrix import MapMatrix
 from Path import Path
 from base.client.map import MapBase, Tile

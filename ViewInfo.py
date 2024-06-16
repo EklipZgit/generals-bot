@@ -19,7 +19,7 @@ from base.Colors import *
 from ArmyTracker import ArmyTracker
 from BoardAnalyzer import BoardAnalyzer
 from DangerAnalyzer import DangerAnalyzer
-from DataModels import GatherTreeNode
+from Models import GatherTreeNode
 from Directives import Timings
 from Path import Path
 from StrategyModels import CycleStatsData

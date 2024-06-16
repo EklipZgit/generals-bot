@@ -18,13 +18,12 @@ from heapq_max import heappush_max, heappop_max
 
 # from numba import jit, float32, int64
 
-from DataModels import PathNode
 from Interfaces import MapMatrixInterface, TileSet
 from Path import Path
 from test.test_float import INF
 from base.client.tile import Tile
 from base.client.map import MapBase, new_value_grid
-from MapMatrix import MapMatrix
+from MapMatrix import MapMatrix, MapMatrixSet
 
 BYPASS_TIMEOUTS_FOR_DEBUGGING = False
 
@@ -2271,7 +2270,8 @@ def breadth_first_dynamic_max_global_visited(
 
         priorityFunc = default_priority_func
 
-    frontier = HeapQueue()
+    frontier: typing.List[typing.Tuple[typing.Any, int, int, Tile, Tile | None]] = []
+    """prioObj, distance (incl startDist), curTurns (starting at 0 per search), nextTile, fromTile"""
 
     fromTileLookup: MapMatrixInterface[typing.Tuple[typing.Any, Tile]] = MapMatrix(map, None)
 
@@ -2280,7 +2280,7 @@ def breadth_first_dynamic_max_global_visited(
             (startPriorityObject, distance) = startTiles[tile]
 
             startVal = startPriorityObject
-            frontier.put((startVal, distance, tile, None))
+            heapq.heappush(frontier, (startVal, distance, 0, tile, None))
     else:
         for tile in startTiles:
             if nonDefaultPrioFunc:
@@ -2307,7 +2307,7 @@ def breadth_first_dynamic_max_global_visited(
                         goalIncrement *= -1
 
             startVal = (dist, negCityCount, negEnemyTileCount, negArmySum, tile.x, tile.y, goalIncrement)
-            frontier.put((startVal, dist, tile, None))
+            heapq.heappush(frontier, (startVal, dist, 0, tile, None))
 
     start = time.perf_counter()
     iter = 0
@@ -2320,8 +2320,7 @@ def breadth_first_dynamic_max_global_visited(
     current: Tile
     next: Tile
 
-    qq = frontier.queue
-    while qq:
+    while frontier:
         iter += 1
         if (iter & 128 == 0
             and time.perf_counter() - start > maxTime
@@ -2330,7 +2329,7 @@ def breadth_first_dynamic_max_global_visited(
             logbook.info(f"BFS-DYNAMIC-MAX BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
             break
 
-        (prioVals, dist, current, parent) = frontier.get()
+        (prioVals, dist, curTurns, current, parent) = heapq.heappop(frontier)
         # if dist not in visited[current.x][current.y] or visited[current.x][current.y][dist][0] > prioVals:
         # if current in globalVisitedSet or (skipTiles != None and current in skipTiles):
 
@@ -2364,9 +2363,10 @@ def breadth_first_dynamic_max_global_visited(
         if dist > depthEvaluated:
             depthEvaluated = dist
             # stop when we either reach the max depth (this is dynamic from start tiles) or use up the remaining turns (as indicated by len(nodeList))
-        if dist >= maxDepth:  # or len(nodeList) > maxTurns:  TODO figure out equivalent?
+        if dist >= maxDepth or curTurns >= maxTurns:
             continue
         dist += 1
+        curTurns += 1
         for next in current.movable:  # new spots to try
             if next == parent:
                 continue
@@ -2386,7 +2386,7 @@ def breadth_first_dynamic_max_global_visited(
                     shouldSkip = skipFunc(next, nextVal)
                     if shouldSkip:
                         continue
-                frontier.put((nextVal, dist, next, current))
+                heapq.heappush(frontier, (nextVal, dist, curTurns, next, current))
     if not noLog:
         logbook.info(f"BFS-DYNAMIC-MAX ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
@@ -2596,7 +2596,9 @@ def breadth_first_dynamic_max_per_tile_global_visited(
         searchingPlayer = map.player_index
     if priorityFunc is None:
         priorityFunc = default_priority_func
-    frontier = HeapQueue()
+
+    frontier: typing.List[typing.Tuple[typing.Any, int, int, Tile, Tile | None, Tile]] = []
+    """prioObj, distance (incl startDist), curTurns (starting at 0 per search), nextTile, fromTile, startTile"""
 
     fromTileLookup: MapMatrixInterface[typing.Tuple[typing.Any, Tile]] = MapMatrix(map, None)
 
@@ -2605,7 +2607,7 @@ def breadth_first_dynamic_max_per_tile_global_visited(
             (startPriorityObject, distance) = startTiles[tile]
 
             startVal = startPriorityObject
-            frontier.put((startVal, distance, tile, None, tile))
+            heapq.heappush(frontier, (startVal, distance, 0, tile, None, tile))
     else:
         for tile in startTiles:
             if priorityFunc != default_priority_func:
@@ -2632,7 +2634,7 @@ def breadth_first_dynamic_max_per_tile_global_visited(
                         goalIncrement *= -1
 
             startVal = (dist, negCityCount, negEnemyTileCount, negArmySum, tile.x, tile.y, goalIncrement)
-            frontier.put((startVal, dist, tile, None, tile))
+            heapq.heappush(frontier, (startVal, dist, 0, tile, None, tile))
 
     start = time.perf_counter()
     iter = 0
@@ -2642,14 +2644,13 @@ def breadth_first_dynamic_max_per_tile_global_visited(
     maxPrios: typing.Dict[Tile, typing.Any] = {}
     endNodes: typing.Dict[Tile, Tile] = {}
 
-    qq = frontier.queue
-    while qq:
+    while frontier:
         iter += 1
         if iter & 64 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING or iter > maxIterations:
             logbook.info(f"BFS-DYNAMIC-MAX-PER-TILE BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
             break
 
-        (prioVals, dist, current, parent, startTile) = frontier.get()
+        (prioVals, dist, curTurns, current, parent, startTile) = heapq.heappop(frontier)
         # if dist not in visited[current.x][current.y] or visited[current.x][current.y][dist][0] > prioVals:
         # if current in globalVisitedSet or (skipTiles != None and current in skipTiles):
 
@@ -2682,9 +2683,10 @@ def breadth_first_dynamic_max_per_tile_global_visited(
         #        logbook.info("   Tile {} from {} was not max value: [{}]".format(current.toString(), parentString, '], ['.join(str(x) for x in newValue)))
         if dist > depthEvaluated:
             depthEvaluated = dist
-        if dist >= maxDepth:  # or len(nodeList) > maxTurns: # TODO sort out equivalent
+        if dist >= maxDepth or curTurns >= maxTurns:
             continue
         dist += 1
+        curTurns += 1
         for next in current.movable:  # new spots to try
             if next == parent:
                 continue
@@ -2708,7 +2710,7 @@ def breadth_first_dynamic_max_per_tile_global_visited(
                     shouldSkip = skipFunc(next, nextPrio)
                     if shouldSkip:
                         continue
-                frontier.put((nextPrio, dist, next, current, startTile))
+                heapq.heappush(frontier, (nextPrio, dist, curTurns, next, current, startTile))
     if not noLog:
         logbook.info(f"BFS-DYNAMIC-MAX-PER-TILE ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
@@ -2920,7 +2922,9 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
         searchingPlayer = map.player_index
     if priorityFunc is None:
         priorityFunc = default_priority_func
-    frontier = HeapQueue()
+
+    frontier: typing.List[typing.Tuple[typing.Any, int, int, Tile, Tile | None]] = []
+    """prioObj, distance (incl startDist), curTurns (starting at 0 per search), nextTile, fromTile, maxDict"""
 
     fromTileLookup: MapMatrixInterface[typing.Tuple[typing.Any, Tile]] = MapMatrix(map, None)
     # fromTileLookup: typing.Dict[int, typing.Tuple[typing.Any, Tile]] = {}
@@ -2936,7 +2940,7 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
             startVal = startPriorityObject
             startDict = {}
             maxValuesDict[tile] = startDict
-            frontier.put((startVal, distance, tile, None, startDict))
+            heapq.heappush(frontier, (startVal, distance, 0, tile, None, startDict))
     else:
         for tile in startTiles:
             if priorityFunc != default_priority_func:
@@ -2966,7 +2970,7 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
             maxValuesDict[tile] = startDict
 
             startVal = (dist, negCityCount, negEnemyTileCount, negArmySum, tile.x, tile.y, goalIncrement)
-            frontier.put((startVal, dist, tile, None, startDict))
+            heapq.heappush(frontier, (startVal, dist, 0, tile, None, startDict))
 
     start = time.perf_counter()
     iter = 0
@@ -2981,8 +2985,7 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
         except:
             valuePrinter = lambda val: str(val)
 
-    qq = frontier.queue
-    while qq:
+    while frontier:
         iter += 1
         if iter & 64 == 0:
             elapsed = time.perf_counter() - start
@@ -2990,7 +2993,7 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
                 logbook.info(f"BFS-DYNAMIC-MAX-PER-TILE-PER-DIST BREAKING EARLY @ {time.perf_counter() - start:.3f} iter {iter}")
                 break
 
-        (prioVals, dist, current, parent, maxDict) = frontier.get()
+        (prioVals, dist, curTurns, current, parent, maxDict) = heapq.heappop(frontier)
         # if dist not in visited[current.x][current.y] or visited[current.x][current.y][dist][0] > prioVals:
         # if current in globalVisitedSet or (skipTiles != None and current in skipTiles):
 
@@ -3031,10 +3034,11 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
 
         if dist > depthEvaluated:
             depthEvaluated = dist
-        if dist >= maxDepth:  # or len(nodeList) > maxTurns: TODO figure out equivalent? if necessary...?
+        if dist >= maxDepth or curTurns >= maxTurns:
             continue
         ogDist = dist
         dist += 1
+        curTurns += 1
         for next in current.movable:  # new spots to try
             if next == parent:
                 continue
@@ -3058,7 +3062,7 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
                     shouldSkip = skipFunc(next, nextPrio)
                     if shouldSkip:
                         continue
-                frontier.put((nextPrio, dist, next, current, maxDict))
+                heapq.heappush(frontier, (nextPrio, dist, curTurns, next, current, maxDict))
     if not noLog:
         logbook.info(f"BFS-DYNAMIC-MAX ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
@@ -3570,12 +3574,12 @@ def breadth_first_foreach(
         return
 
     frontier = deque()
-    globalVisited = MapMatrix(map, False)
+    globalVisited = MapMatrixSet(map)
     if skipTiles:
         for tile in skipTiles:
             if not noLog:
                 logbook.info(f"    skipTiles contained {tile}")
-            globalVisited[tile] = True
+            globalVisited.raw[tile.tile_index] = True
 
     for tile in startTiles:
         if tile.isMountain:
@@ -3591,11 +3595,11 @@ def breadth_first_foreach(
         iter += 1
 
         (current, dist) = frontier.pop()
-        if current in globalVisited:
+        if globalVisited.raw[current.tile_index]:
             continue
         if dist > maxDepth:
             break
-        globalVisited.add(current)
+        globalVisited.raw[current.tile_index] = True
         if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)) and dist > 0:
             continue
 
@@ -3638,12 +3642,12 @@ def breadth_first_foreach_with_state(
         return
 
     frontier = deque()
-    globalVisited = MapMatrix(map, False)
+    globalVisited = MapMatrixSet(map)
     if skipTiles:
         for tile in skipTiles:
             if not noLog:
                 logbook.info(f"    skipTiles contained {tile}")
-            globalVisited[tile] = True
+            globalVisited.raw[tile.tile_index] = True
 
     if isinstance(startTiles, dict):
         for tile, startVal in startTiles.items():
@@ -3660,11 +3664,11 @@ def breadth_first_foreach_with_state(
         iter += 1
 
         (current, dist, state) = frontier.pop()
-        if current in globalVisited:
+        if globalVisited.raw[current.tile_index]:
             continue
         if dist > maxDepth:
             break
-        globalVisited.add(current)
+        globalVisited.raw[current.tile_index] = True
         if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)) and dist > 0:
             continue
 
@@ -3708,12 +3712,12 @@ def breadth_first_foreach_with_state_and_start_dist(
         return
 
     frontier = HeapQueue()
-    globalVisited = MapMatrix(map, False)
+    globalVisited = MapMatrixSet(map)
     if skipTiles:
         for tile in skipTiles:
             if not noLog:
                 logbook.info(f"    skipTiles contained {tile}")
-            globalVisited[tile] = True
+            globalVisited.raw[tile.tile_index] = True
 
     if isinstance(startTiles, dict):
         for tile, (startDist, startVal) in startTiles.items():
@@ -3729,11 +3733,11 @@ def breadth_first_foreach_with_state_and_start_dist(
         iter += 1
 
         (dist, state, current) = frontier.get()
-        if current in globalVisited:
+        if globalVisited.raw[current.tile_index]:
             continue
         if dist > maxDepth:
             break
-        globalVisited.add(current)
+        globalVisited.raw[current.tile_index] = True
         if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)) and dist > 0:
             continue
 
@@ -3777,10 +3781,10 @@ def breadth_first_foreach_dist(
         return
 
     frontier = deque()
-    globalVisited = MapMatrix(map, False)
+    globalVisited = MapMatrixSet(map)
     if skipTiles:
         for tile in skipTiles:
-            globalVisited[tile] = True
+            globalVisited.raw[tile.tile_index] = True
 
     for tile in startTiles:
         if tile.isMountain:
@@ -3796,11 +3800,11 @@ def breadth_first_foreach_dist(
         iter += 1
 
         (current, dist) = frontier.pop()
-        if current in globalVisited:
+        if globalVisited.raw[current.tile_index]:
             continue
         if dist > maxDepth:
             break
-        globalVisited.add(current)
+        globalVisited.raw[current.tile_index] = True
         if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)):
             continue
 
@@ -3841,7 +3845,7 @@ def breadth_first_foreach_dist_fast_incl_neut_cities(
     if maxDepth < map.rows // 3:
         globalVisited = set()
     else:
-        globalVisited = MapMatrix(map, False)
+        globalVisited = MapMatrixSet(map)
 
     for tile in startTiles:
         frontier.appendleft((tile, 0))
@@ -3862,6 +3866,53 @@ def breadth_first_foreach_dist_fast_incl_neut_cities(
         newDist = dist + 1
         for next in current.movable:  # new spots to try
             frontier.appendleft((next, newDist))
+
+
+def breadth_first_foreach_dist_fast_with_start_dist_incl_neut_cities(
+        map: MapBase,
+        startTiles: typing.Iterable[typing.Tuple[int, Tile]],
+        maxDepth: int,
+        foreachFunc: typing.Callable[[Tile, int], bool | None]):
+    """
+    WILL NOT run the foreach function against mountains unless told to bypass that with bypassDefaultSkip
+    (at which point you must explicitly skipFunc mountains / obstacles to prevent traversing through them)
+    Does NOT skip neutral cities by default.
+    Same as breadth_first_foreach, except the foreach function also gets the distance parameter passed to it.
+
+    @param map:
+    @param startTiles:
+    @param maxDepth:
+    @param foreachFunc: ALSO the skip func. Return true to avoid adding neighbors to queue.
+    @return:
+    """
+    frontier: typing.Deque[typing.Tuple[Tile, int, int]] = deque()
+
+    # TODO benchmark this...? TODO if we ALWAYS mapmatrix then we can direct-access grid for better perf.
+    if maxDepth < map.rows // 3:
+        globalVisited = set()
+    else:
+        globalVisited = MapMatrixSet(map)
+
+    for dist, tile in startTiles:
+        frontier.appendleft((tile, dist, 0))
+
+    while frontier:
+        (current, dist, depth) = frontier.pop()
+        if current.isNotPathable:
+            continue
+        if current in globalVisited:
+            continue
+        if depth > maxDepth:
+            break
+        globalVisited.add(current)
+
+        if foreachFunc(current, dist):
+            continue
+
+        newDist = dist + 1
+        newDepth = depth + 1
+        for n in current.movable:  # new spots to try
+            frontier.appendleft((n, newDist, newDepth))
 
 
 def breadth_first_foreach_dist_fast_no_neut_cities(
@@ -3889,7 +3940,7 @@ def breadth_first_foreach_dist_fast_no_neut_cities(
     if maxDepth < map.rows // 3:
         globalVisited = set()
     else:
-        globalVisited = MapMatrix(map, False)
+        globalVisited = MapMatrixSet(map)
 
     for tile in startTiles:
         if tile.isMountain:
@@ -3940,7 +3991,7 @@ def breadth_first_foreach_dist_fast_no_default_skip(
     if maxDepth < map.rows // 3:
         globalVisited = set()
     else:
-        globalVisited = MapMatrix(map, False)
+        globalVisited = MapMatrixSet(map)
 
     for tile in startTiles:
         frontier.appendleft((tile, 0))
@@ -3987,7 +4038,7 @@ def breadth_first_foreach_fast_no_neut_cities(
     if maxDepth < map.rows // 3:
         globalVisited = set()
     else:
-        globalVisited = MapMatrix(map, False)
+        globalVisited = MapMatrixSet(map)
 
     for tile in startTiles:
         if tile.isMountain:
@@ -4044,7 +4095,7 @@ def breadth_first_foreach_dist_revisit_callback(
         return
 
     frontier = deque()
-    globalVisited = new_value_grid(map, None)
+    globalVisited = MapMatrix(map, None)
     if skipTiles:
         for tile in skipTiles:
             globalVisited[tile.x][tile.y] = 1000
@@ -4118,7 +4169,7 @@ def build_distance_map_incl_mountains(map, startTiles, skipTiles=None) -> typing
     return distanceMap
 
 
-def build_distance_map(map: MapBase, startTiles: typing.List[Tile], skipTiles: typing.Set[Tile] | typing.Iterable[Tile] | None = None) -> typing.List[typing.List[int]]:
+def build_distance_map(map: MapBase, startTiles: typing.List[Tile], skipTiles: typing.Set[Tile] | typing.Iterable[Tile] | None = None, maxDepth: int = 1000) -> typing.List[typing.List[int]]:
     distanceMap = new_value_grid(map, 1000)
 
     if skipTiles is not None and not isinstance(skipTiles, set):
@@ -4142,30 +4193,28 @@ def build_distance_map(map: MapBase, startTiles: typing.List[Tile], skipTiles: t
     breadth_first_foreach_dist_fast_incl_neut_cities(
         map,
         startTiles,
-        1000,
+        maxDepth,
         bfs_dist_mapper)
 
     return distanceMap
 
 
-def build_distance_map_matrix(map, startTiles, skipTiles=None) -> MapMatrixInterface[int]:
+def build_distance_map_matrix(map, startTiles, skipTiles=None, maxDepth: int = 1000) -> MapMatrixInterface[int]:
     """
     Builds a distance map to all reachable tiles (including neutral cities). Does not put distances in for mountains / undiscovered obstacles.
 
     @param map:
     @param startTiles:
     @param skipTiles:
+    @param maxDepth:
     @return:
     """
     distanceMap = MapMatrix(map, 1000)
 
     if not skipTiles:
         skipTiles = None
-    elif not isinstance(skipTiles, set):
-        newSkipTiles = set()
-        for tile in skipTiles:
-            newSkipTiles.add(tile)
-        skipTiles = newSkipTiles
+    elif not isinstance(skipTiles, set) and not isinstance(skipTiles, MapMatrix) and not isinstance(skipTiles, MapMatrixSet):
+        skipTiles = {t for t in skipTiles}
 
     if skipTiles is None:
         def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
@@ -4184,8 +4233,71 @@ def build_distance_map_matrix(map, startTiles, skipTiles=None) -> MapMatrixInter
     breadth_first_foreach_dist_fast_incl_neut_cities(
         map,
         startTiles,
-        1000,
+        maxDepth,
         bfs_dist_mapper)
+
+    return distanceMap
+
+
+def build_distance_map_matrix_with_start_dist(map, startTiles: typing.Iterable[typing.Tuple[int, Tile]], skipTiles=None, maxDepth: int = 1000) -> MapMatrixInterface[int]:
+    """
+    Builds a distance map to all reachable tiles (including neutral cities). Does not put distances in for mountains / undiscovered obstacles.
+
+    @param map:
+    @param startTiles:
+    @param skipTiles:
+    @param maxDepth:
+    @return:
+    """
+    distanceMap = MapMatrix(map, 1000)
+
+    if not skipTiles:
+        skipTiles = None
+    elif not isinstance(skipTiles, set) and not isinstance(skipTiles, MapMatrix) and not isinstance(skipTiles, MapMatrixSet):
+        skipTiles = {t for t in skipTiles}
+
+    if skipTiles is None:
+        def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
+            distanceMap.raw[tile.tile_index] = dist
+
+            return tile.isNeutral and tile.isCity
+    else:
+        def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
+            if tile in skipTiles:
+                return True
+
+            distanceMap.raw[tile.tile_index] = dist
+
+            return tile.isNeutral and tile.isCity
+
+    frontier: typing.Deque[typing.Tuple[Tile, int, int]] = deque()
+
+    # TODO benchmark this...? TODO if we ALWAYS mapmatrix then we can direct-access grid for better perf.
+    if maxDepth < map.rows // 3:
+        globalVisited = set()
+    else:
+        globalVisited = MapMatrixSet(map)
+
+    for dist, tile in startTiles:
+        frontier.appendleft((tile, dist, 0))
+
+    while frontier:
+        (current, dist, depth) = frontier.pop()
+        if current.isNotPathable:
+            continue
+        if current in globalVisited:
+            continue
+        if depth > maxDepth:
+            break
+        globalVisited.add(current)
+
+        if bfs_dist_mapper(current, dist):
+            continue
+
+        newDist = dist + 1
+        newDepth = depth + 1
+        for n in current.movable:  # new spots to try
+            frontier.appendleft((n, newDist, newDepth))
 
     return distanceMap
 
@@ -4203,11 +4315,8 @@ def build_distance_map_matrix_allow_pathing_through_neut_cities(map, startTiles,
 
     if not skipTiles:
         skipTiles = None
-    elif not isinstance(skipTiles, set):
-        newSkipTiles = set()
-        for tile in skipTiles:
-            newSkipTiles.add(tile)
-        skipTiles = newSkipTiles
+    elif not isinstance(skipTiles, set) and not isinstance(skipTiles, MapMatrix) and not isinstance(skipTiles, MapMatrixSet):
+        skipTiles = {t for t in skipTiles}
 
     if skipTiles is None:
         def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
@@ -4247,7 +4356,7 @@ def build_distance_map_matrix_include_set(map, startTiles, containsSet: typing.C
         return distanceMap
 
     frontier = deque()
-    globalVisited = MapMatrix(map, False)
+    globalVisited = MapMatrixSet(map)
 
     for tile in startTiles:
         frontier.appendleft((tile, 0))

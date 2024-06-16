@@ -13,7 +13,7 @@ import SearchUtils
 from Algorithms import MapSpanningUtils
 from Army import Army
 from BoardAnalyzer import BoardAnalyzer
-from DataModels import Move
+from Models import Move
 from MapMatrix import MapMatrixSet, TileSet
 from PerformanceTimer import PerformanceTimer
 from SearchUtils import *

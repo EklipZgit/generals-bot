@@ -12,7 +12,8 @@ import SearchUtils
 from ArmyAnalyzer import ArmyAnalyzer
 from ArmyTracker import Army
 from BoardAnalyzer import BoardAnalyzer
-from DataModels import Move
+from Interfaces import MapMatrixInterface
+from Models import Move
 from Engine.ArmyEngineModels import ArmySimState, ArmySimResult, SimTile, ArmySimEvaluationParams
 from MctsLudii import MctsDUCT, Game, Context, MctsEngineSummary
 from Path import Path

@@ -1,4 +1,5 @@
 import SearchUtils
+from Interfaces import MapMatrixInterface
 from base.client.map import MapBase, Tile
 from MapMatrix import MapMatrix
 

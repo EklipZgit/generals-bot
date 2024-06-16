@@ -1,4 +1,4 @@
-from DataModels import Move
+from Models import Move
 from Sim.GameSimulator import GameSimulator, GameSimulatorHost
 from TestBase import TestBase
 from base.client.tile import Tile, TILE_FOG

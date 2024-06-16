@@ -7,13 +7,13 @@
 
 from __future__ import annotations
 
-import GatherUtils
+import Gather
 from ArmyAnalyzer import *
 from BoardAnalyzer import BoardAnalyzer
 from Communication import TileCompressor, CoordinatedDefense, DefensePlan, CommunicationConstants, TeammateCommunication
 from DangerAnalyzer import ThreatObj
 from SearchUtils import *
-from DataModels import *
+from Models import *
 
 from base.client.generals import ChatUpdate
 from base.client.map import Player
@@ -157,7 +157,7 @@ class TeammateCommunicator(object):
                 gatherTiles.append(n.tile)
 
         if self.is_defense_lead and defensePlanGatherNodes is not None:
-            GatherUtils.foreach_tree_node(defensePlanGatherNodes, gatherTileAdder)
+            GatherTreeNode.foreach_tree_node(defensePlanGatherNodes, gatherTileAdder)
 
         self.coordinated_defense.include_defense_plan(threatTarget, threatTile, threatTurns, requiredArmy, gatherTiles, markLivePlan=True)
 

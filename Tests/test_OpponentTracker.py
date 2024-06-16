@@ -541,7 +541,7 @@ class OpponentTrackerTests(TestBase):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_get_notified_of_all_army_emergences_wtf___RGYuHtVjh---0--225.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 225, fill_out_tiles=True)
-        self.update_tile_preserving_player_army(map, map.GetTile(12, 12), enemyGeneral.player, newArmy=1)
+        self.update_tile_player_preserving_player_army(map, map.GetTile(12, 12), enemyGeneral.player, newArmy=1)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=225)
 

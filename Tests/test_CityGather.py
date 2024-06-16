@@ -2,7 +2,7 @@ import logbook
 import time
 import typing
 
-import GatherUtils
+import Gather
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase

@@ -1,5 +1,3 @@
-import traceback
-
 import logbook
 import time
 import typing
@@ -10,13 +8,16 @@ import SearchUtils
 from Algorithms import TileIslandBuilder, TileIsland
 from Behavior.ArmyInterceptor import InterceptionOptionInfo
 from BoardAnalyzer import BoardAnalyzer
-from DataModels import Move
+from Models import Move
 from Interfaces import TilePlanInterface, MapMatrixInterface
 from Path import Path
 from PerformanceTimer import PerformanceTimer
 from SearchUtils import breadth_first_foreach, count, where
 from ViewInfo import PathColorer, ViewInfo
 from base.client.map import Tile, MapBase
+
+
+USE_DEBUG_LOGGING = False
 
 
 class RoundPlan(object):
@@ -525,11 +526,11 @@ def _include_optimal_expansion_options(
     if targetPlayer >= 0:
         targetTeam = map.players[targetPlayer].team
 
-    largeIslandSet = tileIslands.large_tile_islands_by_team[targetTeam]
-    distanceToLargeIslandsMap = tileIslands.large_tile_island_distances_by_team[targetTeam]
+    largeIslandSet = tileIslands.large_tile_islands_by_team_id[targetTeam]
+    distanceToLargeIslandsMap = tileIslands.large_tile_island_distances_by_team_id[targetTeam]
 
     if distanceToLargeIslandsMap is None:
-        distanceToLargeIslandsMap = tileIslands.large_tile_island_distances_by_team[-1]
+        distanceToLargeIslandsMap = tileIslands.large_tile_island_distances_by_team_id[-1]
 
     logEntries.append(f"\n\nAttempting Optimal Expansion (tm) for turns {turns} (lengthWeightOffset {lengthWeightOffset}), negatives {str([str(t) for t in negativeTiles])}:\n")
 
@@ -1212,14 +1213,14 @@ def _process_new_expansion_paths(
                                 usage = cityUsages.get(node.tile, 0)
                                 cityUsages[node.tile] = usage + 1
                             node = node.next
-                        if existingPath is not None and logStuff:
+                        if existingPath is not None and logStuff and USE_DEBUG_LOGGING:
                             logEntries.append(f'path for {str(tile)} dist {curDist} BETTER than existing:\r\n      new {curValue:.3f} {str(path)}\r\n   exist {existingMax:.3f} {str(existingPath)}')
                         curTileDict[curDist] = (curValue, path)
 
                         # todo dont need this...?
                         # sortedTiles.remove(path.start.tile)
                         newPaths.append((curValue, path))
-                    elif logStuff:
+                    elif logStuff and USE_DEBUG_LOGGING:
                         logEntries.append(f'path for {str(tile)} dist {curDist} worse than existing:\r\n      bad {curValue:.3f} {str(path)}\r\n   exist {existingMax:.3f} {str(existingPath)}')
                     if tilesInIslandIdx >= len(tilesInIsland):
                         tilesInIslandIdx = 0
@@ -2212,14 +2213,14 @@ def _try_include_alt_sourced_path(
         turnOverride = planOption.length
     existingMax, existingPath = curTileDict.get(turnOverride, defaultNoPathValue)
     if value > existingMax:
-        if logEntries is not None:
+        if logEntries is not None and USE_DEBUG_LOGGING:
             logEntries.append(
                 f'altOpt {str(startTile)}@{turnOverride}t BETTER than existing:\r\n'
                 f'   new   {value} {str(planOption)}\r\n'
                 f'   exist {existingMax} {str(existingPath)}')
         curTileDict[planOption.length] = (value, planOption)
     else:
-        if logEntries is not None:
+        if logEntries is not None and USE_DEBUG_LOGGING:
             logEntries.append(
                 f'altOpt for {str(startTile)}@{turnOverride}t worse than existing:\r\n      bad {value} {str(planOption)}\r\n   exist {existingMax} {str(existingPath)}')
     multiPathDict[startTile] = curTileDict

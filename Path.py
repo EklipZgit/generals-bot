@@ -11,49 +11,12 @@ import queue
 
 import logbook
 import typing
-from DataModels import GatherTreeNode, Move
+from Models import GatherTreeNode, Move
 from collections import deque
 
-from Interfaces.TilePlanInterface import TilePlanInterface
+from Interfaces.TilePlanInterface import TilePlanInterface, PathMove
 from base.client.tile import Tile
 from base.client.map import MapBase
-
-
-class PathMove(object):
-    def __init__(self, tile: Tile, next: PathMove | None = None, prev: PathMove | None = None, move_half: bool = False):
-        self.tile: Tile = tile
-        self.next: PathMove | None = next
-        self.prev: PathMove | None = prev
-        self.move_half: bool = move_half
-
-    def clone(self) -> PathMove:
-        return PathMove(self.tile, self.next, self.prev)
-
-    def toString(self) -> str:
-        prevVal = "[]"
-        if self.prev is not None:
-            prevVal = "[{},{}]".format(self.prev.tile.x, self.prev.tile.y)
-        nextVal = "[]"
-        if self.next is not None:
-            nextVal = "[{},{}]".format(self.next.tile.x, self.next.tile.y)
-        myVal = "[{},{}]".format(self.tile.x, self.tile.y)
-
-        val = "(prev:{} me:{} next:{})".format(prevVal, myVal, nextVal)
-        return val
-    #def __gt__(self, other):
-    #    if (other == None):
-    #        return True
-    #    return self.turn > other.turn
-    #def __lt__(self, other):
-    #    if (other == None):
-    #        return True
-    #    return self.turn < other.turn
-
-    def __str__(self) -> str:
-        return self.toString()
-
-    def __repr__(self) -> str:
-        return str(self)
 
 
 # class PartialPathPlan(Path):

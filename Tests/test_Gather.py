@@ -3,7 +3,7 @@ import time
 import typing
 
 import DebugHelper
-import GatherUtils
+import Gather
 import SearchUtils
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
@@ -19,7 +19,7 @@ class GatherTests(TestBase):
         bot.info_render_gather_values = True
         bot.gather_use_pcst = True
         # bot.info_render_centrality_distances = True
-        GatherUtils.USE_DEBUG_ASSERTS = True
+        Gather.USE_DEBUG_ASSERTS = True
         DebugHelper.IS_DEBUGGING = True
 
         return bot
@@ -114,7 +114,7 @@ class GatherTests(TestBase):
         self.assertEqual(valueGathered, sumVal)
         self.assertEqual(turnsUsed, sumTurns)
 
-        postPruneNodes = GatherUtils.prune_mst_to_turns(gatherNodes, turnsUsed, general.player, viewInfo=ekBot.viewInfo, noLog=False)
+        postPruneNodes = Gather.prune_mst_to_turns(gatherNodes, turnsUsed, general.player, viewInfo=ekBot.viewInfo, noLog=False)
 
         sumVal = 0
         sumTurns = 0
@@ -177,7 +177,7 @@ class GatherTests(TestBase):
         self.assertEqual(valueGathered, sumVal)
         self.assertEqual(turnsUsed, sumTurns)
 
-        postPruneNodes = GatherUtils.prune_mst_to_turns(gatherNodes, turnsUsed - 1, general.player, viewInfo=ekBot.viewInfo, noLog=False)
+        postPruneNodes = Gather.prune_mst_to_turns(gatherNodes, turnsUsed - 1, general.player, viewInfo=ekBot.viewInfo, noLog=False)
 
         sumVal = 0
         sumTurns = 0
@@ -231,7 +231,7 @@ class GatherTests(TestBase):
         for pruneNearZeroMovesCase in pruneNearZeroMovesCases:
             with self.subTest(pruneNearZeroMovesCase=pruneNearZeroMovesCase):
                 toPrune = [node.deep_clone() for node in gatherNodes]
-                postPruneNodes = GatherUtils.prune_mst_to_turns(toPrune, pruneNearZeroMovesCase, general.player, viewInfo=ekBot.viewInfo, noLog=False)
+                postPruneNodes = Gather.prune_mst_to_turns(toPrune, pruneNearZeroMovesCase, general.player, viewInfo=ekBot.viewInfo, noLog=False)
                 sumVal = 0
                 for node in postPruneNodes:
                     sumVal += node.value
@@ -283,7 +283,7 @@ class GatherTests(TestBase):
                 self.set_general_emergence_around(16, 7, simHost, general.player, enemyGeneral.player, 30)
                 #
                 # bot.info_render_gather_values = False
-                # GatherUtils.USE_DEBUG_ASSERTS = False
+                # Gather.USE_DEBUG_ASSERTS = False
                 # DebugHelper.IS_DEBUGGING = False
                 # self.begin_capturing_logging()
                 # _, _, _, gathers = bot.get_gather_to_target_tiles([enemyGeneral], 0.2, gatherTurns=73)
@@ -425,7 +425,7 @@ b1   b1   b1   b1   b1   b1   bG1
             skipFunc = lambda tile, tilePriorityObject: not tile.discovered
 
         enemyDistanceMap = bot.board_analysis.intergeneral_analysis.bMap
-        value, nodes = GatherUtils.knapsack_levels_backpack_gather_with_value(
+        value, nodes = Gather.knapsack_levels_backpack_gather_with_value(
             m,
             bot.target_player_gather_path.tileList,
             4,
@@ -864,52 +864,3 @@ b1   b1   b1   b1   b1   b1   bG1
         tilesShouldHaveGathered = [playerMap.GetTile(x, 3) for x in range(10, 13)]
         tilesUngathered = [t for t in tilesShouldHaveGathered if t.army > 1]
         self.assertEqual(0, len(tilesUngathered), f'should have gathered {" | ".join([str(t) for t in tilesUngathered])}')
-
-    def test_build_capture_tree_contiguous(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
-
-        # if debugMode:
-        #     self.render_map(map)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-        self.begin_capturing_logging()
-
-        gathing = {
-            map.GetTile(9, 6),
-            map.GetTile(9, 5),
-            map.GetTile(9, 7),
-        }
-
-        capping = {
-            map.GetTile(10, 6),
-            map.GetTile(10, 7),
-            map.GetTile(10, 8),
-            map.GetTile(10, 9),
-            map.GetTile(10, 10),
-            map.GetTile(11, 8),
-        }
-
-        allBorderTiles = {
-            map.GetTile(10, 6),
-            map.GetTile(10, 7),
-        }
-
-        negativeTiles = set()
-
-        plan = GatherUtils.convert_contiguous_tiles_to_gather_capture_plan(
-            map,
-            rootTiles=allBorderTiles,
-            tiles=gathing,
-            negativeTiles=negativeTiles,
-            searchingPlayer=general.player,
-            priorityMatrix=None,
-            useTrueValueGathered=True,
-            captures=capping,
-        )
-
-        self.assertEqual(plan.length, 8)
-        self.assertEqual(plan.econValue, 6 * 1.0)
-
-        # IterativeExpansion

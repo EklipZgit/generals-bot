@@ -3,9 +3,9 @@ import time
 import networkx as nx
 
 import DebugHelper
-import GatherUtils
+import Gather
 from Algorithms import WatchmanRouteUtils, TravelingSalesmanUtils
-from DataModels import Move
+from Models import Move
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
@@ -21,7 +21,7 @@ class WatchmanRouteUtilsTests(TestBase):
 
         bot.info_render_gather_values = True
         # bot.info_render_centrality_distances = True
-        GatherUtils.USE_DEBUG_ASSERTS = True
+        Gather.USE_DEBUG_ASSERTS = True
         DebugHelper.IS_DEBUGGING = True
         bot.info_render_expansion_matrix_values = True
         # bot.info_render_general_undiscovered_prediction_values = True
@@ -300,11 +300,18 @@ class WatchmanRouteUtilsTests(TestBase):
             startTile = self.get_player_largest_tile(simHost.sim, general.player)
             toReveal = bot.get_target_player_possible_general_location_tiles_sorted(elimNearbyRange=0, player=bot.targetPlayer, cutoffEmergenceRatio=0.1)
 
+            timeLimit = 0.525
+
             self.begin_capturing_logging()
             startTime = time.perf_counter()
             pivot_wrp = WatchmanRouteUtils.PivotIterativeWRP(startTile, playerMap, set(toReveal))
-            path = pivot_wrp.solve()
+            path = pivot_wrp.solve(cutoffTime=startTime + timeLimit)
             completedTime = time.perf_counter() - startTime
+
+            nonIterStartTime = time.perf_counter()
+            nonIterPivot_wrp = WatchmanRouteUtils.PivotWRP(startTile, playerMap, set(toReveal))
+            nonIterPath = nonIterPivot_wrp.solve(cutoffTime=nonIterStartTime + timeLimit)
+            nonIterCompletedTime = time.perf_counter() - nonIterStartTime
 
             try:
                 self.assertNotIn(playerMap.GetTile(7, 0), pivot_wrp.frontiers, 'Must have gone through 7,1 already to reach this, it can be pruned.')

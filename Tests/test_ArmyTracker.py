@@ -4,7 +4,7 @@ import typing
 
 import logbook
 
-import GatherUtils
+import Gather
 import SearchUtils
 from Algorithms import MapSpanningUtils
 from Path import Path
@@ -108,7 +108,7 @@ class ArmyTrackerTests(TestBase):
         bTile = map.GetTile(2, 1)
         aTile.army = aArmy
         bTile.army = bArmy
-        GatherUtils.USE_DEBUG_ASSERTS = False
+        Gather.USE_DEBUG_ASSERTS = False
         mapVision = map
         simHost = GameSimulatorHost(map, player_with_viewer=-2, playerMapVision=mapVision)
         simHost.apply_map_vision(enemyGeneral.player, mapVision)
@@ -2255,7 +2255,7 @@ a1   b1   b1   bG1
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_emerge_army_on_right_from_left_wtf___1lZK5xvmU---1--94.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 94, fill_out_tiles=True)
-        self.update_tile_preserving_player_army(map, map.GetTile(9, 12), enemyGeneral.player, 18)
+        self.update_tile_player_preserving_player_army(map, map.GetTile(9, 12), enemyGeneral.player, 18)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=94)
 

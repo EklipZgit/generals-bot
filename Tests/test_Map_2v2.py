@@ -5,7 +5,7 @@ import EarlyExpandUtils
 import SearchUtils
 from BoardAnalyzer import BoardAnalyzer
 from BotHost import BotHostBase
-from DataModels import Move
+from Models import Move
 from Sim.GameSimulator import GameSimulatorHost
 from Sim.TextMapLoader import TextMapLoader
 from TestBase import TestBase

@@ -14,7 +14,7 @@ import heapq
 
 
 # TODO THIS IS CHATGPT CODE FROM https://chatgpt.com/g/g-3w1rEXGE0-web-browser/c/4fe68032-e88c-4057-a329-d37a42df465b
-def cutesy_chatgpt_gather(
+def find_exact_best_steiner_gather_slow(
         map: MapBase,
         targetTurns: int,
         rootTiles: typing.Set[Tile],
@@ -32,6 +32,18 @@ def cutesy_chatgpt_gather(
             missing = rootTiles.difference(tilesToInclude)
             if missing:
                 raise Exception(f'Bruh rootTiles still `need to be in tilesToInclude. {" | ".join([str(t) for t in missing])} missing.')
+
+    """
+    Psuedocode:
+    N = targetTurns
+    K = best subset
+    
+    Start with the set of all gatherable tiles.
+    Connect them through enemy/neutral land.
+    for every tile in the set check if removing it disconnects the graph, and prune the disconnected portion of the graph.
+        
+    
+    """
 
     if USE_DEBUG_ASSERTS:
         assertConnected(tilesToInclude.union(rootTiles))

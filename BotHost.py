@@ -23,8 +23,8 @@ from bot_ek0x45 import EklipZBot
 
 from Viewer.ViewerProcessHost import ViewerHost
 
-FORCE_NO_VIEWER = False  # if you want the bot GUI to stop distracting you from work but you dont want to stop and restart all the bot shells with noUI, flip this flag and it will force the GUI off :)
-FORCE_PRIVATE = False  # if you're making changes that are gonna break the bot and want to force it to only play in private rooms temporarily but dont want to kill all the shell loops, flip this flag, and it will keep restarting and wait for the flag to be flipped back before queuing again (except private games).
+FORCE_NO_VIEWER = False     # if you want the bot GUI to stop distracting you from work but you dont want to stop and restart all the bot shells with noUI, flip this flag and it will force the GUI off :)
+FORCE_PRIVATE = False       # if you're making changes that are gonna break the bot and want to force it to only play in private rooms temporarily but dont want to kill all the shell loops, flip this flag, and it will keep restarting and wait for the flag to be flipped back before queuing again (except private games).
 
 
 class BotHostBase(object):
@@ -162,8 +162,6 @@ class BotHostBase(object):
 
         gc.collect()
 
-        return
-
     def receive_update_no_move(self, currentMap: MapBase, updateReceivedTime: float):
         timer: PerformanceTimer = self.eklipz_bot.perf_timer
 
@@ -208,6 +206,8 @@ class BotHostBase(object):
                     currentMap.complete = True
                     currentMap.result = False
                     self.notify_game_over()
+
+        gc.collect()
 
     def save_txtmap(self, map: MapBase):
         if self.noLog:

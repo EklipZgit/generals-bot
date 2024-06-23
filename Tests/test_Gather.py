@@ -425,7 +425,7 @@ b1   b1   b1   b1   b1   b1   bG1
             skipFunc = lambda tile, tilePriorityObject: not tile.discovered
 
         enemyDistanceMap = bot.board_analysis.intergeneral_analysis.bMap
-        value, nodes = Gather.knapsack_levels_backpack_gather_with_value(
+        value, usedTurns, nodes = Gather.knapsack_depth_gather_with_values(
             m,
             bot.target_player_gather_path.tileList,
             4,

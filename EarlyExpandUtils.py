@@ -2071,7 +2071,7 @@ def optimize_first_25__start_end_precalc(
             prune_cutoff = 16
 
     if cramped:
-        # genArmy, turn, optimalMaxWasteMoves
+        # genArmy, optimalMaxWasteMoves
         combinationsWithMaxOptimal = [
             None,  # buys 11 more time
             (11, 8),
@@ -2093,7 +2093,7 @@ def optimize_first_25__start_end_precalc(
             # (13, 8),
         ]
     else:
-        # genArmy, turn, optimalMaxWasteMoves
+        # genArmy, optimalMaxWasteMoves
         combinationsWithMaxOptimal = [
             (13, 2),  # most likely to find high value paths first
             (11, 6),

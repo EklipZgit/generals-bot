@@ -103,7 +103,7 @@ class ViewInfo(object):
         self.midLeftGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
         self.lastMoveDuration = 0.0
         self.addlTimingsLineText: str = ""
-        self.addlInfoLines: typing.List[str] = []
+        self.infoLines: typing.List[str] = []
         self.arrows: typing.List[typing.Tuple[float, float, float, float, str, typing.Tuple[int, int, int], int, bool]] = []
         """(from, to, label, color, alpha, isBidirectional)"""
         self.statsLines: typing.List[str] = []
@@ -130,9 +130,9 @@ class ViewInfo(object):
             return ORANGE
         return GRAY
 
-    def turnInc(self):
+    def clear_for_next_turn(self):
         self.addlTimingsLineText = ""
-        self.addlInfoLines = []
+        self.infoLines = []
         self.statsLines = []
         self._divisions = []
         self._zones = []
@@ -173,10 +173,10 @@ class ViewInfo(object):
 
     def add_info_line(self, additionalInfo: str):
         logbook.info(additionalInfo)
-        self.addlInfoLines.append(additionalInfo)
+        self.infoLines.append(additionalInfo)
 
     def add_info_line_no_log(self, additionalInfo: str):
-        self.addlInfoLines.append(additionalInfo)
+        self.infoLines.append(additionalInfo)
 
     def add_stats_line(self, statsLine: str):
         logbook.info(statsLine)
@@ -271,6 +271,32 @@ class ViewInfo(object):
         """
 
         self.draw_diagonal_arrow_between_xy(fromTile.x, fromTile.y, toTile.x, toTile.y, label, color, alpha, bidir, colorFloor)
+
+    def add_info_multi_line(self, inputStr: str, lineLenChars: int = 80, childLineIndent: int = 2):
+        subsLineStart = ''
+        if childLineIndent > 1:
+            subsLineStart = ' ' * (childLineIndent - 1)
+
+        splitsByLine = inputStr.split('\n')
+        for line in splitsByLine:
+            splitBySpace = line.strip().split(' ')
+
+            curPointInLine = 0
+            curWords = []
+            for word in splitBySpace:
+                if curPointInLine + len(word) > lineLenChars:
+                    self.add_info_line(' '.join(curWords))
+                    curPointInLine = childLineIndent
+                    curWords.clear()
+                    curWords.append(subsLineStart)
+
+                curWords.append(word)
+                curPointInLine += len(word) + 1
+
+            if len(curWords) > 1:
+                self.add_info_line(' '.join(curWords))
+
+
 
 
 

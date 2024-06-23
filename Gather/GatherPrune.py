@@ -5,8 +5,9 @@ from collections import deque
 import logbook
 
 import SearchUtils
+from Interfaces import MapMatrixInterface
 from Models import GatherTreeNode, Move
-from Gather import GatherDebug
+from . import GatherDebug
 from ViewInfo import ViewInfo
 from base.client.tile import Tile
 
@@ -177,6 +178,7 @@ def prune_mst_to_turns_with_values(
         preferPrune: typing.Set[Tile] | None = None,
         parentPruneFunc: typing.Callable[[Tile, GatherTreeNode], None] | None = None,
         allowNegative: bool = True,
+        overpruneCutoff: int | None = None,
         logEntries: typing.List[str] | None = None,
 ) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
     """
@@ -197,8 +199,6 @@ def prune_mst_to_turns_with_values(
 
     @return: gatherTurns, gatherValue, rootNodes
     """
-    start = time.perf_counter()
-
     if logEntries is None:
         logEntries = []
 
@@ -219,6 +219,10 @@ def prune_mst_to_turns_with_values(
         # trunkBehindNodeValuePerTurn = -100
         if node.gatherTurns > 0:
             rawValPerTurn = node.value / node.gatherTurns
+            # if node.gatherTurns > 1:
+            #     rawValPerTurn = max(rawValPerTurn, node.)
+            if not noLog:
+                logEntries.append(f'  prune {node.tile}: {rawValPerTurn:.3f}  (val {node.value:.1f}, gatherTurns {node.gatherTurns}, tv {node.trunkValue}, td {node.trunkDistance})')
             # trunkValPerTurn = node.trunkValue / node.trunkDistance
             # trunkValPerTurn = node.trunkValue / node.trunkDistance
             # trunkBehindNodeValuePerTurn = trunkValPerTurn
@@ -237,12 +241,19 @@ def prune_mst_to_turns_with_values(
 
         return rawValPerTurn, node.value, 0 - node.trunkDistance
 
-    return prune_mst_until(
+    if overpruneCutoff is None:
+        overpruneCutoff = turns
+
+    def pruneOverrideFunc(node, _, turnsLeft, curValue) -> bool:
+        return turnsLeft - node.gatherTurns < overpruneCutoff
+        # return False
+
+    gathTurns, gathVal, rootNodes = prune_mst_until(
         rootNodes,
         untilFunc=lambda node, _, turnsLeft, curValue: turnsLeft <= turns,
         pruneOrderFunc=pruneFunc,
         invalidMoveFunc=invalidMoveFunc,
-        pruneOverrideFunc=lambda node, _, turnsLeft, curValue: turnsLeft - node.gatherTurns < turns,
+        pruneOverrideFunc=pruneOverrideFunc,
         viewInfo=viewInfo,
         noLog=noLog,
         pruneBranches=True,
@@ -253,6 +264,8 @@ def prune_mst_to_turns_with_values(
         allowNegative=allowNegative,
         parentPruneFunc=parentPruneFunc,
     )
+
+    return gathTurns, gathVal, rootNodes
 
 
 def prune_mst_to_tiles(
@@ -962,7 +975,7 @@ def prune_mst_until(
         logEntries.append(f'gatherTreeNodeLookupToPrune: {repr(gatherTreeNodeLookupToPrune)}')
         logEntries.append(f'tileDictToPrune: {repr(tileDictToPrune)}')
         if logEnd:
-            _dump_log_entries(logEntries)
+            logbook.info('\r\n' + '\r\n'.join(logEntries))
         raise
 
     # while not leaves.empty():
@@ -976,10 +989,176 @@ def prune_mst_until(
             f"  Pruned MST to turns {count} with value {totalValue} in duration {time.perf_counter() - start:.4f}")
 
         if logEnd:
-            _dump_log_entries(logEntries)
+            logbook.info('\r\n' + '\r\n'.join(logEntries))
 
     return count, totalValue, rootNodes
 
+def recalculate_tree_values(
+        logEntries: typing.List[str],
+        rootNodes: typing.List[GatherTreeNode],
+        negativeTiles: typing.Set[Tile] | None,
+        startTilesDict: typing.Dict[Tile, object],
+        searchingPlayer: int,
+        teams: typing.List[int],
+        onlyCalculateFriendlyArmy=False,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
+        viewInfo=None,
+        shouldAssert=False
+) -> typing.Tuple[int, int]:
+    """
+    Return totalTurns, totalValue
 
-def _dump_log_entries(logEntries: typing.List[str]):
-    logbook.info('\r\n' + '\r\n'.join(logEntries))
+    @param logEntries:
+    @param rootNodes:
+    @param negativeTiles:
+    @param startTilesDict:
+    @param searchingPlayer:
+    @param teams:
+    @param onlyCalculateFriendlyArmy:
+    @param priorityMatrix:
+    @param viewInfo:
+    @param shouldAssert:
+    @return:
+    """
+    totalValue = 0
+    totalTurns = 0
+    # logEntries.append('recalcing treenodes....')
+    for currentNode in rootNodes:
+        _recalculate_tree_values_recurse(
+            logEntries,
+            currentNode,
+            negativeTiles,
+            startTilesDict,
+            searchingPlayer,
+            teams,
+            onlyCalculateFriendlyArmy,
+            priorityMatrix,
+            viewInfo,
+            shouldAssert)
+        totalValue += currentNode.value
+        totalTurns += currentNode.gatherTurns
+
+    # find the leaves
+    queue = deque()
+    for treeNode in rootNodes:
+        if shouldAssert and treeNode.trunkValue != 0:
+            logbook.info('\r\n' + '\r\n'.join(logEntries))
+            raise AssertionError(f'root node {str(treeNode)} trunk value should have been 0 but was {treeNode.trunkValue}')
+        if shouldAssert and treeNode.trunkDistance != 0:
+            logbook.info('\r\n' + '\r\n'.join(logEntries))
+            raise AssertionError(f'root node {str(treeNode)} trunk dist should have been 0 but was {treeNode.trunkDistance}')
+        treeNode.trunkValue = 0
+        treeNode.trunkDistance = 0
+        queue.appendleft(treeNode)
+
+    while queue:
+        current = queue.pop()
+        for child in current.children:
+            trunkValue = current.trunkValue
+            trunkDistance = current.trunkDistance + 1
+            if negativeTiles is None or child.tile not in negativeTiles:
+                if teams[child.tile.player] == teams[searchingPlayer]:
+                    trunkValue += child.tile.army
+                elif not onlyCalculateFriendlyArmy:
+                    trunkValue -= child.tile.army
+            trunkValue -= 1
+            if shouldAssert:
+                if trunkDistance != child.trunkDistance:
+                    logbook.info('\r\n' + '\r\n'.join(logEntries))
+                    raise AssertionError(f'node {str(child)} trunk dist should have been {trunkDistance} but was {child.trunkDistance}')
+                if trunkValue != child.trunkValue:
+                    logbook.info('\r\n' + '\r\n'.join(logEntries))
+                    raise AssertionError(f'node {str(child)} trunk value should have been {trunkValue} but was {child.trunkValue}')
+            child.trunkValue = trunkValue
+            child.trunkDistance = trunkDistance
+
+            # if viewInfo is not None:
+            #     viewInfo.bottomLeftGridText[child.tile] = child.trunkValue
+            queue.appendleft(child)
+
+    return totalTurns, totalValue
+
+
+def _recalculate_tree_values_recurse(
+        logEntries: typing.List[str],
+        currentNode: GatherTreeNode,
+        negativeTiles: typing.Set[Tile] | None,
+        startTilesDict: typing.Dict[Tile, object],
+        searchingPlayer: int,
+        teams: typing.List[int],
+        onlyCalculateFriendlyArmy=False,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
+        viewInfo=None,
+        shouldAssert=False
+):
+    if GatherDebug.USE_DEBUG_ASSERTS:
+        logEntries.append(f'RECALCING currentNode {currentNode}')
+
+    isStartNode = False
+
+    # we leave one node behind at each tile, except the root tile.
+    turns = 1
+    sum = -1
+    currentTile = currentNode.tile
+    if viewInfo:
+        viewInfo.midRightGridText[currentTile] = f'v{currentNode.value:.0f}'
+        viewInfo.bottomMidRightGridText[currentTile] = f'tv{currentNode.trunkValue:.0f}'
+        viewInfo.bottomRightGridText[currentTile] = f'td{currentNode.trunkDistance}'
+
+        if currentNode.trunkDistance > 0:
+            rawValPerTurn = currentNode.value / currentNode.trunkDistance
+            trunkValPerTurn = currentNode.trunkValue / currentNode.trunkDistance
+            viewInfo.bottomMidLeftGridText[currentTile] = f'tt{trunkValPerTurn:.1f}'
+            viewInfo.bottomLeftGridText[currentTile] = f'vt{rawValPerTurn:.1f}'
+
+    if currentNode.toTile is None:
+        if GatherDebug.USE_DEBUG_ASSERTS:
+            logEntries.append(f'{currentTile} is first tile, starting at 0')
+        isStartNode = True
+        sum = 0
+        turns = 0
+    # elif priorityMatrix:
+    #     sum += priorityMatrix[currentTile]
+
+    if (negativeTiles is None or currentTile not in negativeTiles) and not isStartNode:
+        if teams[currentTile.player] == teams[searchingPlayer]:
+            sum += currentTile.army
+        elif not onlyCalculateFriendlyArmy:
+            sum -= currentTile.army
+
+    if priorityMatrix and not isStartNode:
+        sum += priorityMatrix[currentTile]
+        if GatherDebug.USE_DEBUG_ASSERTS:
+            logEntries.append(f'appending {currentTile}  {currentTile.army}a  matrix {priorityMatrix[currentTile]:.3f} -> {sum:.3f}')
+
+    for child in currentNode.children:
+        _recalculate_tree_values_recurse(
+            logEntries,
+            child,
+            negativeTiles,
+            startTilesDict,
+            searchingPlayer,
+            teams,
+            onlyCalculateFriendlyArmy,
+            priorityMatrix,
+            viewInfo,
+            shouldAssert=shouldAssert)
+        sum += child.value
+        turns += child.gatherTurns
+
+    # if viewInfo:
+    #     viewInfo.bottomRightGridText[currentNode.tile] = sum
+
+    if shouldAssert:
+        curNodeVal = round(currentNode.value, 6)
+        recalcSum = round(sum, 6)
+        if curNodeVal != recalcSum:
+            logbook.info('\r\n' + '\r\n'.join(logEntries))
+            raise AssertionError(f'currentNode {str(currentNode)} val {curNodeVal:.6f} != recalculated sum {recalcSum:.6f}')
+        if currentNode.gatherTurns != turns:
+            logbook.info('\r\n' + '\r\n'.join(logEntries))
+            raise AssertionError(f'currentNode {str(currentNode)} turns {currentNode.gatherTurns} != recalculated turns {turns}')
+
+    currentNode.value = sum
+    currentNode.gatherTurns = turns
+

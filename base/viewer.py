@@ -110,6 +110,7 @@ class GeneralsViewer(object):
             cell_width: int | None = None,
             cell_height: int | None = None,
             no_log: bool = False,
+            min_sleep_time: float = 0.0
     ):
         self._killed = False
         self._inbound_update_queue: "Queue[typing.Tuple[ViewInfo | None, MapBase | None, bool]]" = update_queue
@@ -145,6 +146,7 @@ class GeneralsViewer(object):
         self.square_inner_4: Rect = None
         self.square_inner_5: Rect = None
         self._red_x: Surface = None
+        self._min_sleep_time: float = min_sleep_time
 
     def updateGrid(self, viewInfo: ViewInfo, map: MapBase):
         if viewInfo is not None:
@@ -394,7 +396,7 @@ class GeneralsViewer(object):
 
                 self.updateGrid(viewInfo, map)
 
-                sleepFor = expectedRenderTime - thisUpdateTime - 0.05
+                sleepFor = max(expectedRenderTime - thisUpdateTime - 0.05, self._min_sleep_time)
                 if sleepFor > 0:
                     logbook.info(f"GeneralsViewer sleeping for {sleepFor:.3f} calculated expected render {expectedRenderTime:.3f} from medianUpdateTime {medianUpdateTime:.3f} based on lastWindowUpdateSum {lastWindowUpdateSum:.3f}")
                     time.sleep(sleepFor)
@@ -488,7 +490,7 @@ class GeneralsViewer(object):
 
             # Draw Bottom Info Text
             self._screen.blit(self._lrgFont.render(
-                f"Turn: {self._map.turn}, ({('%.2f' % self._viewInfo.lastMoveDuration).lstrip('0')})",
+                f"Turn {self._map.turn}  {self._map.turn / 2}: {('%.3f' % self._viewInfo.lastMoveDuration).lstrip('0')}",
                 True, WHITE), (10, self._window_size[1] - self.infoRowHeight + 4))
 
             self.draw_stat_text()
@@ -830,7 +832,7 @@ class GeneralsViewer(object):
     def draw_info_text(self):
         curInfoTextHeight = 0
 
-        for addlInfo in self._viewInfo.addlInfoLines:
+        for addlInfo in self._viewInfo.infoLines:
             if addlInfo == self._viewInfo.infoText:
                 continue
             self._screen.blit(
@@ -850,43 +852,46 @@ class GeneralsViewer(object):
             allInText = "+"
 
         curInfoTextHeight = 0
+        fontToUse = self._infoFont
+        fontHeight = self.infoLineHeight
 
         if self._viewInfo.timings:
             timings = self._viewInfo.timings
             timingTurn = (self._map.turn + timings.offsetTurns) % timings.cycleTurns
             timingsText = f"{str(timings)} ({timingTurn}) - {allInText}{self._viewInfo.allInCounter}/{self._viewInfo.givingUpCounter}  {self._viewInfo.addlTimingsLineText}"
             self._screen.blit(
-                self._infoFont.render(
+                fontToUse.render(
                     timingsText,
                     True,
                     WHITE),
                 (self.statsSpaceFromLeft, self._window_size[1] - self.infoRowHeight + curInfoTextHeight))
-            curInfoTextHeight += self.infoLineHeight
+            curInfoTextHeight += fontHeight
 
         for statInfo in self._viewInfo.statsLines:
             if statInfo == self._viewInfo.infoText:
                 continue
             self._screen.blit(
-                self._infoFont.render(
+                fontToUse.render(
                     statInfo,
                     True,
                     WHITE),
                 (self.statsSpaceFromLeft, self._window_size[1] - self.infoRowHeight + curInfoTextHeight))
-            curInfoTextHeight += self.infoLineHeight
-
+            curInfoTextHeight += fontHeight
 
     def draw_perf_stats(self):
+        fontToUse = self._medFont
+        fontHeight = self._medFontHeight
+
+        # shift them down below the big TURN text.
         perfEventHeight = self._lrgFontHeight
         for perfEvent in self._viewInfo.perfEvents:
-            if perfEvent == self._viewInfo.infoText:
-                continue
             self._screen.blit(
-                self._infoFont.render(
+                fontToUse.render(
                     perfEvent[:self.perfWidthCutoff],
                     True,
                     WHITE),
                 (0, self._window_size[1] - self.infoRowHeight + perfEventHeight))
-            perfEventHeight += self.infoLineHeight
+            perfEventHeight += fontHeight
 
     def draw_targets(self):
         # draw the black circles, THEN the colored circles so we can end up with bands of color.
@@ -1476,7 +1481,15 @@ class GeneralsViewer(object):
                 if not self._map.is_player_on_team_with(player.index, self._map.player_index):
                     playerFogTiles = self._viewInfo.player_fog_tile_counts.get(player.index, None)
                     if playerFogTiles is not None:
-                        playerFogSubtext = " | ".join([f'{n}x{tileSize}s'.ljust(5) for tileSize, n in sorted(playerFogTiles.items(), reverse=True)])
+                        toJoin = []
+                        numFog = 0
+                        for tileSize, n in sorted(playerFogTiles.items(), reverse=True):
+                            toJoin.append(f'{n}x{tileSize}s'.ljust(5))
+                            numFog += n
+
+                        playerFogSubtext = " | ".join(toJoin)
+                        visCount = SearchUtils.count(player.tiles, lambda t: t.visible)
+                        playerFogSubtext += f'  ({numFog} fog, {visCount} vis)'
                         self._screen.blit(self._medFont.render(playerFogSubtext, True, WHITE),
                                           (pos_left + 3, pos_top + 2 + 2 * self._medFont.get_height()))
 

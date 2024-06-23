@@ -584,7 +584,7 @@ class GameSimulatorHost(object):
             if botHost.eklipz_bot.teammate_communicator is not None:
                 botHost.eklipz_bot.teammate_communicator.begin_next_turn()
                 botHost.eklipz_bot.teammate_communicator.begin_next_turn()
-            botHost.eklipz_bot.viewInfo.turnInc()
+            botHost.eklipz_bot.viewInfo.clear_for_next_turn()
 
             if playerMapVision is not None and playerIndex == playerMapVision.player_index:
                 botHost.eklipz_bot.load_resume_data(playerMapVision.resume_data)

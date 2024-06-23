@@ -289,3 +289,21 @@ class GeneralPredictionTests(TestBase):
                 self.assertEqual(general.player, winner)
 
 
+    
+    def test_quick_kill_should_not_find_ridiculous_paths_and_override_defense_with_long_kills(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/quick_kill_should_not_find_ridiculous_paths_and_override_defense_with_long_kills___eUM0gp3BQ---0--1034.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 1034, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=1034)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '9,8->5,8->5,7->3,7')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=11)
+        self.assertNoFriendliesKilled(map, general)
+

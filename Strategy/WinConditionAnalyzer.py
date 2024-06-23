@@ -397,7 +397,7 @@ class WinConditionAnalyzer(object):
         bestValue = 0
         bestFogRisk = 0
 
-        value, gatherNodes = Gather.knapsack_levels_backpack_gather_with_value(
+        value, usedTurns, gatherNodes = Gather.knapsack_depth_gather_with_values(
             self.map,
             tiles,
             inTurns - 1,
@@ -537,7 +537,7 @@ class WinConditionAnalyzer(object):
         if negativeTiles is not None:
             negs.update(negativeTiles)
 
-        value, gatherNodes = Gather.knapsack_levels_backpack_gather_with_value(
+        value, usedTurns, gatherNodes = Gather.knapsack_depth_gather_with_values(
             self.map,
             tiles,
             maxTurns,
@@ -658,7 +658,7 @@ class WinConditionAnalyzer(object):
         if DebugHelper.IS_DEBUGGING:
             timeLimit *= 4
 
-        value, gatherNodes = Gather.knapsack_levels_backpack_gather_with_value(
+        value, usedTurns, gatherNodes = Gather.knapsack_depth_gather_with_values(
             self.map,
             curTiles,
             maxTurns,

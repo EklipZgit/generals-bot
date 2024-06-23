@@ -172,13 +172,17 @@ class Path(TilePlanInterface):
 
     def get_first_move(self) -> Move | None:
         if len(self._pathQueue) <= 1:
-            raise queue.Empty(f", bitch? Path length {len(self._pathQueue)}: Why you tryin to get_first_move when there aint no moves to made?")
+            return None
 
         move = Move(self.start.tile, self.start.next.tile, self.start.move_half)
         return move
 
     def pop_first_move(self) -> Move | None:
+        if len(self._pathQueue) <= 1:
+            raise ", bitch? Why you tryin to pop_first_move when there aint no moves to made?"
+
         move = self.get_first_move()
+
         self._tileSet = None
         self._tileList = None
         self._adjacentSet = None

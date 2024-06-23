@@ -2142,14 +2142,14 @@ def breadth_first_dynamic_max_global_visited(
         boundFunc=None,
         maxIterations: int = INF,
         priorityMatrix: MapMatrixInterface[float] | None = None,
-        priorityMatrixSkipStart: bool = False,
+        priorityMatrixSkipStart: bool = True,
         priorityMatrixSkipEnd: bool = False,
         pathValueFunc: typing.Callable[[Path, typing.Tuple], float] | None = None,
         includePath=False,
         ignoreNonPlayerArmy: bool = False,
         ignoreIncrement: bool = True,
         **kwargs  # swallows the garbage from the non-global-visited parameters
-):
+) -> Path | None:
     """
     @param map:
     @param startTiles: startTiles dict is (startPriorityObject, distance) = startTiles[tile]
@@ -2809,7 +2809,7 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
         maxIterations: int = INF,
         pathValueFunc: typing.Callable[[Path, typing.Tuple], float] | None = None,
         priorityMatrix: MapMatrixInterface[float] | None = None,
-        priorityMatrixSkipStart: bool = False,
+        priorityMatrixSkipStart: bool = True,
         priorityMatrixSkipEnd: bool = False,
         ignoreNonPlayerArmy: bool = False,
         ignoreIncrement: bool = True,
@@ -2999,7 +2999,7 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
 
         fromVal = fromTileLookup.raw[current.tile_index]
         # fromVal = fromTileLookup.get(current.tile_index, None)
-        if fromVal:
+        if fromVal is not None:
             continue
 
         if skipTiles and current in skipTiles:

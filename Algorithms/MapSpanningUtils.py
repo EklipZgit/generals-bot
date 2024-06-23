@@ -6,7 +6,7 @@ from collections import deque
 
 import SearchUtils
 from Interfaces import MapMatrixInterface, TileSet
-from Interfaces.MapMatrixInterface import EmptySet
+from Interfaces.MapMatrixInterface import EmptyTileSet
 from MapMatrix import MapMatrix
 from base.client.map import Tile, MapBase
 
@@ -93,7 +93,7 @@ def get_spanning_tree_set_from_tile_lists(
 
 def get_spanning_tree_set_from_tile_lists_with_cost_per(
         map: MapBase,
-        requiredTiles: typing.List[Tile],
+        requiredTiles: typing.Iterable[Tile],
         bannedSet: TileSet,
         # oneOfTiles: typing.Iterable[Tile] | None = None,
 ) -> typing.Tuple[typing.Set[Tile], typing.Set[Tile], typing.Dict[Tile, int]]:
@@ -119,10 +119,11 @@ def get_spanning_tree_set_from_tile_lists_with_cost_per(
     for req in requiredTiles:
         bannedSet.discard(req)
 
-    if len(requiredTiles) == 0:
+    try:
+        root = next(iter(requiredTiles))
+    except:
         return includedSet, missingIncluded, costPer
 
-    root = requiredTiles[0]
     usefulStartSet = includedSet.copy()
     if LOG_VERBOSE:
         logbook.info('Completed sets setup')
@@ -134,11 +135,11 @@ def get_spanning_tree_set_from_tile_lists_with_cost_per(
         # if depth > 1 and t in usefulStartSet:
         return t in missingIncluded
 
-    iter = 0
+    iteration = 0
     while missingIncluded:
         # iter += 1
         if LOG_VERBOSE:
-            logbook.info(f'missingIncluded iter {iter}')
+            logbook.info(f'missingIncluded iter {iteration}')
         path = SearchUtils.breadth_first_find_queue(map, usefulStartSet, findFunc, skipTiles=bannedSet, noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
         if path is None:
             if LOG_VERBOSE:
@@ -171,7 +172,7 @@ def get_spanning_tree_set_from_tile_lists_with_cost_per(
     costPer[root] = 0
 
     if LOG_VERBOSE:
-        logbook.info(f'get_spanning_tree_set_from_tile_lists completed in {time.perf_counter() - start:.5f}s with {len(missingIncluded)} missing after {iter} path iterations')
+        logbook.info(f'get_spanning_tree_set_from_tile_lists completed in {time.perf_counter() - start:.5f}s with {len(missingIncluded)} missing after {iteration} path iterations')
 
     return includedSet, missingIncluded, costPer
 

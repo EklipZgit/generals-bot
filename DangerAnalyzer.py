@@ -47,24 +47,26 @@ class ThreatObj(object):
         hasPriority = False
         if mapForPriority is not None:
             includePriority = True
-            threatTurn = mapForPriority.turn  #  + self.turns + offset  # ??? offset? TODO
-            hasPriority = mapForPriority.player_has_priority_over_other(mapForPriority.player_index, self.threatPlayer, threatTurn)
+            hasPriority = mapForPriority.player_has_priority_over_other(mapForPriority.player_index, self.threatPlayer, mapForPriority.turn)
 
-        dict = self.path.get_reversed().convert_to_dist_dict(offset=offset)
+        distDict = self.path.get_reversed().convert_to_dist_dict(offset=offset)
 
         # for tile in self.armyAnalysis.shortestPathWay.tiles:
         for tile in self.path.tileList:
-            dist = dict.pop(tile, None)
+            dist = distDict.pop(tile, None)
             # if dist is None:
-            dist = self.armyAnalysis.aMap[tile] + offset
+            dist = self.armyAnalysis.aMap[tile] + offset + 1
+            newDist = dist
             if includePriority and hasPriority:
-                dist -= 1
+                newDist -= 1
 
             if allowNonChoke:
-                dict[tile] = dist
+                distDict[tile] = dist
             if tile.isGeneral:
-                # need to gather to general 1 turn earlier than otherwise necessary
-                dict[tile] = dist + 1
+                # need to gather to general 1 turn earlier than otherwise necessary. hasPriority here means we moved TO the general on a non-priority turn...?
+                newDist += 1
+                distDict[tile] = newDist
+                logbook.info(f'Threat path +GEN {str(tile)} dist {dist} changed to {newDist}. Priority {hasPriority}')
             else:  # and not self.path.start.next.tile in tile.movable:
                 # pathWay = self.armyAnalysis.pathWayLookupMatrix[tile]
                 # neighbors = where(pathWay.tiles, lambda t: t != tile and self.armyAnalysis.aMap[t] == self.armyAnalysis.aMap[tile] and self.armyAnalysis.bMap[t] == self.armyAnalysis.bMap[tile])
@@ -73,12 +75,13 @@ class ThreatObj(object):
                 if allowNonChoke or (interceptChoke is not None and interceptChoke < 3):
                     if chokeWidth is not None:
                         # newDist = dist + chokeWidth - 1  # this 2 is almost certainly wrong, but makes some tests pass.
-                        newDist = dist + interceptChoke + 1 + offset
-                        logbook.info(f'Threat path tile {str(tile)} dist {dist} changed to {newDist} based on chokeWidth {chokeWidth} / interceptChoke {interceptChoke}')
-                        dict[tile] = newDist
+                        newDist += interceptChoke + 1
+                        logbook.info(f'Threat path tile {str(tile)} dist {dist} changed to {newDist} based on chokeWidth {chokeWidth} / interceptChoke {interceptChoke}. Priority {hasPriority}')
+                        distDict[tile] = newDist
+
             hasPriority = not hasPriority
 
-        return dict
+        return distDict
 
     def __str__(self):
         return f'[p{self.threatPlayer} {self.threatValue} in {self.turns} @ {self.path.tail.tile}: {str(self.path)}]'
@@ -415,7 +418,12 @@ class DangerAnalyzer(object):
             if self.map.is_player_on_team_with(self.map.player_index, player.index):
                 continue
 
-            if player.score > genPlayer.score * 1.5 and isFfaMode:
+            oppEcon = player.tileCount + player.cityCount * 25
+            usEcon = genPlayer.tileCount + genPlayer.cityCount * 25
+            if oppEcon > usEcon * 1.25 and player.score > genPlayer.score * 0.9 and isFfaMode:
+                continue
+
+            if player.score > genPlayer.score * 1.25 and oppEcon > usEcon * 1.0 and isFfaMode:
                 continue
 
             defendableFromPlayers.add(player.index)

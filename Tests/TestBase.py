@@ -44,7 +44,7 @@ __unittest = True
 
 
 class TestBase(unittest.TestCase):
-    GLOBAL_BYPASS_REAL_TIME_TEST = True
+    GLOBAL_BYPASS_REAL_TIME_TEST = False
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -814,6 +814,7 @@ class TestBase(unittest.TestCase):
         while not viewer.check_viewer_closed():
             viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
             time.sleep(0.1)
+        time.sleep(0.2)
 
     def render_map(self, map: MapBase, infoString: str | None = None, includeTileDiffs: bool = False):
         titleString = infoString
@@ -1704,7 +1705,7 @@ class TestBase(unittest.TestCase):
         if enTile is None:
             enTile = max(map.get_all_tiles(), key=lambda t: t.army if t.player == enemyGeneral.player else 0)
         if fromTile is None:
-            potentialFroms = SearchUtils.where(enTile.movableNoObstacles, lambda t: t.player == enTile.player and (t.army == 1 or (map.turn % 50 == 0 and t.army == 2)))
+            potentialFroms = SearchUtils.where(enTile.movableNoObstacles, lambda t: t.player == enTile.player and (t.army == 1 or (map.is_army_bonus_turn and t.army == 2)))
             if len(potentialFroms) > 1:
                 for potFrom in potentialFroms.copy():
                     potentialFromFroms = SearchUtils.where(potFrom.movableNoObstacles, lambda t: t != enTile and t not in potentialFroms and t.player == enTile.player and (t.army == 1 or ((map.turn - 1) % 50 in [49, 0] and t.army == 2)))

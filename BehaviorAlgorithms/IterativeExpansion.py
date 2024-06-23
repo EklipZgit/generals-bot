@@ -14,7 +14,7 @@ import networkx as nx
 import DebugHelper
 import Gather
 import SearchUtils
-from Interfaces.MapMatrixInterface import EmptySet
+from Interfaces.MapMatrixInterface import EmptyTileSet
 from MapMatrix import MapMatrix
 from Path import Path
 from SearchUtils import HeapQueue

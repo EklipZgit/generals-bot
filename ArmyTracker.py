@@ -759,7 +759,7 @@ class ArmyTracker(object):
         logbook.info("Finding new armies:")
         playerLargest = [None for x in range(len(self.map.players))]
 
-        if self.map.turn % 50 == 0:
+        if self.map.is_army_bonus_turn:
             self.update_track_threshold()
 
         playerMoves: typing.Dict[Tile, typing.Set[int]] = {}
@@ -1029,7 +1029,7 @@ class ArmyTracker(object):
         #    return (0-negArmy)
         # return -1
 
-        def pathSortFunc(
+        def prioFunc(
                 nextTile: Tile,
                 prioObject
         ):
@@ -1128,10 +1128,10 @@ class ArmyTracker(object):
             valFunc,
             maxTurns=depthLimit,
             maxDepth=depthLimit,
-            maxTime=100000.0,
+            maxTime=0.004,
             noNeutralCities=not allowVisionlessObstaclesAndCities,
             noNeutralUndiscoveredObstacles=not allowVisionlessObstaclesAndCities,
-            priorityFunc=pathSortFunc,
+            priorityFunc=prioFunc,
             skipFunc=fogSkipFunc,
             searchingPlayer=armyPlayer,
             logResultValues=True,
@@ -2476,10 +2476,16 @@ class ArmyTracker(object):
                 for player in self.map.players:
                     self.valid_general_positions_by_player[player.index].discard(tile)
 
-                if tile.isGeneral:
+                if tile.isGeneral or (tile.isCity and tile.delta.discoveredExGeneralCity):
+                    generalPositionPlayer = tile.player
+                    if not tile.isGeneral:
+                        generalPositionPlayer = -1
+
                     for player in self.map.players:
-                        if self.map.is_player_on_team_with(player.index, tile.player):
-                            if tile.player != player.index and self.map.is_2v2:
+                        if player.dead:
+                            continue
+                        if self.map.is_player_on_team_with(player.index, generalPositionPlayer):
+                            if generalPositionPlayer != player.index and self.map.is_2v2:
                                 def limitSpawnAroundAllyGen(t: Tile):
                                     if abs(t.x - tile.x) + abs(t.y - tile.y) > 11:
                                         self.valid_general_positions_by_player[player.index].discard(t)
@@ -2492,11 +2498,12 @@ class ArmyTracker(object):
 
                         SearchUtils.breadth_first_foreach(self.map, [tile], self.min_spawn_distance, foreachFunc=limitSpawnAroundOtherGen, bypassDefaultSkip=True)
 
-                    for t in self.map.get_all_tiles():
-                        if t != tile:
-                            self.valid_general_positions_by_player[tile.player].discard(t)
-                        else:
-                            self.valid_general_positions_by_player[tile.player].add(t)
+                    if generalPositionPlayer != -1:
+                        for t in self.map.get_all_tiles():
+                            if t != tile:
+                                self.valid_general_positions_by_player[generalPositionPlayer].discard(t)
+                            else:
+                                self.valid_general_positions_by_player[generalPositionPlayer].add(t)
 
         mustReLimit = False
         for tile in self._flipped_tiles:

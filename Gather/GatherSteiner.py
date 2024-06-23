@@ -14,19 +14,21 @@ from base.client.map import MapBase, Tile
 
 def build_network_x_steiner_tree(
         map: MapBase,
-        includingTiles: typing.Iterable[Tile],
+        requiredTiles: typing.Iterable[Tile],
         weightMod: MapMatrixInterface[float],
         searchingPlayer=-2,
         baseWeight: int = 1,
         bannedTiles: typing.Container[Tile] | None = None,
+        allowedTiles: typing.Iterable[Tile] | None = None
         # faster: bool = False
-) -> typing.List[Tile]:
+) -> typing.Set[Tile]:
     """
     Builds an arbitrarily sized steiner tree (connected to includingTiles) based on some baseWeight.
     Non-iterative, this just does single network x steiner tree.
+    This is O(E + V log(V)) where E is the number of valid movables (edges) and V is the number of vertices in the map.
 
     @param map:
-    @param includingTiles:
+    @param requiredTiles:
     @param searchingPlayer:
     @param weightMod:
     @param baseWeight:
@@ -36,16 +38,15 @@ def build_network_x_steiner_tree(
     # bannedTiles = None
     start = time.perf_counter()
     ogStart = start
-    # if faster:
     g = build_networkX_graph_flat_add(map, weightMod, baseWeight, bannedTiles=bannedTiles)
-    # else:
-    #     g = build_networkX_graph(map, weightMod, baseWeight, bannedTiles=bannedTiles)
+
+    # artPoints = nx.algorithms.articulation_points(g)
 
     nextTime = time.perf_counter()
     logbook.info(f'networkX graph build in {nextTime - start:.5f}s')
     start = nextTime
 
-    terminalNodes = [t.tile_index for t in includingTiles]
+    terminalNodes = [t.tile_index for t in requiredTiles]
 
     nextTime = time.perf_counter()
     logbook.info(f'terminalNodes in {nextTime - start:.5f}s')
@@ -57,7 +58,7 @@ def build_network_x_steiner_tree(
     nextTime = time.perf_counter()
     logbook.info(f'steiner calc in {nextTime - start:.5f}s')
     start = nextTime
-    includedNodes = [map.tiles_by_index[n] for n in steinerTree.nodes]
+    includedNodes = {map.tiles_by_index[n] for n in steinerTree.nodes}
 
     nextTime = time.perf_counter()
     logbook.info(f'includedNodes in {nextTime - start:.5f}s')
@@ -128,15 +129,18 @@ def build_networkX_graph_flat_add(
         map: MapBase,
         weightMod: MapMatrixInterface[float],
         baseWeight: int = 1,
-        bannedTiles: typing.Container[Tile] | None = None
+        bannedTiles: typing.Container[Tile] | None = None,
+        validTiles: typing.Set[Tile] | None = None
 ) -> nx.Graph:
     start = time.perf_counter()
 
     g = nx.Graph()
+    if not validTiles:
+        validTiles = map.pathable_tiles
 
-    for tile in map.get_all_tiles():
-        if tile.isMountain:
-            continue
+    for tile in validTiles:
+        # if tile.isMountain:
+        #     continue
         # if tile.isObstacle:
         #     continue
 
@@ -149,17 +153,17 @@ def build_networkX_graph_flat_add(
         right = map.GetTile(tile.x + 1, tile.y)
         down = map.GetTile(tile.x, tile.y + 1)
         tileIndex = tile.tile_index
-        if right and not right.isObstacle:
+        if right and right in validTiles:
             weight = fromWeight
-            if right.isObstacle or (bannedTiles is not None and right in bannedTiles):
+            if right.isObstacle or (bannedTiles and right in bannedTiles):
                 weight += baseWeight * 1000
 
             weight -= weightMod.raw[right.tile_index]
 
             g.add_edge(tileIndex, right.tile_index, weight=weight)
-        if down and not down.isObstacle:
+        if down and down in validTiles:
             weight = fromWeight
-            if down.isObstacle or (bannedTiles is not None and down in bannedTiles):
+            if down.isObstacle or (bannedTiles and down in bannedTiles):
                 weight += baseWeight * 1000
 
             weight -= weightMod.raw[down.tile_index]
@@ -183,7 +187,7 @@ def _build_pcst_tile_prize_matrix(
         gatherMatrix: MapMatrixInterface[float] | None = None,
         captureMatrix: MapMatrixInterface[float] | None = None,
         hintIncludeTiles: TileSet | None = None,
-) -> typing.Tuple[MapMatrix[float], MapMatrix[float]]:
+) -> typing.Tuple[MapMatrix[float], float, float, MapMatrix[float], float, float]:
     """
     Returns prizeMatrix, extraCostMatrix
 
@@ -204,9 +208,29 @@ def _build_pcst_tile_prize_matrix(
     tilePrizeMatrix = MapMatrix(map, 0.0)
     tileExtraCostMatrix = MapMatrix(map, 0.0)
 
+    if negativeTiles:
+        for tile in map.iterate_tile_set(negativeTiles):
+            tileExtraCostMatrix.raw[tile.tile_index] += 2.0
+            tilePrizeMatrix.raw[tile.tile_index] = -1.0
+
+    if hintIncludeTiles:
+        for tile in map.iterate_tile_set(hintIncludeTiles):
+            # never extra-cost these, and make their cost hint lower than other nearby
+            tileExtraCostMatrix.raw[tile.tile_index] = -1.0
+            tilePrizeMatrix.raw[tile.tile_index] += 0.5
+
+    # root tiles have no value themselves, should always be included
+    for tile in rootTiles:
+        tilePrizeMatrix.raw[tile.tile_index] += 1.0
+        tileExtraCostMatrix.raw[tile.tile_index] = -1.0
+
+    minCost = 1000000.0
+    maxCost = -1000000.0
+    minPrize = 1000000.0
+    maxPrize = -1000000.0
     for tile in map.reachable_tiles:
-        prize = 0.0
-        extraCost = 0.0
+        prize = tilePrizeMatrix.raw[tile.tile_index]
+        extraCost = tileExtraCostMatrix.raw[tile.tile_index]
 
         if map.is_tile_on_team_with(tile, searchingPlayer):
             prize = float(tile.army)
@@ -224,26 +248,14 @@ def _build_pcst_tile_prize_matrix(
                     capVal = captureMatrix.raw[tile.tile_index]
                     prize += capVal
 
+        minCost = min(extraCost, minCost)
+        minPrize = min(prize, minPrize)
+        maxCost = max(extraCost, maxCost)
+        maxPrize = max(prize, maxPrize)
         tilePrizeMatrix.raw[tile.tile_index] = prize
         tileExtraCostMatrix.raw[tile.tile_index] = extraCost
 
-    if negativeTiles:
-        for tile in map.iterate_tile_set(negativeTiles):
-            tileExtraCostMatrix.raw[tile.tile_index] += 2.0
-            tilePrizeMatrix.raw[tile.tile_index] = -1.0
-
-    if hintIncludeTiles:
-        for tile in map.iterate_tile_set(hintIncludeTiles):
-            # never extra-cost these, and make their cost hint lower than other nearby
-            tileExtraCostMatrix.raw[tile.tile_index] = -1.0
-            tilePrizeMatrix.raw[tile.tile_index] += 0.5
-
-    # root tiles have no value themselves, should always be included
-    for tile in rootTiles:
-        tilePrizeMatrix.raw[tile.tile_index] += 1.0
-        tileExtraCostMatrix.raw[tile.tile_index] = -1.0
-
-    return tilePrizeMatrix, tileExtraCostMatrix
+    return tilePrizeMatrix, minPrize, maxPrize, tileExtraCostMatrix, minCost, maxCost
 
 
 def get_prize_collecting_gather_mapmatrix(
@@ -277,7 +289,7 @@ def get_prize_collecting_gather_mapmatrix(
 
     start = time.perf_counter()
 
-    tilePrizeMatrix, tileExtraCostMatrix = _build_pcst_tile_prize_matrix(
+    tilePrizeMatrix, minPrize, maxPrize, tileExtraCostMatrix, minCost, maxCost = _build_pcst_tile_prize_matrix(
         map=map,
         searchingPlayer=searchingPlayer,
         rootTiles=rootTiles,
@@ -296,8 +308,12 @@ def get_prize_collecting_gather_mapmatrix(
         sameResultCutoff,
         targetTurns,
         rootTiles,
-        costIterations=7,
-        prizeIterations=7,
+        costIterations=5,
+        prizeIterations=4,
+        minPrizeAvailable=minPrize,
+        maxPrizeAvailable=maxPrize,
+        minCost=minCost,
+        maxCost=maxCost,
         tilePrizeMatrix=tilePrizeMatrix,
         tileExtraCostMatrix=tileExtraCostMatrix,
         cutoffTime=time.perf_counter() + timeLimit,
@@ -334,6 +350,10 @@ def _pcst_gradient_search(
         rootTiles: typing.List[Tile] | None,
         costIterations: int,
         prizeIterations: int,
+        minPrizeAvailable: float,
+        maxPrizeAvailable: float,
+        minCost: float,
+        maxCost: float,
         tilePrizeMatrix: MapMatrixInterface[float],
         tileExtraCostMatrix: MapMatrixInterface[float],
         cutoffTime: float | None = None,
@@ -359,20 +379,26 @@ def _pcst_gradient_search(
     if rootTiles:
         rootCount = len(rootTiles)
 
-    costCutoffsToTry = [1.0, 2.0, 5.0, 10.0, 50.0, 100.0]
+    costCutoffsToTry = [0.5, 1.0, 2.0, 8.0, 32.0, 128.0]
     results = []
 
     prevCutoff = None
     bestPrev = 0.0
-    bestNext = 20.0
+    bestNext = costCutoffsToTry[-1]
     wasMax = False
     for initialCostCutoff in costCutoffsToTry:
+        actualCutoff = initialCostCutoff - 1.0
+        if actualCutoff < -minCost:
+            continue
+
         costIters += 1
-        curPrizeIterLimit = 4
+        curPrizeIterLimit = 3
         prizeMax, prizeMin, vertices = _pcst_gradient_descent_prize_basis(
             map,
             targetNodeCount=targetNodeCount,
             # maxNodeCount=maxNodes,  # if we limit this by max nodes, then it will make the algo thing we're always undershooting instead of understanding we overshot.
+            minPrizeAvailable=minPrizeAvailable,
+            maxPrizeAvailable=maxPrizeAvailable,
             costCutoff=initialCostCutoff,
             iterationLimit=curPrizeIterLimit,
             sameResultCutoff=sameResultCutoff,
@@ -384,6 +410,9 @@ def _pcst_gradient_search(
         vCount = 0 - targetNodeCount
         if vertices is not None:
             vCount = len(vertices)
+        elif bestPrev != 0.0:
+            logbook.info(f'  bypassing remaining initial as we passed useful costs with cost attempt at {initialCostCutoff:.5f} output {vCount} nodes (target {targetNodeCount}, prizeMin {prizeMin:.5f}, prizeMax {prizeMax:.5f})')
+            bestNext = min(bestNext, initialCostCutoff)
 
         logbook.info(f'  cost attempt at {initialCostCutoff:.5f} output {vCount} nodes (target {targetNodeCount}, prizeMin {prizeMin:.5f}, prizeMax {prizeMax:.5f})')
 
@@ -430,6 +459,8 @@ def _pcst_gradient_search(
             targetNodeCount=targetNodeCount,
             # maxNodeCount=maxNodes,  # if we limit this by max nodes, then it will make the algo thing we're always undershooting instead of understanding we overshot.
             costCutoff=nextCutoff,
+            minPrizeAvailable=minPrizeAvailable,
+            maxPrizeAvailable=maxPrizeAvailable,
             iterationLimit=curPrizeIterLimit,
             sameResultCutoff=sameResultCutoff,
             rootTiles=rootTiles,
@@ -745,17 +776,19 @@ def _pcst_gradient_descent_prize_basis(
         costCutoff,
         iterationLimit,
         sameResultCutoff,
+        minPrizeAvailable: float,
+        maxPrizeAvailable: float,
         tilePrizeMatrix: MapMatrixInterface[float],
         tileExtraCostMatrix: MapMatrixInterface[float],
         rootTiles: typing.List[Tile] | None,
         skipTiles: TileSet | None = None,
 ) -> typing.Tuple[int, int, typing.List[int] | None]:
     lastCount = -1000
-    minCutoff = -80.0
-    maxCutoff = 10.0
+    minCutoff = -maxPrizeAvailable
+    maxCutoff = 0.0
     bestResult = None
     bestDiff = 100000
-    nextCutoff = -5.0
+    nextCutoff = -1.0
     sameResultCount = 0
     bestMax = 100.0
     bestMin = -100

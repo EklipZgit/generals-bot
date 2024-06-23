@@ -3,6 +3,8 @@ from __future__ import annotations
 import typing
 from collections import deque
 
+import logbook
+
 from Interfaces import MapMatrixInterface
 from base.client.tile import Tile
 

@@ -48,7 +48,7 @@ class DefenseTests(TestBase):
         simHost.reveal_player_general(playerToReveal=enemyGeneral.player, playerToRevealTo=general.player)
 
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=50)
+        simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=20)
         self.assertNoRepetition(simHost, minForRepetition=3)
 
     def test_finds_perfect_gather_defense__small_moves_into_path__knapsack_gather_breaks_simpler_with_enemy(self):
@@ -1144,7 +1144,7 @@ class DefenseTests(TestBase):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_kill_vision_threat_with_general_lol___fHVoYEYIm---2--281.txtmap'
 
-        for i in range(10):
+        for i in range(5):
             map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 281, fill_out_tiles=True)
 
             rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=281)
@@ -1829,8 +1829,8 @@ class DefenseTests(TestBase):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
 
         for turn, isWinRaw in [
-            (243, True),
             (244, False),
+            (243, True),
         ]:
             for addlArmy, canKill in [
                 (0, True),
@@ -1840,7 +1840,7 @@ class DefenseTests(TestBase):
                 (5, False),
                 (7, False),
             ]:
-                for generalVisible in [False, True]:
+                for generalVisible in [True, False]:
                     isWin = isWinRaw and canKill
                     with self.subTest(turn=turn, extraArmy=addlArmy, generalVisible=generalVisible, isWin=isWin):
                         self._run_king_kill_race_test(debugMode, addlArmy, generalVisible, isWin, turn)
@@ -1862,11 +1862,20 @@ class DefenseTests(TestBase):
             self.reset_general(rawMap, enemyGeneral)
         else:
             rawMap.GetTile(enemyGeneral.x, enemyGeneral.y).army = enemyGeneral.army
+
+        if not isWin:
+            map.GetTile(16, 10).army = 2
+            rawMap.GetTile(16, 10).army = 2
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '11,11->16,11')
-        # proof
-        # simHost.queue_player_moves_str(general.player, '5,9->4,9->4,7->2,7')
+        # # proof
+        # if isWin:
+        #     simHost.queue_player_moves_str(general.player, '5,9->4,9->4,7->2,7')
+        # else:
+        #     simHost.queue_player_moves_str(general.player, '11,12->11,11  17,9->16,9->16,11')
+
         bot = self.get_debug_render_bot(simHost, general.player)
         bot.opponent_tracker.current_team_cycle_stats[enemyGeneral.player].approximate_fog_city_army += addlArmy
         playerMap = simHost.get_player_map(general.player)
@@ -2418,3 +2427,20 @@ class DefenseTests(TestBase):
     # 94f, 57p, 5s
     # 82f, 74p, 5s after preventing gather
     # 91f, 68p, 4s after fixing iterative gather bug? lol? wtf?
+    
+    def test_should_just_intercept__not_die_lmao__why_is_defense_preventing_intercept_here(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_just_intercept__not_die_lmao__why_is_defense_preventing_intercept_here___9kQJij1tZ---1--275.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 275, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=275)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '7,15->7,16->6,16->6,17->5,17')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)

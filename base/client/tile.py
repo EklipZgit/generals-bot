@@ -115,6 +115,9 @@ class TileDelta(object):
         self.expectedDelta: int = 0
         """The EXPECTED army delta of the tile, this turn."""
 
+        self.discoveredExGeneralCity: bool = False
+        """True when a tile that wasnt a city (or obstacle) gets discovered as a city. Only true for THAT turn."""
+
     def __str__(self):
         pieces = [f'{self.armyDelta:+d}']
         if self.oldOwner != self.newOwner:
@@ -423,6 +426,7 @@ class Tile(object):
     ) -> bool:
         self.delta: TileDelta = TileDelta()
         self.delta.oldArmy = self.army
+        wasObstacle = self.isObstacle
         if not self.visible:
             self.delta.imperfectArmyDelta = True
         if tile >= TILE_MOUNTAIN:
@@ -527,6 +531,8 @@ class Tile(object):
         if isCity and not self.isCity:
             self.isCity = True
             self.isGeneral = False
+            if not wasObstacle:
+                self.delta.discoveredExGeneralCity = True
 
         elif isGeneral:
             playerObj = map.players[self._player]

@@ -36,7 +36,7 @@ class ExpansionLegacyUnitTests(TestBase):
         # SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING = DebugHelper.IS_DEBUGGING
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=mapVision, allAfkExceptMapPlayer=True)
         bot = self.get_debug_render_bot(simHost, general.player)
-        bot.viewInfo.turnInc()
+        bot.viewInfo.clear_for_next_turn()
 
         path, otherPaths = self.run_expansion_raw(bot, turns, negativeTiles, timeLimit)
 

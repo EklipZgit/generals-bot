@@ -296,18 +296,15 @@ class MapBase(object):
 
     @turn.setter
     def turn(self, val: int):
+        self.cycleTurn = val % 50
+        self.remainingCycleTurns = 50 - self.cycleTurn
+
         if val & 1 == 0:
             self.is_city_bonus_turn = True
-            if val % 50 == 0:
-                self.is_army_bonus_turn = True
-            else:
-                self.is_army_bonus_turn = False
+            self.is_army_bonus_turn = self.cycleTurn == 0
         else:
             self.is_army_bonus_turn = False
             self.is_city_bonus_turn = False
-
-        self.cycleTurn = val % 50
-        self.remainingCycleTurns = 50 - self.cycleTurn
 
         self._turn = val
 
@@ -344,6 +341,20 @@ class MapBase(object):
     def get_all_tiles(self) -> typing.Generator[Tile, None, None]:
         for row in self.grid:
             for tile in row:
+                yield tile
+
+    def get_all_tiles_for_team_of_player(self, player: int) -> typing.Generator[Tile, None, None]:
+        for p in self._teammates_by_player[player]:
+            playerObj = self.players[p]
+
+            for tile in playerObj.tiles:
+                yield tile
+
+    def get_all_tiles_for_team(self, teamId: int) -> typing.Generator[Tile, None, None]:
+        for p in self._teammates_by_team[teamId]:
+            playerObj = self.players[p]
+
+            for tile in playerObj.tiles:
                 yield tile
 
     def manhattan_dist(self, tileA: Tile, tileB: Tile) -> int:
@@ -625,7 +636,7 @@ class MapBase(object):
 
         return (self.tiles_by_index[i] for i, isInSet in enumerate(tileSet.raw) if isInSet)
 
-    # Emulates a tile update event from the server. Changes player tile ownership, or mountain to city, etc, and fires events
+    # Applies a tile update event from the server. Call this method directly to pretend a server update happend to a tile in tests. Changes player tile ownership, or mountain to city, etc, and fires events
     def update_visible_tile(
             self,
             x: int,
@@ -636,7 +647,7 @@ class MapBase(object):
             is_general: bool = False):
         """
         Call this AFTER calling map.update_turn.
-        ONLY call this once per turn per tile, or deltas will be messed up.
+        ONLY call this ONCE per turn per tile, or the first deltas will be replaced by the final delta.
         THEN once all tile updates are queued, call map.update() to process all the updates into tile movements.
 
         @param x:
@@ -654,7 +665,10 @@ class MapBase(object):
         wasGeneral = curTile.isGeneral
         if curTile.isCity and tile_type >= TILE_EMPTY and not is_city:
             curTile.isCity = False
+
+        # does the ACTUAL tile update
         maybeMoved = curTile.update(self, tile_type, tile_army, is_city, is_general)
+
         if not is_general and tile_type >= TILE_EMPTY and curTile.isGeneral:
             curTile.isGeneral = False
 

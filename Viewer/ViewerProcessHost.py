@@ -1,3 +1,4 @@
+import os
 import time
 
 import queue
@@ -27,6 +28,7 @@ class ViewerHost(object):
             ctx: DefaultContext | None = None,
             mgr: SyncManager | None = None,
             onClick: typing.Callable[[Tile, bool], None] | None = None,
+            minUpdateSleep: float = 0.0,
             noLog: bool = False
     ):
         if ctx is None:
@@ -44,7 +46,7 @@ class ViewerHost(object):
         self._viewer_event_queue: "Queue[typing.Tuple[str, typing.Any]]" = self.mgr.Queue()
         self._closed_by_user: bool | None = None
         logbook.info("newing up viewer process")
-        self.process: BaseProcess = self.ctx.Process(target=_run_main_viewer_loop, args=(self._update_queue, self._viewer_event_queue, window_title, cell_width, cell_height, noLog, alignTop, alignLeft, BotLogging.LOGGING_QUEUE))
+        self.process: BaseProcess = self.ctx.Process(target=_run_main_viewer_loop, args=(self._update_queue, self._viewer_event_queue, window_title, cell_width, cell_height, noLog, alignTop, alignLeft, BotLogging.LOGGING_QUEUE, minUpdateSleep))
         self.no_log: bool = noLog
         self._started: bool = False
 
@@ -147,14 +149,117 @@ class ViewerHost(object):
                 self._closed_by_user = False
 
 
-def _run_main_viewer_loop(update_queue, viewer_event_queue, window_title, cell_width, cell_height, noLog, alignTop, alignLeft, loggingQueue):
+class DebugViewerHost(object):
+    def __init__(
+            self,
+            viewInfo: ViewInfo,
+            titleString: str | None,
+            minUpdateSleep: float = 0.1,
+            pauseOnRightClick: bool = True,
+            onClick: typing.Callable[[Tile | None, bool], None] | None = None,
+            startPaused: bool = False,
+            cell_width=40,
+            cell_height=40
+    ):
+        if not titleString:
+            try:
+                titleString = os.environ.get('PYTEST_CURRENT_TEST').split(':')[-1].split(' ')[0]
+            except:
+                titleString = traceback.format_exc()
+
+        self.viewer_host: ViewerHost = ViewerHost(titleString, cell_width=None, cell_height=None, alignTop=False, alignLeft=False, noLog=True, onClick=self.on_click, minUpdateSleep=minUpdateSleep)
+        self.viewer_host.noLog = True
+        self.viewer_host.start()
+
+        self.map: MapBase = viewInfo.map
+
+        self.view_info: ViewInfo = viewInfo
+
+        self._extra_on_click: typing.Callable[[Tile | None, bool], None] | None = onClick
+        self._pause_on_right_click: bool = pauseOnRightClick
+        self._clicked: bool = False
+        self.paused: bool = startPaused
+
+    def trigger_update(self, clearViewInfoAfter: bool = False, waitClick: bool = False):
+        self.viewer_host.send_update_to_viewer(self.view_info, self.map, isComplete=False)
+
+        if waitClick:
+            while not self.viewer_host.check_viewer_closed() and not self._clicked:
+                self.viewer_host.send_update_to_viewer(self.view_info, self.map, isComplete=False)
+                time.sleep(0.1)
+
+            self._clicked = False
+
+        self._hold_while_paused()
+
+        if clearViewInfoAfter:
+            self.view_info.clear_for_next_turn()
+
+    def on_click(self, tile: Tile, isRightClick: bool):
+        if isRightClick and self._pause_on_right_click:
+            if self.paused:
+                self.paused = False
+            else:
+                self.paused = True
+        else:
+            self._clicked = True
+
+        if self._extra_on_click:
+            self._extra_on_click(tile, isRightClick)
+
+    def send_final_result_and_close(self, msg, closeDelay: float | None = None):
+        """
+        Not sending a close delay means it will wait for a click before actually closing.
+        Sending a close delay means wait that long after final update, then auto close.
+
+        @param msg:
+        @param closeDelay:
+        @return:
+        """
+        waitClick = False
+        if closeDelay is None:
+            waitClick = True
+        self.view_info.infoText = msg
+        self.trigger_update(waitClick=waitClick)
+
+        if closeDelay:
+            closeStart = time.perf_counter()
+            while not self.viewer_host.check_viewer_closed() and not self._clicked and (time.perf_counter() - closeStart < closeDelay or self.paused):
+                # self.viewer_host.send_update_to_viewer(self.view_info, self.map, isComplete=False)
+                time.sleep(0.1)
+
+        self.kill()
+
+    def kill(self):
+        self.viewer_host.kill()
+
+    def _hold_while_paused(self):
+        while not self.viewer_host.check_viewer_closed() and self.paused and not self._clicked:
+            # self.viewer_host.send_update_to_viewer(self.view_info, self.map, isComplete=False)
+            time.sleep(0.1)
+
+        self._clicked = False
+
+
+def _run_main_viewer_loop(
+        update_queue,
+        viewer_event_queue,
+        window_title,
+        cell_width,
+        cell_height,
+        noLog,
+        alignTop,
+        alignLeft,
+        loggingQueue,
+        minUpdateSleep: float
+):
     # if not noLog:
     BotLogging.set_up_logger(logbook.INFO, mainProcess=False, queue=loggingQueue)
 
     logbook.info("MAIN VIEWER LOOP PROC importing GeneralsViewer")
     from base.viewer import GeneralsViewer
     logbook.info("MAIN VIEWER LOOP PROC newing up GeneralsViewer")
-    viewer = GeneralsViewer(update_queue, viewer_event_queue, window_title, cell_width=cell_width, cell_height=cell_height, no_log=noLog)
+    viewer = GeneralsViewer(update_queue, viewer_event_queue, window_title, cell_width=cell_width, cell_height=cell_height, no_log=noLog, min_sleep_time=minUpdateSleep)
 
     logbook.info("running run_main_viewer_loop...?")
     viewer.run_main_viewer_loop(alignTop, alignLeft)
@@ -176,3 +281,11 @@ def render_view_info_debug(titleString: str, infoString: str, map: MapBase, view
     while not viewer.check_viewer_closed():
         viewer.send_update_to_viewer(viewInfo, map, isComplete=False)
         time.sleep(0.1)
+
+
+def start_debug_live_renderer(map: MapBase, minUpdateTime: float = 0.5, startPaused: bool = True) -> DebugViewerHost:
+    viewInfo = ViewInfo(2, map)
+    host = DebugViewerHost(viewInfo, 'algo debug', minUpdateTime, startPaused=startPaused)
+    host.trigger_update()
+
+    return host

@@ -1,3 +1,4 @@
+import gc
 import random
 import time
 import typing
@@ -9,6 +10,7 @@ import logbook
 
 import SearchUtils
 from DistanceMapperImpl import DistanceMapperImpl
+from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrix, MapMatrixSet  #, MapMatrixSetWithLength, MapMatrixSetWithLengthAndTiles
 from Tests.TestBase import TestBase
 from ViewInfo import PathColorer
@@ -849,6 +851,112 @@ class MapMatrixBenchmarkTests(TestBase):
                         logbook.info(f'mapMatrixSet direct access duration {mapMatrixTotalDur:.4f} vs set duration {setTotalDuration:.4f} at num "added" {numAdds} + retrievals {accesses} (ratio {setTotalDuration / mapMatrixTotalDur:.3f})')
 
                         self.assertLess(mapMatrixTotalDur, setTotalDuration, f'mapMatrixSet direct access stopped being faster at num "added" {numAdds} + retrievals {accesses}')
+
+    def test_benchmark_mapmatrixset__direct_access__assign_plus_retrieve__find_point_where_set_is_better__set_int_access(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        for mapSize in [
+            'small',
+            'large'
+        ]:
+            for accesses in [
+                5000,
+                750,
+                500,
+                300,
+                200,
+                140,
+                120,
+                110,
+                100,
+                90,
+                80,
+                70,
+                60,
+                50,
+                40,
+                35,
+                20,
+                10,
+                7,
+                2
+            ]:
+                for numAdds in [
+                    5000,
+                    1500,
+                    750,
+                    300,
+                    200,
+                    150,
+                    120,
+                    110,
+                    100,
+                    85,
+                    75,
+                    65,
+                    50,
+                    40,
+                    30,
+                    20,
+                    10,
+                    5,
+                    2,
+                ]:
+                    with self.subTest(mapSize=mapSize, accesses=accesses, numInSet=numAdds):
+                        if mapSize == 'large':
+                            mapFile = 'GameContinuationEntries/fog_land_builder_should_not_take_ages_to_build___Sx5Tl3mwJ---2--880.txtmap'
+                        else:
+                            mapFile = 'GameContinuationEntries/should_recognize_army_collision_from_fog___BlpaDuBT2---b--136.txtmap'
+
+                        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136)
+
+                        allTiles = list(map.get_all_tiles())
+
+                        self.begin_capturing_logging()
+
+                        mapMatrixTotalDur = 0.0
+                        setTotalDuration = 0.0
+
+                        for i in range(100):
+                            gc.collect()
+                            randTiles = [random.choice(allTiles) for i in range(numAdds)]
+                            val = 0
+                            itrLeft = accesses
+                            start = time.perf_counter()
+                            matrix: MapMatrixSet = MapMatrixSet(map)
+                            for tile in randTiles:
+                                matrix.raw[tile.tile_index] = True
+                            while itrLeft > 0:
+                                for tile in map.pathable_tiles:
+                                    if matrix.raw[tile.tile_index]:
+                                        val += 1
+                                    itrLeft -= 1
+                                    if itrLeft == 0:
+                                        break
+                            mapMatrixDuration = time.perf_counter() - start
+                            mapMatrixTotalDur += mapMatrixDuration
+
+                            val = 0
+                            start = time.perf_counter()
+                            setLookup: typing.Set[int] = set()
+                            # set only gets
+                            for tile in randTiles:
+                                setLookup.add(tile.tile_index)
+
+                            itrLeft = accesses
+                            while itrLeft > 0:
+                                for tile in map.pathable_tiles:
+                                    if tile.tile_index in setLookup:
+                                        val += 1
+                                    itrLeft -= 1
+                                    if itrLeft == 0:
+                                        break
+                            setDuration = time.perf_counter() - start
+                            setTotalDuration += setDuration
+
+                        logbook.info(f'mapMatrixSet direct access duration {mapMatrixTotalDur:.4f} vs set int access duration {setTotalDuration:.4f} at num "added" {numAdds} + retrievals {accesses} (ratio {setTotalDuration / mapMatrixTotalDur:.3f})')
+
+                        self.assertLess(mapMatrixTotalDur, setTotalDuration, f'mapMatrixSet direct access stopped being faster at num "added" {numAdds} + retrievals {accesses}')
     #
     # def test_benchmark_mapmatrixsetwithlength__assign_plus_retrieve__find_point_where_set_is_better(self):
     #     debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1310,3 +1418,559 @@ class MapMatrixBenchmarkTests(TestBase):
                     logbook.info(f'mapMatrix duration {mapMatrixTotalDur:.4f} vs dict duration {dictTotalDuration:.4f}')
 
                     self.assertLess(mapMatrixTotalDur, dictTotalDuration, f'mapMatrix stopped being faster at iterations {iterations}')
+
+    def test_benchmark_empty_sets(self):
+        self.begin_capturing_logging()
+        for numChecks in [20, 50, 100, 500]:
+            with self.subTest(numChecks=numChecks):
+                # q.qsize()
+                mapFile = 'GameContinuationEntries/should_recognize_army_collision_from_fog___BlpaDuBT2---b--136.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136)
+
+                numberRuns = 100
+
+                logbook.info(f'\r\n\r\n numChecks {numChecks}:\r\n')
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if tile in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+from Interfaces.MapMatrixInterface import EmptySet
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = EmptySet()
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: EmptySet: {result:.4f} seconds')
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if tile in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+from Interfaces.MapMatrixInterface import EmptyTileSet
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = EmptyTileSet()
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: EmptyTileSet: {result:.4f} seconds')
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if tile in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = set()
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: empty set(): {result:.4f} seconds')
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if tile in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = frozenset()
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: empty frozenset(): {result:.4f} seconds')
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if tile in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = dict()
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: dict(): {result:.4f} seconds')
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if tile in mmSet:
+            v += 1
+                    ''',
+                    setup=f'''
+from MapMatrix import MapMatrix, MapMatrixSet  #, MapMatrixSetWithLength, MapMatrixSetWithLengthAndTiles
+mmSet = MapMatrixSet(map)
+tiles = [t for t in map.get_all_tiles()]
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map})
+
+                # report the result
+                logbook.info(f'{numChecks}: empty mmSet: {result:.4f} seconds')
+
+                logbook.info(f'\r\n RAW INT / DIRECT ACCESS:')
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if mmSet.raw[tile.tile_index]:
+            v += 1
+                    ''',
+                    setup=f'''
+from MapMatrix import MapMatrix, MapMatrixSet  #, MapMatrixSetWithLength, MapMatrixSetWithLengthAndTiles
+mmSet = MapMatrixSet(map)
+tiles = [t for t in map.get_all_tiles()]
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map})
+
+                # report the result
+                logbook.info(f'{numChecks}: empty mmSet (but direct access instead of "in": {result:.4f} seconds')
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if tile.tile_index in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+from Interfaces.MapMatrixInterface import EmptySet
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = EmptySet()
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: EmptySet: {result:.4f} seconds')
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if tile.tile_index in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+from Interfaces.MapMatrixInterface import EmptyTileSet
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = EmptyTileSet()
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: EmptyTileSet: {result:.4f} seconds')
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if tile.tile_index in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = set()
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: empty set(): {result:.4f} seconds')
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if tile.tile_index in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = frozenset()
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: empty frozenset(): {result:.4f} seconds')
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if tile.tile_index in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = dict()
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: dict(): {result:.4f} seconds')
+
+    def test_benchmark_empty_sets_vs_none_check(self):
+        self.begin_capturing_logging()
+        for numChecks in [20, 50, 100, 500]:
+            with self.subTest(numChecks=numChecks):
+                # q.qsize()
+                mapFile = 'GameContinuationEntries/should_recognize_army_collision_from_fog___BlpaDuBT2---b--136.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136)
+
+                numberRuns = 100
+
+                logbook.info(f'\r\n\r\n numChecks {numChecks}:\r\n')
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if mySet and tile in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+from Interfaces.MapMatrixInterface import EmptySet
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = EmptySet()
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: EmptySet Truthy check: {result:.4f} seconds')
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if mySet and tile in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+from Interfaces.MapMatrixInterface import EmptySet
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = None
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: None Truthy check: {result:.4f} seconds')
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if mySet and tile in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = set()
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: empty set() Truthy check: {result:.4f} seconds')
+
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if mySet and tile in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+import random
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = {{t for t in random.choices(tiles, k=30)}}
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: non-empty set() Truthy check: {result:.4f} seconds')
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if mySet is not None and tile in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+from Interfaces.MapMatrixInterface import EmptySet
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = EmptySet()
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: EmptySet None check: {result:.4f} seconds')
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if mySet is not None and tile in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+from Interfaces.MapMatrixInterface import EmptySet
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = None
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: None None check: {result:.4f} seconds')
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if mySet is not None and tile in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = set()
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: empty set() None check: {result:.4f} seconds')
+
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if mySet is not None and tile in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+import random
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = {{t for t in random.choices(tiles, k=30)}}
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: non-empty set() None check: {result:.4f} seconds')
+
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if tile in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+from Interfaces.MapMatrixInterface import EmptySet
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = EmptySet()
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: EmptySet NO check: {result:.4f} seconds')
+
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if tile in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = set()
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: empty set() NO check: {result:.4f} seconds')
+
+
+                result = timeit(
+                f'''
+v = 0
+for i in range({numChecks}):
+    for tile in tiles:
+        if tile in mySet:
+            v += 1
+                    ''',
+                    setup=f'''
+import random
+tiles = [t for t in map.get_all_tiles()]
+
+mySet = {{t for t in random.choices(tiles, k=30)}}
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: non-empty set() NO check: {result:.4f} seconds')
+
+    def test_benchmark_random_obj_none_vs_truthy(self):
+        self.begin_capturing_logging()
+        for numChecks in [5000000]:
+            with self.subTest(numChecks=numChecks):
+                # q.qsize()
+                mapFile = 'GameContinuationEntries/should_recognize_army_collision_from_fog___BlpaDuBT2---b--136.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136)
+
+                numberRuns = 100
+
+                logbook.info(f'\r\n\r\n numChecks {numChecks}:\r\n')
+
+                result = timeit(
+                f'''
+v = 1
+for i in range({numChecks}):
+    if not map:
+        v += 1
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: random obj truthy check: {result:.4f} seconds')
+
+
+                result = timeit(
+                f'''
+v = 1
+for i in range({numChecks}):
+    if map is None:
+        v += 1
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: random obj is not None check: {result:.4f} seconds')
+
+                result = timeit(
+                f'''
+v = 1
+for i in range({numChecks}):
+    if not map:
+        v += 1
+                    ''',
+                    number=numberRuns,
+                    globals={'map': map},
+                )
+
+                # report the result
+                logbook.info(f'{numChecks}: random obj truthy check: {result:.4f} seconds')

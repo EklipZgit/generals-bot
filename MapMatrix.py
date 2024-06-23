@@ -18,12 +18,17 @@ MapMatrix (direct vs dict[])       Dict()-90%  40-60 accesses   (53% access, 220
 MapMatrixSet                       Set()~0%    70-85 adds       (-10% access, 30% add)
 MapMatrixSet (direct access)       Set()-70%   30-50 accesses   (62% access, 200% add)
 
+MapMatrixSet should NEVER be used when Set(tile.tile_index) is available. Unfortunately it pretty much always loses. It BARELY wins at TONS of accesses, but only JUST barely, and loses heavily for any smaller counts, sadly.
+MapMatrixSet (direct access)       Set(int)-1%  at 5000 accesses+5000 adds
+
 TLDR
 now with fixed hashcode, Set() performs very well. Direct access mapmatrixset is still a good choice in high perf situations.
 Dict() performs better when making lots of copies. Matrix is better than dict when using dict get()
 Matrix direct access has much higher add performance than dict for lots of adds.
 Matrix.get() performs poorly and should be avoided where possible unless a default is NEEDED.
 If you need to iterate the tiles in smaller sets, always use Set(). 
+MapMatrixSet should NEVER be used when Set(tile.tile_index) is available. Unfortunately it pretty much always loses to Set(int). 
+It BARELY wins at TONS of adds + accesses, but only JUST barely, and loses heavily (3x slower) for any smaller counts, sadly.
 TODO not actually benched yet. ^
 """
 
@@ -129,6 +134,33 @@ class MapMatrix(MapMatrixInterface[T]):
                     newMatrix.raw[idx] += val
 
         return newMatrix
+
+    @classmethod
+    def get_min_normalized_via_sum(cls, matrix: MapMatrixInterface[float], normalizedMinimum: float = 0, offsetDownward: bool = False, noCopy: bool = False) -> MapMatrixInterface[float]:
+        """
+        if input is ints, will output ints.
+
+        @param matrix:
+        @param normalizedMinimum: The new minimum value.
+        @param offsetDownward: If False (default) then if ALL values are greater than normalizedMinimum, then the returned matrix values will be unchanged (will still be a new copy, though).
+        @param noCopy: if True, original matrix will be modified.
+        @return:
+        """
+        minVal = min(matrix.raw)
+        offset = normalizedMinimum - minVal
+
+        if offset == 0:
+            return matrix if noCopy else matrix.copy()
+        if offset < 0 and not offsetDownward:
+            return matrix if noCopy else matrix.copy()
+
+        targetMatrix = matrix
+        if not noCopy:
+            targetMatrix = matrix.copy()
+
+        targetMatrix.raw = [v + offset for v in matrix.raw if v is not None]
+
+        return targetMatrix
 
     @classmethod
     def add_to_matrix(cls, matrixToModify: MapMatrixInterface[float], matrixToAdd: MapMatrixInterface[float]):

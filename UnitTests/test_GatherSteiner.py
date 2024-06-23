@@ -6,7 +6,7 @@ import logbook
 from Gather import GatherSteiner
 import Gather
 from Algorithms import TileIslandBuilder, MapSpanningUtils
-from Interfaces.MapMatrixInterface import EmptySet
+from Interfaces.MapMatrixInterface import EmptyTileSet
 from MapMatrix import MapMatrix, MapMatrixSet
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
@@ -636,7 +636,7 @@ class GatherSteinerUnitTests(TestBase):
 
         oldGathViewInfo = self.get_renderable_view_info(map)
         oldGatherStart = time.perf_counter()
-        value, oldGatherNodes = Gather.knapsack_levels_backpack_gather_with_value(
+        value, usedTurns, oldGatherNodes = Gather.knapsack_depth_gather_with_values(
             map,
             [enemyGeneral],
             turns=plan.length,
@@ -750,7 +750,7 @@ class GatherSteinerUnitTests(TestBase):
         for t in tiles:
             viewInfo.add_targeted_tile(t, TargetStyle.GREEN)
         start = time.perf_counter()
-        connectedTiles, missingRequired = MapSpanningUtils.get_max_gather_spanning_tree_set_from_tile_lists(map, tiles, bannedSet=EmptySet(), negativeTiles=EmptySet(), maxTurns=60, gatherPrioMatrix=gatherMatrix)
+        connectedTiles, missingRequired = MapSpanningUtils.get_max_gather_spanning_tree_set_from_tile_lists(map, tiles, bannedSet=EmptyTileSet(), negativeTiles=EmptyTileSet(), maxTurns=60, gatherPrioMatrix=gatherMatrix)
         logbook.info(f'GATHMAX mine tree builder took {time.perf_counter() - start:.5f}s')
         steinerMatrix = MapMatrixSet(map, connectedTiles)
         viewInfo.add_map_division(steinerMatrix, (150, 255, 150), 200)

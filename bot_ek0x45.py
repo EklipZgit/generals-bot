@@ -348,9 +348,6 @@ class EklipZBot(object):
 
         self.expansion_use_cutoff: bool = True
         """The time cap per large tile search when finding expansions"""
-        #
-        # self.expansion_full_time_limit: float = 0.15
-        # """The full time limit for an optimal_expansion cycle. Will be cut short if it would run the move too long."""
 
         self.expansion_small_tile_time_ratio: float = 1.0
         """The ratio of expansion_single_iteration_time_cap that will be used for each small tile path find iteration."""
@@ -863,7 +860,7 @@ class EklipZBot(object):
         logbook.info(f"\n       ~~~\n       Turn {self._map.turn}   ({timeSinceLastUpdate:.3f})\n       ~~~\n")
 
         if not secondAttempt:
-            self.viewInfo.turnInc()
+            self.viewInfo.clear_for_next_turn()
 
         # self.pinged_tiles = set()
         self.was_allowing_neutral_cities_last_turn = not self.is_blocking_neutral_city_captures
@@ -898,7 +895,7 @@ class EklipZBot(object):
 
         self.last_init_turn = self._map.turn
 
-        if self._map.turn % 50 == 0:
+        if self._map.is_army_bonus_turn:
             for otherPlayer in self._map.players:
                 otherPlayer.aggression_factor = otherPlayer.aggression_factor // 2
 
@@ -1485,7 +1482,7 @@ class EklipZBot(object):
 
                 if gatherNodes is None:
                     self.info(f'timing_gather failed to find a move with PCST...?')
-                    value, gatherNodes = Gather.knapsack_levels_backpack_gather_with_value(
+                    value, usedTurns, gatherNodes = Gather.knapsack_depth_gather_with_values(
                         self._map,
                         startTiles,
                         depth,
@@ -1545,7 +1542,8 @@ class EklipZBot(object):
                 valFunc = self._get_tree_move_default_value_func()
                 move = self.get_tree_move_default(self.gatherNodes, valFunc)
                 if move is not None:
-                    self.curPath = self.convert_gather_to_move_list_path(gatherNodes, turnsUsed, value, valFunc)
+                    self.curPath = None
+                    # self.curPath = self.convert_gather_to_move_list_path(gatherNodes, turnsUsed, value, valFunc)
                     return self.move_half_on_repetition(move, 6, 4)
                 else:
                     logbook.info("NO MOVE WAS RETURNED FOR timing_gather?????????????????????")
@@ -1838,7 +1836,7 @@ class EklipZBot(object):
 
         if not is_lag_move:
             with self.perf_timer.begin_move_event('ENEMY Expansion quick check'):
-                self.enemy_expansion_plan = self.build_enemy_expansion_plan(timeLimit=0.025, pathColor=(255, 150, 130))
+                self.enemy_expansion_plan = self.build_enemy_expansion_plan(timeLimit=0.02, pathColor=(255, 150, 130))
 
         self.intercept_plans = self.build_intercept_plans()
         for i, interceptPlan in enumerate(self.intercept_plans.values()):
@@ -1847,7 +1845,7 @@ class EklipZBot(object):
         if not is_lag_move:
             with self.perf_timer.begin_move_event('Expansion quick check'):
                 redoTimings = False
-                if self.expansion_plan is None or self._map.turn % 50 == 0:
+                if self.expansion_plan is None or self._map.is_army_bonus_turn:
                     redoTimings = True
 
                 negs = {t for t in defenseCriticalTileSet if not self._map.is_tile_on_team_with(t, self.targetPlayer)}
@@ -1855,7 +1853,7 @@ class EklipZBot(object):
                     negs.update(self.threat.path.tileList)
                 if self.dangerAnalyzer.fastestPotentialThreat is not None and self.dangerAnalyzer.fastestPotentialThreat.threatType == ThreatType.Kill:
                     negs.update(t for t in self.dangerAnalyzer.fastestPotentialThreat.path.tileList if not self._map.is_tile_on_team_with(t, self.targetPlayer))
-                self.expansion_plan = self.build_expansion_plan(timeLimit=0.025, expansionNegatives=negs, pathColor=(150, 100, 150))
+                self.expansion_plan = self.build_expansion_plan(timeLimit=0.02, expansionNegatives=negs, pathColor=(150, 100, 150))
 
                 if redoTimings:
                     self.timings = self.get_timings()
@@ -2119,7 +2117,7 @@ class EklipZBot(object):
             actualGatherTurns = earlyRetakeTurns
 
             with self.perf_timer.begin_move_event(f'early retake turn gather?'):
-                gatherNodes = Gather.knapsack_levels_backpack_gather(
+                gatherNodes = Gather.knapsack_depth_gather(
                     self._map,
                     list(needToKillTiles),
                     actualGatherTurns,
@@ -2795,7 +2793,7 @@ class EklipZBot(object):
         else:
             if additionalIncrement != 0 and targetArmy > 0:
                 targetArmy = targetArmy + additionalIncrement * gatherTurns // 2
-            gatherNodes = Gather.knapsack_levels_backpack_gather(
+            gatherNodes = Gather.knapsack_depth_gather(
                 self._map,
                 targets,
                 gatherTurns,
@@ -4417,7 +4415,7 @@ class EklipZBot(object):
             newPath = path.clone()
             self.viewInfo.add_info_line(f'VT subsegment repair ALSO bad.')
 
-            while newPath.start is not None and (newPath.start.tile.army < 2 or newPath.start.tile.player != self.general.player):
+            while newPath.get_first_move() is not None and (newPath.start.tile.army < 2 or newPath.start.tile.player != self.general.player):
                 self.viewInfo.add_info_line(f'Popping bad move {str(newPath.start.tile)} off of value-per-turn-subsegment-path')
                 newPath.pop_first_move()
 
@@ -6388,17 +6386,28 @@ class EklipZBot(object):
 
             nonGenArmy = 0
             addlIncrement = 0.0
+
             if not enemyGeneral.visible:
                 defTurns = 0
                 # remove fog army that can't reach gen
-                targetArmy = self.determine_fog_defense_amount_available_for_tiles(altEnGenPositions, enPlayer)
+                optTargetArmy = self.determine_fog_defense_amount_available_for_tiles(altEnGenPositions, enPlayer, fogDefenseTurns=defTurns, fogReachTurns=5)
+                newTargetArmyOption = optTargetArmy
 
-                nonGenArmy = targetArmy
+                if enemyGeneral.isGeneral:
+                    newTargetArmyOption -= enemyGeneral.army
 
-                logbook.info(f'QK en{enPlayer} fog defense in {defTurns}t was {targetArmy}')
+                if newTargetArmyOption > targetArmy:
+                    targetArmy = newTargetArmyOption
+                    nonGenArmy = optTargetArmy
+
+                if threat is None and self.opponent_tracker.get_player_gather_queue(enPlayer).cur_max_tile_size > 2:
+                    # if the opponent is obviously going to be spending time defending then require a bit extra army.
+                    addlIncrement += 0.5
+
+                logbook.info(f'will attmpt QK en{enPlayer} fog defense in {defTurns}t was {targetArmy}')
 
             if not enemyGeneral.isGeneral:
-                addlIncrement = 0.5  # * min(4, self._map.players[enPlayer].cityCount)
+                addlIncrement += 0.5  # * min(4, self._map.players[enPlayer].cityCount)
                 if not self.is_ffa_situation():
                     thisPlayerDepth = max(3, thisPlayerDepth - 5)
 
@@ -6450,9 +6459,11 @@ class EklipZBot(object):
                     cutoffEmergence = 0.4
                     if threatIsGeneralKill:
                         cutoffKillArmy = self.opponent_tracker.get_approximate_fog_army_risk(enPlayer, cityLimit=1, inTurns=0)
+                        if enemyGeneral.isGeneral:
+                            cutoffKillArmy -= enemyGeneral.army + quickKill.length // 2
                         cutoffEmergence = 0.25
                     else:
-                        bestDef = self.opponent_tracker.get_approximate_fog_army_risk(enPlayer, cityLimit=max(2, maxEnDefTurns // 6), inTurns=maxEnDefTurns - 3)
+                        bestDef = self.opponent_tracker.get_approximate_fog_army_risk(enPlayer, cityLimit=max(1, maxEnDefTurns // 6), inTurns=maxEnDefTurns - 3)
 
                         cutoffKillArmy = bestDef + 2 * additionalKillDist - 5
 
@@ -6502,7 +6513,7 @@ class EklipZBot(object):
                                     self.viewInfo.add_info_line(f'skipped QK wrpPath (addl {additionalKillDist}) was {wrpPath}')
                         turnsToDeath = None
 
-                        killRaceCutoff = 0.1
+                        killRaceCutoff = 0.3
                         if threatIsGeneralKill:
                             turnsToDeath = threat.turns + curExtraTurn + 1
                             killRaceCutoff = 0.7
@@ -6511,10 +6522,12 @@ class EklipZBot(object):
                             logbook.info(f"QK {quickKill.value} {quickKill.length}t kill race chance {killRaceChance:.3f} > {killRaceCutoff:.2f} with cutoffKillArmy {cutoffKillArmy} in {maxEnDefTurns}t +{additionalKillDist} :^)")
                             self.viewInfo.color_path(PathColorer(quickKill, 255, 240, 79, 244, 5, 200))
                             move = Move(quickKill.start.tile, quickKill.start.next.tile)
-                            self.curPath = None
-                            if quickKill.start.next.tile.isCity:
-                                self.curPath = quickKill
                             if self.is_move_safe_valid(move):
+                                self.curPath = None
+                                # self.curPath = quickKill
+                                if quickKill.start.next.tile.isCity:
+                                    self.curPath = quickKill
+
                                 for t in altEnGenPositions:
                                     self.viewInfo.add_targeted_tile(t, TargetStyle.RED, radiusReduction=0)
 
@@ -6522,7 +6535,7 @@ class EklipZBot(object):
                                     for t in connectedTiles:
                                         # quickKill.add_next(t)
                                         self.viewInfo.add_targeted_tile(t, TargetStyle.RED, radiusReduction=8)
-                                self.viewInfo.infoText = f"QK {quickKill.value} > {cutoffKillArmy} in {maxEnDefTurns}t {quickKill.length}t+{additionalKillDist}t :^)"
+                                self.viewInfo.infoText = f"QK chance {killRaceChance:.2f} {quickKill.value}v > {cutoffKillArmy} in {maxEnDefTurns}t {quickKill.length}t+{additionalKillDist}t :^)"
                                 return move, quickKill
                     else:
                         logbook.info(f" ---quick-kill path val {quickKill.value} < {cutoffKillArmy} in {maxEnDefTurns}t {quickKill.length}t+{additionalKillDist}t @enemy king. Low val. {str(quickKill)}")
@@ -6535,109 +6548,111 @@ class EklipZBot(object):
 
             logbook.info(
                 f"Performing depth increasing BFS kill search on enemy king {enemyGeneral.toString()} depth {thisPlayerDepth}")
-            for depth in range(2, thisPlayerDepth):
-                enemyNegTiles = []
-                if threat is not None:
-                    enemyNegTiles.append(threat.path.start.tile)
-                enemySavePath = self.get_best_defense(enemyGeneral, depth - 1, enemyNegTiles)
-                defTurnsLeft = depth - 1
-                depthTargetArmy = targetArmy
-                if enemySavePath is not None:
-                    defTurnsLeft -= enemySavePath.length
-                    depthTargetArmy = max(enemySavePath.value + nonGenArmy, depthTargetArmy)
+            with self.perf_timer.begin_move_event(f"race depth increasing vs p{enPlayer} {enemyGeneral}"):
+                for depth in range(2, thisPlayerDepth):
+                    enemyNegTiles = []
+                    if threat is not None:
+                        enemyNegTiles.append(threat.path.start.tile)
+                    enemySavePath = self.get_best_defense(enemyGeneral, depth - 1, enemyNegTiles)
+                    defTurnsLeft = depth - 1
+                    depthTargetArmy = targetArmy
+                    if enemySavePath is not None:
+                        defTurnsLeft -= enemySavePath.length
+                        depthTargetArmy = max(enemySavePath.value + nonGenArmy, depthTargetArmy)
+                        if not enemyGeneral.visible:
+                            depthTargetArmy = max(depthTargetArmy, enemySavePath.value + nonGenArmy + self.determine_fog_defense_amount_available_for_tiles(altEnGenPositions, enPlayer, fogDefenseTurns=defTurnsLeft))
+                        logbook.info(f"  targetArmy {targetArmy}, enemySavePath {enemySavePath.toString()}")
+                        attackNegTiles = enemySavePath.tileSet.copy()
+                        attackNegTiles.remove(enemyGeneral)
+
                     if not enemyGeneral.visible:
-                        depthTargetArmy = max(depthTargetArmy, enemySavePath.value + nonGenArmy + self.determine_fog_defense_amount_available_for_tiles(altEnGenPositions, enPlayer, fogDefenseTurns=defTurnsLeft))
-                    logbook.info(f"  targetArmy {targetArmy}, enemySavePath {enemySavePath.toString()}")
-                    attackNegTiles = enemySavePath.tileSet.copy()
-                    attackNegTiles.remove(enemyGeneral)
+                        # remove fog army that can't reach gen
+                        depthTargetArmy = max(depthTargetArmy, self.determine_fog_defense_amount_available_for_tiles(altEnGenPositions, enPlayer, fogDefenseTurns=depth - 1))
 
-                if not enemyGeneral.visible:
-                    # remove fog army that can't reach gen
-                    depthTargetArmy = max(depthTargetArmy, self.determine_fog_defense_amount_available_for_tiles(altEnGenPositions, enPlayer, fogDefenseTurns=depth - 1))
+                    logbook.info(f"  targetArmy to add to enemyGeneral kill = {depthTargetArmy}")
+                    shouldPrioritizeTileCaps = (
+                            not self.is_all_in()
+                            and not self.is_ffa_situation()
+                            and (threat is None or threat.threatType != ThreatType.Kill)
+                    )
+                    killPath = SearchUtils.dest_breadth_first_target(
+                        self._map,
+                        altEnGenPositions,
+                        max(depthTargetArmy, 1),
+                        0.05,
+                        depth,
+                        attackNegTiles,
+                        self.general.player,
+                        dupeThreshold=3,
+                        preferCapture=shouldPrioritizeTileCaps,
+                        ignoreGoalArmy=self.has_defenseless_modifier,
+                        additionalIncrement=addlIncrement,
+                        noLog=True)
+                    if killPath is not None and killPath.length > 0:
+                        logbook.info(f"    depth {depth} path found to kill enemy king? {str(killPath)}")
+                        if threat is None or threat.threatType != ThreatType.Kill or threatDistCutoff >= killPath.length:
+                            logbook.info(f"    DEST BFS K found kill path length {killPath.length} :^)")
+                            self.viewInfo.color_path(PathColorer(killPath, 255, 240, 79, 244, 5, 200))
+                            move = Move(killPath.start.tile, killPath.start.next.tile)
+                            self.curPath = None
+                            if killPath.start.next.tile.isCity:
+                                self.curPath = killPath
+                            if self.is_move_safe_valid(move):
+                                self.viewInfo.infoText = f"Depth increasing Killpath against general length {killPath.length}"
+                                return move, killPath
+                        else:
+                            logbook.info(
+                                f"    DEST BFS K found kill path {str(killPath)} BUT ITS LONGER THAN OUR THREAT LENGTH :(")
+                            if kingKillPath is None:
+                                logbook.info("      saving above kingKillPath as backup in case we can't defend threat")
+                                kingKillPath = killPath
 
-                logbook.info(f"  targetArmy to add to enemyGeneral kill = {depthTargetArmy}")
-                shouldPrioritizeTileCaps = (
-                        not self.is_all_in()
-                        and not self.is_ffa_situation()
-                        and (threat is None or threat.threatType != ThreatType.Kill)
-                )
-                killPath = SearchUtils.dest_breadth_first_target(
-                    self._map,
-                    altEnGenPositions,
-                    max(depthTargetArmy, 1),
-                    0.05,
-                    depth,
-                    attackNegTiles,
-                    self.general.player,
-                    dupeThreshold=3,
-                    preferCapture=shouldPrioritizeTileCaps,
-                    ignoreGoalArmy=self.has_defenseless_modifier,
-                    additionalIncrement=addlIncrement,
-                    noLog=True)
-                if killPath is not None and killPath.length > 0:
-                    logbook.info(f"    depth {depth} path found to kill enemy king? {str(killPath)}")
-                    if threat is None or threat.threatType != ThreatType.Kill or threatDistCutoff >= killPath.length:
-                        logbook.info(f"    DEST BFS K found kill path length {killPath.length} :^)")
-                        self.viewInfo.color_path(PathColorer(killPath, 255, 240, 79, 244, 5, 200))
-                        move = Move(killPath.start.tile, killPath.start.next.tile)
-                        self.curPath = None
-                        if killPath.start.next.tile.isCity:
-                            self.curPath = killPath
-                        if self.is_move_safe_valid(move):
-                            self.viewInfo.infoText = f"Depth increasing Killpath against general length {killPath.length}"
-                            return move, killPath
-                    else:
-                        logbook.info(
-                            f"    DEST BFS K found kill path {str(killPath)} BUT ITS LONGER THAN OUR THREAT LENGTH :(")
-                        if kingKillPath is None:
-                            logbook.info("      saving above kingKillPath as backup in case we can't defend threat")
-                            kingKillPath = killPath
+                rangeBasedOnDistance = int(self.distance_from_general(self.targetPlayerExpectedGeneralLocation) // 3 - 1)
+                additionalKillArmyRequirement = 0
+                if not enemyGeneral.isGeneral:
+                    additionalKillArmyRequirement = self.opponent_tracker.get_approximate_fog_army_risk(enPlayer, cityLimit=2, inTurns=0)
+                if not force and (not self.opponent_tracker.winning_on_army(byRatio=1.3)
+                                  and not self.opponent_tracker.winning_on_army(byRatio=1.3, againstPlayer=self.targetPlayer)
+                                  # and (threat is None or threat.threatType != ThreatType.Kill)
+                                  and not self.is_all_in()
+                                  and not enemyGeneral.visible):
+                    rangeBasedOnDistance = int(self.distance_from_general(self.targetPlayerExpectedGeneralLocation) // 4 - 1)
 
-            rangeBasedOnDistance = int(self.distance_from_general(self.targetPlayerExpectedGeneralLocation) // 3 - 1)
-            additionalKillArmyRequirement = 0
-            if not enemyGeneral.isGeneral:
-                additionalKillArmyRequirement = self.opponent_tracker.get_approximate_fog_army_risk(enPlayer, cityLimit=2, inTurns=0)
-            if not force and (not self.opponent_tracker.winning_on_army(byRatio=1.3)
-                              and not self.opponent_tracker.winning_on_army(byRatio=1.3, againstPlayer=self.targetPlayer)
-                              # and (threat is None or threat.threatType != ThreatType.Kill)
-                              and not self.is_all_in()
-                              and not enemyGeneral.visible):
-                rangeBasedOnDistance = int(self.distance_from_general(self.targetPlayerExpectedGeneralLocation) // 4 - 1)
+                    additionalKillArmyRequirement = self.opponent_tracker.get_approximate_fog_army_risk(enPlayer, cityLimit=2, inTurns=3)
+                    logbook.info(f'additional kill army requirement is currently {additionalKillArmyRequirement}')
 
-                additionalKillArmyRequirement = self.opponent_tracker.get_approximate_fog_army_risk(enPlayer, cityLimit=2, inTurns=3)
-                logbook.info(f'additional kill army requirement is currently {additionalKillArmyRequirement}')
+                depth = max(alwaysCheckKingKillWithinRange, rangeBasedOnDistance)
 
-            depth = max(alwaysCheckKingKillWithinRange, rangeBasedOnDistance)
+                if self.is_all_in_losing or self.is_ffa_situation():
+                    depth += 5
 
-            if self.is_all_in_losing or self.is_ffa_situation():
-                depth += 5
+                logbook.info(f"Performing depth {depth} BFS kill search on enemy kings {str(altEnGenPositions)}")
+                # uses targetArmy from depth 6 above
+                fullKillReq = targetArmy + additionalKillArmyRequirement
+                killPath = SearchUtils.dest_breadth_first_target(self._map, altEnGenPositions, fullKillReq, 0.05, depth, attackNegTiles, self.general.player, False, 3)
+                if (killPath is not None and killPath.length >= 0) and (threat is None or threat.threatType != ThreatType.Kill or (threatDistCutoff >= killPath.length)):
+                    logbook.info(f"DEST BFS K found kill path length {killPath.length} :^)")
+                    self.curPath = None
+                    self.viewInfo.color_path(PathColorer(killPath, 200, 100, 0))
+                    move = Move(killPath.start.tile, killPath.start.next.tile)
 
-            logbook.info(f"Performing depth {depth} BFS kill search on enemy kings {str(altEnGenPositions)}")
-            # uses targetArmy from depth 6 above
-            killPath = SearchUtils.dest_breadth_first_target(self._map, altEnGenPositions, targetArmy + additionalKillArmyRequirement, 0.05, depth, attackNegTiles, self.general.player, False, 3)
-            if (killPath is not None and killPath.length >= 0) and (threat is None or threat.threatType != ThreatType.Kill or (threatDistCutoff >= killPath.length)):
-                logbook.info(f"DEST BFS K found kill path length {killPath.length} :^)")
-                self.curPath = None
-                self.viewInfo.color_path(PathColorer(killPath, 200, 100, 0))
-                move = Move(killPath.start.tile, killPath.start.next.tile)
+                    if self.is_move_safe_valid(move):
+                        self.info(f"DBFT d{depth} K: {killPath.length}t {killPath.value}v for {fullKillReq}a (tg{targetArmy} + addl{additionalKillArmyRequirement}) force {str(force)[0]}")
+                        return move, killPath
 
-                if self.is_move_safe_valid(move):
-                    self.viewInfo.infoText = f"destbfs Killpath against general length {killPath.length}"
-                    return move, killPath
+                elif killPath is not None and killPath.length > 0:
+                    logbook.info(
+                        f"DEST BFS K found kill path {str(killPath)} BUT ITS LONGER THAN OUR THREAT LENGTH :(")
+                    if kingKillPath is None:
+                        logbook.info("  saving above kingKillPath as backup in case we can't defend threat")
 
-            elif killPath is not None and killPath.length > 0:
-                logbook.info(
-                    f"DEST BFS K found kill path {str(killPath)} BUT ITS LONGER THAN OUR THREAT LENGTH :(")
-                if kingKillPath is None:
-                    logbook.info("  saving above kingKillPath as backup in case we can't defend threat")
-
-                    kingKillPath = killPath
+                        kingKillPath = killPath
 
             if self.is_ffa_situation():
                 king = enemyGeneral
                 tiles = self.largeTilesNearEnemyKings[king]
                 if len(tiles) > 0:
-                    logbook.info(f"Attempting to find A_STAR kill path against general {king.player} ({king.x},{king.y})")
+                    logbook.info(f"Attempting to find A_STAR kill path against general {king.player} ({king})")
                     bestTurn = 1000
                     bestPath = None
                     targets = set(altEnGenPositions)
@@ -6671,9 +6686,12 @@ class EklipZBot(object):
                         return move, path
         return None, kingKillPath
 
-    def determine_fog_defense_amount_available_for_tiles(self, targetTiles, enPlayer, fogDefenseTurns: int = 0, fogReachTurns: int = 8):
+    def determine_fog_defense_amount_available_for_tiles(self, targetTiles, enPlayer, fogDefenseTurns: int = 0, fogReachTurns: int = 8) -> int:
+        """Does NOT include the army that is on the targetTiles."""
         targetArmy = self.opponent_tracker.get_approximate_fog_army_risk(enPlayer, cityLimit=1, inTurns=fogDefenseTurns)
+
         genReachable = SearchUtils.build_distance_map_matrix(self._map, targetTiles, skipTiles=self._map.visible_tiles)
+
         used = set()
         for army in self.armyTracker.armies.values():
             if army.player != enPlayer:
@@ -6697,6 +6715,7 @@ class EklipZBot(object):
                 targetArmy -= army.value
 
                 used.add(army.name)
+
         return targetArmy
 
     def calculate_target_player(self) -> int:
@@ -7105,7 +7124,7 @@ class EklipZBot(object):
                     if gatherNodes is not None:
                         leavesGreaterThanDistance = GatherTreeNode.get_tree_leaves_further_than_distance(gatherNodes, threat.armyAnalysis.aMap, threat.turns, survivalThreshold)
                         anyLeafIsSameDistAsThreat = len(leavesGreaterThanDistance) > 0
-                        move_closest_value_func = self.get_defense_tree_move_prio_func(threat, anyLeafIsSameDistAsThreat)
+                        move_closest_value_func = self.get_defense_tree_move_prio_func(threat, anyLeafIsSameDistAsThreat, printDebug=True)
                         move = self.get_tree_move_default(gatherNodes, move_closest_value_func)
                 if move:
                     with self.perf_timer.begin_move_event(f'Def prun @ {str(threat.path.start.tile)}->{str(threat.path.tail.tile)}'):
@@ -7160,7 +7179,7 @@ class EklipZBot(object):
                                 move = self.get_tree_move_default(pruned, move_closest_value_func)
                                 self.communicate_threat_to_ally(threat, sumPruned, pruned)
                                 self.info(
-                                    f'{flags}GathDef-{str(threat.path.start.tile)}@{str(threat.path.tail.tile)}:  {str(move)} val {valueGathered:.1f}/p{sumPruned:.1f}/{survivalThreshold} turns {turnsUsed}/p{sumPrunedTurns}/{threat.turns} offs{distOffset}')
+                                    f'{flags}GathDefRaw-{str(threat.path.start.tile)}@{str(threat.path.tail.tile)}:  {str(move)} val {valueGathered:.1f}/p{sumPruned:.1f}/{survivalThreshold} turns {turnsUsed}/p{sumPrunedTurns}/{threat.turns} offs{distOffset}')
                                 return move, savePath
                             else:
                                 self.communicate_threat_to_ally(threat, sumPruned, pruned)
@@ -11307,7 +11326,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         def move_closest_negative_value_func(curTile: Tile, currentPriorityObject):
             """
-            MAX tuple gets moved first.
+            MAX tuple gets moved first. Trues are > False, etc.
 
             @param curTile:
             @param currentPriorityObject:
@@ -11315,10 +11334,10 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             """
             toTile = None
             if currentPriorityObject is not None:
-                _, _, _, _, toTile = currentPriorityObject
+                _, _, _, _, _, toTile = currentPriorityObject
 
             isMovable = curTile in threat.path.start.tile.movable
-            isMovableToThreatButNotIntercepting = toTile != threat.path.start.tile and isMovable
+            isMovableToThreatButNotIntercepting = toTile != threat.path.start.tile and isMovable and threatenedTileDistMap.raw[curTile.tile_index] < threatDist
 
             # this is very specifically like this to pass test_should_wait_to_gather_tiles_that_are_in_the_shortest_pathway_for_last
             closenessToThreat = threatenedTileDistMap.raw[curTile.tile_index]
@@ -11336,15 +11355,18 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             elif isMovable:
                 closenessToThreat = 0
 
+            isntDelayableCity = anyLeafIsSameDistAsThreat or not curTile.isCity
+
             obj = (
-                not (anyLeafIsSameDistAsThreat or curTile.isCity),
-                not inShortest or isInterceptingIn1,
+                isntDelayableCity,
+                isInterceptingIn1,
+                not inShortest,
                 0 - closenessToThreat,
                 curTile.army,
                 curTile,
             )
             if printDebug:
-                self.viewInfo.add_info_line(f'{curTile}: {obj}')
+                self.viewInfo.add_info_line(f'{curTile}: {obj}  (isMov {str(isMovable)[0]}, int1 {str(isInterceptingIn1)[0]}, short {str(inShortest)[0]}, mvNotInt {str(isMovableToThreatButNotIntercepting)[0]})')
 
             return obj
 
@@ -13392,6 +13414,8 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         if self.enemy_attack_path is not None and self.likely_kill_push:
             logbook.info(f'due to high risk threat path, using that as flank vision target instead of biggest flank path itself')
             checkPath = self.enemy_attack_path.get_subsegment_excluding_trailing_visible()
+        elif self.is_still_ffa_and_non_dominant():
+            return None
 
         checkFlank = checkPath is not None and (
                 checkPath.tail.tile in self.board_analysis.flank_danger_play_area_matrix
@@ -14433,7 +14457,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         if isOnlyOneSpot:
             if turnsToDeath is None:
                 return 1.0
-            if generalHuntPath.length > turnsToDeath:
+            if generalHuntPath.length < turnsToDeath:
                 # TODO check their fog army...?
                 logbook.info(f'We win the race.')
                 return 1.0

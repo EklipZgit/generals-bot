@@ -24,7 +24,7 @@ class ExpansionContinuationTests(TestBase):
         # self.begin_capturing_logging()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=mapVision, allAfkExceptMapPlayer=True)
         bot = self.get_debug_render_bot(simHost, general.player)
-        bot.viewInfo.turnInc()
+        bot.viewInfo.clear_for_next_turn()
 
         self.begin_capturing_logging()
         self.enable_search_time_limits_and_disable_debug_asserts()

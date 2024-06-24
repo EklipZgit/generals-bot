@@ -1348,6 +1348,7 @@ def gather_approximate_turns_to_tiles(
         includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
         viewInfo=viewInfo,
     )
+
     usedTime = time.perf_counter() - startTime
     logbook.info(f'gather_approximate_turns_to_tile complete in {usedTime:.4f}s with {plan}')
 

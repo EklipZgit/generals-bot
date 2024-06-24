@@ -66,7 +66,26 @@ PLAYER_CHAR_BY_INDEX: typing.List[str] = [
     'p',
 ]
 
+
 class TileDelta(object):
+    __slots__ = (
+        'oldArmy',
+        'oldOwner',
+        'newOwner',
+        'gainedSight',
+        'lostSight',
+        'discovered',
+        'imperfectArmyDelta',
+        'friendlyCaptured',
+        'armyDelta',
+        'unexplainedDelta',
+        'fromTile',
+        'toTile',
+        'armyMovedHere',
+        'expectedDelta',
+        'discoveredExGeneralCity',
+    )
+
     def __init__(self):
         # Public Properties
         self.oldArmy: int = 0
@@ -118,7 +137,7 @@ class TileDelta(object):
         self.discoveredExGeneralCity: bool = False
         """True when a tile that wasnt a city (or obstacle) gets discovered as a city. Only true for THAT turn."""
 
-    def __str__(self):
+    def __str__(self) -> str:
         pieces = [f'{self.armyDelta:+d}']
         if self.oldOwner != self.newOwner:
             pieces.append(f'p{self.oldOwner}->p{self.newOwner}')
@@ -130,11 +149,36 @@ class TileDelta(object):
             pieces.append(f'<-?')
         return ' '.join(pieces)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self)
 
-    def __getstate__(self):
-        state = self.__dict__.copy()
+    # def __getstate__(self) -> typing.Dict[str, typing.Any]:
+    #     state = self.__dict__.copy()
+    #
+    #     if self.fromTile is not None:
+    #         state["fromTile"] = f'{self.fromTile.x},{self.fromTile.y}:{self.fromTile.tile_index}'
+    #     if self.toTile is not None:
+    #         state["toTile"] = f'{self.toTile.x},{self.toTile.y}:{self.toTile.tile_index}'
+    #     return state
+
+    # def __setstate__(self, state: typing.Dict[str, typing.Any]):
+    #     if state['fromTile'] is not None:
+    #         x, y = state['fromTile'].split(',')
+    #         y, index = y.split(':')
+    #         copy = Tile(int(x), int(y))
+    #         copy.tile_index = int(index)
+    #         state["fromTile"] = copy
+    #     if state['toTile'] is not None:
+    #         x, y = state['toTile'].split(',')
+    #         y, index = y.split(':')
+    #         copy = Tile(int(x), int(y))
+    #         copy.tile_index = int(index)
+    #         state["toTile"] = copy
+    #     self.__dict__.update(state)
+
+    # SLOTS VERSION
+    def __getstate__(self) -> typing.Dict[str, typing.Any]:
+        state = { slot: getattr(self, slot) for slot in self.__slots__ }
 
         if self.fromTile is not None:
             state["fromTile"] = f'{self.fromTile.x},{self.fromTile.y}:{self.fromTile.tile_index}'
@@ -142,23 +186,50 @@ class TileDelta(object):
             state["toTile"] = f'{self.toTile.x},{self.toTile.y}:{self.toTile.tile_index}'
         return state
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: typing.Dict[str, typing.Any]):
         if state['fromTile'] is not None:
             x, y = state['fromTile'].split(',')
             y, index = y.split(':')
             copy = Tile(int(x), int(y))
             copy.tile_index = int(index)
             state["fromTile"] = copy
+
         if state['toTile'] is not None:
             x, y = state['toTile'].split(',')
             y, index = y.split(':')
             copy = Tile(int(x), int(y))
             copy.tile_index = int(index)
             state["toTile"] = copy
-        self.__dict__.update(state)
+
+        for slot, val in state.items():
+            setattr(self, slot, val)
 
 
 class Tile(object):
+    __slots__ = (
+        'x',
+        'y',
+        'tile',
+        'turn_captured',
+        'army',
+        'isCity',
+        'isTempFogPrediction',
+        '_player',
+        # '_isGeneral',
+        'isGeneral',
+        'visible',
+        'discovered',
+        'discoveredAsNeutral',
+        'lastSeen',
+        'lastMovedTurn',
+        'isMountain',
+        'delta',
+        'adjacents',
+        'movable',
+        'tile_index',
+        '_hash_key',
+    )
+
     def __init__(
             self,
             x,
@@ -192,7 +263,9 @@ class Tile(object):
         self.isCity: bool = isCity
         """Boolean isCity"""
 
-        self._isGeneral: bool = isGeneral
+        # self._isGeneral: bool = isGeneral
+        # """Boolean isGeneral"""
+        self.isGeneral: bool = isGeneral
         """Boolean isGeneral"""
 
         self.isTempFogPrediction: bool = False
@@ -226,16 +299,33 @@ class Tile(object):
         self.tile_index: int = tileIndex
         self._hash_key = hash((self.x, self.y))
 
-    def __getstate__(self):
-        state = self.__dict__.copy()
+    # # NO SLOTS VERSON
+    # def __getstate__(self) -> typing.Dict[str, typing.Any]:
+    #     state = self.__dict__.copy()
+    #     if "movable" in state:
+    #         del state["movable"]
+    #     if "adjacents" in state:
+    #         del state["adjacents"]
+    #     return state
+    #
+    # def __setstate__(self, state: typing.Dict[str, typing.Any]):
+    #     self.__dict__.update(state)
+    #     self.movable = []
+    #     self.adjacents = []
+
+    # SLOTS VERSION
+    def __getstate__(self) -> typing.Dict[str, typing.Any]:
+        state = { slot: getattr(self, slot) for slot in self.__slots__ }
         if "movable" in state:
             del state["movable"]
         if "adjacents" in state:
             del state["adjacents"]
         return state
 
-    def __setstate__(self, state):
-        self.__dict__.update(state)
+    def __setstate__(self, state: typing.Dict[str, typing.Any]):
+        for slot, val in state.items():
+            setattr(self, slot, val)
+
         self.movable = []
         self.adjacents = []
 
@@ -271,6 +361,15 @@ class Tile(object):
                 yield t
 
     @property
+    def coords(self) -> typing.Tuple[int, int]:
+        """
+        NOT high performance, generated on the fly each time.
+
+        @return: (x, y)
+        """
+        return self.x, self.y
+
+    @property
     def player(self) -> int:
         """int player index"""
         return self._player
@@ -288,15 +387,6 @@ class Tile(object):
 
         self._player = value
 
-    @property
-    def coords(self) -> typing.Tuple[int, int]:
-        """
-        NOT high performance, generated on the fly each time.
-
-        @return: (x, y)
-        """
-        return self.x, self.y
-
     # @property
     # def army(self) -> int:
     #     """int army for debugging"""
@@ -305,15 +395,15 @@ class Tile(object):
     # @army.setter
     # def army(self, value: int):
     #     self._army = value
-
-    @property
-    def isGeneral(self) -> bool:
-        """int isGeneral val for debugging"""
-        return self._isGeneral
-
-    @isGeneral.setter
-    def isGeneral(self, value: bool):
-        self._isGeneral = value
+    #
+    # @property
+    # def isGeneral(self) -> bool:
+    #     """int isGeneral val for debugging"""
+    #     return self._isGeneral
+    #
+    # @isGeneral.setter
+    # def isGeneral(self, value: bool):
+    #     self._isGeneral = value
 
     @staticmethod
     def convert_player_to_char(player: int):
@@ -356,7 +446,7 @@ class Tile(object):
     def __str__(self) -> str:
         return f"{self.x},{self.y}"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         vRep = self.get_value_representation()
 
         delta = ''

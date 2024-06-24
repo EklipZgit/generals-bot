@@ -24,6 +24,7 @@ def _knapsack_max_gather_iteration(
     factor = 1
     if valueFunc is None:
         factor = 1000
+
         def value_func(path: Path) -> int:
             return int(path.value * 1000)
 
@@ -1046,9 +1047,11 @@ def _knapsack_max_gather_iterative_prune(
                 tileDictToPrune=newStartTilesDict,
                 logEntries=logEntries,
                 overpruneCutoff=overpruneCutoff,
-                parentPruneFunc=lambda t, prunedNode: _start_tiles_prune_helper(startTilesDict, t, prunedNode)
+                # this was for adjusting the prune depth backwards, or something...?
+                # parentPruneFunc=lambda t, prunedNode: _start_tiles_prune_helper(startTilesDict, t, prunedNode)
             )
-            logEntries.append(f'pruned {ogTotalValue:.2f}v @ {ogTotalTurns}t to {totalValue:.2f}v @ {totalTurns}t (goal was {pruneToTurns}t, overpruneCut {overpruneCutoff}t, maxPerIteration {maxPerIteration}, allowNegative={includeGatherTreeNodesThatGatherNegative})')
+            logEntries.append(
+                f'pruned {ogTotalValue:.2f}v @ {ogTotalTurns}t to {totalValue:.2f}v @ {totalTurns}t (goal was {pruneToTurns}t, overpruneCut {overpruneCutoff}t, maxPerIteration {maxPerIteration}, allowNegative={includeGatherTreeNodesThatGatherNegative})')
 
             if GatherDebug.USE_DEBUG_ASSERTS:
                 recalcTotalTurns, recalcTotalValue = recalculate_tree_values(
@@ -1367,24 +1370,23 @@ def knapsack_max_gather_with_values(
             if currentTile.army < 2 or currentTile.player != searchingPlayer:
                 return None
 
-            value = 0 - negGatheredSum
-
-            vt = 0
-            # this breaks if not max vt when the 'find big first boi' comes out
+            val = -1000
+            # this breaks if not max val when the 'find big first boi' comes out
             if realDist > 0:
-                # vt = value / realDist
-                vt = value
+                # val = value / realDist
+                val = 0 - negGatheredSum
 
-            prioObj = (vt,  # most army per turn
-                       # then by the furthest 'distance' (which when gathering to a path, weights short paths to the top of the path higher which is important)
-                       0 - negGatheredSum,  # then by maximum amount gathered...?
-                       realDist,  # then by the real distance
-                       # 0 - xSum,
-                       # 0 - ySum
-                       )
+            valueObj = (val,  # most army
+                        # then by the furthest 'distance' (which when gathering to a path, weights short paths to the top of the path higher which is important)
+                        0 - negGatheredSum,  # then by maximum amount gathered...?
+                        0 - negArmySum,
+                        realDist,  # then by the real distance
+                        # 0 - xSum,
+                        # 0 - ySum
+                        )
             if shouldLog:
-                logEntries.append(f'VALUE {str(currentTile)} : {str(prioObj)}')
-            return prioObj
+                logEntries.append(f'VALUE {str(currentTile)} : {str(valueObj)}')
+            return valueObj
 
         valueFunc = default_value_func_max_gathered_per_turn
 
@@ -1396,6 +1398,7 @@ def knapsack_max_gather_with_values(
             (
                 value,  # most army
                 gatheredSum,  # then by maximum amount gathered...?
+                armySum,
                 realDist,  # then by the real distance
             ) = valueObj
 
@@ -1437,15 +1440,15 @@ def knapsack_max_gather_with_values(
                         negGatheredSum += nextTile.army
 
             # TODO comment back in
-            # if priorityMatrix is not None:
-            #     negGatheredSum -= priorityMatrix.raw[nextTile.tile_index]
+            if priorityMatrix is not None:
+                negGatheredSum -= priorityMatrix.raw[nextTile.tile_index]
 
             if priorityTiles and nextTile in priorityTiles:
                 numPrioTiles += 1
             realDist += 1
             prioVal = -100000
             if realDist > 0:
-                prioVal = 10000 + negGatheredSum / realDist + 0.05 * (realDist * realDist)
+                prioVal = 10000 + negGatheredSum / realDist + 0.01 * (realDist * realDist)
 
             prioObj = (
                 prioVal,

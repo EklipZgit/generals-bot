@@ -10,8 +10,9 @@ from Algorithms import MapSpanningUtils
 from Algorithms.FastDisjointSet import FastDisjointTileSetSum
 from Interfaces.MapMatrixInterface import EmptySet
 from MapMatrix import MapMatrix
-from ViewInfo import TargetStyle
+from ViewInfo import TargetStyle, ViewInfo
 from Viewer import ViewerProcessHost
+from base import Colors
 from . import GatherCapturePlan, GatherSteiner, convert_contiguous_tile_tree_to_gather_capture_plan, prune_raw_connected_nodes_to_turns__bfs, GatherDebug
 from Interfaces import MapMatrixInterface, TileSet
 from base.client.map import MapBase
@@ -29,6 +30,7 @@ def get_gather_plan_set_prune(
         includeGatherPriorityAsEconValues: bool = False,
         includeCapturePriorityAsEconValues: bool = True,
         skipTiles: TileSet | None = None,
+        renderLive: bool = False,
         viewInfo=None,
 ) -> GatherCapturePlan:
     """
@@ -62,7 +64,12 @@ def get_gather_plan_set_prune(
 
     steinerNodes = GatherSteiner.build_network_x_steiner_tree(map, allNodes, weightMod=valueMatrix, searchingPlayer=asPlayer, baseWeight=1000, bannedTiles=skipTiles)
 
-    outputTiles = _k_prune_reconnect_greedy(map, targetTurns, steinerNodes, rootTiles, valueMatrix, skipTiles=skipTiles, renderLive=True)
+    outputTiles = _k_prune_reconnect_greedy(map, targetTurns, steinerNodes, rootTiles, valueMatrix, skipTiles=skipTiles, renderLive=renderLive)
+
+    if not renderLive:
+        vi = ViewInfo(1, map)
+        vi.add_map_zone(outputTiles, Colors.LIGHT_BLUE, alpha=125)
+        ViewerProcessHost.render_view_info_debug('f off', '', map, vi)
 
     usedTime = time.perf_counter() - startTime
     logbook.info(f'k_prune_reconnect_greedy complete in {usedTime:.4f}s with {len(outputTiles) - len(rootTiles)}')
@@ -159,9 +166,9 @@ def _k_prune_reconnect_greedy(
     bareMinTurns = len(minIncluded)
 
     excessTiles = len(contiguousTiles.union(requiredTiles)) - toTurns
-    prunePerIter = 5
+    prunePerIter = 7
     if excessTiles > toTurns * 0.5:
-        prunePerIter = excessTiles // 10
+        prunePerIter = max(3, excessTiles // 10)
     """How many tiles to prune per reconnect"""
 
     liveValRenderMatrix = None
@@ -175,7 +182,7 @@ def _k_prune_reconnect_greedy(
         for t in map.get_all_tiles():
             liveRenderer.view_info.bottomLeftGridText.raw[t.tile_index] = f'{liveValueMatrix.raw[t.tile_index]:.1f}'
 
-        liveRenderer.trigger_update(clearViewInfoAfter=False)
+        liveRenderer.trigger_update(clearViewInfoAfter=False, bypassPause=True)
 
         liveValRenderMatrix = liveRenderer.view_info.bottomLeftGridText.copy()
 
@@ -187,6 +194,14 @@ def _k_prune_reconnect_greedy(
 
     closestConnected = None
 
+    bestOuterFound = None
+    bestOuterValue = -1000.0
+    bestOuterTurns = -1000
+
+    unelimmed = set(contiguousTiles)
+    pruneThreshold = disconnectQueue[0][0]
+    pruneThreshInc = 0.5
+
     while True:
         iterStart = time.perf_counter()
         iteration += 1
@@ -195,21 +210,35 @@ def _k_prune_reconnect_greedy(
             liveRenderer.view_info.clear_for_next_turn()
 
         # for i in range(prunePerIter):
-        while len(curSet) > toTurns - prunePerIter:
+        if not disconnectQueue:
+            break
+
+        pruneThreshold = disconnectQueue[0][0] + pruneThreshInc
+        # while len(curSet) > toTurns - prunePerIter and len(prunedThisIter) < 2 * prunePerIter:
+        while True:
             if not disconnectQueue:
                 break
+            if disconnectQueue[0][0] > pruneThreshold and prunedThisIter and len(curSet) < pruneTo - prunePerIter:
+                # pruneThreshold = max(pruneThreshold, disconnectQueue[0][0] - pruneThreshInc)
+                break
 
-            # while disconnectQueue:
             prio, nextDisconnect = heapq.heappop(disconnectQueue)
-            pruneIters += 1
-            prunedThisIter.add(nextDisconnect)
-            disconnectCounts.raw[nextDisconnect.tile_index] += 1
 
-            if liveRenderer:
-                liveRenderer.view_info.evaluatedGrid[nextDisconnect.x][nextDisconnect.y] = 100
-                liveRenderer.view_info.midRightGridText.raw[nextDisconnect.tile_index] = f'{prio:.3f}'.lstrip('0')
-                # liveRenderer.view_info.midRightGridText.raw[nextDisconnect.tile_index] = f'I{val:.1f}'
-            curSet.discard(nextDisconnect)
+            pruneIters += 1
+
+            pruned = _prune_connected(nextDisconnect, curSet, initialRawValueMatrix, disconnectCounts, rootTiles)
+            if not pruned:
+                continue
+
+            prunedThisIter.update(pruned)
+
+            for prune in pruned:
+                if liveRenderer:
+                    liveRenderer.view_info.evaluatedGrid[nextDisconnect.x][nextDisconnect.y] = 100
+                    liveRenderer.view_info.midRightGridText.raw[nextDisconnect.tile_index] = f'{prio:.3f}'.lstrip('0')
+                    # liveRenderer.view_info.midRightGridText.raw[nextDisconnect.tile_index] = f'I{val:.1f}'
+                unelimmed.discard(prune)
+            # curSet.discard(nextDisconnect)
 
         if liveRenderer:
             liveRenderer.view_info.add_stats_line(f'X = {len(prunedThisIter)} prunedThisIter {" | ".join([str(t) for t in prunedThisIter])}')
@@ -222,20 +251,53 @@ def _k_prune_reconnect_greedy(
             liveRenderer.view_info.add_stats_line(f'RED = {len(curSet)} reconnect start tiles (out of {pruneTo})')
             liveRenderer.view_info.add_map_zone(curSet.copy(), base.Colors.P_DARK_RED, alpha=120)
 
-        newTiles, closestConnected = _reconnect(
+        newTiles, forest = _reconnect(
             map,
             pruneTo,
             curSet,
             rootTiles,
             prunedThisIter,
+            disconnectCounts,
             skipTiles,
             initialRawValueMatrix,
             bareMinTurns)
-        curSet = closestConnected
+
+        bestRoot = next(iter(rootTiles))
+        newBestRootSet, bestVal = forest.subset_with_value(bestRoot)
+        for root in rootTiles:
+            if root in newBestRootSet:
+                continue
+
+            rootSubset, rootVal = forest.subset_with_value(root)
+            if rootVal > bestVal:
+                logbook.info(f'better root found? {root} {rootVal:.2f} vs {bestRoot} {bestVal:.2f}')
+                newBestRootSet = rootSubset
+                bestVal = rootVal
+                bestRoot = root
+
+        closestConnected = newBestRootSet
+
+        outerAbs = abs(bestOuterTurns - pruneTo)
+        innerAbs = abs(len(closestConnected) - pruneTo)
+        if bestOuterFound is None or outerAbs > innerAbs or (outerAbs == innerAbs and bestOuterValue < bestVal):
+            if liveRenderer:
+                liveRenderer.view_info.add_info_line(f'NEW BEST {bestVal:.2f}/{len(closestConnected)} > OUTER BEST {bestOuterValue:.2f}/{bestOuterTurns} (pt {pruneTo})')
+                liveRenderer.view_info.add_info_line(f'NEW BEST {bestVal:.2f}/{len(closestConnected)} > OUTER BEST {bestOuterValue:.2f}/{bestOuterTurns} (pt {pruneTo})')
+
+            bestOuterFound = closestConnected.copy()
+            bestOuterValue = bestVal
+            bestOuterTurns = len(closestConnected)
+        else:
+            if liveRenderer:
+                liveRenderer.view_info.add_info_line(f'new {bestVal:.2f}/{len(closestConnected)} < OUTER BEST {bestOuterValue:.2f}/{bestOuterTurns} (pt {pruneTo})')
+
+        curSet = closestConnected.union(unelimmed)
+        # curSet = {t for t in forest}
 
         if liveRenderer:
             liveRenderer.view_info.add_stats_line(f'GREEN Circle = {len(newTiles)} reconnected this iter {" | ".join([str(t) for t in newTiles])}')
         for tile in newTiles:
+
             discCount = disconnectCounts.raw[tile.tile_index]
             val = liveValueMatrix.raw[tile.tile_index]
             if discCount > 0:
@@ -244,15 +306,22 @@ def _k_prune_reconnect_greedy(
                 val += 0.2 * discCount
                 if liveRenderer:
                     liveValRenderMatrix.raw[tile.tile_index] = f'I{val:.1f}'
+                liveValueMatrix.raw[tile.tile_index] = val
 
-            curSet.add(tile)
+            # if tile in curSet:
+            #     logbook.info(f'hhhhhhhhhhhhhhh {tile}')
+            # else:
+            #     curSet.add(tile)
 
             if liveRenderer:
                 liveRenderer.view_info.add_targeted_tile(tile, TargetStyle.GREEN, radiusReduction=8)
 
             heapq.heappush(disconnectQueue, (val, tile))
 
-        if len(closestConnected) == pruneTo:
+        if (1 == 1
+            and len(closestConnected) == pruneTo
+            and not curSet.difference(closestConnected)
+        ):
             break
 
         prunedThisIter.clear()
@@ -267,13 +336,13 @@ def _k_prune_reconnect_greedy(
                     liveValRenderMatrix.raw[t.tile_index] = existing
             liveRenderer.view_info.add_info_line(f'iter {iteration} (pruneIter {pruneIters}), {len(curSet)} left, {len(newTiles)} added')
 
-    msg = f'k-prune ended after iter {iteration} with {len(closestConnected)} closestConnected, greedyTemp {greedyTemp:.2f}, overPruneGathMoreTemp {overPruneGathMoreTemp:.2f}, prunePerIter {prunePerIter}'
+    msg = f'k-prune ended after iter {iteration} with {bestOuterValue:.2f}/{len(bestOuterFound)} closestConnected, greedyTemp {greedyTemp:.2f}, overPruneGathMoreTemp {overPruneGathMoreTemp:.2f}, prunePerIter {prunePerIter}'
     logbook.info(msg)
     if liveRenderer:
-        liveRenderer.view_info.add_map_zone(closestConnected, base.Colors.LIGHT_BLUE, alpha=160)
+        liveRenderer.view_info.add_map_zone(bestOuterFound, base.Colors.LIGHT_BLUE, alpha=160)
         liveRenderer.send_final_result_and_close(msg)
 
-    return closestConnected
+    return bestOuterFound
 
 
 # def get_max_gather_spanning_tree_set_from_tile_lists(
@@ -294,11 +363,12 @@ def _reconnect(
         curSet: typing.Set[Tile],
         rootTiles: typing.Set[Tile],
         justDisconnectedTiles: typing.Set[Tile],
+        disconnectedCounts: MapMatrixInterface[int],
         skipTiles: TileSet | None,
         valueMatrix: MapMatrixInterface[float],
         bareMinTurns: int,
         # costPer: typing.Dict[Tile, int]
-) -> typing.Tuple[typing.Set[Tile], typing.Set[Tile]]:
+) -> typing.Tuple[typing.Set[Tile], FastDisjointTileSetSum]:
     """
     Returns set of all those connected, as well as the set of any required that couldn't be connected to the first required tile.
     Prioritizes gathering army, optionally modifying the gather value with the value from the prio matrix
@@ -357,8 +427,19 @@ def _reconnect(
     someRoot = None
     for root in rootTiles:
         someRoot = root
-        _include_all_adj_required_set_forest(root, forest, newTiles, usefulStartSet, missingIncluded, valueMatrix, lastTile=someRoot, someRoot=someRoot)
+        # _include_all_adj_required_set_forest(root, forest, newTiles, usefulStartSet, None, valueMatrix, lastTile=someRoot, someRoot=someRoot)
         # _include_all_adj_required_set_gather(root, , newTiles, usefulStartSet, missingIncluded, valueMatrix)
+
+    for t in curSet:
+        for adj in t.movable:
+            if adj in curSet:
+                if forest.merge(t, adj):
+                    # these werent already connected
+                    pass
+    #
+    # for t in rootTiles:
+    #     val = forest.subset_value(t)
+    #     usefulStartSet[t] = ((-1000000, 0, 0), 0)
 
     if GatherDebug.USE_DEBUG_LOGGING:
         logbook.info('Completed root _include_all_adj_required')
@@ -366,26 +447,40 @@ def _reconnect(
     # def findFunc(t: Tile, prio: typing.Tuple) -> bool:
     #     return t in missingIncluded
 
-    def findFunc(t: Tile, prio: typing.Tuple) -> bool:
-        return t in forest and not forest.connected(t, someRoot)
+    # def findFunc(t: Tile, prio: typing.Tuple) -> bool:
+    #     return t in forest and not forest.connected(t, someRoot)
 
     def valueFunc(t: Tile, prio: typing.Tuple) -> typing.Tuple | None:
-        if t not in missingIncluded:
+        if t not in forest:
             return None
-
-        missingVal = disjoin
 
         (
             prio,
             dist,
             negGatherPoints,
+            fromTile,
+            originTile,
         ) = prio
 
-        return negGatherPoints + t
+        if forest.connected(t, originTile):
+            return None
+
+        missingVal = forest.subset_value(t)
+        missingSize = forest.subset_size(t)
+
+        # negGatherPoints -= missingVal
+        # if forest.connected(someRoot, t):
+        #     negGatherPoints -= 2.0
+        #     if negGatherPoints < 0:
+        #         negGatherPoints *= 1.15
+        #     else:
+        #         negGatherPoints -= 1.0
+
+        return 0 - negGatherPoints, 0 - dist - missingSize
 
     iteration = 0
     # while len(missingIncluded) > 0:
-    while len(includedSet) < pruneTo:
+    while forest.subset_size(someRoot) < pruneTo:
         # iter += 1
         if GatherDebug.USE_DEBUG_LOGGING:
             logbook.info(f'missingIncluded iter {iteration}')
@@ -407,15 +502,20 @@ def _reconnect(
         #
         # logbook.info(f'  costSoFar {costSoFar}, expectedMinRemaining {expectedMinRemaining} (out of max {pruneTo}, min {bareMinTurns}), closestDist {closestDist}, excessTurnsLeft {excessTurnsLeft}')
 
-        excessTurnsLeft = pruneTo - len(includedSet)
-        logbook.info(f'  included so far {len(includedSet)} (missing {len(missingIncluded)}, (out of max {pruneTo}, min {bareMinTurns}), excessTurnsLeft {excessTurnsLeft}')
+        excessTurnsLeft = pruneTo - forest.subset_size(someRoot)
+        logbook.info(f'  included so far {forest.subset_size(someRoot)} (missing {forest.n_subsets - 1} subsets), (out of max {pruneTo}, min {bareMinTurns}), excessTurnsLeft {excessTurnsLeft}')
 
         def prioFunc(tile: Tile, prioObj: typing.Tuple):
             (
                 prio,
                 dist,
                 negGatherPoints,
+                fromTile,
+                originTile,
             ) = prioObj
+            if fromTile in forest and fromTile != originTile:
+                # not allowed to path through other parts of the forest, valfunc should just connect the forest...
+                return None
 
             # if tile not in justDisconnectedTiles:
             negGatherPoints -= valueMatrix.raw[tile.tile_index]
@@ -431,26 +531,37 @@ def _reconnect(
             #     newCost -= costWeight * excessCostRat  #- 1/costDivisor
             #     # newCost -= excessTurnsLeft * (1 / excessCostRat)
 
-            newDist = dist + 1
+            newDist = dist + 10 / (10 + disconnectedCounts.raw[tile.tile_index])
             newPrio = negGatherPoints / newDist if negGatherPoints < 0 else negGatherPoints * newDist
+            if tile in forest:
+                newPrio -= 10
             return (
                 newPrio,
                 newDist,
                 negGatherPoints,
+                tile,
+                originTile,
             )
 
+        usefulStartSet = dict()
+        for t in curSet:
+            if not forest.connected(t, someRoot):
+                val = forest.subset_value(t)
+                size = forest.subset_size(t)
+                usefulStartSet[t] = ((-val / size, size - 1, -val, None, t), 0)
+
         # path = SearchUtils.breadth_first_dynamic(map, usefulStartSet, findFunc, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
-        path = SearchUtils.breadth_first_dynamic_max(map, usefulStartSet, findFunc, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
+        path = SearchUtils.breadth_first_dynamic_max(map, usefulStartSet, valueFunc, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
         if path is None:
             if GatherDebug.USE_DEBUG_LOGGING:
                 logbook.info(f'  Path NONE! Performing altBanned set')
             # altBanned = skipTiles.copy()
             # altBanned.update([t for t in map.reachableTiles if t.isMountain])
 #             path = SearchUtils.breadth_first_dynamic(map, usefulStartSet, findFunc, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noNeutralCities=False, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
-            path = SearchUtils.breadth_first_dynamic_max(map, usefulStartSet, findFunc, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noNeutralCities=False, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
+            path = SearchUtils.breadth_first_dynamic_max(map, usefulStartSet, valueFunc, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noNeutralCities=False, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
             if path is None:
                 if GatherDebug.USE_DEBUG_LOGGING:
-                    logbook.info(f'  No AltPath, breaking early with {len(missingIncluded)} left missing')
+                    logbook.info(f'  No AltPath, breaking early with {len(curSet) - forest.subset_size(someRoot)} left missing')
                 break
                 # raise AssertionError(f'No MST building path found...? \r\nFrom {includedSet} \r\nto {missingIncluded}')
             # else:
@@ -463,17 +574,25 @@ def _reconnect(
         # logbook.info(f'    found {path.start.tile}->{path.tail.tile} len {path.length} (closest {closest} len {closestDist}) {path}')
         logbook.info(f'    found {path.start.tile}->{path.tail.tile} len {path.length}')
 
-        lastTile: Tile = someRoot
+        # lastTile: Tile = someRoot
 
+        # first = path.tileList[0]
+        last = path.tileList[-1]
+        newTiles.update(path.tileList[1:-1])
         for tile in path.tileList:
-            _include_all_adj_required_set_forest(tile, forest, newTiles, usefulStartSet, missingIncluded, valueMatrix, lastTile, someRoot) # , lastTile
-#             _include_all_adj_required_set_gather(tile, includedSet, newTiles, usefulStartSet, missingIncluded, valueMatrix) # , lastTile
-            lastTile = tile
+            forest.merge(tile, last)
+
+            # _include_all_adj_required_set_forest(tile, forest, newTiles, usefulStartSet, valueMatrix, last) # , lastTile
+            # _include_all_adj_required_set_gather(tile, includedSet, newTiles, usefulStartSet, missingIncluded, valueMatrix) # , lastTile
+            # lastTile = tile
+
+        # for tile in path.tileList:
+        #     usefulStartSet
 
     if GatherDebug.USE_DEBUG_LOGGING:
-        logbook.info(f'_reconnect completed in {time.perf_counter() - start:.5f}s with {len(missingIncluded)} missing after {iteration} path iterations')
+        logbook.info(f'_reconnect completed in {time.perf_counter() - start:.5f}s with {len(curSet) - forest.subset_size(someRoot)} missing after {iteration} path iterations')
 
-    return newTiles, includedSet
+    return newTiles, forest
 
 
 def _include_all_adj_required_set_gather(node: Tile, includedSet: TileSet, newTiles: typing.Set[Tile], usefulStartSet: TileSet, missingIncludedSet: TileSet, valueMatrix: MapMatrixInterface[float]):
@@ -524,15 +643,51 @@ def _include_all_adj_required_set_gather(node: Tile, includedSet: TileSet, newTi
 
     # logbook.info(f'_include_all_adj_required, iter {iter} included {included}')
 
-def _include_all_adj_required_set_forest(node: Tile, includedSet: FastDisjointTileSetSum, newTiles: typing.Set[Tile], usefulStartSet: TileSet, missingIncludedSet: TileSet, valueMatrix: MapMatrixInterface[float], lastTile: Tile, someRoot: Tile):
+
+def _prune_connected(node: Tile, setToPrune: typing.Set[Tile], valueMatrix: MapMatrixInterface[float], disconnectCounts: MapMatrixInterface[int], rootTiles: typing.Set[Tile]) -> typing.List[Tile]:
+    """
+    prunes connected with value equal to or lower than
+
+    @param node:
+    @param setToPrune:
+    @param valueMatrix:
+    @return:
+    """
+    q = [node]
+    cutoff = valueMatrix.raw[node.tile_index]
+
+    pruned = []
+
+    while q:
+        tile = q.pop()
+
+        # if fromNode is not None:
+        #     node.adjacents.append(fromNode)
+        #     fromNode.adjacents.append(node)
+
+        if tile not in setToPrune or valueMatrix.raw[tile.tile_index] > cutoff:
+            continue
+
+        pruned.append(tile)
+        setToPrune.discard(tile)
+        disconnectCounts.raw[tile.tile_index] += 1
+
+        for movable in tile.movable:
+            if movable not in setToPrune and movable not in rootTiles:
+                continue
+
+            q.append(movable)
+
+    return pruned
+
+def _include_all_adj_required_set_forest(node: Tile, forest: FastDisjointTileSetSum, newTiles: typing.Set[Tile], usefulStartSet: TileSet, valueMatrix: MapMatrixInterface[float], someRoot: Tile):
     """
     Inlcudes all adjacent required tiles int the
 
     @param node:
-    @param includedSet:
+    @param forest:
     @param newTiles: set of tiles to update with tiles that werent previously in missing or included sets.
     @param usefulStartSet:
-    @param missingIncludedSet:
     @param valueMatrix:
     @return:
     """
@@ -541,23 +696,22 @@ def _include_all_adj_required_set_forest(node: Tile, includedSet: FastDisjointTi
     while q:
         tile = q.pop()
 
-        # if not includedSet.merge(tile, lastTile):
-        if tile in includedSet:
+        wasTileInSets = tile in forest
+        if not forest.merge(tile, someRoot):
             continue
 
-        if tile not in missingIncludedSet:
+        if not wasTileInSets:
             newTiles.add(tile)
-
-        includedSet.merge(tile, someRoot)
 
         usefulStartSet[tile] = ((-valueMatrix.raw[tile.tile_index], 0, 0), 0)
 
-        missingIncludedSet.discard(tile)
+        # missingIncludedSet.discard(tile)
 
         for movable in tile.movable:
-            if movable not in missingIncludedSet:
+            # if movable not in missingIncludedSet:
+            if movable not in forest:
                 continue
 
             q.append(movable)
 
-        lastTile = tile
+        # lastTile = tile

@@ -238,7 +238,7 @@ class MapMatrixBenchmarkTests(TestBase):
     #
     #             self.assertGreater(mapMatrixTotalDur, flatTotalDuration, f'mapMatrix should never be faster to initialize')
 
-    def test_benchmark_mapmatrix__assign_plus_retrieve__find_point_where_dict_is_better(self):
+    def test_benchmark_mapmatrix__assign_plus_retrieve__find_point_where_dict__getitem__is_better(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         for mapSize in [
@@ -337,11 +337,11 @@ class MapMatrixBenchmarkTests(TestBase):
                             dictDuration = time.perf_counter() - start
                             dictTotalDuration += dictDuration
 
-                        logbook.info(f'mapMatrix duration {mapMatrixTotalDur:.4f} vs dict duration {dictTotalDuration:.4f} at num "added" {numInSet} + retrievals {accesses} (ratio {dictTotalDuration / mapMatrixTotalDur:.3f})')
+                        logbook.info(f'mapMatrix duration {mapMatrixTotalDur:.4f} vs dict getItem duration {dictTotalDuration:.4f} at num "added" {numInSet} + retrievals {accesses} (ratio {dictTotalDuration / mapMatrixTotalDur:.3f})')
 
                         self.assertLess(mapMatrixTotalDur, dictTotalDuration, f'mapMatrix stopped being faster at num "added" {numInSet} + retrievals {accesses}')
 
-    def test_benchmark_mapmatrix__assign_plus_retrieve__find_point_where_dict_getitem_is_better(self):
+    def test_benchmark_mapmatrix__assign_plus_retrieve__find_point_where_dict_is_better(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         for mapSize in [
@@ -453,32 +453,24 @@ class MapMatrixBenchmarkTests(TestBase):
         ]:
             for accesses in [
                 5000,
-                750,
-                500,
-                300,
-                200,
-                120,
-                100,
-                90,
-                80,
-                70,
                 60,
                 50,
                 40,
                 35,
+                30,
+                25,
                 20,
+                15,
+                10,
                 5,
                 1,
             ]:
                 for numInSet in [
                     5000,
-                    1500,
-                    750,
-                    400,
-                    200,
-                    100,
                     50,
+                    40,
                     30,
+                    25,
                     20,
                     15,
                     10,
@@ -512,7 +504,7 @@ class MapMatrixBenchmarkTests(TestBase):
                             for tile in randTiles:
                                 matrix.raw[tile.tile_index] = 1
                             while itrLeft > 0:
-                                for tile in map.pathable_tiles:
+                                for tile in randTiles:
                                     val += matrix.raw[last.tile_index] - matrix.raw[tile.tile_index]
                                     itrLeft -= 1
                                     last = tile
@@ -531,8 +523,8 @@ class MapMatrixBenchmarkTests(TestBase):
                                 dictLookup[tile] = 1
 
                             while itrLeft > 0:
-                                for tile in map.pathable_tiles:
-                                    val += dictLookup.get(last, -1) - dictLookup.get(tile, 0)
+                                for tile in randTiles:
+                                    val += dictLookup[last] - dictLookup[tile]
                                     last = tile
                                     itrLeft -= 1
                                     if itrLeft == 0:
@@ -612,7 +604,7 @@ class MapMatrixBenchmarkTests(TestBase):
                             for tile in randTiles:
                                 matrix.raw[tile.tile_index] = 1
                             while itrLeft > 0:
-                                for tile in randTiles:
+                                for tile in allTiles:
                                     val += matrix.raw[last.tile_index] - matrix.raw[tile.tile_index]
                                     itrLeft -= 1
                                     last = tile
@@ -631,8 +623,94 @@ class MapMatrixBenchmarkTests(TestBase):
                                 dictLookup[tile] = 1
 
                             while itrLeft > 0:
+                                for tile in allTiles:
+                                    val += dictLookup.get(last, -1) - dictLookup.get(tile, -1)
+                                    last = tile
+                                    itrLeft -= 1
+                                    if itrLeft == 0:
+                                        break
+                            dictDuration = time.perf_counter() - start
+                            dictTotalDuration += dictDuration
+
+                        logbook.info(f'mapMatrix duration {mapMatrixTotalDur:.4f} vs dict getitem duration {dictTotalDuration:.4f} at num "added" {numInSet} + retrievals {accesses} (ratio {dictTotalDuration / mapMatrixTotalDur:.3f})')
+
+                        self.assertLess(mapMatrixTotalDur, dictTotalDuration, f'mapMatrix stopped being faster at num "added" {numInSet} + retrievals {accesses}')
+
+    def test_benchmark_mapmatrix__direct_access__assign_plus_retrieve__find_point_where_dict_INT_is_better(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        for mapSize in [
+            'small',
+            'large'
+        ]:
+            for accesses in [
+                5000,
+                3000,
+                1500,
+                900,
+                600,
+                300,
+                150,
+                75,
+                40,
+                1,
+            ]:
+                for numInSet in [
+                    5000,
+                    130,
+                    100,
+                    80,
+                    40,
+                    20,
+                    1,
+                ]:
+                    with self.subTest(mapSize=mapSize, accesses=accesses, numInSet=numInSet):
+                        if mapSize == 'large':
+                            mapFile = 'GameContinuationEntries/fog_land_builder_should_not_take_ages_to_build___Sx5Tl3mwJ---2--880.txtmap'
+                        else:
+                            mapFile = 'GameContinuationEntries/should_recognize_army_collision_from_fog___BlpaDuBT2---b--136.txtmap'
+
+                        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136)
+
+                        allTiles = list(map.get_all_tiles())
+
+                        self.begin_capturing_logging()
+
+                        mapMatrixTotalDur = 0.0
+                        dictTotalDuration = 0.0
+
+                        last = map.generals[map.player_index]
+
+                        for i in range(500):
+                            randTiles = [random.choice(allTiles) for t in range(numInSet)]
+                            val = 0
+                            itrLeft = accesses // 2
+                            start = time.perf_counter()
+                            matrix: MapMatrixInterface[int] = MapMatrix(map, 0)
+                            for tile in randTiles:
+                                matrix.raw[tile.tile_index] = 1
+                            while itrLeft > 0:
                                 for tile in randTiles:
-                                    val += dictLookup[last] - dictLookup[tile]
+                                    val += matrix.raw[last.tile_index] - matrix.raw[tile.tile_index]
+                                    itrLeft -= 1
+                                    last = tile
+                                    if itrLeft == 0:
+                                        break
+
+                            mapMatrixDuration = time.perf_counter() - start
+                            mapMatrixTotalDur += mapMatrixDuration
+
+                            val = 0
+                            itrLeft = accesses // 2
+                            start = time.perf_counter()
+                            dictLookup: typing.Dict[int, int] = {last.tile_index: 1}
+                            # dict only gets
+                            for tile in randTiles:
+                                dictLookup[tile.tile_index] = 1
+
+                            while itrLeft > 0:
+                                for tile in randTiles:
+                                    val += dictLookup[last.tile_index] - dictLookup[tile.tile_index]
                                     last = tile
                                     itrLeft -= 1
                                     if itrLeft == 0:
@@ -641,6 +719,105 @@ class MapMatrixBenchmarkTests(TestBase):
                             dictTotalDuration += dictDuration
 
                         logbook.info(f'mapMatrix duration {mapMatrixTotalDur:.4f} vs set duration {dictTotalDuration:.4f} at num "added" {numInSet} + retrievals {accesses} (ratio {dictTotalDuration / mapMatrixTotalDur:.3f})')
+
+                        self.assertLess(mapMatrixTotalDur, dictTotalDuration, f'mapMatrix stopped being faster at num "added" {numInSet} + retrievals {accesses}')
+
+    def test_benchmark_mapmatrix__direct_access__assign_plus_retrieve__find_point_where_dict_INT_getitem_is_better(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        for mapSize in [
+            'small',
+            'large'
+        ]:
+            for accesses in [
+                5000,
+                300,
+                220,
+                190,
+                170,
+                150,
+                140,
+                120,
+                100,
+                75,
+                40,
+                1,
+            ]:
+                for numInSet in [
+                    5000,
+                    130,
+                    120,
+                    110,
+                    100,
+                    90,
+                    75,
+                    65,
+                    55,
+                    50,
+                    45,
+                    40,
+                    35,
+                    30,
+                    25,
+                    20,
+                    1,
+                ]:
+                    with self.subTest(mapSize=mapSize, accesses=accesses, numInSet=numInSet):
+                        if mapSize == 'large':
+                            mapFile = 'GameContinuationEntries/fog_land_builder_should_not_take_ages_to_build___Sx5Tl3mwJ---2--880.txtmap'
+                        else:
+                            mapFile = 'GameContinuationEntries/should_recognize_army_collision_from_fog___BlpaDuBT2---b--136.txtmap'
+                        gc.collect()
+
+                        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136)
+
+                        allTiles = list(map.get_all_tiles())
+
+                        self.begin_capturing_logging()
+
+                        mapMatrixTotalDur = 0.0
+                        dictTotalDuration = 0.0
+
+                        last = map.generals[map.player_index]
+
+                        for i in range(500):
+                            randTiles = [random.choice(allTiles) for t in range(numInSet)]
+                            val = 0
+                            itrLeft = accesses // 2
+                            start = time.perf_counter()
+                            matrix: MapMatrixInterface[int] = MapMatrix(map, 0)
+                            for tile in randTiles:
+                                matrix.raw[tile.tile_index] = 1
+                            while itrLeft > 0:
+                                for tile in allTiles:
+                                    val += matrix.raw[last.tile_index] - matrix.raw[tile.tile_index]
+                                    itrLeft -= 1
+                                    last = tile
+                                    if itrLeft == 0:
+                                        break
+
+                            mapMatrixDuration = time.perf_counter() - start
+                            mapMatrixTotalDur += mapMatrixDuration
+
+                            val = 0
+                            itrLeft = accesses // 2
+                            start = time.perf_counter()
+                            dictLookup: typing.Dict[int, int] = {last.tile_index: 1}
+                            # dict only gets
+                            for tile in randTiles:
+                                dictLookup[tile.tile_index] = 1
+
+                            while itrLeft > 0:
+                                for tile in allTiles:
+                                    val += dictLookup.get(last.tile_index, -1) - dictLookup.get(tile.tile_index, -1)
+                                    last = tile
+                                    itrLeft -= 1
+                                    if itrLeft == 0:
+                                        break
+                            dictDuration = time.perf_counter() - start
+                            dictTotalDuration += dictDuration
+
+                        logbook.info(f'mapMatrix duration {mapMatrixTotalDur:.4f} vs dict getitem duration {dictTotalDuration:.4f} at num "added" {numInSet} + retrievals {accesses} (ratio {dictTotalDuration / mapMatrixTotalDur:.3f})')
 
                         self.assertLess(mapMatrixTotalDur, dictTotalDuration, f'mapMatrix stopped being faster at num "added" {numInSet} + retrievals {accesses}')
 

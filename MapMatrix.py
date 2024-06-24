@@ -10,19 +10,27 @@ T = TypeVar('T')
 
 """
 Matrix perf summary:               overall     better after?    Performance diff access vs add
-MapMatrix (vs dict.get(,default))  Dict()-40%  70-110 accesses  (45% access, 20% add)
-MapMatrix (vs dict[])              Dict()-20%  170 accesses     (20% access, 7% add)
-MapMatrix (direct vs get)          Dict()-110% 25-40 accesses   (88% access, 220% add)
-MapMatrix (direct vs dict[])       Dict()-90%  40-60 accesses   (53% access, 220% add)
+                                    -improvem  accesses/adds,
+                                               small-large map
+MapMatrix (vs dict.get(,default))  Dict()-30%  50/40 - 90/60    (37% access, 30% add)
+MapMatrix (vs dict[])              Dict()-12%  120/60- 200/90   (13% access, 10% add)
+MapMatrix (raw vs get(, default))  Dict()-110% 20/15 - 35/20    (100% access, 220% add)
+MapMatrix (raw vs dict[])          Dict()-90%  35/20 - 60/25    (56% access, 225% add)
+
+MapMatrix (raw vs INT get(, df))   Dict()-26%  100/40 - 150/75  (28% access, 30% add)
+MapMatrix (raw vs INT dict[])      Dict()-4%    ~/50  -  ~/80   (-6% access, 30% add)
 
 MapMatrixSet                       Set()~0%    70-85 adds       (-10% access, 30% add)
-MapMatrixSet (direct access)       Set()-70%   30-50 accesses   (62% access, 200% add)
+MapMatrixSet (raw vs set())        Set()-70%   30-50 accesses   (62% access, 200% add)
 
 MapMatrixSet should NEVER be used when Set(tile.tile_index) is available. Unfortunately it pretty much always loses. It BARELY wins at TONS of accesses, but only JUST barely, and loses heavily for any smaller counts, sadly.
-MapMatrixSet (direct access)       Set(int)-1%  at 5000 accesses+5000 adds
+MapMatrixSet (raw vs set(int))     Set(int)-1%  at 5000 accesses+5000 adds
 
 TLDR
 now with fixed hashcode, Set() performs very well. Direct access mapmatrixset is still a good choice in high perf situations.
+Set(tileIndex) is pretty much always equivalent to mapmatrix set.
+Dict(tileIndex) when NOT using .get is very good. When using .get, .raw wins.
+
 Dict() performs better when making lots of copies. Matrix is better than dict when using dict get()
 Matrix direct access has much higher add performance than dict for lots of adds.
 Matrix.get() performs poorly and should be avoided where possible unless a default is NEEDED.
@@ -36,9 +44,16 @@ TODO not actually benched yet. ^
 class MapMatrix(MapMatrixInterface[T]):
     __slots__ = ("empty_val", "raw", "map")
 
-    def __init__(self, map: MapBase, initVal: T = None, emptyVal: T | None | str = 'PLACEHOLDER'):
+    def __init__(self, map: MapBase, initVal: T = None, emptyVal: T | None | str = 'PH'):
+        """
+        The initial value will be considered 'empty' for 'in' unless an explicit emptyVal is passed.
+
+        @param map:
+        @param initVal:
+        @param emptyVal:
+        """
         self.empty_val: T = initVal
-        if emptyVal != 'PLACEHOLDER':
+        if emptyVal != 'PH':
             self.empty_val = emptyVal
 
         self.raw: typing.List[T] = [initVal] * (map.cols * map.rows) if map is not None else None

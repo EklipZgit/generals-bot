@@ -6,7 +6,7 @@ import logbook
 import DebugHelper
 import KnapsackUtils
 import SearchUtils
-from . import USE_DEBUG_ASSERTS, recalculate_tree_values, prune_mst_to_turns_with_values
+from . import recalculate_tree_values, prune_mst_to_turns_with_values, GatherDebug
 from Interfaces import MapMatrixInterface
 from Models import GatherTreeNode
 from Path import Path
@@ -378,7 +378,7 @@ def _extend_tree_node_lookup(
             #     runningValue -= priorityMatrix[pathNode.tile]
 
             runningTrunkValue -= tileEffect
-            if USE_DEBUG_ASSERTS:
+            if GatherDebug.USE_DEBUG_ASSERTS:
                 logEntries.append(f'ETNL: setting {nextGatherTreeNode} value to {runningValue}')
             nextGatherTreeNode.value = runningValue
             nextGatherTreeNode.trunkValue = runningTrunkValue
@@ -416,7 +416,7 @@ def _extend_tree_node_lookup(
             if nextGatherTreeNode is not None and nextGatherTreeNode.toTile == curGatherTreeNode.tile:
                 errMsg = f'found graph cycle in extend_tree_node_lookup, {str(curGatherTreeNode)}<-{str(curGatherTreeNode.toTile)}  ({str(nextGatherTreeNode)}<-{str(nextGatherTreeNode.toTile)}) setting curGatherTreeNode fromTile to None to break the cycle.'
                 logbook.error(errMsg)
-                if USE_DEBUG_ASSERTS:
+                if GatherDebug.USE_DEBUG_ASSERTS:
                     logbook.info('\r\n' + '\r\n'.join(logEntries))
                     raise AssertionError(errMsg)
 
@@ -924,7 +924,7 @@ def _knapsack_levels_gather_iterative_prune(
 
             rootNodes = [g for g in (gatherTreeNodeLookup.get(tile, None) for tile in origStartTilesDict) if g is not None]
 
-            if USE_DEBUG_ASSERTS:
+            if GatherDebug.USE_DEBUG_ASSERTS:
                 # rootNodes = [gatherTreeNodeLookup[tile] for tile in origStartTilesDict]
                 logEntries.append('doing recalc after adding to start dict')
 
@@ -950,7 +950,7 @@ def _knapsack_levels_gather_iterative_prune(
                 #         raise AssertionError(f'recalculated gather value {recalcTotalValue} didnt match algo output gather value {newGatheredArmy}')
                 if recalcTotalTurns != turnsUsedByNewPaths + turnsSoFar:
                     msg = f'recalc gather turns {recalcTotalTurns} didnt match algo turns turnsUsedByNewPaths {turnsUsedByNewPaths} + turnsSoFar {turnsSoFar}'
-                    if USE_DEBUG_ASSERTS:
+                    if GatherDebug.USE_DEBUG_ASSERTS:
                         # TODO figure this shit the fuck out, what the fuck
                         logbook.info('\r\n' + '\r\n'.join(logEntries))
                         raise AssertionError(msg)
@@ -1016,17 +1016,18 @@ def _knapsack_levels_gather_iterative_prune(
                 turns=pruneToTurns,
                 searchingPlayer=searchingPlayer,
                 viewInfo=viewInfo,
-                noLog=not shouldLog and not USE_DEBUG_ASSERTS,  # and not DebugHelper.IS_DEBUGGING
+                noLog=not shouldLog and not GatherDebug.USE_DEBUG_ASSERTS,  # and not DebugHelper.IS_DEBUGGING
                 gatherTreeNodeLookupToPrune=gatherTreeNodeLookup,
                 allowNegative=includeGatherTreeNodesThatGatherNegative,
                 tileDictToPrune=newStartTilesDict,
                 logEntries=logEntries,
                 overpruneCutoff=overpruneCutoff,
+                # This is here to update the start tiles start dist? or something? This doesnt really make sense though wtf why is it here.
                 parentPruneFunc=lambda t, prunedNode: _start_tiles_prune_helper(startTilesDict, t, prunedNode)
             )
             logEntries.append(f'pruned {ogTotalValue:.2f}v @ {ogTotalTurns}t to {totalValue:.2f}v @ {totalTurns}t (goal was {pruneToTurns}t, overpruneCut {overpruneCutoff}t, maxPerIteration {maxPerIteration}, allowNegative={includeGatherTreeNodesThatGatherNegative})')
 
-            if USE_DEBUG_ASSERTS:
+            if GatherDebug.USE_DEBUG_ASSERTS:
                 recalcTotalTurns, recalcTotalValue = recalculate_tree_values(
                     logEntries,
                     rootNodes,
@@ -1037,7 +1038,7 @@ def _knapsack_levels_gather_iterative_prune(
                     onlyCalculateFriendlyArmy=not useTrueValueGathered,
                     priorityMatrix=priorityMatrix,
                     viewInfo=viewInfo,
-                    shouldAssert=USE_DEBUG_ASSERTS
+                    shouldAssert=GatherDebug.USE_DEBUG_ASSERTS
                 )
 
                 if recalcTotalTurns != totalTurns:
@@ -1088,7 +1089,7 @@ def _start_tiles_prune_helper(
 
     if prioDistTuple is not None:
         prios, oldDist = prioDistTuple
-        if USE_DEBUG_ASSERTS:
+        if GatherDebug.USE_DEBUG_LOGGING:
             logbook.info(f'pruning {str(parentTile)} from {oldDist} to {oldDist - gatherNodeBeingPruned.gatherTurns} (pruned {str(gatherNodeBeingPruned.tile)} gatherTurns {gatherNodeBeingPruned.gatherTurns})')
         startTilesDict[parentTile] = (prios, oldDist - gatherNodeBeingPruned.gatherTurns)
 
@@ -1351,13 +1352,13 @@ def knapsack_depth_gather_with_values(
 
             value = 0 - negGatheredSum
 
-            vt = 0
+            val = 0
             # this breaks if not max vt when the 'find big first boi' comes out
             if realDist > 0:
                 # vt = value / realDist
-                vt = value
+                val = value
 
-            prioObj = (vt,  # most army
+            prioObj = (val,  # most army
                        0 - threatDist,
                        # then by the furthest 'distance' (which when gathering to a path, weights short paths to the top of the path higher which is important)
                        0 - negGatheredSum,  # then by maximum amount gathered...?
@@ -1445,7 +1446,7 @@ def knapsack_depth_gather_with_values(
                 # ySum + nextTile.y,
                 numPrioTiles
             )
-            if shouldLog or USE_DEBUG_ASSERTS:
+            if shouldLog or GatherDebug.USE_DEBUG_ASSERTS:
                 logEntries.append(f'PRIO {str(nextTile)} : {str(prioObj)}')
             # logbook.info("prio: nextTile {} got realDist {}, negNextArmy {}, negDistanceSum {}, newDist {}, xSum {}, ySum {}".format(nextTile.toString(), realDist + 1, 0-nextArmy, negDistanceSum, dist + 1, xSum + nextTile.x, ySum + nextTile.y))
             return prioObj
@@ -1500,10 +1501,10 @@ def knapsack_depth_gather_with_values(
                     numPrioTiles
                 ) = fromPrio
 
-                if USE_DEBUG_ASSERTS and startingDist != depthDist:
+                if GatherDebug.USE_DEBUG_ASSERTS and startingDist != depthDist:
                     raise AssertionError(f'what? startingDist {startingDist} != depthDist {depthDist}')
 
-                if shouldLog or USE_DEBUG_ASSERTS:
+                if shouldLog or GatherDebug.USE_DEBUG_ASSERTS:
                     logEntries.append(f'BASE FROM: {tile} -> {str(fromPrio)}')
 
                 prioObj = (
@@ -1527,7 +1528,7 @@ def knapsack_depth_gather_with_values(
                 #     numPrioTiles
                 # )
 
-            if shouldLog or USE_DEBUG_ASSERTS:
+            if shouldLog or GatherDebug.USE_DEBUG_ASSERTS:
                 logEntries.append(f"BASE CASE: {str(tile)} -> {str(prioObj)}")
             return prioObj
 

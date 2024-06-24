@@ -149,7 +149,7 @@ class ViewerHost(object):
                 self._closed_by_user = False
 
 
-class DebugViewerHost(object):
+class DebugLiveViewerHost(object):
     def __init__(
             self,
             viewInfo: ViewInfo,
@@ -158,8 +158,8 @@ class DebugViewerHost(object):
             pauseOnRightClick: bool = True,
             onClick: typing.Callable[[Tile | None, bool], None] | None = None,
             startPaused: bool = False,
-            cell_width=40,
-            cell_height=40
+            cell_width=45,
+            cell_height=45
     ):
         if not titleString:
             try:
@@ -180,7 +180,12 @@ class DebugViewerHost(object):
         self._clicked: bool = False
         self.paused: bool = startPaused
 
-    def trigger_update(self, clearViewInfoAfter: bool = False, waitClick: bool = False):
+    def trigger_update(
+            self,
+            clearViewInfoAfter: bool = False,
+            waitClick: bool = False,
+            bypassPause: bool = False
+    ):
         self.viewer_host.send_update_to_viewer(self.view_info, self.map, isComplete=False)
 
         if waitClick:
@@ -190,7 +195,8 @@ class DebugViewerHost(object):
 
             self._clicked = False
 
-        self._hold_while_paused()
+        if not bypassPause:
+            self._hold_while_paused()
 
         if clearViewInfoAfter:
             self.view_info.clear_for_next_turn()
@@ -283,9 +289,9 @@ def render_view_info_debug(titleString: str, infoString: str, map: MapBase, view
         time.sleep(0.1)
 
 
-def start_debug_live_renderer(map: MapBase, minUpdateTime: float = 0.5, startPaused: bool = True) -> DebugViewerHost:
+def start_debug_live_renderer(map: MapBase, minUpdateTime: float = 0.001, startPaused: bool = True) -> DebugLiveViewerHost:
     viewInfo = ViewInfo(2, map)
-    host = DebugViewerHost(viewInfo, 'algo debug', minUpdateTime, startPaused=startPaused)
-    host.trigger_update()
+    host = DebugLiveViewerHost(viewInfo, 'algo debug', minUpdateTime, startPaused=startPaused)
+    host.trigger_update(bypassPause=True)
 
     return host

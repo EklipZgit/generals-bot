@@ -6,6 +6,7 @@ import logbook
 import DebugHelper
 import KnapsackUtils
 import SearchUtils
+from MapMatrix import MapMatrix
 from . import recalculate_tree_values, prune_mst_to_turns_with_values, GatherDebug
 from Interfaces import MapMatrixInterface
 from Models import GatherTreeNode
@@ -24,6 +25,7 @@ def _knapsack_max_set_gather_iteration(
     factor = 1
     if valueFunc is None:
         factor = 1000
+
         def value_func(path: Path) -> int:
             return int(path.value * 1000)
 
@@ -69,7 +71,6 @@ def _get_sub_knapsack_max_set_gather(
         maxTime: float,
         remainingTurns: int,
         fullTurns: int,
-        # gatherTreeNodeLookup: typing.Dict[Tile, GatherTreeNode],
         noNeutralCities,
         negativeTiles,
         skipTiles,
@@ -107,7 +108,7 @@ def _get_sub_knapsack_max_set_gather(
 
     # NOT causing the duplicates issue
     if len(startTilesDict) < remainingTurns // 10:
-        return _get_single_line_iterative_starter_max(
+        return _get_single_line_iterative_starter_max_set(
             fullTurns,
             ignoreStartTile,
             incrementBackward,
@@ -157,7 +158,7 @@ def _get_sub_knapsack_max_set_gather(
     return int(round(gatheredArmy)), maxPaths
 
 
-def _get_single_line_iterative_starter_max(
+def _get_single_line_iterative_starter_max_set(
         fullTurns,
         ignoreStartTile,
         incrementBackward,
@@ -246,7 +247,7 @@ def _get_single_line_iterative_starter_max(
             vis.add(t)
 
     return valuePerTurnPath.value, [valuePerTurnPath]
-#
+
 #
 # def _build_tree_node_lookup(
 #         newPaths: typing.List[Path],
@@ -271,200 +272,201 @@ def _get_single_line_iterative_starter_max(
 #         priorityMatrix=priorityMatrix,
 #     )
 
+#
+# def _extend_tree_node_lookup(
+#         newPaths: typing.List[Path],
+#         gatherTreeNodeLookup: typing.Dict[Tile, GatherTreeNode],
+#         startTilesDict: typing.Dict[Tile, typing.Tuple[typing.Any, int]],
+#         searchingPlayer: int,
+#         teams: typing.List[int],
+#         negativeTiles: typing.Set[Tile],
+#         logEntries: typing.List[str],
+#         useTrueValueGathered: bool = False,
+#         shouldLog: bool = False,
+#         force: bool = False,
+#         priorityMatrix: MapMatrixInterface[float] | None = None,
+# ) -> typing.Dict[Tile, GatherTreeNode]:
+#     """
+#     Returns the remaining turns after adding the paths, and the new tree nodes list, and the new startingTileDict.
+#     If a path in the list does not produce any army, returns None for remaining turns.
+#     Sets trunkdistance.
+#
+#     @param force:
+#     @param shouldLog:
+#     @param startTilesDict:
+#     @param newPaths:
+#     @param negativeTiles:
+#     @param gatherTreeNodeLookup:
+#     @param searchingPlayer:
+#     @param useTrueValueGathered:
+#     @return:
+#     """
+#     distanceLookup: typing.Dict[Tile, int] = {}
+#     for tile, (_, distance) in startTilesDict.items():
+#         distanceLookup[tile] = distance
+#
+#     if GatherDebug.USE_DEBUG_ASSERTS:
+#         for p in newPaths:
+#             vis = set()
+#             for t in p.tileList:
+#                 if t in vis:
+#                     raise Exception(f'{t} was in path twice! Path {p}')
+#                 vis.add(t)
+#
+#     for valuePerTurnPath in newPaths:
+#         if valuePerTurnPath.tail.tile.army <= 1 or valuePerTurnPath.tail.tile.player != searchingPlayer:
+#             # THIS should never happen since we are supposed to nuke these already in the startTilesDict builder
+#             logbook.error(
+#                 f"TERMINATING extend_tree_node_lookup PATH BUILDING DUE TO TAIL TILE {valuePerTurnPath.tail.tile.toString()} THAT WAS < 1 OR NOT OWNED BY US. PATH: {valuePerTurnPath.toString()}")
+#             continue
+#
+#         if shouldLog:
+#             logbook.info(
+#                 f"Adding valuePerTurnPath (v/t {(valuePerTurnPath.value - valuePerTurnPath.start.tile.army + 1) / valuePerTurnPath.length:.3f}): {valuePerTurnPath.toString()}")
+#
+#         # itr += 1
+#         # add the new path to startTiles, rinse, and repeat
+#         pathNode = valuePerTurnPath.start
+#         # we need to factor in the distance that the last path was already at (say we're gathering to a threat,
+#         # you can't keep adding gathers to the threat halfway point once you're gathering for as many turns as half the threat length
+#         distance = distanceLookup[pathNode.tile]
+#         # TODO? May need to not continue with the previous paths priorityObjects and instead start fresh, as this may unfairly weight branches
+#         #       towards the initial max path, instead of the highest actual additional value
+#         addlDist = 1
+#
+#         currentGatherTreeNode = gatherTreeNodeLookup.get(pathNode.tile, None)
+#         if currentGatherTreeNode is None:
+#             startTilesDictStringed = "\r\n      ".join([repr(t) for t in startTilesDict.items()])
+#             gatherTreeNodeLookupStringed = "\r\n      ".join([repr(t) for t in gatherTreeNodeLookup.items()])
+#             newPathsStringed = "\r\n      ".join([repr(t) for t in newPaths])
+#             msg = (f'Should never get here with no root tree pathNode. pathNode.tile {str(pathNode.tile)} dist {distance} in path {str(valuePerTurnPath)}.\r\n'
+#                    f'  Path was {repr(valuePerTurnPath)}\r\n'
+#                    f'  startTiles was\r\n      {startTilesDictStringed}\r\n'
+#                    f'  gatherTreeNodeLookup was\r\n      {gatherTreeNodeLookupStringed}\r\n'
+#                    f'  newPaths was\r\n      {newPathsStringed}')
+#
+#             if not force:
+#                 logbook.info('\r\n' + '\r\n'.join(logEntries))
+#                 raise AssertionError(msg)
+#
+#             logbook.error(msg)
+#
+#             currentGatherTreeNode = GatherTreeNode(pathNode.tile, None, distance)
+#             # currentGatherTreeNode.gatherTurns = 1
+#             gatherTreeNodeLookup[pathNode.tile] = currentGatherTreeNode
+#
+#         gatherTreeNodePathAddingOnTo = currentGatherTreeNode
+#         # runningValue = valuePerTurnPath.value - pathNode.tile.army
+#         runningValue = valuePerTurnPath.value
+#         runningTrunkDist = gatherTreeNodePathAddingOnTo.trunkDistance
+#         runningTrunkValue = gatherTreeNodePathAddingOnTo.trunkValue
+#         # if pathNode.tile.player == searchingPlayer:
+#         #     runningValue -= pathNode.tile.army
+#         # elif useTrueValueGathered:
+#         #     runningValue += pathNode.tile.army
+#         # skipTiles.add(pathNode.tile)
+#         # skipping because first tile is actually already on the path
+#         pathNode = pathNode.next
+#         # add the new path to startTiles and then search a new path
+#         iter = 0
+#         while pathNode is not None:
+#             # if DebugHelper.IS_DEBUGGING and pathNode.tile.x == 17 and pathNode.tile.y > 1 and pathNode.tile.y < 5:
+#             #     pass
+#             iter += 1
+#             if iter > 600:
+#                 logbook.info('\r\n' + '\r\n'.join(logEntries))
+#                 raise AssertionError(f'Infinite looped in extend_tree_node_lookup, {str(pathNode)}')
+#             runningTrunkDist += 1
+#             newDist = distance + addlDist
+#             distanceLookup[pathNode.tile] = newDist
+#             # skipTiles.add(pathNode.tile)
+#             # if viewInfo:
+#             #    viewInfo.bottomRightGridText[pathNode.tile] = newDist
+#             nextGatherTreeNode = GatherTreeNode(pathNode.tile, currentGatherTreeNode.tile, newDist)
+#
+#             tileEffect = 1
+#
+#             if negativeTiles is None or pathNode.tile not in negativeTiles:
+#                 if teams[pathNode.tile.player] == teams[searchingPlayer]:
+#                     tileEffect -= pathNode.tile.army
+#                 elif useTrueValueGathered:
+#                     tileEffect += pathNode.tile.army
+#             # if priorityMatrix and pathNode.next is not None:
+#             #     runningValue -= priorityMatrix[pathNode.tile]
+#
+#             runningTrunkValue -= tileEffect
+#             if GatherDebug.USE_DEBUG_ASSERTS:
+#                 logEntries.append(f'ETNL: setting {nextGatherTreeNode} value to {runningValue}')
+#             nextGatherTreeNode.value = runningValue
+#             nextGatherTreeNode.trunkValue = runningTrunkValue
+#             nextGatherTreeNode.trunkDistance = runningTrunkDist
+#             nextGatherTreeNode.gatherTurns = valuePerTurnPath.length - addlDist + 1
+#             runningValue += tileEffect
+#             if priorityMatrix:
+#                 runningValue -= priorityMatrix[pathNode.tile]
+#
+#             if nextGatherTreeNode not in currentGatherTreeNode.children:
+#                 currentGatherTreeNode.children.append(nextGatherTreeNode)
+#                 prunedToRemove = None
+#                 for p in currentGatherTreeNode.pruned:
+#                     if p.tile == nextGatherTreeNode.tile:
+#                         prunedToRemove = p
+#                 if prunedToRemove is not None:
+#                     currentGatherTreeNode.pruned.remove(prunedToRemove)
+#             currentGatherTreeNode = nextGatherTreeNode
+#             gatherTreeNodeLookup[pathNode.tile] = currentGatherTreeNode
+#             addlDist += 1
+#             pathNode = pathNode.next
+#
+#         # now bubble the value of the path and turns up the tree
+#         curGatherTreeNode = gatherTreeNodePathAddingOnTo
+#         iter = 0
+#         while True:
+#             iter += 1
+#
+#             curGatherTreeNode.value += valuePerTurnPath.value
+#             curGatherTreeNode.gatherTurns += valuePerTurnPath.length
+#             if curGatherTreeNode.toTile is None:
+#                 break
+#
+#             nextGatherTreeNode = gatherTreeNodeLookup.get(curGatherTreeNode.toTile, None)
+#             if nextGatherTreeNode is not None and nextGatherTreeNode.toTile == curGatherTreeNode.tile:
+#                 errMsg = f'found graph cycle in extend_tree_node_lookup, {str(curGatherTreeNode)}<-{str(curGatherTreeNode.toTile)}  ({str(nextGatherTreeNode)}<-{str(nextGatherTreeNode.toTile)}) setting curGatherTreeNode fromTile to None to break the cycle.'
+#                 logbook.error(errMsg)
+#                 if GatherDebug.USE_DEBUG_ASSERTS:
+#                     logbook.info('\r\n' + '\r\n'.join(logEntries))
+#                     raise AssertionError(errMsg)
+#
+#                 curGatherTreeNode.toTile = None
+#                 break
+#
+#             if iter > 600 and nextGatherTreeNode is not None:
+#                 logbook.info('\r\n' + '\r\n'.join(logEntries))
+#                 raise AssertionError(f'Infinite looped in extend_tree_node_lookup, {str(curGatherTreeNode)}<-{str(curGatherTreeNode.toTile)}  ({str(nextGatherTreeNode)}<-{str(nextGatherTreeNode.toTile)})')
+#
+#             if nextGatherTreeNode is None:
+#                 startTilesDictStringed = "\r\n      ".join([repr(t) for t in startTilesDict.items()])
+#                 gatherTreeNodeLookupStringed = "\r\n      ".join([repr(t) for t in gatherTreeNodeLookup.items()])
+#                 newPathsStringed = "\r\n      ".join([repr(t) for t in newPaths])
+#                 fromDist = distanceLookup.get(curGatherTreeNode.toTile, None)
+#                 curDist = distanceLookup.get(curGatherTreeNode.tile, None)
+#                 msg = (f'curGatherTreeNode {repr(curGatherTreeNode)} HAD A FROM TILE {repr(curGatherTreeNode.toTile)} fromDist [{fromDist}] curDist [{curDist}] THAT WAS NOT IN THE gatherTreeNodeLookup...?\r\n'
+#                        f'  Path was {repr(valuePerTurnPath)}\r\n'
+#                        f'  startTiles was\r\n      {startTilesDictStringed}\r\n'
+#                        f'  gatherTreeNodeLookup was\r\n      {gatherTreeNodeLookupStringed}\r\n'
+#                        f'  newPaths was\r\n      {newPathsStringed}')
+#                 if not force:
+#                     logbook.info('\r\n' + '\r\n'.join(logEntries))
+#                     raise AssertionError(msg)
+#                 else:
+#                     logbook.error(msg)
+#                 break
+#             curGatherTreeNode = nextGatherTreeNode
+#
+#     return gatherTreeNodeLookup
 
-def _extend_tree_node_lookup(
-        newPaths: typing.List[Path],
-        # gatherTreeNodeLookup: typing.Dict[Tile, GatherTreeNode],
-        startTilesDict: typing.Dict[Tile, typing.Tuple[typing.Any, int]],
-        searchingPlayer: int,
-        teams: typing.List[int],
-        negativeTiles: typing.Set[Tile],
-        logEntries: typing.List[str],
-        useTrueValueGathered: bool = False,
-        shouldLog: bool = False,
-        force: bool = False,
-        priorityMatrix: MapMatrixInterface[float] | None = None,
-) -> typing.Dict[Tile, GatherTreeNode]:
-    """
-    Returns the remaining turns after adding the paths, and the new tree nodes list, and the new startingTileDict.
-    If a path in the list does not produce any army, returns None for remaining turns.
-    Sets trunkdistance.
 
-    @param force:
-    @param shouldLog:
-    @param startTilesDict:
-    @param newPaths:
-    @param negativeTiles:
-    @param searchingPlayer:
-    @param useTrueValueGathered:
-    @return:
-    """
-    distanceLookup: typing.Dict[Tile, int] = {}
-    for tile, (_, distance) in startTilesDict.items():
-        distanceLookup[tile] = distance
-
-    if GatherDebug.USE_DEBUG_ASSERTS:
-        for p in newPaths:
-            vis = set()
-            for t in p.tileList:
-                if t in vis:
-                    raise Exception(f'{t} was in path twice! Path {p}')
-                vis.add(t)
-
-    for valuePerTurnPath in newPaths:
-        if valuePerTurnPath.tail.tile.army <= 1 or valuePerTurnPath.tail.tile.player != searchingPlayer:
-            # THIS should never happen since we are supposed to nuke these already in the startTilesDict builder
-            logbook.error(
-                f"TERMINATING extend_tree_node_lookup PATH BUILDING DUE TO TAIL TILE {valuePerTurnPath.tail.tile.toString()} THAT WAS < 1 OR NOT OWNED BY US. PATH: {valuePerTurnPath.toString()}")
-            continue
-
-        if shouldLog:
-            logbook.info(
-                f"Adding valuePerTurnPath (v/t {(valuePerTurnPath.value - valuePerTurnPath.start.tile.army + 1) / valuePerTurnPath.length:.3f}): {valuePerTurnPath.toString()}")
-
-        # itr += 1
-        # add the new path to startTiles, rinse, and repeat
-        pathNode = valuePerTurnPath.start
-        # we need to factor in the distance that the last path was already at (say we're gathering to a threat,
-        # you can't keep adding gathers to the threat halfway point once you're gathering for as many turns as half the threat length
-        distance = distanceLookup[pathNode.tile]
-        # TODO? May need to not continue with the previous paths priorityObjects and instead start fresh, as this may unfairly weight branches
-        #       towards the initial max path, instead of the highest actual additional value
-        addlDist = 1
-
-        currentGatherTreeNode = gatherTreeNodeLookup.get(pathNode.tile, None)
-        if currentGatherTreeNode is None:
-            startTilesDictStringed = "\r\n      ".join([repr(t) for t in startTilesDict.items()])
-            gatherTreeNodeLookupStringed = "\r\n      ".join([repr(t) for t in gatherTreeNodeLookup.items()])
-            newPathsStringed = "\r\n      ".join([repr(t) for t in newPaths])
-            msg = (f'Should never get here with no root tree pathNode. pathNode.tile {str(pathNode.tile)} dist {distance} in path {str(valuePerTurnPath)}.\r\n'
-                   f'  Path was {repr(valuePerTurnPath)}\r\n'
-                   f'  startTiles was\r\n      {startTilesDictStringed}\r\n'
-                   f'  gatherTreeNodeLookup was\r\n      {gatherTreeNodeLookupStringed}\r\n'
-                   f'  newPaths was\r\n      {newPathsStringed}')
-
-            if not force:
-                logbook.info('\r\n' + '\r\n'.join(logEntries))
-                raise AssertionError(msg)
-
-            logbook.error(msg)
-
-            currentGatherTreeNode = GatherTreeNode(pathNode.tile, None, distance)
-            # currentGatherTreeNode.gatherTurns = 1
-            gatherTreeNodeLookup[pathNode.tile] = currentGatherTreeNode
-
-        gatherTreeNodePathAddingOnTo = currentGatherTreeNode
-        # runningValue = valuePerTurnPath.value - pathNode.tile.army
-        runningValue = valuePerTurnPath.value
-        runningTrunkDist = gatherTreeNodePathAddingOnTo.trunkDistance
-        runningTrunkValue = gatherTreeNodePathAddingOnTo.trunkValue
-        # if pathNode.tile.player == searchingPlayer:
-        #     runningValue -= pathNode.tile.army
-        # elif useTrueValueGathered:
-        #     runningValue += pathNode.tile.army
-        # skipTiles.add(pathNode.tile)
-        # skipping because first tile is actually already on the path
-        pathNode = pathNode.next
-        # add the new path to startTiles and then search a new path
-        iter = 0
-        while pathNode is not None:
-            # if DebugHelper.IS_DEBUGGING and pathNode.tile.x == 17 and pathNode.tile.y > 1 and pathNode.tile.y < 5:
-            #     pass
-            iter += 1
-            if iter > 600:
-                logbook.info('\r\n' + '\r\n'.join(logEntries))
-                raise AssertionError(f'Infinite looped in extend_tree_node_lookup, {str(pathNode)}')
-            runningTrunkDist += 1
-            newDist = distance + addlDist
-            distanceLookup[pathNode.tile] = newDist
-            # skipTiles.add(pathNode.tile)
-            # if viewInfo:
-            #    viewInfo.bottomRightGridText[pathNode.tile] = newDist
-            nextGatherTreeNode = GatherTreeNode(pathNode.tile, currentGatherTreeNode.tile, newDist)
-
-            tileEffect = 1
-
-            if negativeTiles is None or pathNode.tile not in negativeTiles:
-                if teams[pathNode.tile.player] == teams[searchingPlayer]:
-                    tileEffect -= pathNode.tile.army
-                elif useTrueValueGathered:
-                    tileEffect += pathNode.tile.army
-            # if priorityMatrix and pathNode.next is not None:
-            #     runningValue -= priorityMatrix[pathNode.tile]
-
-            runningTrunkValue -= tileEffect
-            if GatherDebug.USE_DEBUG_ASSERTS:
-                logEntries.append(f'ETNL: setting {nextGatherTreeNode} value to {runningValue}')
-            nextGatherTreeNode.value = runningValue
-            nextGatherTreeNode.trunkValue = runningTrunkValue
-            nextGatherTreeNode.trunkDistance = runningTrunkDist
-            nextGatherTreeNode.gatherTurns = valuePerTurnPath.length - addlDist + 1
-            runningValue += tileEffect
-            if priorityMatrix:
-                runningValue -= priorityMatrix[pathNode.tile]
-
-            if nextGatherTreeNode not in currentGatherTreeNode.children:
-                currentGatherTreeNode.children.append(nextGatherTreeNode)
-                prunedToRemove = None
-                for p in currentGatherTreeNode.pruned:
-                    if p.tile == nextGatherTreeNode.tile:
-                        prunedToRemove = p
-                if prunedToRemove is not None:
-                    currentGatherTreeNode.pruned.remove(prunedToRemove)
-            currentGatherTreeNode = nextGatherTreeNode
-            gatherTreeNodeLookup[pathNode.tile] = currentGatherTreeNode
-            addlDist += 1
-            pathNode = pathNode.next
-
-        # now bubble the value of the path and turns up the tree
-        curGatherTreeNode = gatherTreeNodePathAddingOnTo
-        iter = 0
-        while True:
-            iter += 1
-
-            curGatherTreeNode.value += valuePerTurnPath.value
-            curGatherTreeNode.gatherTurns += valuePerTurnPath.length
-            if curGatherTreeNode.toTile is None:
-                break
-
-            nextGatherTreeNode = gatherTreeNodeLookup.get(curGatherTreeNode.toTile, None)
-            if nextGatherTreeNode is not None and nextGatherTreeNode.toTile == curGatherTreeNode.tile:
-                errMsg = f'found graph cycle in extend_tree_node_lookup, {str(curGatherTreeNode)}<-{str(curGatherTreeNode.toTile)}  ({str(nextGatherTreeNode)}<-{str(nextGatherTreeNode.toTile)}) setting curGatherTreeNode fromTile to None to break the cycle.'
-                logbook.error(errMsg)
-                if GatherDebug.USE_DEBUG_ASSERTS:
-                    logbook.info('\r\n' + '\r\n'.join(logEntries))
-                    raise AssertionError(errMsg)
-
-                curGatherTreeNode.toTile = None
-                break
-
-            if iter > 600 and nextGatherTreeNode is not None:
-                logbook.info('\r\n' + '\r\n'.join(logEntries))
-                raise AssertionError(f'Infinite looped in extend_tree_node_lookup, {str(curGatherTreeNode)}<-{str(curGatherTreeNode.toTile)}  ({str(nextGatherTreeNode)}<-{str(nextGatherTreeNode.toTile)})')
-
-            if nextGatherTreeNode is None:
-                startTilesDictStringed = "\r\n      ".join([repr(t) for t in startTilesDict.items()])
-                gatherTreeNodeLookupStringed = "\r\n      ".join([repr(t) for t in gatherTreeNodeLookup.items()])
-                newPathsStringed = "\r\n      ".join([repr(t) for t in newPaths])
-                fromDist = distanceLookup.get(curGatherTreeNode.toTile, None)
-                curDist = distanceLookup.get(curGatherTreeNode.tile, None)
-                msg = (f'curGatherTreeNode {repr(curGatherTreeNode)} HAD A FROM TILE {repr(curGatherTreeNode.toTile)} fromDist [{fromDist}] curDist [{curDist}] THAT WAS NOT IN THE gatherTreeNodeLookup...?\r\n'
-                       f'  Path was {repr(valuePerTurnPath)}\r\n'
-                       f'  startTiles was\r\n      {startTilesDictStringed}\r\n'
-                       f'  gatherTreeNodeLookup was\r\n      {gatherTreeNodeLookupStringed}\r\n'
-                       f'  newPaths was\r\n      {newPathsStringed}')
-                if not force:
-                    logbook.info('\r\n' + '\r\n'.join(logEntries))
-                    raise AssertionError(msg)
-                else:
-                    logbook.error(msg)
-                break
-            curGatherTreeNode = nextGatherTreeNode
-
-    return gatherTreeNodeLookup
-
-
-def _build_next_level_start_dict_max(
+def _build_next_level_start_dict_max_set(
         newPaths: typing.List[Path],
         startTilesDict: typing.Dict[Tile, typing.Tuple[typing.Any, int]],
         searchingPlayer: int,
@@ -527,45 +529,50 @@ def _build_next_level_start_dict_max(
 
     return remainingTurns, startTilesDict
 
-#
-# def _add_tree_nodes_to_start_tiles_dict_recurse_max(
-#         rootNode: GatherTreeNode,
-#         startTilesDict: typing.Dict[Tile, typing.Tuple[typing.Any, int]],
-#         searchingPlayer: int,
-#         remainingTurns: int,
-#         # skipTiles: typing.Set[Tile],
-#         baseCaseFunc,
-#         dist: int = 0
-# ) -> int:
-#     """
-#     Adds nodes recursively to the start tiles dict.
-#     DOES NOT make a copy of the start tiles dict.
-#     Returns the number of nodes that were extended on this node.
-#
-#     @param rootNode:
-#     @param searchingPlayer:
-#     # @param skipTiles:
-#     @return:
-#     """
-#
-#     added = 0
-#
-#     startTilesEntry = startTilesDict.get(rootNode.tile, None)
-#     if startTilesEntry is None:
-#         nextPrioObj = baseCaseFunc(rootNode.tile, dist)
-#         startTilesDict[rootNode.tile] = (nextPrioObj, dist)
-#         added += 1
-#
-#     for node in rootNode.children:
-#         added += _add_tree_nodes_to_start_tiles_dict_recurse_max(node, startTilesDict, searchingPlayer, remainingTurns, baseCaseFunc, dist=dist + 1)
-#     #
-#     # if startTilesEntry is not None:
-#     #     (prioObj, oldDist) = startTilesEntry
-#     #     logbook.info(f'shifting {str(rootNode.tile)} from {oldDist} to {oldDist + added}')
-#     #     startTilesDict[rootNode.tile] = (prioObj, oldDist + added)
-#
-#     return added
 
+def _add_tree_nodes_to_start_tiles_dict_recurse_max_set(
+        # TODO PATHS OR SOMETHIGN?
+        path: Path,
+        # rootNode: GatherTreeNode,
+        startTilesDict: typing.Dict[Tile, typing.Tuple[typing.Any, int]],
+        searchingPlayer: int,
+        remainingTurns: int,
+        # skipTiles: typing.Set[Tile],
+        baseCaseFunc,
+        dist: int = 0
+) -> int:
+    """
+    Adds nodes recursively to the start tiles dict.
+    DOES NOT make a copy of the start tiles dict.
+    Returns the number of nodes that were extended on this node.
+
+    @param rootNode:
+    @param searchingPlayer:
+    # @param skipTiles:
+    @return:
+    """
+
+    added = 0
+
+    startTilesEntry = startTilesDict.get(rootNode.tile, None)
+    if startTilesEntry is None:
+        nextPrioObj = baseCaseFunc(rootNode.tile, dist)
+        startTilesDict[rootNode.tile] = (nextPrioObj, dist)
+        added += 1
+
+    for node in rootNode.children:
+        added += _add_tree_nodes_to_start_tiles_dict_recurse_max_set(node, startTilesDict, searchingPlayer, remainingTurns, baseCaseFunc, dist=dist + 1)
+    #
+    # if startTilesEntry is not None:
+    #     (prioObj, oldDist) = startTilesEntry
+    #     logbook.info(f'shifting {str(rootNode.tile)} from {oldDist} to {oldDist + added}')
+    #     startTilesDict[rootNode.tile] = (prioObj, oldDist + added)
+
+    return added
+
+
+# TODO make two versions of this, one that respects defensive depth stuff (and actually calculates move order safety to avoid impossible defense gathers that dont violate depth but would need to make 2 depth 2 moves or whatever)
+#  and one that doesnt even give a shit about the gather nodes until after the gather is complete maybe? Though that version could respect capture roots.
 def _knapsack_max_set_gather_iterative_prune(
         itr: SearchUtils.Counter,
         map: MapBase,
@@ -578,7 +585,7 @@ def _knapsack_max_set_gather_iterative_prune(
         valueFunc=None,
         baseCaseFunc=None,
         pathValueFunc=None,
-        negativeTiles=None,
+        # negativeTiles=None,
         skipTiles=None,
         searchingPlayer=-2,
         priorityFunc=None,
@@ -590,8 +597,7 @@ def _knapsack_max_set_gather_iterative_prune(
         preferNeutral=False,
         viewInfo=None,
         distPriorityMap=None,
-        useTrueValueGathered=False,
-        priorityMatrix: MapMatrixInterface[float] | None = None,
+        # useTrueValueGathered=False,
         logEntries: typing.List[str] | None = None,
         includeGatherTreeNodesThatGatherNegative=False,
         shouldLog: bool = False,
@@ -608,7 +614,7 @@ def _knapsack_max_set_gather_iterative_prune(
     @param targetArmy:
     @param valueFunc:
     @param baseCaseFunc:
-    @param negativeTiles:
+    # @param negativeTiles:
     @param skipTiles:
     @param searchingPlayer:
     @param priorityFunc:
@@ -619,12 +625,6 @@ def _knapsack_max_set_gather_iterative_prune(
     @param preferNeutral:
     @param viewInfo:
     @param distPriorityMap:
-    @param useTrueValueGathered: Use True for things like capturing stuff. Causes the algo to include the cost of
-     capturing tiles in the value calculation. Also include the cost of the gather start tile into the gather FINDER
-     so that it only finds paths that kill the target. Avoid using this when just gathering as it prevents
-     gathering tiles on the other side of enemy territory, which is the opposite of good general gather behavior.
-     Use useTrueValueGathered to make sure the gatherValue returned by the gather matches the actual amount of army you will have on the gather target tiles at the end of the gather execution.
-     Use includeGatherTreeNodesThatGatherNegative to allow a gather to return gather nodes in the final result that fail to flip an enemy node in the path to friendly.
     @param includeGatherTreeNodesThatGatherNegative: if set True, allows the gather PLAN to gather
      to tiles without killing them. Use this for defense for example, when you dont need to fully kill the threat tile with each gather move.
      Use includeGatherTreeNodesThatGatherNegative to allow a gather to return gather nodes in the final result that fail to flip an enemy node in the path to friendly.
@@ -637,7 +637,7 @@ def _knapsack_max_set_gather_iterative_prune(
     """
     origStartTilesDict = startTilesDict.copy()
 
-    # rootNodes: typing.List[GatherTreeNode] = []
+    rootNodes: typing.List[GatherTreeNode] = []
 
     maxPerIteration = max(min(4, fullTurns // 2), 1 * fullTurns // 4)
     if fastMode:
@@ -652,10 +652,10 @@ def _knapsack_max_set_gather_iterative_prune(
     turnsSoFar = 0
     totalValue = 0
     newStartTilesDict = startTilesDict.copy()
-    # gatherTreeNodeLookup: typing.Dict[Tile, GatherTreeNode] = {}
-    # for tile, data in startTilesDict.items():
-    #     (_, dist) = data
-    #     gatherTreeNodeLookup[tile] = GatherTreeNode(tile, toTile=None, stateObj=dist)
+    gatherTreeNodeLookup: typing.Dict[Tile, GatherTreeNode] = {}
+    for tile, data in startTilesDict.items():
+        (_, dist) = data
+        gatherTreeNodeLookup[tile] = GatherTreeNode(tile, toTile=None, stateObj=dist)
 
     prevBest = 0
 
@@ -687,7 +687,7 @@ def _knapsack_max_set_gather_iterative_prune(
                 remainingTurns=turnsToGather,
                 fullTurns=fullTurns,
                 noNeutralCities=True,
-                negativeTiles=negativeTiles,
+                # negativeTiles=negativeTiles,
                 skipTiles=skipTiles,
                 searchingPlayer=searchingPlayer,
                 priorityFunc=priorityFunc,
@@ -697,7 +697,7 @@ def _knapsack_max_set_gather_iterative_prune(
                 preferNeutral=preferNeutral,
                 priorityMatrix=priorityMatrix,
                 shouldLog=shouldLog,
-                useTrueValueGathered=useTrueValueGathered,
+                # useTrueValueGathered=useTrueValueGathered,
                 logEntries=logEntries
             )
 
@@ -707,19 +707,6 @@ def _knapsack_max_set_gather_iterative_prune(
             # elif DebugHelper.IS_DEBUGGING:
             #     logEntries.append(f'  returned:')
             #     logEntries.extend([f'\r\n    {p}' for p in newPaths])
-
-            _extend_tree_node_lookup(
-                newPaths,
-                gatherTreeNodeLookup,
-                newStartTilesDict,
-                searchingPlayer,
-                teams,
-                logEntries=logEntries,
-                negativeTiles=negativeTiles,
-                useTrueValueGathered=useTrueValueGathered,
-                priorityMatrix=priorityMatrix,
-                shouldLog=shouldLog,
-            )
 
             turnsUsedByNewPaths = 0
             for path in newPaths:
@@ -732,8 +719,8 @@ def _knapsack_max_set_gather_iterative_prune(
                     (startPriorityObject, distance) = newStartTilesDict[rootNode.tile]
                     if DebugHelper.IS_DEBUGGING:
                         logEntries.append(f'  add_tree_nodes_to_start_tiles_dict_recurse {rootNode} @ dist {distance}')
-                    _add_tree_nodes_to_start_tiles_dict_recurse_max(
-                        rootNode,
+                    _add_tree_nodes_to_start_tiles_dict_recurse_max_set(
+                        rootNode, # TODO
                         newStartTilesDict,
                         searchingPlayer,
                         calculatedLeftOverTurns,
@@ -841,9 +828,11 @@ def _knapsack_max_set_gather_iterative_prune(
                 tileDictToPrune=newStartTilesDict,
                 logEntries=logEntries,
                 overpruneCutoff=overpruneCutoff,
-                parentPruneFunc=lambda t, prunedNode: _start_tiles_prune_helper(startTilesDict, t, prunedNode)
+                # This WAS here to update the start dist
+                # parentPruneFunc=lambda t, prunedNode: _start_tiles_prune_helper(startTilesDict, t, prunedNode)
             )
-            logEntries.append(f'pruned {ogTotalValue:.2f}v @ {ogTotalTurns}t to {totalValue:.2f}v @ {totalTurns}t (goal was {pruneToTurns}t, overpruneCut {overpruneCutoff}t, maxPerIteration {maxPerIteration}, allowNegative={includeGatherTreeNodesThatGatherNegative})')
+            logEntries.append(
+                f'pruned {ogTotalValue:.2f}v @ {ogTotalTurns}t to {totalValue:.2f}v @ {totalTurns}t (goal was {pruneToTurns}t, overpruneCut {overpruneCutoff}t, maxPerIteration {maxPerIteration}, allowNegative={includeGatherTreeNodesThatGatherNegative})')
 
             if GatherDebug.USE_DEBUG_ASSERTS:
                 recalcTotalTurns, recalcTotalValue = recalculate_tree_values(
@@ -907,7 +896,7 @@ def _start_tiles_prune_helper(
 
     if prioDistTuple is not None:
         prios, oldDist = prioDistTuple
-        if GatherDebug.USE_DEBUG_ASSERTS:
+        if GatherDebug.USE_DEBUG_LOGGING:
             logbook.info(f'pruning {str(parentTile)} from {oldDist} to {oldDist - gatherNodeBeingPruned.gatherTurns} (pruned {str(gatherNodeBeingPruned.tile)} gatherTurns {gatherNodeBeingPruned.gatherTurns})')
         startTilesDict[parentTile] = (prios, oldDist - gatherNodeBeingPruned.gatherTurns)
 
@@ -936,7 +925,7 @@ def _debug_print_diff_between_start_dict_and_tree_nodes(
             logbook.info(f'  missing from GatherTreeNodes: {str(tile)}  (dist {dist}, [{str(prioThing)}])')
 
 
-def knapsack_max_set_gather(
+def gather_max_set_iterative(
         map: MapBase,
         startTiles,
         turns: int,
@@ -999,7 +988,7 @@ def knapsack_max_set_gather(
     @param fastMode: whether to use the fastMode (less optimal results but much quicker) iterative params.
     @return:
     """
-    totalValue, usedTurns, rootNodes = knapsack_max_set_gather_with_values(
+    totalValue, usedTurns, rootNodes = gather_max_set_iterative_with_values(
         map=map,
         startTiles=startTiles,
         turns=turns,
@@ -1028,15 +1017,16 @@ def knapsack_max_set_gather(
     return rootNodes
 
 
-def knapsack_max_set_gather_with_values(
+def gather_max_set_iterative_with_values(
         map: MapBase,
         startTiles,
         turns: int,
+        armyCostMatrix: MapMatrixInterface[int],
+        valueMatrix: MapMatrixInterface[int],
         targetArmy=None,
         valueFunc=None,
         baseCaseFunc=None,
         pathValueFunc=None,
-        negativeTiles=None,
         skipTiles=None,
         searchingPlayer=-2,
         priorityFunc=None,
@@ -1048,17 +1038,17 @@ def knapsack_max_set_gather_with_values(
         preferNeutral=False,
         viewInfo: ViewInfo | None = None,
         distPriorityMap=None,
-        useTrueValueGathered=False,
         includeGatherTreeNodesThatGatherNegative=False,
         shouldLog=False,  # DebugHelper.IS_DEBUGGING
-        useRecurse=False,
-        priorityMatrix: MapMatrixInterface[float] | None = None,
         cutoffTime: float | None = None,
         fastMode: bool = False,
         slowMode: bool = False,
 ) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
     """
-    Does black magic and shits out a spiderweb with numbers in it, sometimes the numbers are even right
+    Does black magic and shits out a spiderweb with numbers in it, sometimes the numbers are even right.
+    The UseTrueValueGathered equivalent is simply the armyCostMatrix also passed in for the valueMatrix.
+    valueMatrix is used to prioritize what to grab.
+    armyCostMatrix is used to make sure the gather isn't invalid.
 
     @param map:
     @param startTiles:
@@ -1068,7 +1058,6 @@ def knapsack_max_set_gather_with_values(
     @param valueFunc:
     valueFunc is (currentTile, priorityObject) -> POSITIVELY weighted value object
     @param baseCaseFunc:
-    @param negativeTiles:
     @param skipTiles:
     @param searchingPlayer:
     @param priorityFunc:
@@ -1080,12 +1069,6 @@ def knapsack_max_set_gather_with_values(
     @param preferNeutral:
     @param viewInfo:
     @param distPriorityMap:
-    @param useTrueValueGathered: Use True for things like capturing stuff. Causes the algo to include the cost of
-     capturing tiles in the value calculation. Also include the cost of the gather start tile into the gather FINDER
-     so that it only finds paths that kill the target. Avoid using this when just gathering as it prevents
-     gathering tiles on the other side of enemy territory, which is the opposite of good general gather behavior.
-     Use useTrueValueGathered to make sure the gatherValue returned by the gather matches the actual amount of army you will have on the gather target tiles at the end of the gather execution.
-     Use includeGatherTreeNodesThatGatherNegative to allow a gather to return gather nodes in the final result that fail to flip an enemy node in the path to friendly.
     @param includeGatherTreeNodesThatGatherNegative: if set True, allows the gather PLAN to gather
      to tiles without killing them. Use this for defense for example, when you dont need to fully kill the threat tile with each gather move.
      Use includeGatherTreeNodesThatGatherNegative to allow a gather to return gather nodes in the final result that fail to flip an enemy node in the path to friendly.
@@ -1093,16 +1076,10 @@ def knapsack_max_set_gather_with_values(
     @return: (valueGathered, rootNodes)
     """
     startTime = time.perf_counter()
-    negativeTilesOrig = negativeTiles
-    if negativeTiles is not None:
-        negativeTiles = negativeTiles.copy()
-    else:
-        negativeTiles = set()
 
     if cutoffTime is None:
         cutoffTime = time.perf_counter() + 500
 
-    teams = MapBase.get_teams_array(map)
     # negativeTilesOrig = set()
     # q = HeapQueue()
 
@@ -1137,7 +1114,7 @@ def knapsack_max_set_gather_with_values(
         if shouldLog:
             logbook.info("Using emptyVal valueFunc")
 
-        def default_value_func_max_gathered_per_turn(
+        def default_value_func_max_set_gathered_per_turn(
                 currentTile,
                 priorityObject
         ):
@@ -1162,26 +1139,25 @@ def knapsack_max_set_gather_with_values(
             if currentTile.army < 2 or currentTile.player != searchingPlayer:
                 return None
 
-            value = 0 - negGatheredSum
-
-            vt = 0
+            val = -1000
             # this breaks if not max vt when the 'find big first boi' comes out
             if realDist > 0:
                 # vt = value / realDist
-                vt = value
+                val = 0 - negGatheredSum
 
-            prioObj = (vt,  # most army per turn
-                       # then by the furthest 'distance' (which when gathering to a path, weights short paths to the top of the path higher which is important)
-                       0 - negGatheredSum,  # then by maximum amount gathered...?
-                       realDist,  # then by the real distance
-                       # 0 - xSum,
-                       # 0 - ySum
-                       )
+            valueObj = (val,  # most army
+                        # then by the furthest 'distance' (which when gathering to a path, weights short paths to the top of the path higher which is important)
+                        0 - negGatheredSum,  # then by maximum amount gathered...?
+                        0 - negArmySum,
+                        realDist,  # then by the real distance
+                        # 0 - xSum,
+                        # 0 - ySum
+                        )
             if shouldLog:
-                logEntries.append(f'VALUE {str(currentTile)} : {str(prioObj)}')
-            return prioObj
+                logEntries.append(f'VALUE {str(currentTile)} : {str(valueObj)}')
+            return valueObj
 
-        valueFunc = default_value_func_max_gathered_per_turn
+        valueFunc = default_value_func_max_set_gathered_per_turn
 
     if pathValueFunc is None:
         if shouldLog:
@@ -1191,6 +1167,7 @@ def knapsack_max_set_gather_with_values(
             (
                 value,  # most army
                 gatheredSum,  # then by maximum amount gathered...?
+                armySum,
                 realDist,  # then by the real distance
             ) = valueObj
 
@@ -1204,7 +1181,7 @@ def knapsack_max_set_gather_with_values(
         if shouldLog:
             logbook.info("Using emptyVal priorityFunc")
 
-        def default_priority_func(nextTile, currentPriorityObject):
+        def default_priority_func(nextTile: Tile, currentPriorityObject):
             (
                 prioVal,
                 negPrioTilesPerTurn,
@@ -1215,32 +1192,19 @@ def knapsack_max_set_gather_with_values(
                 # ySum,
                 numPrioTiles
             ) = currentPriorityObject
-            negArmySum += 1
-            negGatheredSum += 1
             # if nextTile.x == 6 and nextTile.y == 2 and map.turn == 224:
             #     pass
-            if nextTile not in negativeTiles:
-                if nextTile.player in friendlyPlayers:
-                    negArmySum -= nextTile.army
-                    negGatheredSum -= nextTile.army
-                # # this broke gather approximation, couldn't predict actual gather values based on this
-                # if nextTile.isCity:
-                #    negArmySum -= turns // 3
-                else:
-                    negArmySum += nextTile.army
-                    if useTrueValueGathered:
-                        negGatheredSum += nextTile.army
 
-            # TODO comment back in
-            # if priorityMatrix is not None:
-            #     negGatheredSum -= priorityMatrix.raw[nextTile.tile_index]
+            negArmySum -= armyCostMatrix.raw[nextTile.tile_index]
+            negGatheredSum -= valueMatrix.raw[nextTile.tile_index]
 
             if priorityTiles and nextTile in priorityTiles:
                 numPrioTiles += 1
+
             realDist += 1
             prioVal = -100000
             if realDist > 0:
-                prioVal = 10000 + negGatheredSum / realDist + 0.05 * (realDist * realDist)
+                prioVal = 10000 + negGatheredSum / realDist + 0.01 * (realDist * realDist)
 
             prioObj = (
                 prioVal,
@@ -1299,6 +1263,9 @@ def knapsack_max_set_gather_with_values(
 
         # perIterationFunc = default_per_iteration_func
 
+    # TODO get rid of this somehow? it is used to prevent start tiles from counting towards shit?
+    negativeTiles = set()
+
     startTilesDict: typing.Dict[Tile, typing.Tuple[typing.Any, int]] = {}
     if isinstance(startTiles, dict):
         for tile in startTiles.keys():
@@ -1319,98 +1286,45 @@ def knapsack_max_set_gather_with_values(
         for tile, (startPriorityObject, distance) in startTilesDict.items():
             logEntries.append(f"Including tile {tile.x},{tile.y} in startTiles at distance {distance}")
 
-    origStartTilesDict = startTilesDict.copy()
-
     itr = SearchUtils.Counter(0)
 
-    if not useRecurse:
-        totalValue, rootNodes = _knapsack_max_set_gather_iterative_prune(
-            itr=itr,
-            map=map,
-            startTilesDict=startTilesDict,
-            cutoffTime=cutoffTime,
-            # gatherTreeNodeLookup=gatherTreeNodeLookup,
-            remainingTurns=turns,
-            fullTurns=turns,
-            targetArmy=targetArmy,
-            valueFunc=valueFunc,
-            baseCaseFunc=baseCaseFunc,
-            pathValueFunc=pathValueFunc,
-            negativeTiles=negativeTiles,
-            skipTiles=skipTiles,
-            searchingPlayer=searchingPlayer,
-            priorityFunc=priorityFunc,
-            skipFunc=skipFunc,
-            perIterationFunc=perIterationFunc,
-            priorityTiles=priorityTiles,
-            ignoreStartTile=ignoreStartTile,
-            incrementBackward=incrementBackward,
-            preferNeutral=preferNeutral,
-            viewInfo=viewInfo,
-            distPriorityMap=distPriorityMap,
-            # priorityMatrix=priorityMatrix,
-            useTrueValueGathered=useTrueValueGathered,
-            includeGatherTreeNodesThatGatherNegative=includeGatherTreeNodesThatGatherNegative,
-            logEntries=logEntries,
-            shouldLog=shouldLog,
-            fastMode=fastMode,
-            slowMode=slowMode,
-        )
-    else:
-        gatheredValue, maxPaths = _knapsack_max_set_gather_recurse(
-            itr=itr,
-            map=map,
-            startTilesDict=startTilesDict,
-            remainingTurns=turns,
-            fullTurns=turns,
-            targetArmy=targetArmy,
-            valueFunc=valueFunc,
-            baseCaseFunc=baseCaseFunc,
-            pathValueFunc=pathValueFunc,
-            negativeTiles=negativeTiles,
-            skipTiles=skipTiles,
-            searchingPlayer=searchingPlayer,
-            priorityFunc=priorityFunc,
-            skipFunc=skipFunc,
-            priorityTiles=priorityTiles,
-            ignoreStartTile=ignoreStartTile,
-            incrementBackward=incrementBackward,
-            preferNeutral=preferNeutral,
-            viewInfo=viewInfo,
-            distPriorityMap=distPriorityMap,
-            useTrueValueGathered=useTrueValueGathered,
-            includeGatherTreeNodesThatGatherNegative=includeGatherTreeNodesThatGatherNegative,
-            shouldLog=shouldLog,
-        )
-
-        gatherTreeNodeLookup = _build_tree_node_lookup(
-            maxPaths,
-            startTilesDict,
-            searchingPlayer,
-            teams,
-            # skipTiles
-            shouldLog=shouldLog,
-            priorityMatrix=priorityMatrix,
-        )
-
-        rootNodes: typing.List[GatherTreeNode] = list(SearchUtils.where(gatherTreeNodeLookup.values(), lambda treeNode: treeNode.toTile is None))
-
-        totalTurns, totalValue = recalculate_tree_values(
-            [],
-            rootNodes,
-            negativeTilesOrig,
-            origStartTilesDict,
-            searchingPlayer=searchingPlayer,
-            teams=teams,
-            onlyCalculateFriendlyArmy=not useTrueValueGathered,
-            viewInfo=viewInfo,
-            shouldAssert=GatherDebug.USE_DEBUG_ASSERTS,
-            priorityMatrix=priorityMatrix)
+    totalValue, rootNodes = _knapsack_max_set_gather_iterative_prune(
+        itr=itr,
+        map=map,
+        startTilesDict=startTilesDict,
+        cutoffTime=cutoffTime,
+        # gatherTreeNodeLookup=gatherTreeNodeLookup,
+        remainingTurns=turns,
+        fullTurns=turns,
+        targetArmy=targetArmy,
+        valueFunc=valueFunc,
+        baseCaseFunc=baseCaseFunc,
+        pathValueFunc=pathValueFunc,
+        # negativeTiles=negativeTiles,
+        skipTiles=skipTiles,
+        searchingPlayer=searchingPlayer,
+        priorityFunc=priorityFunc,
+        skipFunc=skipFunc,
+        perIterationFunc=perIterationFunc,
+        priorityTiles=priorityTiles,
+        ignoreStartTile=ignoreStartTile,
+        incrementBackward=incrementBackward,
+        preferNeutral=preferNeutral,
+        viewInfo=viewInfo,
+        distPriorityMap=distPriorityMap,
+        # priorityMatrix=priorityMatrix,
+        # useTrueValueGathered=useTrueValueGathered,
+        includeGatherTreeNodesThatGatherNegative=includeGatherTreeNodesThatGatherNegative,
+        logEntries=logEntries,
+        shouldLog=shouldLog,
+        fastMode=fastMode,
+        slowMode=slowMode,
+    )
 
     totalTurns = 0
     for g in rootNodes:
         totalTurns += g.gatherTurns
 
     logbook.info(
-        f"Concluded knapsack_levels_backpack_gather with {itr.value} iterations. Gather turns {totalTurns}, value {totalValue}. Duration: {time.perf_counter() - startTime:.4f}")
+        f"Concluded gather_max_set_iterative_with_values with {itr.value} iterations. Gather turns {totalTurns}, value {totalValue}. Duration: {time.perf_counter() - startTime:.4f}")
     return totalValue, totalTurns, rootNodes

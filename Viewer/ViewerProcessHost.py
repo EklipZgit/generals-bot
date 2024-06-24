@@ -159,7 +159,8 @@ class DebugLiveViewerHost(object):
             onClick: typing.Callable[[Tile | None, bool], None] | None = None,
             startPaused: bool = False,
             cell_width=45,
-            cell_height=45
+            cell_height=45,
+            noLog: bool = False
     ):
         if not titleString:
             try:
@@ -167,7 +168,7 @@ class DebugLiveViewerHost(object):
             except:
                 titleString = traceback.format_exc()
 
-        self.viewer_host: ViewerHost = ViewerHost(titleString, cell_width=None, cell_height=None, alignTop=False, alignLeft=False, noLog=True, onClick=self.on_click, minUpdateSleep=minUpdateSleep)
+        self.viewer_host: ViewerHost = ViewerHost(titleString, cell_width=None, cell_height=None, alignTop=False, alignLeft=False, noLog=noLog, onClick=self.on_click, minUpdateSleep=minUpdateSleep)
         self.viewer_host.noLog = True
         self.viewer_host.start()
 

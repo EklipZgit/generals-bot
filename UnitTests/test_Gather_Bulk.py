@@ -1542,6 +1542,7 @@ player_index=0
             gatherMatrix,
             armyCostMatrix,
             # negativeTiles=negativeTiles,
+            renderLive=False,
             viewInfo=None,
             searchingPlayer=general.player
 

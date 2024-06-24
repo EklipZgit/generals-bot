@@ -142,6 +142,8 @@ def _k_prune_reconnect_greedy(
     overPruneGathMoreTemp = 10.0
     """How much to over-prune and then try a re-gather"""
 
+    liveSum = 0
+
     liveValueMatrix = initialRawValueMatrix.copy()
     # liveValueMatrix = MapMatrix.get_min_normalized_via_sum(initialRawValueMatrix, normalizedMinimum=1.0)
 
@@ -191,6 +193,7 @@ def _k_prune_reconnect_greedy(
             continue
 
         heapq.heappush(disconnectQueue, (liveValueMatrix.raw[t.tile_index], t))
+        liveSum += initialRawValueMatrix.raw[t.tile_index]
 
     closestConnected = None
 
@@ -238,6 +241,7 @@ def _k_prune_reconnect_greedy(
                     liveRenderer.view_info.midRightGridText.raw[nextDisconnect.tile_index] = f'{prio:.3f}'.lstrip('0')
                     # liveRenderer.view_info.midRightGridText.raw[nextDisconnect.tile_index] = f'I{val:.1f}'
                 unelimmed.discard(prune)
+                liveSum -= initialRawValueMatrix.raw[prune.tile_index]
             # curSet.discard(nextDisconnect)
 
         if liveRenderer:
@@ -296,6 +300,7 @@ def _k_prune_reconnect_greedy(
 
         if liveRenderer:
             liveRenderer.view_info.add_stats_line(f'GREEN Circle = {len(newTiles)} reconnected this iter {" | ".join([str(t) for t in newTiles])}')
+        curAvg = liveSum / len(curSet)
         for tile in newTiles:
 
             discCount = disconnectCounts.raw[tile.tile_index]
@@ -303,7 +308,8 @@ def _k_prune_reconnect_greedy(
             if discCount > 0:
                 # val *= 1.0 + 0.05 * (discCount)
                 # val += 1
-                val += 0.2 * discCount
+                # val += 0.2 * discCount
+                val += curAvg / 4
                 if liveRenderer:
                     liveValRenderMatrix.raw[tile.tile_index] = f'I{val:.1f}'
                 liveValueMatrix.raw[tile.tile_index] = val
@@ -317,6 +323,7 @@ def _k_prune_reconnect_greedy(
                 liveRenderer.view_info.add_targeted_tile(tile, TargetStyle.GREEN, radiusReduction=8)
 
             heapq.heappush(disconnectQueue, (val, tile))
+            liveSum += initialRawValueMatrix.raw[tile.tile_index]
 
         if (1 == 1
             and len(closestConnected) == pruneTo
@@ -531,10 +538,11 @@ def _reconnect(
             #     newCost -= costWeight * excessCostRat  #- 1/costDivisor
             #     # newCost -= excessTurnsLeft * (1 / excessCostRat)
 
-            newDist = dist + 10 / (10 + disconnectedCounts.raw[tile.tile_index])
+            # newDist = dist + 10 / (10 + disconnectedCounts.raw[tile.tile_index])
+            newDist = dist + 1
             newPrio = negGatherPoints / newDist if negGatherPoints < 0 else negGatherPoints * newDist
             if tile in forest:
-                newPrio -= 10
+                newPrio -= 100
             return (
                 newPrio,
                 newDist,
@@ -548,7 +556,8 @@ def _reconnect(
             if not forest.connected(t, someRoot):
                 val = forest.subset_value(t)
                 size = forest.subset_size(t)
-                usefulStartSet[t] = ((-val / size, size - 1, -val, None, t), 0)
+                usefulStartSet[t] = ((-10000, 0, 0, None, t), 0)
+                # usefulStartSet[t] = ((-val / size, size - 1, -val, None, t), 0)
 
         # path = SearchUtils.breadth_first_dynamic(map, usefulStartSet, findFunc, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
         path = SearchUtils.breadth_first_dynamic_max(map, usefulStartSet, valueFunc, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
@@ -653,19 +662,20 @@ def _prune_connected(node: Tile, setToPrune: typing.Set[Tile], valueMatrix: MapM
     @param valueMatrix:
     @return:
     """
-    q = [node]
     cutoff = valueMatrix.raw[node.tile_index]
+    q = [(node, cutoff)]
 
     pruned = []
 
     while q:
-        tile = q.pop()
+        tile, fromVal = q.pop()
 
         # if fromNode is not None:
         #     node.adjacents.append(fromNode)
         #     fromNode.adjacents.append(node)
 
-        if tile not in setToPrune or valueMatrix.raw[tile.tile_index] > cutoff:
+        curVal = valueMatrix.raw[tile.tile_index]
+        if tile not in setToPrune or curVal > cutoff or curVal > fromVal:
             continue
 
         pruned.append(tile)
@@ -676,7 +686,7 @@ def _prune_connected(node: Tile, setToPrune: typing.Set[Tile], valueMatrix: MapM
             if movable not in setToPrune and movable not in rootTiles:
                 continue
 
-            q.append(movable)
+            q.append((movable, curVal))
 
     return pruned
 

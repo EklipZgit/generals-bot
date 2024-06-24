@@ -142,11 +142,11 @@ def _get_sub_knapsack_gather(
         ignoreStartTile=ignoreStartTile,
         incrementBackward=incrementBackward,
         preferNeutral=preferNeutral,
-        priorityMatrix=priorityMatrix,
         logResultValues=shouldLog,
         ignoreNonPlayerArmy=not useTrueValueGathered,
         ignoreIncrement=True,
-        priorityMatrixSkipStart=True,
+        # priorityMatrix=priorityMatrix, # does nothing when pathValueFunc is passed
+        # priorityMatrixSkipStart=True, # does nothing when pathValueFunc is passed
         pathValueFunc=pathValueFunc,
         noLog=not shouldLog  # note, these log entries end up AFTER all the real logs...
     )

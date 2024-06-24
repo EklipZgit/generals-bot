@@ -315,38 +315,6 @@ class GatherSteinerUnitTests(TestBase):
         for result in results:
             logbook.info(result)
 
-    def test_should_build_steiner(self):
-        """NetworkX 43 ms here"""
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
-
-        # self.render_map(map)
-        self.begin_capturing_logging()
-
-        tiles = [
-            map.GetTile(10, 5),
-            map.GetTile(5, 3),
-            map.GetTile(13, 4),
-            map.GetTile(13, 1),
-            map.GetTile(10, 0),
-            map.GetTile(9, 15),
-            map.GetTile(1, 16),
-            map.GetTile(9, 7),
-            # map.GetTile(),
-            # map.GetTile(),
-            # map.GetTile(),
-            # map.GetTile(),
-            # map.GetTile(),
-        ]
-
-        steinerNodes = GatherSteiner.build_network_x_steiner_tree(map, tiles, general.player)
-        steinerMatrix = MapMatrixSet(map, steinerNodes)
-
-        viewInfo = self.get_renderable_view_info(map)
-        viewInfo.add_map_division(steinerMatrix, (0, 255, 255), 200)
-        self.render_view_info(map, viewInfo, f'steiner')
-
     def test_should_build_steiner_respecting_value_matrix(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
@@ -378,8 +346,8 @@ class GatherSteinerUnitTests(TestBase):
 
         gatherMatrix = bot.get_gather_tiebreak_matrix()
         captureMatrix = bot.get_expansion_weight_matrix()
+        valueMatrix = Gather.build_gather_capture_pure_value_matrix(map, general.player, None, gatherMatrix, captureMatrix, prioritizeCaptureHighArmyTiles=False, useTrueValueGathered=True)
 
-        valueMatrix = Gather.build_gather_capture_pure_value_matrix(map, general.player, None, gatherMatrix, captureMatrix, prioritizeCaptureHighArmyTiles=False)
         plan = Gather.build_max_value_gather_tree_linking_specific_nodes(
             map,
             {enemyGeneral},
@@ -391,6 +359,299 @@ class GatherSteinerUnitTests(TestBase):
         viewInfo.add_map_division(plan.tileSet, (0, 255, 255), 200)
         viewInfo.gatherNodes = plan.root_nodes
         self.render_view_info(map, viewInfo, f'steiner {plan.length}t with {plan.gathered_army}')
+
+    def test_should_build_steiner__main_method__steiner_tree(self):
+        """NetworkX 43 ms here"""
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        # self.render_map(map)
+        self.begin_capturing_logging()
+
+        tiles = [
+            map.GetTile(10, 5),
+            map.GetTile(5, 3),
+            map.GetTile(13, 4),
+            map.GetTile(13, 1),
+            map.GetTile(10, 0),
+            map.GetTile(9, 15),
+            map.GetTile(1, 16),
+            # map.GetTile(9, 7),
+            # map.GetTile(),
+            # map.GetTile(),
+            # map.GetTile(),
+            # map.GetTile(),
+            # map.GetTile(),
+        ]
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        gatherMatrix = bot.get_gather_tiebreak_matrix()
+        captureMatrix = bot.get_expansion_weight_matrix()
+        valueMatrix = Gather.build_gather_capture_pure_value_matrix(map, general.player, None, gatherMatrix, captureMatrix, prioritizeCaptureHighArmyTiles=False)
+
+        steinerNodes = GatherSteiner.build_network_x_steiner_tree(map, tiles, valueMatrix, general.player, baseWeight=100)
+        steinerMatrix = MapMatrixSet(map, steinerNodes)
+
+        viewInfo = self.get_renderable_view_info(map)
+        viewInfo.add_map_division(steinerMatrix, (0, 255, 255), 200)
+        self.render_view_info(map, viewInfo, f'steiner')
+
+    def test_should_build_nx_subtraction_graph__steiner_tree(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        # self.render_map(map)
+        self.begin_capturing_logging()
+
+        tiles = [
+            map.GetTile(10, 5),
+            map.GetTile(5, 3),
+            map.GetTile(13, 4),
+            map.GetTile(13, 1),
+            map.GetTile(10, 0),
+            # map.GetTile(9, 15),
+            map.GetTile(1, 16),
+            # map.GetTile(9, 7),
+            # map.GetTile(),
+            # map.GetTile(),
+            # map.GetTile(),
+            # map.GetTile(),
+            # map.GetTile(),
+        ]
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        gatherMatrix = bot.get_gather_tiebreak_matrix()
+        captureMatrix = bot.get_expansion_weight_matrix()
+        valueMatrix = Gather.build_gather_capture_pure_value_matrix(map, general.player, None, gatherMatrix, captureMatrix, prioritizeCaptureHighArmyTiles=False, useTrueValueGathered=True)
+
+        viewInfo = self.get_renderable_view_info(map)
+        steinerGraph = Gather.build_networkX_graph_flat_weight_mod_subtract(
+            map,
+            valueMatrix,
+            viewInfo=viewInfo,
+            baseWeight=100,
+        )
+
+        tileSet = Gather.build_network_x_steiner_tree_from_arbitrary_nx_graph(
+            map, steinerGraph, tiles
+        )
+
+        viewInfo.add_map_division(tileSet, (0, 255, 255), 200)
+        for t in map.get_all_tiles():
+            viewInfo.midLeftGridText.raw[t.tile_index] = f'{valueMatrix.raw[t.tile_index]:.1f}'
+        self.render_view_info(map, viewInfo, f'steiner {len(tileSet)} tiles')
+
+    def test_should_build_nx_scaled_graph__steiner_tree(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        # self.render_map(map)
+        self.begin_capturing_logging()
+
+        tiles = [
+            map.GetTile(10, 5),
+            map.GetTile(5, 3),
+            map.GetTile(13, 4),
+            map.GetTile(13, 1),
+            map.GetTile(10, 0),
+            # map.GetTile(9, 15),
+            map.GetTile(1, 16),
+            # map.GetTile(9, 7),
+            # map.GetTile(),
+            # map.GetTile(),
+            # map.GetTile(),
+            # map.GetTile(),
+            # map.GetTile(),
+        ]
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        gatherMatrix = bot.get_gather_tiebreak_matrix()
+        captureMatrix = bot.get_expansion_weight_matrix()
+        valueMatrix = Gather.build_gather_capture_pure_value_matrix(map, general.player, None, gatherMatrix, captureMatrix, prioritizeCaptureHighArmyTiles=False, useTrueValueGathered=True)
+
+        viewInfo = self.get_renderable_view_info(map)
+        steinerGraph = Gather.build_networkX_graph_flat_weight_mod_scale(
+            map,
+            valueMatrix,
+            viewInfo=viewInfo,
+        )
+
+        tileSet = Gather.build_network_x_steiner_tree_from_arbitrary_nx_graph(
+            map, steinerGraph, tiles
+        )
+
+        viewInfo.add_map_division(tileSet, (0, 255, 255), 200)
+        for t in map.get_all_tiles():
+            viewInfo.midLeftGridText.raw[t.tile_index] = f'{valueMatrix.raw[t.tile_index]:.1f}'
+        self.render_view_info(map, viewInfo, f'steiner {len(tileSet)} tiles')
+
+    def test_should_build_nx_divided_graph__min_offset__steiner_tree(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        # self.render_map(map)
+        self.begin_capturing_logging()
+
+        tiles = [
+            map.GetTile(10, 5),
+            map.GetTile(5, 3),
+            map.GetTile(13, 4),
+            map.GetTile(13, 1),
+            map.GetTile(10, 0),
+            # map.GetTile(9, 15),
+            map.GetTile(1, 16),
+            # map.GetTile(9, 7),
+            # map.GetTile(),
+            # map.GetTile(),
+            # map.GetTile(),
+            # map.GetTile(),
+            # map.GetTile(),
+        ]
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        gatherMatrix = bot.get_gather_tiebreak_matrix()
+        captureMatrix = bot.get_expansion_weight_matrix()
+        valueMatrix = Gather.build_gather_capture_pure_value_matrix(map, general.player, None, gatherMatrix, captureMatrix, prioritizeCaptureHighArmyTiles=False, useTrueValueGathered=True)
+
+        viewInfo = self.get_renderable_view_info(map)
+
+        steinerGraph = Gather.build_networkX_graph_flat_weight_mod_divide_min_offset(
+            map,
+            valueMatrix,
+            baseOffset=-10.0,
+            viewInfo=viewInfo
+        )
+
+        tileSet = Gather.build_network_x_steiner_tree_from_arbitrary_nx_graph(
+            map, steinerGraph, tiles
+        )
+
+        viewInfo.add_map_division(tileSet, (0, 255, 255), 200)
+        for t in map.get_all_tiles():
+            viewInfo.midLeftGridText.raw[t.tile_index] = f'{valueMatrix.raw[t.tile_index]:.1f}'
+        self.render_view_info(map, viewInfo, f'steiner {len(tileSet)} tiles')
+
+    def test_should_build_nx_divided_graph__min_offset_squared__steiner_tree(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        # self.render_map(map)
+        self.begin_capturing_logging()
+
+        tiles = [
+            map.GetTile(10, 5),
+            map.GetTile(5, 3),
+            map.GetTile(13, 4),
+            map.GetTile(13, 1),
+            map.GetTile(10, 0),
+            # map.GetTile(9, 15),
+            map.GetTile(1, 16),
+            # map.GetTile(9, 7),
+            map.GetTile(2, 1),
+            # map.GetTile(),
+            # map.GetTile(),
+            # map.GetTile(),
+            # map.GetTile(),
+        ]
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        gatherMatrix = bot.get_gather_tiebreak_matrix()
+        captureMatrix = bot.get_expansion_weight_matrix()
+        valueMatrix = Gather.build_gather_capture_pure_value_matrix(map, general.player, None, gatherMatrix, captureMatrix, prioritizeCaptureHighArmyTiles=False, useTrueValueGathered=True)
+
+        viewInfo = self.get_renderable_view_info(map)
+
+        steinerGraph = Gather.build_networkX_graph_flat_weight_mod_divide_min_offset_squared(
+            map,
+            valueMatrix,
+            baseOffset=-15.0,
+            viewInfo=viewInfo
+        )
+
+        tileSet = Gather.build_network_x_steiner_tree_from_arbitrary_nx_graph(
+            map, steinerGraph, tiles
+        )
+
+        viewInfo.add_map_division(tileSet, (0, 255, 255), 200)
+        for t in map.get_all_tiles():
+            viewInfo.midLeftGridText.raw[t.tile_index] = f'{valueMatrix.raw[t.tile_index]:.1f}'
+        self.render_view_info(map, viewInfo, f'steiner {len(tileSet)} tiles')
+
+    def test_should_build_nx_divided_graph__neg_scale__steiner_tree(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        # self.render_map(map)
+        self.begin_capturing_logging()
+
+        tiles = [
+            map.GetTile(10, 5),
+            map.GetTile(5, 3),
+            map.GetTile(13, 4),
+            map.GetTile(13, 1),
+            map.GetTile(10, 0),
+            # map.GetTile(9, 15),
+            map.GetTile(1, 16),
+            # map.GetTile(9, 7),
+            # map.GetTile(),
+            # map.GetTile(),
+            # map.GetTile(),
+            # map.GetTile(),
+            # map.GetTile(),
+        ]
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        gatherMatrix = bot.get_gather_tiebreak_matrix()
+        captureMatrix = bot.get_expansion_weight_matrix()
+        valueMatrix = Gather.build_gather_capture_pure_value_matrix(map, general.player, None, gatherMatrix, captureMatrix, prioritizeCaptureHighArmyTiles=False, useTrueValueGathered=True)
+
+        viewInfo = self.get_renderable_view_info(map)
+
+        steinerGraph = Gather.build_networkX_graph_flat_weight_mod_divide_neg_scale(
+            map,
+            valueMatrix,
+            baseOffset=0.0,
+            viewInfo=viewInfo
+        )
+
+        tileSet = Gather.build_network_x_steiner_tree_from_arbitrary_nx_graph(
+            map, steinerGraph, tiles
+        )
+
+        viewInfo.add_map_division(tileSet, (0, 255, 255), 200)
+        for t in map.get_all_tiles():
+            viewInfo.midLeftGridText.raw[t.tile_index] = f'{valueMatrix.raw[t.tile_index]:.1f}'
+        self.render_view_info(map, viewInfo, f'steiner {len(tileSet)} tiles')
 
     def test_should_build_quick_gath_max_steiner(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -769,8 +1030,8 @@ class GatherSteinerUnitTests(TestBase):
         viewInfo = self.get_renderable_view_info(map)
         for t in tiles:
             viewInfo.add_targeted_tile(t, TargetStyle.GREEN)
-        steinerNodes = GatherSteiner.build_network_x_steiner_tree(map, tiles, general.player, weightMod=weightMod, baseWeight=1000)
-        steinerNodes = GatherSteiner.build_network_x_steiner_tree(map, tiles, general.player, weightMod=weightMod, baseWeight=1000)
+        steinerNodes = GatherSteiner.build_network_x_steiner_tree(map, tiles, weightMod=weightMod, searchingPlayer=general.player, baseWeight=1000)
+        steinerNodes = GatherSteiner.build_network_x_steiner_tree(map, tiles, weightMod=weightMod, searchingPlayer=general.player, baseWeight=1000)
         steinerMatrix = MapMatrixSet(map, steinerNodes)
 
         viewInfo.add_map_division(steinerMatrix, (150, 255, 150), 200)

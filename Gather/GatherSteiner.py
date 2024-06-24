@@ -7,6 +7,7 @@ import networkx as nx
 import logbook
 from pcst_fast import pcst_fast
 
+from . import build_networkX_graph_flat_weight_mod_subtract
 from Interfaces import TileSet
 from MapMatrix import MapMatrixInterface, MapMatrix
 from base.client.map import MapBase, Tile
@@ -18,8 +19,7 @@ def build_network_x_steiner_tree(
         weightMod: MapMatrixInterface[float],
         searchingPlayer=-2,
         baseWeight: int = 1,
-        bannedTiles: typing.Container[Tile] | None = None,
-        allowedTiles: typing.Iterable[Tile] | None = None
+        bannedTiles: typing.Container[Tile] | None = None
         # faster: bool = False
 ) -> typing.Set[Tile]:
     """
@@ -38,141 +38,33 @@ def build_network_x_steiner_tree(
     # bannedTiles = None
     start = time.perf_counter()
     ogStart = start
-    g = build_networkX_graph_flat_add(map, weightMod, baseWeight, bannedTiles=bannedTiles)
+    g = build_networkX_graph_flat_weight_mod_subtract(map, weightMod, baseWeight, bannedTiles=bannedTiles)
 
     # artPoints = nx.algorithms.articulation_points(g)
 
     nextTime = time.perf_counter()
     logbook.info(f'networkX graph build in {nextTime - start:.5f}s')
-    start = nextTime
 
-    terminalNodes = [t.tile_index for t in requiredTiles]
-
-    nextTime = time.perf_counter()
-    logbook.info(f'terminalNodes in {nextTime - start:.5f}s')
-    start = nextTime
-
-    steinerTree: nx.Graph = nx.algorithms.approximation.steiner_tree(g, terminal_nodes=terminalNodes, method='mehlhorn')  # kou or mehlhorn. kou is just bad...?
-    # steinerTree: nx.Graph = nx.algorithms.approximation.steiner_tree(g, terminal_nodes=terminalNodes)
-
-    nextTime = time.perf_counter()
-    logbook.info(f'steiner calc in {nextTime - start:.5f}s')
-    start = nextTime
-    includedNodes = {map.tiles_by_index[n] for n in steinerTree.nodes}
-
-    nextTime = time.perf_counter()
-    logbook.info(f'includedNodes in {nextTime - start:.5f}s')
+    includedNodes = build_network_x_steiner_tree_from_arbitrary_nx_graph(map, g, requiredTiles)
 
     complete = time.perf_counter() - ogStart
     logbook.info(f'networkX steiner calculated {len(includedNodes)} node subtree in {complete:.5f}s')
 
     return includedNodes
 
-#  SLOWER
-# def build_networkX_graph(
-#         map: MapBase,
-#         weightMod: MapMatrixInterface[float] | None = None,
-#         baseWeight: int = 1,
-#         bannedTiles: typing.Container[Tile] | None = None
-# ) -> nx.Graph:
-#     def _tree_edges() -> typing.Generator[typing.Tuple[int, int, typing.Dict[str, typing.Any]], None, None]:
-#         for tile in map.get_all_tiles():
-#             if tile.isMountain:
-#                 continue
-#             # if tile.isObstacle:
-#             #     continue
-#
-#             fromWeight = baseWeight
-#             if tile.isObstacle or (bannedTiles is not None and tile in bannedTiles):
-#                 fromWeight += baseWeight * 1000
-#
-#             if weightMod:
-#                 fromWeight -= weightMod.raw[tile.tile_index]
-#
-#             right = map.GetTile(tile.x + 1, tile.y)
-#             down = map.GetTile(tile.x, tile.y + 1)
-#             if right and not right.isObstacle:
-#                 weight = fromWeight
-#                 if right.isObstacle or (bannedTiles is not None and right in bannedTiles):
-#                     weight += baseWeight * 1000
-#
-#                 if weightMod:
-#                     weight -= weightMod.raw[right.tile_index]
-#
-#                 yield tile.tile_index, right.tile_index, {"weight": weight}
-#             if down and not down.isObstacle:
-#                 weight = fromWeight
-#                 if down.isObstacle or (bannedTiles is not None and down in bannedTiles):
-#                     weight += baseWeight * 1000
-#
-#                 if weightMod:
-#                     weight -= weightMod.raw[down.tile_index]
-#
-#                 yield tile.tile_index, down.tile_index, {"weight": weight}
-#
-#     start = time.perf_counter()
-#     # edges = [e for e in _tree_edges()]
-#     #
-#     # nextTime = time.perf_counter()
-#     # logbook.info(f'networkX initial edges build in {nextTime - start:.5f}s')
-#     # start = nextTime
-#     #
-#     # g = nx.Graph(edges)
-#     g = nx.Graph(_tree_edges())
-#
-#     nextTime = time.perf_counter()
-#     logbook.info(f'networkX graph itself built in {nextTime - start:.5f}s')
-#     return g
 
-
-def build_networkX_graph_flat_add(
-        map: MapBase,
-        weightMod: MapMatrixInterface[float],
-        baseWeight: int = 1,
-        bannedTiles: typing.Container[Tile] | None = None,
-        validTiles: typing.Set[Tile] | None = None
-) -> nx.Graph:
+def build_network_x_steiner_tree_from_arbitrary_nx_graph(map, g, requiredTiles) -> typing.Set[Tile]:
     start = time.perf_counter()
-
-    g = nx.Graph()
-    if not validTiles:
-        validTiles = map.pathable_tiles
-
-    for tile in validTiles:
-        # if tile.isMountain:
-        #     continue
-        # if tile.isObstacle:
-        #     continue
-
-        fromWeight = baseWeight
-        if tile.isObstacle or (bannedTiles is not None and tile in bannedTiles):
-            fromWeight += baseWeight * 1000
-
-        fromWeight -= weightMod.raw[tile.tile_index]
-
-        right = map.GetTile(tile.x + 1, tile.y)
-        down = map.GetTile(tile.x, tile.y + 1)
-        tileIndex = tile.tile_index
-        if right and right in validTiles:
-            weight = fromWeight
-            if right.isObstacle or (bannedTiles and right in bannedTiles):
-                weight += baseWeight * 1000
-
-            weight -= weightMod.raw[right.tile_index]
-
-            g.add_edge(tileIndex, right.tile_index, weight=weight)
-        if down and down in validTiles:
-            weight = fromWeight
-            if down.isObstacle or (bannedTiles and down in bannedTiles):
-                weight += baseWeight * 1000
-
-            weight -= weightMod.raw[down.tile_index]
-
-            g.add_edge(tileIndex, down.tile_index, weight=weight)
-
+    terminalNodes = [t.tile_index for t in requiredTiles]
+    steinerTree: nx.Graph = nx.algorithms.approximation.steiner_tree(g, terminal_nodes=terminalNodes, method='mehlhorn')  # kou or mehlhorn. kou is just bad...?
+    # steinerTree: nx.Graph = nx.algorithms.approximation.steiner_tree(g, terminal_nodes=terminalNodes)
     nextTime = time.perf_counter()
-    logbook.info(f'networkX graph itself built in {nextTime - start:.5f}s')
-    return g
+    logbook.info(f'steiner calc in {nextTime - start:.5f}s')
+    start = nextTime
+    includedNodes = {map.tiles_by_index[n] for n in steinerTree.nodes}
+    nextTime = time.perf_counter()
+    logbook.info(f'includedNodes in {nextTime - start:.5f}s')
+    return includedNodes
 
 
 def _build_pcst_tile_prize_matrix(

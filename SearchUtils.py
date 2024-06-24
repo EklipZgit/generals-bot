@@ -2824,7 +2824,8 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
     @param startTiles: startTiles dict is (startPriorityObject, distance) = startTiles[tile]
     @param valueFunc:
     @param maxTime:
-    @param maxDepth:
+    @param maxTurns: The max number of moves in this search.
+    @param maxDepth: The max depth (based on tiles starting distances) in this search.
     @param noNeutralCities:
     @param negativeTiles:
     @param skipTiles:
@@ -2842,6 +2843,10 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
     @param maxIterations:
     @param ignoreNonPlayerArmy: if True, the paths returned will be calculated on the basis of just the searching players army and ignore enemy (or neutral city!) army they pass through.
     @param ignoreIncrement: if True, do not have paths returned include the city increment in their path calculation for any cities or generals in the path.
+    @param pathValueFunc: if provided, this will be used instead of standard path.calculate_value. all priorityMatrix* parameters will be ignored when this is passed. (Path, valueTuple) -> float
+    @param priorityMatrix: if provided, used to modify the paths value unless pathValueFunc is passed.
+    @param priorityMatrixSkipStart: Dont add the path start tile priority to path val
+    @param priorityMatrixSkipEnd: Dont add the path end priority val to path val.
     @return:
 
     # make sure to initialize the initial base values and account for first priorityObject being None.
@@ -3070,11 +3075,6 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
 
     maxPaths: typing.Dict[Tile, typing.List[Path]] = {}
 
-    pathNegs = negativeTiles
-    if ignoreStartTile and not pathValueFunc:
-        negWithStart = negativeTiles.union(startTiles.keys())
-        pathNegs = negWithStart
-
     matrixStart = 0 if not priorityMatrixSkipStart else 1
     matrixEndOffset = -1 if not priorityMatrixSkipEnd else 0
 
@@ -3118,6 +3118,11 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
             if pathValueFunc:
                 pathObject.value = pathValueFunc(pathObject, val)
             else:
+                pathNegs = negativeTiles
+                if ignoreStartTile and not pathValueFunc:
+                    negWithStart = negativeTiles.union(startTiles.keys())
+                    pathNegs = negWithStart
+
                 pathObject.calculate_value(
                     searchingPlayer,
                     teams=map.team_ids_by_player_index,

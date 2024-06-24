@@ -1470,7 +1470,7 @@ player_index=0
             negativeTiles=negativeTiles,
             viewInfo=None,
             useTrueValueGathered=useTrueVal,
-            renderLive=True,
+            renderLive=False,
             # cutoffTime=time.perf_counter() + 1.0
         )
 
@@ -1482,6 +1482,82 @@ player_index=0
         if debugMode:
             viewInfo = self.get_renderable_view_info(map)
             viewInfo.add_info_multi_line(f'GathSetPruneReconnect is new algo based around greedily pruning a connected set with no regard for disconnecting the graph, and then reconnecting it, and decreasing the prune likelihood of pruned nodes that were then used in a reconnect attempt')
+            viewInfo.gatherNodes = plan.root_nodes
+            self.render_view_info(map, viewInfo, msg)
+        else:
+            logbook.info(msg)
+
+    def test_GatherMaxIterativeSet_PruneReconnect(self):
+        #
+        """
+        Produces a scenario where gathers max value paths produce results away from the main cluster, and
+         where leaves on suboptimal parts of the cluster are intentionally larger than leaves on optimal parts of the
+         cluster to try to induce suboptimal prunes that prune the lower value leaves from the higher value cluster
+         over the higher value leaves from the poorer-value-per-turn offshoots, leaving a suboptimal gather plan.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        testData = """
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+aG1  a11  a2   a2   a3   a3   a3   a3   a3   a3   a3   a2   a2   a3   a1   a3   a3
+a3   a3   a2   a2   a2   a2   a2   M    a2   a2   a2   a2   a2   a1   a1   a2   a1  
+a3   b1   b1   b1   b1   b1   b1   b1   b1   b1   b1   M    b1   b1   a2   b1   a3  
+a3   a2   a2   a2   a3   a3   a3   M    a3   a3   a3   a1   a1   a1   a1   a3   M  
+a3   a3   a2   a2   a2   a2   a2   a2   a2   a2   a2   a2   a2   a1   a2   a2   M  
+a3   a3   a2   a2   a3   a3   a3   a3   a3   a3   M    a2   a2   a6   a2   a3   a3 
+a3   a2   a2   a2   a3   a3   a3   a3   M    a3   a3   a1   a1   a1   a1   a3   b1  
+a3   a2   a2   a2   a3                  M    a15  a15  b1   b1        b1  
+a3   a2   a2   a2   a3   a1   a1   a1   a1   b25  b25  a1   a1   a1   a1   a1   b1  
+a3   a2   a2   a2   a3   a1   a1   M    a1   b25  b25  a1   M    a1   a1   a1   b1  
+a3   a2   a2   M    a3             b5   b5   a15  a15  b1   b1   b1   b5   
+a3   a3   M    a2   a1   a3   a2   b3   b3   a1   a3   b1   b1   b1   b1   b3   b1  
+a3   a3   a2   a2   a1   a3   a2   b3   b3   a1   a3   a2   a2   a6   a2   b3   a3
+a3   a2   a2   a2   a1   a3   a2   b3   b3   a1   M    a1   a1   a1   a1   M    b1  
+a3   a2   a2   a2   a3             b5   b5        M    a15  b1   b5   a5  
+a3   a3   a2   a2   a3   M    a3   a3   a3   a3   a3   b1   b1   b1   b1   a3   b1  
+a3   a2   M    a1   b1   b1   b1   b1   b1   b1   b1   b1   b1   b1   b1   b1   a5  
+a3   a2   b1   b1   b1   b1   M    b1   b1   b1   b1   b1   b1   b1   b1   b1   a5  
+a3   b1   M    a30  b1   b1   b1   b1   b1   b1   b1   b1   b1   b1   bG1  b1   b1
+|    |    |    |    |    |    |    |    |    |    |    |   | 
+player_index=0
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 100)
+
+        self.begin_capturing_logging()
+        Gather.USE_DEBUG_ASSERTS = True
+        Gather.USE_DEBUG_LOGGING = True
+        start = time.perf_counter()
+        targets = {enemyGeneral}
+        depth = 65
+        negativeTiles = set()
+        useTrueVal = True
+        inclNegative = False
+
+        gatherMatrix = Gather.build_gather_capture_pure_value_matrix(map, general.player, negativeTiles, useTrueValueGathered=useTrueVal, prioritizeCaptureHighArmyTiles=False)
+        armyCostMatrix = Gather.build_gather_capture_pure_value_matrix(map, general.player, negativeTiles, useTrueValueGathered=True, prioritizeCaptureHighArmyTiles=False)
+
+        plan = Gather.gather_max_set_iterative_plan(
+            map,
+            targets,
+            depth,
+            gatherMatrix,
+            armyCostMatrix,
+            # negativeTiles=negativeTiles,
+            viewInfo=None,
+            searchingPlayer=general.player
+
+            # useTrueValueGathered=useTrueVal,
+            # renderLive=False,
+            # cutoffTime=time.perf_counter() + 1.0
+        )
+
+        # msg = f"FAST {iterMaxValGathered} / {expectedGather},  {iterMaxTurnsUsed} / {depth} in {(time.perf_counter() - start) * 1000.0:.1f}ms"
+        msg = f"GatherMaxSet PRUNE RECON {plan.gathered_army} gathered in {plan.length} moves ({depth} requested) in {(time.perf_counter() - start) * 1000.0:.1f}ms"
+
+        # for n in iterMaxNodes:
+        #     n.strip_all_prunes()
+        if debugMode:
+            viewInfo = self.get_renderable_view_info(map)
+            viewInfo.add_info_multi_line(f'GatherMaxSet PRUNE RECONNECT is a set-based (instead of tree based) variant of LIVE ITER, that allows for non breadth-first traversal via heuristics, and prunes naively and reconnects intelligently, all while building up the same iterative process as normal LIVE ITER.')
             viewInfo.gatherNodes = plan.root_nodes
             self.render_view_info(map, viewInfo, msg)
         else:

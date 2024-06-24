@@ -360,7 +360,7 @@ class MapBase(object):
     def manhattan_dist(self, tileA: Tile, tileB: Tile) -> int:
         return abs(tileA.x - tileB.x) + abs(tileA.y - tileB.y)
 
-    def GetTile(self, x, y) -> typing.Union[None, Tile]:
+    def GetTile(self, x, y) -> Tile | None:
         if x < 0 or x >= self.cols or y < 0 or y >= self.rows:
             return None
         return self.grid[y][x]
@@ -405,16 +405,18 @@ class MapBase(object):
                     player.delta25score = self.players[i].score - earliest[i].total
                     player.delta25tiles = self.players[i].tileCount - earliest[i].tiles
                 if self.scores[i].dead:
+                    # wait one turn upon receiving a 'dead' update to allow for 'capture' messages that are arriving late.
                     if not player.leftGame:
                         player.leftGame = True
                         player.leftGameTurn = self.turn
-                    # don't immediately set 'dead' so that we keep attacking disconnected player
-                    if self.scores[i].tiles == 0:
-                        player.dead = True
-                        if len(player.tiles) > 0:
-                            for tile in player.tiles:
-                                if not tile.visible:
-                                    tile.set_disconnected_neutral()
+                    else:
+                        # don't immediately set 'dead' so that we keep attacking disconnected player
+                        if self.scores[i].tiles == 0:
+                            player.dead = True
+                            if len(player.tiles) > 0:
+                                for tile in player.tiles:
+                                    if not tile.visible:
+                                        tile.set_disconnected_neutral()
 
                 else:
                     self.remainingPlayers += 1
@@ -694,14 +696,17 @@ class MapBase(object):
         if wasGeneral != curTile.isGeneral:
             for eventHandler in self.notify_general_revealed:
                 eventHandler(curTile)
-            if curTile.isGeneral:
+            if curTile.isGeneral and curTile.visible:
                 self.generals[curTile.player] = curTile
             else:
-                for i, maybeNotGen in list(enumerate(self.generals)):
-                    if maybeNotGen is not None and maybeNotGen.player != i:
-                        maybeNotGen.isCity = True
-                        maybeNotGen.isGeneral = False
-                        self.generals[i] = None
+                if curTile.delta.oldOwner != -1 and self.generals[curTile.delta.oldOwner] == curTile:
+                    self.generals[curTile.delta.oldOwner] = None
+                # curTile.isGeneral = False
+                # for i, maybeNotGen in list(enumerate(self.generals)):
+                #     if maybeNotGen is not None and maybeNotGen.player != i:
+                #         maybeNotGen.isCity = True
+                #         maybeNotGen.isGeneral = False
+                #         self.generals[i] = None
 
     def update(self, bypassDeltas: bool = False):
         """
@@ -962,11 +967,12 @@ class MapBase(object):
                     fromTile.isCity = True
                     fromTile.army = 1
                     fromTile.isMountain = False
-                    fromTile.discovered = True
-                    fromTile.delta.discovered = True
-                    fromTile.isTempFogPrediction = False
+                    if not fromTile.discovered:
+                        fromTile.discovered = fullFromDiffCovered
+                        fromTile.delta.discovered = fullFromDiffCovered
+                    fromTile.isTempFogPrediction = not fullFromDiffCovered
 
-                if fromTile.isCity:
+                if fromTile.isCity and fromTile not in byPlayerObj.cities:
                     byPlayerObj.cities.append(fromTile)
                     # if self.is_army_bonus_turn:
                     #     fromTile.army += 1
@@ -994,6 +1000,7 @@ class MapBase(object):
                 toTile.delta.newOwner = byPlayer
             if toTile.isUndiscoveredObstacle:
                 toTile.isCity = True
+                toTile.isTempFogPrediction = not fullFromDiffCovered
                 # toTile.delta.unexplainedDelta = 0
 
         # prefer leaving enemy move froms, as they're harder for armytracker to track since it doesn't have the last move spelled out like it does for friendly moves.

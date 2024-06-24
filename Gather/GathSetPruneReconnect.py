@@ -66,10 +66,10 @@ def get_gather_plan_set_prune(
 
     outputTiles = _k_prune_reconnect_greedy(map, targetTurns, steinerNodes, rootTiles, valueMatrix, skipTiles=skipTiles, renderLive=renderLive)
 
-    if not renderLive:
-        vi = ViewInfo(1, map)
-        vi.add_map_zone(outputTiles, Colors.LIGHT_BLUE, alpha=125)
-        ViewerProcessHost.render_view_info_debug('f off', '', map, vi)
+    # if not renderLive:
+    #     vi = ViewInfo(1, map)
+    #     vi.add_map_zone(outputTiles, Colors.LIGHT_BLUE, alpha=125)
+    #     ViewerProcessHost.render_view_info_debug('f off', '', map, vi)
 
     usedTime = time.perf_counter() - startTime
     logbook.info(f'k_prune_reconnect_greedy complete in {usedTime:.4f}s with {len(outputTiles) - len(rootTiles)}')
@@ -397,7 +397,7 @@ def _reconnect(
         logbook.info('starting _reconnect')
     # includedSet = set()
 
-    forest = FastDisjointTileSetSum(valueMatrix, curSet)
+    forest = FastDisjointTileSetSum(valueMatrix)
 
     # missingIncluded = curSet.copy()
     newTiles: typing.Set[Tile] = set()
@@ -428,9 +428,6 @@ def _reconnect(
     # usefulStartSet = {t: baseTuple for t in includedSet}
     usefulStartSet = dict()
 
-    if GatherDebug.USE_DEBUG_LOGGING:
-        logbook.info('Completed sets setup')
-
     someRoot = None
     for root in rootTiles:
         someRoot = root
@@ -447,9 +444,6 @@ def _reconnect(
     # for t in rootTiles:
     #     val = forest.subset_value(t)
     #     usefulStartSet[t] = ((-1000000, 0, 0), 0)
-
-    if GatherDebug.USE_DEBUG_LOGGING:
-        logbook.info('Completed root _include_all_adj_required')
 
     # def findFunc(t: Tile, prio: typing.Tuple) -> bool:
     #     return t in missingIncluded
@@ -556,18 +550,21 @@ def _reconnect(
             if not forest.connected(t, someRoot):
                 val = forest.subset_value(t)
                 size = forest.subset_size(t)
-                usefulStartSet[t] = ((-10000, 0, 0, None, t), 0)
+                usefulStartSet[t] = ((-10000, 0, 0, None, t), size - 1)
                 # usefulStartSet[t] = ((-val / size, size - 1, -val, None, t), 0)
 
-        # path = SearchUtils.breadth_first_dynamic(map, usefulStartSet, findFunc, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
-        path = SearchUtils.breadth_first_dynamic_max(map, usefulStartSet, valueFunc, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
+        capTurns = 1000
+        capTurns = excessTurnsLeft
+
+        # path = SearchUtils.breadth_first_dynamic(map, usefulStartSet, findFunc, maxTurns=capTurns, maxDepth=capTurns, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
+        path = SearchUtils.breadth_first_dynamic_max(map, usefulStartSet, valueFunc, maxTurns=capTurns, maxDepth=capTurns, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
         if path is None:
             if GatherDebug.USE_DEBUG_LOGGING:
                 logbook.info(f'  Path NONE! Performing altBanned set')
             # altBanned = skipTiles.copy()
             # altBanned.update([t for t in map.reachableTiles if t.isMountain])
-#             path = SearchUtils.breadth_first_dynamic(map, usefulStartSet, findFunc, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noNeutralCities=False, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
-            path = SearchUtils.breadth_first_dynamic_max(map, usefulStartSet, valueFunc, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noNeutralCities=False, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
+#             path = SearchUtils.breadth_first_dynamic(map, usefulStartSet, findFunc, maxTurns=capTurns, maxDepth=capTurns, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noNeutralCities=False, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
+            path = SearchUtils.breadth_first_dynamic_max(map, usefulStartSet, valueFunc, maxTurns=capTurns, maxDepth=capTurns, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noNeutralCities=False, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
             if path is None:
                 if GatherDebug.USE_DEBUG_LOGGING:
                     logbook.info(f'  No AltPath, breaking early with {len(curSet) - forest.subset_size(someRoot)} left missing')
@@ -670,10 +667,6 @@ def _prune_connected(node: Tile, setToPrune: typing.Set[Tile], valueMatrix: MapM
     while q:
         tile, fromVal = q.pop()
 
-        # if fromNode is not None:
-        #     node.adjacents.append(fromNode)
-        #     fromNode.adjacents.append(node)
-
         curVal = valueMatrix.raw[tile.tile_index]
         if tile not in setToPrune or curVal > cutoff or curVal > fromVal:
             continue
@@ -689,6 +682,7 @@ def _prune_connected(node: Tile, setToPrune: typing.Set[Tile], valueMatrix: MapM
             q.append((movable, curVal))
 
     return pruned
+
 
 def _include_all_adj_required_set_forest(node: Tile, forest: FastDisjointTileSetSum, newTiles: typing.Set[Tile], usefulStartSet: TileSet, valueMatrix: MapMatrixInterface[float], someRoot: Tile):
     """

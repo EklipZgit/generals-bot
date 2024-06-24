@@ -874,8 +874,8 @@ class FastDisjointTileSetMultiSum(object):
         """
         return self._sizes[self[x]]
 
-    def subset_value(self, x: Tile) -> typing.List[float]:
-        """Get the value of the subset containing `x`.
+    def subset_values(self, x: Tile) -> typing.List[float]:
+        """Get the values of the subset containing `x`.
 
         Note that this method is faster than ``len(self.subset(x))`` because
         the value is directly read off an internal field, without the need to

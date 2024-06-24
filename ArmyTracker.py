@@ -528,9 +528,11 @@ class ArmyTracker(object):
                 logbook.info(f'Map detected army move, honoring that: {str(tile)}->{str(tile.delta.toTile)}')
                 self.army_moved(armyDetectedAsMove, tile.delta.toTile, trackingArmies)
                 if tile.delta.toTile.isUndiscoveredObstacle:
-                    tile.delta.toTile.isCity = True
-                    tile.delta.toTile.player = armyDetectedAsMove.player
-                    tile.delta.toTile.army = armyDetectedAsMove.value
+                    # if map detected a move into an obstacle, then
+                    toTile = self.map.tiles_by_index[tile.delta.toTile.tile_index]
+                    toTile.isCity = True
+                    toTile.player = armyDetectedAsMove.player
+                    toTile.army = armyDetectedAsMove.value
                     logbook.warn(f'CONVERTING {str(tile.delta.toTile)} UNDISCOVERED MOUNTAIN TO CITY DUE TO MAP SAYING DEFINITELY TILE MOVED THERE. {str(tile)}->{str(tile.delta.toTile)}')
                 armyDetectedAsMove.update()
                 if not tile.delta.toTile.visible:

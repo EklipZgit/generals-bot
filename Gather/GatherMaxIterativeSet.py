@@ -1493,14 +1493,14 @@ def _reconnect_iterative_heuristic(
         # for t in newTiles:
         #     usefulStartSet[t] = ((-10000, 0, 0, None, t), 0)
 
-        path = SearchUtils.breadth_first_dynamic(map, usefulStartSet, findFunc, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
+        path = SearchUtils.breadth_first_dynamic(map, usefulStartSet, findFunc, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noLog=not GatherDebug.USE_DEBUG_LOGGING, noVal=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
         # path = SearchUtils.breadth_first_dynamic_max(map, usefulStartSet, valueFunc, maxTurns=excessTurnsLeft, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
         if path is None:
             if GatherDebug.USE_DEBUG_LOGGING and logEntries:
                 logEntries.append(f'  Path NONE! Performing altBanned set')
             # altBanned = skipTiles.copy()
             # altBanned.update([t for t in map.reachableTiles if t.isMountain])
-            path = SearchUtils.breadth_first_dynamic(map, usefulStartSet, findFunc, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noNeutralCities=False, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
+            path = SearchUtils.breadth_first_dynamic(map, usefulStartSet, findFunc, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noNeutralCities=False, noLog=not GatherDebug.USE_DEBUG_LOGGING, noVal=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
             # path = SearchUtils.breadth_first_dynamic_max(map, usefulStartSet, valueFunc, maxTurns=excessTurnsLeft, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noNeutralCities=False, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
             if path is None:
                 if GatherDebug.USE_DEBUG_LOGGING and logEntries:

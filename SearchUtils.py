@@ -925,7 +925,8 @@ def breadth_first_dynamic(
         priorityFunc: typing.Callable[[Tile, typing.Tuple], typing.Tuple | None] = None,
         ignoreStartTile: bool = False,
         incrementBackward: bool = False,
-        noLog: bool = False
+        noLog: bool = False,
+        noVal: bool = False,
 ) -> Path:
     """
     Finds a path to a goal, dynamically. Doesn't search past when it found the goal, unlike _max equivalents.
@@ -1081,10 +1082,11 @@ def breadth_first_dynamic(
     #     if (node != None):
     #         dist -= 1
     #         path = PathNode(node, path, army, dist, -1, None)
-    pathObject.calculate_value(
-        searchingPlayer,
-        teams=map.team_ids_by_player_index,
-        incrementBackwards=incrementBackward)
+    if not noVal:
+        pathObject.calculate_value(
+            searchingPlayer,
+            teams=map.team_ids_by_player_index,
+            incrementBackwards=incrementBackward)
     if not noLog:
         logbook.info(
             f"DYNAMIC BFS FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}\n   {pathObject}")

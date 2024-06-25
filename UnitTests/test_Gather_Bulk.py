@@ -1650,6 +1650,12 @@ player_index=0
             (
                 Stats(profile)
                 .strip_dirs()
+                .sort_stats(SortKey.CUMULATIVE)
+                .print_stats(20)
+            )
+            (
+                Stats(profile)
+                .strip_dirs()
                 .sort_stats(SortKey.TIME)
                 .print_stats(20)
             )

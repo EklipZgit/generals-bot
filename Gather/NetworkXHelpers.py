@@ -45,7 +45,7 @@ def build_networkX_graph_no_obstacles_no_weights(
                 g.add_edge(tileIndex, down.tile_index)
 
     nextTime = time.perf_counter()
-    logbook.info(f'networkX basic graph itself built in {nextTime - start:.5f}s')
+    logbook.info(f'networkX basic graph itself built in {1000.0 * (nextTime - start):.2f}ms')
     return g
 
 

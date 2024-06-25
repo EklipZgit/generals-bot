@@ -876,7 +876,7 @@ def _knapsack_max_gather_iterative_prune(
         while lastPrunedTo < fullTurns:
             itr.add(1)
             turnsToGather = fullTurns - turnsSoFar
-            logEntries.append(f'Sub Knap (iter {itr.value} {time.perf_counter() - startTime:.4f} in) turns {turnsToGather} sub_knapsack, fullTurns {fullTurns}, turnsSoFar {turnsSoFar}')
+            logEntries.append(f'Sub Knap (iter {itr.value} {1000.0 * (time.perf_counter() - startTime):.1f}ms in) turns {turnsToGather} sub_knapsack, fullTurns {fullTurns}, turnsSoFar {turnsSoFar}')
             if shouldLog:
                 logEntries.append(f'start tiles: {str(newStartTilesDict)}')
 

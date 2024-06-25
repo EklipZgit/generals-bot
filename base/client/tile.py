@@ -491,7 +491,8 @@ class Tile(object):
         return str(self)
 
     def __hash__(self):
-        return self._hash_key
+        return self.tile_index
+        # return self._hash_key
 
     def __eq__(self, other):
         if other is None:

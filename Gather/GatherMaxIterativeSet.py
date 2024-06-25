@@ -1,9 +1,11 @@
 import heapq
+import random
 import time
 import typing
 
 import logbook
 import networkx as nx
+import numpy as np
 
 import DebugHelper
 import Gather
@@ -622,11 +624,16 @@ def _knapsack_max_set_gather_iterative_prune(
 
     prunedSet: typing.Set[Tile] = set()
 
+    bestSet = None
+    bestVal = -10000
+    bestStart = newStartTilesDict
+    bestTurns = 1
+
     try:
         while lastPrunedTo < fullTurns:
             itr.add(1)
             turnsToGather = fullTurns - turnsSoFar
-            logEntries.append(f'Sub Knap (iter {itr.value} {time.perf_counter() - startTime:.4f} in) turns {turnsToGather} sub_knapsack, fullTurns {fullTurns}, turnsSoFar {turnsSoFar}')
+            logEntries.append(f'Sub Knap (iter {itr.value} {1000.0 * (time.perf_counter() - startTime):.1f}ms in) turns {turnsToGather} sub_knapsack, fullTurns {fullTurns}, turnsSoFar {turnsSoFar}')
             if shouldLog:
                 logEntries.append(f'start tiles: {str(newStartTilesDict)}')
 
@@ -784,11 +791,27 @@ def _knapsack_max_set_gather_iterative_prune(
             # overpruneCutoff = pruneToTurns
             rootForestSubset, (gatherVal, armySum) = forest.subset_with_values(next(iter(rootTiles)))
 
+            curTurns = len(rootForestSubset) - len(rootTiles)
+            if totalTurns > 0:
+                if bestVal < gatherVal:
+                    bestVal = gatherVal
+                    bestSet = rootForestSubset.copy()
+                    bestStart = newStartTilesDict.copy()
+                    bestTurns = curTurns
+
+                if bestVal / bestTurns > gatherVal * 1.04 / curTurns:
+                    msg = f'  -- overriding poor re-plan {gatherVal:.1f}/{len(rootForestSubset)} back to bestVal {bestVal:.1f}/{len(bestSet)}'
+                    logEntries.append(msg)
+                    if liveRenderer:
+                        liveRenderer.view_info.add_info_line(msg)
+                    newStartTilesDict = bestStart.copy()
+                    rootForestSubset = bestSet.copy()
+
             totalTurns, totalValue, prunedSet = prune_set_to_turns_and_reconnect_with_values(
                 map,
                 rootTiles,
                 rootForestSubset,
-                turns=pruneToTurns + len(rootTiles),
+                turns=pruneToTurns,
                 searchingPlayer=searchingPlayer,
                 valueMatrix=rewardMatrix,
                 armyCostMatrix=armyCostMatrix,
@@ -806,7 +829,7 @@ def _knapsack_max_set_gather_iterative_prune(
                 # parentPruneFunc=lambda t, prunedNode: _start_tiles_prune_helper(startTilesDict, t, prunedNode)
             )
             logEntries.append(
-                f'pruned {ogTotalValue:.2f}v @ {ogTotalTurns}t to {totalValue:.2f}v @ {totalTurns}t (goal was {pruneToTurns}t, overpruneCut {overpruneCutoff}t, maxPerIteration {maxPerIteration}, allowNegative={includeGatherTreeNodesThatGatherNegative})')
+                f' pruned {ogTotalValue:.2f}v @ {ogTotalTurns}t to {totalValue:.2f}v @ {totalTurns}t (goal was {pruneToTurns}t, overpruneCut {overpruneCutoff}t, maxPerIteration {maxPerIteration}, allowNegative={includeGatherTreeNodesThatGatherNegative})')
 
             if liveRenderer:
                 liveRenderer.view_info.add_stats_line(f'PURPLE = {len(prunedSet)} iteration final tiles')
@@ -829,7 +852,7 @@ def _knapsack_max_set_gather_iterative_prune(
     finally:
         logbook.info('\n'.join(logEntries))
 
-    return totalValue, prunedSet
+    return bestVal, bestSet
 
 
 def prune_set_naive(
@@ -838,29 +861,92 @@ def prune_set_naive(
         pruneTo: int,
         valueMatrix: MapMatrixInterface[float],
         pruneReconnectCountMatrix: MapMatrixInterface[int],
-        tileDictToPrune: typing.Dict[Tile, typing.Any] | None = None
+        tileDictToPrune: typing.Dict[Tile, typing.Any] | None = None,
+        logEntries: typing.List[str] | None = None,
 ) -> typing.List[Tile]:
+    start = time.perf_counter()
     pruned = []
     dcQueue = []
-    for tile in toPrune:
+
+    # mean = 0.0
+    # stdDev = 0.2
+    # randShuffles = np.random.normal(mean, stdDev, len(toPrune)).tolist()
+
+    for i, tile in enumerate(toPrune):
         if tile in rootTiles:
             continue
 
-        # reconnectWeight = max(0.0, pruneReconnectCountMatrix.raw[tile.tile_index] - 2.5) / 5
+        reconnectWeight = max(0.0, pruneReconnectCountMatrix.raw[tile.tile_index] - 2.5)
         # reconnectWeight *= reconnectWeight
-        # heapq.heappush(dcQueue, (valueMatrix.raw[tile.tile_index] + reconnectWeight, tile))
-        heapq.heappush(dcQueue, (valueMatrix.raw[tile.tile_index], tile))
+        heapq.heappush(dcQueue, (valueMatrix.raw[tile.tile_index] + reconnectWeight, tile))
+
+        # heapq.heappush(dcQueue, (valueMatrix.raw[tile.tile_index] + randShuffles[i], tile))
+        # heapq.heappush(dcQueue, (valueMatrix.raw[tile.tile_index], tile))
 
     while len(toPrune) - len(rootTiles) > pruneTo and dcQueue:
         _, t = heapq.heappop(dcQueue)
 
-        newPruned = _prune_connected_by_value(t, toPrune, valueMatrix, rootTiles, tileDictToPrune)
+        newPruned = _prune_connected_by_value(t, toPrune, valueMatrix, rootTiles, tileDictToPrune, dropSimilarOffset=0.1, logEntries=logEntries)
         for t in newPruned:
             # already done by the _prune_connected_by_value func..
             # toPrune.discard(t)
             # if tileDictToPrune:
             #     tileDictToPrune.pop(t, None)
             pruned.append(t)
+
+    # if logEntries:
+    #     logEntries.append(f'  naive pruned {len(pruned)} to {len(toPrune)} in {(time.perf_counter() - start) * 1000.0:.2f}ms')
+
+    return pruned
+
+
+def quick_prune_connected_set(toPrune: typing.Set[Tile], pruneTo: int, valueMatrix: MapMatrixInterface[float], rootTiles: typing.Set[Tile]) -> typing.List[Tile]:
+    """
+    Prunes a connected set by the worst obviously pruneable tiles down to some amount.
+
+    @param toPrune:
+    @param pruneTo:
+    @param valueMatrix:
+    @param rootTiles:
+    @return:
+    """
+
+    def heur_prunable(tile: Tile) -> bool:
+        mvInSet = [mv for mv in tile.movable if mv in toPrune]
+        if len(mvInSet) == 1:
+            return True
+        if len(mvInSet) > 2:
+            return False
+        if len(mvInSet) == 2:
+            for alt in mvInSet[0].movable:
+                for mv in alt.movable:
+                    if mv == tile:
+                        continue
+                    if mv in mvInSet[1].movable:
+                        # they are part of a cube and this is a cube corner
+                        return True
+        return False
+
+    pruned = []
+    unprunable = set()
+    q = []
+    for t in toPrune:
+        if t in rootTiles:
+            continue
+        heapq.heappush(q, (valueMatrix.raw[t.tile_index], t))
+
+    while q and len(toPrune) > pruneTo:
+        _, t = heapq.heappop(q)
+
+        if heur_prunable(t):
+            pruned.append(t)
+            toPrune.discard(t)
+            for mv in t.movable:
+                if mv in unprunable:
+                    unprunable.discard(mv)
+                    heapq.heappush(q, (valueMatrix.raw[mv.tile_index], mv))
+        else:
+            unprunable.add(t)
 
     return pruned
 
@@ -891,9 +977,43 @@ def prune_set_by_articulation_points(
     @param currentArmySum:
     @return:
     """
-    start = time.perf_counter()
+    if pruneTo <= 0:
+        pruned = [t for t in toPrune]
+        toPrune.clear()
+        return 0.0, 0.0, pruned
+
     ogLen = len(toPrune)
 
+    pruned = []
+
+    if ogLen <= pruneTo:
+        return currentGathVal, currentArmySum, pruned
+
+    quickPruneTo = pruneTo + 4
+    if quickPruneTo < len(toPrune):
+        start = time.perf_counter()
+        startGath = currentGathVal
+        startArmy = currentArmySum
+        pruned = quick_prune_connected_set(toPrune, quickPruneTo, valueMatrix, rootTiles)
+        for t in pruned:
+            # toPrune.discard(t)
+            currentGathVal -= valueMatrix.raw[t.tile_index]
+            currentArmySum -= armyCostMatrix.raw[t.tile_index]
+            if tileDictToPrune:
+                tileDictToPrune.pop(t, None)
+            toPrune.discard(t)
+        quickPruneCount = len(pruned)
+        if logEntries:
+            dur = time.perf_counter() - start
+            durPerPrune = dur / (ogLen - len(toPrune))
+            logEntries.append(f'artic heur QUICK pruned {quickPruneCount} ({ogLen} down to {len(toPrune)}) in {1000.0 * dur:.2f}ms, {1000.0 * durPerPrune:.2f}ms each - gathVal {startGath:.2f}->{currentGathVal:.2f}, armySum {startArmy:.2f}->{currentArmySum:.2f}')
+
+        ogLen = len(toPrune)
+
+        if ogLen <= pruneTo:
+            return currentGathVal, currentArmySum, pruned
+
+    start = time.perf_counter()
     dcQueue = []
     for tile in toPrune:
         if tile in rootTiles:
@@ -901,7 +1021,7 @@ def prune_set_by_articulation_points(
 
         heapq.heappush(dcQueue, (valueMatrix.raw[tile.tile_index], tile))
 
-    unableToPrune = []
+    unableToPrune = set()
 
     nxForBcc = Gather.build_networkX_graph_no_obstacles_no_weights(
         map,
@@ -909,16 +1029,25 @@ def prune_set_by_articulation_points(
         validTiles=toPrune,
     )
 
-    pruned = []
+    # pruned = []
+    unsafeToCut = set()
+    mustReEvaluateUnsafe = True
+    articExecutions = 0
 
     while len(toPrune) > pruneTo and dcQueue:
-        unsafeToCut = {t for t in nx.algorithms.articulation_points(nxForBcc)}
+        if mustReEvaluateUnsafe:
+            unsafeToCut = {t for t in nx.algorithms.articulation_points(nxForBcc)}
+            mustReEvaluateUnsafe = False
+            articExecutions += 1
 
         _, t = heapq.heappop(dcQueue)
 
         if t.tile_index in unsafeToCut:
-            unableToPrune.append(t)
+            unableToPrune.add(t)
             continue
+
+        mustReEvaluateUnsafe = sum(1 for mv in t.movable if mv in toPrune) != 1
+        # mustReEvaluateUnsafe = True
 
         # pruned = _prune_connected_by_value(t, toPrune, valueMatrix, rootTiles)
         toPrune.discard(t)
@@ -929,14 +1058,21 @@ def prune_set_by_articulation_points(
             tileDictToPrune.pop(t, None)
         pruned.append(t)
 
-        # don't retry these until we're near the end at least, so we dont turn this into n^2 worst case
-        if len(toPrune) + 5 > pruneTo:
+        if mustReEvaluateUnsafe and len(toPrune) + 5 > pruneTo:
+            # don't retry these until we're near the end at least, so we dont turn this into n^2 worst case
             for mightPruneNow in unableToPrune:
                 heapq.heappush(dcQueue, (valueMatrix.raw[mightPruneNow.tile_index], mightPruneNow))
             unableToPrune.clear()
+        elif not mustReEvaluateUnsafe:
+            for mv in t.movable:
+                if mv in unableToPrune:
+                    unableToPrune.discard(mv)
+                    heapq.heappush(dcQueue, (valueMatrix.raw[mv.tile_index], mv))
 
     if logEntries:
-        logEntries.append(f'articulation point prune pruned {ogLen} down to {len(toPrune)} in {time.perf_counter() - start:.5f}s (gathVal {currentGathVal:.2f}, armySum {currentArmySum:.2f})')
+        dur = time.perf_counter() - start
+        durPerPrune = dur / (ogLen - len(toPrune))
+        logEntries.append(f'  articulation point prune pruned {ogLen - len(toPrune)}tiles/{articExecutions}execs ({ogLen} down to {len(toPrune)}) in {1000.0 * dur:.2f}ms, {1000.0 * durPerPrune:.2f}ms each - gathVal {currentGathVal:.2f}, armySum {currentArmySum:.2f}')
 
     return currentGathVal, currentArmySum, pruned
 
@@ -948,6 +1084,7 @@ def _prune_connected_by_value(
         # disconnectCounts: MapMatrixInterface[int],
         rootTiles: typing.Set[Tile],
         tileDictToPrune: typing.Dict[Tile, typing.Any] | None,
+        dropSimilarOffset: float = 0.0,
         logEntries: typing.List[str] | None = None,
 ) -> typing.List[Tile]:
     """
@@ -958,7 +1095,7 @@ def _prune_connected_by_value(
     @param valueMatrix:
     @return:
     """
-    cutoff = valueMatrix.raw[node.tile_index]
+    cutoff = valueMatrix.raw[node.tile_index] + dropSimilarOffset
     q = [(node, cutoff)]
 
     pruned = []
@@ -967,11 +1104,11 @@ def _prune_connected_by_value(
         tile, fromVal = q.pop()
 
         curVal = valueMatrix.raw[tile.tile_index]
-        if tile not in setToPrune or curVal > cutoff or curVal > fromVal:
+        if tile not in setToPrune or curVal > cutoff or curVal > fromVal + dropSimilarOffset:
             continue
 
-        if logEntries:
-            logEntries.append(f'  addl prune {tile}, (curVal {curVal:.1f} vs cutoff {cutoff:.1f} vs fromVal {fromVal:.1f}) {len(pruned)} pruned so far')
+        # if logEntries:
+        #     logEntries.append(f'  addl prune {tile}, (curVal {curVal:.1f} vs cutoff {cutoff:.1f} vs fromVal {fromVal:.1f}) {len(pruned)} pruned so far')
 
         pruned.append(tile)
         setToPrune.discard(tile)
@@ -1025,28 +1162,55 @@ def prune_set_to_turns_and_reconnect_with_values(
     @return: gatherTurns, gatherValue, rootNodes
     """
 
+    desiredTotalNodes = turns + len(rootTiles)
+
     # pruneDiff = len(toPrune) - len(rootTiles) - turns
     # numToPruneNaive = int(pruneDiff * 1.5)
     # prune_set_naive(rootTiles, toPrune, numToPruneNaive, valueMatrix)
 
-    reconnectedSubset = toPrune
-    rawArmy = 0
-    gathVal = 0
-    for t in toPrune:
-        rawArmy += armyCostMatrix.raw[t.tile_index]
-        gathVal += valueMatrix.raw[t.tile_index]
-
+    # rawArmy = 0
+    # gathVal = 0
+    # for t in toPrune:
+    #     rawArmy += armyCostMatrix.raw[t.tile_index]
+    #     gathVal += valueMatrix.raw[t.tile_index]
     someRoot = next(iter(rootTiles))
 
-    # over prune the set naively, before we reconnect it. TODO adjust the overprune amount...?
-    naiveTargetTurns = overpruneCutoff - 5
-    prunedTiles = prune_set_naive(rootTiles, toPrune, naiveTargetTurns, valueMatrix, pruneReconnectCountMatrix, tileDictToPrune)
-    if liveRenderer:
-        liveRenderer.view_info.add_stats_line(f'O - ORANGE = {len(prunedTiles)} naive pruned ({len(toPrune)} remaining, tg {naiveTargetTurns})')
-        for t in prunedTiles:
-            liveRenderer.view_info.add_targeted_tile(t, TargetStyle.ORANGE, radiusReduction=12)
+    if len(toPrune) - overpruneCutoff > 5:
+        # over prune the set naively, before we reconnect it. TODO adjust the overprune amount...?
+        # naiveTargetTurns = overpruneCutoff - random.randint(-2, 5)
+        naiveTargetTurns = overpruneCutoff - 5
+        prunedTiles = prune_set_naive(rootTiles, toPrune, naiveTargetTurns, valueMatrix, pruneReconnectCountMatrix, tileDictToPrune, logEntries)
+        if liveRenderer:
+            liveRenderer.view_info.add_stats_line(f'O - ORANGE = {len(prunedTiles)} naive pruned ({len(toPrune)} remaining, tg {naiveTargetTurns})')
+            for t in prunedTiles:
+                liveRenderer.view_info.add_targeted_tile(t, TargetStyle.ORANGE, radiusReduction=12)
+    else:
+        # over prune the set naively, before we reconnect it. TODO adjust the overprune amount...?
+        # naiveTargetTurns = overpruneCutoff - random.randint(-2, 5)
+        naiveTargetTurns = overpruneCutoff
+        prunedTiles = prune_set_naive(rootTiles, toPrune, naiveTargetTurns, valueMatrix, pruneReconnectCountMatrix, tileDictToPrune, logEntries)
+        if liveRenderer:
+            liveRenderer.view_info.add_stats_line(f'O - ORANGE = {len(prunedTiles)} naive pruned ({len(toPrune)} remaining, tg {naiveTargetTurns})')
+            for t in prunedTiles:
+                liveRenderer.view_info.add_targeted_tile(t, TargetStyle.ORANGE, radiusReduction=12)
 
-    reconnectTargetTurns = turns
+        rawArmy = 0
+        gathVal = 0
+        for t in toPrune:
+            rawArmy += armyCostMatrix.raw[t.tile_index]
+            gathVal += valueMatrix.raw[t.tile_index]
+
+        articPruneTargetTurns = overpruneCutoff - 4
+        finalGathVal, finalRawArmy, prunedArticTiles = prune_set_by_articulation_points(map, rootTiles, toPrune, articPruneTargetTurns, valueMatrix, armyCostMatrix, pruneReconnectCountMatrix, gathVal, rawArmy, tileDictToPrune, logEntries)
+        # for t in prunedArticTiles:
+        #     forest.unsafe_delete
+
+        if liveRenderer:
+            liveRenderer.view_info.add_stats_line(f'O - BLUE = {len(prunedArticTiles)} endgame artic pruned ({len(toPrune)} returned, tg {articPruneTargetTurns})')
+            for t in prunedArticTiles:
+                liveRenderer.view_info.add_targeted_tile(t, TargetStyle.BLUE, radiusReduction=2)
+
+    reconnectTargetTurns = desiredTotalNodes
     reconnectionTiles, forest = _reconnect_iterative_heuristic(
         map,
         reconnectTargetTurns,
@@ -1079,7 +1243,7 @@ def prune_set_to_turns_and_reconnect_with_values(
     for tile in reconnectionTiles:
         pruneReconnectCountMatrix.raw[tile.tile_index] += 1
 
-    articPruneTargetTurns = turns
+    articPruneTargetTurns = desiredTotalNodes
     finalGathVal, finalRawArmy, prunedArticTiles = prune_set_by_articulation_points(map, rootTiles, reconnectedSubset, articPruneTargetTurns, valueMatrix, armyCostMatrix, pruneReconnectCountMatrix, gathVal, rawArmy, tileDictToPrune, logEntries)
     # for t in prunedArticTiles:
     #     forest.unsafe_delete
@@ -1118,6 +1282,7 @@ def _reconnect_iterative_heuristic(
         doNotAllowExtraTurns: bool = False,
         liveRenderer: DebugLiveViewerHost | None = None,
         # costPer: typing.Dict[Tile, int]
+        logEntries: typing.List[str] | None = None,
 ) -> typing.Tuple[typing.Set[Tile], FastDisjointTileSetMultiSum]:
     """
     Returns the set of newly added tiles used to reconnect, and a forest with values (sumValueMatrix, sumArmyCost) that has been partially reconnected.
@@ -1134,8 +1299,8 @@ def _reconnect_iterative_heuristic(
     excessTurns = pruneTo - bareMinTurns
 
     start = time.perf_counter()
-    if GatherDebug.USE_DEBUG_LOGGING:
-        logbook.info('starting _reconnect')
+    if GatherDebug.USE_DEBUG_LOGGING and logEntries:
+        logEntries.append('starting _reconnect')
     # includedSet = set()
 
     forest = FastDisjointTileSetMultiSum([valueMatrix, armyCostMatrix])
@@ -1157,7 +1322,8 @@ def _reconnect_iterative_heuristic(
     #     expectedMinRemaining += costPer.get(tile, 0)
 
     # logbook.info(f'bareMinTurns {bareMinTurns}, excessTurns {excessTurns}, expectedMinRemaining {expectedMinRemaining}')
-    logbook.info(f'bareMinTurns {bareMinTurns}, excessTurns {excessTurns}')
+    if logEntries:
+        logEntries.append(f'bareMinTurns {bareMinTurns}, excessTurns {excessTurns}')
 
     # # skipTiles.difference_update(requiredTiles)
     # for req in requiredTiles:
@@ -1170,7 +1336,7 @@ def _reconnect_iterative_heuristic(
     usefulStartSet = dict()
 
     if GatherDebug.USE_DEBUG_LOGGING:
-        logbook.info('Completed sets setup')
+        logEntries.append('Completed sets setup')
 
     someRoot = None
     for root in rootTiles:
@@ -1187,25 +1353,25 @@ def _reconnect_iterative_heuristic(
     #     val = forest.subset_value(t)
     #     usefulStartSet[t] = ((-1000000, 0, 0), 0)
 
-    def findFunc(t: Tile, prio: typing.Tuple) -> bool:
-        (
-            prio,
-            dist,
-            negGatherPoints,
-            fromTile,
-            originTile,
-        ) = prio
-        if t not in forest:
-            return False
-
-        if forest.connected(t, originTile):
-            return False
-
-        return True
-
     # def findFunc(t: Tile, prio: typing.Tuple) -> bool:
-    #     return t in forest and not forest.connected(t, someRoot)
+    #     (
+    #         prio,
+    #         dist,
+    #         negGatherPoints,
+    #         fromTile,
+    #         originTile,
+    #     ) = prio
+    #     if t not in forest:
+    #         return False
     #
+    #     if forest.connected(t, originTile):
+    #         return False
+    #
+    #     return True
+
+    def findFunc(t: Tile, prio: typing.Tuple) -> bool:
+        return t in forest and not forest.connected(t, someRoot)
+
     # def valueFunc(t: Tile, prio: typing.Tuple) -> typing.Tuple | None:
     #     if t not in forest:
     #         return None
@@ -1238,8 +1404,8 @@ def _reconnect_iterative_heuristic(
     # while len(missingIncluded) > 0:
     while forest.subset_size(someRoot) < pruneTo:
         # iter += 1
-        if GatherDebug.USE_DEBUG_LOGGING:
-            logbook.info(f'missingIncluded iter {iteration}')
+        if GatherDebug.USE_DEBUG_LOGGING and logEntries:
+            logEntries.append(f'missingIncluded iter {iteration}')
 
         # expectedMinRemaining = 0
         # closestDist = pruneTo
@@ -1259,7 +1425,8 @@ def _reconnect_iterative_heuristic(
         # logbook.info(f'  costSoFar {costSoFar}, expectedMinRemaining {expectedMinRemaining} (out of max {pruneTo}, min {bareMinTurns}), closestDist {closestDist}, excessTurnsLeft {excessTurnsLeft}')
 
         excessTurnsLeft = pruneTo - forest.subset_size(someRoot)
-        logbook.info(f'  included so far {forest.subset_size(someRoot)} (missing {forest.n_subsets - 1} subsets), (out of max {pruneTo}, min {bareMinTurns}), excessTurnsLeft {excessTurnsLeft}')
+        if GatherDebug.USE_DEBUG_LOGGING and logEntries:
+            logEntries.append(f'  included so far {forest.subset_size(someRoot)} (missing {forest.n_subsets - 1} subsets), (out of max {pruneTo}, min {bareMinTurns}), excessTurnsLeft {excessTurnsLeft}')
 
         def prioFunc(tile: Tile, prioObj: typing.Tuple):
             (
@@ -1269,9 +1436,10 @@ def _reconnect_iterative_heuristic(
                 fromTile,
                 originTile,
             ) = prioObj
-            if fromTile in forest and fromTile != originTile:
-                # not allowed to path through other parts of the forest, valfunc should just connect the forest...
-                return None
+            # only necessary when doing max instead of greedy find first
+            # if fromTile in forest and fromTile != originTile:
+            #     # not allowed to path through other parts of the forest, valfunc should just connect the forest...
+            #     return None
 
             # if tile not in justDisconnectedTiles:
             negGatherPoints -= valueMatrix.raw[tile.tile_index]
@@ -1294,7 +1462,7 @@ def _reconnect_iterative_heuristic(
             newPrio = negGatherPoints / newDist if negGatherPoints < 0 else negGatherPoints * newDist
 
             #bfs
-            # newPrio = newDist + negGatherPoints / newDist
+            newPrio = newDist + negGatherPoints / newDist
 
             if tile in forest:
                 newPrio -= 100
@@ -1308,18 +1476,18 @@ def _reconnect_iterative_heuristic(
             )
 
         # # naive start
+        usefulStartSet = dict()
+        for t in partiallyDisconnectedSetToModify:
+            if forest.connected(t, someRoot):
+                usefulStartSet[t] = ((-10000, 0, 0, None, t), 0)
+
         # usefulStartSet = dict()
         # for t in partiallyDisconnectedSetToModify:
         #     if not forest.connected(t, someRoot):
-        #         usefulStartSet[t] = ((-10000, 0, 0, None, t), 0)
-
-        usefulStartSet = dict()
-        for t in partiallyDisconnectedSetToModify:
-            if not forest.connected(t, someRoot):
-                gathVal, armyVal = forest.subset_values(t)
-                size = forest.subset_size(t)
-                # usefulStartSet[t] = ((-10000, 0, 0, None, t), 0)
-                usefulStartSet[t] = ((-gathVal / size, size - 1, -gathVal, None, t), 0)
+        #         gathVal, armyVal = forest.subset_values(t)
+        #         size = forest.subset_size(t)
+        #         # usefulStartSet[t] = ((-10000, 0, 0, None, t), 0)
+        #         usefulStartSet[t] = ((-gathVal / size, size - 1, -gathVal, None, t), 0)
 
         # # new tiles are always connected to root. saves us from having to modify the og set
         # for t in newTiles:
@@ -1328,26 +1496,27 @@ def _reconnect_iterative_heuristic(
         path = SearchUtils.breadth_first_dynamic(map, usefulStartSet, findFunc, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
         # path = SearchUtils.breadth_first_dynamic_max(map, usefulStartSet, valueFunc, maxTurns=excessTurnsLeft, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
         if path is None:
-            if GatherDebug.USE_DEBUG_LOGGING:
-                logbook.info(f'  Path NONE! Performing altBanned set')
+            if GatherDebug.USE_DEBUG_LOGGING and logEntries:
+                logEntries.append(f'  Path NONE! Performing altBanned set')
             # altBanned = skipTiles.copy()
             # altBanned.update([t for t in map.reachableTiles if t.isMountain])
             path = SearchUtils.breadth_first_dynamic(map, usefulStartSet, findFunc, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noNeutralCities=False, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
             # path = SearchUtils.breadth_first_dynamic_max(map, usefulStartSet, valueFunc, maxTurns=excessTurnsLeft, negativeTiles=negativeTiles, skipTiles=skipTiles, priorityFunc=prioFunc, noNeutralCities=False, noLog=not GatherDebug.USE_DEBUG_LOGGING)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
             if path is None:
-                if GatherDebug.USE_DEBUG_LOGGING:
-                    logbook.info(f'  No AltPath, breaking early with {len(partiallyDisconnectedSetToModify) - forest.subset_size(someRoot)} left missing')
+                if GatherDebug.USE_DEBUG_LOGGING and logEntries:
+                    logEntries.append(f'  No AltPath, breaking early with {len(partiallyDisconnectedSetToModify) - forest.subset_size(someRoot)} left missing')
                 break
                 # raise AssertionError(f'No MST building path found...? \r\nFrom {includedSet} \r\nto {missingIncluded}')
             # else:
-            #     if GatherDebug.USE_DEBUG_LOGGING:
-            #         logbook.info(f'  AltPath len {path.length}')
+            #     if GatherDebug.USE_DEBUG_LOGGING and logEntries:
+            #         logEntries.append(f'  AltPath len {path.length}')
         # else:
-        #     if GatherDebug.USE_DEBUG_LOGGING:
-        #         logbook.info(f'  Path len {path.length}')
+        #     if GatherDebug.USE_DEBUG_LOGGING and logEntries:
+        #         logEntries.appendinfo(f'  Path len {path.length}')
 
-        # logbook.info(f'    found {path.start.tile}->{path.tail.tile} len {path.length} (closest {closest} len {closestDist}) {path}')
-        logbook.info(f'    found {path.start.tile}->{path.tail.tile} len {path.length}')
+        # logEntries.append(f'    found {path.start.tile}->{path.tail.tile} len {path.length} (closest {closest} len {closestDist}) {path}')
+        if GatherDebug.USE_DEBUG_LOGGING and logEntries:
+            logEntries.append(f'    found {path.start.tile}->{path.tail.tile} len {path.length}')
 
         # lastTile: Tile = someRoot
 
@@ -1375,8 +1544,8 @@ def _reconnect_iterative_heuristic(
         # for tile in path.tileList:
         #     usefulStartSet
 
-    if GatherDebug.USE_DEBUG_LOGGING:
-        logbook.info(f'_reconnect completed in {time.perf_counter() - start:.5f}s with {len(partiallyDisconnectedSetToModify) - forest.subset_size(someRoot)} missing after {iteration} path iterations')
+    if GatherDebug.USE_DEBUG_LOGGING and logEntries:
+        logEntries.append(f'_reconnect completed in {time.perf_counter() - start:.5f}s with {len(partiallyDisconnectedSetToModify) - forest.subset_size(someRoot)} missing after {iteration} path iterations')
 
     return newTiles, forest
 

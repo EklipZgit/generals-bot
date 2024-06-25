@@ -1542,7 +1542,7 @@ player_index=0
             gatherMatrix,
             armyCostMatrix,
             # negativeTiles=negativeTiles,
-            renderLive=False,
+            renderLive=True,
             viewInfo=None,
             searchingPlayer=general.player
 
@@ -1620,6 +1620,22 @@ player_index=0
 
         gatherMatrix = Gather.build_gather_capture_pure_value_matrix(map, general.player, negativeTiles, useTrueValueGathered=useTrueVal, prioritizeCaptureHighArmyTiles=False)
         armyCostMatrix = Gather.build_gather_capture_pure_value_matrix(map, general.player, negativeTiles, useTrueValueGathered=True, prioritizeCaptureHighArmyTiles=False)
+
+        plan = Gather.gather_max_set_iterative_plan(
+            map,
+            targets,
+            depth,
+            gatherMatrix,
+            armyCostMatrix,
+            # negativeTiles=negativeTiles,
+            renderLive=False,
+            viewInfo=None,
+            searchingPlayer=general.player
+
+            # useTrueValueGathered=useTrueVal,
+            # renderLive=False,
+            # cutoffTime=time.perf_counter() + 1.0
+        )
 
         from cProfile import Profile
         from pstats import SortKey, Stats

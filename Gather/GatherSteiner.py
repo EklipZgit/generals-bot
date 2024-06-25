@@ -150,6 +150,38 @@ def _build_pcst_tile_prize_matrix(
     return tilePrizeMatrix, minPrize, maxPrize, tileExtraCostMatrix, minCost, maxCost
 
 
+def get_prize_collecting_gather_mapmatrix_single_iteration(
+        map: MapBase,
+        valueMatrix: MapMatrixInterface[float],
+        searchingPlayer=-2,
+        # armyCutoff = 2.0,
+        rootTiles: typing.List[Tile] | None = None,
+        mustInclude: typing.Set[Tile] | None = None,
+        negativeTiles: TileSet | None = None,
+        skipTiles: TileSet | None = None,
+) -> typing.Set[Tile] | None:
+    """
+    """
+
+    prizes = valueMatrix.copy()
+    if mustInclude:
+        for t in mustInclude:
+            prizes.raw[t.tile_index] += 50
+
+    tIdxs = _pcst_iteration_internal(
+        map,
+        costBasis=12.0,
+        tilePrizeMatrix=prizes,
+        tileExtraCostMatrix=None,
+        skipTiles=skipTiles,
+        prizeOffset=3.0,
+        rootTiles=rootTiles,
+        fastMode=False,
+    )
+
+    return {map.tiles_by_index[t] for t in tIdxs}
+
+
 def get_prize_collecting_gather_mapmatrix(
         map: MapBase,
         searchingPlayer=-2,
@@ -169,14 +201,6 @@ def get_prize_collecting_gather_mapmatrix(
         timeLimit: float = 0.2
 ) -> typing.List[Tile] | None:
     """
-    Does black magic and shits out a spiderweb with numbers in it, sometimes the numbers are even right
-
-    @param map:
-    startTiles is list of tiles that will be weighted with baseCaseFunc, OR dict (startPriorityObject, distance) = startTiles[tile]
-    valueFunc is (currentTile, priorityObject) -> POSITIVELY weighted value object
-    @param searchingPlayer:
-    priorityFunc is (nextTile, currentPriorityobject) -> nextPriorityObject NEGATIVELY weighted
-    @return:
     """
 
     start = time.perf_counter()
@@ -529,7 +553,7 @@ def _pcst_gradient_quadrant_search(
                 if vertices is None:
                     vertices = _pcst_iteration_internal(
                         map,
-                        cutoffFactor=costCutoff,
+                        costBasis=costCutoff,
                         tilePrizeMatrix=tilePrizeMatrix,
                         tileExtraCostMatrix=tileExtraCostMatrix,
                         prizeOffset=prizeCutoff,
@@ -694,7 +718,7 @@ def _pcst_gradient_descent_prize_basis(
 
         vertices = _pcst_iteration_internal(
             map,
-            cutoffFactor=costCutoff,
+            costBasis=costCutoff,
             tilePrizeMatrix=tilePrizeMatrix,
             tileExtraCostMatrix=tileExtraCostMatrix,
             prizeOffset=nextCutoff,
@@ -744,9 +768,9 @@ def _pcst_gradient_descent_prize_basis(
 
 def _pcst_iteration_internal(
         map: MapBase,
-        cutoffFactor: float,
+        costBasis: float,
         tilePrizeMatrix: MapMatrixInterface[float],
-        tileExtraCostMatrix: MapMatrixInterface[float],
+        tileExtraCostMatrix: MapMatrixInterface[float] | None = None,
         skipTiles: TileSet | None = None,
         prizeOffset: float = 0.0,
         rootTiles: typing.List[Tile] | None = None,
@@ -783,7 +807,7 @@ def _pcst_iteration_internal(
 
     root = -1  # or a node # if we want to root somewhere specific
     if rootTiles:
-        root = rootTiles[0].tile_index
+        root = next(iter(rootTiles)).tile_index
     """ root: the root note for rooted PCST. For the unrooted variant, this parameter should be -1."""
 
     num_clusters = 1  # we want exactly one subtree...?
@@ -803,7 +827,7 @@ def _pcst_iteration_internal(
     """ verbosity_level: an integer indicating how much debug output the function should produce."""
     for tileIndex, tile in enumerate(map.tiles_by_index):
         prize = tilePrizeMatrix.raw[tileIndex]
-        extraCost = tileExtraCostMatrix.raw[tileIndex]
+        extraCost = tileExtraCostMatrix.raw[tileIndex] if tileExtraCostMatrix is not None else 0.0
         # if tile.army > 1 or not map.is_tile_friendly(tile):
         prize += prizeOffset
 
@@ -822,14 +846,14 @@ def _pcst_iteration_internal(
         if right and not right.isObstacle:
             if skipTiles is None or right not in skipTiles:
                 edges.append([tileIndex, right.tile_index])
-                cost = cutoffFactor + extraCost
+                cost = costBasis + extraCost
                 costs.append(max(0.0, cost))
             # logbook.info(f'prize {prize:.3f} for {tile}<->{right}  cost {cost:.3f}')
 
         if down and not down.isObstacle:
             if skipTiles is None or down not in skipTiles:
                 edges.append([tileIndex, down.tile_index])
-                cost = cutoffFactor + extraCost
+                cost = costBasis + extraCost
                 costs.append(max(0.0, cost))
             # logbook.info(f'prize {prize:.3f} for {tile}<->{down}  cost {cost:.3f}')
 

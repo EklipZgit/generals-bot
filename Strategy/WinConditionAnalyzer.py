@@ -285,12 +285,17 @@ class WinConditionAnalyzer(object):
 
         maxThreat = 0
         maxThreatTurns = 0
-        for city in self.map.players[self.map.player_index].cities:
+        analyzedCount = 0
+        for city in sorted(self.map.players[self.map.player_index].cities, key=lambda t: self.board_analysis.intergeneral_analysis.bMap[t]):
             isEnemySide = self.board_analysis.intergeneral_analysis.bMap[city] * 1.2 < self.board_analysis.intergeneral_analysis.aMap[city]
             isContested = city in self.city_analyzer.owned_contested_cities
 
             if not isEnemySide and not isContested:
                 continue
+            analyzedCount += 1
+
+            if analyzedCount > 4:
+                break
 
             threatAllowedTurns = oldDefTurns - 1
             if threatAllowedTurns < 5:

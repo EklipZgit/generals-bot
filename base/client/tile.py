@@ -8,6 +8,9 @@ TILE_EMPTY = -1
 TILE_MOUNTAIN = -2
 TILE_FOG = -3
 TILE_OBSTACLE = -4
+TILE_LOOKOUT = -5
+TILE_TELESCOPE = -6
+MOUNTAIN_TILES = [TILE_LOOKOUT, TILE_MOUNTAIN, TILE_TELESCOPE]
 
 PLAYER_CHAR_INDEX_PAIRS: typing.List[typing.Tuple[str, int]] = [
     ('a', 0),
@@ -228,6 +231,8 @@ class Tile(object):
         'movable',
         'tile_index',
         '_hash_key',
+        'isTelescope',
+        'isLookout',
     )
 
     def __init__(
@@ -241,7 +246,9 @@ class Tile(object):
             player: typing.Union[None, int] = None,
             isMountain=False,
             turnCapped=0,
-            tileIndex: int = -1
+            tileIndex: int = -1,
+            isTelescope=False,
+            isLookout=False,
     ):
         # Public Properties
         self.x = x
@@ -286,6 +293,10 @@ class Tile(object):
         """Turn the tile last had an unexpected delta on it"""
 
         self.isMountain: bool = isMountain
+
+        self.isTelescope: bool = isMountain
+
+        self.isLookout: bool = isMountain
 
         self.delta: TileDelta = TileDelta()
         """Tile's army/player/whatever delta since last turn"""
@@ -462,7 +473,11 @@ class Tile(object):
             outputToJoin.append(playerChar)
         if self.isCity:
             outputToJoin.append('C')
-        if self.isMountain or (not self.visible and self.isNotPathable):
+        if self.isLookout:
+            outputToJoin.append('L')
+        elif self.isTelescope:
+            outputToJoin.append('T')
+        elif self.isMountain or (not self.visible and self.isNotPathable):
             outputToJoin.append('M')
         if self.isGeneral:
             outputToJoin.append('G')
@@ -547,7 +562,7 @@ class Tile(object):
         self.delta.oldOwner = self._player
 
         if self.tile != tile:  # tile changed
-            if tile < TILE_MOUNTAIN and self.discovered:  # lost sight of tile.
+            if tile < TILE_MOUNTAIN and self.discovered and not tile == TILE_LOOKOUT and not tile == TILE_TELESCOPE:  # lost sight of tile.
                 if self.visible:
                     self.delta.lostSight = True
                 self.visible = False
@@ -569,13 +584,17 @@ class Tile(object):
 
             self.tile = tile
 
-        if tile == TILE_MOUNTAIN:
+        if tile in MOUNTAIN_TILES:
             if not self.isMountain:
                 for movableTile in self.movable:
                     if self in movableTile.movable:
                         movableTile.movable.remove(self)
 
                 self.isMountain = True
+            if tile == TILE_LOOKOUT:
+                self.isLookout = True
+            elif tile == TILE_TELESCOPE:
+                self.isTelescope = True
 
             if self.player != -1 or self.isCity or self.army != 0:
                 # mis-predicted city.
@@ -621,7 +640,6 @@ class Tile(object):
 
         if isCity and not self.isCity:
             self.isCity = True
-            self.isGeneral = False
             if not wasObstacle:
                 self.delta.discoveredExGeneralCity = True
 
@@ -629,20 +647,17 @@ class Tile(object):
             playerObj = map.players[self._player]
             playerObj.general = self
             self.isGeneral = True
-            # TODO remove, this should NOT happen here
-            # map.generals[tile] = self
 
         if self.delta.oldOwner != self.delta.newOwner:
-            # TODO  and not self.delta.gainedSight ?
-            logbook.debug(f'oldOwner != newOwner for {str(self)}')
+            # logbook.debug(f'oldOwner != newOwner for {str(self)}')
             armyMovedHere = True
 
         # if self.delta.oldOwner == self.delta.newOwner and self.delta.armyDelta == 0:
         #     armyMovedHere = False
 
-        if tile == TILE_MOUNTAIN or (tile == TILE_EMPTY and isCity and self.delta.gainedSight):
+        if tile in MOUNTAIN_TILES or (tile == TILE_EMPTY and isCity and self.delta.gainedSight):
             armyMovedHere = False
-            if tile == TILE_MOUNTAIN or army > 38:
+            if tile in MOUNTAIN_TILES or army > 38:
                 self.delta.imperfectArmyDelta = False
                 self.delta.armyDelta = 0
                 self.delta.unexplainedDelta = 0
@@ -650,7 +665,7 @@ class Tile(object):
         self.delta.armyMovedHere = armyMovedHere
 
         if armyMovedHere:
-            logbook.debug(f'armyMovedHere True for {str(self)} (expected delta was {self.delta.expectedDelta}, actual was {self.delta.armyDelta})')
+            # logbook.debug(f'armyMovedHere True for {str(self)} (expected delta was {self.delta.expectedDelta}, actual was {self.delta.armyDelta})')
             self.lastMovedTurn = map.turn
 
         if not self.visible:

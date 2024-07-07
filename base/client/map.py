@@ -409,7 +409,10 @@ class MapBase(object):
                     if not player.leftGame:
                         player.leftGame = True
                         player.leftGameTurn = self.turn
+
+                        logbook.info(f'WARNING, setting dead player p{player.index} surrendered but hasnt left')
                     else:
+                        logbook.info(f'WARNING, ok player left the game now, we can convert their stuff p{player.index} surrendered but hasnt left')
                         # don't immediately set 'dead' so that we keep attacking disconnected player
                         if self.scores[i].tiles == 0:
                             player.dead = True
@@ -417,6 +420,14 @@ class MapBase(object):
                                 for tile in player.tiles:
                                     if not tile.visible:
                                         tile.set_disconnected_neutral()
+
+                        if self.generals[player.index] is not None:
+                            logbook.info(f'WARNING, setting forfeited player p{player.index} general {self.generals[player.index]} = None')
+                            self.generals[player.index] = None
+                        if player.general is not None and player.general.isGeneral:
+                            logbook.warning(f'WARNING, GENERAL WAS NOT RESET TO CITY ON DEAD PLAYER BY THE TIME WE WERE CALCULATING SCORES, THE FUCK? {player.general}')
+                            player.general.isGeneral = False
+                            player.general.isCity = True
 
                 else:
                     self.remainingPlayers += 1
@@ -428,11 +439,10 @@ class MapBase(object):
             for i, player in enumerate(self.players):
                 if not player.dead and player.index != self.player_index:
                     if player.cityCount < cityCounts[i]:
-                        player.cityCount = cityCounts[i]
                         player.cityGainedTurn = self.turn
-                    if player.cityCount > cityCounts[i] > 0:
-                        player.cityCount = cityCounts[i]
+                    elif player.cityCount > cityCounts[i] > 0:
                         player.cityLostTurn = self.turn
+                    player.cityCount = cityCounts[i]
 
     def handle_player_capture_text(self, text):
         capturer, capturee = text.split(" captured ")
@@ -697,10 +707,16 @@ class MapBase(object):
             for eventHandler in self.notify_general_revealed:
                 eventHandler(curTile)
             if curTile.isGeneral and curTile.visible:
+                logbook.info(f' SET map.generals[{curTile.player}] = {curTile} IN map.py (was {self.generals[curTile.player]})')
                 self.generals[curTile.player] = curTile
-            else:
+            elif curTile.visible:
                 if curTile.delta.oldOwner != -1 and self.generals[curTile.delta.oldOwner] == curTile:
+                    logbook.info(f' SET oldOwner map.generals[{curTile.delta.oldOwner}] = NONE IN map.py (was {self.generals[curTile.delta.oldOwner]})')
                     self.generals[curTile.delta.oldOwner] = None
+            else:
+                logbook.error(f' WTF is going on with generals?? tile {curTile}  delta {curTile.delta}  isGeneral{curTile.isGeneral} wasGeneral{wasGeneral}')
+                logbook.error(f'    generals {str(self.generals)}')
+
                 # curTile.isGeneral = False
                 # for i, maybeNotGen in list(enumerate(self.generals)):
                 #     if maybeNotGen is not None and maybeNotGen.player != i:
@@ -829,7 +845,11 @@ class MapBase(object):
                     tile.adjacents.append(adjTile)
 
                 if tile.isGeneral:
+                    if tile.player == -1:
+                        raise AssertionError(f'Cant have neutral generals idiot')
+
                     self.generals[tile.player] = tile
+
                 if not MapBase.DO_NOT_RANDOMIZE:
                     random.shuffle(tile.adjacents)
                     random.shuffle(tile.movable)

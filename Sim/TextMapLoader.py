@@ -18,6 +18,7 @@ import typing
 
 from SearchUtils import count
 from base.client.map import Tile, TILE_EMPTY, TILE_MOUNTAIN, MapBase, PLAYER_CHAR_INDEX_PAIRS
+from base.client.tile import TILE_TELESCOPE, TILE_LOOKOUT
 
 
 class TextMapLoader(object):
@@ -161,6 +162,22 @@ class TextMapLoader(object):
                 if 'D' in text_tile:
                     tile.discovered = True
                 return
+            case 'T':
+                tile.army = 0
+                tile.tile = TILE_TELESCOPE
+                tile.player = -1
+                tile.isMountain = True
+                if 'D' in text_tile:
+                    tile.discovered = True
+                return
+            case 'L':
+                tile.army = 0
+                tile.tile = TILE_LOOKOUT
+                tile.player = -1
+                tile.isMountain = True
+                if 'D' in text_tile:
+                    tile.discovered = True
+                return
             case 'a':
                 player = 0
             case 'b':
@@ -266,6 +283,8 @@ class TextMapLoader(object):
 
         if 'mode' in data:
             map.is_2v2 = data['mode'] == 'team'
+        if 'turn' in data:
+            map.turn = int(data['turn'])
         if 'modifiers' in data and len(data['modifiers']) > 0:
             map.modifiers = set(data['modifiers'].split(', '))
 

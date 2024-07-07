@@ -13,7 +13,7 @@ class PerfScope(object):
     def __init__(self, event_name: str, telemetry: PerformanceTelemetry):
         self.event_name = event_name
         self.event_start_time: float = time.time_ns() / NS_CONVERTER
-        self.event_end_time: typing.Union[None, float] = None
+        self.event_end_time: float | None = None
         self.parent: PerformanceTelemetry = telemetry
 
     def __enter__(self):

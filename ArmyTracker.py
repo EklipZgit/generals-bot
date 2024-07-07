@@ -3665,6 +3665,8 @@ class ArmyTracker(object):
 
     def _calculate_maximum_general_distance_for_raw_fog_standing_army(self, player: Player, armyInFog: int) -> int:
         cityCount = player.cityCount
+        if cityCount < 0:
+            cityCount = 0
         # walk backward through turn order till we go negative
         maxDist = 0
         armyLeft = armyInFog  # - (player.cityCount - 1) // 2  # for each 2 cities (after general), they must leave behind a 2 instead of a 1, so

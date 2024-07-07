@@ -4,7 +4,8 @@ from Interfaces import TilePlanInterface
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from Tests.TestBase import TestBase
-from base.client.tile import Tile, MapBase
+from base.client.map import MapBase
+from base.client.tile import Tile
 
 
 class ExpansionContinuationTests(TestBase):

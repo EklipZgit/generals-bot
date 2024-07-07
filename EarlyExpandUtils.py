@@ -2448,7 +2448,6 @@ def build_initial_mst_gather_root(map, general, visited_set, skip_tiles, dist_to
         [],
         [generalNode],
         negativeTiles=None,
-        startTilesDict={},
         searchingPlayer=general.player,
         teams=map.team_ids_by_player_index,
         onlyCalculateFriendlyArmy=True,

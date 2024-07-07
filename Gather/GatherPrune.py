@@ -997,7 +997,6 @@ def recalculate_tree_values(
         logEntries: typing.List[str],
         rootNodes: typing.List[GatherTreeNode],
         negativeTiles: typing.Set[Tile] | None,
-        startTilesDict: typing.Dict[Tile, object],
         searchingPlayer: int,
         teams: typing.List[int],
         onlyCalculateFriendlyArmy=False,
@@ -1011,7 +1010,6 @@ def recalculate_tree_values(
     @param logEntries:
     @param rootNodes:
     @param negativeTiles:
-    @param startTilesDict:
     @param searchingPlayer:
     @param teams:
     @param onlyCalculateFriendlyArmy:
@@ -1028,7 +1026,6 @@ def recalculate_tree_values(
             logEntries,
             currentNode,
             negativeTiles,
-            startTilesDict,
             searchingPlayer,
             teams,
             onlyCalculateFriendlyArmy,
@@ -1056,7 +1053,7 @@ def recalculate_tree_values(
         for child in current.children:
             trunkValue = current.trunkValue
             trunkDistance = current.trunkDistance + 1
-            if negativeTiles is None or child.tile not in negativeTiles:
+            if not negativeTiles or child.tile not in negativeTiles:
                 if teams[child.tile.player] == teams[searchingPlayer]:
                     trunkValue += child.tile.army
                 elif not onlyCalculateFriendlyArmy:
@@ -1083,7 +1080,6 @@ def _recalculate_tree_values_recurse(
         logEntries: typing.List[str],
         currentNode: GatherTreeNode,
         negativeTiles: typing.Set[Tile] | None,
-        startTilesDict: typing.Dict[Tile, object],
         searchingPlayer: int,
         teams: typing.List[int],
         onlyCalculateFriendlyArmy=False,
@@ -1120,7 +1116,7 @@ def _recalculate_tree_values_recurse(
     # elif priorityMatrix:
     #     sum += priorityMatrix[currentTile]
 
-    if (negativeTiles is None or currentTile not in negativeTiles) and not isStartNode:
+    if (not negativeTiles or currentTile not in negativeTiles) and not isStartNode:
         if teams[currentTile.player] == teams[searchingPlayer]:
             sum += currentTile.army
         elif not onlyCalculateFriendlyArmy:
@@ -1136,11 +1132,149 @@ def _recalculate_tree_values_recurse(
             logEntries,
             child,
             negativeTiles,
-            startTilesDict,
             searchingPlayer,
             teams,
             onlyCalculateFriendlyArmy,
             priorityMatrix,
+            viewInfo,
+            shouldAssert=shouldAssert)
+        sum += child.value
+        turns += child.gatherTurns
+
+    # if viewInfo:
+    #     viewInfo.bottomRightGridText[currentNode.tile] = sum
+
+    if shouldAssert:
+        curNodeVal = round(currentNode.value, 6)
+        recalcSum = round(sum, 6)
+        if curNodeVal != recalcSum:
+            logbook.info('\r\n' + '\r\n'.join(logEntries))
+            raise AssertionError(f'currentNode {str(currentNode)} val {curNodeVal:.6f} != recalculated sum {recalcSum:.6f}')
+        if currentNode.gatherTurns != turns:
+            logbook.info('\r\n' + '\r\n'.join(logEntries))
+            raise AssertionError(f'currentNode {str(currentNode)} turns {currentNode.gatherTurns} != recalculated turns {turns}')
+
+    currentNode.value = sum
+    currentNode.gatherTurns = turns
+
+
+def recalculate_tree_values_from_matrix(
+        logEntries: typing.List[str],
+        rootNodes: typing.List[GatherTreeNode],
+        valueMatrix: MapMatrixInterface[float],
+        negativeTiles: typing.Set[Tile] | None,
+        viewInfo=None,
+        shouldAssert=False
+) -> typing.Tuple[int, int]:
+    """
+    Return totalTurns, totalValue
+
+    @param logEntries:
+    @param rootNodes:
+    @param valueMatrix: the value matrix to use
+    @param negativeTiles:
+    @param viewInfo:
+    @param shouldAssert:
+    @return:
+    """
+    totalValue = 0
+    totalTurns = 0
+    # logEntries.append('recalcing treenodes....')
+    for currentNode in rootNodes:
+        _recalculate_tree_values_matrix_recurse(
+            logEntries,
+            currentNode,
+            valueMatrix,
+            negativeTiles,
+            viewInfo,
+            shouldAssert)
+        totalValue += currentNode.value
+        totalTurns += currentNode.gatherTurns
+
+    # find the leaves
+    queue = deque()
+    for treeNode in rootNodes:
+        if shouldAssert and treeNode.trunkValue != 0:
+            logbook.info('\r\n' + '\r\n'.join(logEntries))
+            raise AssertionError(f'root node {str(treeNode)} trunk value should have been 0 but was {treeNode.trunkValue}')
+        if shouldAssert and treeNode.trunkDistance != 0:
+            logbook.info('\r\n' + '\r\n'.join(logEntries))
+            raise AssertionError(f'root node {str(treeNode)} trunk dist should have been 0 but was {treeNode.trunkDistance}')
+        treeNode.trunkValue = 0
+        treeNode.trunkDistance = 0
+        queue.appendleft(treeNode)
+
+    while queue:
+        current = queue.pop()
+        for child in current.children:
+            trunkValue = current.trunkValue
+            trunkDistance = current.trunkDistance + 1
+            if not negativeTiles or child.tile not in negativeTiles:
+                trunkValue += valueMatrix.raw[child.tile.tile_index]
+            trunkValue -= 1
+            if shouldAssert:
+                if trunkDistance != child.trunkDistance:
+                    logbook.info('\r\n' + '\r\n'.join(logEntries))
+                    raise AssertionError(f'node {str(child)} trunk dist should have been {trunkDistance} but was {child.trunkDistance}')
+                if trunkValue != child.trunkValue:
+                    logbook.info('\r\n' + '\r\n'.join(logEntries))
+                    raise AssertionError(f'node {str(child)} trunk value should have been {trunkValue} but was {child.trunkValue}')
+            child.trunkValue = trunkValue
+            child.trunkDistance = trunkDistance
+
+            # if viewInfo is not None:
+            #     viewInfo.bottomLeftGridText[child.tile] = child.trunkValue
+            queue.appendleft(child)
+
+    return totalTurns, totalValue
+
+
+def _recalculate_tree_values_matrix_recurse(
+        logEntries: typing.List[str],
+        currentNode: GatherTreeNode,
+        valueMatrix: MapMatrixInterface[float],
+        negativeTiles: typing.Set[Tile] | None,
+        viewInfo=None,
+        shouldAssert=False
+):
+    if GatherDebug.USE_DEBUG_ASSERTS:
+        logEntries.append(f'RECALCING currentNode {currentNode}')
+
+    isStartNode = False
+
+    # we leave one node behind at each tile, except the root tile.
+    turns = 1
+    sum = -1
+    currentTile = currentNode.tile
+    if viewInfo:
+        viewInfo.midRightGridText[currentTile] = f'v{currentNode.value:.0f}'
+        viewInfo.bottomMidRightGridText[currentTile] = f'tv{currentNode.trunkValue:.0f}'
+        viewInfo.bottomRightGridText[currentTile] = f'td{currentNode.trunkDistance}'
+
+        if currentNode.trunkDistance > 0:
+            rawValPerTurn = currentNode.value / currentNode.trunkDistance
+            trunkValPerTurn = currentNode.trunkValue / currentNode.trunkDistance
+            viewInfo.bottomMidLeftGridText[currentTile] = f'tt{trunkValPerTurn:.1f}'
+            viewInfo.bottomLeftGridText[currentTile] = f'vt{rawValPerTurn:.1f}'
+
+    if currentNode.toTile is None:
+        if GatherDebug.USE_DEBUG_ASSERTS:
+            logEntries.append(f'{currentTile} is first tile, starting at 0')
+        isStartNode = True
+        sum = 0
+        turns = 0
+    # elif priorityMatrix:
+    #     sum += priorityMatrix[currentTile]
+
+    if (negativeTiles is None or currentTile not in negativeTiles) and not isStartNode:
+        sum += valueMatrix.raw[currentTile.tile_index]
+
+    for child in currentNode.children:
+        _recalculate_tree_values_matrix_recurse(
+            logEntries,
+            child,
+            valueMatrix,
+            negativeTiles,
             viewInfo,
             shouldAssert=shouldAssert)
         sum += child.value

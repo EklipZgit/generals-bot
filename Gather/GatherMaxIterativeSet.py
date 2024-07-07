@@ -599,9 +599,9 @@ def _knapsack_max_set_gather_iterative_prune(
     if renderLive:
         liveRenderer = ViewerProcessHost.start_debug_live_renderer(map, startPaused=True)
 
-    maxPerIteration = max(min(4, fullTurns // 2), 1 * fullTurns // 2)
+    maxPerIteration = max(min(4, fullTurns // 2), 1 * fullTurns // 2 - 1)
     if fastMode:
-        maxPerIteration = max(min(7, 3 * fullTurns // 4), 2 * fullTurns // 3)
+        maxPerIteration = max(min(7, 3 * fullTurns // 5 - 1), 1 * fullTurns // 2)
     # if slowMode:
     #     maxPerIteration = 2
 
@@ -701,6 +701,9 @@ def _knapsack_max_set_gather_iterative_prune(
                     )
                     liveRenderer.view_info.add_info_line(f' path {path}')
 
+            # if calculatedLeftOverTurns < remainingTurns - 1:
+            #     continue
+
             # if GatherDebug.USE_DEBUG_ASSERTS:
             #     # rootNodes = [gatherTreeNodeLookup[tile] for tile in origStartTilesDict]
             #     logEntries.append('doing recalc after adding to start dict')
@@ -756,9 +759,9 @@ def _knapsack_max_set_gather_iterative_prune(
             if itr.value > 1 and maxPerIteration > 1:
                 if fastMode:
                     # maxPerIteration = min(3 * maxPerIteration // 4, nextTurnsLeft // 2 + 1)
-                    maxPerIteration = 3 * maxPerIteration // 4 + 1
+                    maxPerIteration = 5 * maxPerIteration // 7 + 1
                 elif not slowMode:
-                    maxPerIteration = 4 * maxPerIteration // 5 + 1
+                    maxPerIteration = 3 * maxPerIteration // 5 + 1
                 else:
                     maxPerIteration = 1
 
@@ -780,6 +783,9 @@ def _knapsack_max_set_gather_iterative_prune(
                         # maxPerIteration = max(1, maxPerIteration // 2)
                         maxPerIteration = newIter
                         # pruneToTurns = lastPrunedTo + maxPerIteration
+
+            if maxPerIteration < 1:
+                maxPerIteration = 1
 
             pruneToTurns = lastPrunedTo + maxPerIteration
 
@@ -819,6 +825,7 @@ def _knapsack_max_set_gather_iterative_prune(
                 searchingPlayer=searchingPlayer,
                 valueMatrix=rewardMatrix,
                 armyCostMatrix=armyCostMatrix,
+                iteration=itr.value,
                 viewInfo=viewInfo,
                 noLog=not shouldLog and not GatherDebug.USE_DEBUG_ASSERTS,  # and not DebugHelper.IS_DEBUGGING
                 # gatherTreeNodeLookupToPrune=gatherTreeNodeLookup,
@@ -871,7 +878,7 @@ def prune_set_naive(
     start = time.perf_counter()
     pruned = []
     dcQueue = []
-
+    #
     # mean = 0.0
     # stdDev = 0.2
     # randShuffles = np.random.normal(mean, stdDev, len(toPrune)).tolist()
@@ -880,9 +887,10 @@ def prune_set_naive(
         if tile in rootTiles:
             continue
 
-        reconnectWeight = max(0.0, pruneReconnectCountMatrix.raw[tile.tile_index] - 2.5)
+        reconnectWeight = max(0.0, pruneReconnectCountMatrix.raw[tile.tile_index] - 1.5)
         # reconnectWeight *= reconnectWeight
         heapq.heappush(dcQueue, (valueMatrix.raw[tile.tile_index] + reconnectWeight, tile))
+        # heapq.heappush(dcQueue, (valueMatrix.raw[tile.tile_index] + reconnectWeight + randShuffles[i], tile))
 
         # heapq.heappush(dcQueue, (valueMatrix.raw[tile.tile_index] + randShuffles[i], tile))
         # heapq.heappush(dcQueue, (valueMatrix.raw[tile.tile_index], tile))
@@ -1182,6 +1190,7 @@ def prune_set_to_turns_and_reconnect_with_values(
         valueMatrix: MapMatrixInterface[float],
         armyCostMatrix: MapMatrixInterface[float],
         pruneReconnectCountMatrix: MapMatrixInterface[int],
+        iteration: int,
         skipTiles: TileSet | None = None,
         baseCaseFunc: typing.Callable[[Tile, int], typing.Tuple] | None = None,
         viewInfo: ViewInfo | None = None,
@@ -1233,7 +1242,7 @@ def prune_set_to_turns_and_reconnect_with_values(
             liveRenderer.view_info.add_targeted_tile(t, TargetStyle.ORANGE, radiusReduction=12)
 
     reconnectTargetTurns = desiredTotalNodes
-    if desiredTotalNodes / finalTargetTurns > 0.94:
+    if desiredTotalNodes / finalTargetTurns > 0.92 and iteration & 1 == 0:  #
         # very good outputs, poor runtime
         gathVal, rawArmy, reconnectedSubset = _reconnect_steiner_subprune(
             map,
@@ -1250,7 +1259,7 @@ def prune_set_to_turns_and_reconnect_with_values(
             tileDictToPrune,
             liveRenderer)
         logEntries.append(f'   steiner {len(reconnectedSubset)}')
-    elif desiredTotalNodes / finalTargetTurns > 0.80:
+    elif desiredTotalNodes / finalTargetTurns > 0.85 and iteration & 2 != 0:  #  and iteration & 2 != 0
         gathVal, rawArmy, reconnectedSubset = _reconnect_dynamic_find_forest(
             map,
             someRoot,
@@ -1361,8 +1370,11 @@ def _reconnect_steiner_subprune(
     @param liveRenderer:
     @return:
     """
-    steinerGraph = NetworkXHelpers.build_networkX_graph_flat_weight_mod_subtract(
-        map, valueMatrix, baseWeight=100, bannedTiles=skipTiles
+    # steinerGraph = NetworkXHelpers.build_networkX_graph_flat_weight_mod_subtract(
+    #     map, valueMatrix, baseWeight=1000, bannedTiles=skipTiles
+    # )
+    steinerGraph = NetworkXHelpers.build_networkX_graph_flat_weight_mod_scale(
+        map, valueMatrix, bannedTiles=skipTiles
     )
     reconnectedSubset = GatherSteiner.build_network_x_steiner_tree_from_arbitrary_nx_graph(map, steinerGraph, requiredTiles=toReconnect)
     reconnectionTiles = []
@@ -2263,18 +2275,24 @@ def gather_max_set_iterative_plan(
         renderLive=renderLive,
     )
 
-    rootTiles = {t for t in startTilesDict.keys()}
+    gcp: GatherCapturePlan | None = None
 
-    gcp = Gather.convert_contiguous_tile_tree_to_gather_capture_plan(
-        map,
-        rootTiles,
-        gathSet,
-        searchingPlayer=searchingPlayer,
-        priorityMatrix=valueMatrix,
-        useTrueValueGathered=True,
-        # valueMatrix=valueMatrix,  # TODO do econ value from value matrix, maybe? or something?
-    )
+    if gathSet:
+        rootTiles = {t for t in startTilesDict.keys()}
 
-    logbook.info(
-        f"Concluded gather_max_set_iterative_with_values with {itr.value} iterations. Gather turns {gcp.length}, value {totalValue}. Duration: {time.perf_counter() - startTime:.4f}")
+        gcp = Gather.convert_contiguous_tile_tree_to_gather_capture_plan(
+            map,
+            rootTiles,
+            gathSet,
+            searchingPlayer=searchingPlayer,
+            priorityMatrix=valueMatrix,
+            useTrueValueGathered=True,
+            # valueMatrix=valueMatrix,  # TODO do econ value from value matrix, maybe? or something?
+        )
+
+        logbook.info(
+            f"Concluded gather_max_set_iterative_with_values with {itr.value} iterations. Gather turns {gcp.length}, value {totalValue}. Duration: {time.perf_counter() - startTime:.4f}")
+    else:
+        logbook.info(
+            f"Concluded gather_max_set_iterative_with_values with {itr.value} iterations. NO GCP FOUND! Duration: {time.perf_counter() - startTime:.4f}")
     return gcp

@@ -1006,10 +1006,10 @@ class EklipZBot(object):
             with self.perf_timer.begin_move_event('TileIsland recalc'):
                 self.tileIslandBuilder.recalculate_tile_islands(self.targetPlayerExpectedGeneralLocation)
                 self._should_recalc_tile_islands = False
-        else:
-            with self.perf_timer.begin_move_event('TileIsland update'):
-                # TODO need to implement, lol
-                self.tileIslandBuilder.update_tile_islands(self.targetPlayerExpectedGeneralLocation)
+        # else:
+        #     with self.perf_timer.begin_move_event('TileIsland update'):
+        #         # TODO need to implement, lol
+        #         self.tileIslandBuilder.update_tile_islands(self.targetPlayerExpectedGeneralLocation)
 
         self.armyTracker.verify_player_tile_and_army_counts_valid()
 
@@ -1737,8 +1737,7 @@ class EklipZBot(object):
                         if lastMove.source.isCity:
                             self.cities_gathered_this_cycle.add(lastMove.source)
 
-    def select_move(self, is_lag_move=False):
-        start = time.perf_counter()
+    def select_move(self, is_lag_move=False) -> Move | None:
         self.init_turn()
 
         self.tiles_pinged_by_teammate_this_turn = set()
@@ -1780,6 +1779,9 @@ class EklipZBot(object):
         if not self.is_still_ffa_and_non_dominant():
             self.prune_timing_split_if_necessary()
 
+        return self.pick_move_after_prep(is_lag_move)
+
+    def pick_move_after_prep(self, is_lag_move=False):
         with self.perf_timer.begin_move_event('calculating general danger / threats'):
             self.calculate_general_danger()
 

@@ -70,7 +70,7 @@ def build_network_x_steiner_tree_from_arbitrary_nx_graph(map, g, requiredTiles) 
 def _build_pcst_tile_prize_matrix(
         map: MapBase,
         searchingPlayer: int,
-        rootTiles: typing.List[Tile],
+        rootTiles: typing.Iterable[Tile],
         negativeTiles: TileSet | None,
         prioritizeCaptureHighArmyTiles: bool,
         skipTiles: TileSet | None,
@@ -170,11 +170,11 @@ def get_prize_collecting_gather_mapmatrix_single_iteration(
 
     tIdxs = _pcst_iteration_internal(
         map,
-        costBasis=12.0,
+        costBasis=13.0,
         tilePrizeMatrix=prizes,
         tileExtraCostMatrix=None,
         skipTiles=skipTiles,
-        prizeOffset=3.0,
+        prizeOffset=4.0,
         rootTiles=rootTiles,
         fastMode=False,
     )
@@ -190,7 +190,7 @@ def get_prize_collecting_gather_mapmatrix(
         maxTurns: int | None = None,
         gatherMatrix: MapMatrixInterface[float] | None = None,
         captureMatrix: MapMatrixInterface[float] | None = None,
-        rootTiles: typing.List[Tile] | None = None,
+        rootTiles: typing.Iterable[Tile] | None = None,
         negativeTiles: TileSet | None = None,
         prioritizeCaptureHighArmyTiles: bool = False,
         skipTiles: TileSet | None = None,

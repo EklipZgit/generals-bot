@@ -957,7 +957,6 @@ def _knapsack_max_gather_iterative_prune(
                     logEntries,
                     rootNodes,
                     negativeTiles,
-                    origStartTilesDict,
                     searchingPlayer,
                     teams,
                     onlyCalculateFriendlyArmy=not useTrueValueGathered,
@@ -1028,6 +1027,9 @@ def _knapsack_max_gather_iterative_prune(
                         maxPerIteration = newIter
                         # pruneToTurns = lastPrunedTo + maxPerIteration
 
+            if maxPerIteration < 1:
+                maxPerIteration = 1
+
             pruneToTurns = lastPrunedTo + maxPerIteration
 
             # if len(newPaths) > 1:
@@ -1058,7 +1060,6 @@ def _knapsack_max_gather_iterative_prune(
                     logEntries,
                     rootNodes,
                     negativeTiles,
-                    newStartTilesDict,
                     searchingPlayer,
                     teams,
                     onlyCalculateFriendlyArmy=not useTrueValueGathered,
@@ -1448,7 +1449,7 @@ def knapsack_max_gather_with_values(
             realDist += 1
             prioVal = -100000
             if realDist > 0:
-                prioVal = 10000 + negGatheredSum / realDist + 0.01 * (realDist * realDist)
+                prioVal = 10000 + negGatheredSum / realDist + 0.05 * (realDist * realDist)
 
             prioObj = (
                 prioVal,
@@ -1607,7 +1608,6 @@ def knapsack_max_gather_with_values(
             [],
             rootNodes,
             negativeTilesOrig,
-            origStartTilesDict,
             searchingPlayer=searchingPlayer,
             teams=teams,
             onlyCalculateFriendlyArmy=not useTrueValueGathered,

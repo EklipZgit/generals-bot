@@ -857,6 +857,10 @@ def _knapsack_levels_gather_iterative_prune(
 
             if perIterationFunc is not None:
                 perIterationFunc(newStartTilesDict)
+            if itr.value > 200:
+                logbook.warn(f'pre-inf loop   :( fullTurns {fullTurns}, turnsSoFar {turnsSoFar}, turnsToGather {turnsToGather}, lastPrunedTo {lastPrunedTo}')
+            if itr.value > 250:
+                raise Exception(f'Infinite looped :( fullTurns {fullTurns}, turnsSoFar {turnsSoFar}, turnsToGather {turnsToGather}, lastPrunedTo {lastPrunedTo}')
 
             newGatheredArmy, newPaths = _get_sub_knapsack_gather(
                 map,
@@ -932,7 +936,6 @@ def _knapsack_levels_gather_iterative_prune(
                     logEntries,
                     rootNodes,
                     negativeTiles,
-                    origStartTilesDict,
                     searchingPlayer,
                     teams,
                     onlyCalculateFriendlyArmy=not useTrueValueGathered,
@@ -1003,6 +1006,9 @@ def _knapsack_levels_gather_iterative_prune(
                         maxPerIteration = newIter
                         # pruneToTurns = lastPrunedTo + maxPerIteration
 
+            if maxPerIteration < 1:
+                maxPerIteration = 1
+
             pruneToTurns = lastPrunedTo + maxPerIteration
 
             # if len(newPaths) > 1:
@@ -1032,7 +1038,6 @@ def _knapsack_levels_gather_iterative_prune(
                     logEntries,
                     rootNodes,
                     negativeTiles,
-                    newStartTilesDict,
                     searchingPlayer,
                     teams,
                     onlyCalculateFriendlyArmy=not useTrueValueGathered,
@@ -1639,7 +1644,6 @@ def knapsack_depth_gather_with_values(
             [],
             rootNodes,
             negativeTilesOrig,
-            origStartTilesDict,
             searchingPlayer=searchingPlayer,
             teams=teams,
             onlyCalculateFriendlyArmy=not useTrueValueGathered,

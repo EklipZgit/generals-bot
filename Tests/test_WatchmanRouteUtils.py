@@ -11,7 +11,6 @@ from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
 from ViewInfo import TargetStyle, PathColorer
 from base.client.map import MapBase
-from base.client.tile import TILE_MOUNTAIN, TILE_EMPTY
 from bot_ek0x45 import EklipZBot
 
 

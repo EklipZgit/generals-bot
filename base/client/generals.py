@@ -23,6 +23,8 @@ from . import map
 from .map import MapBase
 
 _ENDPOINT_BOT = "://botws.generals.io/socket.io/?EIO=4"
+_ENDPOINT_LOCAL = "://localhost:8080/socket.io/?EIO=4"
+_ENDPOINT_BOT = _ENDPOINT_LOCAL
 _ENDPOINT_PUBLIC = "://ws.generals.io/socket.io/?EIO=4"
 
 _LOG_WS = False
@@ -169,10 +171,10 @@ class GeneralsClient(object):
         logbook.debug("Starting heartbeat thread")
 
     def get_endpoint_ws(self):
-        return "wss" + (_ENDPOINT_BOT if not self.public_server else _ENDPOINT_PUBLIC) + "&transport=websocket"
+        return "ws" + (_ENDPOINT_BOT if not self.public_server else _ENDPOINT_PUBLIC) + "&transport=websocket"
 
     def get_endpoint_requests(self):
-        return "https" + (_ENDPOINT_BOT if not self.public_server else _ENDPOINT_PUBLIC) + "&transport=polling"
+        return "http" + (_ENDPOINT_BOT if not self.public_server else _ENDPOINT_PUBLIC) + "&transport=polling"
 
     def get_sid(self):
         request = requests.get(self.get_endpoint_requests() + "&t=ObyKmaZ", verify=False)

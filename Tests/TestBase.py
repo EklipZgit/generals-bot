@@ -1,4 +1,6 @@
 import itertools
+import os
+import pathlib
 import sys
 from collections import deque
 
@@ -25,6 +27,7 @@ from Behavior.ArmyInterceptor import ArmyInterception, ArmyInterceptor, Intercep
 from BehaviorAlgorithms.IterativeExpansion import FlowExpansionPlanOption, IslandFlowNode, ArmyFlowExpander, IslandMaxFlowGraph
 from BoardAnalyzer import BoardAnalyzer
 from DangerAnalyzer import ThreatType, ThreatObj
+from Gather import GatherCapturePlan
 from Models import Move
 from DistanceMapperImpl import DistanceMapperImpl
 from Interfaces import MapMatrixInterface
@@ -112,7 +115,7 @@ class TestBase(unittest.TestCase):
     def load_map_and_general_from_string(
             self,
             rawMapDataString: str,
-            turn: int,
+            turn: int | None = None,
             player_index: int = -1,
             respect_undiscovered: bool = False
     ) -> typing.Tuple[MapBase, Tile]:
@@ -125,6 +128,8 @@ class TestBase(unittest.TestCase):
 
         map = self.get_test_map(board, turn=turn, dont_set_seen_visible_discovered=respect_undiscovered, num_players=numPlayers)
         TextMapLoader.load_map_data_into_map(map, data)
+        if turn is not None:
+            map.turn = turn
         general = next(t for t in map.pathable_tiles if t.isGeneral and (t.player == player_index or player_index == -1))
         map.player_index = general.player
         map.friendly_team = map.team_ids_by_player_index[general.player]
@@ -135,7 +140,7 @@ class TestBase(unittest.TestCase):
 
         return map, general
 
-    def load_map_and_general(self, mapFilePath: str, turn: int, player_index: int = -1, respect_undiscovered: bool = False) -> typing.Tuple[MapBase, Tile]:
+    def load_map_and_general(self, mapFilePath: str, turn: int | None = None, player_index: int = -1, respect_undiscovered: bool = False) -> typing.Tuple[MapBase, Tile]:
         try:
             if player_index == -1:
                 gameData = TextMapLoader.load_data_from_file(mapFilePath)
@@ -150,7 +155,7 @@ class TestBase(unittest.TestCase):
     def load_map_and_generals(
             self,
             mapFilePath: str,
-            turn: int,
+            turn: int | None = None,
             player_index: int = -1,
             fill_out_tiles: bool = False,
             respect_player_vision: bool = False
@@ -161,7 +166,7 @@ class TestBase(unittest.TestCase):
     def load_map_and_generals_2v2(
             self,
             mapFilePath: str,
-            turn: int,
+            turn: int | None = None,
             player_index: int = -1,
             fill_out_tiles: bool = False,
             respect_player_vision: bool = False
@@ -172,7 +177,7 @@ class TestBase(unittest.TestCase):
     def load_map_and_generals_2v2_from_string(
             self,
             rawMapStr: str,
-            turn: int,
+            turn: int | None = None,
             player_index: int = -1,
             fill_out_tiles=False,
             respect_player_vision: bool = False
@@ -207,7 +212,7 @@ class TestBase(unittest.TestCase):
     def load_map_and_generals_from_string(
             self,
             rawMapStr: str,
-            turn: int,
+            turn: int | None = None,
             player_index: int = -1,
             fill_out_tiles=False,
             respect_player_vision: bool = False
@@ -397,7 +402,7 @@ class TestBase(unittest.TestCase):
             tile.player = army.player
             ent.expectedPaths = ArmyTracker.get_army_expected_path(bot._map, army, bot.general, bot.armyTracker.player_targets)
 
-    def get_test_map(self, tiles: typing.List[typing.List[Tile]], turn: int = 1, player_index: int = 0, dont_set_seen_visible_discovered: bool = False, num_players: int = -1) -> MapBase:
+    def get_test_map(self, tiles: typing.List[typing.List[Tile]], turn: int | None = None, player_index: int = 0, dont_set_seen_visible_discovered: bool = False, num_players: int = -1) -> MapBase:
         self._initialize()
         figureOutPlayerCount = num_players == -1
         num_players = max(num_players, 2)
@@ -417,6 +422,8 @@ class TestBase(unittest.TestCase):
         fakeScores = [Score(n, 1, 1, False) for n in range(0, num_players)]
 
         usernames = [c for c, idx in TextMapLoader.get_player_char_index_map()]
+        if turn is None:
+            turn = 1
 
         map = MapBase(player_index=player_index, teams=None, user_names=usernames[0:num_players], turn=turn, map_grid_y_x=tiles, replay_url='42069')
         map.update_scores(fakeScores)
@@ -2159,3 +2166,102 @@ class TestBase(unittest.TestCase):
         threat = ThreatObj(path.length - 1, path.value, path, threatType, saveTile, analysis)
 
         return threat
+
+    def execute_with_random_maps(
+            self,
+            runCount: int,
+            runEach: typing.Callable[[MapBase, Tile, Tile, str], None],
+            mapSkipFilterer: typing.Callable[[MapBase, Tile, Tile], bool] | None = None
+    ):
+        projRoot = pathlib.Path(__file__).parent
+        folderWithHistoricals = projRoot / f'../Tests/GameContinuationEntries/'
+        files = os.listdir(folderWithHistoricals)
+        # joined = '\n'.join(files)
+        # logbook.info(f'files:\n{joined}')
+
+        successRuns = 0
+        while successRuns < runCount:
+            file = random.choice(files)
+            if 'TagXHz0X4-' in file:
+                continue
+            try:
+                map, general, enemyGeneral = self.load_map_and_generals(f'GameContinuationEntries/{file}')
+            except Exception as ex:
+                logbook.warn(f'failed to load map {file}: {ex}')
+                continue
+
+            if mapSkipFilterer and mapSkipFilterer(map, general, enemyGeneral):
+                logbook.info(f'skipped {file} due to mapSkipFilterer True')
+                continue
+
+            # playerMap =
+
+            successRuns += 1
+            runEach(map, general, enemyGeneral, file)
+
+    def execute_with_shuffled_tiles_on_maps(
+            self,
+            runCount: int,
+            frTileCountLimit: int,
+            runEach: typing.Callable[[MapBase, Tile, Tile, str], None],
+            mapSkipFilterer: typing.Callable[[MapBase, Tile, Tile], bool] | None = None,
+            shuffleMax: int | None = None,
+            numFrEnToSwap: int = 5
+    ):
+        def mapFilterer(map: MapBase, general: Tile, enemyGeneral: Tile) -> bool:
+            if map.players[general.player].tileCount < frTileCountLimit:
+                return True
+            if enemyGeneral is None:
+                return True
+            if mapSkipFilterer is not None and mapSkipFilterer(map, general, enemyGeneral):
+                return True
+
+            return False
+
+        def mapShuffler(map: MapBase, general: Tile, enemyGeneral: Tile, mapFileName: str):
+            frTiles = map.players[general.player].tiles
+
+            enTiles = map.players[enemyGeneral.player].tiles
+
+            shuffleCount = len(frTiles) if shuffleMax is None else shuffleMax
+
+            for i in range(shuffleCount):
+                tile1, tile2 = random.choices(frTiles, k=2)
+
+                tile1.army, tile2.army = tile2.army, tile1.army
+
+            shuffleCount = len(enTiles) if shuffleMax is None else shuffleMax
+            for i in range(shuffleCount):
+                tile1, tile2 = random.choices(enTiles, k=2)
+
+                tile1.army, tile2.army = tile2.army, tile1.army
+
+            frEnSwapped = 0
+            while frEnSwapped < numFrEnToSwap:
+                frTile = random.choice(frTiles)
+                if frTile.isGeneral:
+                    continue
+
+                enTile = random.choice(enTiles)
+                if enTile.isGeneral:
+                    continue
+
+                map.players[general.player].tiles.remove(frTile)
+                map.players[enemyGeneral.player].tiles.remove(enTile)
+
+                map.players[general.player].tiles.append(enTile)
+                map.players[enemyGeneral.player].tiles.append(frTile)
+
+                enTile.player = general.player
+                frTile.player = enemyGeneral.player
+
+                frTile.army, enTile.army = enTile.army, frTile.army
+
+                frEnSwapped += 1
+
+            runEach(map, general, enemyGeneral, mapFileName)
+
+        self.execute_with_random_maps(runCount, mapShuffler, mapFilterer)
+
+
+

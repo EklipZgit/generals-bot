@@ -404,7 +404,6 @@ def greedy_backpack_gather_values(
         [],
         rootNodes,
         negativeTilesOrig,
-        origStartTiles,
         searchingPlayer=searchingPlayer,
         teams=teams,
         onlyCalculateFriendlyArmy=not useTrueValueGathered,
@@ -472,7 +471,6 @@ def convert_contiguous_capture_tiles_to_gather_capture_plan(
     #     logs,
     #     rootNodes,
     #     negativeTiles,
-    #     startTilesDict={},
     #     searchingPlayer=searchingPlayer,
     #     teams=MapBase.get_teams_array(map),
     #     priorityMatrix=priorityMatrix,
@@ -1257,7 +1255,7 @@ def build_gather_capture_pure_value_matrix(
 
 def gather_approximate_turns_to_tiles(
         map: MapBase,
-        rootTiles: typing.List[Tile],
+        rootTiles: typing.Iterable[Tile],
         approximateTargetTurns: int,
         asPlayer: int = -1,
         maxTurns: int = 2000,

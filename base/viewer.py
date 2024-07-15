@@ -531,6 +531,17 @@ class GeneralsViewer(object):
                         pygame.draw.rect(self._screen, color,
                                          [pos_left, pos_top + self.plusDepth, self.cellWidth,
                                           self.cellHeight - self.plusDepth * 2])
+                    elif tile.isLookout:
+                        # Draw horizontal rect
+                        pygame.draw.rect(self._screen, color,
+                                         [pos_left + self.plusDepth, pos_top, self.cellWidth - self.plusDepth * 2,
+                                          self.cellHeight])
+
+                    elif tile.isObservatory:
+                        # Draw vertical rect
+                        pygame.draw.rect(self._screen, color,
+                                         [pos_left, pos_top + self.plusDepth, self.cellWidth,
+                                          self.cellHeight - self.plusDepth * 2])
                     elif tile.isCity:  # City
                         # Draw Circle
                         pos_left_circle = int(pos_left + (self.cellWidth / 2))
@@ -1300,7 +1311,11 @@ class GeneralsViewer(object):
     def get_tile_color(self, tile) -> typing.Tuple[int, int, int]:
         pColor = WHITE
 
-        if tile.isMountain:  # Mountain
+        if tile.isLookout:  # Lookout
+            pColor = NEUT_CITY_GRAY
+        elif tile.isObservatory:  # Observatory
+            pColor = NEUT_CITY_GRAY
+        elif tile.isMountain:  # Mountain
             pColor = BLACK
         elif tile.player >= 0:
             playercolor = PLAYER_COLORS[tile.player]
@@ -1426,60 +1441,60 @@ class GeneralsViewer(object):
         for teamScore, teamCycleData in statsSorted:
             if teamCycleData is None:
                 continue
-            players = []
+            teamPlayers = []
 
             for p in teamCycleData.players:
-                player = self._map.players[p]
-                players.append(player)
+                teamPlayer = self._map.players[p]
+                teamPlayers.append(teamPlayer)
 
             team_pos_left = pos_left
 
-            players = sorted(players, key=lambda p: (p.score, p.leftGameTurn), reverse=True)
-            for i, player in enumerate(players):
-                if player is None:
+            teamPlayers = sorted(teamPlayers, key=lambda p: (p.score, p.leftGameTurn), reverse=True)
+            for playerIndexInTeam, teamPlayer in enumerate(teamPlayers):
+                if teamPlayer is None:
                     continue
 
-                score_color = PLAYER_COLORS[player.index]
-                if player.leftGame:
+                score_color = PLAYER_COLORS[teamPlayer.index]
+                if teamPlayer.leftGame:
                     # make them 70% black after leaving game
                     score_color = Utils.rescale_color(0.6, 0, 1.0, score_color, GRAY)
 
                 curScoreWidth = alive_score_width
-                if player.dead:
+                if teamPlayer.dead:
                     score_color = GRAY_DARK
                     curScoreWidth = dead_score_width
 
                 pygame.draw.rect(self._screen, score_color, [pos_left, pos_top, curScoreWidth, self.scoreRowHeight])
 
-                if player.fighting_with_player >= 0:
-                    otherPlayerColor = PLAYER_COLORS[player.fighting_with_player]
+                if teamPlayer.fighting_with_player >= 0:
+                    otherPlayerColor = PLAYER_COLORS[teamPlayer.fighting_with_player]
                     desiredHeight = self.cellHeight // 5
                     pygame.draw.rect(self._screen, otherPlayerColor,[pos_left, pos_top + self.scoreRowHeight - desiredHeight, curScoreWidth, desiredHeight])
 
-                if self._viewInfo.targetPlayer == player.index:
+                if self._viewInfo.targetPlayer == teamPlayer.index:
                     pygame.draw.rect(self._screen, GRAY,
                                      [pos_left, pos_top, curScoreWidth, self.scoreRowHeight], 1)
-                userName = self._map.usernames[player.index]
-                userString = f"({player.stars}) {userName}"
+                userName = self._map.usernames[teamPlayer.index]
+                userString = f"({teamPlayer.stars}) {userName}"
                 try:
                     self._screen.blit(self._medFont.render(userString, True, WHITE),
                                       (pos_left + 3, pos_top + 1))
                 except:
-                    userString = f"({player.stars}) INVALID_NAME"
+                    userString = f"({teamPlayer.stars}) INVALID_NAME"
                     self._screen.blit(self._medFont.render(userString, True, WHITE),
                                       (pos_left + 3, pos_top + 1))
 
-                playerSubtext = f"{player.score} {player.tileCount}t {player.cityCount}c ({player.tileCount + player.cityCount * 25})"
-                if player.index != self._map.player_index and len(self._viewInfo.playerTargetScores) > 0:
-                    playerSubtext += f"   {player.aggression_factor}a"
-                if self._map.remainingPlayers > 2 and player.index != self._map.player_index and len(
+                playerSubtext = f"{teamPlayer.score} {teamPlayer.tileCount}t {teamPlayer.cityCount}c ({teamPlayer.tileCount + teamPlayer.cityCount * 25})"
+                if teamPlayer.index != self._map.player_index and len(self._viewInfo.playerTargetScores) > 0:
+                    playerSubtext += f"   {teamPlayer.aggression_factor}a"
+                if self._map.remainingPlayers > 2 and teamPlayer.index != self._map.player_index and len(
                         self._viewInfo.playerTargetScores) > 0:
-                    playerSubtext += f" {int(self._viewInfo.playerTargetScores[player.index])}ts"
+                    playerSubtext += f" {int(self._viewInfo.playerTargetScores[teamPlayer.index])}ts"
                 self._screen.blit(self._medFont.render(playerSubtext, True, WHITE),
                                   (pos_left + 3, pos_top + 1 + self._medFont.get_height()))
 
-                if not self._map.is_player_on_team_with(player.index, self._map.player_index):
-                    playerFogTiles = self._viewInfo.player_fog_tile_counts.get(player.index, None)
+                if not self._map.is_player_on_team_with(teamPlayer.index, self._map.player_index):
+                    playerFogTiles = self._viewInfo.player_fog_tile_counts.get(teamPlayer.index, None)
                     if playerFogTiles is not None:
                         toJoin = []
                         numFog = 0
@@ -1488,28 +1503,29 @@ class GeneralsViewer(object):
                             numFog += n
 
                         playerFogSubtext = " | ".join(toJoin)
-                        visCount = SearchUtils.count(player.tiles, lambda t: t.visible)
+                        visCount = SearchUtils.count(teamPlayer.tiles, lambda t: t.visible)
                         playerFogSubtext += f'  ({numFog} fog, {visCount} vis)'
                         self._screen.blit(self._medFont.render(playerFogSubtext, True, WHITE),
                                           (pos_left + 3, pos_top + 2 + 2 * self._medFont.get_height()))
 
-                playerSubSubtext = f"eΔ{player.expectedScoreDelta:+d}".ljust(8) + f"Δ{player.actualScoreDelta:+d}"
+                playerSubSubtext = f"eΔ{teamPlayer.expectedScoreDelta:+d}".ljust(8) + f"Δ{teamPlayer.actualScoreDelta:+d}"
                 self._screen.blit(self._medFont.render(playerSubSubtext, True, WHITE),
                                   (pos_left + 3, pos_top + 2 + 3 * self._medFont.get_height()))
 
                 pos_left = pos_left + curScoreWidth
 
-            for i, player in enumerate(players):
-                if player is None:
+            for playerIndexInTeam, teamPlayer in enumerate(teamPlayers):
+                if teamPlayer is None:
                     continue
 
-                if i == 0:
+                if playerIndexInTeam == 0:
                     approxArmy = teamCycleData.approximate_fog_city_army + teamCycleData.approximate_fog_army_available_total
                     gathMoves = teamCycleData.moves_spent_gathering_fog_tiles + teamCycleData.moves_spent_gathering_visible_tiles
                     capMoves = teamCycleData.moves_spent_capturing_fog_tiles + teamCycleData.moves_spent_capturing_visible_tiles
+                    risk = self._viewInfo.player_fog_risks[teamPlayer.index]
 
                     # only draw team score data once
-                    playerCycleSubtext = f"{str(approxArmy).ljust(3)}  g:{teamCycleData.approximate_army_gathered_this_cycle:3d}  Δt:{teamCycleData.tiles_gained:2d}  Δc:{teamCycleData.cities_gained:d}   a:{teamCycleData.approximate_fog_army_available_total:3d}/c:{teamCycleData.approximate_fog_city_army:2d} (tru:{teamCycleData.approximate_fog_army_available_total_true:3d})"
+                    playerCycleSubtext = f"{str(risk).ljust(3)}  g:{teamCycleData.approximate_army_gathered_this_cycle:3d}  Δt:{teamCycleData.tiles_gained:2d}  Δc:{teamCycleData.cities_gained:d}   a:{teamCycleData.approximate_fog_army_available_total:3d}/c:{teamCycleData.approximate_fog_city_army:2d} (tru:{teamCycleData.approximate_fog_army_available_total_true:3d}), cum {approxArmy}"
                     self._screen.blit(self._medFont.render(playerCycleSubtext, True, WHITE),
                                       (team_pos_left + 3, pos_top + 2 + 3.9 * self._medFont.get_height()))
                     playerCycleSubtext = f"MV: g{gathMoves}/c{capMoves}  fcap:{teamCycleData.moves_spent_capturing_fog_tiles:2d}  vcap:{teamCycleData.moves_spent_capturing_visible_tiles:2d}  fg:{teamCycleData.moves_spent_gathering_fog_tiles:2d}  vg:{teamCycleData.moves_spent_gathering_visible_tiles:2d}"

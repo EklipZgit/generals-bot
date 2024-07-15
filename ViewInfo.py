@@ -74,6 +74,7 @@ class ViewInfo(object):
         self.team_cycle_stats: typing.Dict[int, CycleStatsData] = {}
         self.team_last_cycle_stats: typing.Dict[int, CycleStatsData] = {}
         self.player_fog_tile_counts: typing.Dict[int, typing.Dict[int, int]] = {}
+        self.player_fog_risks: typing.List[int] = []
         self.generalApproximations: typing.List[typing.Tuple[float, float, int, Tile | None]] = []
         """
         List of general location approximation data as averaged by enemy tiles bordering undiscovered and euclid averaged.

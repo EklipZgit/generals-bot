@@ -81,23 +81,6 @@ class EarlyExpandUtilsTests(TestBase):
         value = EarlyExpandUtils.get_start_expand_captures(map, general, general.army, map.turn, paths, noLog=False)
         self.assertEqual(plan.tile_captures, value)
 
-    def get_tiles_capped_on_50_count_and_reset_map(self, map, general, toTurn: int = 1) -> int:
-        playerTilesToMatchOrExceed = SearchUtils.count(map.pathable_tiles, lambda t: t.player == general.player)
-        map.turn = toTurn
-        for tile in map.pathable_tiles:
-            if tile.isGeneral:
-                tile.army = 1 + toTurn // 2
-            else:
-                tile.army = 0
-                tile.player = -1
-                # tile.reset_wrong_undiscovered_fog_guess()
-
-        map.update()
-
-        EarlyExpandUtils.DEBUG_ASSERTS = True
-
-        return playerTilesToMatchOrExceed
-
     def render_expansion_plan(self, map: MapBase, plan: EarlyExpandUtils.CityExpansionPlan):
         self.render_paths(map, plan.plan_paths, f'{str(plan.tile_captures)}')
 

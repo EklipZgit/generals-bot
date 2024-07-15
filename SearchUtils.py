@@ -170,6 +170,15 @@ def dest_breadth_first_target(
     if searchingPlayer == -2:
         searchingPlayer = map.player_index
 
+    if map.teammates:
+        if skipTiles:
+            skipTiles = skipTiles.copy()
+        else:
+            skipTiles = set()
+        for tId in map.teammates:
+            if map.generals[tId] and map.generals[tId].isGeneral and map.generals[tId].player == tId:
+                skipTiles.add(map.generals[tId])
+
     frontier = HeapQueue()
     visited = [[None for _ in range(map.rows)] for _ in range(map.cols)]
     if isinstance(goalList, dict):
@@ -4394,6 +4403,7 @@ def euclidean_distance(v: Tile, goal: Tile) -> float:
     """Not fast, does square root"""
 
     return ((v.x - goal.x)**2 + (v.y - goal.y)**2)**0.5
+
 
 def bidirectional_a_star_pq(start: Tile, goal: Tile, allowNeutralCities: bool = False) -> Path | None:
     """

@@ -1,8 +1,14 @@
+import os
+import pathlib
+import random
 import time
 import typing
 
+import logbook
+
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
+from ViewInfo import TargetStyle
 from bot_ek0x45 import EklipZBot
 
 
@@ -396,7 +402,7 @@ class GeneralPredictionTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
-        self.assertTrue(bot.euclidDist(17, 7, bot.targetPlayerExpectedGeneralLocation.x, bot.targetPlayerExpectedGeneralLocation.y) < 5, 'should pick somewhere pretty central to the players tile-mass')
+        self.assertTrue(bot._map.euclidDist(17, 7, bot.targetPlayerExpectedGeneralLocation.x, bot.targetPlayerExpectedGeneralLocation.y) < 5, 'should pick somewhere pretty central to the players tile-mass')
 
     def test_should_not_over_emerge_initial_trail(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -546,7 +552,7 @@ class GeneralPredictionTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
-        self.assertLess(bot.euclidDist(7, 4, bot.targetPlayerExpectedGeneralLocation.x, bot.targetPlayerExpectedGeneralLocation.y), 4)
+        self.assertLess(bot._map.euclidDist(7, 4, bot.targetPlayerExpectedGeneralLocation.x, bot.targetPlayerExpectedGeneralLocation.y), 4)
 
     def test_should_not_prune_top_map_just_because_fog_discovered_neutral_previously(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1144,6 +1150,69 @@ class GeneralPredictionTests(TestBase):
                 for tile in tilesAllowedIndexedByGenArmy[generalArmy:]:
                     self.assertInvalidGeneralPosition(bot, tile)
 
+    def test_doesnt_over_limit_optimal_starts(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        projRoot = pathlib.Path(__file__).parent
+        folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
+        files = os.listdir(folderWithHistoricals)
+        joined = '\n'.join(files)
+        self.begin_capturing_logging()
+        logbook.info(f'files:\n{joined}')
+        for file in files:
+            map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=51)
+            enPlayer = (general.player + 1) & 1
+            if len(map.players[enPlayer].tiles) > 0:
+                continue
+            tileCount = map.players[general.player].tileCount
+            # if tileCount != 25:
+            #     continue
+
+            with self.subTest(file=file.replace('.', '_')):
+                bot = self.verify_not_overlimiting_known_starts(debugMode, enPlayer, file)
+                if not bot:
+                    self.skipTest('error')
+                else:
+                    self.assertTrue(bot.armyTracker.valid_general_positions_by_player[general.player][general])
+
+    def test_doesnt_over_limit_optimal_starts__specific_map(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        file = 're6H49cT3.txtmap'
+        # file = 'BeaCFkX3h.txtmap'
+
+        map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=51)
+        enPlayer = (general.player + 1) & 1
+
+        self.begin_capturing_logging()
+        bot = self.verify_not_overlimiting_known_starts(debugMode, enPlayer, file)
+        if not bot:
+            self.skipTest('error')
+        else:
+            self.assertTrue(bot.armyTracker.valid_general_positions_by_player[general.player][general])
+
+    def verify_not_overlimiting_known_starts(self, debugMode, enPlayer, file):
+        map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=51)
+        enemyGeneral = self.get_furthest_tile_from_general(map, general, manhattan=True)
+        enemyGeneral.player = enPlayer
+        enemyGeneral.isGeneral = True
+        enemyGeneral.army = 10
+        enemyGeneral.isMountain = False
+        map.generals[enPlayer] = enemyGeneral
+        msg = f'TOTAL COUNT {len(map.players[general.player].tiles)} ({map.players[general.player].tileCount})'
+        # playerTilesToMatchOrExceed = self.get_tiles_capped_on_50_count_and_reset_map(map, general, toTurn=1)
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        try:
+            simHost = GameSimulatorHost(map, player_with_viewer=enemyGeneral.player, playerMapVision=map, allAfkExceptMapPlayer=False)
+            bot = self.get_debug_render_bot(simHost, enemyGeneral.player)
+            bot.armyTracker.limit_player_spawn_by_good_start(bot._map.players[general.player], general)
+            for t in map.players[general.player].tiles:
+                bot.viewInfo.add_targeted_tile(t, TargetStyle.GREEN)
+            bot.viewInfo.add_targeted_tile(general, TargetStyle.PURPLE)
+            bot.viewInfo.add_info_line(msg)
+            if debugMode:
+                simHost.run_sim(debugMode, 0.25, 1)
+            return bot
+        except:
+            return None
 
 # 11f, 65p
 # 7f, 72p

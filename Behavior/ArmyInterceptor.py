@@ -397,7 +397,7 @@ class ArmyInterceptor(object):
 
     def _build_shared_chokes(
             self,
-            potentialSharedChokes: typing.Concatenate[typing.Iterable[Tile], typing.Container[Tile]],
+            potentialSharedChokes: typing.Set[Tile],
             commonMaxExtraMoves: typing.Dict[Tile, int],
             commonMinDelayTurns: typing.Dict[Tile, int],
             threats: typing.List[ThreatValueInfo]
@@ -964,7 +964,7 @@ class ArmyInterceptor(object):
             euclidIntDist = 5
             if currentDist in positionsByTurn:
                 (x, y) = positionsByTurn[currentDist]
-                euclidIntDist = ((x - tile.x)**2 + (y - tile.y)**2) ** 0.5
+                euclidIntDist = self.map.euclidDist(x, y, tile.x, tile.y)
 
             for adj in tile.movable:
                 intInf = interception.common_intercept_chokes.get(adj, None)
@@ -974,7 +974,7 @@ class ArmyInterceptor(object):
                 euclidAltIntDist = 5
                 if altDist in positionsByTurn:
                     (altX, altY) = positionsByTurn[altDist]
-                    euclidAltIntDist = ((altX - adj.x)**2 + (altY - adj.y)**2) ** 0.5
+                    euclidAltIntDist = self.map.euclidDist(altX, altY, adj.x, adj.y)
 
                 # TODO there is no way this is right but it already makes more tests pass than did before...?
                 if intInf.max_search_dist - euclidIntDist < depth - euclidAltIntDist:
@@ -1085,7 +1085,8 @@ class ArmyInterceptor(object):
             distTuple = positionsByTurn.get(dist, None)
             if distTuple:
                 approxPosX, approxPosY = distTuple
-                euclidIntDist = (approxPosX - nextTile.x)**2 + (approxPosY - nextTile.y)**2
+                # TODO this can exclude the sqrt part of euclid...
+                euclidIntDist = self.map.euclidDist(approxPosX, approxPosY, nextTile.x, nextTile.y)
             else:
                 pass
 

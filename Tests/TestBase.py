@@ -732,15 +732,25 @@ class TestBase(unittest.TestCase):
 
         map.update()
 
-    def get_furthest_tile_from_general(self, map: MapBase, general: Tile) -> Tile:
-        distMap = SearchUtils.build_distance_map_matrix(map, [general])
+    def get_furthest_tile_from_general(self, map: MapBase, general: Tile, manhattan: bool = False) -> Tile:
         maxDist = 0
         furthestTile: Tile | None = None
+
+        if manhattan:
+            for tile in map.pathable_tiles:
+                dist = map.manhattan_dist(tile, general)
+                if dist > maxDist:
+                    maxDist = dist
+                    furthestTile = tile
+            return furthestTile
+
+        distMap = SearchUtils.build_distance_map_matrix(map, [general])
         for tile in map.pathable_tiles:
             tileDist = distMap[tile]
             if tileDist > maxDist:
                 maxDist = tileDist
                 furthestTile = tile
+
         return furthestTile
 
     def reset_map_with_enemy_general_discovered_and_gen_as_p0(self, map: MapBase, general: Tile) -> Tile:
@@ -2167,6 +2177,23 @@ class TestBase(unittest.TestCase):
 
         return threat
 
+    def get_tiles_capped_on_50_count_and_reset_map(self, map, general, toTurn: int = 1) -> int:
+        playerTilesToMatchOrExceed = SearchUtils.count(map.pathable_tiles, lambda t: t.player == general.player)
+        map.turn = toTurn
+        for tile in map.pathable_tiles:
+            if tile.isGeneral:
+                tile.army = 1 + toTurn // 2
+            else:
+                tile.army = 0
+                tile.player = -1
+                # tile.reset_wrong_undiscovered_fog_guess()
+
+        map.update()
+
+        EarlyExpandUtils.DEBUG_ASSERTS = True
+
+        return playerTilesToMatchOrExceed
+
     def execute_with_random_maps(
             self,
             runCount: int,
@@ -2180,6 +2207,7 @@ class TestBase(unittest.TestCase):
         # logbook.info(f'files:\n{joined}')
 
         successRuns = 0
+        mapsRun = set()
         while successRuns < runCount:
             file = random.choice(files)
             if 'TagXHz0X4-' in file:
@@ -2194,10 +2222,15 @@ class TestBase(unittest.TestCase):
                 logbook.info(f'skipped {file} due to mapSkipFilterer True')
                 continue
 
+            mapsRun.add(file)
+
             # playerMap =
 
             successRuns += 1
             runEach(map, general, enemyGeneral, file)
+
+        mapList = "\r\n    ".join(mapsRun)
+        logbook.info(f'maps used: \r\n    {mapList}')
 
     def execute_with_shuffled_tiles_on_maps(
             self,
@@ -2237,7 +2270,12 @@ class TestBase(unittest.TestCase):
                 tile1.army, tile2.army = tile2.army, tile1.army
 
             frEnSwapped = 0
+            iterations = 0
             while frEnSwapped < numFrEnToSwap:
+                iterations += 1
+                if iterations > 1000:
+                    logbook.error(f'uh, infinite looped swapping tiles lol')
+                    break
                 frTile = random.choice(frTiles)
                 if frTile.isGeneral:
                     continue

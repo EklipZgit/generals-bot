@@ -564,7 +564,7 @@ def build_mst_from_root_and_contiguous_tiles(map: MapBase, rootTiles: typing.Ite
             q.append((tile, fromTile, fromNode, fromDepth))
             break
 
-        newNode = GatherTreeNode(tile, fromTile)
+        newNode = GatherTreeNode(tile, None)
         rootNodes.append(newNode)
         visited.raw[tile.tile_index] = True
 

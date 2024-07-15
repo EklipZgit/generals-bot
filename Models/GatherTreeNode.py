@@ -77,18 +77,26 @@ class GatherTreeNode(typing.Generic[T]):
         for child in self.children:
             child.toGather = self
 
-    def deep_clone(self):
+    def deep_clone(self, dupeAssertionCache=None):
+        if dupeAssertionCache is None:
+            dupeAssertionCache = {}
+
+        if self.tile in dupeAssertionCache:
+            raise Exception(f'{self.tile} was part of a cycle in GatherTreeNode deep clone... toTile {self.toTile}, self.children {" | ".join([str(c.tile) for c in self.children])}')
+
+        dupeAssertionCache[self.tile] = self.tile
+
         newNode = GatherTreeNode(self.tile, self.toTile, self.stateObj)
         newNode.value = self.value
         newNode.trunkValue = self.trunkValue
         newNode.gatherTurns = self.gatherTurns
         newNode.trunkDistance = self.trunkDistance
-        newNode.children = [node.deep_clone() for node in self.children]
+        newNode.children = [node.deep_clone(dupeAssertionCache) for node in self.children]
         for child in newNode.children:
             child.toGather = newNode
-        newNode.pruned = [node.deep_clone() for node in self.pruned]
-        for child in newNode.pruned:
-            child.toGather = newNode
+        # newNode.pruned = [node.deep_clone(dupeAssertionCache) for node in self.pruned]
+        # for child in newNode.pruned:
+        #     child.toGather = newNode
         return newNode
 
     def populate_from_nodes(self):

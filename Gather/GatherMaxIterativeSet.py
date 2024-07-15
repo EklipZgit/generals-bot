@@ -805,7 +805,7 @@ def _knapsack_max_set_gather_iterative_prune(
                     bestStart = newStartTilesDict.copy()
                     bestTurns = curTurns
 
-                if bestVal / bestTurns > gatherVal * 1.04 / curTurns:
+                if bestVal / max(1, bestTurns) > gatherVal * 1.04 / max(1, curTurns):
                     msg = f'  -- overriding poor re-plan {gatherVal:.1f}/{len(rootForestSubset)} back to bestVal {bestVal:.1f}/{len(bestSet)}'
                     logEntries.append(msg)
                     if liveRenderer:

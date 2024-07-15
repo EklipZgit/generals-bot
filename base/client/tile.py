@@ -9,8 +9,8 @@ TILE_MOUNTAIN = -2
 TILE_FOG = -3
 TILE_OBSTACLE = -4
 TILE_LOOKOUT = -5
-TILE_TELESCOPE = -6
-MOUNTAIN_TILES = [TILE_LOOKOUT, TILE_MOUNTAIN, TILE_TELESCOPE]
+TILE_OBSERVATORY = -6
+MOUNTAIN_TILES = [TILE_LOOKOUT, TILE_MOUNTAIN, TILE_OBSERVATORY]
 
 PLAYER_CHAR_INDEX_PAIRS: typing.List[typing.Tuple[str, int]] = [
     ('a', 0),
@@ -231,7 +231,7 @@ class Tile(object):
         'movable',
         'tile_index',
         '_hash_key',
-        'isTelescope',
+        'isObservatory',
         'isLookout',
     )
 
@@ -247,7 +247,7 @@ class Tile(object):
             isMountain=False,
             turnCapped=0,
             tileIndex: int = -1,
-            isTelescope=False,
+            isObservatory=False,
             isLookout=False,
     ):
         # Public Properties
@@ -294,9 +294,9 @@ class Tile(object):
 
         self.isMountain: bool = isMountain
 
-        self.isTelescope: bool = isMountain
+        self.isObservatory: bool = isObservatory
 
-        self.isLookout: bool = isMountain
+        self.isLookout: bool = isLookout
 
         self.delta: TileDelta = TileDelta()
         """Tile's army/player/whatever delta since last turn"""
@@ -475,8 +475,8 @@ class Tile(object):
             outputToJoin.append('C')
         if self.isLookout:
             outputToJoin.append('L')
-        elif self.isTelescope:
-            outputToJoin.append('T')
+        elif self.isObservatory:
+            outputToJoin.append('O')
         elif self.isMountain or (not self.visible and self.isNotPathable):
             outputToJoin.append('M')
         if self.isGeneral:
@@ -562,7 +562,7 @@ class Tile(object):
         self.delta.oldOwner = self._player
 
         if self.tile != tile:  # tile changed
-            if tile < TILE_MOUNTAIN and self.discovered and not tile == TILE_LOOKOUT and not tile == TILE_TELESCOPE:  # lost sight of tile.
+            if tile < TILE_MOUNTAIN and self.discovered and not tile == TILE_LOOKOUT and not tile == TILE_OBSERVATORY:  # lost sight of tile.
                 if self.visible:
                     self.delta.lostSight = True
                 self.visible = False
@@ -593,8 +593,8 @@ class Tile(object):
                 self.isMountain = True
             if tile == TILE_LOOKOUT:
                 self.isLookout = True
-            elif tile == TILE_TELESCOPE:
-                self.isTelescope = True
+            elif tile == TILE_OBSERVATORY:
+                self.isObservatory = True
 
             if self.player != -1 or self.isCity or self.army != 0:
                 # mis-predicted city.

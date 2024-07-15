@@ -18,7 +18,7 @@ import typing
 
 from SearchUtils import count
 from base.client.map import Tile, TILE_EMPTY, TILE_MOUNTAIN, MapBase, PLAYER_CHAR_INDEX_PAIRS
-from base.client.tile import TILE_TELESCOPE, TILE_LOOKOUT
+from base.client.tile import TILE_OBSERVATORY, TILE_LOOKOUT
 
 
 class TextMapLoader(object):
@@ -162,11 +162,12 @@ class TextMapLoader(object):
                 if 'D' in text_tile:
                     tile.discovered = True
                 return
-            case 'T':
+            case 'O':
                 tile.army = 0
-                tile.tile = TILE_TELESCOPE
+                tile.tile = TILE_OBSERVATORY
                 tile.player = -1
                 tile.isMountain = True
+                tile.isObservatory = True
                 if 'D' in text_tile:
                     tile.discovered = True
                 return
@@ -175,6 +176,7 @@ class TextMapLoader(object):
                 tile.tile = TILE_LOOKOUT
                 tile.player = -1
                 tile.isMountain = True
+                tile.isLookout = True
                 if 'D' in text_tile:
                     tile.discovered = True
                 return

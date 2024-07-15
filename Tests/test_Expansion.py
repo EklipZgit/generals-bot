@@ -19,7 +19,7 @@ class ExpansionTests(TestBase):
         bot.info_render_general_undiscovered_prediction_values = True
         bot.info_render_leaf_move_values = True
         bot.info_render_tile_islands = True
-        bot.expansion_use_legacy = False
+        # bot.expansion_use_legacy = False
 
         return bot
 
@@ -1380,3 +1380,63 @@ bot_target_player=1
 
         numCapped = SearchUtils.count(twoOf, lambda t: t.player == general.player)
         self.assertEqual(2, numCapped, f'should have captured two of {"  |  ".join([repr(t) for t in twoOf])}')
+    
+    def test_look_at_recapture_line_and_launch_earlier_with_plan_to_cap_right_side_end_of_round(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/look_at_recapture_line_and_launch_earlier_with_plan_to_cap_right_side_end_of_round___RdZ7mes-U---1--156.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 156, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=156)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for look_at_recapture_line_and_launch_earlier_with_plan_to_cap_right_side_end_of_round")
+    
+    def test_shouldnt_thing_moving_corner_is_worth_expansion_points(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_thing_moving_corner_is_worth_expansion_points___RdZ7mes-U---1--197.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 197, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=197)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for shouldnt_thing_moving_corner_is_worth_expansion_points")
+    
+    def test_shouldnt_think_moving_corner_is_worth_expansion_points_earlier(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_think_moving_corner_is_worth_expansion_points_earlier___RdZ7mes-U---1--196.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 196, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=196)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '10,10->11,10')
+        simHost.queue_player_moves_str(enemyGeneral.player, '8,11->8,10')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        diff = self.get_tile_differential(simHost)
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTileDifferentialGreaterThan(diff + 7, simHost, 'should have capped tiles with all 4 moves')
+

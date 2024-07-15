@@ -17,6 +17,10 @@ from collections import deque
 
 import BotLogging
 from Interfaces import MapMatrixInterface, TileSet
+MODIFIER_TORUS = 7
+MODIFIER_WATCHTOWER = 6
+
+MAX_ALLY_SPAWN_DISTANCE = 11
 
 ENABLE_DEBUG_ASSERTS = False
 
@@ -168,7 +172,8 @@ class MapBase(object):
                  turn: int,
                  map_grid_y_x: typing.List[typing.List[Tile]],  # dont need to init movable and stuff
                  replay_url: str,
-                 replay_id: typing.Union[None, str] = None
+                 replay_id: typing.Union[None, str] = None,
+                 modifiers: typing.List[int] | None = None
                  ):
         # Start Data
         self.remainingCycleTurns: int = 0
@@ -179,6 +184,12 @@ class MapBase(object):
         # TODO TEAMMATE
         self.is_2v2: bool = False
         self.teammates: typing.Set[int] = set()
+        self.lookouts: typing.Set[Tile] = set()
+        self.observatories: typing.Set[Tile] = set()
+        self.modifiers_by_id = [False for i in range(30)]
+        if modifiers:
+            for m in modifiers:
+                self.modifiers_by_id[m] = True
 
         uniqueTeams = set()
         if teams is not None:
@@ -358,11 +369,71 @@ class MapBase(object):
                 yield tile
 
     def manhattan_dist(self, tileA: Tile, tileB: Tile) -> int:
+        if self.modifiers_by_id[MODIFIER_TORUS]:
+            xMin = min(abs(tileA.x - tileB.x), abs(tileA.x - tileB.x + self.cols), abs(tileB.x - tileA.x + self.cols))
+            yMin = min(abs(tileA.y - tileB.y), abs(tileA.y - tileB.y + self.rows), abs(tileB.y - tileA.y + self.rows))
+
+            return xMin + yMin
         return abs(tileA.x - tileB.x) + abs(tileA.y - tileB.y)
+
+    def euclidDist(self, x: float, y: float, x2: float, y2: float) -> float:
+        bestX = x
+        bestY = y
+
+        if self.modifiers_by_id[MODIFIER_TORUS]:
+            stdX = abs(x - x2)
+            best = stdX
+            xPlus = abs(x - x2 + self.cols)
+            if xPlus < best:
+                best = xPlus
+                bestX = x + self.cols
+
+            xMinus = abs(x2 - x + self.cols)
+            if xMinus < best:
+                best = xMinus
+                bestX = x - self.cols
+
+            stdY = abs(y - y2)
+            best = stdY
+            yPlus = abs(y - y2 + self.cols)
+            if yPlus < best:
+                best = yPlus
+                bestY = y + self.cols
+
+            yMinus = abs(y2 - y + self.cols)
+            if yMinus < best:
+                best = yMinus
+                bestY = y - self.cols
+
+        if bestX == x2 and bestY == y2:
+            return 0
+
+        return pow(pow(abs(bestX - x2), 2) + pow(abs(bestY - y2), 2), 0.5)
+
+    def euclidDistTile(self, a: Tile, b: Tile) -> float:
+        return self.euclidDist(a.x, a.y, b.x, b.y)
 
     def GetTile(self, x, y) -> Tile | None:
         if x < 0 or x >= self.cols or y < 0 or y >= self.rows:
             return None
+        return self.grid[y][x]
+
+    def GetTileModifierSafe(self, x, y) -> Tile | None:
+        if self.modifiers_by_id[MODIFIER_TORUS]:
+            return self.GetTileTorus(x, y)
+
+        return self.GetTile(x, y)
+
+    def GetTileTorus(self, x, y) -> Tile:
+        while x < 0:
+            x += self.cols
+        while x >= self.cols:
+            x -= self.cols
+        while y < 0:
+            y += self.rows
+        while y >= self.rows:
+            y -= self.rows
+
         return self.grid[y][x]
 
     def _update_player_information(self, bypassDeltas: bool):
@@ -680,6 +751,11 @@ class MapBase(object):
 
         # does the ACTUAL tile update
         maybeMoved = curTile.update(self, tile_type, tile_army, is_city, is_general)
+        
+        if tile_type == TILE_OBSERVATORY:
+            self.observatories.add(curTile)
+        if tile_type == TILE_LOOKOUT:
+            self.lookouts.add(curTile)
 
         if not is_general and tile_type >= TILE_EMPTY and curTile.isGeneral:
             curTile.isGeneral = False
@@ -815,32 +891,32 @@ class MapBase(object):
                 if len(tile.adjacents) != 0:
                     continue
 
-                movableTile = self.GetTile(x - 1, y)
+                movableTile = self.GetTileModifierSafe(x - 1, y)
                 if movableTile is not None and movableTile not in tile.movable:
                     tile.adjacents.append(movableTile)
                     tile.movable.append(movableTile)
-                movableTile = self.GetTile(x + 1, y)
+                movableTile = self.GetTileModifierSafe(x + 1, y)
                 if movableTile is not None and movableTile not in tile.movable:
                     tile.adjacents.append(movableTile)
                     tile.movable.append(movableTile)
-                movableTile = self.GetTile(x, y - 1)
+                movableTile = self.GetTileModifierSafe(x, y - 1)
                 if movableTile is not None and movableTile not in tile.movable:
                     tile.adjacents.append(movableTile)
                     tile.movable.append(movableTile)
-                movableTile = self.GetTile(x, y + 1)
+                movableTile = self.GetTileModifierSafe(x, y + 1)
                 if movableTile is not None and movableTile not in tile.movable:
                     tile.adjacents.append(movableTile)
                     tile.movable.append(movableTile)
-                adjTile = self.GetTile(x - 1, y - 1)
+                adjTile = self.GetTileModifierSafe(x - 1, y - 1)
                 if adjTile is not None and adjTile not in tile.adjacents:
                     tile.adjacents.append(adjTile)
-                adjTile = self.GetTile(x + 1, y - 1)
+                adjTile = self.GetTileModifierSafe(x + 1, y - 1)
                 if adjTile is not None and adjTile not in tile.adjacents:
                     tile.adjacents.append(adjTile)
-                adjTile = self.GetTile(x - 1, y + 1)
+                adjTile = self.GetTileModifierSafe(x - 1, y + 1)
                 if adjTile is not None and adjTile not in tile.adjacents:
                     tile.adjacents.append(adjTile)
-                adjTile = self.GetTile(x + 1, y + 1)
+                adjTile = self.GetTileModifierSafe(x + 1, y + 1)
                 if adjTile is not None and adjTile not in tile.adjacents:
                     tile.adjacents.append(adjTile)
 
@@ -2431,7 +2507,10 @@ class Map(MapBase):
         if 'teams' in start_data:
             teams = start_data['teams']
 
-        super().__init__(start_data['playerIndex'], teams, start_data['usernames'], data['turn'], map_grid_y_x, replay_url, start_data['replay_id'])
+        mods = []
+        if 'options' in start_data and 'modifiers' in start_data['options']:
+            mods = start_data['options']['modifiers']
+        super().__init__(start_data['playerIndex'], teams, start_data['usernames'], data['turn'], map_grid_y_x, replay_url, start_data['replay_id'], mods)
 
         self.apply_server_update(data)
 
@@ -2449,6 +2528,10 @@ class Map(MapBase):
         self.update_turn(data['turn'])
 
         self.update_scores(Score.from_server_scores(self._get_raw_scores_from_data(data)))
+
+        self.lookouts = set()
+
+        self.observatories = set()
 
         # Check each tile for updates indiscriminately
         for x in range(self.cols):

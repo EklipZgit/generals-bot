@@ -23,8 +23,12 @@ from . import map
 from .map import MapBase
 
 _ENDPOINT_BOT = "://botws.generals.io/socket.io/?EIO=4"
+WSPREFIX = "wss"
+HTTPPREFIX = "https"
 _ENDPOINT_LOCAL = "://localhost:8080/socket.io/?EIO=4"
-_ENDPOINT_BOT = _ENDPOINT_LOCAL
+# _ENDPOINT_BOT = _ENDPOINT_LOCAL
+# WSPREFIX = "ws"
+# HTTPPREFIX = "http"
 _ENDPOINT_PUBLIC = "://ws.generals.io/socket.io/?EIO=4"
 
 _LOG_WS = False
@@ -171,10 +175,10 @@ class GeneralsClient(object):
         logbook.debug("Starting heartbeat thread")
 
     def get_endpoint_ws(self):
-        return "ws" + (_ENDPOINT_BOT if not self.public_server else _ENDPOINT_PUBLIC) + "&transport=websocket"
+        return WSPREFIX + (_ENDPOINT_BOT if not self.public_server else _ENDPOINT_PUBLIC) + "&transport=websocket"
 
     def get_endpoint_requests(self):
-        return "http" + (_ENDPOINT_BOT if not self.public_server else _ENDPOINT_PUBLIC) + "&transport=polling"
+        return HTTPPREFIX + (_ENDPOINT_BOT if not self.public_server else _ENDPOINT_PUBLIC) + "&transport=polling"
 
     def get_sid(self):
         request = requests.get(self.get_endpoint_requests() + "&t=ObyKmaZ", verify=False)
@@ -315,6 +319,8 @@ class GeneralsClient(object):
                             "!!!!!!!!!!\n!!!!!!!!!!!!!\n!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!\ncouldn't write EARLY LOGS to file")
             elif msg[0] == "game_update":
                 self._seen_update = True
+                # Simulate abuser
+                # self._send(['leave_game'])
                 # self.last_update = msg[1]
                 yield msg[0], msg[1]
             elif msg[0] == "ping_tile":

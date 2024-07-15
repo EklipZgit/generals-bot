@@ -362,7 +362,7 @@ function Start-WindowsTerminalHistoricalBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'run-bot -game 1v1, 1v1, 1v1, ffa -name "EklipZ_ai_14" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-07-24\bot_ek0x45.py'
+        $command = 'run-bot -game ffa, 1v1, 1v1, 1v1 -name "EklipZ_ai_14" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-07-24\bot_ek0x45.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -385,7 +385,7 @@ function Start-WindowsTerminalHistoricalBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'run-bot -game 1v1, 1v1, ffa -name "EklipZ_ai_13" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-07-29\bot_ek0x45.py'
+        $command = 'run-bot -game ffa, 1v1, 1v1, ffa -name "EklipZ_ai_13" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-07-29\bot_ek0x45.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -404,7 +404,7 @@ function Start-WindowsTerminalHistoricalBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'run-bot -game 1v1, ffa, 1v1 -name "EklipZ_ai_12" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-07-31\bot_ek0x45.py'
+        $command = 'run-bot -game ffa, 1v1, ffa, 1v1 -name "EklipZ_ai_12" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-07-31\bot_ek0x45.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -419,7 +419,7 @@ function Start-WindowsTerminalHistoricalBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'run-bot -game 1v1, ffa, 1v1, 1v1 -name "EklipZ_ai_11" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-04\BotHost.py'
+        $command = 'run-bot -game ffa, 1v1, ffa, 1v1 -name "EklipZ_ai_11" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-04\BotHost.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -433,7 +433,7 @@ function Start-WindowsTerminalHistoricalBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'run-bot -game 1v1, ffa, 1v1, 1v1, ffa, 1v1, 1v1 -name "EklipZ_ai_10" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-07\BotHost.py'
+        $command = 'run-bot -game ffa, 1v1, ffa -name "EklipZ_ai_10" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-07\BotHost.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -450,7 +450,7 @@ function Start-WindowsTerminalHistoricalBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'run-bot -game 1v1, ffa, 1v1, ffa, 1v1, 1v1, 1v1 -name "EklipZ_ai_09" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-08\BotHost.py'
+        $command = 'run-bot -game ffa, 1v1, ffa -name "EklipZ_ai_09" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-08\BotHost.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -476,7 +476,7 @@ function Start-WindowsTerminalHistoricalBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'run-bot -game 1v1, ffa, ffa, 1v1, ffa, 1v1, 1v1 -name "EklipZ_ai_08" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-26\BotHost.py'
+        $command = 'run-bot -game ffa, ffa, 1v1, ffa -name "EklipZ_ai_08" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-26\BotHost.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -495,7 +495,7 @@ function Start-WindowsTerminalHistoricalBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'run-bot -game 1v1, ffa, ffa, 1v1, ffa, 1v1, 1v1 -name "EklipZ_ai_07" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-09-15\BotHost.py'
+        $command = 'run-bot -game ffa, ffa, 1v1, ffa, 1v1 -name "EklipZ_ai_07" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-09-15\BotHost.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -516,7 +516,7 @@ function Start-WindowsTerminalHistoricalBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'run-bot -game 1v1, ffa, ffa, 1v1, ffa, 1v1, 1v1 -name "EklipZ_ai_06" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-10-23\BotHost.py'
+        $command = 'run-bot -game ffa, ffa, 1v1, ffa, 1v1 -name "EklipZ_ai_06" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-10-23\BotHost.py'
         try {
             Invoke-Expression $command
         } finally {

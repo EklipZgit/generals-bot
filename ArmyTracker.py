@@ -18,7 +18,7 @@ from MapMatrix import MapMatrixSet, TileSet
 from PerformanceTimer import PerformanceTimer
 from SearchUtils import *
 from Path import Path
-from base.client.map import Tile, TILE_OBSTACLE, TileDelta, Player
+from base.client.map import Tile, TILE_OBSTACLE, TileDelta, Player, MODIFIER_TORUS, MAX_ALLY_SPAWN_DISTANCE
 
 
 class PlayerAggressionTracker(object):
@@ -160,6 +160,14 @@ class ArmyTracker(object):
                     # then this is a unit test or custom map with starting tiles
                     self.player_launch_timings[player.index] = 24
 
+        if self.map.turn == 50:
+            with self.perf_timer.begin_move_event(f'limiting player spawns by start value'):
+                usTeam = self.map.team_ids_by_player_index[self.general.player]
+                for player in self.map.players:
+                    if player.team != usTeam and player.tileCount >= 22:
+                        # Then they can't have spawned at any tile with only one liberty.
+                        self.limit_player_spawn_by_good_start(player)
+
         with self.perf_timer.begin_move_event('ArmyTracker flipped tiles / neutral discovery'):
             self._handle_flipped_tiles()
 
@@ -219,6 +227,72 @@ class ArmyTracker(object):
                 self.map.generals[player.index] = None
                 general.isGeneral = False
                 logbook.info(f'   RESET BAD GENERAL {general}')
+
+    def limit_player_spawn_by_good_start(self, player, debugTile = None):
+        depthCheck = 4
+        # isPerfect = player.tileCount == 25
+        wastesAllowed = (25 - player.tileCount) * 2
+        pIdx = player.index
+
+        for tile in self.map.get_all_tiles():
+            if not self.valid_general_positions_by_player[pIdx].raw[tile.tile_index]:
+                continue
+
+            foundByRange = [0] * (depthCheck + 1)
+
+            def foreachFunc(t: Tile, d: int):
+                if t.visible and t.player != player.index and t not in self.tiles_ever_owned_by_player[player.index]:
+                    return True
+                foundByRange[d] += 1
+
+            SearchUtils.breadth_first_foreach_dist_fast_no_neut_cities(
+                self.map,
+                [tile],
+                maxDepth=depthCheck,
+                foreachFunc=foreachFunc,
+            )
+
+            # if isPerfect:
+            #     numValid = len(list(tile.movableNoObstacles))
+            #     if numValid == 1:
+            #         self.valid_general_positions_by_player[pIdx].raw[tile.tile_index] = False
+            #         for mv in tile.movableNoObstacles:
+            #             if self.valid_general_positions_by_player[pIdx].raw[mv.tile_index]:
+            #                 numValid = len(list(mv.movableNoObstacles))
+            #                 if numValid <= 2:
+            #                     self.valid_general_positions_by_player[pIdx].raw[mv.tile_index] = False
+
+            isDebugTile = debugTile and debugTile.coords == tile.coords
+            if isDebugTile:
+                pass
+
+            avail = wastesAllowed
+            minValid = [1, 2, 5, 8, 12]
+            elimmed = False
+            for i in range(1, depthCheck + 1):
+                avail += foundByRange[i]
+                cutoff = minValid[i]
+                if cutoff > avail:
+                    if isDebugTile:
+                        logbook.info(f'elimmed {tile} based on {i} min {cutoff} vs found {avail}')
+                    elimmed = True
+                    self.valid_general_positions_by_player[pIdx].raw[tile.tile_index] = False
+                else:
+                    if isDebugTile:
+                        logbook.info(f'legal   {tile} based on {i} min {cutoff} vs found {avail}')
+
+            if elimmed:
+                continue
+            #
+            # if foundByRange[1] < 2 - perfectOffset:
+            #     self.valid_general_positions_by_player[pIdx].raw[tile.tile_index] = False
+            #     continue
+            # if foundByRange[2] < 4 - perfectOffset:
+            #     self.valid_general_positions_by_player[pIdx].raw[tile.tile_index] = False
+            #     continue
+            # if foundByRange[3] < 3 - perfectOffset:
+            #     self.valid_general_positions_by_player[pIdx].raw[tile.tile_index] = False
+            #     continue
 
     def update_fog_prediction(
             self,
@@ -2488,11 +2562,11 @@ class ArmyTracker(object):
                             continue
                         if self.map.is_player_on_team_with(player.index, generalPositionPlayer):
                             if generalPositionPlayer != player.index and self.map.is_2v2:
-                                def limitSpawnAroundAllyGen(t: Tile):
-                                    if abs(t.x - tile.x) + abs(t.y - tile.y) > 11:
+                                def limitSpawnAroundAllyGen(t: Tile, dist: int):
+                                    if dist > MAX_ALLY_SPAWN_DISTANCE:
                                         self.valid_general_positions_by_player[player.index].discard(t)
-
-                                SearchUtils.breadth_first_foreach(self.map, [tile], 1000, foreachFunc=limitSpawnAroundAllyGen, bypassDefaultSkip=True)
+                                # TODO stop bypassing default skip once server patch goes live with 2v2 ally distance limit check!
+                                SearchUtils.breadth_first_foreach_dist(self.map, [tile], 1000, foreachFunc=limitSpawnAroundAllyGen, bypassDefaultSkip=True)
                             continue
 
                         def limitSpawnAroundOtherGen(t: Tile):
@@ -2800,7 +2874,9 @@ class ArmyTracker(object):
                     continue
 
                 for tile in self.map.get_all_tiles():
-                    if abs(tile.x - general.x) + abs(tile.y - general.y) < self.min_spawn_distance:  # spawns are manhattan distance
+                    dist = self.map.manhattan_dist(tile, general)
+
+                    if dist < self.min_spawn_distance:  # spawns are manhattan distance
                         self.valid_general_positions_by_player[player.index].discard(tile)
                         continue
 

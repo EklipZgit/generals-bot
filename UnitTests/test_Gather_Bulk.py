@@ -1818,22 +1818,29 @@ player_index=0
         logbook.info(f'output:\r\n{bencher}')
 
     def test_benchmark_gathers_render_specific_map(self):
-        mapfileName = 'validate_expansion_10_moves_remaining__240__32YTavdft___32YTavdft---2--240.txtmap'
+        # produces weird shorter gather in the max iter set impls.
+        # mapfileName = 'should_not_time_out_on_win_condition_in_ffa___uu_dzfs6v---1--1275.txtmap'
+        # just a big attack gather from multiple angles
+        # mapfileName = 'should_not_generate_too_large_an_input_to_knapsack___PFKmbadYE---0--477.txtmap'
+        # weird behavior with Max iter underperforming...? at 32 turns
+        mapfileName = 'should_path_large_tile_through_flank_cities____H2EL3yXK---1--952.txtmap'
+        debugMode = True
         bencher = GatherBenchmarker()
-        useTrueVal = True
+        useTrueVal = False
         inclNegative = True
-        gatherTurnsMax = 100
-        gatherTurnsMin = 50
+        gatherTurnsMax = 32
+        gatherTurnsMin = 31
 
-        incLiveDepthIter = True
-        incLiveDepthFast = True
+        incLiveDepthIter = False # True
+        incLiveDepthFast = False # True
         incLiveDepthSlow = False
-        incIterativeMax = True
+        incIterativeMax = False # True
+        incIterativeMaxFast = False # True
         incChatGptDp = False
         incChatGptDpStack = False
-        incGreedy = True
-        incApproxPcst = True
-        incGathSetQuick = True
+        incGreedy = False # True
+        incApproxPcst = False # True
+        incGathSetQuick = False # True
         incGathMaxIterSet = True
         incGathMaxIterSetFast = True
 
@@ -1852,7 +1859,6 @@ player_index=0
 
         depth = random.randint(randMin, max(randMax, randMin + 2))
         bencher.begin_next_run(f'depth {depth} - {mapfileName}')
-        debugMode = True
         self.begin_capturing_logging()
         self.run_gather_bench_iter(
             debugMode,
@@ -1869,6 +1875,7 @@ player_index=0
             incLiveDepthFast,
             incLiveDepthSlow,
             incIterativeMax,
+            incIterativeMaxFast,
             incChatGptDp,
             incChatGptDpStack,
             incGreedy,
@@ -1887,15 +1894,16 @@ player_index=0
     def test_benchmark_gathers_on_random_shuffled_maps(self):
 
         bencher = GatherBenchmarker()
-        useTrueVal = False
+        useTrueVal = True
         inclNegative = True
-        gatherTurnsMax = 100
-        gatherTurnsMin = 50
+        gatherTurnsMax = 40
+        gatherTurnsMin = 15
 
         incLiveDepthIter = True
         incLiveDepthFast = True
         incLiveDepthSlow = False
         incIterativeMax = True
+        incIterativeMaxFast = True
         incChatGptDp = False
         incChatGptDpStack = False
         incGreedy = True
@@ -1936,6 +1944,7 @@ player_index=0
                     incLiveDepthFast,
                     incLiveDepthSlow,
                     incIterativeMax,
+                    incIterativeMaxFast,
                     incChatGptDp,
                     incChatGptDpStack,
                     incGreedy,
@@ -1943,6 +1952,7 @@ player_index=0
                     incGathSetQuick,
                     incGathMaxIterSet,
                     incGathMaxIterSetFast,
+                    addlTargets=2
                 )
             except:
                 self.begin_capturing_logging()
@@ -1952,7 +1962,7 @@ player_index=0
                 bencher.undo_current_run()
                 self.stop_capturing_logging()
 
-        self.execute_with_shuffled_tiles_on_maps(500, frTileCountLimit=120, runEach=runTest, shuffleMax=15, numFrEnToSwap=5)
+        self.execute_with_shuffled_tiles_on_maps(150, frTileCountLimit=60, runEach=runTest, shuffleMax=20, numFrEnToSwap=6)
         self.begin_capturing_logging()
         bencher.print_data_info(sortBy=GatherSort.Value, printRawOutput=True)
         time.sleep(0.1)
@@ -1977,6 +1987,7 @@ player_index=0
         incLiveDepthFast,
         incLiveDepthSlow,
         incIterativeMax,
+        incIterativeMaxFast,
         incChatGptDp,
         incChatGptDpStack,
         incGreedy,
@@ -1984,6 +1995,7 @@ player_index=0
         incGathSetQuick,
         incGathMaxIterSet,
         incGathMaxIterSetFast,
+        addlTargets: int = 0
     ):
         gc.collect()
 
@@ -2001,12 +2013,16 @@ player_index=0
             map,
             general.player,
             negativeTiles=negativeTiles,
-            gatherMatrix=gatherMatrix,
-            captureMatrix=captureMatrix,
+            # gatherMatrix=gatherMatrix,
+            # captureMatrix=captureMatrix,
             useTrueValueGathered=True,
             prioritizeCaptureHighArmyTiles=False)
 
         targets = {enemyGeneral}
+
+        if addlTargets:
+            targets.update(random.choices(map.players[enemyGeneral.player].tiles, k=addlTargets))
+
         # targets = {general}
         if incLiveDepthIter:
             with bencher.begin_bench_gather('DEF ITER'):
@@ -2038,7 +2054,7 @@ player_index=0
                 negativeTiles,
             )
             if debugMode:
-                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'DEF ITER {plan}')
+                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'DEF ITER {plan}', gatherMatrix, captureMatrix, valueMatrix, armyCostMatrix)
             gc.collect()
 
         if incIterativeMax:
@@ -2071,7 +2087,41 @@ player_index=0
                 negativeTiles,
             )
             if debugMode:
-                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'MAX ITER {plan}')
+                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'MAX ITER {plan}', gatherMatrix, captureMatrix, valueMatrix, armyCostMatrix)
+
+            gc.collect()
+
+        if incIterativeMaxFast:
+            with bencher.begin_bench_gather('MAX ITER FAST'):
+                iterMaxValGathered, iterMaxTurnsUsed, iterMaxNodes = Gather.knapsack_max_gather_with_values(
+                    map,
+                    targets,
+                    depth,
+                    targetArmy=-1,
+                    distPriorityMap=None,
+                    negativeTiles=negativeTiles,
+                    searchingPlayer=map.player_index,
+                    viewInfo=None,
+                    useTrueValueGathered=useTrueVal,
+                    incrementBackward=False,
+                    includeGatherTreeNodesThatGatherNegative=inclNegative,
+                    priorityMatrix=gatherMatrix,
+                    cutoffTime=time.perf_counter() + 1.0,
+                    fastMode=True,
+                    shouldLog=False)
+            plan = GatherCapturePlan.build_from_root_nodes(map, iterMaxNodes, negativeTiles, general.player)
+            plan._turns = iterMaxTurnsUsed
+            plan.gathered_army = iterMaxValGathered
+            bencher.set_result_completion_data(
+                map,
+                plan,
+                depth,
+                valueMatrix,
+                armyCostMatrix,
+                negativeTiles,
+            )
+            if debugMode:
+                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'MAX ITER FAST {plan}', gatherMatrix, captureMatrix, valueMatrix, armyCostMatrix)
 
             gc.collect()
 
@@ -2105,7 +2155,7 @@ player_index=0
                 negativeTiles,
             )
             if debugMode:
-                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'DEF ITER FAST {plan}')
+                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'DEF ITER FAST {plan}', gatherMatrix, captureMatrix, valueMatrix, armyCostMatrix)
 
             gc.collect()
 
@@ -2140,7 +2190,7 @@ player_index=0
                 negativeTiles,
             )
             if debugMode:
-                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'DEF ITER SLOW {plan}')
+                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'DEF ITER SLOW {plan}', gatherMatrix, captureMatrix, valueMatrix, armyCostMatrix)
             gc.collect()
 
         if incChatGptDp:
@@ -2182,7 +2232,7 @@ player_index=0
                 negativeTiles,
             )
             if debugMode:
-                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'ChatGPT DP (me) {plan}')
+                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'ChatGPT DP (me) {plan}', gatherMatrix, captureMatrix, valueMatrix, armyCostMatrix)
 
             gc.collect()
 
@@ -2225,7 +2275,7 @@ player_index=0
                 negativeTiles,
             )
             if debugMode:
-                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'ChatGpt DP (stack OG design) {plan}')
+                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'ChatGpt DP (stack OG design) {plan}', gatherMatrix, captureMatrix, valueMatrix, armyCostMatrix)
 
             gc.collect()
 
@@ -2252,7 +2302,7 @@ player_index=0
                 negativeTiles,
             )
             if debugMode:
-                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'Greedy {plan}')
+                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'Greedy {plan}', gatherMatrix, captureMatrix, valueMatrix, armyCostMatrix)
             gc.collect()
 
         if incApproxPcst:
@@ -2283,7 +2333,7 @@ player_index=0
                 negativeTiles,
             )
             if debugMode:
-                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'Approx PCST Gradient {plan}')
+                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'Approx PCST Gradient {plan}', gatherMatrix, captureMatrix, valueMatrix, armyCostMatrix)
 
             gc.collect()
 
@@ -2312,7 +2362,7 @@ player_index=0
                 negativeTiles,
             )
             if debugMode:
-                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'Gath Set Quick {plan}')
+                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'Gath Set Quick {plan}', gatherMatrix, captureMatrix, valueMatrix, armyCostMatrix)
 
             gc.collect()
 
@@ -2325,13 +2375,13 @@ player_index=0
                     valueMatrix,
                     armyCostMatrix,
                     # negativeTiles=negativeTiles,
-                    renderLive=False,
+                    renderLive=debugMode,
                     viewInfo=None,
                     searchingPlayer=general.player,
                     fastMode=True
 
                     # useTrueValueGathered=useTrueVal,
-                    # renderLive=False,
+                    # renderLive=debugMode,
                     # cutoffTime=time.perf_counter() + 1.0
                 )
             bencher.set_result_completion_data(
@@ -2343,7 +2393,7 @@ player_index=0
                 negativeTiles,
             )
             if debugMode:
-                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'Gath Max Iterative Set Fast {plan}')
+                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'Gath Max Iterative Set Fast {plan}', gatherMatrix, captureMatrix, valueMatrix, armyCostMatrix)
             gc.collect()
 
         if incGathMaxIterSet:
@@ -2355,13 +2405,13 @@ player_index=0
                     valueMatrix,
                     armyCostMatrix,
                     # negativeTiles=negativeTiles,
-                    renderLive=False,
+                    renderLive=debugMode,
                     viewInfo=None,
                     searchingPlayer=general.player,
                     fastMode=False
 
                     # useTrueValueGathered=useTrueVal,
-                    # renderLive=False,
+                    # renderLive=debugMode,
                     # cutoffTime=time.perf_counter() + 1.0
                 )
             bencher.set_result_completion_data(
@@ -2373,6 +2423,6 @@ player_index=0
                 negativeTiles,
             )
             if debugMode:
-                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'Gath Max Iterative Set {plan}')
+                self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player, f'Gath Max Iterative Set {plan}', gatherMatrix, captureMatrix, valueMatrix, armyCostMatrix)
             gc.collect()
 

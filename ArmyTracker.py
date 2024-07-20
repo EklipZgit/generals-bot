@@ -229,14 +229,20 @@ class ArmyTracker(object):
                 logbook.info(f'   RESET BAD GENERAL {general}')
 
     def limit_player_spawn_by_good_start(self, player, debugTile = None):
-        depthCheck = 4
+        depthCheck = 15
         # isPerfect = player.tileCount == 25
-        wastesAllowed = (25 - player.tileCount) * 2
+        realWastesAllowed = (25 - player.tileCount) * 2
         pIdx = player.index
+
+        tilesWithBarely = []
+        tilesCouldntGetBetter = []
+        biggestNegative = 0
 
         for tile in self.map.get_all_tiles():
             if not self.valid_general_positions_by_player[pIdx].raw[tile.tile_index]:
                 continue
+
+            wastesAllowed = realWastesAllowed
 
             foundByRange = [0] * (depthCheck + 1)
 
@@ -267,8 +273,13 @@ class ArmyTracker(object):
                 pass
 
             avail = wastesAllowed
-            minValid = [1, 2, 5, 8, 12]
+            minValid = [1, 1, 4, 7, 10, 13, 15, 17, 19, 20, 21, 22, 23, 24, 24, 24]  # ethryns lower bound for arbitrary graphs (assumes infinite tiles at range 2 are available) -- tweaked to be -1 since counting general
+            minValid = [1, 2, 5, 8, 11, 13, 16, 17, 19, 20, 21, 22, 23, 24, 24, 24]  # mine empirical
+            minValid = [1, 2, 5, 8, 10, 13, 15, 17, 19, 20, 21, 22, 23, 24, 24, 24]  # with range 4 and range 6 adjusted downwards due to ethryn_hack_4_10__rx07Ek732.txtmap and ethryn_hack_6_15__rx07Ek732.txtmap counter-examples
             elimmed = False
+
+            exactlyMets = 0
+            barelyMets = 0
             for i in range(1, depthCheck + 1):
                 avail += foundByRange[i]
                 cutoff = minValid[i]
@@ -278,21 +289,59 @@ class ArmyTracker(object):
                     elimmed = True
                     self.valid_general_positions_by_player[pIdx].raw[tile.tile_index] = False
                 else:
+                    if cutoff == avail and i > 2:
+                        exactlyMets += 1
+                    if cutoff > avail - 4:
+                        barelyMets += 1
                     if isDebugTile:
                         logbook.info(f'legal   {tile} based on {i} min {cutoff} vs found {avail}')
+            if isDebugTile:
+                logbook.info(f'exactlyMets {exactlyMets}, barelyMets {barelyMets}')
 
             if elimmed:
                 continue
-            #
-            # if foundByRange[1] < 2 - perfectOffset:
-            #     self.valid_general_positions_by_player[pIdx].raw[tile.tile_index] = False
-            #     continue
-            # if foundByRange[2] < 4 - perfectOffset:
-            #     self.valid_general_positions_by_player[pIdx].raw[tile.tile_index] = False
-            #     continue
-            # if foundByRange[3] < 3 - perfectOffset:
-            #     self.valid_general_positions_by_player[pIdx].raw[tile.tile_index] = False
-            #     continue
+
+            tilesWithBarely.append((exactlyMets, barelyMets, tile))
+            if player.tileCount < 25:
+                self.emergenceLocationMap[player.index].raw[tile.tile_index] += min(1.5, barelyMets / 2)
+
+            exactPenalty = min(2, exactlyMets / 2)
+            if exactPenalty > biggestNegative:
+                biggestNegative = exactPenalty
+            self.emergenceLocationMap[player.index].raw[tile.tile_index] -= exactPenalty
+
+            if wastesAllowed > 0:
+                wastesAllowed -= 2
+
+                avail = wastesAllowed
+                for i in range(1, depthCheck + 1):
+                    avail += foundByRange[i]
+                    cutoff = minValid[i]
+                    if cutoff > avail:
+                        if isDebugTile:
+                            logbook.info(f'r2 elimmed {tile} based on {i} min {cutoff} vs found {avail}')
+                        elimmed = True
+                    else:
+                        if isDebugTile:
+                            logbook.info(f'r2 legal   {tile} based on {i} min {cutoff} vs found {avail}')
+
+                if isDebugTile:
+                    logbook.info(f'POST better check, elimmed waste {wastesAllowed}: {elimmed}')
+
+                if elimmed:
+                    tilesCouldntGetBetter.append(tile)
+
+        # if player.tileCount > 22 and player.tileCount < 25:
+
+        for tile in self.map.pathable_tiles:
+            if not self.valid_general_positions_by_player[pIdx].raw[tile.tile_index]:
+                continue
+            self.emergenceLocationMap[player.index].raw[tile.tile_index] += biggestNegative
+
+        if tilesCouldntGetBetter:
+            for tile in tilesCouldntGetBetter:
+                self.emergenceLocationMap[player.index].raw[tile.tile_index] += 3
+
 
     def update_fog_prediction(
             self,
@@ -1470,6 +1519,9 @@ class ArmyTracker(object):
             # armies told to load from fog ignore the tiles army. In this case, we want to explicitly respect it.
             if not fogTile.visible:
                 maxArmy.value = fogTile.army - 1
+            else:
+                maxArmy.last_seen_turn = self.map.turn
+
             # self.armies[fogTile] = maxArmy
             maxArmy.path = sourceFogArmyPath
 
@@ -1720,6 +1772,8 @@ class ArmyTracker(object):
         if not tile.visible:
             army.last_moved_turn = self.map.turn - 2  # this should only really happen on incrementing fog cities or on initial unit test map load
             army.value = tile.army - 1
+        else:
+            army.last_seen_turn = self.map.turn
 
         if not skip_expected_path:
             army.expectedPaths = ArmyTracker.get_army_expected_path(self.map, army, self.general, self.player_targets)
@@ -2689,11 +2743,13 @@ class ArmyTracker(object):
             else:
                 maxDist = min(maxDist, cycle1Trail1DistLimitAkaStartArmy - trailOffset)
 
-        limitByRawStandingArmy = self.get_emergence_max_depth_to_general_or_none(p.index, tile, emergenceAmount)
-        if limitByRawStandingArmy is not None and maxDist > limitByRawStandingArmy:
-            logbook.info(f'WHOO LIMITING PLAYER {p.index} GENERAL BY {limitByRawStandingArmy} BASED ON SHEER STANDING ARMY EMERGENCE AT {tile}')
-            # this function doesn't expect you to include the emerging tile, where our calculation above does.
-            maxDist = limitByRawStandingArmy
+        # only run the 'distance' emerger if the tile clearly was them moving (and not an old trail).
+        if tile.army > 1 or tile.was_visible_last_turn():
+            limitByRawStandingArmy = self.get_emergence_max_depth_to_general_or_none(p.index, tile, emergenceAmount)
+            if limitByRawStandingArmy is not None and maxDist > limitByRawStandingArmy:
+                logbook.info(f'WHOO LIMITING PLAYER {p.index} GENERAL BY {limitByRawStandingArmy} BASED ON SHEER STANDING ARMY EMERGENCE AT {tile}')
+                # this function doesn't expect you to include the emerging tile, where our calculation above does.
+                maxDist = limitByRawStandingArmy
 
         increaseEmergence = self.map.turn < 51 or maxDist < 5
         if len(playerPreviouslyVisibleTiles) == 0:

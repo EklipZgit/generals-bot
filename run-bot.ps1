@@ -1012,11 +1012,13 @@ function Run-Human {
         $sleepMax = 3,
         $roomID = 'getRekt',
         [switch] $left,
-        [switch] $private
+        [switch] $private,
+        [switch] $nolog
     )
     $splat = @{
         noui = $false
         right = -not $left
+        nolog = $nolog
     }
     while ($true)
     {
@@ -1051,13 +1053,15 @@ function SleepLeastOfTwo {
 function Run-HumanTeammate {
     Param(
         [switch] $left,
-        $roomID = 'getRekt'
+        $roomID = 'getRekt',
+        [switch] $nolog
     )
 
     $splat = @{
         noui = $false
         right = -not $left
         userID = 'efgHuman.py'
+        nolog = $nolog
     }
 
     while ($true)
@@ -1071,7 +1075,8 @@ function Run-Teammate {
     Param(
         [switch] $left,
         $sleepMax = 120,
-        $roomID = 'matchmaking'
+        $roomID = 'matchmaking',
+        [switch] $nolog
     )
 
     $splat = @{
@@ -1079,6 +1084,7 @@ function Run-Teammate {
         right = -not $left
         userID = 'efgBuddy.exe'
         roomID = $roomID
+        nolog = $nolog
     }
 
     while ($true)

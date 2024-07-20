@@ -9,7 +9,9 @@ from enum import Enum
 
 import logbook
 
+import Algorithms
 import SearchUtils
+from Algorithms import FastDisjointSet
 from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrix, MapMatrixSet
 from base.client.map import MapBase, Tile, TeamStats
@@ -75,7 +77,12 @@ class TileIsland(object):
             self.unique_id = IslandNamer.get_int()
 
     def __str__(self) -> str:
-        return f'{{t{self.team} {self.unique_id}/{self.name}: {self.tile_count}t {self.sum_army}a ({next(iter(self.tile_set))})}}'
+        sampleTile = None
+        if self.tile_set:
+            sampleTile = str(next(iter(self.tile_set)))
+        else:
+            pass
+        return f'{{t{self.team} {self.unique_id}/{self.name}: {self.tile_count}t {self.sum_army}a ({sampleTile})}}'
 
     def __repr__(self) -> str:
         return str(self)
@@ -227,7 +234,8 @@ class TileIslandBuilder(object):
                 continue
 
             newIsland = self._build_island_from_tile(tile, tile.player)
-            newIslands.append(newIsland)
+            brokenUp = self._break_up_initial_island_if_necessary(newIsland)
+            newIslands.extend(brokenUp)
 
         logbook.info(f'initial islands built ({time.perf_counter() - start:.5f}s in)')
 
@@ -273,66 +281,60 @@ class TileIslandBuilder(object):
         # logbook.info(f'islands updated in {complete:.5f}s')
 
     def _build_island_from_tile(self, startTile: Tile, player: int) -> TileIsland:
-        mustBeSolo = startTile.isCity or startTile.isGeneral
         teamId = self.teams[player]
         teammates = self.map.get_teammates(player)
-        if self.force_territory_borders_to_single_tile_islands and not mustBeSolo:
-            mustBeSolo = self.must_tile_be_solo(startTile, teamId)
 
-        if mustBeSolo:
-            tilesInIsland = [startTile]
+        tilesInIsland = []
 
-            island = TileIsland(tilesInIsland, teamId, tileCount=len(tilesInIsland))
-            island.name = '_' + IslandNamer.get_letter()
+        if startTile.isCity or startTile.isGeneral:
+            tilesInIsland.append(startTile)
+
+        # if self.force_territory_borders_to_single_tile_islands:
+        #     if len(teammates) > 1:
+        #         def foreachFunc(tile: Tile) -> bool:
+        #             if tile.player in teammates:
+        #                 mustBeSolo = tile.isCity or tile.isGeneral or self.must_tile_be_solo(tile, teamId)
+        #                 if mustBeSolo:
+        #                     return True
+        #                 tilesInIsland.append(tile)
+        #                 return False
+        #             return True
+        #     else:
+        #         def foreachFunc(tile: Tile) -> bool:
+        #             if tile.player == player:
+        #                 mustBeSolo = tile.isCity or tile.isGeneral or self.must_tile_be_solo(tile, teamId)
+        #                 if mustBeSolo:
+        #                     return True
+        #                 tilesInIsland.append(tile)
+        #                 return False
+        #             return True
+        # else:
+        if len(teammates) > 1:
+            def foreachFunc(tile: Tile) -> bool:
+                if tile.isCity or tile.isGeneral:
+                    return True
+                if tile.player in teammates:
+                    tilesInIsland.append(tile)
+                    return False
+                return True
         else:
-            tilesInIsland = []
+            def foreachFunc(tile: Tile) -> bool:
+                if tile.isCity or tile.isGeneral:
+                    return True
+                if tile.player == player:
+                    tilesInIsland.append(tile)
+                    return False
+                return True
 
-            if self.force_territory_borders_to_single_tile_islands:
-                if len(teammates) > 1:
-                    def foreachFunc(tile: Tile) -> bool:
-                        if tile.player in teammates:
-                            mustBeSolo = tile.isCity or tile.isGeneral or self.must_tile_be_solo(tile, teamId)
-                            if mustBeSolo:
-                                return True
-                            tilesInIsland.append(tile)
-                            return False
-                        return True
-                else:
-                    def foreachFunc(tile: Tile) -> bool:
-                        if tile.player == player:
-                            mustBeSolo = tile.isCity or tile.isGeneral or self.must_tile_be_solo(tile, teamId)
-                            if mustBeSolo:
-                                return True
-                            tilesInIsland.append(tile)
-                            return False
-                        return True
-            else:
-                if len(teammates) > 1:
-                    def foreachFunc(tile: Tile) -> bool:
-                        if tile.isCity or tile.isGeneral:
-                            return True
-                        if tile.player in teammates:
-                            tilesInIsland.append(tile)
-                            return False
-                        return True
-                else:
-                    def foreachFunc(tile: Tile) -> bool:
-                        if tile.isCity or tile.isGeneral:
-                            return True
-                        if tile.player == player:
-                            tilesInIsland.append(tile)
-                            return False
-                        return True
+        SearchUtils.breadth_first_foreach_fast_no_neut_cities(
+            self.map,
+            [startTile],
+            maxDepth=1000,
+            foreachFunc=foreachFunc
+        )
 
-            SearchUtils.breadth_first_foreach_fast_no_neut_cities(
-                self.map,
-                [startTile],
-                maxDepth=1000,
-                foreachFunc=foreachFunc
-            )
-
-            island = TileIsland(tilesInIsland, teamId, tileCount=len(tilesInIsland))
-            island.name = '_' + IslandNamer.get_letter()
+        island = TileIsland(tilesInIsland, teamId, tileCount=len(tilesInIsland))
+        island.name = '_' + IslandNamer.get_letter()
 
         for tile in tilesInIsland:
             self.tile_island_lookup[tile] = island
@@ -404,6 +406,57 @@ class TileIslandBuilder(object):
         else:
             return [island]
 
+    def _break_up_initial_island_if_necessary(self, island: TileIsland) -> typing.List[TileIsland]:
+        brokenUp = []
+        leftoverTiles = island.tile_set.copy()
+        for tile in island.tile_set:
+            mustBeSolo = tile.isCity or tile.isGeneral
+            if self.force_territory_borders_to_single_tile_islands and not mustBeSolo:
+                mustBeSolo = self.must_tile_be_solo(tile, island.team)
+
+            if mustBeSolo:
+                leftoverTiles.discard(tile)
+                tilesInIsland = [tile]
+
+                newIsland = TileIsland(tilesInIsland, island.team)
+                newIsland.full_island = island
+                newIsland.sum_army_all_adjacent_friendly = island.sum_army_all_adjacent_friendly
+                newIsland.tile_count_all_adjacent_friendly = island.tile_count_all_adjacent_friendly
+                newIsland.name = f'!{IslandNamer.get_letter()}'
+
+                brokenUp.append(newIsland)
+                for t in tilesInIsland:
+                    self.tile_island_lookup[t] = newIsland
+
+        if len(brokenUp) == 0:
+            return [island]
+
+        island.child_islands = brokenUp.copy()
+        if len(leftoverTiles) > 0:
+            forest = Algorithms.FastDisjointSet()
+            for t in leftoverTiles:
+                # forest.add(t.tile_index)
+                for mv in t.movable:
+                    if mv in leftoverTiles:
+                        forest.merge(t.tile_index, mv.tile_index)
+
+            subsets = forest.subsets()
+            for subset in subsets:
+                newIsland = TileIsland([self.map.tiles_by_index[i] for i in subset], island.team, len(subset))
+                newIsland.full_island = island
+                newIsland.sum_army_all_adjacent_friendly = island.sum_army_all_adjacent_friendly
+                newIsland.tile_count_all_adjacent_friendly = island.tile_count_all_adjacent_friendly
+                newIsland.name = f'+{IslandNamer.get_letter()}'
+
+                logbook.info(f'new broken island {newIsland}')
+
+                brokenUp.append(newIsland)
+                for i in subset:
+                    self.tile_island_lookup.raw[i] = newIsland
+
+        return brokenUp
+
+
     def _break_apart_island_by_army(self, island: TileIsland, primaryPlayer: int) -> typing.List[TileIsland]:
         if island.team != -1:
             # Ok, break the island up.
@@ -457,7 +510,7 @@ class TileIslandBuilder(object):
     def _build_large_island_distances_for_team(self, team: int):
         targetTeam = self.map.team_ids_by_player_index[team]
 
-        tileMinimum = min(12, self.map.players[self.map.player_index].tileCount // 3)
+        tileMinimum = min(12, max(1, self.map.players[self.map.player_index].tileCount // 3))
 
         largeIslands = []
 

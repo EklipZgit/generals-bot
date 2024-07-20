@@ -422,7 +422,7 @@ class GeneralsClient(object):
         if toCheck in self.username:
             if alt in message:
                 self._ws.close()
-                exit()
+                sys.exit(0)
                 
         return True
 
@@ -454,7 +454,7 @@ class GeneralsClient(object):
             logbook.error(f'error shutting down in killswitch elapsed timer.')
             logbook.error(traceback.format_exc())
         logbook.info('peace nerd')
-        exit(2)  # End Program
+        sys.exit(2)
 
     def _terminate(self):
         if self._terminated:

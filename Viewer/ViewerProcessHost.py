@@ -260,8 +260,10 @@ def _run_main_viewer_loop(
         loggingQueue,
         minUpdateSleep: float
 ):
-    # if not noLog:
-    BotLogging.set_up_logger(logbook.INFO, mainProcess=False, queue=loggingQueue)
+    if not noLog:
+        BotLogging.set_up_logger(logbook.INFO, mainProcess=False, queue=loggingQueue)
+    else:
+        BotLogging.set_up_logger(logbook.ERROR, mainProcess=False, queue=loggingQueue)
 
     logbook.info("MAIN VIEWER LOOP PROC importing GeneralsViewer")
     from base.viewer import GeneralsViewer

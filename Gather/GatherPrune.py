@@ -902,17 +902,36 @@ def prune_mst_until(
                 except ValueError:
                     logEntries.append(f'child {str(current)} already not present on {str(parent)}')
                     if GatherDebug.USE_DEBUG_ASSERTS:
-                        raise AssertionError(f'child {str(current)} already not present on {str(parent)}')
+                        raise Exception(f'child {str(current)} already not present on {str(parent)}')
                 parent.pruned.append(current)
 
-            while parent is not None:
+            vis = set()
+            last = None
+            while parent is not None and parent.tile.tile_index not in vis:
+                vis.add(parent.tile.tile_index)
                 parent.value -= current.value
                 parent.gatherTurns -= current.gatherTurns
                 if parentPruneFunc is not None:
                     parentPruneFunc(parent.tile, current)
                 if parent.toTile is None:
+                    parent = None
                     break
+                last = parent
                 parent = nodeMap.get(parent.toTile, None)
+                if parent is None:
+                    last.toTile = None
+                    last.toGather = None
+
+            if parent is not None:
+                msg = f'parent finder went infinite, had a cycle.... {parent} to tile {parent.toTile}  to gather {parent.toGather}  LAST {last} to tile {last.toTile}  to gather {last.toGather}'
+                if GatherDebug.USE_DEBUG_ASSERTS:
+                    raise Exception(msg)
+                else:
+                    logbook.error(msg)
+                    logEntries.append(msg)
+                    if last is not None:
+                        last.toTile = None
+                        last.toGather = None
 
             childRecurseQueue.append(current)
             childIter = 0
@@ -925,7 +944,7 @@ def prune_mst_until(
                         viewInfo.add_info_line('ERR PRUNE CHILD WENT INFINITE!!!!!!!!!')
                     if GatherDebug.USE_DEBUG_ASSERTS:
                         queueStr = '\r\n'.join([str(i) for i in childRecurseQueue])
-                        raise AssertionError(f"PRUNE CHILD WENT INFINITE, BREAKING, {str(toDropFromLookup)}. QUEUE:\r\n{queueStr}")
+                        raise Exception(f"PRUNE CHILD WENT INFINITE, BREAKING, {str(toDropFromLookup)}. QUEUE:\r\n{queueStr}")
                     break
 
                 if gatherTreeNodeLookupToPrune is not None:

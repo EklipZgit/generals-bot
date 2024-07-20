@@ -855,6 +855,8 @@ def _knapsack_max_gather_iterative_prune(
 
     standardMode = not fastMode and not slowMode
 
+    # TODO this performs really well and i don't think it even needs treenodes anymore, mid algo, does it...? Cant we make this MUCH faster?
+
     turnsSoFar = 0
     totalValue = 0
     newStartTilesDict = startTilesDict.copy()

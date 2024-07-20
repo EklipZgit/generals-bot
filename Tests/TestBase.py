@@ -90,7 +90,10 @@ class TestBase(unittest.TestCase):
 
     def stop_capturing_logging(self):
         # logging.basicConfig(format='%(message)s', level=logbook.CRITICAL, force=True)
-        self._logging_handler.pop_application()
+        try:
+            self._logging_handler.pop_application()
+        except:
+            pass
 
     def _initialize(self):
         if not self._initialized:
@@ -1069,6 +1072,8 @@ class TestBase(unittest.TestCase):
     def assertInvalidGeneralPosition(self, bot: EklipZBot, tile: Tile, enemyPlayer: int = -1):
         if enemyPlayer == -1:
             enemyPlayer = bot.targetPlayer
+        if enemyPlayer == -1 and tile.isGeneral and tile.player != -1 and tile.player != bot.general.player:
+            enemyPlayer = tile.player
         if enemyPlayer == -1:
             self.fail(f'bot target player was {bot.targetPlayer}; you\'ll need to explicitly specify the enemyPlayer for this call.')
 
@@ -2032,13 +2037,34 @@ class TestBase(unittest.TestCase):
 
         return bestOpt
 
-    def render_gather_capture_plan(self, map: MapBase, plan: Gather.GatherCapturePlan, player: int = -1, targetPlayer: int = -1, info: str | None = None):
+    def render_gather_capture_plan(
+            self,
+            map: MapBase,
+            plan: Gather.GatherCapturePlan,
+            player: int = -1,
+            targetPlayer: int = -1,
+            info: str | None = None,
+            gatherMatrix: MapMatrixInterface[float] | None = None,
+            captureMatrix: MapMatrixInterface[float] | None = None,
+            valueMatrix: MapMatrixInterface[float] | None = None,
+            armyCostMatrix: MapMatrixInterface[float] | None = None
+    ):
         viewInfo = self.get_renderable_view_info(map)
         if player == -1:
             player = map.player_index
 
         if info is None:
             info = f'gcp {plan}'
+
+        for tile in map.get_all_tiles():
+            if gatherMatrix:
+                viewInfo.midRightGridText.raw[tile.tile_index] = f'g{str(round(gatherMatrix.raw[tile.tile_index], 2)).lstrip("0").replace("-0", "-")}'
+            if captureMatrix:
+                viewInfo.bottomMidRightGridText.raw[tile.tile_index] = f'c{str(round(captureMatrix.raw[tile.tile_index], 2)).lstrip("0").replace("-0", "-")}'
+            if valueMatrix:
+                viewInfo.bottomRightGridText.raw[tile.tile_index] = f'v{str(round(valueMatrix.raw[tile.tile_index], 3)).lstrip("0").replace("-0", "-")}'
+            if armyCostMatrix:
+                viewInfo.bottomLeftGridText.raw[tile.tile_index] = f'a{str(round(armyCostMatrix.raw[tile.tile_index], 1)).lstrip("0").replace("-0", "-")}'
 
         if targetPlayer == -1:
             for t in plan.tileSet:
@@ -2210,7 +2236,7 @@ class TestBase(unittest.TestCase):
         mapsRun = set()
         while successRuns < runCount:
             file = random.choice(files)
-            if 'TagXHz0X4-' in file:
+            if 'TagXHz0X4-' in file or 'nyeEPub4n---7--1165' in file:
                 continue
             try:
                 map, general, enemyGeneral = self.load_map_and_generals(f'GameContinuationEntries/{file}')

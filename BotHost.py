@@ -145,7 +145,7 @@ class BotHostBase(object):
 
             if self.has_viewer and self._viewer is not None:
                 with moveTimer.begin_event(f'Sorting perfevents for {currentMap.turn} update to Viewer'):
-                    self.eklipz_bot.viewInfo.perfEvents.extend(moveTimer.get_events_organized_longest_to_shortest(limit=40, indentSize=2))
+                    self.eklipz_bot.viewInfo.perfEvents.extend(moveTimer.get_events_organized_longest_to_shortest(limit=30, indentSize=2))
                 with moveTimer.begin_event(f'Sending turn {currentMap.turn} update to Viewer'):
                     # self.eklipz_bot.viewInfo.perfEvents.extend(moveTimer.get_events_organized_longest_to_shortest(limit=40, indentSize=2))
                     self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, currentMap, currentMap.complete)
@@ -198,7 +198,7 @@ class BotHostBase(object):
                 #     self.eklipz_bot.prep_view_info_for_render(None)
                 with moveTimer.begin_event(f'Sending turn {currentMap.turn} update to Viewer (no move)'):
                     self.eklipz_bot.prep_view_info_for_render(None)
-                    self.eklipz_bot.viewInfo.perfEvents.extend(moveTimer.get_events_organized_longest_to_shortest(limit=15, indentSize=2))
+                    self.eklipz_bot.viewInfo.perfEvents.extend(moveTimer.get_events_organized_longest_to_shortest(limit=30, indentSize=2))
                     self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, currentMap, currentMap.complete)
 
             with moveTimer.begin_event(f'Main thread check for pygame exit'):
@@ -347,24 +347,28 @@ def run_bothost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, ali
     loggingProc = None
     mgr = None
     ctx: DefaultContext = multiprocessing.get_context('spawn')
-    if not noLog:
-        import BotLogging
-        mgr = ctx.Manager()
-        queue = mgr.Queue(-1)
-        BotLogging.set_up_logger(logbook.INFO, queue=queue)
+    # if not noLog:
+    import BotLogging
+    mgr = ctx.Manager()
+    queue = mgr.Queue(-1)
+    level = logbook.INFO
+    if noLog:
+        level = logbook.ERROR
 
-        loggingProc = ctx.Process(target=BotLogging.run_log_output_process, args=[BotLogging.LOGGING_QUEUE])
+    BotLogging.set_up_logger(level, queue=queue)
 
-        loggingProc.start()
+    loggingProc = ctx.Process(target=BotLogging.run_log_output_process, args=[BotLogging.LOGGING_QUEUE, level])
 
-        def signal_handler(sig, frame):
-            if loggingProc is not None:
-                # loggingProc.join()
-                loggingProc.kill()
-            print('You pressed Ctrl+C!')
-            sys.exit(0)
+    loggingProc.start()
 
-        signal.signal(signal.SIGINT, signal_handler)
+    def signal_handler(sig, frame):
+        if loggingProc is not None:
+            # loggingProc.join()
+            loggingProc.kill()
+        print('You pressed Ctrl+C!')
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
 
     try:
         logbook.info("newing up bot host")
@@ -377,6 +381,7 @@ def run_bothost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, ali
         if loggingProc is not None:
             loggingProc.join(1.5)
             loggingProc.kill()
+        print('logger kilt')
 
 
 if __name__ == '__main__':

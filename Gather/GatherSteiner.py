@@ -153,6 +153,7 @@ def _build_pcst_tile_prize_matrix(
 def get_prize_collecting_gather_mapmatrix_single_iteration(
         map: MapBase,
         valueMatrix: MapMatrixInterface[float],
+        baselineValuePerTurn,
         searchingPlayer=-2,
         # armyCutoff = 2.0,
         rootTiles: typing.List[Tile] | None = None,
@@ -166,15 +167,15 @@ def get_prize_collecting_gather_mapmatrix_single_iteration(
     prizes = valueMatrix.copy()
     if mustInclude:
         for t in mustInclude:
-            prizes.raw[t.tile_index] += 50
+            prizes.raw[t.tile_index] += 150
 
     tIdxs = _pcst_iteration_internal(
         map,
-        costBasis=13.0,
+        costBasis=max(0, baselineValuePerTurn - 1),
         tilePrizeMatrix=prizes,
         tileExtraCostMatrix=None,
         skipTiles=skipTiles,
-        prizeOffset=4.0,
+        prizeOffset=0,
         rootTiles=rootTiles,
         fastMode=False,
     )
@@ -824,6 +825,9 @@ def _pcst_iteration_internal(
         For the PCSF problem, the output of strong pruning is at least as good as the output of GW pruning."""
 
     verbosity_level = 0
+    # we scale negatives into the 2 range, i picked it arbitrarily
+    scaleNegativesBelow = 2
+    costBasis += scaleNegativesBelow
     """ verbosity_level: an integer indicating how much debug output the function should produce."""
     for tileIndex, tile in enumerate(map.tiles_by_index):
         prize = tilePrizeMatrix.raw[tileIndex]
@@ -832,8 +836,8 @@ def _pcst_iteration_internal(
         prize += prizeOffset
 
         # prizes.append(max(0.0, prize))
-        if prize < 1:
-            prize = 1 / (1 - prize)
+        if prize < scaleNegativesBelow:
+            prize = scaleNegativesBelow / ((scaleNegativesBelow + 1) - prize)
         prizes.append(prize)
         if tile.isObstacle:
             continue
@@ -841,8 +845,8 @@ def _pcst_iteration_internal(
         if skipTiles is not None and tile in skipTiles:
             continue
 
-        right = map.GetTile(tile.x + 1, tile.y)
-        down = map.GetTile(tile.x, tile.y + 1)
+        right = map.GetTileModifierSafe(tile.x + 1, tile.y)
+        down = map.GetTileModifierSafe(tile.x, tile.y + 1)
         if right and not right.isObstacle:
             if skipTiles is None or right not in skipTiles:
                 edges.append([tileIndex, right.tile_index])

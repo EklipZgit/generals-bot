@@ -172,7 +172,7 @@ def dest_breadth_first_target(
 
     if map.teammates:
         if skipTiles:
-            skipTiles = skipTiles.copy()
+            skipTiles = set(t for t in skipTiles)
         else:
             skipTiles = set()
         for tId in map.teammates:
@@ -2951,14 +2951,18 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
     # maxPriosTMP: typing.Dict[Tile, typing.Dict[int, typing.Any]] = {}
     # endNodesTMP: typing.Dict[Tile, typing.Dict[int, Tile]] = {}
 
+    # visited = set()
+
     if isinstance(startTiles, dict):
         for tile, (startPriorityObject, distance) in startTiles.items():
+            # visited.add(tile.tile_index)
             startVal = startPriorityObject
             startDict = {}
             maxValuesDict[tile] = startDict
             heapq.heappush(frontier, (startVal, distance, 0, tile, None, startDict))
     else:
         for tile in startTiles:
+            # visited.add(tile.tile_index)
             if priorityFunc != default_priority_func:
                 raise AssertionError(
                     "yo you need to do the dictionary start if you're gonna pass a nonstandard priority func.")
@@ -3013,6 +3017,7 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
         # if dist not in visited[current.x][current.y] or visited[current.x][current.y][dist][0] > prioVals:
         # if current in globalVisitedSet or (skipTiles != None and current in skipTiles):
 
+        # remove if visited set
         fromVal = fromTileLookup.raw[current.tile_index]
         # fromVal = fromTileLookup.get(current.tile_index, None)
         if fromVal is not None:
@@ -3058,11 +3063,12 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
         for next in current.movable:  # new spots to try
             if next == parent:
                 continue
+            # if next.tile_index in visited:
+            #     continue
             if (next.isMountain
                     or (noNeutralCities and next.player == -1 and next.isCity)
                     or (not next.discovered and next.isNotPathable)):
                 continue
-
             nextPrio = priorityFunc(next, prioVals)
             if nextPrio is not None:
                 if boundFunc is not None:
@@ -3078,6 +3084,8 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
                     shouldSkip = skipFunc(next, nextPrio)
                     if shouldSkip:
                         continue
+
+                # visited.add(next.tile_index)
                 heapq.heappush(frontier, (nextPrio, dist, curTurns, next, current, maxDict))
     if not noLog:
         logbook.info(f"BFS-DYNAMIC-MAX ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")

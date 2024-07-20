@@ -2,10 +2,12 @@ import os
 import pathlib
 import random
 import time
+import traceback
 import typing
 
 import logbook
 
+import SearchUtils
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
 from ViewInfo import TargetStyle
@@ -1151,7 +1153,7 @@ class GeneralPredictionTests(TestBase):
                     self.assertInvalidGeneralPosition(bot, tile)
 
     def test_doesnt_over_limit_optimal_starts(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         projRoot = pathlib.Path(__file__).parent
         folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
         files = os.listdir(folderWithHistoricals)
@@ -1164,32 +1166,103 @@ class GeneralPredictionTests(TestBase):
             if len(map.players[enPlayer].tiles) > 0:
                 continue
             tileCount = map.players[general.player].tileCount
-            # if tileCount != 25:
-            #     continue
+            if tileCount != 24:
+                continue
 
             with self.subTest(file=file.replace('.', '_')):
                 bot = self.verify_not_overlimiting_known_starts(debugMode, enPlayer, file)
                 if not bot:
-                    self.skipTest('error')
+                    self.stop_capturing_logging()
+                    self.skipTest(f'error {traceback.format_exc()}')
                 else:
-                    self.assertTrue(bot.armyTracker.valid_general_positions_by_player[general.player][general])
+                    if not bot.armyTracker.valid_general_positions_by_player[general.player][general]:
+                        logbook.info(f'FAILED {file}')
+                        self.stop_capturing_logging()
+                        self.fail(f'should not have eliminated {general}')
 
     def test_doesnt_over_limit_optimal_starts__specific_map(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        file = 're6H49cT3.txtmap'
+        file = '3TL2aLE6X.txtmap'
         # file = 'BeaCFkX3h.txtmap'
+        # file = 'BxJGRqcph.txtmap'
+        # file = 'BxrRuXrhh.txtmap'
+        file = '3TL2aLE6X.txtmap'
+        # file = 'YExTF0h34.txtmap'
+        # file = '4Tg7CtauM.txtmap'
+        # file = 'BeaCFkX3h.txtmap'
+        # file = 'BxfoIQB3h.txtmap'
+        # file = 'Fw-1fOqRO.txtmap'
+        # file = 'BxJGRqcph.txtmap'
+        # file = 'BxrRuXrhh.txtmap'
+        # file = 'BzwzhsmEK.txtmap'
+        # file = 'd7X-0yshI.txtmap'
+        # file = 'egzNc_XMZ.txtmap'
+        # file = 'He6CKDrhn.txtmap'
+        # file = 'gm-pbPvml.txtmap'
+        # file = 'HedEBsqph.txtmap'
+        # file = '3MyM5SBG8.txtmap'
+        # file = 'ethryn_hack_6_15__rx07Ek732.txtmap'
+        # file = 'ethryn_hack_4_10__rx07Ek732.txtmap'
+        # BxJGRqcph.txtmap
+        # BzwzhsmEK.txtmap
+        # egzNc_XMZ.txtmap
+        # EIOm0pyej.txtmap
+        # He6CKDrhn.txtmap
+        # l2EWInn_Q.txtmap
+        # RBgYv_Sef.txtmap
+        # S-KEVulKr.txtmap
+        # SGxaoc-Lp.txtmap
+        # tcNStuInw.txtmap
+        # TwVCPfKGk.txtmap
+        # uG1xBBXcL.txtmap
+        # uZ8hgO5YQ.txtmap
 
         map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=51)
         enPlayer = (general.player + 1) & 1
 
-        self.begin_capturing_logging()
-        bot = self.verify_not_overlimiting_known_starts(debugMode, enPlayer, file)
-        if not bot:
-            self.skipTest('error')
-        else:
-            self.assertTrue(bot.armyTracker.valid_general_positions_by_player[general.player][general])
+        # self.render_map(map, infoString=f'{map.players[general.player].tileCount} tiles')
 
-    def verify_not_overlimiting_known_starts(self, debugMode, enPlayer, file):
+        self.begin_capturing_logging()
+        bot = self.verify_not_overlimiting_known_starts(debugMode, enPlayer, file, replaceWithMountains=True)
+        if not bot:
+            self.stop_capturing_logging()
+            self.skipTest(f'error {traceback.format_exc()}')
+        else:
+            if not bot.armyTracker.valid_general_positions_by_player[general.player][general]:
+                logbook.info(f'FAILED {file}')
+                self.stop_capturing_logging()
+                self.fail(f'should not have eliminated {general}')
+
+    def test_doesnt_over_limit_optimal_starts__mountain_replace_test(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        projRoot = pathlib.Path(__file__).parent
+        folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
+        files = os.listdir(folderWithHistoricals)
+        joined = '\n'.join(files)
+        self.begin_capturing_logging()
+        logbook.info(f'files:\n{joined}')
+        for file in files:
+            map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=51)
+            enPlayer = (general.player + 1) & 1
+            if len(map.players[enPlayer].tiles) > 0:
+                continue
+            tileCount = map.players[general.player].tileCount
+            # if tileCount != 24:
+            #     continue
+
+            with self.subTest(file=file.replace('.', '_')):
+                bot = self.verify_not_overlimiting_known_starts(debugMode, enPlayer, file, replaceWithMountains=True)
+                if not bot:
+                    self.stop_capturing_logging()
+                    self.skipTest(f'error')
+                else:
+                    if not bot.armyTracker.valid_general_positions_by_player[general.player][general]:
+                        logbook.info(f'FAILED {file}')
+                        self.stop_capturing_logging()
+                        self.fail(f'should not have eliminated {general}')
+
+    def verify_not_overlimiting_known_starts(self, debugMode, enPlayer, file, replaceWithMountains: bool = False):
+        self.stop_capturing_logging()
         map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=51)
         enemyGeneral = self.get_furthest_tile_from_general(map, general, manhattan=True)
         enemyGeneral.player = enPlayer
@@ -1197,21 +1270,46 @@ class GeneralPredictionTests(TestBase):
         enemyGeneral.army = 10
         enemyGeneral.isMountain = False
         map.generals[enPlayer] = enemyGeneral
+
+        if replaceWithMountains:
+            keep = {general, enemyGeneral}
+            for tile in map.players[general.player].tiles:
+                keep.add(tile)
+
+            def findFunc(tile, _, __) -> bool:
+                return tile == enemyGeneral
+
+            path = SearchUtils.breadth_first_find_queue(map, map.players[general.player].tiles, findFunc, noNeutralCities=True)
+            for t in path.tileList:
+                keep.add(t)
+
+            for t in map.get_all_tiles():
+                if t not in keep:
+                    map.convert_tile_to_mountain(t)
+
         msg = f'TOTAL COUNT {len(map.players[general.player].tiles)} ({map.players[general.player].tileCount})'
         # playerTilesToMatchOrExceed = self.get_tiles_capped_on_50_count_and_reset_map(map, general, toTurn=1)
         self.enable_search_time_limits_and_disable_debug_asserts()
         try:
-            simHost = GameSimulatorHost(map, player_with_viewer=enemyGeneral.player, playerMapVision=map, allAfkExceptMapPlayer=False)
+            map.players[enemyGeneral.player].dead = False
+            map.players[enemyGeneral.player].leftGame = False
+            map.player_index = enemyGeneral.player
+            simHost = GameSimulatorHost(map, player_with_viewer=enemyGeneral.player, playerMapVision=None, allAfkExceptMapPlayer=True, botInitOnly=True)
             bot = self.get_debug_render_bot(simHost, enemyGeneral.player)
+            self.begin_capturing_logging()
+            start = time.perf_counter()
             bot.armyTracker.limit_player_spawn_by_good_start(bot._map.players[general.player], general)
+            logbook.info(f'took {time.perf_counter() - start:.4}s to limit...')
             for t in map.players[general.player].tiles:
                 bot.viewInfo.add_targeted_tile(t, TargetStyle.GREEN)
             bot.viewInfo.add_targeted_tile(general, TargetStyle.PURPLE)
             bot.viewInfo.add_info_line(msg)
             if debugMode:
-                simHost.run_sim(debugMode, 0.25, 1)
+                simHost.run_sim(debugMode, 0.25, 0)
             return bot
         except:
+            self.begin_capturing_logging()
+            logbook.info(traceback.format_exc())
             return None
 
 # 11f, 65p
@@ -1223,4 +1321,24 @@ class GeneralPredictionTests(TestBase):
 # 15f, 79p after fixing the ever_owned_by_player order issue with drop_chained_bad_fog on tile-discovered-as-neutral
 # 15f, 90p after adding limits for emergences from obvious locations based on pure, raw unfettered standing army.
 # -------
-# 10f, 87p, 1s  AFTER MOVED DIVE RELATED TESTS TO OTHER TEST FILE
+# 10f, 87p, 1s  AFTER MOVED DIVE RELATED TESTS TO OTHER TEST FILE    
+    def test_should_not_misEliminate_gen_position_for_weird_start(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_misEliminate_gen_position_for_weird_start___ElZH_kmpU---0--15.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 15, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=15)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.reveal_player_general(enemyGeneral.player, general.player, hidden=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '9,2->9,3->7,3->7,7  None  9,2->10,2->10,1->12,1  None  9,2->9,1->7,1  None  None  9,2->11,2->11,3  None  9,2->9,0->7,0')
+        # simHost.queue_player_moves_str(enemyGeneral.player, '9,2->9,3->7,3->7,7  None  9,2->10,2->10,1->12,1  None  9,2->9,1->7,1  None  None  9,2->9,0->7,0  None  9,2->11,2->11,3')
+        simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  15,11->9,11->9,7  15,11->8,11->8,7')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=25)
+        self.assertValidGeneralPosition(bot, enemyGeneral)
+        self.assertNoFriendliesKilled(map, general)

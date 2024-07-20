@@ -82,7 +82,7 @@ class GeneralsClientHost(object):
         time.sleep(4.0)
         logbook.info('ok, killing process')
         time.sleep(0.1)
-        exit(0)
+        sys.exit(0)
 
     def _start_game_thread(self):
         # Create Game

@@ -25,8 +25,8 @@ def add_file_log_output(botName: str, gameMode: str, replayId: str, logFolder: s
     pass
 
 
-def run_log_output_process(queue):
-    set_up_logger(logbook.INFO, mainProcess=True, queue=queue)
+def run_log_output_process(queue, level):
+    set_up_logger(level, mainProcess=True, queue=queue)
 
 
 def set_up_logger(logLevel: int, mainProcess: bool = False, queue = None):

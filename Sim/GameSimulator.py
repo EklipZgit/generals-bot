@@ -637,7 +637,10 @@ class GameSimulatorHost(object):
                         # perform the final 'bot' turn without actual executing the move or getting the next
                         # server update. Allows things like the army tracker etc and the map viewer to update with the
                         # bots final calculated map state and everything.
-                        botHost.make_move(self.sim.players[idx].map, time.time_ns() / NS_CONVERTER)
+                        if self.init_only:
+                            botHost.receive_update_no_move(self.sim.players[idx].map, updateReceivedTime=time.time_ns() / NS_CONVERTER)
+                        else:
+                            botHost.make_move(self.sim.players[idx].map, time.time_ns() / NS_CONVERTER)
 
                 # run these one last time
                 for func in self._between_turns_funcs:

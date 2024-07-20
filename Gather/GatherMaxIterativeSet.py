@@ -647,8 +647,10 @@ def _knapsack_max_set_gather_iterative_prune(
                         forest.merge(tile, mv)
 
             if liveRenderer:
-                liveRenderer.view_info.add_stats_line(f'LIGHT BLUE = {len(newStartTilesDict)} iter start tiles')
-                liveRenderer.view_info.add_map_zone(newStartTilesDict.copy(), Colors.LIGHT_BLUE, alpha=150)
+                liveRenderer.view_info.add_stats_line(f'O GREEN = {len(newStartTilesDict)} iter start tiles')
+                for t in newStartTilesDict.keys():
+                    liveRenderer.view_info.add_targeted_tile(t, TargetStyle.GREEN, radiusReduction=-2)
+                # liveRenderer.view_info.add_map_zone(newStartTilesDict.copy(), Colors.P_GREEN, alpha=200)
 
             newGatheredArmy, newPaths = _get_sub_knapsack_max_set_gather(
                 map,
@@ -691,12 +693,14 @@ def _knapsack_max_set_gather_iterative_prune(
                     newStartTilesDict[tile] = (baseCaseFunc(tile, 0), 0)
 
             if liveRenderer:
+                liveRenderer.view_info.add_stats_line(f'GREEN ARROWS ARE INITIAL PATHS')
                 for path in newPaths:
                     liveRenderer.view_info.color_path(
                         PathColorer(
                             path,
                             100, 255, 100,
                             alpha=200,
+                            alphaDecreaseRate=0,
                         ),
                     )
                     liveRenderer.view_info.add_info_line(f' path {path}')
@@ -794,8 +798,16 @@ def _knapsack_max_set_gather_iterative_prune(
             ogTotalValue = totalValue + newGatheredArmy
             ogTotalTurns = totalTurns
             overpruneCutoff = max(pruneToTurns // 2, lastPrunedTo - maxPerIteration)
-            # overpruneCutoff = pruneToTurns
-            rootForestSubset, (gatherVal, armySum) = forest.subset_with_values(next(iter(rootTiles)))
+
+            rootForestSubset = set()
+            gatherVal = 0
+            armySum = 0
+            for rootTile in rootTiles:
+                if rootTile in forest:
+                    recon, (thisRootGath, thisRootArmy) = forest.subset_with_values(rootTile)
+                    rootForestSubset.update(recon)
+                    gatherVal += thisRootGath
+                    armySum += thisRootArmy
 
             curTurns = len(rootForestSubset) - len(rootTiles)
             if totalTurns > 0:
@@ -1021,8 +1033,26 @@ def prune_set_by_articulation_points(
     unsafeToCut = set()
     mustReEvaluateUnsafe = True
     articExecutions = 0
+    unsafeRefreshes = SearchUtils.Counter(0)
+    movableRechecks = 0
 
-    while len(toPrune) > pruneTo and dcQueue:
+    def refreshUnableToPrune():
+        # don't retry these until we're near the end at least, so we dont turn this into n^2 worst case
+        for mightPruneNow in unableToPrune:
+            if mightPruneNow in toPrune:
+                heapq.heappush(dcQueue, (valueMatrix.raw[mightPruneNow.tile_index], mightPruneNow))
+        unsafeRefreshes.value += 1
+        unableToPrune.clear()
+
+    lastPrunedToUnsafe = -1
+
+    while len(toPrune) > pruneTo:
+        if not dcQueue:
+            mustReEvaluateUnsafe = True
+            if len(toPrune) == lastPrunedToUnsafe:
+                break
+            lastPrunedToUnsafe = len(toPrune)
+            refreshUnableToPrune()
         if mustReEvaluateUnsafe:
             unsafeToCut = {t for t in nx.algorithms.articulation_points(nxForBcc)}
             mustReEvaluateUnsafe = False
@@ -1046,21 +1076,24 @@ def prune_set_by_articulation_points(
             tileDictToPrune.pop(t, None)
         pruned.append(t)
 
-        if len(dcQueue) < 2 or (mustReEvaluateUnsafe and len(toPrune) + 5 > pruneTo):
-            # don't retry these until we're near the end at least, so we dont turn this into n^2 worst case
-            for mightPruneNow in unableToPrune:
-                heapq.heappush(dcQueue, (valueMatrix.raw[mightPruneNow.tile_index], mightPruneNow))
-            unableToPrune.clear()
+        if len(dcQueue) < 2 or (mustReEvaluateUnsafe and len(toPrune) < pruneTo + 5):
+            mustReEvaluateUnsafe = True
+            refreshUnableToPrune()
         elif not mustReEvaluateUnsafe:
             for mv in t.movable:
                 if mv in unableToPrune:
                     unableToPrune.discard(mv)
+                    movableRechecks += 1
                     heapq.heappush(dcQueue, (valueMatrix.raw[mv.tile_index], mv))
 
     if logEntries:
         dur = time.perf_counter() - start
         durPerPrune = dur / (ogLen - len(toPrune))
-        logEntries.append(f'  articulation point prune pruned {ogLen - len(toPrune)}tiles/{articExecutions}execs ({ogLen} down to {len(toPrune)}) in {1000.0 * dur:.2f}ms, {1000.0 * durPerPrune:.2f}ms each - gathVal {currentGathVal:.2f}, armySum {currentArmySum:.2f}')
+        # if GatherDebug.USE_DEBUG_LOGGING:
+        logbook.info(f'   art point prune finished, {ogLen - len(toPrune)} tiles / {articExecutions} execs ({ogLen} down to {len(toPrune)}) in {1000.0 * dur:.2f}ms, {1000.0 * durPerPrune:.2f}ms each - gathVal {currentGathVal:.2f}, armySum {currentArmySum:.2f}')
+        logbook.info(f'       len(toPrune) {len(toPrune)} <= pruneTo {pruneTo} or not dcQueue {dcQueue}...')
+        logbook.info(f'       unsafeRefreshes {unsafeRefreshes.value}, movableRechecks {movableRechecks}, len(unableToPrune) {len(unableToPrune)},  {unableToPrune}')
+        logEntries.append(f'  articulation point prune pruned {ogLen - len(toPrune)} tiles / {articExecutions} execs ({ogLen} down to {len(toPrune)}) in {1000.0 * dur:.2f}ms, {1000.0 * durPerPrune:.2f}ms each - gathVal {currentGathVal:.2f}, armySum {currentArmySum:.2f}')
 
     return currentGathVal, currentArmySum, pruned
 
@@ -1225,6 +1258,9 @@ def prune_set_to_turns_and_reconnect_with_values(
     # numToPruneNaive = int(pruneDiff * 1.5)
     # prune_set_naive(rootTiles, toPrune, numToPruneNaive, valueMatrix)
 
+    baselineValue = sum(valueMatrix.raw[t.tile_index] for t in toPrune if t not in rootTiles)
+    baselineValuePerTurn = baselineValue / max(1, len(toPrune) - len(rootTiles))
+
     # rawArmy = 0
     # gathVal = 0
     # for t in toPrune:
@@ -1232,14 +1268,21 @@ def prune_set_to_turns_and_reconnect_with_values(
     #     gathVal += valueMatrix.raw[t.tile_index]
     someRoot = next(iter(rootTiles))
 
+    if liveRenderer:
+        liveRenderer.view_info.add_stats_line(f'O - WHITE = {len(toPrune)} raw input tiles before disconnect/reconnect iteration.')
+        for t in toPrune:
+            liveRenderer.view_info.add_targeted_tile(t, TargetStyle.WHITE, radiusReduction=0)
+
     # over prune the set naively, before we reconnect it. TODO adjust the overprune amount...?
     # naiveTargetTurns = overpruneCutoff - random.randint(-2, 5)
     naiveTargetTurns = overpruneCutoff - 5
     prunedTiles = prune_set_naive(rootTiles, toPrune, naiveTargetTurns, valueMatrix, pruneReconnectCountMatrix, tileDictToPrune, logEntries)
     if liveRenderer:
-        liveRenderer.view_info.add_stats_line(f'O - ORANGE = {len(prunedTiles)} naive pruned ({len(toPrune)} remaining, tg {naiveTargetTurns})')
+        liveRenderer.view_info.add_stats_line(f'O - ORANGE = {len(prunedTiles)} naive pruned ({len(toPrune)} remaining, tg {naiveTargetTurns}) (drawn over the white circles)')
         for t in prunedTiles:
-            liveRenderer.view_info.add_targeted_tile(t, TargetStyle.ORANGE, radiusReduction=12)
+            liveRenderer.view_info.add_targeted_tile(t, TargetStyle.ORANGE, radiusReduction=0)
+        # for t in prunedTiles:
+        #     liveRenderer.view_info.add_targeted_tile(t, TargetStyle.ORANGE, radiusReduction=2)
 
     reconnectTargetTurns = desiredTotalNodes
     if desiredTotalNodes / finalTargetTurns > 0.92 and iteration & 1 == 0:  #
@@ -1291,11 +1334,13 @@ def prune_set_to_turns_and_reconnect_with_values(
             overpruneCutoff,
             baseCaseFunc,
             tileDictToPrune,
+            baselineValuePerTurn,
             liveRenderer)
         logEntries.append(f'   pcst {len(reconnectedSubset)}')
 
+    prePruneCount = len(reconnectedSubset)
     qpTurns = desiredTotalNodes + 6
-    gathVal, rawArmy, qpArticTiles = prune_set_by_heuristic_articulation_points(
+    gathVal, rawArmy, qpArticTilesPruned = prune_set_by_heuristic_articulation_points(
         map,
         rootTiles,
         reconnectedSubset,
@@ -1308,11 +1353,14 @@ def prune_set_to_turns_and_reconnect_with_values(
         tileDictToPrune,
         logEntries)
 
-    if liveRenderer:
-        liveRenderer.view_info.add_stats_line(f'O - TEAL = {len(qpArticTiles)} HEUR artic pruned ({len(reconnectedSubset)} returned, tg {qpTurns})')
-        for t in qpArticTiles:
-            liveRenderer.view_info.add_targeted_tile(t, TargetStyle.TEAL, radiusReduction=14)
+    # TODO render liverenderer phase here so this can be more followable...? TOO MUCH DATA RIGHT NOW ON SCREEN IDK WHATS HAPPENING
 
+    if liveRenderer:
+        liveRenderer.view_info.add_stats_line(f'O - TEAL = {len(qpArticTilesPruned)} HEUR artic pruned ({len(reconnectedSubset)} returned of {prePruneCount}, tg {qpTurns}) (pruning the purple inner circles now)')
+        for t in qpArticTilesPruned:
+            liveRenderer.view_info.add_targeted_tile(t, TargetStyle.TEAL, radiusReduction=6)
+
+    preApPruneCount = len(reconnectedSubset)
     articPruneTargetTurns = desiredTotalNodes
     finalGathVal, finalRawArmy, prunedArticTiles = prune_set_by_articulation_points(
         map,
@@ -1330,9 +1378,9 @@ def prune_set_to_turns_and_reconnect_with_values(
     #     forest.unsafe_delete
 
     if liveRenderer:
-        liveRenderer.view_info.add_stats_line(f'O - RED = {len(prunedArticTiles)} artic pruned ({len(reconnectedSubset)} returned, tg {articPruneTargetTurns})')
+        liveRenderer.view_info.add_stats_line(f'O - RED = {len(prunedArticTiles)} artic pruned ({len(reconnectedSubset)} returned of {preApPruneCount}, tg {articPruneTargetTurns}) prune of remaining...?')
         for t in prunedArticTiles:
-            liveRenderer.view_info.add_targeted_tile(t, TargetStyle.RED, radiusReduction=10)
+            liveRenderer.view_info.add_targeted_tile(t, TargetStyle.RED, radiusReduction=9)
 
     return len(reconnectedSubset) - len(rootTiles), finalGathVal, reconnectedSubset
 
@@ -1388,25 +1436,10 @@ def _reconnect_steiner_subprune(
         rawArmy += armyCostMatrix.raw[t.tile_index]
         tileDictToPrune[t] = (baseCaseFunc(t, 0), 0)
 
-    #
-    # reconnectionTiles, forest = _reconnect_iterative_heuristic(
-    #     map,
-    #     reconnectTargetTurns,
-    #     partiallyDisconnectedSetToModify=toReconnect,
-    #     rootTiles=rootTiles,
-    #     valueMatrix=valueMatrix,
-    #     armyCostMatrix=armyCostMatrix,
-    #     skipTiles=skipTiles,
-    #     bareMinTurns=overpruneCutoff,  # TODO
-    #     doNotAllowExtraTurns=False,
-    #     liveRenderer=liveRenderer,
-    # )
-    # reconnectedSubset, (gathVal, rawArmy) = forest.subset_with_values(next(iter(rootTiles)))
-
     if liveRenderer:
-        liveRenderer.view_info.add_stats_line(f'O - PURPLE = {len(reconnectionTiles)} +stein rec ({len(reconnectedSubset)} total, min {overpruneCutoff}, tg {reconnectTargetTurns})')
+        liveRenderer.view_info.add_stats_line(f'O - PURPLE = {len(reconnectionTiles)} +stein rec ({len(reconnectedSubset)} total, min {overpruneCutoff}, tg {reconnectTargetTurns}). These are reconnecting the WHITE tiles that were not pruned.')
         for t in reconnectionTiles:
-            liveRenderer.view_info.add_targeted_tile(t, TargetStyle.PURPLE, radiusReduction=6)
+            liveRenderer.view_info.add_targeted_tile(t, TargetStyle.PURPLE, radiusReduction=3)
 
     for tile in reconnectionTiles:
         pruneReconnectCountMatrix.raw[tile.tile_index] += 1
@@ -1427,6 +1460,7 @@ def _reconnect_fast_pcst(
         overpruneCutoff,
         baseCaseFunc,
         tileDictToPrune,
+        baselineValuePerTurn,
         liveRenderer
 ) -> typing.Tuple[float, float, typing.Set[Tile]]:
     """
@@ -1450,6 +1484,7 @@ def _reconnect_fast_pcst(
     reconnectedSubset = GatherSteiner.get_prize_collecting_gather_mapmatrix_single_iteration(
         map,
         valueMatrix,
+        baselineValuePerTurn,
         map.player_index,
         rootTiles=rootTiles,
         mustInclude=toReconnect,
@@ -1485,9 +1520,9 @@ def _reconnect_fast_pcst(
     # reconnectedSubset, (gathVal, rawArmy) = forest.subset_with_values(next(iter(rootTiles)))
 
     if liveRenderer:
-        liveRenderer.view_info.add_stats_line(f'O - PURPLE = {len(reconnectionTiles)} +stein rec ({len(reconnectedSubset)} total, min {overpruneCutoff}, tg {reconnectTargetTurns})')
+        liveRenderer.view_info.add_stats_line(f'O - PURPLE = {len(reconnectionTiles)} +PCST FAST reconnect ({len(reconnectedSubset)} total, min {overpruneCutoff}, tg {reconnectTargetTurns}) connecting the white nodes that werent pruned orange')
         for t in reconnectionTiles:
-            liveRenderer.view_info.add_targeted_tile(t, TargetStyle.PURPLE, radiusReduction=6)
+            liveRenderer.view_info.add_targeted_tile(t, TargetStyle.PURPLE, radiusReduction=3)
 
     for tile in reconnectionTiles:
         pruneReconnectCountMatrix.raw[tile.tile_index] += 1
@@ -1540,11 +1575,21 @@ def _reconnect_dynamic_find_forest(
         doNotAllowExtraTurns=False,
         liveRenderer=liveRenderer,
     )
-    reconnectedSubset, (gathVal, rawArmy) = forest.subset_with_values(next(iter(rootTiles)))
+
+    reconnectedSubset = set()
+    gathVal = 0
+    rawArmy = 0
+    for rootTile in rootTiles:
+        if rootTile in forest:
+            recon, (thisRootGath, thisRootArmy) = forest.subset_with_values(rootTile)
+            reconnectedSubset.update(recon)
+            gathVal += thisRootGath
+            rawArmy += thisRootArmy
+
     if liveRenderer:
-        liveRenderer.view_info.add_stats_line(f'O - PURPLE = {len(reconnectionTiles)} +reconn ({len(reconnectedSubset)} total, min {overpruneCutoff}, tg {reconnectTargetTurns})')
+        liveRenderer.view_info.add_stats_line(f'O - PURPLE = {len(reconnectionTiles)} +FOREST ({len(reconnectedSubset)} total, min {overpruneCutoff}, tg {reconnectTargetTurns}) ALT dynamic forest reconnect reconnecting WHITE O that werent pruned naively')
         for t in reconnectionTiles:
-            liveRenderer.view_info.add_targeted_tile(t, TargetStyle.PURPLE, radiusReduction=6)
+            liveRenderer.view_info.add_targeted_tile(t, TargetStyle.PURPLE, radiusReduction=3)
     if baseCaseFunc and tileDictToPrune:
         for tile in list(tileDictToPrune.keys()):
             if not forest.connected(tile, someRoot):
@@ -1555,6 +1600,7 @@ def _reconnect_dynamic_find_forest(
                 tileDictToPrune[tile] = (baseCaseFunc(tile, 0), 0)
     for tile in reconnectionTiles:
         pruneReconnectCountMatrix.raw[tile.tile_index] += 1
+
     return gathVal, rawArmy, reconnectedSubset
 
 
@@ -1597,6 +1643,9 @@ def _reconnect_iterative_heuristic(
     @param valueMatrix: gather prio values.
     @return:
     """
+
+    if liveRenderer:
+        liveRenderer.view_info.add_stats_line(f'YELLOW ARROWS ARE RECONNECT PATHS')
 
     excessTurns = pruneTo - bareMinTurns
 

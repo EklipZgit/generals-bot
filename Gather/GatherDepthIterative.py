@@ -745,9 +745,7 @@ def _knapsack_levels_gather_recurse(
     return maxIterationGatheredArmy, maxIterationPaths
 
 
-# TODO make two versions of this, one that respects defensive depth stuff (and actually calculates move order safety to avoid impossible defense gathers that dont violate depth but would need to make 2 depth 2 moves or whatever)
-#  and one that doesnt even give a shit about the gather nodes until after the gather is complete maybe? Though that version could respect capture roots.
-def _knapsack_levels_gather_iterative_prune(
+def _knapsack_levels_gather_iterative_depth_prune(
         itr: SearchUtils.Counter,
         map: MapBase,
         startTilesDict: typing.Dict[Tile, typing.Tuple[typing.Any, int]],
@@ -1432,9 +1430,8 @@ def knapsack_depth_gather_with_values(
                     if useTrueValueGathered:
                         negGatheredSum += nextTile.army
 
-            # TODO comment back in
-            # if priorityMatrix is not None:
-            #     negGatheredSum -= priorityMatrix.raw[nextTile.tile_index]
+            if priorityMatrix is not None:
+                negGatheredSum -= priorityMatrix.raw[nextTile.tile_index]
 
             if priorityTiles and nextTile in priorityTiles:
                 numPrioTiles += 1
@@ -1569,7 +1566,7 @@ def knapsack_depth_gather_with_values(
     itr = SearchUtils.Counter(0)
 
     if not useRecurse:
-        totalValue, rootNodes = _knapsack_levels_gather_iterative_prune(
+        totalValue, rootNodes = _knapsack_levels_gather_iterative_depth_prune(
             itr=itr,
             map=map,
             startTilesDict=startTilesDict,
@@ -1593,7 +1590,7 @@ def knapsack_depth_gather_with_values(
             preferNeutral=preferNeutral,
             viewInfo=viewInfo,
             distPriorityMap=distPriorityMap,
-            # priorityMatrix=priorityMatrix,
+            priorityMatrix=priorityMatrix,
             useTrueValueGathered=useTrueValueGathered,
             includeGatherTreeNodesThatGatherNegative=includeGatherTreeNodesThatGatherNegative,
             logEntries=logEntries,
@@ -1648,7 +1645,7 @@ def knapsack_depth_gather_with_values(
             teams=teams,
             onlyCalculateFriendlyArmy=not useTrueValueGathered,
             viewInfo=viewInfo,
-            shouldAssert=USE_DEBUG_ASSERTS,
+            shouldAssert=GatherDebug.USE_DEBUG_ASSERTS,
             priorityMatrix=priorityMatrix)
 
     totalTurns = 0

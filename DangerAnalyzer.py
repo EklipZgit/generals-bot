@@ -53,9 +53,9 @@ class ThreatObj(object):
 
         # for tile in self.armyAnalysis.shortestPathWay.tiles:
         for tile in self.path.tileList:
-            dist = distDict.pop(tile, None)
+            ogDist = distDict.pop(tile, None)
             # if dist is None:
-            dist = self.armyAnalysis.aMap[tile] + offset + 1
+            dist = self.armyAnalysis.aMap[tile] + offset
             newDist = dist
             if includePriority and hasPriority:
                 newDist -= 1
@@ -74,8 +74,8 @@ class ThreatObj(object):
                 interceptChoke = self.armyAnalysis.interceptChokes.get(tile, None)
                 if allowNonChoke or (interceptChoke is not None and interceptChoke < 3):
                     if chokeWidth is not None:
-                        # newDist = dist + chokeWidth - 1  # this 2 is almost certainly wrong, but makes some tests pass.
-                        newDist += interceptChoke + 1
+                        newDist = dist + chokeWidth - 1  # this 2 is almost certainly wrong, but makes some tests pass.
+                        # newDist += interceptChoke + 1
                         logbook.info(f'Threat path tile {str(tile)} dist {dist} changed to {newDist} based on chokeWidth {chokeWidth} / interceptChoke {interceptChoke}. Priority {hasPriority}')
                         distDict[tile] = newDist
 

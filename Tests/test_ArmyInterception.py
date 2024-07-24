@@ -2062,3 +2062,42 @@ class ArmyInterceptionTests(TestBase):
             # test_should_split_to_avoid_repetition_behind_on_tiles
 # 87f 69p 4s, after adding a bunch of new tests and NOT fixing splitting above (lol).
 # 83f 75p 4s, after VERY FIRST attempt at pruning intercept points based on distance to average tile position...? No way that stuff is even right
+    
+    def test_should_intercept_preventing_massive_damage(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for turn in [136, 137]:
+            mapFile = 'GameContinuationEntries/should_intercept_preventing_massive_damage___TbmnknZ-M---1--136.txtmap'
+            map, general, enemyGeneral = self.load_map_and_generals(mapFile, turn, fill_out_tiles=True)
+
+            rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=turn)
+
+            self.enable_search_time_limits_and_disable_debug_asserts()
+            simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+            simHost.queue_player_moves_str(enemyGeneral.player, '8,15->4,15->4,14->2,14->2,17')
+            bot = self.get_debug_render_bot(simHost, general.player)
+            playerMap = simHost.get_player_map(general.player)
+
+            self.begin_capturing_logging()
+            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+            self.assertNoFriendliesKilled(map, general)
+            self.assertOwned(general.player, playerMap.GetTile(6, 15), 'shouldnt have let this army run rampant...')
+
+    def test_should_not_chase_around_obstacles_that_lead_to_death(self):
+        for i in range(5):
+            debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+            mapFile = 'GameContinuationEntries/should_intercept_preventing_massive_damage___TbmnknZ-M---1--136.txtmap'
+            map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136, fill_out_tiles=True)
+
+            rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=136)
+
+            self.enable_search_time_limits_and_disable_debug_asserts()
+            simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+            simHost.queue_player_moves_str(enemyGeneral.player, '8,15->4,15->4,14->2,14->2,17')
+            # make bot wait a turn to simulate the bad-chase scenario.
+            simHost.queue_player_moves_str(general.player, 'None')
+            bot = self.get_debug_render_bot(simHost, general.player)
+            playerMap = simHost.get_player_map(general.player)
+
+            self.begin_capturing_logging()
+            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=12)
+            self.assertNoFriendliesKilled(map, general)

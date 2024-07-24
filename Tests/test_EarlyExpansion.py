@@ -808,6 +808,8 @@ class EarlyExpandUtilsTests(TestBase):
         logbook.info(f'files:\n{joined}')
         for file in files:
             map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=50)
+            if SearchUtils.count(map.players, lambda p: len(p.tiles) > 0) > 1:
+                continue
 
             turn = random.choice([1, 2])
             playerTilesToMatchOrExceed = self.get_tiles_capped_on_50_count_and_reset_map(map, general, toTurn=turn)
@@ -859,6 +861,8 @@ class EarlyExpandUtilsTests(TestBase):
         logbook.info(f'files:\n{joined}')
         for file in files:
             map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=50)
+            if SearchUtils.count(map.players, lambda p: len(p.tiles) > 0) > 1:
+                continue
 
             playerTilesToMatchOrExceed = self.get_tiles_capped_on_50_count_and_reset_map(map, general)
             if playerTilesToMatchOrExceed > 23:

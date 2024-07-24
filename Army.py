@@ -41,15 +41,16 @@ class Army(object):
         self.entangledValue = None
         self.scrapped = False
         self.last_moved_turn: int = 0
-        self._last_seen_turn: int = 0
+        self.last_seen_turn: int = 0
 
-    @property
-    def last_seen_turn(self) -> int:
-        return self._last_seen_turn
-
-    @last_seen_turn.setter
-    def last_seen_turn(self, value: int):
-        self._last_seen_turn = value
+    # # for debugging
+    # @property
+    # def last_seen_turn(self) -> int:
+    #     return self._last_seen_turn
+    #
+    # @last_seen_turn.setter
+    # def last_seen_turn(self, value: int):
+    #     self._last_seen_turn = value
 
     def update_tile(self, tile):
         if self.path.tail is None or self.path.tail.tile != tile:

@@ -43,11 +43,9 @@ class MapGenerationPlayground(TestBase):
 
         self.stop_capturing_logging()
 
-        numMapsToGenerate = 1000
+        numMapsToGenerate = 5000
         startTime = time.perf_counter()
         for i in range(numMapsToGenerate):
-            # uncomment to test the runtime of the existing map generator on your machine, to compare.
-            # map = self.generate_map_current(minimumSpawnDistance=15, mountainRatio=0.25, fairness=1.0)
             map = self.generate_map_hemlix(minimumSpawnDistance=15, mountainRatio=0.25, fairness=1.0)
             if renderDebug:
                 self.render_map(map)

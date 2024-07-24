@@ -20,11 +20,13 @@ from bot_ek0x45 import EklipZBot
 class MapGenerationPlayground(TestBase):
     def test_generate_basic_map(self):
         renderDebug = False
-        startTime = time.perf_counter()
         # dont waste time randomizing movables, this is only relevant to human.exe and should not matter in map generation
         MapBase.DO_NOT_RANDOMIZE = True
 
+        self.stop_capturing_logging()
+
         numMapsToGenerate = 1000
+        startTime = time.perf_counter()
         for i in range(numMapsToGenerate):
             # uncomment to test the runtime of the existing map generator on your machine, to compare.
             # map = self.generate_map_current(minimumSpawnDistance=15, mountainRatio=0.25, fairness=1.0)
@@ -32,8 +34,9 @@ class MapGenerationPlayground(TestBase):
             if renderDebug:
                 self.render_map(map)
 
+        fullTime = time.perf_counter() - startTime
         self.begin_capturing_logging()
-        logbook.info(f'took {time.perf_counter() - startTime:.3f} seconds to generate {numMapsToGenerate} maps.')
+        logbook.info(f'took {fullTime:.3f} seconds to generate {numMapsToGenerate} maps.')
 
     def generate_map_current(self, minimumSpawnDistance=15, mountainRatio=0.25, fairness=1.0) -> MapBase:
         """
@@ -43,7 +46,6 @@ class MapGenerationPlayground(TestBase):
         @param fairness:
         @return:
         """
-        self.stop_capturing_logging()
 
         iterationCount = 0
         while iterationCount < 10000:
@@ -119,7 +121,6 @@ class MapGenerationPlayground(TestBase):
         @param fairness:
         @return:
         """
-        self.stop_capturing_logging()
 
         iterationCount = 0
         while iterationCount < 10000:

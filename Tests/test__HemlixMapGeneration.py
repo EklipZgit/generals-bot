@@ -17,16 +17,7 @@ from base.client.tile import TILE_EMPTY, Tile
 from bot_ek0x45 import EklipZBot
 
 
-class GeneralPredictionTests(TestBase):
-    def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
-        bot = super().get_debug_render_bot(simHost, player)
-        #
-        # bot.info_render_tile_deltas = True
-        # bot.info_render_army_emergence_values = True
-        # # bot.info_render_general_undiscovered_prediction_values = True
-
-        return bot
-
+class MapGenerationPlayground(TestBase):
     def test_generate_basic_map(self):
         renderDebug = False
         startTime = time.perf_counter()

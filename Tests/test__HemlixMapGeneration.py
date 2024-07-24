@@ -18,8 +18,26 @@ from bot_ek0x45 import EklipZBot
 
 
 class MapGenerationPlayground(TestBase):
-    def test_generate_basic_map(self):
-        renderDebug = False
+    def test_generate_maps__server(self):
+        renderDebug = True
+        # dont waste time randomizing movables, this is only relevant to human.exe and should not matter in map generation
+        MapBase.DO_NOT_RANDOMIZE = True
+
+        self.stop_capturing_logging()
+
+        numMapsToGenerate = 5000
+        startTime = time.perf_counter()
+        for i in range(numMapsToGenerate):
+            map = self.generate_map_current(minimumSpawnDistance=15, mountainRatio=0.25, fairness=1.0)
+            if renderDebug:
+                self.render_map(map)
+
+        fullTime = time.perf_counter() - startTime
+        self.begin_capturing_logging()
+        logbook.info(f'took {fullTime:.3f} seconds to generate {numMapsToGenerate} maps.')
+
+    def test_generate_maps__hemlix(self):
+        renderDebug = True
         # dont waste time randomizing movables, this is only relevant to human.exe and should not matter in map generation
         MapBase.DO_NOT_RANDOMIZE = True
 
@@ -51,8 +69,8 @@ class MapGenerationPlayground(TestBase):
         while iterationCount < 10000:
             iterationCount += 1
 
-            width = random.randint(19, 25)
-            height = random.randint(19, 25)
+            width = random.randint(18, 24)
+            height = random.randint(18, 24)
 
             map = MapBase(
                 player_index=0,
@@ -102,7 +120,7 @@ class MapGenerationPlayground(TestBase):
 
             for i in range(int(len(allTileIndexes) * mountainRatio)):
                 mapTile = map.tiles_by_index[allTileIndexes[i]]
-                map.convert_tile_to_mountain(mapTile)
+                mapTile.isMountain = True
 
             if map.distance_mapper.get_distance_between(genA, genB) > 999:
                 # invalid map, generals cannot reach each other through mountains. Reroll the map.
@@ -126,8 +144,8 @@ class MapGenerationPlayground(TestBase):
         while iterationCount < 10000:
             iterationCount += 1
 
-            width = random.randint(20, 26)
-            height = random.randint(20, 26)
+            width = random.randint(18, 24)
+            height = random.randint(18, 24)
 
             map = MapBase(
                 player_index=0,
@@ -177,7 +195,7 @@ class MapGenerationPlayground(TestBase):
 
             for i in range(int(len(allTileIndexes) * mountainRatio)):
                 mapTile = map.tiles_by_index[allTileIndexes[i]]
-                map.convert_tile_to_mountain(mapTile)
+                mapTile.isMountain = True
 
             if map.distance_mapper.get_distance_between(genA, genB) > 999:
                 # invalid map, generals cannot reach each other through mountains. Reroll the map.

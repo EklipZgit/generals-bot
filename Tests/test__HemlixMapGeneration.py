@@ -69,8 +69,8 @@ class MapGenerationPlayground(TestBase):
         while iterationCount < 10000:
             iterationCount += 1
 
-            width = random.randint(18, 24)
-            height = random.randint(18, 24)
+            width = random.randint(15, 21)
+            height = random.randint(15, 21)
 
             map = MapBase(
                 player_index=0,
@@ -144,8 +144,8 @@ class MapGenerationPlayground(TestBase):
         while iterationCount < 10000:
             iterationCount += 1
 
-            width = random.randint(18, 24)
-            height = random.randint(18, 24)
+            width = random.randint(15, 21)
+            height = random.randint(15, 21)
 
             map = MapBase(
                 player_index=0,

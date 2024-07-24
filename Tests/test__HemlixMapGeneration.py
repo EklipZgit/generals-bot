@@ -63,7 +63,6 @@ class MapGenerationPlayground(TestBase):
                 modifiers=[],
             )
 
-            map.init_grid_movable()
             # this stuff doesnt exist on the server code, this is just necessary for the human.exe framework to function so you can reuse the reachable BFS checks.
             distanceMapper = DistanceMapperImpl(map)
             map.distance_mapper = distanceMapper
@@ -140,7 +139,6 @@ class MapGenerationPlayground(TestBase):
                 modifiers=[],
             )
 
-            map.init_grid_movable()
             # this stuff doesnt exist on the server code, this is just necessary for the human.exe framework to function so you can reuse the reachable BFS checks.
             distanceMapper = DistanceMapperImpl(map)
             map.distance_mapper = distanceMapper

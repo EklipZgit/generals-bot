@@ -20,7 +20,7 @@ from Interfaces import MapMatrixInterface, TileSet
 MODIFIER_TORUS = 7
 MODIFIER_WATCHTOWER = 6
 
-MAX_ALLY_SPAWN_DISTANCE = 11
+MAX_ALLY_SPAWN_DISTANCE = 10
 
 ENABLE_DEBUG_ASSERTS = False
 
@@ -1023,7 +1023,7 @@ class MapBase(object):
         logbook.info(f'MOVE {repr(fromTile)} -> {repr(toTile)} (fullFromDiffCovered {fullFromDiffCovered}, fullToDiffCovered {fullToDiffCovered})')
         self.army_moved_grid[fromTile.y][fromTile.x] = self.army_moved_grid[fromTile.y][fromTile.x] and not fullFromDiffCovered
         # if not self.USE_OLD_MOVEMENT_DETECTION:
-        fromTile.delta.armyMovedHere = fromTile.delta.armyMovedHere and not fullFromDiffCovered
+        self._update_moved_here(fromTile, fromTile.delta.armyMovedHere and not fullFromDiffCovered)
 
         expectedDelta = self._get_expected_delta_amount_toward(fromTile, toTile)
 
@@ -1084,7 +1084,7 @@ class MapBase(object):
         # only say the army is completely covered if the confidence was high, otherwise we can have two armies move here from diff players
         self.army_moved_grid[toTile.y][toTile.x] = self.army_moved_grid[toTile.y][toTile.x] and not fullToDiffCovered
         # if not self.USE_OLD_MOVEMENT_DETECTION:
-        toTile.delta.armyMovedHere = toTile.delta.armyMovedHere and not fullToDiffCovered
+        self._update_moved_here(toTile, toTile.delta.armyMovedHere and not fullToDiffCovered)
 
         if not toTile.visible:
             toTile.army = toTile.army + expectedDelta
@@ -1106,19 +1106,20 @@ class MapBase(object):
         if fullFromDiffCovered:
             if fromTile.delta.gainedSight:
                 if fromTile.delta.oldOwner == fromTile.player:
-                    fromTile.delta.unexplainedDelta = fromTile.delta.unexplainedDelta - toTile.delta.unexplainedDelta
+                    self._update_unexplained_delta(fromTile, fromTile.delta.unexplainedDelta - toTile.delta.unexplainedDelta)
                 else:
-                    fromTile.delta.unexplainedDelta = fromTile.delta.unexplainedDelta - toTile.delta.unexplainedDelta
+                    self._update_unexplained_delta(fromTile, fromTile.delta.unexplainedDelta - toTile.delta.unexplainedDelta)
                 self.set_fog_emergence(fromTile, armyEmerged=fromTile.delta.unexplainedDelta, byPlayer=fromTile.player)
             else:
-                fromTile.delta.unexplainedDelta = 0
+                self._update_unexplained_delta(fromTile, 0)
 
         if fullToDiffCovered:
-            toTile.delta.unexplainedDelta = 0
+            self._update_unexplained_delta(toTile, 0)
         else:
-            toTile.delta.unexplainedDelta -= expectedDelta
+            self._update_unexplained_delta(toTile, toTile.delta.unexplainedDelta - expectedDelta)
+
             if toTile.delta.unexplainedDelta == 0:
-                toTile.delta.armyMovedHere = False
+                self._update_moved_here(toTile, False)
 
         fromTile.delta.toTile = toTile
         logbook.info(f'  done: {repr(fromTile)} -> {repr(toTile)}{"z" if isMoveHalf else ""}')
@@ -1200,7 +1201,7 @@ class MapBase(object):
             return True
         return False
 
-    def _is_exact_army_movement_delta_match(self, source: Tile, dest: Tile):
+    def _is_exact_army_movement_delta_dest_match(self, source: Tile, dest: Tile):
         if source.delta.imperfectArmyDelta:
             return self._is_exact_lost_source_vision_movement_delta_match(source, dest)
         if dest.delta.imperfectArmyDelta:
@@ -1209,9 +1210,38 @@ class MapBase(object):
             return False
 
         deltaToDest = self._get_expected_delta_amount_toward(source, dest)
-        if deltaToDest == dest.delta.unexplainedDelta:
-            return True
-        return False
+        if deltaToDest != dest.delta.unexplainedDelta:
+            return False
+
+        return True
+
+    def _is_exact_army_movement_delta_source_match(self, source: Tile, dest: Tile):
+        if source.delta.imperfectArmyDelta:
+            return self._is_exact_lost_source_vision_movement_delta_match(source, dest)
+        if dest.delta.imperfectArmyDelta:
+            return self._is_exact_lost_dest_vision_movement_delta_match(source, dest)
+        if self._move_would_violate_known_player_deltas(source, dest):
+            return False
+
+        if not source.was_visible_last_turn() or not source.visible:
+            return False
+
+        deltaFromSource = self._get_expected_delta_amount_from(source, dest)
+        if deltaFromSource != source.delta.unexplainedDelta:
+            return False
+
+        return True
+
+    def _is_exact_army_movement_delta_all_match(self, source: Tile, dest: Tile):
+        if not self._is_exact_army_movement_delta_dest_match(source, dest):
+            return False
+
+        if source.was_visible_last_turn() and source.visible:
+            deltaFromSource = self._get_expected_delta_amount_from(source, dest)
+            if deltaFromSource != source.delta.unexplainedDelta:
+                return False
+
+        return True
 
     def _is_exact_lost_source_vision_movement_delta_match(self, source: Tile, dest: Tile):
         """Detects if a move from a tile that we just lost vision of would have resulted in the exact dest delta."""
@@ -1268,31 +1298,28 @@ class MapBase(object):
                 if moveHalf:
                     sourceDelta = 0 - source.delta.oldArmy // 2
 
+        bypassNeutFogSource = False
+        if not source.visible:
             # how the fuck does this make sense
             sourceNeut = bypassNeutFogSource = source.player == -1
             # TODO does this need to get fancier with potential movers vs the dest owner...?
             # TODO try commenting this out...?
             sameOwnerMove = (sameOwnerMove or (sourceNeut and not source.delta.lostSight)) and dest.delta.oldOwner != -1
-
-            # TODO should check move-half too probably
-            # if source.player == -1:
-            #     # then just assume same owner move...?
-            #     sourceDelta = dest.delta.unexplainedDelta
         elif moveHalf:
             raise AssertionError(f'cannot provide moveHalf directive for visible tile {str(source)}, visible tiles exclusively use tile deltas.')
         if sameOwnerMove or (attackedFlippedTile and not bypassNeutFogSource):
-            return 0 - sourceDelta
+            return 0 - expectedDelta
         if teamMateMove:
             if not dest.isGeneral:
                 if dest.delta.fromTile is not None and dest.delta.fromTile.delta.oldOwner == dest.player and source.player != dest.player:
                     # then ally moved at this tile with priority with us, and the other one won. Delta is purely 0-sourceDelta in that case.
-                    return 0-sourceDelta
+                    return 0-expectedDelta
                 # otherwise, the ally flipped the tile in their favor
-                return 0 - (2 * dest.delta.oldArmy - sourceDelta)
+                return 0 - (2 * dest.delta.oldArmy - expectedDelta)
             else:
-                return 0 - sourceDelta
+                return 0 - expectedDelta
 
-        return sourceDelta
+        return expectedDelta
 
     def _apply_last_player_move(self, last_player_index_submitted_move: typing.Tuple[Tile, Tile, bool]) -> typing.Tuple[Tile, Tile, bool] | None:
         """
@@ -1312,8 +1339,8 @@ class MapBase(object):
         # dest.delta.imperfectArmyDelta = False
         oldSourceMovedHere = source.delta.armyMovedHere
         oldDestMovedHere = dest.delta.armyMovedHere
-        source.delta.armyMovedHere = False
-        dest.delta.armyMovedHere = False
+        self._update_moved_here(source, False)
+        self._update_moved_here(dest, False)
 
         logbook.info(
             f"    tile (last_player_index_submitted_move) probably moved from {str(source)} to {str(dest)} with move_half {move_half}")
@@ -1337,8 +1364,8 @@ class MapBase(object):
                 logbook.error(
                     f'    map determined player DEFINITELY dropped move {str(last_player_index_submitted_move)}. Setting last move to none...')
                 self.last_player_index_submitted_move = None
-                source.delta.armyMovedHere = oldSourceMovedHere
-                dest.delta.armyMovedHere = oldDestMovedHere
+                self._update_moved_here(source, oldSourceMovedHere)
+                self._update_moved_here(dest, oldDestMovedHere)
                 return None
             else:
                 logbook.error(
@@ -1380,10 +1407,9 @@ class MapBase(object):
             self.set_tile_moved(toTile=source, fromTile=dest, fullFromDiffCovered=True, fullToDiffCovered=True, byPlayer=dest.delta.oldOwner)
             if actualDestDelta <= expectedSourceDelta:
                 logbook.info(f'   Mutual attack appears to have fully cancelled out our move, returning no move from us.')
-                # source.delta.armyMovedHere = True
                 self.last_player_index_submitted_move = None
-                source.delta.armyMovedHere = source.delta.unexplainedDelta != 0
-                dest.delta.armyMovedHere = dest.delta.unexplainedDelta != 0
+                self._update_moved_here(source, source.delta.unexplainedDelta != 0)
+                self._update_moved_here(dest, dest.delta.unexplainedDelta != 0)
                 return None
 
         sourceHasEnPriorityDeltasNearby = False
@@ -1432,36 +1458,26 @@ class MapBase(object):
                     else:
                         armyMovedToDest = False
 
-                    # self.unaccounted_tile_diffs[source] = srcUnexpectedDelta  # negative number
-                    # source.delta.destUnexpectedDelta = srcUnexpectedDelta
-                    source.delta.armyMovedHere = True
-                    dest.delta.armyMovedHere = armyMovedToDest
+                    self._update_moved_here(source, True)
+                    self._update_moved_here(dest, armyMovedToDest)
                     self.last_player_index_submitted_move = None
                     return None
                 else:
                     if actualDestDelta == 0:
                         logbook.info(
                             f'MOVE {str(last_player_index_submitted_move)} seems to have been attacked with priority down to where we dont capture anything. Nuking our last move.')
-                        # self.unaccounted_tile_diffs[source] = srcUnexpectedDelta  # negative number
-                        # source.delta.destUnexpectedDelta = srcUnexpectedDelta
-                        source.delta.armyMovedHere = True
+                        self._update_moved_here(source, True)
                         self.last_player_index_submitted_move = None
                         return None
-                    # source.delta.destUnexpectedDelta -= actualDestDelta
-                    # source.delta.armyMovedHere = True
-                    # # source.delta.imperfectArmyDelta = destHasEnDeltasNearby
-                    # # return source, dest
+
             elif source.player != self.player_index:
                 if not source.visible and not dest.visible and dest.delta.oldArmy + expectedDestDelta >= 0:
                     # then we assume the army reached it with priority but since we didn't cap the tile we just don't see that it happened.
                     logbook.info(
                         f'MOVE {str(last_player_index_submitted_move)} was capped WITHOUT priority. Our move probably still executed though, as it would not have captured the dest tile.')
 
-                    source.delta.armyMovedHere = True
-                    dest.delta.armyMovedHere = False
-                    # source.delta.unexplainedDelta = actualSrcDelta
-                    # if dest.visible:
-                    #     source.delta.unexplainedDelta = srcUnexpectedDelta - actualDestDelta + expectedDestDelta
+                    self._update_moved_here(source, True)
+                    self._update_moved_here(dest, False)
                     return source, dest, move_half
                 else:
                     logbook.info(
@@ -1471,18 +1487,17 @@ class MapBase(object):
                     if not source.visible:
                         # we lost sight of our own moving tile
                         # TODO this might be wrong? idk
-                        source.delta.unexplainedDelta = actualSrcDelta
+                        self._update_unexplained_delta(source, actualSrcDelta)
                         # this should be right
                         if dest.visible:
-                            source.delta.unexplainedDelta = actualDestDelta - expectedDestDelta
+                            self._update_unexplained_delta(source, actualDestDelta - expectedDestDelta)
                     else:
-                        source.delta.unexplainedDelta = actualSrcDelta
+                        self._update_unexplained_delta(source, actualSrcDelta)
                         if dest.visible:
-                            source.delta.unexplainedDelta = srcUnexpectedDelta - actualDestDelta + expectedDestDelta
+                            self._update_unexplained_delta(source, srcUnexpectedDelta - actualDestDelta + expectedDestDelta)
 
-                    source.delta.armyMovedHere = True
+                    self._update_moved_here(source, True)
                     # TODO this is wrong...? Need to account for the amount of dest delta we think made it...?
-                    # dest.delta.destUnexpectedDelta = 0
             else:
                 # we can get here if the source tile was attacked with priority but not for full damage, OR if it was attacked without priority for non full damage...
                 destArmyInterferedToo = False
@@ -1503,39 +1518,32 @@ class MapBase(object):
                     # TODO what to do here?
                     logbook.warn(
                         f'???MOVE {str(last_player_index_submitted_move)} ? player had priority but we still had a dest delta as well as source delta...?')
-                    dest.delta.armyMovedHere = True
+                    self._update_moved_here(dest, True)
 
-                source.delta.unexplainedDelta = srcUnexpectedDelta  # negative number
-                source.delta.armyMovedHere = True
+                self._update_unexplained_delta(source, srcUnexpectedDelta)  # negative number
+                self._update_moved_here(source, True)
                 if not destArmyInterferedToo:
                     # intentionally do nothing about the dest tile diff if we found a source tile diff, as it is really unlikely that both source and dest get interfered with on same turn.
-                    # self.army_moved(army, dest, trackingArmies)
                     # TODO could be wrong
-                    dest.delta.unexplainedDelta = 0
+                    self._update_unexplained_delta(dest, 0)
                     self.last_player_index_submitted_move = last_player_index_submitted_move
                     return source, dest, move_half
         else:
             # nothing happened, we moved the expected army off of source. Not unexplained.
-            # self.unaccounted_tile_diffs.pop(source, 0)
-            source.delta.unexplainedDelta = 0
+            self._update_unexplained_delta(source, 0)
 
         if hasDestDeltaMismatch:
             if dest.delta.lostSight:
                 # then we got attacked, possibly BY the dest tile.
                 if dest.delta.oldArmy > source.delta.oldArmy - 1 and dest.delta.oldOwner != self.player_index:
                     # then dest could have attacked us.
-                    dest.delta.armyMovedHere = True
+                    self._update_moved_here(dest, True)
                     dest.delta.imperfectArmyDelta = True
             else:
                 if destHasEnDeltasNearby:
-                    dest.delta.unexplainedDelta = destUnexpectedDelta
-                    dest.delta.armyMovedHere = True
-                    # dest.delta.imperfectArmyDelta = sourceHasEnPriorityDeltasNearby
+                    self._update_unexplained_delta(dest, destUnexpectedDelta)
+                    self._update_moved_here(dest, True)
 
-                # if destHasEnDeltasNearby:
-                #     if not sourceHasEnPriorityDeltasNearby:
-                #         dest.delta.unexplainedDelta = destUnexpectedDelta
-                #     dest.delta.armyMovedHere = True
 
                 if sourceHasEnPriorityDeltasNearby:
                     logbook.info(
@@ -1547,27 +1555,19 @@ class MapBase(object):
                 # TODO this might need to also happen when lost sight, but idk how to get the right delta...? Repro...?
                 if sourceHasEnPriorityDeltasNearby:
                     # the source tile could have been attacked for non-lethal damage BEFORE the move was made to target.
-                    source.delta.unexplainedDelta = destUnexpectedDelta
+                    self._update_unexplained_delta(source, destUnexpectedDelta)
                     if dest.delta.oldOwner != self.player_index:
-                        source.delta.unexplainedDelta = 0 - destUnexpectedDelta
-                    # source.delta.unexplainedDelta = srcUnexpectedDelta
-                    # if dest.delta.oldOwner != self.player_index:
-                    #     source.delta.unexplainedDelta = 0 - destUnexpectedDelta
+                        self._update_unexplained_delta(source, 0 - destUnexpectedDelta)
                     source.delta.imperfectArmyDelta = destHasEnDeltasNearby
-                    source.delta.armyMovedHere = True
+                    self._update_moved_here(source, True)
                 elif not destHasEnDeltasNearby:
-                    # The 'set_tile_moved will already correct the dest delta without our help
-                    # if destHasEnDeltasNearby then we already handled this correctly
-                    # dest.delta.unexplainedDelta = destUnexpectedDelta
+
                     if destUnexpectedDelta != 0:
-                        dest.delta.armyMovedHere = True
+                        self._update_moved_here(dest, True)
         else:
             logbook.info(
                 f'!MOVE {str(last_player_index_submitted_move)} made it to dest with no issues, moving army.\r\n    expectedDestDelta {expectedDestDelta}, actualDestDelta {actualDestDelta}, expectedSourceDelta {expectedSourceDelta}, actualSrcDelta {actualSrcDelta}, sourceWasAttackedWithPriority {sourceWasAttackedWithPriority}, sourceWasCaptured {sourceWasCaptured}')
-            # self.unaccounted_tile_diffs.pop(dest, 0)
-            dest.delta.unexplainedDelta = 0
-            # dest.delta.armyMovedHere = False
-            # if dest.player != self.map.player_index:
+            self._update_unexplained_delta(dest, 0)
             # skip.add(dest)  # might not need this at alll.....? TODO ??
 
         if actualDestDelta == 0 and dest.delta.unexplainedDelta == 0:
@@ -1614,6 +1614,19 @@ class MapBase(object):
     def detect_movement_and_populate_unexplained_diffs(self):
         possibleMovesDict: typing.Dict[Tile, typing.List[Tile]] = {}
 
+        self.unexplained_deltas = {}
+        self.moved_here_set = set()
+        for t in self.get_all_tiles():
+            if t.delta.armyMovedHere:
+                self.moved_here_set.add(t)
+            if t.delta.unexplainedDelta == 0:
+                continue
+            if not t.visible:
+                continue
+            if t.player == -1:
+                continue
+            self.unexplained_deltas[t] = t.delta.unexplainedDelta
+
         for player in self.players:
             player.last_move = None
 
@@ -1621,15 +1634,12 @@ class MapBase(object):
             # we are dead
             return
 
-        # TODO for debugging only
-        tilesWithDiffsPreOwn = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
-        tilesWithMovedHerePreOwn = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
-
         for player in self.players:
             logbook.info(f'p{player.index} - unexplainedTileDelta {player.unexplainedTileDelta}, tileDelta {player.tileDelta}')
 
-        logbook.info(f'Tiles with diffs pre-own: {str([str(t) for t in tilesWithDiffsPreOwn])}')
-        logbook.info(f'Tiles with MovedHere pre-own: {str([str(t) for t in tilesWithMovedHerePreOwn])}')
+        # TODO debugging only
+        logbook.info(f'Tiles with diffs pre-own: {str([str(t) for t in self.unexplained_deltas.keys()])}')
+        logbook.info(f'Tiles with MovedHere pre-own: {str([str(t) for t in self.moved_here_set])}')
 
         # TRY OWN MOVE FIRST
         if self.last_player_index_submitted_move is not None:
@@ -1664,13 +1674,10 @@ class MapBase(object):
         self.run_island_vision_loss_scan(possibleMovesDict)
 
         # TODO for debugging only
-        tilesWithDiffsEnd = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
-        tilesWithMovedHereEnd = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
+        logbook.info(f'Tiles with diffs at end: {str([str(t) for t in self.unexplained_deltas.keys() if self.unexplained_deltas[t] != 0])}')
+        logbook.info(f'Tiles with MovedHere at end: {str([str(t) for t in self.moved_here_set])}')
 
-        logbook.info(f'Tiles with diffs at end: {str([str(t) for t in tilesWithDiffsEnd])}')
-        logbook.info(f'Tiles with MovedHere at end: {str([str(t) for t in tilesWithMovedHereEnd])}')
-
-        for t in self.get_all_tiles():
+        for t in self.unexplained_deltas.keys():
             if t.delta.unexplainedDelta == 0:
                 continue
             if not t.visible:
@@ -1982,10 +1989,8 @@ class MapBase(object):
         @param possibleMovesDict:
         @return:
         """
-        tilesWithDiffsPreFog = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
-        tilesWithMovedHerePreFog = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
-        logbook.info(f'Tiles with diffs at pre-FOG: {str([str(t) for t in tilesWithDiffsPreFog])}')
-        logbook.info(f'Tiles with MovedHere at pre-FOG: {str([str(t) for t in tilesWithMovedHerePreFog])}')
+        logbook.info(f'Tiles with diffs at pre-FOG: {str([str(t) for t in self.unexplained_deltas.keys() if self.unexplained_deltas[t] != 0])}')
+        logbook.info(f'Tiles with MovedHere at pre-FOG: {str([str(t) for t in self.moved_here_set])}')
         # now check for destinations into fog
         for x in range(self.cols):
             for y in range(self.rows):
@@ -2009,7 +2014,7 @@ class MapBase(object):
                     if potentialDest.visible and not potentialDest.delta.gainedSight:
                         continue
 
-                    if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(sourceTile, potentialDest):
+                    if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_dest_match(sourceTile, potentialDest):
                         logbook.info(
                             f'FOG SOURCE SCAN DEST {repr(potentialDest)} SRC {repr(sourceTile)} WAS sourceWasAttackedNonLethalOrVacated {sourceWasAttackedNonLethalOrVacated} FORCE-SELECTED DUE TO EXACT MATCH, BREAKING EARLY')
                         potentialDests = [potentialDest]
@@ -2039,7 +2044,7 @@ class MapBase(object):
                         exactMatch = False
                     if exclusiveDest.delta.imperfectArmyDelta and not exclusiveDest.delta.lostSight:
                         exactMatch = False
-                    if not self._is_exact_army_movement_delta_match(sourceTile, exclusiveDest):
+                    if not self._is_exact_army_movement_delta_dest_match(sourceTile, exclusiveDest):
                         exactMatch = False
 
                     # should have had perfect info of this tile for this case to get hit so should always be this.
@@ -2077,10 +2082,8 @@ class MapBase(object):
 
     def run_island_vision_loss_scan(self, possibleMovesDict):
         # TODO for debugging only
-        tilesWithDiffsPreIsland = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
-        tilesWithMovedHerePreIsland = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
-        logbook.info(f'Tiles with diffs at pre-ISLAND-VISION-LOSS: {str([str(t) for t in tilesWithDiffsPreIsland])}')
-        logbook.info(f'Tiles with MovedHere at pre-ISLAND-VISION-LOSS: {str([str(t) for t in tilesWithMovedHerePreIsland])}')
+        logbook.info(f'Tiles with diffs at pre-ISLAND-VISION-LOSS: {str([str(t) for t in self.unexplained_deltas.keys() if self.unexplained_deltas[t] != 0])}')
+        logbook.info(f'Tiles with MovedHere at pre-ISLAND-VISION-LOSS: {str([str(t) for t in self.moved_here_set])}')
         # now check for island vision loss
         for x in range(self.cols):
             for y in range(self.rows):
@@ -2142,11 +2145,8 @@ class MapBase(object):
             fogFlag = " (FOG)"
 
         # TODO for debugging only
-        tilesWithDiffsPrePos = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
-        tilesWithMovedHerePrePos = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
-
-        logbook.info(f'Tiles with diffs pre-POS{fogFlag}: {str([str(t) for t in tilesWithDiffsPrePos])}')
-        logbook.info(f'Tiles with MovedHere pre-POS{fogFlag}: {str([str(t) for t in tilesWithMovedHerePrePos])}')
+        logbook.info(f'Tiles with diffs pre-POS{fogFlag}: {str([str(t) for t in self.unexplained_deltas.keys() if self.unexplained_deltas[t] != 0])}')
+        logbook.info(f'Tiles with MovedHere pre-POS{fogFlag}: {str([str(t) for t in self.moved_here_set])}')
 
         # scan for tiles with positive deltas first, those tiles MUST have been gathered to from a friendly tile by the player they are on, letting us eliminate tons of options outright.
         for x in range(self.cols):
@@ -2197,7 +2197,7 @@ class MapBase(object):
 
                     sourceWasAttackedNonLethalOrVacated = potentialSource.delta.armyDelta < 0
                     # if  sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
-                    if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
+                    if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_dest_match(potentialSource, destTile):
                         potentialSources = [potentialSource]
                         logbook.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} <- SRC {repr(potentialSource)} FORCE-SELECTED DUE TO EXACT MATCH, BREAKING EARLY')
                         break
@@ -2220,7 +2220,7 @@ class MapBase(object):
                     exactMatch = (
                             not destTile.delta.imperfectArmyDelta
                             and not exclusiveSrc.delta.imperfectArmyDelta
-                            and self._is_exact_army_movement_delta_match(exclusiveSrc, destTile)
+                            and self._is_exact_army_movement_delta_dest_match(exclusiveSrc, destTile)
                     )
 
                     logbook.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} <- SRC {repr(exclusiveSrc)} WAS EXCLUSIVE SOURCE, EXACT MATCH {exactMatch} INCLUDING IN MOVES')
@@ -2230,7 +2230,7 @@ class MapBase(object):
                         byPlayer = destTile.player
                     if byPlayer == -1 and exclusiveSrc.was_visible_last_turn():
                         byPlayer = exclusiveSrc.delta.oldOwner
-                    if byPlayer == -1 and not exclusiveSrc.was_visible_last_turn():
+                    if byPlayer == -1:
                         byPlayer = exclusiveSrc.delta.oldOwner
                     if byPlayer == -1:
                         byPlayer = destTile.player
@@ -2263,11 +2263,8 @@ class MapBase(object):
             fogFlag = "(FOG) "
 
         # TODO for debugging only
-        tilesWithDiffsPreSource = [t for t in self.get_all_tiles() if t.delta.unexplainedDelta != 0]
-        tilesWithMovedHerePreSource = [t for t in self.get_all_tiles() if t.delta.armyMovedHere]
-
-        logbook.info(f'Tiles with diffs pre-ATTK{fogFlag}: {str([str(t) for t in tilesWithDiffsPreSource])}')
-        logbook.info(f'Tiles with MovedHere pre-ATTK{fogFlag}: {str([str(t) for t in tilesWithMovedHerePreSource])}')
+        logbook.info(f'Tiles with diffs pre-ATTK{fogFlag}: {str([str(t) for t in self.unexplained_deltas.keys() if self.unexplained_deltas[t] != 0])}')
+        logbook.info(f'Tiles with MovedHere pre-ATTK{fogFlag}: {str([str(t) for t in self.moved_here_set])}')
 
         for x in range(self.cols):
             for y in range(self.rows):
@@ -2309,7 +2306,7 @@ class MapBase(object):
                     )
                     # sourceWasAttackedNonLethalOrVacated = potentialSource.delta.armyDelta < 0 or potentialSource.delta.lostSight or (not potentialSource.visible and allowFogSource)
                     # if  sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
-                    if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_match(potentialSource, destTile):
+                    if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_dest_match(potentialSource, destTile):
                         potentialSources = [potentialSource]
                         logbook.info(
                             f'ATTK DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(potentialSource)} FORCE-SELECTED DUE TO EXACT MATCH, BREAKING EARLY')
@@ -2340,11 +2337,12 @@ class MapBase(object):
                 if len(potentialSources) == 1:
                     exclusiveSrc = potentialSources[0]
                     # we have our source...?
-                    exactMatch = (
+                    exactDestMatch = (
                             not destTile.delta.imperfectArmyDelta
                             and not exclusiveSrc.delta.imperfectArmyDelta
-                            and self._is_exact_army_movement_delta_match(exclusiveSrc, destTile)
+                            and self._is_exact_army_movement_delta_dest_match(exclusiveSrc, destTile)
                     )
+                    exactSourceMatch = exactDestMatch
 
                     byPlayer = exclusiveSrc.delta.oldOwner
                     if byPlayer == -1:
@@ -2374,14 +2372,14 @@ class MapBase(object):
                             byPlayer = possibilities[0].index
 
                     logbook.info(
-                        f'ATTK DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(exclusiveSrc)} WAS EXCLUSIVE SOURCE, EXACT MATCH {exactMatch} INCLUDING IN MOVES, CALCED PLAYER {byPlayer}')
+                        f'ATTK DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(exclusiveSrc)} WAS EXCLUSIVE SOURCE, EXACT MATCH {exactDestMatch} INCLUDING IN MOVES, CALCED PLAYER {byPlayer}')
 
                     if byPlayer != -1:
                         self.set_tile_moved(
                             destTile,
                             exclusiveSrc,
-                            fullFromDiffCovered=exactMatch,
-                            fullToDiffCovered=exactMatch,
+                            fullFromDiffCovered=exactSourceMatch,
+                            fullToDiffCovered=exactDestMatch,
                             byPlayer=byPlayer)
                     else:
                         logbook.error(
@@ -2486,6 +2484,21 @@ class MapBase(object):
     def clone(self) -> MapBase:
         newMap = deepcopy(self)
         return newMap
+
+    def _update_unexplained_delta(self, tile: Tile, newValue: int):
+        tile.delta.unexplainedDelta = newValue
+        if newValue == 0:
+            self.unexplained_deltas.pop(tile, None)
+        else:
+            self.unexplained_deltas[tile] = newValue
+
+    def _update_moved_here(self, tile: Tile, isMovedHere: bool):
+        if tile.delta.armyMovedHere and not isMovedHere:
+            tile.delta.armyMovedHere = False
+            self.moved_here_set.discard(tile)
+        elif not tile.delta.armyMovedHere and isMovedHere:
+            tile.delta.armyMovedHere = True
+            self.moved_here_set.add(tile)
 
 
 class Map(MapBase):

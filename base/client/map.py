@@ -1279,24 +1279,24 @@ class MapBase(object):
         return False
 
     def _get_expected_delta_amount_toward(self, source: Tile, dest: Tile, moveHalf: bool = False) -> int:
-        sourceDelta = source.delta.unexplainedDelta
         sameOwnerMove = source.delta.oldOwner == dest.delta.oldOwner and source.delta.oldOwner != -1  # and (dest.player == source.delta.oldOwner or dest.player != self.player_index)
         attackedFlippedTile = dest.delta.oldOwner != dest.player and source.delta.oldOwner != dest.player and dest.visible
         teamMateMove = source.delta.oldOwner != dest.delta.oldOwner and self.team_ids_by_player_index[source.delta.oldOwner] == self.team_ids_by_player_index[dest.delta.oldOwner]
-        bypassNeutFogSource = False
+        expectedDelta = source.delta.unexplainedDelta
         if not source.visible:
             if not source.delta.lostSight:
-                sourceDelta = dest.delta.unexplainedDelta
+                expectedDelta = dest.delta.unexplainedDelta
 
                 # if not dest.visible:
-                #     sourceDelta = source.delta.oldArmy - 1
+                #     expectedDelta = source.delta.oldArmy - 1
                 #     # OK so this ^ was wrong, all tests pass with it commented out, should have been:
-                #     sourceDelta = 0 - (source.delta.oldArmy - 1)
+                #     expectedDelta = 0 - (source.delta.oldArmy - 1)
 
             else:
-                sourceDelta = 0 - (source.delta.oldArmy - 1)
+                expectedDelta = 0 - (source.delta.oldArmy - 1)
                 if moveHalf:
-                    sourceDelta = 0 - source.delta.oldArmy // 2
+                    expectedDelta = 0 - source.delta.oldArmy // 2
+        # END TODO REMOVE ME
 
         bypassNeutFogSource = False
         if not source.visible:

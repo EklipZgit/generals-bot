@@ -1,6 +1,7 @@
 import typing
 
-from Sim.GameSimulator import GameSimulatorHost
+from Models import Move
+from Sim.GameSimulator import GameSimulatorHost, GameSimulator
 from Sim.TextMapLoader import TextMapLoader
 from TestBase import TestBase
 from base.client.map import Score
@@ -122,15 +123,18 @@ a1   b1   b1   b1   b1   bG1
 
     def test_tile_delta_against_neutral(self):
         mapRaw = """
-|  
+|   |
 aG7
 
 
-
+dG1
 | 
 """
-        map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=0)
+        map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=3)
+        general = map.GetTile(0, 0)
 
+        map.clear_deltas()
+        self.begin_capturing_logging()
         targetTile = map.GetTile(0, 1)
         genArmyMoved = general.army - 1
 
@@ -145,17 +149,21 @@ aG7
         self.assertEqual(general, targetTile.delta.fromTile)
         self.assertEqual(targetTile, general.delta.toTile)
 
-    def test_tile_delta_against_friendly(self):
+    def test_tile_delta_against_same_player(self):
         mapRaw = """
-|  
+|   |
 aG7
 a1 
 
 
+dG1
 | 
 """
-        map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=0)
+        map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=3)
+        general = map.GetTile(0, 0)
 
+        map.clear_deltas()
+        self.begin_capturing_logging()
         targetTile = map.GetTile(0, 1)
         genArmyMoved = general.army - 1
 
@@ -170,17 +178,21 @@ a1
         self.assertEqual(general, targetTile.delta.fromTile)
         self.assertEqual(targetTile, general.delta.toTile)
 
+    # failing
     def test_tile_delta_against_enemy(self):
         mapRaw = """
-|  
+|   |
 aG7
 b1 
 
 
+dG1
 | 
 """
-        map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=0)
+        map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=3)
+        general = map.GetTile(0, 0)
 
+        map.clear_deltas()
         self.begin_capturing_logging()
         targetTile = map.GetTile(0, 1)
         genArmyMoved = general.army - 1
@@ -197,22 +209,57 @@ b1
         self.assertEqual(targetTile, general.delta.toTile)
         self.assertEqual(general, targetTile.delta.fromTile)
 
+    # failing
+    def test_tile_delta_against_enemy__bonus_turn(self):
+        mapRaw = """
+|   |
+aG7
+b1 
+
+
+dG1
+| 
+"""
+        map, general = self.load_map_and_general_from_string(mapRaw, turn=13, player_index=3)
+        general = map.GetTile(0, 0)
+
+        map.clear_deltas()
+        self.begin_capturing_logging()
+        targetTile = map.GetTile(0, 1)
+        genArmyMoved = general.army - 1
+
+        map.update_turn(14)
+        map.update_visible_tile(targetTile.x, targetTile.y, general.player, genArmyMoved - targetTile.army, is_city=False,
+                                is_general=False)
+        map.update_visible_tile(general.x, general.y, general.player, 2, is_city=False, is_general=True)
+        map.update()
+
+        self.assertEqual(0 - genArmyMoved, general.delta.armyDelta)
+        self.assertEqual(5, targetTile.army)
+        self.assertEqual(0-genArmyMoved, targetTile.delta.armyDelta)
+        self.assertEqual(targetTile, general.delta.toTile)
+        self.assertEqual(general, targetTile.delta.fromTile)
+
     def test_tile_delta_against_neutral_city_non_bonus_turn(self):
         mapRaw = """
-|  
+|   |
 aG7
 C5
 
 
+dG1
 | 
 """
-        map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=0)
+        map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=3)
+        general = map.GetTile(0, 0)
+        map.clear_deltas()
 
+        self.begin_capturing_logging()
         targetTile = map.GetTile(0, 1)
         genArmyMoved = general.army - 1
 
         map.update_turn(13)
-        map.update_visible_tile(targetTile.x, targetTile.y, general.player, genArmyMoved - targetTile.army,
+        map.update_visible_tile(targetTile.x, targetTile.y, general.player, 1,
                                 is_city=True,
                                 is_general=False)
         map.update_visible_tile(general.x, general.y, general.player, 1, is_city=False, is_general=True)
@@ -221,6 +268,38 @@ C5
         self.assertEqual(0 - genArmyMoved, general.delta.armyDelta)
         self.assertEqual(0 - genArmyMoved, targetTile.delta.armyDelta)
         self.assertEqual(1, targetTile.army)
+        self.assertEqual(0, targetTile.player)
+        self.assertEqual(general, targetTile.delta.fromTile)
+        self.assertEqual(targetTile, general.delta.toTile)
+
+    def test_tile_delta_against_neutral_city_yes_bonus_turn(self):
+        mapRaw = """
+|   |
+aG7
+C5
+
+
+dG1
+| 
+"""
+        map, general = self.load_map_and_general_from_string(mapRaw, turn=13, player_index=3)
+        general = map.GetTile(0, 0)
+        map.clear_deltas()
+
+        self.begin_capturing_logging()
+        targetTile = map.GetTile(0, 1)
+        genArmyMoved = general.army - 1
+
+        map.update_turn(14)
+        map.update_visible_tile(targetTile.x, targetTile.y, general.player, 2,
+                                is_city=True,
+                                is_general=False)
+        map.update_visible_tile(general.x, general.y, general.player, 2, is_city=False, is_general=True)
+        map.update()
+
+        self.assertEqual(0 - genArmyMoved, general.delta.armyDelta)
+        self.assertEqual(0 - genArmyMoved, targetTile.delta.armyDelta)
+        self.assertEqual(2, targetTile.army)
         self.assertEqual(0, targetTile.player)
         self.assertEqual(general, targetTile.delta.fromTile)
         self.assertEqual(targetTile, general.delta.toTile)
@@ -610,7 +689,7 @@ C5
         self.assertEqual(enemyPlayer, botMap.GetTile(6,13).player)
 
     def test_army_should_not_duplicate_backwards_on_capture(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/army_should_not_duplicate_backwards_on_capture___Bgb7Eiba2---a--399.txtmap'
 
         # Grant the general the same fog vision they had at the turn the map was exported
@@ -624,7 +703,7 @@ C5
         simHost.queue_player_moves_str(general.player, "14,6->15,6->16,6->17,6")
         simHost.queue_player_moves_str(enemyGeneral.player, "12,13->12,12->12,11->13,11")
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=2, turns=4)
+        simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=4)
 
     def test_run_adj_collision_mutual(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -683,7 +762,7 @@ C5
         # OK so this works correctly at the map level, must be the bot itself with army tracking / emergence updating the fog to 1/0...?
 
     def test_capture_from_fog_should_not_duplicate_out_into_fog(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/capture_from_fog_should_not_duplicate_out_into_fog___rgI9fxNa3---a--485.txtmap'
         rawMap, gen = self.load_map_and_general(mapFile, 485)
 
@@ -732,6 +811,7 @@ C5
                                     # 17
                                     # 0
                                     # 0
+                                    # 0
                                     self.run_fog_island_border_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bArmyAdjacent=bArmyAdjacent)
 
     def test_run_one_off_fog_island_border_capture_test(self):
@@ -766,6 +846,7 @@ C5
                                     # 209
                                     # 145
                                     # 145 still
+                                    # 145
                                     self.run_fog_island_full_capture_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, bMove=bMove, turn=turn, seenFog=seenFog, bHasNearbyVision=bHasNearbyVision)
 
     def test_run_one_off_fog_island_full_capture_test(self):
@@ -788,6 +869,7 @@ C5
                                     # 0
                                     # 69
                                     # 69 still
+                                    # 53
                                     self.run_out_of_fog_collision_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn, seenFog=seenFog)
 
     def test_run_one_off_out_of_fog_collision_test(self):
@@ -816,6 +898,7 @@ C5
                                 # 0
                                 # 77
                                 # 73
+                                # 73
                                 self.run_adj_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
 
     def test_run_one_off_adj_test(self):
@@ -835,6 +918,7 @@ C5
                     for bArmy in [10, 11, 12, 15, 20, 2, 5, 8, 9]:
                         for turn in [96, 97]:
                             with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn):
+                                # 0
                                 # 0
                                 # 0
                                 self.run_diag_test(debugMode=debugMode, aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove, turn=turn)
@@ -1006,6 +1090,46 @@ player_index=0
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
+    def test_should_not_literally_kill_self_in_2v2_by_preventing_ally_from_saving__unit(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_literally_kill_self_in_2v2_by_preventing_ally_from_saving___55XCt3qlT---0--177.txtmap'
+
+        for (includeEnemyMove, includeAllyMove) in [
+            (True, True),
+            (False, True),
+            (True, False),
+        ]:
+            with self.subTest(includeAllyMove=includeAllyMove, includeEnemyMove=includeEnemyMove):
+                map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 177, fill_out_tiles=True)
+                sim = GameSimulator(map, exclusive_player_map=map.player_index)
+                if includeEnemyMove:
+                    sim.set_next_move(enemyGeneral.player, Move(map.GetTile(17, 10), map.GetTile(17, 9)))
+                if includeAllyMove:
+                    sim.set_next_move(allyGen.player, Move(map.GetTile(16, 10), map.GetTile(17, 10)))
+                self.begin_capturing_logging()
+
+                sim.execute_turn(dont_require_all_players_to_move=True)
+
+                playerMap = sim.players[general.player].map
+                frFrom = playerMap.GetTile(16, 10)
+                frTo = playerMap.GetTile(17, 10)
+                enTo = playerMap.GetTile(17, 9)
+
+                if includeAllyMove:
+                    self.assertEqual(frTo, frFrom.delta.toTile)
+                    self.assertEqual(frFrom, frTo.delta.fromTile)
+                else:
+                    self.assertIsNone(frFrom.delta.toTile)
+                    self.assertIsNone(frTo.delta.fromTile)
+
+                if includeEnemyMove:
+                    self.assertEqual(enTo, frTo.delta.toTile)
+                    self.assertEqual(frTo, enTo.delta.fromTile)
+                else:
+                    self.assertIsNone(frTo.delta.toTile)
+                    self.assertIsNone(enTo.delta.fromTile)
+
+
 
     # THIS IS ALL BEFORE SPLITTING 2v2 OUT
     # 4590 failed, 23,663 passed
@@ -1019,3 +1143,4 @@ player_index=0
     # 297f 19189p w/ pre neutral tile collision fix
     # 277 after FUCKING TWO WHOLE GODDAMN DAYS OF TRYING TO FUCKING FJKDSF:LKJFDS:JLKFDSGLJK:HRSW:JMNKLGWR GOD I HATE TILE TRACKING, BRUTE FORCE WOULD HAVE BEEN SO MUCH BETTER
     # 279 after fixing incorrect delta on neutral(fog)->neutral(visible) from fog move
+    # 279 still

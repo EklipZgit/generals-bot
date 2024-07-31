@@ -81,9 +81,9 @@ class GameSimulatorTests(TestBase):
         self.assertEqual(33, p0Map.GetTile(6, 10).army)
         self.assertTrue(p0Map.GetTile(6, 10).visible)
 
-        sim.make_move(0, Move(Tile(6, 10), Tile(6, 9)))
+        sim.set_next_move(0, Move(Tile(6, 10), Tile(6, 9)))
 
-        sim.make_move(1, Move(Tile(5, 9), Tile(5, 8)))
+        sim.set_next_move(1, Move(Tile(5, 9), Tile(5, 8)))
 
         sim.execute_turn()
 
@@ -132,15 +132,15 @@ class GameSimulatorTests(TestBase):
         self.assertEqual(31, p0Map.GetTile(6, 9).army)
         self.assertTrue(p0Map.GetTile(6, 9).visible)
 
-        sim.make_move(0, Move(Tile(6, 9), Tile(7, 9)))
+        sim.set_next_move(0, Move(Tile(6, 9), Tile(7, 9)))
 
-        sim.make_move(1, Move(Tile(5, 8), Tile(6, 8)))
+        sim.set_next_move(1, Move(Tile(5, 8), Tile(6, 8)))
 
         sim.execute_turn()
 
-        sim.make_move(0, Move(Tile(7, 9), Tile(7, 8)))
+        sim.set_next_move(0, Move(Tile(7, 9), Tile(7, 8)))
 
-        sim.make_move(1, Move(Tile(6, 8), Tile(7, 8)))
+        sim.set_next_move(1, Move(Tile(6, 8), Tile(7, 8)))
 
         sim.execute_turn()
 
@@ -296,8 +296,8 @@ M                             M                                  M              
         self.assertPlayerTileNotVisible(p1TileNextToEnemyCorrectTile.x, p1TileNextToEnemyCorrectTile.y, sim, fakeEnemyGen.player)
 
         # p0 captures p1s tile
-        sim.make_move(0, Move(fakeEnemyGen, p1TileNextToEnemy))
-        sim.make_move(1, Move(general, general.movable[0]))
+        sim.set_next_move(0, Move(fakeEnemyGen, p1TileNextToEnemy))
+        sim.set_next_move(1, Move(general, general.movable[0]))
         sim.execute_turn()
         self.assertEqual(13, map.turn)
         self.assertEqual(13, sim.players[0].map.turn)
@@ -316,8 +316,8 @@ M                             M                                  M              
         self.assertPlayerTileVisibleAndCorrect(p1TileNextToEnemyCorrectTile.x, p1TileNextToEnemyCorrectTile.y, sim, fakeEnemyGen.player)
 
         # p0 captures p1s final tile down there
-        sim.make_move(0, Move(p1TileNextToEnemy, p1TileNextToEnemyCorrectTile))
-        sim.make_move(1, Move(general.movable[0], general.movable[0].movable[0]))
+        sim.set_next_move(0, Move(p1TileNextToEnemy, p1TileNextToEnemyCorrectTile))
+        sim.set_next_move(1, Move(general.movable[0], general.movable[0].movable[0]))
         sim.execute_turn()
 
         self.assertPlayerTileNotVisible(fakeEnemyGen.x, fakeEnemyGen.y, sim, general.player)
@@ -417,8 +417,8 @@ aG7
         self.assertPlayerTileCorrect(1, 3, sim, 1)
 
         # armies collide
-        sim.make_move(0, Move(aCollisionSource, collisionTarget))
-        sim.make_move(1, Move(bCollisionSource, collisionTarget))
+        sim.set_next_move(0, Move(aCollisionSource, collisionTarget))
+        sim.set_next_move(1, Move(bCollisionSource, collisionTarget))
         sim.execute_turn()
 
         if render:
@@ -491,11 +491,11 @@ aG7
                 sim = GameSimulator(map)
                 pMap = sim.players[general.player].map
                 eMap = sim.players[enemyGen.player].map
-                sim.make_move(general.player, Move(pMap.GetTile(6, 7), pMap.GetTile(5, 7)))
-                sim.make_move(enemyGen.player, Move(eMap.GetTile(6, 9), eMap.GetTile(5, 9)))
+                sim.set_next_move(general.player, Move(pMap.GetTile(6, 7), pMap.GetTile(5, 7)))
+                sim.set_next_move(enemyGen.player, Move(eMap.GetTile(6, 9), eMap.GetTile(5, 9)))
                 sim.execute_turn()
-                sim.make_move(general.player, Move(pMap.GetTile(5, 7), pMap.GetTile(5, 8)))
-                sim.make_move(enemyGen.player, Move(eMap.GetTile(5, 9), eMap.GetTile(5, 8)))
+                sim.set_next_move(general.player, Move(pMap.GetTile(5, 7), pMap.GetTile(5, 8)))
+                sim.set_next_move(enemyGen.player, Move(eMap.GetTile(5, 9), eMap.GetTile(5, 8)))
                 sim.execute_turn()
 
                 if turn == 495:

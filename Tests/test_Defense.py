@@ -1710,7 +1710,7 @@ class DefenseTests(TestBase):
         self.assertGreater(self.get_tile_differential(simHost), 6)
     
     def test_should_defend_city_and_not_move_stuff_off_city(self):
-        for i in range(8):
+        for i in range(32):
             debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
             mapFile = 'GameContinuationEntries/should_defend_city_and_not_move_stuff_off_city___iL5WmojH_---1--332.txtmap'
             map, general, enemyGeneral = self.load_map_and_generals(mapFile, 332, fill_out_tiles=True)
@@ -2478,3 +2478,21 @@ class DefenseTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
         self.assertNoFriendliesKilled(map, general)
+    
+    def test_should_not_literally_kill_self_in_2v2_by_preventing_ally_from_saving(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_literally_kill_self_in_2v2_by_preventing_ally_from_saving___55XCt3qlT---0--177.txtmap'
+        map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 177, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=177)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=False)
+        simHost.queue_player_moves_str(enemyGeneral.player, '17,10->17,9->16,9->16,8')
+        simHost.queue_player_moves_str(allyGen.player, '16,10->17,10->17,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        self.assertNoFriendliesKilled(map, general, allyGen)

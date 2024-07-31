@@ -231,7 +231,7 @@ def get_round_plan_with_expansion(
             addlPaths = _execute_expansion_gather_to_borders(
                 map,
                 [t.dest for t in includeForGath if t.source not in negativeTiles and t.dest not in negativeTiles],
-                2,
+                3,
                 preferNeutral=True,
                 negativeTiles=negativeTiles,
                 searchingPlayer=searchingPlayer,
@@ -1086,7 +1086,8 @@ def _include_optimal_expansion_options(
             searchingPlayer,
             tileIslands,
             turns,
-            valPerTurnCutoff)
+            valPerTurnCutoff,
+            map)
 
         logEntries.append(f'iter complete @ {time.perf_counter() - startTime:.3f} iter {iter[0]} paths {len(newPaths)}')
 
@@ -1144,7 +1145,8 @@ def _process_new_expansion_paths(
         searchingPlayer,
         tileIslands,
         turns,
-        valPerTurnCutoff
+        valPerTurnCutoff,
+        map
 ) -> typing.List[typing.Tuple[float, Path]]:
     newPaths = []
     for tile, tilePaths in newPathDict.items():
@@ -1209,7 +1211,7 @@ def _process_new_expansion_paths(
                         path.econValue = curValue
                         node = path.start
                         while node is not None:
-                            if (node.tile.isGeneral or node.tile.isCity) and node.tile.player == searchingPlayer:
+                            if (node.tile.isGeneral and node.tile.player == searchingPlayer) or (node.tile.isCity and map.is_tile_on_team_with(node.tile, searchingPlayer)):
                                 usage = cityUsages.get(node.tile, 0)
                                 cityUsages[node.tile] = usage + 1
                             node = node.next
@@ -1418,7 +1420,7 @@ def _execute_expansion_gather_to_borders(
     # TODO factor in cities, right now they're not even incrementing. need to factor them into the timing and calculate when they'll be moved.
     if searchingPlayer == -2:
         if isinstance(startTiles, dict):
-            searchingPlayer = [t for t in startTiles.keys()][0].player
+            searchingPlayer = next(iter(startTiles.keys())).player
         else:
             searchingPlayer = startTiles[0].player
 
@@ -1818,7 +1820,7 @@ def _get_tile_path_value(
         elif tile.player == -1:
             value += 1.0
         elif map.is_player_on_team_with(searchingPlayer, tile.player):
-            value -= 0.2 / max(1, (1 + tile.army))
+            value -= 0.2 / max(0.5, tile.army)
 
         # if tile.visible:
         #     value += 0.02

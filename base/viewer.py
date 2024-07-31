@@ -354,7 +354,7 @@ class GeneralsViewer(object):
         map: MapBase | None = None
         isComplete: bool = False
 
-        renderIntervalAvgWindow = 20
+        renderIntervalAvgWindow = 30
         rollingUpdateWindow = queue.Queue()
         for i in range(renderIntervalAvgWindow):
             rollingUpdateWindow.put(0.15)
@@ -387,7 +387,7 @@ class GeneralsViewer(object):
                     done = True
 
                 if not self.noLog:
-                    logbook.info(f"GeneralsViewer received an event after {diff:.3f}! Updating _grid")
+                    logbook.info(f"GeneralsViewer received an event after {diff:.3f}! (medianUpdateTime {medianUpdateTime:.3f}) Updating _grid")
 
                 if diff < medianUpdateTime * 4:
                     # ignore massively delayed updates
@@ -396,7 +396,7 @@ class GeneralsViewer(object):
 
                 self.updateGrid(viewInfo, map)
 
-                sleepFor = max(expectedRenderTime - thisUpdateTime - 0.05, self._min_sleep_time)
+                sleepFor = max(expectedRenderTime - thisUpdateTime - 0.025, self._min_sleep_time)
                 if sleepFor > 0:
                     logbook.info(f"GeneralsViewer sleeping for {sleepFor:.3f} calculated expected render {expectedRenderTime:.3f} from medianUpdateTime {medianUpdateTime:.3f} based on lastWindowUpdateSum {lastWindowUpdateSum:.3f}")
                     time.sleep(sleepFor)

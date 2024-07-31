@@ -65,10 +65,10 @@ class ArmyEngineTests(TestBase):
         if result.best_result_state.depth > 0:
             frMove, enMove = result.expected_best_moves[0]
             if frMove is not None:
-                sim.make_move(map.player_index, frMove)
+                sim.set_next_move(map.player_index, frMove)
                 aTile = frMove.dest
             if enMove is not None:
-                sim.make_move((map.player_index + 1) & 1, enMove)
+                sim.set_next_move((map.player_index + 1) & 1, enMove)
                 bTile = enMove.dest
 
             sim.execute_turn(dont_require_all_players_to_move=True)
@@ -1379,7 +1379,7 @@ bTiles=20
                 boardAnalysis = BoardAnalyzer(map, general)
                 boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
 
-                for i in range(8):
+                for i in range(32):
                     mcts: MctsDUCT = MctsDUCT()
                     aArmies = eklipz_bot.find_large_tiles_near(
                         fromTiles=[
@@ -2619,8 +2619,8 @@ bTiles=20
         #     self.render_map(fMap)
         #     self.render_map(eMap)
 
-        sim.make_move(general.player, frMove1)
-        sim.make_move(enemyGen.player, enMove1)
+        sim.set_next_move(general.player, frMove1)
+        sim.set_next_move(enemyGen.player, enMove1)
         fMap.last_player_index_submitted_move = None if frMove1 is None else (fMap.GetTile(frMove1.source.x, frMove1.source.y), fMap.GetTile(frMove1.dest.x, frMove1.dest.y), frMove1.move_half)
         eMap.last_player_index_submitted_move = None if enMove1 is None else (eMap.GetTile(enMove1.source.x, enMove1.source.y), eMap.GetTile(enMove1.dest.x, enMove1.dest.y), enMove1.move_half)
 
@@ -2640,8 +2640,8 @@ bTiles=20
 
         self.assertBoardStateMatchesGameEngine(sim, move1BoardState, frPlayer=general.player, enPlayer=enemyGen.player)
 
-        sim.make_move(general.player, frMove2)
-        sim.make_move(enemyGen.player, enMove2)
+        sim.set_next_move(general.player, frMove2)
+        sim.set_next_move(enemyGen.player, enMove2)
         fMap.last_player_index_submitted_move = None if frMove2 is None else (fMap.GetTile(frMove2.source.x, frMove2.source.y), fMap.GetTile(frMove2.dest.x, frMove2.dest.y), frMove2.move_half)
         eMap.last_player_index_submitted_move = None if enMove2 is None else (eMap.GetTile(enMove2.source.x, enMove2.source.y), eMap.GetTile(enMove2.dest.x, enMove2.dest.y), enMove2.move_half)
 

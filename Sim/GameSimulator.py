@@ -154,6 +154,7 @@ class GameSimulator(object):
         """
 
         @param map_raw: Should be the full map
+        @param exclusive_player_map: if passed, will not make a map for any other player (for testing simple map update stuff).
         """
         for tile in map_raw.get_all_tiles():
             if tile.tile == TILE_FOG:
@@ -184,7 +185,7 @@ class GameSimulator(object):
         self.tiles_updated_this_cycle: typing.Set[Tile] = set()
         self.ignore_illegal_moves = ignore_illegal_moves
 
-    def make_move(self, player_index: int, move: Move | None, force: bool = False) -> bool:
+    def set_next_move(self, player_index: int, move: Move | None, force: bool = False) -> bool:
         if self.moves[player_index] is not None:
             if not force:
                 raise AssertionError(f'player {player_index} already has a move queued this turn, {str(self.moves[player_index])}')
@@ -543,7 +544,7 @@ class GameSimulatorHost(object):
                 continue
             # i=i captures the current value of i in the lambda, otherwise all players lambdas would send the last players player index...
             hasUi = i == player_with_viewer or player_with_viewer == -2
-            botMover = lambda source, dest, moveHalf, i=i: self.sim.make_move(player_index=i, move=Move(source, dest, moveHalf))
+            botMover = lambda source, dest, moveHalf, i=i: self.sim.set_next_move(player_index=i, move=Move(source, dest, moveHalf))
             botPinger = lambda tile, i=i: self.enqueue_teammates_tile_ping(player=i, tile=tile)
             botChatter = lambda message, teamChat, i=i: self.enqueue_chat_message(player=i, message=message, teamChat=teamChat)
             botHost = BotHostBase(char, botMover, botPinger, botChatter, 'test', noUi=not hasUi, alignBottom=True, throw=True)
@@ -873,7 +874,7 @@ class GameSimulatorHost(object):
                 if self.respect_turn_time_limit and moveTimeTook > self.player_move_cutoff_time and not DebugHelper.IS_DEBUGGING:  # and self.sim.sim_map.turn > 20
                     # then we dropped this move.
                     logbook.error(f'~~~~~~SimHost DROPPING MOVE: turn {self.sim.sim_map.turn}: player {playerIndex} {self.sim.sim_map.usernames[playerIndex]} took {moveTimeTook:.4f} to move, dropping!')
-                    self.sim.make_move(playerIndex, None, force=True)
+                    self.sim.set_next_move(playerIndex, None, force=True)
                     self.dropped_move_counts_by_player[playerIndex] += 1
 
                 # we're now bleeding into the next turn
@@ -884,7 +885,7 @@ class GameSimulatorHost(object):
                 move = self.move_queue[playerIndex].pop(0)
                 if move is not None and self.sim.sim_map.GetTile(move.source.x, move.source.y).player != playerIndex:
                     move = None
-                self.sim.make_move(playerIndex, move, force=True)
+                self.sim.set_next_move(playerIndex, move, force=True)
                 if self.bot_hosts[playerIndex] is not None:
                     if move is not None:
                         fullArmy = self.sim.sim_map.GetTile(move.source.x, move.source.y).army

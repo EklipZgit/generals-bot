@@ -76,6 +76,8 @@ class ArmyTracker(object):
         self.min_spawn_distance: int = 9
         if self.is_long_spawns:
             self.min_spawn_distance = 15
+        if self.map.is_2v2:
+            self.min_spawn_distance = 16
 
         self._initialize_viable_general_positions()
 

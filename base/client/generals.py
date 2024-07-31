@@ -22,14 +22,24 @@ import BotLogging
 from . import map
 from .map import MapBase
 
-_ENDPOINT_BOT = "://botws.generals.io/socket.io/?EIO=4"
 WSPREFIX = "wss"
 HTTPPREFIX = "https"
+_ENDPOINT_BOT = "://botws.generals.io/socket.io/?EIO=4"
 _ENDPOINT_LOCAL = "://localhost:8080/socket.io/?EIO=4"
+_ENDPOINT_PUBLIC = "://ws.generals.io/socket.io/?EIO=4"
+
+# # force bot server bots to local:
 # _ENDPOINT_BOT = _ENDPOINT_LOCAL
 # WSPREFIX = "ws"
 # HTTPPREFIX = "http"
-_ENDPOINT_PUBLIC = "://ws.generals.io/socket.io/?EIO=4"
+
+# # force public bots to local:
+# _ENDPOINT_PUBLIC = _ENDPOINT_LOCAL
+# WSPREFIX = "ws"
+# HTTPPREFIX = "http"
+
+# # force public bots to bot
+# _ENDPOINT_PUBLIC = _ENDPOINT_BOT
 
 _LOG_WS = False
 
@@ -552,7 +562,7 @@ class GeneralsClient(object):
         return self.mode != "ffa" or (self.map is not None and self.map.remainingPlayers <= 2)
 
     def is_message_talking_to_us(self, message: str) -> bool:
-        return "human" in message.lower() or " bot" in message.lower() or message.lower().startswith("bot ")
+        return "human" in message.lower() or " bot" in message.lower() or message.lower().startswith("bot ") or self.map.remainingPlayers == 2
 
     def send_chat_broken_up_by_sentence(self, message: str):
         sentences = message.split('. ')
@@ -621,7 +631,7 @@ class GeneralsClient(object):
         elif "source" in message.lower() or "bot?" in message.lower() or " code" in message.lower() or "github" in message.lower() or " ai?" in message.lower():
             self.send_chat(
                 "You can find my source code at https://github.com/EklipZgit/generals-bot. I didn't say it was pretty")
-        elif (
+        elif self.is_message_talking_to_us(message) and (
                 (
                         (
                                 message.lower().startswith("glhf")
@@ -630,7 +640,7 @@ class GeneralsClient(object):
                         )
                 )
                 or (
-                        (self.is_message_talking_to_us(message) or self.is_not_ffa())
+                        self.is_not_ffa()
                         and (
                                 message.lower().startswith("hello")
                                 or message.lower().startswith("hey")

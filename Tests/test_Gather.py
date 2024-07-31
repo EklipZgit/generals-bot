@@ -902,3 +902,24 @@ b1   b1   b1   b1   b1   b1   bG1
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for shouldnt_throw_errors_doing_max_set_gath")
+    
+    def test_gather_should_not_crash_in_2v2(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/gather_should_not_crash_in_2v2___wy2MPWkXM---2--68.txtmap'
+        map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 68, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=68)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=False)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        simHost.reveal_player_general(enemyGeneral.player, general.player, hidden=True)
+        simHost.reveal_player_general(enemyAllyGen.player, general.player, hidden=True)
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general, allyGen)
+
+        self.skipTest("TODO add asserts for gather_should_not_crash_in_2v2")

@@ -7,8 +7,9 @@ import logbook
 import Gather
 import SearchUtils
 from Algorithms import MapSpanningUtils
+from Models import Move
 from Path import Path
-from Sim.GameSimulator import GameSimulatorHost
+from Sim.GameSimulator import GameSimulatorHost, GameSimulator
 from TestBase import TestBase
 from base.client.tile import TILE_EMPTY, Tile
 from bot_ek0x45 import EklipZBot
@@ -2479,3 +2480,49 @@ a1   b1   b1   bG1
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=14)
         self.assertNoFriendliesKilled(map, general)
+    
+    def test_army_emerging_as_enemy_teammate_should_not_dupe_original_army(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/army_emerging_as_enemy_teammate_should_not_dupe_original_army___BUxnWbuI2---3--177_actual.txtmap'
+        map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 177, fill_out_tiles=True)
+
+        mapFile = 'GameContinuationEntries/army_emerging_as_enemy_teammate_should_not_dupe_original_army___BUxnWbuI2---3--177.txtmap'
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=177)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=False)
+        simHost.queue_player_moves_str(enemyAllyGen.player, '12,9->11,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general, allyGen)
+
+        army = bot.get_army_at_x_y(12, 9)
+        self.assertLess(army.value, 2)
+
+    def test_should_not_literally_kill_self_in_2v2_by_preventing_ally_from_saving(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_literally_kill_self_in_2v2_by_preventing_ally_from_saving___55XCt3qlT---0--177.txtmap'
+        map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 177, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=177)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=False)
+        simHost.queue_player_moves_str(enemyGeneral.player, '17,10->17,9->16,9->16,8')
+        simHost.queue_player_moves_str(allyGen.player, '16,10->17,10->17,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        frFrom = playerMap.GetTile(16, 10)
+        frTo = playerMap.GetTile(17, 10)
+        enTo = playerMap.GetTile(17, 9)
+
+        self.assertEqual(frTo, frFrom.delta.toTile)
+        self.assertEqual(frFrom, frTo.delta.fromTile)
+        self.assertEqual(enTo, frTo.delta.toTile)
+        self.assertEqual(frTo, enTo.delta.fromTile)

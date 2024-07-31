@@ -724,3 +724,23 @@ class OpponentTrackerTests(TestBase):
 
         self.assertEqual(startingFog, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total)
         self.assertEqual(startingFogTrue, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total_true)
+    
+    def test_should_fully_recognize_finding_all_of_the_fog_army_in_the_fog(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_fully_recognize_finding_all_of_the_fog_army_in_the_fog___ESW_l8ssb---1--425_actual.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 425, fill_out_tiles=True)
+
+        mapFile = 'GameContinuationEntries/should_fully_recognize_finding_all_of_the_fog_army_in_the_fog___ESW_l8ssb---1--425.txtmap'
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=425)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '13,6->14,6')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_fully_recognize_finding_all_of_the_fog_army_in_the_fog")

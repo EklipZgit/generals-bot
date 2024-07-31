@@ -721,6 +721,76 @@ function Start-WindowsTerminalBigFfaBots {
             Start-Sleep -Seconds 1
         }
     }
+    # starts a windows terminal that runs the FFA bots and a second instance of Sora AI that joins 1v1s
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-Blob -game ffa'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+    # time for the terminal window to open
+    start-sleep -seconds 3
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-Path -game ffa'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-Path -game ffa'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-Blob -game ffa'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-SoraAI -game ffa'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+    
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-SoraAI -game ffa'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
 }
 
 
@@ -750,7 +820,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-Human -left -game 1v1 -sleepMax 30'
+        $command = 'Run-Human -left -game 1v1 -sleepMax 60'
         try {
             Invoke-Expression $command
         } finally {
@@ -765,7 +835,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-Human -right -game ffa -sleepMax 1'
+        $command = 'Run-Human -right -game ffa -sleepMax 30'
         try {
             Invoke-Expression $command
         } finally {
@@ -792,7 +862,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-HumanTeammate -game team -right -sleepMax 180'
+        $command = 'Run-HumanTeammate -game team -right -sleepMax 20'
         try {
             Invoke-Expression $command
         } finally {
@@ -804,7 +874,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-Teammate -sleepMax 180 -left'
+        $command = 'Run-Teammate -sleepMax 90 -left'
         try {
             Invoke-Expression $command
         } finally {
@@ -844,8 +914,8 @@ function Start-WindowsTerminalBotServerLiveBots {
     <#
     1v1 only
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
+    wt -w $windowName new-tab pwsh -NoExit -c {
+        cd "D:\2019_reformat_Backup\generals-bot\";
         . .\run-bot.ps1;
         $command = 'run-bot -game 1v1 -name "EklipZ_ai" -right'
         try {

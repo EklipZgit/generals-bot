@@ -347,6 +347,7 @@ class EklipZBot(object):
 
         self.expansion_use_iterative_flow: bool = False
         self.expansion_use_legacy: bool = True
+        self.expansion_use_tile_islands: bool = False
         self.expansion_full_time_limit: float = 0.15
         """The full time limit for an optimal_expansion cycle. Will be cut short if it would run the move too long."""
 
@@ -797,7 +798,7 @@ class EklipZBot(object):
                             allNew = False
 
                     if allNew:
-                        self.send_teammate_communication(f'Found {self._map.usernames[tile.player]}', tile, cooldown=5, detectOnMessageAlone=True)
+                        # self.send_teammate_communication(f'Found {self._map.usernames[tile.player]}', tile, cooldown=5, detectOnMessageAlone=True)
                         self._should_recalc_tile_islands = True
         elif tile.delta.lostSight and tile.player >= 0:
             self.opponent_tracker.notify_player_tile_vision_lost(tile)
@@ -1836,6 +1837,13 @@ class EklipZBot(object):
             if killMove is not None:
                 return killMove
 
+        defenseCriticalTileSet = set()
+        if self._map.is_2v2 and self.teammate_general is not None and self.teammate_general.player in self._map.teammates:
+            for army in self.armyTracker.armies.values():
+                if army.player in self._map.teammates:
+                    if self._map.turn - army.last_moved_turn < 3:
+                        defenseCriticalTileSet.add(army.tile)
+
         self.threat = threat
 
         self.check_should_be_all_in_losing()
@@ -1843,7 +1851,6 @@ class EklipZBot(object):
         if self.is_all_in_losing:
             logbook.info(f"~~~ ___ {self.get_elapsed()}\n   YO WE ALL IN DAWG\n~~~ ___")
 
-        defenseCriticalTileSet = set()
         # if not self.isAllIn() and (threat.turns > -1 and self.dangerAnalyzer.anyThreat):
         #    armyAmount = (self.general_min_army_allowable() + enemyNearGen) * 1.1 if threat is None else threat.threatValue + general.army + 1
 
@@ -4387,60 +4394,63 @@ class EklipZBot(object):
             self,
             path: Path,
             minFactor=0.7,
-            minLengthFactor=0.1
+            minLengthFactor=0.1,
+            negativeTiles=None
     ) -> Path:
-        pathMoveList = path.tileList
-        totalCount = len(pathMoveList)
-        fullValue = 0
-        for tile in pathMoveList:
-            if self._map.is_player_on_team_with(tile.player, self.general.player):
-                fullValue += tile.army - 1
-
-        if fullValue == 0:
+        if not isinstance(path, Path):
             return path
 
-        i = 1
-        curSum = 0
-        maxValuePerTurn = 0
+        return path
 
-        lastValueTile = None
-        reversedPath = list(reversed(pathMoveList))
-        logbook.info(f"get_value_per_turn_subsegment: len(pathMoveList) == {len(pathMoveList)}")
-        logbook.info(f"get_value_per_turn_subsegment input path: {str(path)}")
-        for tile in reversedPath:
+        tileArrayRev = [t for t in reversed(path.tileList)]
+
+        tileCount = len(tileArrayRev)
+        vtArray = [0.0] * tileCount
+        valArray = [0] * tileCount
+
+        rollingSum = 0
+        for i, tile in enumerate(tileArrayRev):
+            if negativeTiles and tile in negativeTiles:
+                continue
+
             if self._map.is_tile_friendly(tile):
-                curSum += tile.army - 1
-                valuePerTurn = curSum / i
-                logbook.info(f"  [{i}]  {tile.x},{tile.y}  value per turn was {'%.1f' % valuePerTurn}")
-                if valuePerTurn >= maxValuePerTurn and i <= totalCount and i > totalCount * minLengthFactor:
-                    logbook.info(
-                        f" ![{i}]  {tile.x},{tile.y}  new max!    {'%.1f' % valuePerTurn} > {'%.1f' % maxValuePerTurn}")
-                    maxValuePerTurn = valuePerTurn
-                    lastValueTile = tile
-            i += 1
+                rollingSum += tile.army - 1
+            # else:
+            #     rollingSum -= tile.army
 
-        i = 1
-        lastValueIndex = path.length
-        curSum = 0
-        # logbook.info("len(reversedPath) {}".format(len(reversedPath)))
-        for tile in reversedPath:
-            if self._map.is_tile_friendly(tile):
-                curSum += tile.army - 1
-                valuePerTurn = curSum / i
-                logbook.info(f"  [{i}]  {tile.x},{tile.y}   2nd pass {'%.1f' % valuePerTurn}")
-                if valuePerTurn >= maxValuePerTurn * minFactor and tile.player == self.general.player:
-                    lastValueIndex = i
-                    lastValueTile = tile
-                    logbook.info(
-                        f"!![{i}]  {tile.x},{tile.y}    minFactor max   {'%.1f' % valuePerTurn} >= {'%.1f' % maxValuePerTurn}")
-            i += 1
-        if lastValueTile:
-            logbook.info(f"       -----   ---- lastValueIndex was {lastValueIndex} tile {lastValueTile.toString()}")
-        else:
-            logbook.warn(f"No lastValueTile found??? lastValueIndex was {lastValueIndex}")
+            if i > 0:
+                vtArray[tileCount - i - 1] = rollingSum / i
+            valArray[tileCount - i - 1] = rollingSum
 
-        newPath = path.get_subsegment(lastValueIndex, end=True)
-        if newPath.start.tile.army == 1:
+        trueVt = rollingSum / path.length
+        cutoffVal = rollingSum * minFactor
+
+        maxVtStart = 0
+        maxVt = 0.0
+
+        for i, tile in enumerate(path.tileList):
+            if tile.player != self.general.player:
+                continue
+            if i == path.length:
+                continue
+            if tile.army <= 1:
+                continue
+
+            lengthFactor = (path.length - i) / path.length
+            if lengthFactor <= minLengthFactor:
+                break
+
+            vt = vtArray[i]
+            if vt > maxVt and valArray[i] >= cutoffVal:
+                maxVtStart = i
+                maxVt = vt
+
+        if maxVtStart == 0:
+            return path
+
+        newPath = path.get_subsegment(path.length - maxVtStart, end=True)
+
+        if newPath.start.tile.army <= 1:
             self.info(f'VT SUBSEGMENT HAD BAD ARMY {newPath.start.tile.army} on start tile {newPath.start.tile}')
             logbook.error(f'value_per_turn_subsegment turned {str(path)} into {str(newPath)}...? Start tile is 1. Returning original path...')
             # newPath = path
@@ -4466,6 +4476,8 @@ class EklipZBot(object):
                 newPath.pop_first_move()
 
         return newPath
+
+
 
     def calculate_general_danger(self):
         depth = self.distance_from_general(self.targetPlayerExpectedGeneralLocation)
@@ -5903,22 +5915,27 @@ class EklipZBot(object):
             return None
         # [28 len 3] 7,18 -> 6,18 -> 6,17 -> 5,17
 
-        _, path = pathStr.split('] ')
+        try:
+            _, path = pathStr.split('] ')
 
-        resultPath = Path()
-        for tileStr in path.split('->'):
-            xStr, yStr = tileStr.split(',')
-            yStr = yStr.lower().strip()
+            resultPath = Path()
+            for tileStr in path.split('->'):
+                xStr, yStr = tileStr.split(',')
+                yStr = yStr.lower().strip()
 
-            moveHalf = False
-            if yStr.endswith('z'):
-                moveHalf = True
-                yStr = yStr.strip('z')
+                moveHalf = False
+                if yStr.endswith('z'):
+                    moveHalf = True
+                    yStr = yStr.strip('z')
 
-            tile = self._map.GetTile(int(xStr), int(yStr))
-            resultPath.add_next(tile, moveHalf)
+                tile = self._map.GetTile(int(xStr), int(yStr))
+                resultPath.add_next(tile, moveHalf)
 
-        return resultPath
+            return resultPath
+        except:
+            # TODO handle other gather capture plan types?
+
+            return None
 
     def parse_bool(self, boolStr: str) -> bool:
         return boolStr.lower().strip() == "true"
@@ -7121,6 +7138,7 @@ class EklipZBot(object):
             threats.append(self.dangerAnalyzer.fastestAllyThreat)
         if self.dangerAnalyzer.fastestCityThreat is not None and self.dangerAnalyzer.fastestCityThreat.turns > -1:
             threats.append(self.dangerAnalyzer.fastestCityThreat)
+
         # threats = [t for t in sorted(threats, key=lambda t: t.threatValue, reverse=True)]
 
         negativeTilesIncludingThreat = outputDefenseCriticalTileSet.copy()
@@ -10994,6 +11012,7 @@ class EklipZBot(object):
     def check_target_player_just_took_city(self):
         if self.targetPlayerObj is not None and self.targetPlayer != -1:
             teamData = self.opponent_tracker.get_current_team_scores_by_player(self.targetPlayer)
+            numLivingPlayers = len(teamData.livingPlayers)
             if teamData.cityCount > self._lastTargetPlayerCityCount:
                 self.viewInfo.add_info_line(f'Dropping timings because target player just took a city.')
 
@@ -11007,7 +11026,7 @@ class EklipZBot(object):
                     if mostRecentCity is None:
                         mostRecentCity = self.targetPlayerExpectedGeneralLocation
 
-                    self.send_teammate_communication(f'Opps have {teamData.cityCount} cities (+generals). New city might be around here:', mostRecentCity)
+                    self.send_teammate_communication(f'Opps have {teamData.cityCount - numLivingPlayers} cities. New city might be around here:', mostRecentCity)
 
                 self.timings = None
 
@@ -12624,6 +12643,9 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
                     timeLimit = timeLimit - (time.perf_counter() - ogStart)
 
+            # islands = None
+            # if self.expansion_use_tile_islands:
+            islands = self.tileIslandBuilder
             expUtilPlan = ExpandUtils.get_round_plan_with_expansion(
                 self._map,
                 searchingPlayer=self.player.index,
@@ -12631,7 +12653,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                 turns=remainingCycleTurns,
                 boardAnalysis=self.board_analysis,
                 territoryMap=territoryMap,
-                tileIslands=self.tileIslandBuilder,
+                tileIslands=islands,
                 negativeTiles=expansionNegatives,
                 leafMoves=self.captureLeafMoves,
                 useLeafMovesFirst=self.expansion_use_leaf_moves_first,
@@ -13603,7 +13625,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         checkPath = self.sketchiest_potential_inbound_flank_path
 
         if self.enemy_attack_path is not None and self.likely_kill_push:
-            logbook.info(f'due to high risk threat path, using that as flank vision target instead of biggest flank path itself')
+            self.info(f'~~risk threat - replacing flank with risk threat BC likely_kill_push')
             checkPath = self.enemy_attack_path.get_subsegment_excluding_trailing_visible()
         elif self.is_still_ffa_and_non_dominant():
             return None
@@ -13652,6 +13674,9 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                     return leafMove
 
             # high priority moves trump city and stuff.
+            return None
+
+        if self.is_still_ffa_and_non_dominant():
             return None
 
         leafMove = self._get_vision_expanding_available_move(coreNegs, checkPath)

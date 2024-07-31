@@ -47,7 +47,7 @@ __unittest = True
 
 
 class TestBase(unittest.TestCase):
-    GLOBAL_BYPASS_REAL_TIME_TEST = False
+    GLOBAL_BYPASS_REAL_TIME_TEST = True
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -128,6 +128,8 @@ class TestBase(unittest.TestCase):
         for character, index in TextMapLoader.get_player_char_index_map():
             if f'{character}Tiles' in data:
                 numPlayers = index + 1
+
+        numPlayers = max(numPlayers, player_index + 1)
 
         map = self.get_test_map(board, turn=turn, dont_set_seen_visible_discovered=respect_undiscovered, num_players=numPlayers)
         TextMapLoader.load_map_data_into_map(map, data)

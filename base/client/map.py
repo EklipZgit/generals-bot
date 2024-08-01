@@ -295,6 +295,9 @@ class MapBase(object):
         for tile in self.get_all_tiles():
             self.tiles_by_index[tile.tile_index] = tile
 
+        self.unexplained_deltas = {}
+        self.moved_here_set = set()
+
     def __repr__(self):
         return str(self)
 
@@ -1040,6 +1043,8 @@ class MapBase(object):
             fromDelta = expectedDelta
 
             fromTile.army += fromDelta
+            if byPlayer != fromTile.delta.oldOwner and self.is_player_on_team_with(fromTile.delta.oldOwner, byPlayer) and fromDelta > 0:
+                fromDelta = -fromDelta
             fromTile.delta.armyDelta = fromDelta
 
             isByPlayerFriendly = self.is_player_friendly(byPlayer)
@@ -1049,7 +1054,8 @@ class MapBase(object):
                     if fromTile.isCity:
                         self.players[fromTile.player].cities.remove(fromTile)
                     self.players[fromTile.player].tiles.remove(fromTile)
-                fromTile.player = byPlayer
+                if not fromTile.isGeneral:
+                    fromTile.player = byPlayer
                 byPlayerObj = self.players[byPlayer]
                 byPlayerObj.tiles.append(fromTile)
                 if fromTile.army > 0 and not self.is_player_friendly(fromTile.delta.oldOwner):
@@ -1311,6 +1317,13 @@ class MapBase(object):
 
     def _get_expected_delta_amount_from(self, source: Tile, dest: Tile, moveHalf: bool = False) -> int:
         expectedDelta = source.delta.unexplainedDelta
+
+        if source.was_visible_last_turn() and source.delta.oldArmy + expectedDelta < 1:
+            # then it is literally impossible for this tile to have vacated that much, so use destDelta instead.
+            expectedDelta = dest.delta.unexplainedDelta
+            if source.delta.oldArmy + expectedDelta < 1:
+                # if still bad, ok then this is PROBABLY not the move that happened because in both cases it implies we moved more army than we had.
+                expectedDelta = 1 - source.delta.oldArmy
 
         if not source.visible:
             if not source.delta.lostSight:
@@ -2248,6 +2261,8 @@ class MapBase(object):
                         byPlayer = destTile.player
                     if byPlayer == -1 and exclusiveSrc.was_visible_last_turn():
                         byPlayer = exclusiveSrc.delta.oldOwner
+                    if byPlayer == -1 and destTile.was_visible_last_turn() and (destTile.delta.oldOwner == -1 or self.is_player_on_team_with(destTile.player, destTile.delta.oldOwner)) and destTile.delta.oldArmy < destTile.army:
+                        byPlayer = destTile.player
                     if byPlayer == -1:
                         byPlayer = exclusiveSrc.delta.oldOwner
                     if byPlayer == -1:
@@ -2360,7 +2375,11 @@ class MapBase(object):
                             and not exclusiveSrc.delta.imperfectArmyDelta
                             and self._is_exact_army_movement_delta_dest_match(exclusiveSrc, destTile)
                     )
-                    exactSourceMatch = exactDestMatch
+                    exactSourceMatch = (
+                            not destTile.delta.imperfectArmyDelta
+                            and not exclusiveSrc.delta.imperfectArmyDelta
+                            and self._is_exact_army_movement_delta_source_match(exclusiveSrc, destTile)
+                    )
 
                     byPlayer = exclusiveSrc.delta.oldOwner
                     if byPlayer == -1:

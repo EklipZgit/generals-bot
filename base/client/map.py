@@ -1282,21 +1282,9 @@ class MapBase(object):
         sameOwnerMove = source.delta.oldOwner == dest.delta.oldOwner and source.delta.oldOwner != -1  # and (dest.player == source.delta.oldOwner or dest.player != self.player_index)
         attackedFlippedTile = dest.delta.oldOwner != dest.player and source.delta.oldOwner != dest.player and dest.visible
         teamMateMove = source.delta.oldOwner != dest.delta.oldOwner and self.team_ids_by_player_index[source.delta.oldOwner] == self.team_ids_by_player_index[dest.delta.oldOwner]
-        expectedDelta = source.delta.unexplainedDelta
-        if not source.visible:
-            if not source.delta.lostSight:
-                expectedDelta = dest.delta.unexplainedDelta
 
-                # if not dest.visible:
-                #     expectedDelta = source.delta.oldArmy - 1
-                #     # OK so this ^ was wrong, all tests pass with it commented out, should have been:
-                #     expectedDelta = 0 - (source.delta.oldArmy - 1)
+        expectedDelta = self._get_expected_delta_amount_from(source, dest, moveHalf)
 
-            else:
-                expectedDelta = 0 - (source.delta.oldArmy - 1)
-                if moveHalf:
-                    expectedDelta = 0 - source.delta.oldArmy // 2
-        # END TODO REMOVE ME
 
         bypassNeutFogSource = False
         if not source.visible:
@@ -1318,6 +1306,20 @@ class MapBase(object):
                 return 0 - (2 * dest.delta.oldArmy - expectedDelta)
             else:
                 return 0 - expectedDelta
+
+        return expectedDelta
+
+    def _get_expected_delta_amount_from(self, source: Tile, dest: Tile, moveHalf: bool = False) -> int:
+        expectedDelta = source.delta.unexplainedDelta
+
+        if not source.visible:
+            if not source.delta.lostSight:
+                expectedDelta = dest.delta.unexplainedDelta
+
+            else:
+                expectedDelta = 0 - (source.delta.oldArmy - 1)
+                if moveHalf:
+                    expectedDelta = 0 - source.delta.oldArmy // 2
 
         return expectedDelta
 
@@ -1661,17 +1663,33 @@ class MapBase(object):
             if p.dead and p.capturedBy is not None:
                 skipCapturedPlayers.append(p.index)
 
-        self.run_positive_delta_movement_scan(skipCapturedPlayers, possibleMovesDict, allowFogSource=False)
+        attempt = 0
+        numRuns = 1
+        noChangesFound = False
+        while attempt < numRuns and not noChangesFound:
+            attempt += 1
+            startingUnexplained = self.unexplained_deltas.copy()
+            self.run_positive_delta_movement_scan(skipCapturedPlayers, possibleMovesDict, allowFogSource=False)
 
-        self.run_attacked_tile_movement_scan(skipCapturedPlayers, possibleMovesDict, allowFogSource=False)
+            self.run_attacked_tile_movement_scan(skipCapturedPlayers, possibleMovesDict, allowFogSource=False)
 
-        self.run_positive_delta_movement_scan(skipCapturedPlayers, possibleMovesDict, allowFogSource=True)
+            self.run_positive_delta_movement_scan(skipCapturedPlayers, possibleMovesDict, allowFogSource=True)
 
-        self.run_movement_into_fog_scan(skipCapturedPlayers, possibleMovesDict)
+            self.run_movement_into_fog_scan(skipCapturedPlayers, possibleMovesDict)
 
-        self.run_attacked_tile_movement_scan(skipCapturedPlayers, possibleMovesDict, allowFogSource=True)
+            self.run_attacked_tile_movement_scan(skipCapturedPlayers, possibleMovesDict, allowFogSource=True)
 
-        self.run_island_vision_loss_scan(possibleMovesDict)
+            self.run_island_vision_loss_scan(possibleMovesDict)
+
+            noChangesFound = True
+            if len(startingUnexplained) != len(self.unexplained_deltas):
+                noChangesFound = False
+                continue
+
+            for tile, unexpDelta in startingUnexplained.items():
+                if self.unexplained_deltas.get(tile, None) != unexpDelta:
+                    noChangesFound = False
+                    break
 
         # TODO for debugging only
         logbook.info(f'Tiles with diffs at end: {str([str(t) for t in self.unexplained_deltas.keys() if self.unexplained_deltas[t] != 0])}')

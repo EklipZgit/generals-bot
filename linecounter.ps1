@@ -1,12 +1,12 @@
 push-location
-$testFiles = foreach ($folder in "Tests") {
+$testFiles = foreach ($folder in "Tests", "UnitTests") {
     cd $psscriptroot\$folder
     gci *.py
 }
 
-$files = foreach ($folder in "Sim", "Engine", "base", "base\client") {
+$files = foreach ($folder in "Sim", "Engine", "base", "base\client", "Algorithms", "Behavior", "BehaviorAlgorithms", "Benchmarks", "BenchmarkTools", "Communication", "Gather", "Interfaces", "Models", "Strategy", "StrategyModels", "Viewer", "Utils") {
     cd $psscriptroot\$folder
-    gci *.py
+    gci -recurse *.py
 }
 
 cd $psscriptroot

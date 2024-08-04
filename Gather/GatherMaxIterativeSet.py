@@ -1088,7 +1088,7 @@ def prune_set_by_articulation_points(
 
     if logEntries:
         dur = time.perf_counter() - start
-        durPerPrune = dur / (ogLen - len(toPrune))
+        durPerPrune = dur / max(1, ogLen - len(toPrune))
         # if GatherDebug.USE_DEBUG_LOGGING:
         logbook.info(f'   art point prune finished, {ogLen - len(toPrune)} tiles / {articExecutions} execs ({ogLen} down to {len(toPrune)}) in {1000.0 * dur:.2f}ms, {1000.0 * durPerPrune:.2f}ms each - gathVal {currentGathVal:.2f}, armySum {currentArmySum:.2f}')
         logbook.info(f'       len(toPrune) {len(toPrune)} <= pruneTo {pruneTo} or not dcQueue {dcQueue}...')
@@ -1159,7 +1159,7 @@ def prune_set_by_heuristic_articulation_points(
         if len(pruned) == 0:
             durPerPrune = float('inf')
         else:
-            durPerPrune = dur / (ogLen - len(toPrune))
+            durPerPrune = dur / max(1, ogLen - len(toPrune))
         logEntries.append(f'  artic heur QUICK pruned {quickPruneCount} ({ogLen} down to {len(toPrune)}) in {1000.0 * dur:.2f}ms, {1000.0 * durPerPrune:.2f}ms each - gathVal {startGath:.2f}->{currentGathVal:.2f}, armySum {startArmy:.2f}->{currentArmySum:.2f}')
 
     return currentGathVal, currentArmySum, pruned

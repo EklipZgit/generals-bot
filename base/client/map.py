@@ -480,7 +480,7 @@ class MapBase(object):
                     player.delta25tiles = self.players[i].tileCount - earliest[i].tiles
                 if self.scores[i].dead:
                     # wait one turn upon receiving a 'dead' update to allow for 'capture' messages that are arriving late.
-                    if not player.leftGame:
+                    if not player.leftGame:  # this
                         player.leftGame = True
                         player.leftGameTurn = self.turn
 
@@ -494,14 +494,14 @@ class MapBase(object):
                                 for tile in player.tiles:
                                     if not tile.visible:
                                         tile.set_disconnected_neutral()
+                            if player.general is not None and player.general.isGeneral:
+                                logbook.warning(f'WARNING, GENERAL WAS NOT RESET TO CITY ON DEAD PLAYER BY THE TIME WE WERE CALCULATING SCORES, THE FUCK? {player.general}')
+                                player.general.isGeneral = False
+                                player.general.isCity = True
 
-                        if self.generals[player.index] is not None:
-                            logbook.info(f'WARNING, setting forfeited player p{player.index} general {self.generals[player.index]} = None')
-                            self.generals[player.index] = None
-                        if player.general is not None and player.general.isGeneral:
-                            logbook.warning(f'WARNING, GENERAL WAS NOT RESET TO CITY ON DEAD PLAYER BY THE TIME WE WERE CALCULATING SCORES, THE FUCK? {player.general}')
-                            player.general.isGeneral = False
-                            player.general.isCity = True
+                            if self.generals[player.index] is not None:
+                                logbook.info(f'WARNING, setting forfeited player p{player.index} general {self.generals[player.index]} = None')
+                                self.generals[player.index] = None
 
                 else:
                     self.remainingPlayers += 1

@@ -1144,3 +1144,4 @@ player_index=0
     # 277 after FUCKING TWO WHOLE GODDAMN DAYS OF TRYING TO FUCKING FJKDSF:LKJFDS:JLKFDSGLJK:HRSW:JMNKLGWR GOD I HATE TILE TRACKING, BRUTE FORCE WOULD HAVE BEEN SO MUCH BETTER
     # 279 after fixing incorrect delta on neutral(fog)->neutral(visible) from fog move
     # 279 still
+    # 279 after all the mechanical updates

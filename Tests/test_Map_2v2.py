@@ -271,3 +271,4 @@ a1
                 self.assertNoFriendliesKilled(map, general, allyGen)
 
 # 4788f, 4005p
+# 3714f, 5079p (with some 2v2 fixes)

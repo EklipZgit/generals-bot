@@ -2405,28 +2405,6 @@ class DefenseTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=turns)
         self.assertNoFriendliesKilled(map, general)
-
-
-    # 36-69-5 as of tweaking chokes and honoring allowNonChoke
-    # 31-74-5 reverted chokeWidth reduction to -2 from -1, which i'm like 100% sure is wrong but it makes the 'one too far' tests pass, lmao.
-    # 50-55 if i switch to gathering to shortest pathway tiles with pathwidth offset
-    # 34-71
-    # 57-49 with chokewidth -1 instead of -2 and the choke defense changes in place
-    # 53-53
-    # 63f-26p-9skip after everything fucked by intercept
-    # 44f-45p-5skip fixed assertion float rounding failures by casting to int lol
-    # 59f 66p 5s with i think broken stuff as far as priority offset goes
-    # 58f, 72p, 5s with fix to intercept overriding defense
-    # 56f, 74p, 5s with another ^
-    # 53f, 77p, 5s still more tweaks to ^
-    # 58f, 72p, 5s LITERALLY THE SAME CODE AS ^
-    # 77f, 64p, 5s after fucking with the intercept instead of chokewidth in distDict and changing the gather-leaf-defense-move-priority-order which needs to be fixed,
-    #         see test test_should_wait_to_gather_tiles_that_are_in_the_shortest_pathway_for_last (?) above. TODO
-    # 88f, 60p, 2s after hating my life. Intercept still fucking things up pretty sure
-    # 97f, 54p, 5s after still hating my life, un-broke the threat dist stuff (but it may be wrong).
-    # 94f, 57p, 5s
-    # 82f, 74p, 5s after preventing gather
-    # 91f, 68p, 4s after fixing iterative gather bug? lol? wtf?
     
     def test_should_just_intercept__not_die_lmao__why_is_defense_preventing_intercept_here(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -2496,3 +2474,61 @@ class DefenseTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
         self.assertNoFriendliesKilled(map, general, allyGen)
+    
+    def test_should_defend_ally_from_straightforward_attack(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_defend_ally_from_straightforward_attack___piCvrHURN---3--378.txtmap'
+        map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 378, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=378)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=False)
+        simHost.queue_player_moves_str(enemyGeneral.player, '16,20->6,20')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        self.assertNoFriendliesKilled(map, general, allyGen)
+
+    def test_should_not_consider_self_dead_when_trivially_obviously_not_dead_at_choke(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_consider_self_dead_when_trivially_obviously_not_dead_at_choke___f1tVhCbAr---1--479.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 479, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=479)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '2,10->2,9->6,9->6,2->7,2')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=13)
+        self.assertNoFriendliesKilled(map, general)
+
+
+
+    # 36-69-5 as of tweaking chokes and honoring allowNonChoke
+    # 31-74-5 reverted chokeWidth reduction to -2 from -1, which i'm like 100% sure is wrong but it makes the 'one too far' tests pass, lmao.
+    # 50-55 if i switch to gathering to shortest pathway tiles with pathwidth offset
+    # 34-71
+    # 57-49 with chokewidth -1 instead of -2 and the choke defense changes in place
+    # 53-53
+    # 63f-26p-9skip after everything fucked by intercept
+    # 44f-45p-5skip fixed assertion float rounding failures by casting to int lol
+    # 59f 66p 5s with i think broken stuff as far as priority offset goes
+    # 58f, 72p, 5s with fix to intercept overriding defense
+    # 56f, 74p, 5s with another ^
+    # 53f, 77p, 5s still more tweaks to ^
+    # 58f, 72p, 5s LITERALLY THE SAME CODE AS ^
+    # 77f, 64p, 5s after fucking with the intercept instead of chokewidth in distDict and changing the gather-leaf-defense-move-priority-order which needs to be fixed,
+    #         see test test_should_wait_to_gather_tiles_that_are_in_the_shortest_pathway_for_last (?) above. TODO
+    # 88f, 60p, 2s after hating my life. Intercept still fucking things up pretty sure
+    # 97f, 54p, 5s after still hating my life, un-broke the threat dist stuff (but it may be wrong).
+    # 94f, 57p, 5s
+    # 82f, 74p, 5s after preventing gather
+    # 91f, 68p, 4s after fixing iterative gather bug? lol? wtf?
+    # 73f, 91p, 5s after idk things that have happened and adding 5 new tests. Also pruning the bad distDict entries that one would never want to gather to, I guess

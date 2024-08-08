@@ -1268,7 +1268,7 @@ def gather_approximate_turns_to_tiles(
         useTrueValueGathered: bool = True,
         includeGatherPriorityAsEconValues: bool = False,
         includeCapturePriorityAsEconValues: bool = True,
-        logDebug: bool = False,
+        logDebug: bool = GatherDebug.USE_DEBUG_LOGGING,
         viewInfo=None,
 ) -> GatherCapturePlan | None:
     """
@@ -1299,6 +1299,13 @@ def gather_approximate_turns_to_tiles(
         asPlayer = map.player_index
 
     weightMatrix = MapMatrix(map, 0.0)
+    logbook.info(f'starting gather_approximate_turns_to_tiles for turns appx{approximateTargetTurns} max {maxTurns} min {minTurns} to rootTiles {" | ".join([str(t) for t in rootTiles])}\r\n'
+                 f'prioritizeCaptureHighArmyTiles {prioritizeCaptureHighArmyTiles} useTrueValueGathered {useTrueValueGathered} includeGatherPriorityAsEconValues {includeGatherPriorityAsEconValues} includeCapturePriorityAsEconValues {includeCapturePriorityAsEconValues}')
+
+    if negativeTiles:
+        logbook.info(f'negatives {" | ".join([str(t) for t in negativeTiles])}')
+    if skipTiles:
+        logbook.info(f'skipTiles {" | ".join([str(t) for t in skipTiles])}')
 
     for t in map.get_all_tiles():
         if map.is_tile_on_team_with(t, asPlayer):
@@ -1331,7 +1338,7 @@ def gather_approximate_turns_to_tiles(
 
     if not steinerNodes:
         usedTime = time.perf_counter() - startTime
-        logbook.info(f'gather_approximate_turns_to_tile complete in {usedTime:.4f}s with NO PLAN')
+        logbook.info(f'gather_approximate_turns_to_tiles complete in {usedTime:.4f}s with NO PLAN')
         return None
 
     plan = convert_contiguous_tile_tree_to_gather_capture_plan(
@@ -1348,7 +1355,7 @@ def gather_approximate_turns_to_tiles(
     )
 
     usedTime = time.perf_counter() - startTime
-    logbook.info(f'gather_approximate_turns_to_tile complete in {usedTime:.4f}s with {plan}')
+    logbook.info(f'gather_approximate_turns_to_tiles complete in {usedTime:.4f}s with {plan}')
 
     return plan
 

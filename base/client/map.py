@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import itertools
 from copy import deepcopy
 from base.client.tile import *
 
@@ -1118,6 +1119,10 @@ class MapBase(object):
                 self.set_fog_emergence(fromTile, armyEmerged=fromTile.delta.unexplainedDelta, byPlayer=fromTile.player)
             else:
                 self._update_unexplained_delta(fromTile, 0)
+        # TODO this elif SHOULD work, figure out why it isnt...
+        # elif fromTile.was_visible_last_turn():
+        #     expectedFromDelta = self._get_expected_delta_amount_from(fromTile, toTile)
+        #     self._update_unexplained_delta(fromTile, fromTile.delta.unexplainedDelta - expectedFromDelta)
 
         if fullToDiffCovered:
             self._update_unexplained_delta(toTile, 0)
@@ -1631,6 +1636,11 @@ class MapBase(object):
 
         self.unexplained_deltas = {}
         self.moved_here_set = set()
+        deltaTilesWhereAllVisible = set()
+        candidateMoves: typing.List[typing.Tuple[int, Tile, Tile]] = []
+
+        enPlayers = [i for i in range(len(self.players)) if self.players[i].team != self.friendly_team]
+
         for t in self.get_all_tiles():
             if t.delta.armyMovedHere:
                 self.moved_here_set.add(t)
@@ -1638,9 +1648,26 @@ class MapBase(object):
                 continue
             if not t.visible:
                 continue
+            # invalid due to swamps..?
             if t.player == -1:
                 continue
             self.unexplained_deltas[t] = t.delta.unexplainedDelta
+            allVis = True
+            for mv in t.movable:
+                exclusiveMvPlayers = enPlayers
+                if not mv.visible:
+                    allVis = False
+                if not mv.was_visible_last_turn():
+                    allVis = False
+                else:
+                    exclusiveMvPlayers = [mv.delta.oldOwner]
+                for exclusiveMvPlayer in exclusiveMvPlayers:
+                    candidateMoves.append((exclusiveMvPlayer, mv, t))
+
+                if t.was_visible_last_turn() and t.delta.oldOwner != -1:
+                    candidateMoves.append((t.delta.oldOwner, t, mv))
+
+        # self._brute_force_movement(candidateMoves)
 
         for player in self.players:
             player.last_move = None
@@ -1678,6 +1705,7 @@ class MapBase(object):
 
         attempt = 0
         numRuns = 1
+        # numRuns = 4 # TODO !!!!
         noChangesFound = False
         while attempt < numRuns and not noChangesFound:
             attempt += 1
@@ -2536,6 +2564,30 @@ class MapBase(object):
         elif not tile.delta.armyMovedHere and isMovedHere:
             tile.delta.armyMovedHere = True
             self.moved_here_set.add(tile)
+    #
+    # def _brute_force_movement(self, candidateMoves: typing.List[typing.Tuple[int, Tile, Tile]]):
+    #     if not candidateMoves:
+    #         return
+    #
+    #     groupedByPlayer = {pIdx: [] for pIdx in range(len(self.players))}
+    #
+    #     if len(candidateMoves) > 20:
+    #         logbook.info(f'bypassing brute force because too many candidate move options...')
+    #
+    #     for candPlayer, fromTile, toTile in candidateMoves:
+    #         mvOpt = groupedByPlayer[candPlayer]
+    #         mvOpt.append((fromTile, toTile))
+    #
+    #     for cross in itertools.product(*all_lists):
+    #         combo = [item for item in cross if item is not None]  # Remove "None" elements
+    #         if combo:  # Ignore the empty list
+    #             print(combo)
+    #     # pIdxs = [0 for i in range(len(self.players))]
+    #     #
+    #     # combs = []
+    #     # anyLeft = True
+    #     # while anyLeft:
+    #     #
 
 
 class Map(MapBase):

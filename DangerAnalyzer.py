@@ -31,7 +31,7 @@ class ThreatObj(object):
         self.saveTile: Tile | None = saveTile
         self.armyAnalysis: ArmyAnalyzer = armyAnalysis
 
-    def convert_to_dist_dict(self, offset: int = -1, allowNonChoke: bool = False, mapForPriority: MapBase | None = None) -> typing.Dict[Tile, int]:
+    def convert_to_dist_dict(self, offset: int = -1, allowNonChoke: bool = False, mapForPriority: MapBase | None = None, stripBad: bool = True) -> typing.Dict[Tile, int]:
         """
         If mapForPriority is provided, then the distdict will take into account priority.
 
@@ -81,6 +81,25 @@ class ThreatObj(object):
 
             hasPriority = not hasPriority
 
+        if stripBad:
+            # og = distDict.copy()
+            lastVal = None
+            lastTile = None
+            for tile in self.path.tileList:
+                val = distDict.get(tile, None)
+                if val is not None:
+                    if lastVal is not None:
+                        if val < lastVal - 1:
+                            # then we would never gather to lastTile, we'd gather to this tile
+                            logbook.info(f'  Dropping last {lastTile} @ {lastVal} because {tile} @ {val}')
+                            distDict.pop(lastTile, None)
+                        if val > lastVal:
+                            # then we would never gather to this tile? We'd gather to last tile instead? TODO is this true with the depth stuff...?
+                            logbook.info(f'  Dropping {tile} @ {val} because last {lastTile} @ {lastVal}')
+                            distDict.pop(tile, None)
+                lastVal = val
+                lastTile = tile
+
         return distDict
 
     def __str__(self):
@@ -89,7 +108,7 @@ class ThreatObj(object):
 
 class DangerAnalyzer(object):
     def __init__(self, map):
-        self.targets: typing.List[Tile] = []
+        self.nonGeneralTargets: typing.List[Tile] = []
         self.map: MapBase = map
         self.fastestVisionThreat: ThreatObj | None = None
         self.fastestThreat: ThreatObj | None = None
@@ -128,7 +147,7 @@ class DangerAnalyzer(object):
         general = self.map.generals[self.map.player_index]
         self.scan(general)
 
-        self.targets = defenseTiles
+        self.nonGeneralTargets = defenseTiles
         self.fastestThreat = self.getFastestThreat(depth, armies, self.map.player_index)
         self.fastestCityThreat = self.getFastestThreat(depth, armies, self.map.player_index, generalOnly=False, requireMovement=True)
         # TODO why was this here...?
@@ -385,6 +404,8 @@ class DangerAnalyzer(object):
             return None
 
         general = self.map.generals[againstPlayer]
+        if not general:
+            return None
 
         threatObj = None
 
@@ -398,7 +419,7 @@ class DangerAnalyzer(object):
                 if not tile.isGeneral and tile.army > 7:
                     negativeTilesToUse.add(tile)
 
-        targets = self.targets
+        targets = self.nonGeneralTargets
         if generalOnly:
             targets = [general]
 

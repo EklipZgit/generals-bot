@@ -184,7 +184,11 @@ class GatherCapturePlan(TilePlanInterface):
         if self.value_func:
             return GatherPrune.get_tree_move(self.root_nodes, self.value_func)
         else:
-            return Move(self.tileList[0], self.tileList[1])
+            raise AssertionError(f'cannot call get_first_move when value_func is None (after pickling)')
+            # i = 0
+            # while i < len(self.tileList):
+            #     if self.tileList[i]
+            # return Move(self.tileList[0], self.tileList[1])
 
     def pop_first_move(self) -> Move | None:
         if self.value_func:
@@ -192,7 +196,7 @@ class GatherCapturePlan(TilePlanInterface):
             self._move_list = None
             return move
         else:
-            raise AssertionError(f'cannot call pop move when value_func is null (after pickling)')
+            raise AssertionError(f'cannot call pop move when value_func is None (after pickling)')
 
     def get_move_list(self) -> typing.List[Move]:
         if self._move_list is not None:
@@ -204,6 +208,7 @@ class GatherCapturePlan(TilePlanInterface):
             raise AssertionError(f'cannot call get_move_list when value_func is null (after pickling)')
 
     def __getstate__(self):
+        # important because otherwise these are not generated and set.
         tileList = self.tileList
         tileSet = self.tileSet
         state = self.__dict__.copy()

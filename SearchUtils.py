@@ -170,7 +170,7 @@ def dest_breadth_first_target(
     if searchingPlayer == -2:
         searchingPlayer = map.player_index
 
-    if map.teammates:
+    if map.teammates and searchingPlayer == map.player_index:
         if skipTiles:
             skipTiles = set(t for t in skipTiles)
         else:

@@ -16,6 +16,8 @@ Bot state data is below the second |  |  |  |  |  | and is ignored when loading 
 import pathlib
 import typing
 
+from Army import Army
+from Path import Path
 from SearchUtils import count
 from base.client.map import Tile, TILE_EMPTY, TILE_MOUNTAIN, MapBase, PLAYER_CHAR_INDEX_PAIRS
 from base.client.tile import TILE_OBSERVATORY, TILE_LOOKOUT
@@ -255,6 +257,108 @@ class TextMapLoader(object):
     @staticmethod
     def get_player_char_index_map():
         return PLAYER_CHAR_INDEX_PAIRS
+
+    @staticmethod
+    def dump_armies(map: MapBase, armies: typing.Dict[Tile, Army]) -> str:
+        """
+        @param map:
+        @param armies:
+        @return:
+        """
+
+        armyStrs = []
+        for army in armies.values():
+            entangled = [army.tile]
+            entangled.extend(a.tile for a in army.entangledArmies)
+            tileStr = "|".join([f'{t.x},{t.y}' for t in entangled])
+
+            pathsStr = "|".join([str(p) for p in army.expectedPaths])
+
+            armyStr = f'{army.name}+{army.value}!{army.entangledValue}^{army.last_seen_turn}*{army.last_moved_turn}&{pathsStr}%{tileStr}'
+
+            armyStrs.append(armyStr)
+
+        return ':'.join(armyStrs)
+
+    @staticmethod
+    def parse_path(map: MapBase, pathStr: str) -> Path | None:
+        if pathStr == "None":
+            return None
+        # [28 len 3] 7,18 -> 6,18 -> 6,17 -> 5,17
+
+        try:
+            _, path = pathStr.split('] ')
+
+            resultPath = Path()
+            for tileStr in path.split('->'):
+                xStr, yStr = tileStr.split(',')
+                yStr = yStr.lower().strip()
+
+                moveHalf = False
+                if yStr.endswith('z'):
+                    moveHalf = True
+                    yStr = yStr.strip('z')
+
+                tile = map.GetTile(int(xStr), int(yStr))
+                resultPath.add_next(tile, moveHalf)
+
+            return resultPath
+        except:
+            # TODO handle other gather capture plan types?
+
+            return None
+
+    @staticmethod
+    def load_armies(map: MapBase, data: typing.Dict[str, str]) -> typing.Dict[Tile, Army]:
+        """
+        @param map:
+        @param data:
+        @return:
+        """
+
+        armies = {}
+
+        if 'Armies' not in data:
+            return armies
+
+        raw = data['Armies']
+
+        armiesRaw = raw.split(':')
+
+        for armyRaw in armiesRaw:
+            name, everythingElse = armyRaw.split('+')
+            value, everythingElse = everythingElse.split('!')
+            entangledValue, everythingElse = everythingElse.split('^')
+            lastSeenTurn, everythingElse = everythingElse.split('*')
+            lastMovedTurn, everythingElse = everythingElse.split('&')
+            expectedPathsCombined, everythingElse = everythingElse.split('%')
+            expectedPaths = [TextMapLoader.parse_path(map, pStr) for pStr in expectedPathsCombined.split('|')]
+            tilesRaw = everythingElse.split('|')
+
+            xRaw, yRaw = tilesRaw[0].split(',')
+
+            curTile = map.GetTile(int(xRaw), int(yRaw))
+            army = armies.get(curTile, None)
+            if not army:
+                army = Army(curTile, name)
+                armies[curTile] = army
+            army.name = name
+            army.value = int(value)
+            army.entangledValue = int(value)
+            army.expectedPaths = expectedPaths
+            army.last_seen_turn = int(lastSeenTurn)
+            army.last_moved_turn = int(lastMovedTurn)
+            if len(tilesRaw) > 1:
+                for tileRaw in tilesRaw[1:]:
+                    xRaw, yRaw = tileRaw.split(',')
+                    entangledTile = map.GetTile(int(xRaw), int(yRaw))
+                    entangled = armies.get(entangledTile, None)
+                    if not entangled:
+                        entangled = Army(entangledTile)
+                        armies[entangledTile] = entangled
+                    army.entangledArmies.append(entangled)
+
+        return armies
 
     @staticmethod
     def load_map_data_into_map(map: MapBase, data: typing.Dict[str, str]):

@@ -1113,6 +1113,12 @@ class MapBase(object):
             logbook.info(f'Setting low cost city game...? is cityState {self.modifiers_by_id[MODIFIER_CITY_STATE]}, modifiers {[i for i, m in enumerate(self.modifiers_by_id) if m]}')
             self.is_low_cost_city_game = True
 
+        if len(pathableTiles) != len(self.pathable_tiles):
+            try:
+                self.distance_mapper.recalculate()
+            except:
+                pass
+
         self.pathable_tiles = pathableTiles
         self.reachable_tiles = reachableTiles
         self.visible_tiles = visibleTiles

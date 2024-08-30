@@ -213,6 +213,8 @@ class GeneralPredictionTests(TestBase):
             self.enable_search_time_limits_and_disable_debug_asserts()
             simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
             simHost.queue_player_moves_str(enemyGeneral.player, '2,4->2,3->5,3')
+            # proof
+            # simHost.queue_player_moves_str(general.player, '3,12->2,12->2,13->1,13')
             bot = self.get_debug_render_bot(simHost, general.player)
             playerMap = simHost.get_player_map(general.player)
 
@@ -260,8 +262,6 @@ class GeneralPredictionTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
         self.assertNoFriendliesKilled(map, general)
-
-# 8f, 6p, 0s After splitting tests out from our dear friend GeneralPrediction tests.
     
     def test_should_keep_diving_when_all_in_and_not_much_left_to_search_regardless_of_opp_army(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -288,8 +288,6 @@ class GeneralPredictionTests(TestBase):
                 winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=11)
                 self.assertEqual(general.player, winner)
 
-
-    
     def test_quick_kill_should_not_find_ridiculous_paths_and_override_defense_with_long_kills(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/quick_kill_should_not_find_ridiculous_paths_and_override_defense_with_long_kills___eUM0gp3BQ---0--1034.txtmap'
@@ -307,3 +305,6 @@ class GeneralPredictionTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=11)
         self.assertNoFriendliesKilled(map, general)
 
+
+# 8f, 6p, 0s After splitting tests out from our dear friend GeneralPrediction tests.
+# 1f, 17p, 0s After making defense take kill probability into account for death-races, and never chosing worse-but-shorter kill-chance king-kill-paths in the race searcher.

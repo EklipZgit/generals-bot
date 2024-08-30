@@ -44,7 +44,7 @@ class ArmyAnalyzer:
     TimeSpentInInit: float = 0.0
     NumAnalysisBuilt: int = 0
 
-    def __init__(self, map: MapBase, armyA: Tile | Army, armyB: Tile | Army, bypassRetraverseThreshold: int = -1, bypassRetraverseThresholdPathTiles: typing.Iterable[Tile] | None = None):
+    def __init__(self, map: MapBase, armyA: Tile | Army, armyB: Tile | Army, bypassRetraverseThreshold: int = -1, bypassRetraverseThresholdPathTiles: typing.Iterable[Tile] | None = None, maxDist: int = 100):
         """
 
         @param map:
@@ -104,14 +104,14 @@ class ArmyAnalyzer:
                 skip.discard(tile)
 
             SearchUtils.breadth_first_foreach_fast_no_neut_cities(map, [t for t in map.pathable_tiles if map.is_tile_on_team_with(t, self.tileA.player) or t == self.tileB], maxDepth=bypassRetraverseThreshold, foreachFunc=foreachFunc)
-            logbook.info(f'building distance maps except skipping {len(skip)} tiles: {" | ".join([str(t) for t in skip])}')
+            logbook.info(f'building distance maps except skipping {len(skip)} tiles')  # : {" | ".join([str(t) for t in skip])}
 
             self.aMap = SearchUtils.build_distance_map_matrix(map, [self.tileA], skip)
             self.bMap = SearchUtils.build_distance_map_matrix(map, [self.tileB], skip)
 
         ArmyAnalyzer.TimeSpentInInit += time.perf_counter() - startTime
 
-        self.scan()
+        self.scan(maxDist)
 
         ArmyAnalyzer.NumAnalysisBuilt += 1
 
@@ -140,9 +140,9 @@ class ArmyAnalyzer:
         cls.TimeSpentInInit = 0.0
         cls.NumAnalysisBuilt = 0
 
-    def scan(self):
+    def scan(self, maxDist: int = 100):
         start = time.perf_counter()
-        self.build_chokes_and_pathways()
+        self.build_chokes_and_pathways(maxDist)
         ArmyAnalyzer.TimeSpentBuildingPathwaysChokeWidthsAndMinPath += time.perf_counter() - start
 
         start = time.perf_counter()
@@ -150,38 +150,40 @@ class ArmyAnalyzer:
         ArmyAnalyzer.TimeSpentBuildingInterceptChokes += time.perf_counter() - start
 
     # This is heavily optimized at this point.
-    def build_chokes_and_pathways(self):
-        minPath = INF_PATH_WAY
+    def build_chokes_and_pathways(self, maxDist: int = 100):
+        self.shortestPathWay = self.build_pathway(self.tileA, 1000)
+        maxDistOffset = self.shortestPathWay.distance + maxDist
         for tile in self.map.pathable_tiles:
             # build the pathway
             path = self.pathWayLookupMatrix.raw[tile.tile_index]
             if path:
                 continue
 
-            path = self.build_pathway(tile)
-            self.pathWays.append(path)
-            if path.distance < minPath.distance:
-                minPath = path
+            path = self.build_pathway(tile, maxDistOffset)
+            if path is not INF_PATH_WAY:
+                self.pathWays.append(path)
 
-            chokeCounterMap = {}
-            for pathTile in path.tiles:
-                if pathTile.isMountain or (pathTile.tile == TILE_OBSTACLE and not pathTile.discovered and not pathTile.isCity) or (pathTile.isCity and pathTile.player == -1):
-                    continue
+                chokeCounterMap = {}
+                for pathTile in path.tiles:
+                    if pathTile.isMountain or (pathTile.tile == TILE_OBSTACLE and not pathTile.discovered and not pathTile.isCity) or (pathTile.isCity and pathTile.player == -1):
+                        continue
 
-                chokeKey = self._get_choke_key(pathTile)
-                chokeCounterMap[chokeKey] = chokeCounterMap.get(chokeKey, 0) + 1
+                    chokeKey = self._get_choke_key(pathTile)
+                    chokeCounterMap[chokeKey] = chokeCounterMap.get(chokeKey, 0) + 1
 
-            for pathTile in path.tiles:
-                if pathTile.isMountain or (pathTile.tile == TILE_OBSTACLE and not pathTile.discovered and not pathTile.isCity) or (pathTile.isCity and pathTile.player == -1):
-                    continue
-                cw = chokeCounterMap[self._get_choke_key(pathTile)]
-                self.chokeWidths.raw[pathTile.tile_index] = cw
-
-        self.shortestPathWay = minPath
+                for pathTile in path.tiles:
+                    if pathTile.isMountain or (pathTile.tile == TILE_OBSTACLE and not pathTile.discovered and not pathTile.isCity) or (pathTile.isCity and pathTile.player == -1):
+                        continue
+                    cw = chokeCounterMap[self._get_choke_key(pathTile)]
+                    self.chokeWidths.raw[pathTile.tile_index] = cw
 
     # recurse
-    def build_pathway(self, tile) -> PathWay:
+    def build_pathway(self, tile, maxDist) -> PathWay:
         distance = self.aMap.raw[tile.tile_index] + self.bMap.raw[tile.tile_index]
+        if distance > maxDist:
+            # TODO is this necessary?
+            self.pathWayLookupMatrix.raw[tile.tile_index] = INF_PATH_WAY
+            return INF_PATH_WAY
         #logbook.info("  building pathway from tile {} distance {}".format(tile.toString(), distance))
         path = PathWay(distance=distance)
         path.seed_tile = tile
@@ -224,7 +226,8 @@ class ArmyAnalyzer:
 
         q.append(self.tileB)
 
-        visited = MapMatrixSet(self.map)
+        # visited = MapMatrixSet(self.map)
+        visited = set()
         pw = self.pathWayLookupMatrix.raw[self.tileA.tile_index]
         if pw is None:
             return
@@ -233,21 +236,21 @@ class ArmyAnalyzer:
 
         while q:
             nextTile = q.popleft()
-            if nextTile not in self.shortestPathWay.tiles:
+            # we only care about the shorted pathway tiles for this?
+            if self.pathWayLookupMatrix.raw[nextTile.tile_index] != pw:
                 continue
             if nextTile in visited:
                 continue
 
             visited.add(nextTile)
-            nextBDist = self.bMap[nextTile]
+            nextBDist = self.bMap.raw[nextTile.tile_index]
 
-            pw = self.pathWayLookupMatrix[nextTile]
+            pw = self.pathWayLookupMatrix.raw[nextTile.tile_index]
 
             offsetDist = nextBDist + pw.distance - shortestDist
 
-            curSet = distancesLookup.get(offsetDist, None)
-            if not curSet:
-                curSet = []
+            curSet = distancesLookup.get(offsetDist, [])
+            if len(curSet) == 0:
                 distancesLookup[offsetDist] = curSet
 
             curSet.append(nextTile)
@@ -256,7 +259,7 @@ class ArmyAnalyzer:
                 if t.isObstacle:
                     continue  # TODO ??
                 if t not in visited:  # and t in self.shortestPathWay.tiles
-                    nPw = self.pathWayLookupMatrix[t]
+                    nPw = self.pathWayLookupMatrix.raw[t.tile_index]
                     if nPw is None:
                         continue
                     if nPw.distance >= pw.distance:
@@ -280,8 +283,8 @@ class ArmyAnalyzer:
                 #         oneChokes.add(t)
                 continue
             if len(curSet) == 2:
-                first = curSet[0]
-                firstDist = self.bMap[first]
+                # first = curSet[0]
+                # firstDist = self.bMap.raw[first.tile_index]
                 # then this is likely a 1-away choke, verify and find common one-choke tiles
                 anyOne = False
                 for t in curSet[0].movable:
@@ -413,12 +416,13 @@ class ArmyAnalyzer:
         return chokeMoves is not None and chokeMoves <= 2
 
     @classmethod
-    def build_from_path(cls, map: MapBase, path: Path, bypassRetraverse: bool = False) -> ArmyAnalyzer:
+    def build_from_path(cls, map: MapBase, path: Path, bypassRetraverse: bool = False, maxDist: int = 10000) -> ArmyAnalyzer:
         """
 
         @param map:
         @param path:
         @param bypassRetraverse: if True, will make sure that the average captures of the path are matched by the army analysis board; tiles will be cut if it involves backtracking over friendly territory instead of capturing tiles. DO NOT use for kill threats.
+        @param maxDist: the maximum distance from the tiles to include in the analysis, beyond which chokes and stuff will be excluded.
         @return:
         """
 
@@ -443,6 +447,6 @@ class ArmyAnalyzer:
             bypassRetraverseThreshold = 2
             bypassRetraversePath = path.tileList
 
-        analyzer = ArmyAnalyzer(map, tileA, tileB, bypassRetraverseThreshold=bypassRetraverseThreshold, bypassRetraverseThresholdPathTiles=bypassRetraversePath)
+        analyzer = ArmyAnalyzer(map, tileA, tileB, bypassRetraverseThreshold=bypassRetraverseThreshold, bypassRetraverseThresholdPathTiles=bypassRetraversePath, maxDist=maxDist)
 
         return analyzer

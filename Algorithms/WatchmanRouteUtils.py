@@ -391,15 +391,18 @@ class PivotWRP:
                 # newPath = current_node.path.copy()
                 # newPath.append(neighbor)
                 newPath = current_node.path + [neighbor]
-                # repeat = len(current_node.path) > 1 and neighbor.tile is current_node.path[-2]
-                # newArmy = current_node.army
-                # if not repeat:
-                #     if neighbor.player in frPlayers:
-                #         newArmy += neighbor.army
-                #     else:
-                #         newArmy -= neighbor.army
-                #
-                # newArmy -= 1
+                repeat = len(current_node.path) > 1 and neighbor.tile is current_node.path[-2]
+                newArmy = current_node.army
+                if not repeat:
+                    if neighbor.player in frPlayers:
+                        newArmy += neighbor.army
+                    else:
+                        newArmy -= neighbor.army
+
+                    newArmy -= 1
+
+                if newArmy <= 2:
+                    continue
 
                 # diff = t for t in neighbor.adjacents if
 
@@ -411,14 +414,14 @@ class PivotWRP:
                     # current_node.unseen_components,
                     newPath,
                     current_node.cost_so_far + 1,  # actual cost is always 1.
-                    # army=newArmy
+                    army=newArmy
                 )
 
                 if neighbor_node in closedSet:
                     continue
 
                 neighbor_node.heuristic_cost_remaining = self.heuristic(neighbor_node)
-                neighbor_node.total_estimated_cost = neighbor_node.cost_so_far + neighbor_node.heuristic_cost_remaining
+                neighbor_node.total_estimated_cost = neighbor_node.cost_so_far + neighbor_node.heuristic_cost_remaining - newArmy / 100
 
                 # if neighbor_node not in openList:  # The fuck, chatgpt? There is NO WAY we are supposed to do this. MAYBE we make a set of open entries to prevent adding duplicates, though.
                 heapq.heappush(openList, (neighbor_node.total_estimated_cost, neighbor_node))
@@ -842,16 +845,10 @@ def get_revealed_count_and_max_kill_turns_and_positive_path(
         return 0, 1000, 1000, 1000.0, MapMatrix(map, 1000), path
 
     visited = set()
-    army = 0
     wentPositive = False
-    i = 0
-    minKillTurns = 1000
-    for i, t in enumerate(path.tileList):
-        if t in unrevealed:
-            minKillTurns = i
-            break
-
+    army = 0
     finalArmy = army
+    i = 0
     for i, t in enumerate(path.tileList):
         if t not in visited:
             if map.is_tile_friendly(t):
@@ -874,12 +871,13 @@ def get_revealed_count_and_max_kill_turns_and_positive_path(
     if not wentPositive:
         logbook.warning(f'get_revealed_count_and_max_kill_turns_and_positive_path army NEVER went positive with starting cutoffArmy {cutoffKillArmy}. Path {path}')
 
-    distMap = SearchUtils.build_distance_map_matrix_with_start_dist(map, enumerate(path.tileList), maxDepth=15)
-
     if i < path.length:
         path = path.get_subsegment(i)
 
+    distMap = SearchUtils.build_distance_map_matrix_with_start_dist(map, enumerate(path.tileList), maxDepth=15)
+
     maxKillTurns = max(distMap.raw[t.tile_index] for t in toReveal)
+    minKillTurns = min(distMap.raw[t.tile_index] for t in toReveal)
     avgKillTurns = sum(distMap.raw[t.tile_index] for t in toReveal) / ogLen
 
     revealedCount = ogLen - len(unrevealed)

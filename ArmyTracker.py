@@ -2855,7 +2855,7 @@ class ArmyTracker(object):
                 return
 
         if emergenceAmount == -1 and len(playerUnelim) == 0:
-            emergenceAmount = 20
+            emergenceAmount = max(20, self.map.turn / 2)
 
         elims = self._limit_general_position_to_within_tiles_and_distance(player, [tile], maxDist, alsoIncreaseEmergence, overrideCityPerfectInfo=overrideCityPerfectInfo, emergenceAmount=emergenceAmount)
         shouldSave = elims > 0 or len(playerUnelim) < 3

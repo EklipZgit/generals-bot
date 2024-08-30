@@ -165,7 +165,7 @@ class OffensiveMicroTests(TestBase):
                 simHost.queue_player_moves_str(enemyGeneral.player, 'None')
                 bot = self.get_debug_render_bot(simHost, general.player)
                 playerMap = simHost.get_player_map(general.player)
-                killMove, kingKillPath = bot.check_for_king_kills_and_races(bot.threat)
+                killMove, kingKillPath, chance = bot.check_for_king_kills_and_races(bot.threat)
 
                 winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
                 self.assertNoFriendliesKilled(map, general)

@@ -1342,3 +1342,25 @@ class GeneralPredictionTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=25)
         self.assertValidGeneralPosition(bot, enemyGeneral)
         self.assertNoFriendliesKilled(map, general)
+    
+    def test_should_not_mis_eliminate_on_custom_map_with_walled_cities(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_mis-eliminate_on_custom_map_with_walled_cities___adYlTe7JG---1--415.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 415, fill_out_tiles=True)
+        realTile = map.GetTile(35, 14)
+        realTile.army = 2
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=415)
+        rawMap.GetTile(30, 32).reset_wrong_undiscovered_fog_guess()
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '35,12->35,13')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertFalse(playerMap.GetTile(39,36).isGeneral)

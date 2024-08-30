@@ -194,6 +194,10 @@ class ArmyInterception(object):
         for threatInfo in threats:
             val = threatInfo.econ_value
             valPerTurn = threatInfo.econ_value_per_turn
+            if threatInfo.threat.threatType == ThreatType.Kill and threatInfo.threat.threatValue > 0 and (maxThreatInfo is None or maxThreatInfo.threat.threatType != ThreatType.Kill or maxThreatInfo.threat.turns > threatInfo.threat.turns):
+                # TODO make a more thoughtful decision about always using this as max threat val?
+                maxThreatInfo = threatInfo
+                break
             if valPerTurn == maxValPerTurn and threatInfo.threat.path.length > maxThreatInfo.threat.path.length:
                 maxValPerTurn -= 1
 
@@ -203,6 +207,7 @@ class ArmyInterception(object):
                 maxThreatInfo = threatInfo
 
         self.best_enemy_threat: ThreatValueInfo = maxThreatInfo
+        """The highest econ value per turn threat. MAY NOT BE A KILL THREAT WHILE A KILL THREAT EXISTS."""
 
         self.intercept_options: typing.Dict[int, InterceptionOptionInfo] = {}
         """turnsToIntercept -> econValueOfIntercept, interceptPath"""
@@ -594,7 +599,7 @@ class ArmyInterceptor(object):
         if threat.path.value == 0:
             threat.path.calculate_value(threat.threatPlayer, self.map.team_ids_by_player_index)
         if threat.armyAnalysis is None:
-            threat.armyAnalysis = ArmyAnalyzer.build_from_path(self.map, threat.path, bypassRetraverse=threat.threatType == ThreatType.Econ)
+            threat.armyAnalysis = ArmyAnalyzer.build_from_path(self.map, threat.path, bypassRetraverse=threat.threatType == ThreatType.Econ, maxDist=max(int(6 + threat.turns / 2), self.map.get_distance_between(threat.path.start.tile, threat.path.tail.tile)))
             return True
         return False
 
@@ -1136,6 +1141,7 @@ class ArmyInterceptor(object):
         best_enemy_threat = best_enemy_threat_info.threat
         blockable = best_enemy_threat_info.econ_value
 
+        # TODO we dont need to recalculate this for the enemy threat every time...
         (
             turnsLeft,
             armyAccumulatedByInterceptPath,

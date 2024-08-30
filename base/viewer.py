@@ -751,7 +751,7 @@ class GeneralsViewer(object):
                     color_font = self.get_font_color(tile)
                     color_small_font = self.get_small_font_color(tile)
 
-                    if not tile in self._map.pathable_tiles and not tile.isNotPathable and not tile.isCity and not tile.isMountain:
+                    if tile not in self._map.pathable_tiles and not tile.isNotPathable and not tile.isCity and not tile.isMountain:
                         textVal = "   X"
                         self._screen.blit(self._medFont.render(textVal, True, color_font),
                                           (pos_left + 2, pos_top + self.cellHeight / 4))

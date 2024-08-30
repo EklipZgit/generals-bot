@@ -257,7 +257,7 @@ def dest_breadth_first_target(
         _, negCaptures, prioArmy = prioVals
 
         nextArmy = army - 1
-        isInc = (baseTurn + dist) & 1 == 0 and dist > 0
+        isInc = (baseTurn + dist) & 1 == 1 and dist > 0
 
         isTeam = map.is_player_on_team_with(searchingPlayer, current.player)
         if preferCapture and not isTeam:  # and army > current.army // 3
@@ -4270,6 +4270,70 @@ def build_distance_map_matrix(map, startTiles, skipTiles=None, maxDepth: int = 1
 def build_distance_map_matrix_with_start_dist(map, startTiles: typing.Iterable[typing.Tuple[int, Tile]], skipTiles=None, maxDepth: int = 1000) -> MapMatrixInterface[int]:
     """
     Builds a distance map to all reachable tiles (including neutral cities). Does not put distances in for mountains / undiscovered obstacles.
+
+    @param map:
+    @param startTiles:
+    @param skipTiles:
+    @param maxDepth:
+    @return:
+    """
+    distanceMap = MapMatrix(map, 1000)
+
+    if not skipTiles:
+        skipTiles = None
+    elif not isinstance(skipTiles, set) and not isinstance(skipTiles, MapMatrix) and not isinstance(skipTiles, MapMatrixSet):
+        skipTiles = {t for t in skipTiles}
+
+    if skipTiles is None:
+        def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
+            distanceMap.raw[tile.tile_index] = dist
+
+            return tile.isCostlyNeutralCity
+    else:
+        def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
+            if tile in skipTiles:
+                return True
+
+            distanceMap.raw[tile.tile_index] = dist
+
+            return tile.isCostlyNeutralCity
+
+    frontier: typing.Deque[typing.Tuple[Tile, int, int]] = deque()
+
+    # TODO benchmark this...? TODO if we ALWAYS mapmatrix then we can direct-access grid for better perf.
+    if maxDepth < map.rows // 3:
+        globalVisited = set()
+    else:
+        globalVisited = MapMatrixSet(map)
+
+    for dist, tile in startTiles:
+        frontier.appendleft((tile, dist, 0))
+
+    while frontier:
+        (current, dist, depth) = frontier.pop()
+        if current.isNotPathable:
+            continue
+        if current in globalVisited:
+            continue
+        if depth > maxDepth:
+            break
+        globalVisited.add(current)
+
+        if bfs_dist_mapper(current, dist):
+            continue
+
+        newDist = dist + 1
+        newDepth = depth + 1
+        for n in current.movable:  # new spots to try
+            frontier.appendleft((n, newDist, newDepth))
+
+    return distanceMap
+
+
+def build_distance_map_matrix_with_start_dist_increasing(map, startTiles: typing.Iterable[typing.Tuple[int, Tile]], skipTiles=None, maxDepth: int = 1000) -> MapMatrixInterface[int]:
+    """
+    Builds a distance map to all reachable tiles (including neutral cities). Does not put distances in for mountains / undiscovered obstacles.
+    Tile 0 in the enumerable will have dist 0, etc.
 
     @param map:
     @param startTiles:

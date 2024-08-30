@@ -41,37 +41,47 @@ def generate_player_map(player_index: int, map_raw: MapBase) -> MapBase:
         user_names=map_raw.usernames,
         turn=map_raw.turn,
         map_grid_y_x=playerMap,
-        replay_url='42069')
+        replay_url='42069',
+        modifiers=[i for i, m in enumerate(map_raw.modifiers_by_id) if m])
+
+    map.is_custom_map = map_raw.is_custom_map
+    map.swamps = {map.tiles_by_index[t.tile_index] for t in map_raw.tiles_by_index if t.isSwamp}
+    for t in map.swamps:
+        t.isSwamp = True
 
     # map.USE_OLD_MOVEMENT_DETECTION = False
     map.update_scores(scores)
     map.update_turn(map_raw.turn)
-    for x in range(map_raw.cols):
-        for y in range(map_raw.rows):
-            realTile = map_raw.grid[y][x]
+    for idx, realTile in enumerate(map_raw.tiles_by_index):
+        hasVision = realTile.player in friendlyPlayers or any(
+            filter(lambda t: t.player in friendlyPlayers, realTile.adjacents))
 
-            hasVision = realTile.player in friendlyPlayers or any(
-                filter(lambda tile: tile.player in friendlyPlayers, realTile.adjacents))
-
-            if hasVision:
-                map.update_visible_tile(realTile.x, realTile.y, realTile.tile, realTile.army, realTile.isCity, realTile.isGeneral)
-                if realTile.isMountain:
-                    map.grid[realTile.y][realTile.x].tile = TILE_MOUNTAIN
-                    map.grid[realTile.y][realTile.x].isMountain = True
+        tile = map.tiles_by_index[idx]
+        if hasVision:
+            map.update_visible_tile(realTile.x, realTile.y, realTile.tile, realTile.army, realTile.isCity, realTile.isGeneral, is_desert=realTile.isDesert)
+            if realTile.isMountain:
+                tile.tile = TILE_MOUNTAIN
+                tile.isMountain = True
+        elif map.is_custom_map:
+            map.update_visible_tile(realTile.x, realTile.y, realTile.tile if realTile.tile < TILE_EMPTY else TILE_FOG, realTile.army if realTile.tile < 0 else 0, realTile.isCity, is_general=False, is_desert=realTile.isDesert)
+            if realTile.isMountain:
+                tile.tile = TILE_MOUNTAIN
+                tile.isMountain = True
+            # tile.discovered = realTile.discovered
+        else:
+            if realTile.isCity or realTile.isMountain:
+                tile = map.tiles_by_index[idx]
+                tile.isMountain = False
+                tile.tile = TILE_OBSTACLE
+                tile.army = 0
+                tile.isCity = False
+                tile.discovered = realTile.discovered
+                map.update_visible_tile(realTile.x, realTile.y, TILE_OBSTACLE, tile_army=0, is_city=False, is_general=False)
             else:
-                if realTile.isCity or realTile.isMountain:
-                    tile = map.GetTile(realTile.x, realTile.y)
-                    tile.isMountain = False
-                    tile.tile = TILE_OBSTACLE
-                    tile.army = 0
-                    tile.isCity = False
-                    # tile.discovered = realTile.discovered
-                    map.update_visible_tile(realTile.x, realTile.y, TILE_OBSTACLE, tile_army=0, is_city=False, is_general=False)
-                else:
-                    map.update_visible_tile(realTile.x, realTile.y, TILE_FOG, tile_army=0, is_city=False, is_general=False)
+                map.update_visible_tile(realTile.x, realTile.y, TILE_FOG, tile_army=0, is_city=False, is_general=False)
 
     map.update(bypassDeltas=True)
-    map.modifiers = map_raw.modifiers
+    map.modifiers_by_id = map_raw.modifiers_by_id.copy()
 
     for i, player in enumerate(map_raw.players):
         map.players[i].cityCount = player.cityCount
@@ -581,6 +591,8 @@ class GameSimulatorHost(object):
             botHost.eklipz_bot._expansion_value_matrix = None
             botHost.eklipz_bot.targetingArmy = None
             botHost.eklipz_bot.armyTracker.lastTurn = map.turn
+            botHost.eklipz_bot.undiscovered_priorities = None
+            botHost.eklipz_bot._evaluatedUndiscoveredCache = []
             botHost.last_init_turn = map.turn - 1
             if botHost.eklipz_bot.teammate_communicator is not None:
                 botHost.eklipz_bot.teammate_communicator.begin_next_turn()

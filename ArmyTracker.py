@@ -77,7 +77,10 @@ class ArmyTracker(object):
         if self.is_long_spawns:
             self.min_spawn_distance = 15
         if self.map.is_2v2:
-            self.min_spawn_distance = 16
+            self.min_spawn_distance = 15
+
+        if self.map.is_custom_map:
+            self.min_spawn_distance = 1
 
         self._initialize_viable_general_positions()
 
@@ -162,11 +165,11 @@ class ArmyTracker(object):
                     # then this is a unit test or custom map with starting tiles
                     self.player_launch_timings[player.index] = 24
 
-        if self.map.turn == 50:
+        if self.map.turn == 50 and not self.map.is_low_cost_city_game:
             with self.perf_timer.begin_move_event(f'limiting player spawns by start value'):
                 usTeam = self.map.team_ids_by_player_index[self.general.player]
                 for player in self.map.players:
-                    if player.team != usTeam and player.tileCount >= 22:
+                    if player.team != usTeam and player.tileCount >= 22 and player.cityCount < 2:
                         # Then they can't have spawned at any tile with only one liberty.
                         self.limit_player_spawn_by_good_start(player)
 
@@ -231,6 +234,13 @@ class ArmyTracker(object):
                 logbook.info(f'   RESET BAD GENERAL {general}')
 
     def limit_player_spawn_by_good_start(self, player, debugTile = None):
+        if player.cityCount > 1:
+            return
+        if player.tileCount > 25:
+            return
+        if player.score > 52:
+            return
+
         depthCheck = 15
         # isPerfect = player.tileCount == 25
         realWastesAllowed = (25 - player.tileCount) * 2
@@ -596,8 +606,8 @@ class ArmyTracker(object):
                         continue
 
                 if tile.isCity and tile.discovered:
-                    logbook.info(f'IGNORING maps determined unexplained emergence of {emergedAmount} by player {emergingPlayer} on tile {repr(tile)} because it was a discovered city..?')
-                    continue
+                    logbook.info(f'(TEMP NOT IG???) IGNORING maps determined unexplained emergence of {emergedAmount} by player {emergingPlayer} on tile {repr(tile)} because it was a discovered city..?')
+                    # continue
 
                 if existingArmy and existingArmy.player == tile.player and existingArmy.value + 1 > tile.army:
                     logbook.info(f'TODO CHECK IF EVER CALLED splitting existingArmy back into fog 2 - emerged {emergedAmount} by player {emergingPlayer} on tile {repr(tile)} because it appears to have been a move INTO fog. Will be tracked via emergence.')
@@ -969,7 +979,11 @@ class ArmyTracker(object):
 
         if not self.has_perfect_information_of_player_cities_and_general(emergingPlayer):
             if distance is None:
-                distance = self.min_spawn_distance + 1
+                distance = max(10, self.min_spawn_distance) + 1
+                if self.map.turn < 300:
+                    distance = max(distance, int(self.map.turn / 4))
+                else:
+                    distance = 75
 
             armyEmergenceValue = 2 + (armyEmergenceValue ** 0.75)
 
@@ -982,10 +996,12 @@ class ArmyTracker(object):
 
             # bannedTiles, connectedTiles, pathToUnelim = self.get_fog_connected_based_on_emergences(emergingPlayer, predictedGeneralLocation=None, additionalRequiredTiles=[emergedTile])
 
+            distancePlateau = max(1, min(distance - 1, 5))
+
             def foreachFunc(tile, dist):
                 if not tile.discovered:
-                    distCapped = max(4, dist)
-                    emergeValue = 4 * armyEmergenceScaledToTurns // distCapped
+                    distCapped = max(distancePlateau, dist)
+                    emergeValue = distancePlateau * armyEmergenceScaledToTurns // distCapped
                     # if self.valid_general_positions_by_player[emergingPlayer][tile]:
                     # TODO this is doing the weird +1 emergence every turn thing
                     self.emergenceLocationMap[emergedTile.player][tile] += max(1, emergeValue)
@@ -1168,7 +1184,7 @@ class ArmyTracker(object):
                     negArmy -= theArmy.value
                 else:
                     negArmy += theArmy.value
-            elif nextTile.isUndiscoveredObstacle or (not nextTile.visible and nextTile.isCity and nextTile.isNeutral):
+            elif nextTile.isUndiscoveredObstacle or (not nextTile.visible and nextTile.isCostlyNeutralCity):
                 citiesConverted += 1
                 if citiesConverted > missingCities:
                     return None
@@ -1278,7 +1294,8 @@ class ArmyTracker(object):
             distanceWeightReduction: int = 3,
             wallBreakWeight: float = 2.0,
             emergenceWeight: float = 1.0,
-            doNotConvert: bool = False
+            doNotConvert: bool = False,
+            forceConnected: bool = False
     ) -> Tile | None:
         """
         Looks for a fog city candidate nearby a given tile, and convert it to player owned if so.
@@ -1300,6 +1317,8 @@ class ArmyTracker(object):
         gen = self.map.players[self.map.player_index].general
         genSpan = self.map.get_distance_between(gen, tile)
 
+        alliedPlayers = self.map.get_teammates(cityPlayer)
+
         def valFunc(
                 thisTile: Tile,
                 prioObject
@@ -1307,6 +1326,15 @@ class ArmyTracker(object):
             dist, _, validLocation = prioObject
             if not validLocation:
                 return None
+
+            if forceConnected:
+                anyConn = False
+                for t in thisTile.movable:
+                    if t.player in alliedPlayers:
+                        anyConn = True
+                    break
+                if not anyConn:
+                    return None
 
             if thisTile.visible or thisTile == tile or dist == 0:
                 return None
@@ -1322,7 +1350,7 @@ class ArmyTracker(object):
             else:
                 wallBreakBonus = wallBreakBonus * wallBreakWeight
 
-            emergenceVal = (self.emergenceLocationMap[cityPlayer][thisTile] * emergenceWeight + wallBreakBonus) / (dist + distanceWeightReduction)
+            emergenceVal = (1 + self.emergenceLocationMap[cityPlayer][thisTile] * emergenceWeight + wallBreakBonus) / (dist + distanceWeightReduction)
             val = emergenceVal
             return val, True  # has to be tuple or logging blows up i guess
 
@@ -1342,7 +1370,7 @@ class ArmyTracker(object):
                     if t.isObstacle:
                         continue
 
-                    if self.map.get_distance_between(self.general, t) > self.map.get_distance_between(self.general, nextTile) + 4 and self.map.get_distance_between(self.general, t) < 150:
+                    if self.map.get_distance_between(self.general, nextTile) + 4 < self.map.get_distance_between(self.general, t) < 150:
                         dist -= 2
 
             if not validLocation:
@@ -1370,7 +1398,6 @@ class ArmyTracker(object):
             )
 
         inputTiles = {}
-        logbook.info(f"FINDING NEXT FOG CITY FOR PLAYER {cityPlayer} for not-fog-city tile {str(tile)}")
         # we want the path to get army up to 0, so start it at the negative delta (positive)
         inputTiles[tile] = ((0, 0, True), 0)
         for player in self.map.players:
@@ -1390,7 +1417,7 @@ class ArmyTracker(object):
             skipFunc=fogSkipFunc,
             searchingPlayer=cityPlayer,
             logResultValues=True,
-            noLog=False)
+            noLog=True)
         if fogSourcePath is not None:
             newFogCity = fogSourcePath.tail.tile
             if not doNotConvert:
@@ -1891,6 +1918,10 @@ class ArmyTracker(object):
         @return:
         """
         player = sourceFogArmyPath.start.tile.player
+        if player == -1:
+            a = self.armies.get(sourceFogArmyPath.start.tile, None)
+            if a is not None:
+                player = a.player
 
         convertedCity = False
         dist = 0
@@ -2232,6 +2263,11 @@ class ArmyTracker(object):
                     maxDistToGen = depthLimit
                     self._limit_general_position_to_within_tile_and_distance(player, tile, maxDistToGen, alsoIncreaseEmergence=True, skipIfLongerThanExisting=True, emergenceAmount=unaccountedForDelta)
 
+                if sourceFogArmyPath.start.tile.player != player:
+                    if sourceFogArmyPath.start.tile.isGeneral:
+                        raise Exception(f'WTF trying to path from a different general...? {sourceFogArmyPath}')
+                    sourceFogArmyPath.start.tile.player = player
+
                 self.use_fog_source_path_and_increase_emergence(tile, sourceFogArmyPath, unaccountedForDelta, depthLimit=depthLimit)
 
                 return self.resolve_fog_emergence(player, sourceFogArmyPath, tile)
@@ -2275,7 +2311,7 @@ class ArmyTracker(object):
                     break
 
             if noFriendlies:
-                newCity = self._find_replacement_fog_city_internal(city)
+                newCity = self._find_replacement_fog_city_internal(city, forceConnected=True)
                 return newCity
 
         if city.delta.oldOwner == city.player:
@@ -2289,11 +2325,11 @@ class ArmyTracker(object):
             logbook.info(f'Not shifting player {city.delta.oldOwner} city {str(city)} because already enough cities on the board.')
             return None
 
-        newCity = self._find_replacement_fog_city_internal(city)
+        newCity = self._find_replacement_fog_city_internal(city, forceConnected=True)
 
         return newCity
 
-    def _find_replacement_fog_city_internal(self, city: Tile):
+    def _find_replacement_fog_city_internal(self, city: Tile, forceConnected: bool):
         prevArmy = city.delta.oldArmy
 
         cityOwner = city.delta.oldOwner
@@ -2302,9 +2338,10 @@ class ArmyTracker(object):
 
         cityPlayer = self.map.players[cityOwner]
 
-        newCity = self.find_next_fog_city_candidate_near_tile(cityOwner, city)
+        logbook.info(f"_find_replacement_fog_city_internal FINDING NEXT FOG CITY FOR PLAYER {cityOwner} for not-fog-city tile {str(city)}")
+        newCity = self.find_next_fog_city_candidate_near_tile(cityOwner, city, forceConnected=forceConnected)
         if not city.discovered:
-            city.reset_wrong_undiscovered_fog_guess()
+            self.map.reset_wrong_undiscovered_fog_guess(city)
         if not city.isCity or cityOwner != city.player:
             cityPlayer.cities = [c for c in cityPlayer.cities if c != city]
 
@@ -2552,8 +2589,16 @@ class ArmyTracker(object):
 
         self._handle_flipped_discovered_as_neutrals()
 
+        if self.map.has_misty_veil and self.map.has_watchtower:
+            for oldOwner, tile in self._flipped_by_army_tracker_this_turn:
+                if self.map.is_tile_friendly(tile):
+                    for mv in tile.movable:
+                        if not mv.visible:
+                            for playerMat in self.valid_general_positions_by_player:
+                                playerMat.raw[mv.tile_index] = False
         reTilePlayers = set()
         for oldOwner, tile in self._flipped_by_army_tracker_this_turn:
+
             if oldOwner >= 0:
                 reTilePlayers.add(oldOwner)
                 if not self.map.is_player_on_team_with(oldOwner, tile.player):
@@ -2796,7 +2841,7 @@ class ArmyTracker(object):
                         alreadyRan.add(adj)
                         self.tile_discovered_neutral(adj)
 
-            if len(alreadyRan) > 0 and self.map.turn < 150:
+            if len(alreadyRan) > 0:
                 with self.perf_timer.begin_move_event('gen re-limit'):
                     self.re_limit_gen_locations()
 
@@ -2859,7 +2904,7 @@ class ArmyTracker(object):
                     self.emergenceLocationMap[player][t] += launchEmergence
             if t.discoveredAsNeutral and t not in self.tiles_ever_owned_by_player[player]:  # and (t.visible or self.map.turn < 50)   # should be solved without the visible check by adding the lost-sight-ever-owned-by-player hack to allow pathing through the fog now.
                 return True
-            if (t.isCity and t.player == -1 and (t.visible or hasPerfectInfoOfPlayerCities)) or t.isMountain or (t.isUndiscoveredObstacle and hasPerfectInfoOfPlayerCities) or t.isGeneral:
+            if (t.isCostlyNeutralCity and (t.visible or hasPerfectInfoOfPlayerCities)) or t.isMountain or (t.isUndiscoveredObstacle and hasPerfectInfoOfPlayerCities) or t.isGeneral:
                 return True
             return False
 
@@ -2904,12 +2949,18 @@ class ArmyTracker(object):
             self.seen_player_lookup[teammate] = True
 
         for p in self.map.players:
+            mm = self.valid_general_positions_by_player[p.index]
+
             if p.general is not None:
-                self.valid_general_positions_by_player[p.index].add(p.general)
+                mm.add(p.general)
                 continue
 
-            for tile in self.map.get_all_tiles():
-                if tile.isObstacle:
+            validTiles = self.map.valid_spawns
+            if validTiles is None:
+                validTiles = self.map.get_all_tiles()
+
+            for tile in validTiles:
+                if tile.isObstacle or tile.isCity:
                     continue
 
                 if tile.visible:
@@ -2918,7 +2969,13 @@ class ArmyTracker(object):
                 if tile.discovered:
                     continue
 
-                self.valid_general_positions_by_player[p.index].add(tile)
+                if tile.isSwamp:
+                    continue
+
+                if tile.isDesert:
+                    continue
+
+                mm.raw[tile.tile_index] = True
 
         for p, general in enumerate(self.map.generals):
             if general is None:
@@ -2927,19 +2984,20 @@ class ArmyTracker(object):
             distances = self.map.distance_mapper.get_tile_dist_matrix(general)
 
             for player in self.map.players:
+                mm = self.valid_general_positions_by_player[player.index]
                 if self.map.is_player_on_team_with(general.player, player.index):
-                    self.valid_general_positions_by_player[player.index].discard(general)
+                    mm.discard(general)
                     continue
 
                 for tile in self.map.get_all_tiles():
                     dist = self.map.manhattan_dist(tile, general)
 
                     if dist < self.min_spawn_distance:  # spawns are manhattan distance
-                        self.valid_general_positions_by_player[player.index].discard(tile)
+                        mm.discard(tile)
                         continue
 
-                    if distances[tile] == 1000:
-                        self.valid_general_positions_by_player[player.index].discard(tile)
+                    if distances[tile] == 1000 and not self.map.is_custom_map:
+                        mm.discard(tile)
 
     def find_territory_bisection_paths(self, targetPlayer: int) -> typing.Tuple[MapMatrixInterface[bool], MapMatrixInterface[int], typing.List[Path]]:
         bisectPaths = []
@@ -3218,7 +3276,9 @@ class ArmyTracker(object):
             if seenAgo > 8:
                 continue
             if tookNeutCity:
-                potentialCity = self.find_next_fog_city_candidate_near_tile(player, army.tile, cutoffDist=8 - seenAgo)
+                cutoff = 8 - seenAgo
+                logbook.info(f"try_find_army_sink FINDING NEXT FOG CITY FOR PLAYER {player} for not-fog-city tile {str(army.tile)} (dist {cutoff})")
+                potentialCity = self.find_next_fog_city_candidate_near_tile(player, army.tile, cutoffDist=cutoff)
                 if potentialCity is not None:
                     self.convert_fog_city_to_player_owned(potentialCity, player)
                     split = army.get_split_for_fog([army.tile, potentialCity])
@@ -3331,7 +3391,7 @@ class ArmyTracker(object):
         keep = []
         for tile in playerObj.tiles:
             if tile.isTempFogPrediction and not tile.discovered and tile not in self.armies and not tile.isGeneral and not tile.isCity:
-                tile.reset_wrong_undiscovered_fog_guess()
+                self.map.reset_wrong_undiscovered_fog_guess(tile)
             else:
                 keep.append(tile)
                 if not tile.visible:
@@ -3376,10 +3436,12 @@ class ArmyTracker(object):
         perfectInfo = teamStats.cityCount == len(teamStats.teamPlayers)
         bannedTiles = MapMatrixSet(self.map)
         for tile in self.map.get_all_tiles():
-            if tile not in uneliminated and tile not in unrecapturedEmergenceEvents and tile not in tilesEverOwned and (tile.discoveredAsNeutral or tile.visible):
+            if (tile.discoveredAsNeutral or tile.visible) and tile not in uneliminated and tile not in unrecapturedEmergenceEvents and tile not in tilesEverOwned:
                 bannedTiles.add(tile)
+                # logbook.info(f'BANNING {tile} because if (tile.discoveredAsNeutral {tile.discoveredAsNeutral} or tile.visible {tile.visible}) and tile not in uneliminated {tile not in uneliminated} and tile not in unrecapturedEmergenceEvents {tile not in unrecapturedEmergenceEvents} and tile not in tilesEverOwned {tile not in tilesEverOwned}')
             elif tile.isObstacle and perfectInfo:
                 bannedTiles.add(tile)
+                # logbook.info(f'BANNING {tile} because obstacle and perfectInfo')
 
         requiredTiles = []
         requiredIncluded = set()
@@ -3456,6 +3518,10 @@ class ArmyTracker(object):
                 for tile in pathToUnelim.tileList:
                     if tile not in connectedSet:
                         connectedSet.add(tile)
+                # TODO stop logging bannedTiles super expensive
+                logbook.info(f'found pathToUnelim {pathToUnelim}, resulting in {len(connectedSet)} connectedSet tiles') #and bannedTiles ({bannedTiles})')
+            else:
+                logbook.warning(f'no pathToUnelim to p{player} spawn found!?')
 
         return bannedTiles, connectedSet, pathToUnelim
 
@@ -3496,14 +3562,19 @@ class ArmyTracker(object):
             approxEnGen = pathToPotentialEnGeneral.tail.tile
 
             numMissingCities = self.get_team_missing_city_count_by_player(player)
-            while numMissingCities > 0:
-                potCity = self.find_next_fog_city_candidate_near_tile(player, approxEnGen, cutoffDist=10, distanceWeightReduction=5, wallBreakWeight=4, emergenceWeight=1.0)
+            # < 30 because if they have basically ALL the cities then we'll just flood-fill their cities with the land-filler, instead..
+            while 0 < numMissingCities < 20:
+                cutoffDist = max(1, min(10, numStartTilesToFill - len(outputTilesToBeConverted) - numMissingCities))
+                logbook.info(f"_fill_land_from_connected_tiles_for_player FINDING NEXT FOG CITY FOR PLAYER {player} for not-fog-city tile {str(approxEnGen)} (dist {cutoffDist}, missing remaining {numMissingCities})")
+                potCity = self.find_next_fog_city_candidate_near_tile(player, approxEnGen, cutoffDist=cutoffDist, distanceWeightReduction=5, wallBreakWeight=4, emergenceWeight=1.0)
                 if potCity is None:
                     break
                 numMissingCities -= 1
                 outputTilesToBeConverted.add(potCity)
-                logbook.info(f'setting fog city {potCity} to be player owned in _fill_land_from_connected_tiles_for_player.')
+                logbook.info(f'setting fog city {potCity} to be player owned in _fill_land_from_connected_tiles_for_player. Connecting it.')
+                self.determine_tiles_to_fill_in(outputTilesToBeConverted, nearGenBan, outputTilesToBeConverted, numStartTilesToFill + 1)  # +1 because the final tile is already part of our connected set
 
+            # here we make sure our connected tiles also connect to the enemy general
             nearGenBan.discard(pathToPotentialEnGeneral.tail.tile)
             self.determine_tiles_to_fill_in([approxEnGen], nearGenBan, outputTilesToBeConverted, numStartTilesToFill + 1)  # +1 because the final tile is already part of our connected set
             # we want to start our second whole expansiony thingy from these new tiles, too, because probably they've expanded backwards some.
@@ -3528,7 +3599,7 @@ class ArmyTracker(object):
             if tile.army > overwriteArmyThresh:
                 return
 
-            if tile.isGeneral or tile.isCity:
+            if tile.isGeneral or tile.isCostlyNeutralCity:
                 return
 
             if tile not in outputTilesToBeConverted:
@@ -3543,7 +3614,7 @@ class ArmyTracker(object):
                 tileAmountLeft.value = playerExpectedFogTileCounts.get(currentTileAmount.value, 0)
 
             tile.player = player
-            if tile.isUndiscoveredObstacle:
+            if tile.isUndiscoveredObstacle or (tile.isCity and tile.player == -1):
                 logbook.info(f'UPDATING REACHABLE BECAUSE OF {tile} IN _fill_land_from_connected_tiles_for_player')
                 self.convert_fog_city_to_player_owned(tile, player)
                 updateReachable[0] = True
@@ -3597,12 +3668,13 @@ class ArmyTracker(object):
                 tilesToConvertToAddTo.add(tile)
 
         numFillTilesNeeded = numTilesToFillIn
+        # missingCities = self.get_team_missing_city_count_by_player()
 
         def findFunc(tile: Tile, army: float, dist: int) -> bool:
             if len(tilesToConvertToAddTo) >= numFillTilesNeeded:
                 return True
 
-            if tile.player == -1 and tile not in tilesToConvertToAddTo:
+            if tile.player == -1 and tile not in tilesToConvertToAddTo and not tile.isSwamp:
                 tilesToConvertToAddTo.add(tile)
 
             return False
@@ -3610,11 +3682,14 @@ class ArmyTracker(object):
         # TODO add breadth_first_foreach_terminating and use that instead so we dont waste time building unused paths in exchange for not fully looping
         fakePath = SearchUtils.breadth_first_find_queue(self.map, connectedDark, findFunc, skipTiles=skips, noNeutralCities=True, noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
         if fakePath is None:
-            logbook.error(f'unable to fill the requested {numFillTilesNeeded} tiles from {connectedDark}, allowing neutral cities...?')
+            logbook.error(f'unable to fill the requested {numFillTilesNeeded} numTilesToFillIn {numTilesToFillIn} tiles from {connectedDark}, (skips {skips}) allowing neutral cities...?')
             fakePath = SearchUtils.breadth_first_find_queue(self.map, connectedDark, findFunc, skipTiles=skips, noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
             if fakePath is None:
                 # then we couldn't fully build the set?
-                logbook.error(f'unable to fully build the set of tiles...?')
+                conDark = set(connectedDark)
+                logbook.error(f'unable to fully build {numFillTilesNeeded} numFillTilesNeeded, {numTilesToFillIn} numTilesToFillIn the set of tiles...? '
+                              f'\r\n{len(tilesToConvertToAddTo)} tilesToConvertToAddTo ({tilesToConvertToAddTo})'
+                              f'\r\n{len(conDark)} connectedDark ({conDark})')
 
     def _check_over_elimination(self, player: int):
         if player == -1:
@@ -3630,9 +3705,15 @@ class ArmyTracker(object):
 
         if numValid == 0:
             logbook.error(f'having to reset general valid positions for p{player} due to over elimination')
-            for tile in self.map.pathable_tiles:
-                if not tile.discovered:
-                    validGenPos.add(tile)
+            validTiles = self.map.pathable_tiles
+            if self.map.valid_spawns:
+                validTiles = self.map.valid_spawns
+            for tile in validTiles:
+                if not tile.discovered and not tile.isCity and not tile.visible:
+                    validGenPos.raw[tile.tile_index] = True
+            playerEvents = self.uneliminated_emergence_events[player]
+            for tile, distance in list(playerEvents.items()):
+                playerEvents[tile] = distance + 2
 
         if numValid == 1 and not lastValid.isGeneral and not self.map.players[player].dead:
             lastValid.player = player
@@ -3755,7 +3836,7 @@ class ArmyTracker(object):
         @return:
         """
 
-        return self.emergenceLocationMap[player][self.map.GetTile(x, y)]
+        return self.emergenceLocationMap[player].raw[self.map.GetTile(x, y).tile_index]
 
     def get_prediction_value(self, player: int, tile: Tile) -> float:
         """
@@ -3766,11 +3847,10 @@ class ArmyTracker(object):
         @return:
         """
 
-        return self.emergenceLocationMap[player][tile]
+        return self.emergenceLocationMap[player].raw[tile.tile_index]
 
     def _reset_player_emergences(self, player: int):
-        for t in self.map.pathable_tiles:
-            self.emergenceLocationMap[player] = MapMatrix(self.map, 0.0)
+        self.emergenceLocationMap[player] = MapMatrix(self.map, 0.0)
 
     def reset_temp_tile_marked(self, curTile: Tile, noLog: bool = False):
         if not noLog:
@@ -3783,7 +3863,7 @@ class ArmyTracker(object):
         if curTile.player >= 0:
             self.dropped_fog_tiles_this_turn.add(curTile)
 
-        curTile.reset_wrong_undiscovered_fog_guess()
+        self.map.reset_wrong_undiscovered_fog_guess(curTile)
 
     def get_unique_armies_by_player(self, player: int) -> typing.List[Army]:
         armiesIncl = set()

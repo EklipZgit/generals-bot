@@ -214,16 +214,13 @@ class BotHostBase(object):
             return
         try:
             try:
-                mapStr = TextMapLoader.dump_map_to_string(map, split_every=5)
+                mapStr = TextMapLoader.dump_map_to_string(map)
             except:
-                try:
-                    mapStr = TextMapLoader.dump_map_to_string(map, split_every=6)
-                except:
-                    exc_type, exc_value, exc_traceback = sys.exc_info()
-                    lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
 
-                    logbook.info(f'failed to dump map, {lines}')
-                    mapStr = f'failed to dump map, {lines}'
+                logbook.info(f'failed to dump map, {lines}')
+                mapStr = f'failed to dump map, {lines}'
 
             ekBotData = self.eklipz_bot.dump_turn_data_to_string()
 
@@ -357,7 +354,7 @@ def run_bothost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, ali
 
     BotLogging.set_up_logger(level, queue=queue)
 
-    loggingProc = ctx.Process(target=BotLogging.run_log_output_process, args=[BotLogging.LOGGING_QUEUE, level])
+    loggingProc = ctx.Process(target=BotLogging.run_log_output_process, args=[BotLogging.LOGGING_QUEUE, level], daemon=True)
 
     loggingProc.start()
 

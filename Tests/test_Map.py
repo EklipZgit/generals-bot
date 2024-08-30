@@ -1144,4 +1144,21 @@ player_index=0
     # 277 after FUCKING TWO WHOLE GODDAMN DAYS OF TRYING TO FUCKING FJKDSF:LKJFDS:JLKFDSGLJK:HRSW:JMNKLGWR GOD I HATE TILE TRACKING, BRUTE FORCE WOULD HAVE BEEN SO MUCH BETTER
     # 279 after fixing incorrect delta on neutral(fog)->neutral(visible) from fog move
     # 279 still
-    # 279 after all the mechanical updates
+    # 279 after all the mechanical updates    
+    def test_should_not_hallucinate_enemy_cities_when_just_taking_own_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_hallucinate_enemy_cities_when_just_taking_own_city___Yk-wWOfJ1---1--125.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 125, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=125)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '2,2->2,3  3,3->2,3  1,3->2,3')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        simHost.run_between_turns(lambda: self.assertEqual(1, playerMap.players[enemyGeneral.player].cityCount))
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+        self.assertNoFriendliesKilled(map, general)

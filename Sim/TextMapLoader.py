@@ -25,17 +25,18 @@ from base.client.tile import TILE_OBSERVATORY, TILE_LOOKOUT
 
 class TextMapLoader(object):
     @staticmethod
-    def load_map_from_file(file_path_from_tests_folder: str, split_every: int = 5) -> typing.List[typing.List[Tile]]:
+    def load_map_from_file(file_path_from_tests_folder: str) -> typing.List[typing.List[Tile]]:
         data = TextMapLoader.get_map_raw_string_from_file(file_path_from_tests_folder)
-        return TextMapLoader.load_map_from_string(data, split_every=split_every)
+        return TextMapLoader.load_map_from_string(data)
 
     @staticmethod
-    def load_map_from_string(data: str, split_every: int = 5) -> typing.List[typing.List[Tile]]:
+    def load_map_from_string(data: str) -> typing.List[typing.List[Tile]]:
         mapRows = []
         data = data.strip('\r\n')
         rows = data.splitlines()
         widthRow = rows[0]
         width = count(widthRow, lambda c: c == '|')
+        split_every = len(widthRow.split('|')[1]) + 1
         indent = len(widthRow) - len(widthRow.lstrip())
         y = 0
         numRows = 0
@@ -92,7 +93,20 @@ class TextMapLoader(object):
         return mapData
 
     @staticmethod
-    def dump_map_to_string(map: MapBase, split_every: int = 5) -> str:
+    def dump_map_to_string(map: MapBase) -> str:
+        maxWidth = 0
+        vals = []
+        for row in map.grid:
+            rowVals = []
+            for tile in row:
+                valRep = tile.get_value_representation()
+                maxWidth = max(len(valRep), maxWidth)
+                rowVals.append(valRep)
+
+            vals.append(rowVals)
+
+        split_every = maxWidth
+
         outputToJoin = []
         for i in range(map.cols):
             outputToJoin.append('|')
@@ -101,9 +115,8 @@ class TextMapLoader(object):
 
         outputToJoin.append('\n')
 
-        for row in map.grid:
-            for tile in row:
-                valRep = tile.get_value_representation()
+        for row in vals:
+            for valRep in row:
                 outputToJoin.append(valRep)
                 charsLeft = split_every - len(valRep)
 
@@ -122,6 +135,12 @@ class TextMapLoader(object):
 
         lines.append(f'turn={map.turn}')
         lines.append(f'player_index={map.player_index}')
+        if map.is_custom_map:
+            lines.append('is_custom_map=True')
+        if map.walled_city_base_value is not None:
+            lines.append(f'walled_city_base_value={map.walled_city_base_value}')
+
+        lines.append(f'PATHABLE_CITY_THRESHOLD={Tile.PATHABLE_CITY_THRESHOLD}')
 
         gameType = '1v1'
         if len(map.players) > 2:
@@ -137,8 +156,12 @@ class TextMapLoader(object):
             lines.append(f'teams={teams}')
 
         lines.append(f'mode={gameType}')
-        if len(map.modifiers) > 0:
-            lines.append(f'modifiers={", ".join(sorted(map.modifiers))}')
+        mods = []
+        for i in range(len(map.modifiers_by_id)):
+            if map.modifiers_by_id[i]:
+                mods.append(str(i))
+        if len(mods) > 0:
+            lines.append(f'modifiers={",".join(mods)}')
 
         return '\n'.join([line.rstrip() for line in lines])
 
@@ -220,6 +243,10 @@ class TextMapLoader(object):
                 tile.tile = -1
             case 'D':
                 tile.tile = -1
+            case 'S':
+                tile.tile = -1
+            case 'E':
+                tile.tile = -1
             case _:
                 raise AssertionError(f'text_tile [{text_tile}] did not match a known pattern.')
 
@@ -228,6 +255,12 @@ class TextMapLoader(object):
 
         if 'G' in text_tile:
             tile.isGeneral = True
+
+        if 'E' in text_tile:
+            tile.isDesert = True
+
+        if 'S' in text_tile:
+            tile.isSwamp = True
 
         if 'D' in text_tile:
             tile.discovered = True
@@ -326,6 +359,8 @@ class TextMapLoader(object):
         armiesRaw = raw.split(':')
 
         for armyRaw in armiesRaw:
+            if len(armyRaw) == 0:
+                continue
             name, everythingElse = armyRaw.split('+')
             value, everythingElse = everythingElse.split('!')
             entangledValue, everythingElse = everythingElse.split('^')
@@ -392,7 +427,18 @@ class TextMapLoader(object):
         if 'turn' in data:
             map.turn = int(data['turn'])
         if 'modifiers' in data and len(data['modifiers']) > 0:
-            map.modifiers = set(data['modifiers'].split(', '))
+            mods = data['modifiers'].split(',')
+            for mod in mods:
+                map.modifiers_by_id[int(mod)] = True
+
+        if 'is_custom_map' in data:
+            map.is_custom_map = bool(data['is_custom_map'])
+        if 'walled_city_base_value' in data:
+            map.walled_city_base_value = int(data['walled_city_base_value'])
+        if 'PATHABLE_CITY_THRESHOLD' in data:
+            Tile.PATHABLE_CITY_THRESHOLD = int(data['PATHABLE_CITY_THRESHOLD'])
+        else:
+            Tile.PATHABLE_CITY_THRESHOLD = 10000  # old replays, no cities were ever pathable.
 
         for player in map.players:
             char, index = playerCharMap[player.index]

@@ -444,6 +444,8 @@ class GatherCapturePlan(TilePlanInterface):
                     if currentTile.isCity:
                         plan.enemy_city_count += 1
                 else:
+                    if currentTile.isCity:
+                        econValue += 5
                     econValue += 1.0
 
         if priorityMatrix:

@@ -1416,6 +1416,9 @@ def knapsack_depth_gather_with_values(
             ) = currentPriorityObject
             negArmySum += 1
             negGatheredSum += 1
+            if nextTile.isSwamp:
+                negArmySum += 2
+                negGatheredSum += 2
             # if nextTile.x == 6 and nextTile.y == 2 and map.turn == 224:
             #     pass
             if nextTile not in negativeTiles:
@@ -1441,7 +1444,7 @@ def knapsack_depth_gather_with_values(
                 threatDist + 1,
                 depthDist,
                 realDist,
-                numPrioTiles / max(1, realDist),
+                0 - numPrioTiles / max(1, realDist),
                 negGatheredSum,
                 negArmySum,
                 # xSum + nextTile.x,

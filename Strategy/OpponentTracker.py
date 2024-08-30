@@ -82,8 +82,9 @@ class FogGatherQueue(object):
         self.gatherable_length += self._gather_amts[1]
 
         self.get_or_create_count(self._gather_amt_max)
+        # does not produce i = 0
         for i in range(self._gather_amt_max, 0, -1):
-            self._gather_amts[i] = self._gather_amts[i - 1]
+            self._gather_amts[i] = max(0, self._gather_amts[i - 1])
 
         self._gather_amts[0] = 0
         # length doesn't change. Total sum increases by the number of tiles we have here, though.
@@ -122,6 +123,8 @@ class FogGatherQueue(object):
         minValid = bestMin > -1
         toRemove = self._gather_amt_max
 
+        amt = 0
+
         while maxValid or minValid:
             if maxValid:
                 amt = self._gather_amts[bestMax]
@@ -137,7 +140,11 @@ class FogGatherQueue(object):
             bestMax += 1
             bestMin -= 1
             maxValid = bestMax <= self._gather_amt_max
-            minValid = bestMin > -1
+            minValid = bestMin > 0
+
+        if amt <= 0:
+            logbook.error(f'Didnt find a tile to remove near {tileAmount}...')
+            return -1
 
         if toRemove != tileAmount:
             logbook.info(
@@ -205,9 +212,15 @@ class FogGatherQueue(object):
     def remove_queued_gather_for_exact_unchecked(self, toRemoveSize: int):
         amt = self._gather_amts[toRemoveSize]
         self.length -= 1
-        if toRemoveSize > 1:
-            self.gatherable_length -= 1
-        self._gather_amts[toRemoveSize] = amt - 1
+        if amt > 0:
+            if toRemoveSize > 1:
+                self.gatherable_length -= 1
+            self._gather_amts[toRemoveSize] = amt - 1
+        else:
+            logbook.error(f'remove_queued_gather_for_exact_unchecked would have triggered a negative amount for tile size {toRemoveSize}, amt was {amt}... Ignoring')
+            return
+            # raise AssertionError(f'Triggering negative amount for tile size {toRemoveSize}, amt was {amt}')
+
         self.total_sum -= toRemoveSize
 
         if amt == 1 and toRemoveSize == self._gather_amt_max:
@@ -325,7 +338,7 @@ class OpponentTracker(object):
                 self.team_score_data_history[team] = {}
                 teamPlayers = self.get_team_players(team)
                 turn0Stats = CycleStatsData(team, teamPlayers)
-                self.team_score_data_history[team][0] = TeamStats(0, 0, 0, len(turn0Stats.players), 0, 0, team, teamPlayers, teamPlayers, self.map.turn - 1)
+                self.team_score_data_history[team][0] = TeamStats(0, 0, 0, len(turn0Stats.players), 0, 0, team, teamPlayers, teamPlayers, self.map.turn - 1, 0)
                 self.current_team_cycle_stats[team] = turn0Stats
                 self.team_cycle_stats_history[team] = {}
                 self._team_indexes.append(team)
@@ -428,6 +441,8 @@ class OpponentTracker(object):
                     qMax = q.cur_max_tile_size
                     toPutBackIntoRotation = min((qMax // 2) + 2, probableLeftoverUngatheredTileArmyAmts)
                     actualTile = q.remove_queued_gather_closest_to_amount(1, leaveOne=False)
+                    if actualTile == -1:
+                        continue
                     incorrectAmt = actualTile - 2
                     actualToQueue = toPutBackIntoRotation - incorrectAmt
                     actions.append(f'p{player} {actualTile}:{actualToQueue}')
@@ -595,7 +610,7 @@ class OpponentTracker(object):
                 break
             for team in self._team_indexes:
                 teamPlayers = self.get_team_players(team)
-                teamScore = TeamStats(0, 0, 0, 0, 0, 0, team, teamPlayers, teamPlayers, 0)
+                teamScore = TeamStats(0, 0, 0, 0, 0, 0, team, teamPlayers, teamPlayers, 0, 0)
                 self.team_score_data_history[team][cycleTurn] = teamScore
                 if f'ot_{team}_c_{cycleTurn}_tileCount' in data:
                     teamScore.tileCount = int(data[f'ot_{team}_c_{cycleTurn}_tileCount'])
@@ -928,7 +943,8 @@ class OpponentTracker(object):
         if annihilated <= self.assumed_player_average_tile_values[player.index] * 1.5:
             # then we assume they didnt use gathered army to block the attack and weren't just having land taken.
             removed = self._remove_queued_gather_closest_to_amount(player.index, annihilated, leaveOne=False)
-            annihilated -= removed
+            if removed != -1:
+                annihilated -= removed
 
         currentCycleStats.approximate_fog_army_available_total -= annihilated
         currentCycleStats.approximate_fog_army_available_total_true -= annihilated
@@ -1114,8 +1130,6 @@ class OpponentTracker(object):
                 armyToUse = tile.army
                 delta = tile.army - 1
                 # eg we gained vision of what we thought was a 5, and its actually a 1, this is triggered with a 3
-                # self._remove_queued_gather_closest_to_amount(tile.player, armyToUse, leaveOne=False)
-                # continue
 
             gathQueue = self.get_player_gather_queue(tile.player)
             armyThresh = max(1, gathQueue.peek_next_highest())
@@ -1633,9 +1647,31 @@ class OpponentTracker(object):
 
         enStats = self.map.get_team_stats(againstPlayer)
 
-        playerEconValue = (ourStats.tileCount + ourStats.cityCount * cityValue) + offset
-        oppEconValue = (enStats.tileCount + enStats.cityCount * cityValue) * byRatio
+        playerEconValue = (ourStats.tileCount - ourStats.deserts + ourStats.cityCount * cityValue) + offset
+        oppEconValue = (enStats.tileCount - enStats.deserts + enStats.cityCount * cityValue) * byRatio
         return playerEconValue >= oppEconValue
+
+    def get_current_econ_ratio(self, cityValue: int = 25, againstPlayer: int = -2, offset: int = 0):
+        """
+        > 1.0 = we're winning, lower than 1.0 means opp is winning.
+        @param cityValue:
+        @param againstPlayer:
+        @param offset: Positive means more likely to return true, negative is less. Value in extra 'tiles' contributed.
+        @return:
+        """
+        if againstPlayer == -2:
+            againstPlayer = self.targetPlayer
+        if againstPlayer == -1:
+            return True
+
+        ourStats = self.map.get_team_stats(self.map.player_index)
+
+        enStats = self.map.get_team_stats(againstPlayer)
+
+        playerEconValue = (ourStats.tileCount + ourStats.cityCount * cityValue) + offset
+        oppEconValue = (enStats.tileCount + enStats.cityCount * cityValue)
+
+        return playerEconValue / oppEconValue
 
     def winning_on_tiles(self, byRatio: float = 1.0, againstPlayer: int = -2, offset: int = 0) -> bool:
         """
@@ -1856,6 +1892,8 @@ class OpponentTracker(object):
             currentCycleStats.approximate_army_gathered_this_cycle -= annihilatedArmy
         else:
             removed = self._remove_queued_gather_closest_to_amount(playerIndex, annihilatedArmy + 1, leaveOne=True)
+            if removed == -1:
+                removed = 0
             currentCycleStats.approximate_fog_army_available_total -= annihilatedArmy - removed
             currentCycleStats.approximate_fog_army_available_total_true -= annihilatedArmy - removed
             currentCycleStats.approximate_army_gathered_this_cycle -= annihilatedArmy - removed

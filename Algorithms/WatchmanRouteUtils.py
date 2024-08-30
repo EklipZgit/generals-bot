@@ -80,7 +80,7 @@ class BasicAStarWRP:
         # Singleton Heuristic; this is quite expensive, something like n^2
         h_singleton = 0
         for tile in node.unseen:
-            h_singleton = max(h_singleton, min(self.map.get_distance_between(node.tile, t) for t in tile.adjacents if not t.isObstacle and not (t.isCity and t.isTempFogPrediction)))
+            h_singleton = max(h_singleton, min(self.map.get_distance_between(node.tile, t) for t in tile.adjacents if not t.isObstacle and not (t.isCity and t.isTempFogPrediction and not self.map.is_walled_city_game and not self.map.is_low_cost_city_game)))
 
         return h_singleton
 
@@ -105,7 +105,7 @@ class BasicAStarWRP:
             for neighbor in current_node.tile.movable:
                 # if neighbor in self.closed_list or neighbor.isObstacle:
                 #     continue
-                if neighbor.isObstacle or (neighbor.isCity and neighbor.isTempFogPrediction):  # Don't let it path through uncertain predicted cities as those are unlikely to ACTUALLY be routable.
+                if neighbor.isObstacle or (neighbor.isCity and neighbor.isTempFogPrediction and not self.map.is_walled_city_game and not self.map.is_low_cost_city_game):  # Don't let it path through uncertain predicted cities as those are unlikely to ACTUALLY be routable.
                     continue
 
                 neighbor_node = BasicAStarNode(
@@ -379,7 +379,7 @@ class PivotWRP:
             closedSet.add(current_node)
 
             for neighbor in current_node.tile.movable:
-                if neighbor.isObstacle or (neighbor.isCity and neighbor.isTempFogPrediction):  # Don't let it path through uncertain predicted cities as those are unlikely to ACTUALLY be routable.
+                if neighbor.isObstacle or (neighbor.isCity and neighbor.isTempFogPrediction and not self.map.is_walled_city_game and not self.map.is_low_cost_city_game):  # Don't let it path through uncertain predicted cities as those are unlikely to ACTUALLY be routable.
                     continue
 
                 component = self.component_lookup.raw[neighbor.tile_index]
@@ -440,12 +440,12 @@ class PivotWRP:
         pivots = set()
         validRemainingPivots = toDiscover.copy()
         leastSeen: typing.List[typing.Tuple[int, Tile]] = []
-        # usedWatchers = set()
         """(numberOfUnseenAdjacents, tile)"""
+
         for t in toDiscover:
             numUnseenAdj = 0
             for adj in t.adjacents:
-                if adj.isObstacle or (adj.isCity and adj.isTempFogPrediction):
+                if adj.isObstacle or (adj.isCity and adj.isTempFogPrediction and not self.map.is_walled_city_game and not self.map.is_low_cost_city_game):
                     continue
                 if adj not in toDiscover:
                     continue
@@ -498,12 +498,12 @@ class PivotWRP:
             # component.add(pivot)
             componentWatchers = set()
             for t in pivot.adjacents:
-                if t.isObstacle or (t.isCity and t.isTempFogPrediction):
+                if t.isObstacle or (t.isCity and t.isTempFogPrediction and not self.map.is_walled_city_game and not self.map.is_low_cost_city_game):
                     continue
 
                 canOnlyPathInThroughAnotherAdj = True
                 for fromTile in t.movable:
-                    if fromTile.isObstacle or (fromTile.isCity and fromTile.isTempFogPrediction):
+                    if fromTile.isObstacle or (fromTile.isCity and fromTile.isTempFogPrediction and not self.map.is_walled_city_game and not self.map.is_low_cost_city_game):
                         continue
                     if fromTile not in pivot.adjacents and fromTile is not pivot:
                         canOnlyPathInThroughAnotherAdj = False
@@ -517,7 +517,7 @@ class PivotWRP:
                 componentWatchers.add(t)
 
             if len(componentWatchers) == 0:
-                raise AssertionError(f'no watchers for {pivot}???')
+                raise AssertionError(f'no watchers for {pivot}??? ({repr(pivot)}) - self.map.is_walled_city_game {self.map.is_walled_city_game}, self.map.is_low_cost_city_game {self.map.is_low_cost_city_game}')
 
             frontiers.update(componentWatchers)
             component = PivotComponent(pivot, componentWatchers)
@@ -711,7 +711,7 @@ class PivotIterativeWRP(PivotWRP):
 
                 if iteration & 63 == 0:
                     if nextIterCutoffTime < time.perf_counter():
-                        logbook.info(f'watchman a* W {w:.1f} iter {iteration} terminating early after {time.perf_counter() - lastStart:.5f} with {bestUnseen} unseen still and length {len(bestPath)}.')
+                        logbook.info(f'watchman a* W {w:.1f} iter {iteration} terminating early after {time.perf_counter() - lastStart:.5f} with {bestUnseen} unseen still and length {len(bestPath) if bestPath else "None"}.')
                         nextIterCutoffTime = cutoffTime
                         break
 
@@ -725,7 +725,7 @@ class PivotIterativeWRP(PivotWRP):
                 closedSet.add(current_node)
 
                 for neighbor in current_node.tile.movable:
-                    if neighbor.isObstacle or (neighbor.isCity and neighbor.isTempFogPrediction):  # Don't let it path through uncertain predicted cities as those are unlikely to ACTUALLY be routable.
+                    if neighbor.isObstacle or (neighbor.isCity and neighbor.isTempFogPrediction and not self.map.is_walled_city_game and not self.map.is_low_cost_city_game):  # Don't let it path through uncertain predicted cities as those are unlikely to ACTUALLY be routable.
                         continue
 
                     component = self.component_lookup.raw[neighbor.tile_index]
@@ -838,6 +838,8 @@ def get_revealed_count_and_max_kill_turns_and_positive_path(
 
     unrevealed = {t for t in toReveal}
     ogLen = len(unrevealed)
+    if ogLen == 0:
+        return 0, 1000, 1000, 1000.0, MapMatrix(map, 1000), path
 
     visited = set()
     army = 0
@@ -861,7 +863,7 @@ def get_revealed_count_and_max_kill_turns_and_positive_path(
             if army <= cutoffKillArmy:
                 if wentPositive:
                     break
-            elif not wentPositive:
+            else:
                 wentPositive = True
 
             finalArmy = army
@@ -884,7 +886,7 @@ def get_revealed_count_and_max_kill_turns_and_positive_path(
 
     path.value = finalArmy
 
-    if revealedCount == 0:
+    if revealedCount == 0 or not wentPositive:
         path = None
 
     return revealedCount, maxKillTurns, minKillTurns, avgKillTurns, distMap, path

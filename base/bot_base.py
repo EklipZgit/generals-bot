@@ -34,6 +34,7 @@ class GeneralsClientHost(object):
 
         self._seen_update: bool = False
         self._updateMethod = updateMethod
+        self._game: generals.GeneralsClient | None = None
 
         self._handleUpdateNoMove = handleMissedMoveUpdate
 
@@ -58,23 +59,40 @@ class GeneralsClientHost(object):
 
     def run(self, additional_thread_methods: list):
         # Start Game Thread
-        create_thread(self._start_game_thread)
+        threads = []
+        gameThread = gameThread = create_thread(self._start_game_thread)
         time.sleep(0.1)
         # Start Chat Message Thead
-        create_thread(self._start_chat_thread)
+        threads.append(create_thread(self._start_chat_thread))
         #time.sleep(0.2)
         # Start Game Move Thread
-        create_thread(self._start_moves_thread)
+        threads.append(create_thread(self._start_moves_thread))
         time.sleep(0.1)
 
         for method in additional_thread_methods:
-            create_thread(method)
+            threads.append(create_thread(method))
             time.sleep(0.1)
+
+        startRun = time.perf_counter()
 
         while self._running:
             time.sleep(1.0)
 
-        logbook.info(f'No longer self._running=True in bot_base.py, starting suicide thread')
+            elapsed = time.perf_counter() - startRun
+
+            if elapsed > 30 and not gameThread.is_alive():
+                logbook.info(f'gameThread is dead. BREAKING OUT OF _running LOOP BECAUSE {elapsed:.2f} seconds elapsed...?')
+                self._running = False
+
+            if elapsed > 1800:
+                logbook.info(f'BREAKING OUT OF _running LOOP BECAUSE {elapsed:.2f} seconds elapsed...?')
+                self._running = False
+
+        numLivingThreads = 0
+        for t in threads:
+            if t.is_alive():
+                numLivingThreads += 1
+        logbook.info(f'No longer self._running=True in bot_base.py, numLivingThreads {numLivingThreads}. Starting suicide thread')
         create_thread(self._suicide_in_4_seconds)
 
     def _suicide_in_4_seconds(self):
@@ -85,7 +103,7 @@ class GeneralsClientHost(object):
         sys.exit(0)
 
     def _start_game_thread(self):
-        # Create Game
+        # Create Game (spawns other threads and stuff...)
         self._game = generals.GeneralsClient(self._userId, self._name, self._gameType, gameid=self._privateRoomID, public_server=self._public_server)
 
         logbook.info("game thread start...?")
@@ -117,7 +135,8 @@ class GeneralsClientHost(object):
             time.sleep(0.1)
 
         self._running = False
-        self._game._terminate()
+        if self._game:
+            self._game._terminate()
 
         logbook.info("crashed out of update loop, creating suicide thread")
 
@@ -162,6 +181,7 @@ class GeneralsClientHost(object):
     def _start_moves_thread(self):
         self._moves_realized = 0
         self._updates_received = 0
+        lastUpd = time.perf_counter()
         while self._running:
             if self._map is not None and self._map.complete and self._map.remainingPlayers > 1 and not self._map.players[self._map.player_index].dead:
                 # bot gave up, terminate
@@ -175,6 +195,7 @@ class GeneralsClientHost(object):
                 botShouldMakeMove = False
                 countsForMakeMove = False
                 mapUpdateTime = updateReceivedTime
+                lastUpd = time.perf_counter()
 
                 try:
                     while True:
@@ -183,7 +204,7 @@ class GeneralsClientHost(object):
                             botShouldMakeMove = True
                             self._updates_received += 1
                             gameUpdateReceived = True
-                        updateType, update, updateReceivedTime = self._server_updates_queue.get(block=False, timeout=0.0)
+                        updateType, update, updateReceivedTime = self._server_updates_queue.get(block=False)
                         if gameUpdateReceived and updateType == "game_update":
                             if self._map is None:
                                 raise AssertionError('_map was none... but missed update?')
@@ -200,9 +221,18 @@ class GeneralsClientHost(object):
                     self._moves_realized += 1
             except queue.Empty:
                 logbook.info('no update received after 1s of waiting...?')
-                if self._game._terminated:
+                if self._game and self._game.terminated:
                     logbook.info('GAME WAS TERMINATED, TERMING UPDATE LOOP TOO')
                     break
+
+                if time.perf_counter() - lastUpd > 60:
+                    if not self._game:
+                        logbook.info('Moves thread hasnt gotten anything in ages and theres no game client still')
+                        break
+                    if not self._game:
+                        logbook.info('Moves thread hasnt gotten anything in ages and theres no game client still')
+                        break
+
             except:
                 exc_type, exc_value, exc_traceback = sys.exc_info()
                 lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
@@ -217,7 +247,7 @@ class GeneralsClientHost(object):
         if not self._seen_update:
             logbook.info('First update...?')
             self._seen_update = True
-            self._map = Map(self._game._start_data, data)
+            self._map = Map(self._game.start_data, data, self._game.currentCustomMapData)
             self._game.map = self._map
             self._map.modifiers = self._game.modifiers
 
@@ -305,3 +335,4 @@ def create_thread(f):
     t = threading.Thread(target=f)
     t.daemon = True
     t.start()
+    return t

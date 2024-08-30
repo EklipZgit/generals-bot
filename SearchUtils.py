@@ -247,7 +247,7 @@ def dest_breadth_first_target(
                 f"PopSkipped skipTile current {current.toString()}, army {army}, goalInc {goalInc}, targetArmy {targetArmy}")
             continue
         if current.isMountain or (
-                current.isCity and noNeutralCities and current.player == -1 and current not in goalList) or (
+                noNeutralCities and current.isCostlyNeutralCity and current not in goalList) or (
                 not current.discovered and current.isNotPathable
         ):
             if not noLog and iter < 100:
@@ -284,6 +284,10 @@ def dest_breadth_first_target(
                 nextArmy -= current.army
             else:
                 nextArmy -= 1
+
+        if current.isSwamp:
+            nextArmy -= 1
+
         newDist = dist + 1
 
         visited[current.x][current.y] = (nextArmy, fromTile)
@@ -478,8 +482,8 @@ def a_star_kill(
                         nextArmy += next.army + inc
                     else:
                         nextArmy -= (next.army + inc)
-                    if next.isCity and next.player == -1:
-                        nextArmy -= next.army * 2
+                    # if next.isCity and next.player == -1:
+                    #     nextArmy -= next.army * 2
                 if nextArmy <= 0 and army > 0:  # prune out paths that go negative after initially going positive
                     # logbook.info("a* next army <= 0: {}".format(nextArmy))
                     continue
@@ -567,7 +571,7 @@ def a_star_find(
                 if next.isMountain or ((not next.discovered) and next.isNotPathable):
                     # logbook.info("a* mountain")
                     continue
-                if next.isCity and next.isNeutral and not allowNeutralCities:
+                if next.isCostlyNeutralCity and not allowNeutralCities:
                     continue
 
                 new_cost = dist + 1
@@ -651,7 +655,7 @@ def a_star_find_raw(
                 if next.isMountain or ((not next.discovered) and next.isNotPathable):
                     # logbook.info("a* mountain")
                     continue
-                if next.isCity and next.isNeutral and not allowNeutralCities:
+                if next.isCostlyNeutralCity and not allowNeutralCities:
                     continue
 
                 new_cost = dist + 1
@@ -733,7 +737,7 @@ def a_star_find_raw_with_try_avoid(
                 if next.isMountain or ((not next.discovered) and next.isNotPathable):
                     # logbook.info("a* mountain")
                     continue
-                if next.isCity and next.isNeutral and not allowNeutralCities:
+                if next.isCostlyNeutralCity and not allowNeutralCities:
                     continue
 
                 new_cost = dist + 1
@@ -823,7 +827,7 @@ def a_star_find_matrix(
                 if next.isMountain or ((not next.discovered) and next.isNotPathable):
                     # logbook.info("a* mountain")
                     continue
-                if next.isCity and next.isNeutral and not allowNeutralCities:
+                if next.isCostlyNeutralCity and not allowNeutralCities:
                     continue
 
                 new_cost = dist + 1
@@ -904,7 +908,7 @@ def a_star_find_dist(
                 if next.isMountain or ((not next.discovered) and next.isNotPathable):
                     # logbook.info("a* mountain")
                     continue
-                if next.isCity and next.isNeutral and not allowNeutralCities:
+                if next.isCostlyNeutralCity and not allowNeutralCities:
                     continue
 
                 new_cost = dist + 1
@@ -1012,7 +1016,7 @@ def breadth_first_dynamic(
             else:
                 negArmySum = tile.army + 1
             if not ignoreStartTile:
-                if tile.player != -1 and tile.isCity or tile.isGeneral:
+                if tile.player != -1 and (tile.isCity or tile.isGeneral):
                     goalIncrement = 0.5
                     if tile.player != searchingPlayer:
                         goalIncrement *= -1
@@ -1052,7 +1056,7 @@ def breadth_first_dynamic(
                 if next == parent:
                     continue
                 if (next.isMountain
-                        or (noNeutralCities and next.player == -1 and next.isCity)
+                        or (noNeutralCities and next.isCostlyNeutralCity)
                         or (not next.discovered and next.isNotPathable)):
                     continue
                 newDist = dist + 1
@@ -1211,7 +1215,7 @@ def breadth_first_dynamic_max(
             #    logbook.info("{}  EVAL".format(current.toString()))
 
             for adj in current.movable:
-                skipMt = adj.isMountain or (adj.isCity and adj.player == -1)
+                skipMt = adj.isMountain or adj.isCostlyNeutralCity
                 skipSearching = adj.player == searchingPlayer
                 # 2 is very important unless army amounts get fixed to not include tile val
                 skipArmy = army - adj.army < 2
@@ -1246,7 +1250,7 @@ def breadth_first_dynamic_max(
             if nextTile.isCity:
                 negCityCount -= 1
             if nextTile.player != searchingPlayer and (
-                    nextTile.player != -1 or (preferNeutral and nextTile.isCity == False)):
+                    nextTile.player != -1 or (preferNeutral and not nextTile.isCity)):
                 negEnemyTileCount -= 1
 
             if negativeTiles is None or next not in negativeTiles:
@@ -1296,7 +1300,7 @@ def breadth_first_dynamic_max(
             else:
                 negArmySum = tile.army + 1
             if not ignoreStartTile:
-                if tile.player != -1 and tile.isCity or tile.isGeneral:
+                if tile.player != -1 and (tile.isCity or tile.isGeneral):
                     goalIncrement = 0.5
                     if tile.player != searchingPlayer:
                         goalIncrement *= -1
@@ -1364,7 +1368,7 @@ def breadth_first_dynamic_max(
             if next == parent:
                 continue
             if (next.isMountain
-                    or (noNeutralCities and next.player == -1 and next.isCity)
+                    or (noNeutralCities and next.isCostlyNeutralCity)
                     or (next.isUndiscoveredObstacle and noNeutralUndiscoveredObstacles)):
                 continue
             nextVal = priorityFunc(next, prioVals) if not includePath else priorityFunc(next, prioVals, nodeList)
@@ -1540,7 +1544,7 @@ def breadth_first_dynamic_max_per_tile(
         if nextTile.isCity:
             negCityCount -= 1
         if nextTile.player != searchingPlayer and (
-                nextTile.player != -1 or (preferNeutral and nextTile.isCity == False)):
+                nextTile.player != -1 or (preferNeutral and not nextTile.isCity)):
             negEnemyTileCount -= 1
 
         if negativeTiles is None or next not in negativeTiles:
@@ -1565,7 +1569,7 @@ def breadth_first_dynamic_max_per_tile(
             #    logbook.info("{}  EVAL".format(current.toString()))
 
             for adj in current.movable:
-                skipMt = adj.isMountain or (adj.isCity and adj.player == -1)
+                skipMt = adj.isMountain or adj.isCostlyNeutralCity
                 skipSearching = adj.player == searchingPlayer
                 # 2 is very important unless army amounts get fixed to not include tile val
                 skipArmy = army - adj.army < 2
@@ -1622,7 +1626,7 @@ def breadth_first_dynamic_max_per_tile(
             else:
                 negArmySum = tile.army + 1
             if not ignoreStartTile:
-                if tile.player != -1 and tile.isCity or tile.isGeneral:
+                if tile.player != -1 and (tile.isCity or tile.isGeneral):
                     goalIncrement = 0.5
                     if tile.player != searchingPlayer:
                         goalIncrement *= -1
@@ -1691,7 +1695,7 @@ def breadth_first_dynamic_max_per_tile(
             if next == parent:
                 continue
             if (next.isMountain
-                    or (noNeutralCities and next.player == -1 and next.isCity)
+                    or (noNeutralCities and next.isCostlyNeutralCity)
                     or (not next.discovered and next.isNotPathable)):
                 continue
             nextPrio = priorityFunc(next, prioVals) if not includePath else priorityFunc(next, prioVals, nodeList)
@@ -1867,7 +1871,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
         if nextTile.isCity:
             negCityCount -= 1
         if nextTile.player != searchingPlayer and (
-                nextTile.player != -1 or (preferNeutral and nextTile.isCity == False)):
+                nextTile.player != -1 or (preferNeutral and not nextTile.isCity)):
             negEnemyTileCount -= 1
 
         if negativeTiles is None or next not in negativeTiles:
@@ -1892,7 +1896,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
             #    logbook.info("{}  EVAL".format(current.toString()))
 
             for adj in current.movable:
-                skipMt = adj.isMountain or (adj.isCity and adj.player == -1)
+                skipMt = adj.isMountain or adj.isCostlyNeutralCity
                 skipSearching = adj.player == searchingPlayer
                 # 2 is very important unless army amounts get fixed to not include tile val
                 skipArmy = army - adj.army < 2
@@ -1947,7 +1951,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
             else:
                 negArmySum = tile.army + 1
             if not ignoreStartTile:
-                if tile.player != -1 and tile.isCity or tile.isGeneral:
+                if tile.player != -1 and (tile.isCity or tile.isGeneral):
                     goalIncrement = 0.5
                     if tile.player != searchingPlayer:
                         goalIncrement *= -1
@@ -2032,7 +2036,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
             if next == parent:
                 continue
             if (next.isMountain
-                    or (noNeutralCities and next.player == -1 and next.isCity)
+                    or (noNeutralCities and next.isCostlyNeutralCity)
                     or (not next.discovered and next.isNotPathable)):
                 continue
             if next in globalVisitedSet:
@@ -2230,7 +2234,7 @@ def breadth_first_dynamic_max_global_visited(
             #    logbook.info("{}  EVAL".format(current.toString()))
 
             for adj in current.movable:
-                skipMt = adj.isMountain or (adj.isCity and adj.player == -1)
+                skipMt = adj.isMountain or adj.isCostlyNeutralCity
                 skipSearching = adj.player == searchingPlayer
                 # 2 is very important unless army amounts get fixed to not include tile val
                 skipArmy = army - adj.army < 2
@@ -2265,7 +2269,7 @@ def breadth_first_dynamic_max_global_visited(
             if nextTile.isCity:
                 negCityCount -= 1
             if nextTile.player != searchingPlayer and (
-                    nextTile.player != -1 or (preferNeutral and nextTile.isCity == False)):
+                    nextTile.player != -1 or (preferNeutral and not nextTile.isCity)):
                 negEnemyTileCount -= 1
 
             if negativeTiles is None or next not in negativeTiles:
@@ -2312,7 +2316,7 @@ def breadth_first_dynamic_max_global_visited(
             else:
                 negArmySum = tile.army + 1
             if not ignoreStartTile:
-                if tile.player != -1 and tile.isCity or tile.isGeneral:
+                if tile.player != -1 and (tile.isCity or tile.isGeneral):
                     goalIncrement = 0.5
                     if tile.player != searchingPlayer:
                         goalIncrement *= -1
@@ -2382,7 +2386,7 @@ def breadth_first_dynamic_max_global_visited(
             if next == parent:
                 continue
             if (next.isMountain
-                    or (noNeutralCities and next.player == -1 and next.isCity)
+                    or (noNeutralCities and next.isCostlyNeutralCity)
                     or (next.isUndiscoveredObstacle and noNeutralUndiscoveredObstacles)):
                 continue
             nextVal = priorityFunc(next, prioVals)
@@ -2556,7 +2560,7 @@ def breadth_first_dynamic_max_per_tile_global_visited(
         if nextTile.isCity:
             negCityCount -= 1
         if nextTile.player != searchingPlayer and (
-                nextTile.player != -1 or (preferNeutral and nextTile.isCity == False)):
+                nextTile.player != -1 or (preferNeutral and not nextTile.isCity)):
             negEnemyTileCount -= 1
 
         if negativeTiles is None or next not in negativeTiles:
@@ -2581,7 +2585,7 @@ def breadth_first_dynamic_max_per_tile_global_visited(
             #    logbook.info("{}  EVAL".format(current.toString()))
 
             for adj in current.movable:
-                skipMt = adj.isMountain or (adj.isCity and adj.player == -1)
+                skipMt = adj.isMountain or adj.isCostlyNeutralCity
                 skipSearching = adj.player == searchingPlayer
                 # 2 is very important unless army amounts get fixed to not include tile val
                 skipArmy = army - adj.army < 2
@@ -2639,7 +2643,7 @@ def breadth_first_dynamic_max_per_tile_global_visited(
             else:
                 negArmySum = tile.army + 1
             if not ignoreStartTile:
-                if tile.player != -1 and tile.isCity or tile.isGeneral:
+                if tile.player != -1 and (tile.isCity or tile.isGeneral):
                     goalIncrement = 0.5
                     if tile.player != searchingPlayer:
                         goalIncrement *= -1
@@ -2702,7 +2706,7 @@ def breadth_first_dynamic_max_per_tile_global_visited(
             if next == parent:
                 continue
             if (next.isMountain
-                    or (noNeutralCities and next.player == -1 and next.isCity)
+                    or (noNeutralCities and next.isCostlyNeutralCity)
                     or (not next.discovered and next.isNotPathable)):
                 continue
             nextPrio = priorityFunc(next, prioVals)
@@ -2887,7 +2891,7 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
         if nextTile.isCity:
             negCityCount -= 1
         if nextTile.player != searchingPlayer and (
-                nextTile.player != -1 or (preferNeutral and nextTile.isCity == False)):
+                nextTile.player != -1 or (preferNeutral and not nextTile.isCity)):
             negEnemyTileCount -= 1
 
         if negativeTiles is None or next not in negativeTiles:
@@ -2912,7 +2916,7 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
             #    logbook.info("{}  EVAL".format(current.toString()))
 
             for adj in current.movable:
-                skipMt = adj.isMountain or (adj.isCity and adj.player == -1)
+                skipMt = adj.isMountain or adj.isCostlyNeutralCity
                 skipSearching = adj.player == searchingPlayer
                 # 2 is very important unless army amounts get fixed to not include tile val
                 skipArmy = army - adj.army < 2
@@ -2981,7 +2985,7 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
             else:
                 negArmySum = tile.army + 1
             if not ignoreStartTile:
-                if tile.player != -1 and tile.isCity or tile.isGeneral:
+                if tile.player != -1 and (tile.isCity or tile.isGeneral):
                     goalIncrement = 0.5
                     if tile.player != searchingPlayer:
                         goalIncrement *= -1
@@ -3066,7 +3070,7 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
             # if next.tile_index in visited:
             #     continue
             if (next.isMountain
-                    or (noNeutralCities and next.player == -1 and next.isCity)
+                    or (noNeutralCities and next.isCostlyNeutralCity)
                     or (not next.discovered and next.isNotPathable)):
                 continue
             nextPrio = priorityFunc(next, prioVals)
@@ -3217,7 +3221,7 @@ def bidirectional_breadth_first_dynamic(
         if nextTile.isCity:
             negCityCount -= 1
         if nextTile.player != searchingPlayer and (
-                nextTile.player != -1 or (preferNeutral and nextTile.isCity == False)):
+                nextTile.player != -1 or (preferNeutral and not nextTile.isCity)):
             negEnemyTileCount -= 1
 
         if negativeTiles is None or next not in negativeTiles:
@@ -3264,7 +3268,7 @@ def bidirectional_breadth_first_dynamic(
             else:
                 negArmySum = tile.army + 1
             if not ignoreStartTile:
-                if tile.player != -1 and tile.isCity or tile.isGeneral:
+                if tile.player != -1 and (tile.isCity or tile.isGeneral):
                     goalIncrement = 0.5
                     if tile.player != searchingPlayer:
                         goalIncrement *= -1
@@ -3306,7 +3310,7 @@ def bidirectional_breadth_first_dynamic(
                 if next == parent:
                     continue
                 if (next.isMountain
-                        or (noNeutralCities and next.player == -1 and next.isCity)
+                        or (noNeutralCities and next.isCostlyNeutralCity)
                         or (not next.discovered and next.isNotPathable)):
                     continue
                 newDist = dist + 1
@@ -3442,7 +3446,7 @@ def breadth_first_find_queue(
                         not bypassDefaultSkipLogic
                         and (
                             nextTile.isMountain
-                            or (noNeutralCities and nextTile.isCity and nextTile.player == -1)
+                            or (noNeutralCities and nextTile.isCostlyNeutralCity)
                             or (not nextTile.discovered and nextTile.isNotPathable)
                         )
                     )
@@ -3555,7 +3559,7 @@ def breadth_first_find_dist_queue(
                 not bypassDefaultSkipLogic
                 and (
                     next.isMountain
-                    or (noNeutralCities and next.isCity and next.player == -1)
+                    or (noNeutralCities and next.isCostlyNeutralCity)
                     or (not next.discovered and next.isNotPathable)
                 )
             ):
@@ -4204,7 +4208,7 @@ def build_distance_map(map: MapBase, startTiles: typing.List[Tile], skipTiles: t
         def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
             distanceMap[tile.x][tile.y] = dist
 
-            return tile.isNeutral and tile.isCity
+            return tile.isCostlyNeutralCity
     else:
         def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
             if tile in skipTiles:
@@ -4212,7 +4216,7 @@ def build_distance_map(map: MapBase, startTiles: typing.List[Tile], skipTiles: t
 
             distanceMap[tile.x][tile.y] = dist
 
-            return tile.isNeutral and tile.isCity
+            return tile.isCostlyNeutralCity
 
     breadth_first_foreach_dist_fast_incl_neut_cities(
         map,
@@ -4244,7 +4248,7 @@ def build_distance_map_matrix(map, startTiles, skipTiles=None, maxDepth: int = 1
         def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
             distanceMap.raw[tile.tile_index] = dist
 
-            return tile.isNeutral and tile.isCity
+            return tile.isCostlyNeutralCity
     else:
         def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
             if tile in skipTiles:
@@ -4252,7 +4256,7 @@ def build_distance_map_matrix(map, startTiles, skipTiles=None, maxDepth: int = 1
 
             distanceMap.raw[tile.tile_index] = dist
 
-            return tile.isNeutral and tile.isCity
+            return tile.isCostlyNeutralCity
 
     breadth_first_foreach_dist_fast_incl_neut_cities(
         map,
@@ -4284,7 +4288,7 @@ def build_distance_map_matrix_with_start_dist(map, startTiles: typing.Iterable[t
         def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
             distanceMap.raw[tile.tile_index] = dist
 
-            return tile.isNeutral and tile.isCity
+            return tile.isCostlyNeutralCity
     else:
         def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
             if tile in skipTiles:
@@ -4292,7 +4296,7 @@ def build_distance_map_matrix_with_start_dist(map, startTiles: typing.Iterable[t
 
             distanceMap.raw[tile.tile_index] = dist
 
-            return tile.isNeutral and tile.isCity
+            return tile.isCostlyNeutralCity
 
     frontier: typing.Deque[typing.Tuple[Tile, int, int]] = deque()
 
@@ -4396,7 +4400,7 @@ def build_distance_map_matrix_include_set(map, startTiles, containsSet: typing.C
             continue
 
         distanceMap[current] = dist
-        if current.isNeutral and current.isCity:
+        if current.isCostlyNeutralCity:
             continue
 
         newDist = dist + 1
@@ -4464,7 +4468,7 @@ def bidirectional_a_star_pq(start: Tile, goal: Tile, allowNeutralCities: bool = 
             for v in curTile.movable:
                 if v.isMountain:
                     continue
-                if v.isCity and v.isNeutral and not allowNeutralCities:
+                if v.isCostlyNeutralCity and not allowNeutralCities:
                     continue
                 # weight = graph[curTile][v]['weight']
                 weight = 1
@@ -4488,7 +4492,7 @@ def bidirectional_a_star_pq(start: Tile, goal: Tile, allowNeutralCities: bool = 
             for v in curTile.movable:
                 if v.isMountain:
                     continue
-                if v.isCity and v.isNeutral and not allowNeutralCities:
+                if v.isCostlyNeutralCity and not allowNeutralCities:
                     continue
                 # weight = graph[curTile][v]['weight']
                 weight = 1
@@ -4603,7 +4607,7 @@ def bidirectional_a_star(start: Tile, goal: Tile, allowNeutralCities: bool = Fal
             for v in curTile.movable:
                 if v.isMountain:
                     continue
-                if v.isCity and v.isNeutral and not allowNeutralCities:
+                if v.isCostlyNeutralCity and not allowNeutralCities:
                     continue
                 # weight = graph[curTile][v]['weight']
                 curTileCost = g_s[curTile] + weight
@@ -4627,7 +4631,7 @@ def bidirectional_a_star(start: Tile, goal: Tile, allowNeutralCities: bool = Fal
             for v in curTile.movable:
                 if v.isMountain:
                     continue
-                if v.isCity and v.isNeutral and not allowNeutralCities:
+                if v.isCostlyNeutralCity and not allowNeutralCities:
                     continue
                 # weight = graph[curTile][v]['weight']
 

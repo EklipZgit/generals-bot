@@ -28,12 +28,12 @@ class TileGraph(typing.Generic[T]):
     def __init__(self, graph: MapMatrixInterface[TileNode]):
         self.nodes: MapMatrixInterface[TileNode[T] | None] = graph
 
-    def reduce_to_tiles(self, bannedTiles: typing.List[Tile], tiles: typing.List[Tile]):
-        for tile in bannedTiles:
-            n = self.nodes[tile]
-            for adj in n.adjacents:
-                adj.adjacents.remove(n)
-            self.nodes[tile] = None
+    # def reduce_to_tiles(self, bannedTiles: typing.List[Tile], tiles: typing.List[Tile]):
+    #     for tile in bannedTiles:
+    #         n = self.nodes[tile]
+    #         for adj in n.adjacents:
+    #             adj.adjacents.remove(n)
+    #         self.nodes[tile] = None
 
     def get_connected_tiles(self) -> typing.List[Tile]:
         return [t.tile for t in self.nodes.values() if t is not None]

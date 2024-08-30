@@ -17,6 +17,7 @@ from collections import deque
 
 import SearchUtils
 from Army import Army
+from Interfaces import MapMatrixInterface
 from Path import Path
 from base.client.map import Tile, MapBase, TILE_OBSTACLE
 from MapMatrix import MapMatrix, MapMatrixSet

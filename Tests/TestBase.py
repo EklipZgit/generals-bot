@@ -39,7 +39,7 @@ from ViewInfo import ViewInfo, PathColorer, TargetStyle
 from Viewer import ViewerProcessHost
 from Viewer.ViewerProcessHost import ViewerHost
 from base import Colors
-from base.client.map import MapBase, Tile, Score, Player, TILE_FOG, TILE_OBSTACLE
+from base.client.map import MapBase, Tile, Score, Player, TILE_FOG, TILE_OBSTACLE, MODIFIER_DEFENSELESS
 from bot_ek0x45 import EklipZBot
 
 
@@ -277,7 +277,9 @@ class TestBase(unittest.TestCase):
                 for tile in tiles:
                     tile.isTempFogPrediction = True
                     # if not tile.isGeneral:
-                    #     tile.reset_wrong_undiscovered_fog_guess()
+                    #     self.map.reset_wrong_undiscovered_fog_guess(tile)
+
+            armies = TextMapLoader.load_armies(map, gameData)
 
             for player in map.players:
                 if player.dead:
@@ -307,7 +309,7 @@ class TestBase(unittest.TestCase):
                 if f'{playerChar}Tiles' in gameData:
                     playerTiles = int(gameData[f'{playerChar}Tiles'])
 
-                self.ensure_player_tiles_and_scores(map, general, playerTiles, playerScore, gen, enemyTiles, enemyScore, enemyCities, respect_player_vision)
+                self.ensure_player_tiles_and_scores(map, general, playerTiles, playerScore, gen, enemyTiles, enemyScore, enemyCities, respect_player_vision, armies)
 
         for player in map.players:
             player.score = 0
@@ -698,7 +700,7 @@ class TestBase(unittest.TestCase):
 
     def reset_general(self, rawMap, enemyGeneral):
         mapTile = rawMap.GetTile(enemyGeneral.x, enemyGeneral.y)
-        mapTile.reset_wrong_undiscovered_fog_guess()
+        rawMap.reset_wrong_undiscovered_fog_guess(mapTile)
         rawMap.generals[enemyGeneral.player] = None
 
     def reset_map_to_just_generals(self, map: MapBase, turn: int = 16):
@@ -1087,6 +1089,15 @@ class TestBase(unittest.TestCase):
     def assertInvalidGeneralPositionXY(self, bot: EklipZBot, x: int, y: int, enemyPlayer: int = -1):
         self.assertInvalidGeneralPosition(bot, bot._map.GetTile(x, y), enemyPlayer)
 
+    def assertMovesValid(self, moveList: typing.List[Move]):
+        failures = []
+        for move in moveList:
+            if move.dest not in move.source.movable:
+                failures.append(move)
+
+        if failures:
+            self.fail(f'Invalid moves found: {" | ".join([str(m) for m in failures])}')
+
     def get_emergence_xy(self, bot, x, y, emergencePlayer: int = -1) -> float:
         if emergencePlayer == -1:
             emergencePlayer = bot.targetPlayer
@@ -1126,6 +1137,7 @@ class TestBase(unittest.TestCase):
             enemyGeneralTargetScore: int = None,
             enemyCityCount: int = 1,
             respectPlayerVision: bool = False,
+            armies: typing.Dict[Tile, Army] | None = None
     ):
         """
         Leave enemy params empty to match the general values evenly (and create an enemy general opposite general)
@@ -1133,6 +1145,13 @@ class TestBase(unittest.TestCase):
         """
 
         bannedEnemyTiles: typing.Set[Tile] = set()
+        skipArmyTiles = set()
+        if armies:
+            for army in armies.values():
+                if army.tile in skipArmyTiles:
+                    continue
+                for entangled in army.entangledArmies:
+                    skipArmyTiles.add(entangled.tile)
         if respectPlayerVision:
             for tile in map.get_all_tiles():
                 if tile.player == general.player:
@@ -1223,7 +1242,7 @@ class TestBase(unittest.TestCase):
                         newTiles.add(tile)
             if tile.player == general.player:
                 countScoreGeneral.add(tile.army)
-            if tile.player == enemyGeneral.player:
+            if tile.player == enemyGeneral.player and tile not in skipArmyTiles:
                 countScoreEnemy.add(tile.army)
 
             return tile.isObstacle
@@ -1755,7 +1774,7 @@ class TestBase(unittest.TestCase):
                 negs.add(tile)
 
         negsToSend = None
-        if "Defenseless" in map.modifiers:
+        if map.modifiers_by_id[MODIFIER_DEFENSELESS]:
             negsToSend = {general}
 
         paths = ArmyTracker.get_army_expected_path(map, Army(enTile), general, targets, negativeTiles=negsToSend)

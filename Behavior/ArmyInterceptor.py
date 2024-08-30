@@ -71,7 +71,7 @@ class InterceptPointTileInfo(object):
         self.max_intercept_turn_offset: int = maxInterceptTurnOffset
         """Mostly useless? The max offset based on chokewidths and distances to chokes, used to calculate the max_delay_turns"""
 
-        self.max_search_dist: int = 1000
+        self.max_search_dist: int = 30
         """Used to limit time spent searching mediocre intercept points."""
 
     def __str__(self) -> str:

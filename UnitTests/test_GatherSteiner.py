@@ -3,6 +3,8 @@ import time
 
 import logbook
 
+from ArmyAnalyzer import ArmyAnalyzer
+from DangerAnalyzer import ThreatObj, ThreatType
 from Gather import GatherSteiner
 import Gather
 from Algorithms import TileIslandBuilder, MapSpanningUtils
@@ -59,7 +61,7 @@ class GatherSteinerUnitTests(TestBase):
 
         self.begin_capturing_logging()
 
-        steinerMatrix = GatherSteiner.get_prize_collecting_gather_mapmatrix(map, general.player, enemyGeneral, targetTurns=42)
+        steinerMatrix = GatherSteiner.get_prize_collecting_gather_mapmatrix(map, general.player, 42, rootTiles=[enemyGeneral])
 
         viewInfo = self.get_renderable_view_info(map)
         viewInfo.add_map_division(steinerMatrix, (0, 255, 255), 200)
@@ -83,7 +85,7 @@ class GatherSteinerUnitTests(TestBase):
 
         self.begin_capturing_logging()
 
-        steinerMatrix = GatherSteiner.get_prize_collecting_gather_mapmatrix(map, general.player, enemyGeneral, gatherMatrix=gatherMatrix, captureMatrix=captureMatrix, targetTurns=28)
+        steinerMatrix = GatherSteiner.get_prize_collecting_gather_mapmatrix(map, general.player, 28, rootTiles=[enemyGeneral], gatherMatrix=gatherMatrix, captureMatrix=captureMatrix)
 
         viewInfo = self.get_renderable_view_info(map)
         viewInfo.bottomLeftGridText = gatherMatrix
@@ -109,7 +111,7 @@ class GatherSteinerUnitTests(TestBase):
 
         self.begin_capturing_logging()
 
-        steinerMatrix = GatherSteiner.get_prize_collecting_gather_mapmatrix(map, general.player, enemyGeneral, gatherMatrix=gatherMatrix, captureMatrix=captureMatrix, targetTurns=57)
+        steinerMatrix = GatherSteiner.get_prize_collecting_gather_mapmatrix(map, general.player, 57, rootTiles=[enemyGeneral], gatherMatrix=gatherMatrix, captureMatrix=captureMatrix)
 
         viewInfo = self.get_renderable_view_info(map)
         viewInfo.bottomLeftGridText = gatherMatrix
@@ -164,6 +166,79 @@ class GatherSteinerUnitTests(TestBase):
 
         otherTile = playerMap.GetTile(15, 1)
         gathPlan = Gather.gather_approximate_turns_to_tiles(map, [enemyGeneral, otherTile], approximateTargetTurns=57, gatherMatrix=gatherMatrix, captureMatrix=captureMatrix)
+
+        moveList = gathPlan.get_move_list()
+        self.assertMovesValid(moveList)
+
+        viewInfo = self.get_renderable_view_info(map)
+        viewInfo.gatherNodes = gathPlan.root_nodes
+        viewInfo.bottomLeftGridText = gatherMatrix
+        viewInfo.bottomRightGridText = captureMatrix
+        viewInfo.add_map_division(gathPlan.tileSet, (0, 255, 255), 200)
+        self.render_view_info(map, viewInfo, f'steiner {gathPlan.length}t with {gathPlan.gathered_army}')
+
+    def test_should_build_steiner_prize_collection_at_enemy_general__large__tile_weights__Gather__multi_tile__broke(self):
+        """
+        This algo seems useless, but more useful than no-enemy-territory.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/pcst_gather_should_not_try_to_warp_between_tiles___63A1QDrpm---1--455.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 455, fill_out_tiles=True)
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.recalculate_player_paths(force=True)
+        playerMap = simHost.get_player_map(general.player)
+
+        gatherMatrix = bot.get_gather_tiebreak_matrix()
+        captureMatrix = bot.get_expansion_weight_matrix()
+
+        self.begin_capturing_logging()
+
+        rootTiles = [
+            playerMap.GetTile(12, 2),
+            playerMap.GetTile(21, 6),
+            playerMap.GetTile(17, 2),
+            playerMap.GetTile(9, 6),
+            playerMap.GetTile(16, 3),
+            playerMap.GetTile(18, 4),
+        ]
+        negativeTiles = {
+            playerMap.GetTile(14, 11),
+            playerMap.GetTile(14, 14),
+            playerMap.GetTile(14, 10),
+            playerMap.GetTile(14, 13),
+            playerMap.GetTile(14, 9),
+            playerMap.GetTile(14, 12),
+            playerMap.GetTile(14, 15),
+            playerMap.GetTile(15, 15),
+            playerMap.GetTile(14, 8),
+        }
+
+        gathPlan = Gather.gather_approximate_turns_to_tiles(
+            map,
+            rootTiles,
+            approximateTargetTurns=40,
+            gatherMatrix=gatherMatrix,
+            captureMatrix=captureMatrix,
+            negativeTiles=negativeTiles,
+            prioritizeCaptureHighArmyTiles=True,
+            useTrueValueGathered=True,
+            includeGatherPriorityAsEconValues=False,
+            includeCapturePriorityAsEconValues=True)
+
+        enAttackPath = bot.enemy_attack_path
+        analysis = ArmyAnalyzer.build_from_path(playerMap, enAttackPath)
+        fakeThreat = ThreatObj(enAttackPath.length, 1, enAttackPath, ThreatType.Vision, armyAnalysis=analysis)
+        move_closest_value_func = bot.get_defense_tree_move_prio_func(fakeThreat)
+        gathPlan.value_func = move_closest_value_func
+
+        firstMove = gathPlan.get_first_move()
+
+        moveList = gathPlan.get_move_list()
+        moveList.insert(0, firstMove)
+        self.assertMovesValid(moveList)
 
         viewInfo = self.get_renderable_view_info(map)
         viewInfo.gatherNodes = gathPlan.root_nodes

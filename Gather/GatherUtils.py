@@ -1269,6 +1269,7 @@ def gather_approximate_turns_to_tiles(
         includeGatherPriorityAsEconValues: bool = False,
         includeCapturePriorityAsEconValues: bool = True,
         logDebug: bool = GatherDebug.USE_DEBUG_LOGGING,
+        timeLimit: float = 0.05,
         viewInfo=None,
 ) -> GatherCapturePlan | None:
     """
@@ -1290,6 +1291,7 @@ def gather_approximate_turns_to_tiles(
     @param includeGatherPriorityAsEconValues: if True, the priority matrix values of gathered nodes will be included in the econValue of the plan for gatherNodes.
     @param includeCapturePriorityAsEconValues: if True, the priority matrix values of CAPTURED nodes will be included in the econValue of the plan for enemy tiles in the plan.
     @param logDebug:
+    @param timeLimit:
     @param viewInfo: if provided, debug output will be written to the view info tile zones.
     @return:
     """
@@ -1332,6 +1334,7 @@ def gather_approximate_turns_to_tiles(
         gatherMatrix,
         captureMatrix,
         rootTiles,
+        timeLimit=timeLimit,
         skipTiles=skipTiles,
         negativeTiles=negativeTiles,
         prioritizeCaptureHighArmyTiles=prioritizeCaptureHighArmyTiles)

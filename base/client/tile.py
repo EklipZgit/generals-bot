@@ -209,6 +209,9 @@ class TileDelta(object):
 
 
 class Tile(object):
+    DEFAULT_PATHABLE_CITY_THRESHOLD = 10
+    PATHABLE_CITY_THRESHOLD = DEFAULT_PATHABLE_CITY_THRESHOLD
+
     __slots__ = (
         'x',
         'y',
@@ -228,11 +231,15 @@ class Tile(object):
         'isMountain',
         'delta',
         'adjacents',
+        'visibleTo',
         'movable',
         'tile_index',
         '_hash_key',
         'isObservatory',
         'isLookout',
+        'isDesert',
+        'isSwamp',
+        'overridePathable',
     )
 
     def __init__(
@@ -249,6 +256,8 @@ class Tile(object):
             tileIndex: int = -1,
             isObservatory=False,
             isLookout=False,
+            isSwamp=False,
+            isDesert=False
     ):
         # Public Properties
         self.x = x
@@ -269,6 +278,12 @@ class Tile(object):
 
         self.isCity: bool = isCity
         """Boolean isCity"""
+
+        self.isSwamp: bool = isSwamp
+        """Boolean isSwamp"""
+
+        self.isDesert: bool = isDesert
+        """Boolean isDesert"""
 
         # self._isGeneral: bool = isGeneral
         # """Boolean isGeneral"""
@@ -293,6 +308,9 @@ class Tile(object):
         """Turn the tile last had an unexpected delta on it"""
 
         self.isMountain: bool = isMountain
+        """
+        True for Mountains, Observatories, Lookouts (but not undiscovered obstacles...?)
+        """
 
         self.isObservatory: bool = isObservatory
 
@@ -304,8 +322,14 @@ class Tile(object):
         self.adjacents: typing.List[Tile] = []
         """Tiles VISIBLE from this tile (not necessarily movable, includes diagonals)"""
 
+        self.visibleTo: typing.List[Tile] = []
+        """Tiles which when owned have visibility TO this tile (not necessarily movable, includes diagonals)"""
+
         self.movable: typing.List[Tile] = []
         """Tiles movable (left right up down) from this tile, including mountains, cities, obstacles."""
+
+        self.overridePathable: bool | None = None
+        """Override whether this tile is pathable, for wonky custom games where there are large neutral city walloffs and stuff."""
 
         self.tile_index: int = tileIndex
         self._hash_key = hash((self.x, self.y))
@@ -331,6 +355,8 @@ class Tile(object):
             del state["movable"]
         if "adjacents" in state:
             del state["adjacents"]
+        if "visibleTo" in state:
+            del state["visibleTo"]
         return state
 
     def __setstate__(self, state: typing.Dict[str, typing.Any]):
@@ -339,6 +365,7 @@ class Tile(object):
 
         self.movable = []
         self.adjacents = []
+        self.visibleTo = []
 
     @property
     def isNeutral(self) -> bool:
@@ -347,13 +374,20 @@ class Tile(object):
 
     @property
     def isUndiscoveredObstacle(self) -> bool:
-        """True if not discovered and is a map obstacle/mountain"""
-        return self.tile == TILE_OBSTACLE and not self.discovered and not self.isCity
+        """True if not discovered and is a map obstacle/mountain and not predicted to be a city"""
+        return self.tile == TILE_OBSTACLE and not self.discovered and not self.isCity and not self.isMountain
 
     @property
     def isNotPathable(self) -> bool:
         """True if mountain or undiscovered obstacle, but NOT for discovered neutral city"""
+        if self.overridePathable is not None:
+            return not self.overridePathable
         return self.isMountain or self.isUndiscoveredObstacle
+
+    @property
+    def isCostlyNeutralCity(self) -> bool:
+        """True if neutral city that costs more than 10"""
+        return self.isCity and self.player == -1 and self.army > Tile.PATHABLE_CITY_THRESHOLD
 
     @property
     def isPathable(self) -> bool:
@@ -363,7 +397,7 @@ class Tile(object):
     @property
     def isObstacle(self) -> bool:
         """True if mountain, undiscovered obstacle, or discovered neutral city"""
-        return self.isMountain or self.isUndiscoveredObstacle or (self.isCity and self.isNeutral)
+        return self.isMountain or (self.tile == TILE_OBSTACLE and not self.discovered and not self.isCity) or self.isCostlyNeutralCity
 
     @property
     def movableNoObstacles(self) -> typing.Generator[Tile, None, None]:
@@ -394,7 +428,7 @@ class Tile(object):
         if value >= 0 and self.visible:
             self.tile = value
         elif value == -1 and self.army == 0 and not self.isNotPathable and not self.isCity and not self.isMountain:
-            self.tile = TILE_EMPTY # this whole thing seems wrong, needs to be updated carefully with tests as the delta logic seems to rely on it...
+            self.tile = TILE_EMPTY  # this whole thing seems wrong, needs to be updated carefully with tests as the delta logic seems to rely on it...
 
         self._player = value
 
@@ -477,6 +511,10 @@ class Tile(object):
             outputToJoin.append('L')
         elif self.isObservatory:
             outputToJoin.append('O')
+        elif self.isSwamp:
+            outputToJoin.append('S')
+        elif self.isDesert:
+            outputToJoin.append('E')
         elif self.isMountain or (not self.visible and self.isNotPathable):
             outputToJoin.append('M')
         if self.isGeneral:
@@ -540,18 +578,18 @@ class Tile(object):
             if not self.discovered:
                 self.discovered = True
                 self.delta.discovered = True
-                if tile <= TILE_EMPTY:
+                if tile == TILE_EMPTY and not self.isSwamp:
                     self.discoveredAsNeutral = True
                 if self.isGeneral and not isGeneral:
                     self.isGeneral = False
                     if map.generals[self.player] == self:
                         map.generals[self.player] = None
                         map.players[self.player].general = None
-                    try:
-                        idx = map.generals.index(self)
-                        map.generals[idx] = None
-                    except:
-                        pass
+                    # try:
+                    #     idx = map.generals.index(self)
+                    #     map.generals[idx] = None
+                    # except:
+                    #     pass
             self.lastSeen = map.turn
             if not self.visible:
                 self.delta.gainedSight = True

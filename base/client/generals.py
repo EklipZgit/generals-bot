@@ -8,6 +8,8 @@ import random
 import sys
 import traceback
 import typing
+import urllib.parse
+from collections import deque
 
 import certifi
 import logbook
@@ -16,22 +18,24 @@ import requests
 import ssl
 import threading
 import time
+
 from websocket import create_connection, WebSocketConnectionClosedException
 
 import BotLogging
-from . import map
-from .map import MapBase
+from .map import MapBase, MODIFIER_TORUS, MODIFIER_WATCHTOWER
 
 WSPREFIX = "wss"
 HTTPPREFIX = "https"
+BOTWSPREFIX = "wss"
+BOTHTTPPREFIX = "https"
 _ENDPOINT_BOT = "://botws.generals.io/socket.io/?EIO=4"
 _ENDPOINT_LOCAL = "://localhost:8080/socket.io/?EIO=4"
 _ENDPOINT_PUBLIC = "://ws.generals.io/socket.io/?EIO=4"
 
 # # force bot server bots to local:
 # _ENDPOINT_BOT = _ENDPOINT_LOCAL
-# WSPREFIX = "ws"
-# HTTPPREFIX = "http"
+# BOTWSPREFIX = "ws"
+# BOTHTTPPREFIX = "http"
 
 # # force public bots to local:
 # _ENDPOINT_PUBLIC = _ENDPOINT_LOCAL
@@ -63,10 +67,10 @@ class GeneralsClient(object):
             userid,
             username,
             mode="1v1",
-            gameid=None,
+            gameid: str | None =None,
             force_start=False,
             public_server=False):
-        self._terminated: bool = False
+        self.terminated: bool = False
         """Prevent double-termination"""
 
         if username is None:
@@ -86,11 +90,21 @@ class GeneralsClient(object):
         self.server_username = username
         self.mode: str = mode
         """ffa, 1v1, team, or custom"""
+        self._customGameIsPublic = True
         if mode == "private":
             self.isPrivate = True
             mode = "custom"
+
+        self._currentQueue = {}
+        self._hostAt: float | None = None
+        self._isHost: bool = False
+        self.currentCustomMapData = None
+
+        if mode == 'custom':
+            self._customGameIsPublic = False
+
         self.writingFile = False
-        self._start_data = {}
+        self.start_data = {}
         self.already_good_lucked = False
         self.chatQueued = []
         self.result = False
@@ -142,6 +156,38 @@ class GeneralsClient(object):
         if not public_server and "[Bot]" not in username:
             self.server_username = "[Bot] " + username
 
+        self._chosen_custom_map = None
+        if gameid and gameid.endswith('CustMap'):
+            self._chosen_custom_map = random.choice(
+                [
+                    'Moneymores_2',
+                    # 'King of the hills.',  # too big, currently lags things out
+                    # 'King of the Hill (FFA)'  # bot needs to take cities towards central clusters. Bot needs to have some issue fixed where it does dumb shit
+                    '1v1 Ultimate',
+                    'city city',
+                ]
+            )
+
+        self.customOptions = {
+            # "width": "0.99",
+            # "height": "0.99",
+            # "city_density": "0.99",
+            'map': self._chosen_custom_map,
+            'swamp_density': None,
+            'desert_density': None,
+            'observatory_density': None,
+            'lookout_density': None,
+        }
+
+        if gameid and gameid.endswith('TESTING'):
+            self.customOptions['map'] = '一战Redux'
+
+        if gameid and gameid.endswith('AltTiles'):
+            self.customOptions['swamp_density'] = 0.04
+            self.customOptions['desert_density'] = 0.05
+            self.customOptions['observatory_density'] = 0.04
+            self.customOptions['lookout_density'] = 0.04
+
         if not public_server:
             self.bot_key = None
 
@@ -185,14 +231,19 @@ class GeneralsClient(object):
         logbook.debug("Starting heartbeat thread")
 
     def get_endpoint_ws(self):
-        return WSPREFIX + (_ENDPOINT_BOT if not self.public_server else _ENDPOINT_PUBLIC) + "&transport=websocket"
+        return (WSPREFIX if self.public_server else BOTWSPREFIX) + (_ENDPOINT_BOT if not self.public_server else _ENDPOINT_PUBLIC) + "&transport=websocket"
 
     def get_endpoint_requests(self):
-        return HTTPPREFIX + (_ENDPOINT_BOT if not self.public_server else _ENDPOINT_PUBLIC) + "&transport=polling"
+        return (HTTPPREFIX if self.public_server else BOTHTTPPREFIX) + (_ENDPOINT_BOT if not self.public_server else _ENDPOINT_PUBLIC) + "&transport=polling"
+
+    def get_endpoint_http_api(self) -> str:
+        baseUrl = (HTTPPREFIX if self.public_server else BOTHTTPPREFIX) + (_ENDPOINT_BOT if not self.public_server else _ENDPOINT_PUBLIC)
+        endpointUrl = baseUrl.split('/socket.io/')[0] + '/api/'
+        return endpointUrl
 
     def get_sid(self):
-        request = requests.get(self.get_endpoint_requests() + "&t=ObyKmaZ", verify=False)
-        result = request.text
+        response = requests.get(self.get_endpoint_requests() + "&t=ObyKmaZ", verify=False)
+        result = response.text
         while result and result[0].isdigit():
             result = result[1:]
 
@@ -201,6 +252,37 @@ class GeneralsClient(object):
         self._gio_session_id = sid
         _spawn(self.verify_sid)
         return sid
+
+    def load_custom_map_data(self, customMapName):
+        # https://generals.io/api/map?name=%E4%B8%80%E6%88%98Redux
+        # {
+        #     "title": "一战Redux",
+        #     "description": "",
+        #     "server_name": "NA",
+        #     "created_at": "2024-08-11T08:08:22.489Z",
+        #     "username": "panrui0811",
+        #     "width": 50,
+        #     "height": 50,
+        #     "map": "s,m,gD,10,10,50,s,s,s,s,s,s,s,s,s,s,s,s,s,m, ,m, , , , , ,50, , , , , , , , , , , , , , , , , , , , , , ,s,m,m,m,50,s,n-100,s,s,s,s,s,s,s,s,s,s,s,m, , ,m,10, , , ,m,s,m, , , , , , , , , , , , , , , , , , , , , ,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,m,m, , , ,m, , , ,10,m,s,m, , , , , , , , , , , , , , , , , , , , , ,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,m, , , ,10, ,50, , , , ,m,s,s,m, , , , , , , , , , , , , , , , , , , , ,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,m,10, , , , ,m, , , ,m,m,s,s,m, , , , , , , , , , , , , , , , , , , , ,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,m, , , ,m,m, , , ,gD,m,s,s,s,m, , , , , , , , , , , , , , , , , , , , ,s,s,s,s,s,m,s,s,s,s,s,s,s,s,s,m, ,gD,m,s,s,m, , , , ,m,s,s,m,10, ,m,m, , , , , , , , , , , , , , , , ,s,s,s,s,m, ,m,s,s,s,s,s,s,s,s,s,100,m,s,s,s,m, , , , ,m,s,s,s,m,100,s,s,m,gB, , , , , , , , , , , , , , ,s,s,s,s,m, ,m,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,m, , , ,m,s,s,s,s,s,s,s,m, , , , , , , , , , , , , , , ,s,s,s,m, ,10,m,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,m, , ,10,m,s,s,m,m,100,m,m, , , , , , , , , , , , , , , , ,s,s,s,m, , ,m,s,s,s,s,s,s,s,s,s,m,m,s,s,s,s,m, ,100,m,s,n-100,s,m, , , , , , , , , , , , , , , , , , , , ,s,m,100, , , , ,m,s,s,s,s,s,s,s,m, , ,m,s,s,s,s,m,s,s,s,s,s,s,m, , , , , , , , , , , , , , , , , , , ,m, , ,n-1, ,10, ,m,s,s,s,s,s,s,s,m, , ,m,s,n-100,s,s,s,s,s,s,m,m,m, , , , , , , , , , , , , , , , , , , , ,m, ,10,m, , , ,m,s,s,s,s,s,s,s,m,n-1,m,s,s,s,s,s,s,s,s,m, ,10, ,m, , , , , , , , , , , , , , , ,30, , , ,m, ,m,s,m, , ,m,s,s,s,s,s,s,s,m, ,m,s,s,s,s,s,s,s,s,m, , , , ,m, , , , ,30, , , , , , , , , , , , , ,m,m,m,s,m, , ,m,s,s,s,s,m,s,s,m, , ,m,m,m,100,m,m,m,m,m, ,m,m,m, , , , , , , , , , , , , , , , , , , ,s,s,s,s,s,m,gB,m,s,s,s,100, ,m,s,m, , , , , , , , , , , , ,m, , , , , , , , , , , , , , , , , , , , , ,s,s,s,s,m, , , ,100,s,m, , ,10,m, ,10, , , , , , , , , , ,m, , , , , , , , , , , , , , , , , , , , , , ,s,s,s,m, , ,m,m,m,s,m,gD, ,m, , , , , , , ,gA, , , , , ,50, , , , , , , , , , , , , , , , , , , , , , ,s,s,s,s,m,m,s,s,s,s,m,n-1,n-1,50, , , , , , , ,m,m,m, , , ,m, , ,m,m,m, , , , , , , , , , , , , , , , , ,s,s,s,s,s,s,s,s,s,m,10, , ,m, ,10, , , , ,m, , , ,m,m,m,m,m,m, , , ,m, , , , , , , , , , , , , , , , ,s,s,s,s,s,s,s,s,m, ,m,m,n-1,10,m, , , , , ,m, , , , , , , , , , , , ,m, , , , , , , , , , , , , , , , ,s,s,s,s,m,m,m,m,10, , , ,m,m,50, , , , , , ,m, ,10, , , , , , , , , ,50, , , , , , ,30, , , , , , , , , ,s,s,s,s,m, , , , , , , , , , ,m,m,m,50,m,m, , , , , , , , , , , , ,m, , , , , , , , , , , , , , , , ,s,s,s,s,s,m,m, , , , ,gB, , ,m, ,m, , , , , , , , ,gA, , , , ,10, , ,m,m,m, , , , , , , , , , , , , , ,s,s,s,s,s,s,m, , , , , , ,m, , , ,m, , ,m, , , , , , , , , , , , ,m, ,10,m, , , , , , , , , , , , , ,s,s,s,s,s,s,m, , , , , , , ,m,m,m, ,m,50, ,m, , , , , , , , , , , ,50, , ,50, , , , , , , , , , , , , ,s,s,s,s,s,s,m, ,10, , , , , ,m, , , , , , ,m, , , , , , , , , , , , ,m, , ,m, ,m,m,m,m,m,100,m,m,m,m, ,s,s,s,s,s,s,m, , , , , ,10, ,m, , , , , ,m,s,m, , , ,10, ,m,m,50, , , ,m,10, ,m,m,s,s,s,s,s, ,s,s,s,m, ,s,s,s,s,s,s,m, , , ,m, , , ,m,m,m,m,10, ,m,s,s,m, , , , ,m,10, ,m,m,m,m, ,gB, ,m,s,s,s,s, , ,s,s,s,m, ,s,m,m,m,m,m,m,m,50,m, ,m,100,m,s,s,s,s,m, ,10,m,s,s,m,m, ,m,m, , ,10,m, , , , , ,m,s,s,s,s, , , ,n-100,s,m, ,s,m, , ,10, , , , , , ,m,s,s,s,s,s,s,m,m, , ,m,s,s,s,m,s,m, ,gB, ,m,m,m,50,m,m,m,s,s,s,s,n-100,s,s,s,s,m, ,s,m, , , , , , , , ,10,m,s,s,s,s,s,s,s,m, , , ,m,m,s,s,s,s,m, , ,50, , , , ,10,m,s,s,s,s,s,s,s,s,s,m, ,s,s,m,n-1,n-1, , ,gC, , , ,m,s,s,s,s,s,s,s,s,m,m, , ,gO,m,s,s,s,m, ,10,m, , ,gA, , ,m,s,s,s,s,s,s,s,s,s,m, ,s,s,m, ,n-1, , , , , , ,m,s,s,s,n-100,s,s,s,s,s,m, , , , ,m,s,s,m,m,m,50,10, , ,m,m,m,s,s,s,s,s,s,s,s,s,m, ,s,s,m, ,n-1, , , , , , ,m,n-100,s,s,s,s,s,s,s,s,s,m,m, , , ,m,s,m, , , ,m, , ,m, , ,m,s,s,s,s,s,s,s,s,m, ,s,s,m,10,n-1, , , ,m,100,m,s,s,s,s,n-100,s,s,s,s,s,s,s,s,m, ,10,m,s,s,m, ,10,m,m,m,m,m, ,gA,s,m,m,m,100,m,m,m,m,50,s,s,m, ,n-1, , ,m,m,s,s,s,s,s,s, ,s,s,s,s,s,s,s,s,100, ,m,s,s,s,m, , ,m,s,s,s,s,10, ,m, , , , , , , , , ,s,s,m,m,m,m,m,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,m, ,m,s,s,s,m,10, ,m,m,s,s,s,m, , , , ,10, , , , , , ,s,s,s,s,s,s,s,s,s,s,m,m,m,m,m,s,s,s,s,s,s,s,s,s,s,m,s,s,s,s,m, , , ,m,s,s,s,m, , , , , , , , , , , ,s,s,s,s,s,s,m,m,m,m,d,d,d,d,d,m,s,s,s,s,s,s,s, ,n-100,s,s,s,s,s,m, , , ,gB,m,s,s,m, , , , , , , , , , , ,s,s,s,s,s,m,d,d,d,d,d,d,d,d,d,m,m,s,s,s,s,s, , , , ,s,s,s,s,m, , , ,m,m,s,s,s,m,m,100,m,m,m,m,m, , , ,s,s,s,s,m,d,d,d,d,d,d,d,d,gC,d,d,m,s,s,s,s,s,s,s,s,s,s,s,s,s,s,m,10,100,s,s,s,s,s,s,s,s,s,s,s,s,m, , ,10,s,s,s,m,d,d,d,10,d,d,d,d,d,d,d,d,d,m,s,s,s,s,s,s,s,s,s,s,s,s,s,s,m,s,s,s,s,s,s,s,s,s,s,s,s,s,m, , , ,s,s,s,m,d,d,d,d,d,d,d,d,d,d,d,d,d,m,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s, ,n-100, ,s,s,s,s,n-100,s,s,m, , ,n-1,n-1,s,s,m,d,d,d,d,d,d,d,d,d,d,d,d,d,d,m,m,m,m,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,m, , ,n-1, ,s,s,m,d,d,d,d,d,d,d,d,d,d,d,d,d,d,d,d,d,d,m,s,s,s,m,m,m,m,m,m,m,m,m,m,m,s,s,s,s,s,s,s,s,s,m, , ,n-1, ,s,s,m,d,d,d,d,d,d,d,d,d,d,d,d,d,d,d,d,d,d,d,m,m,m,d,d,d,d,d,d,d,d,10,d,d,m,m,m,m,m,m,s,s,m, , ,n-1, , ,s,s,m,d,10,d,d,d,d,d,d,d,d,d,d,d,d,d,d,d,d,d,m,d,d,d,d,d,d,gA,d,d,d,d,d,d,m,d,d,10,d,d,m,m,m, , ,n-1, , ,s,m,d,d,d,d,d,d,d,d,d,d,d,d,d,d,d,d,10,d,d,d,50,d,d,10,d,d,d,d,d,d,d,d,10,d,d,50,d,d,d,10,d,gC,50, , ,n-1, , ",
+        #     "score": 2201.4243681214643,
+        #     "upvotes": 2
+        # }
+        # '一战Redux' should become '%E4%B8%80%E6%88%98Redux'
+        # 'http://gameslist.io/play' should become 'http%3A%2F%2Fgameslist.io%2Fplay'
+        assert urllib.parse.quote('一战Redux', safe='') == '%E4%B8%80%E6%88%98Redux'
+        assert urllib.parse.quote('http://gameslist.io/play', safe='') == 'http%3A%2F%2Fgameslist.io%2Fplay'
+        # mapEscaped = '%E4%B8%80%E6%88%98Redux'
+        mapEscaped = urllib.parse.quote(customMapName, safe='')
+
+        response = requests.get(self.get_endpoint_http_api() + 'map?name=' + mapEscaped, verify=False)
+        if response.status_code != 200:
+            raise Exception(f'Got response status {response.status_code}: {response.text}')
+
+        result = json.loads(response.text)
+
+        logbook.info(f'GOT CUSTOM MAP DATA FOR REQUEST escaped {mapEscaped} | actual {customMapName} | returned {result["title"]}\r\n{json.dumps(result)}')
+
+        return result
 
     def verify_sid(self):
         sid = self._gio_session_id
@@ -217,17 +299,21 @@ class GeneralsClient(object):
 
     def _send_chat_immediate(self, msg: str, team: bool = False):
         if not self._seen_update:
-            raise ValueError("Cannot chat before game starts")
+            if self._gameid:
+                self._send(["chat_message", f"chat_custom_queue_{self._gameid}", msg, ""])
+                return
+            else:
+                raise ValueError("Cannot chat before game starts")
 
         if len(msg.strip()) < 1:
             return
 
         # prefix is the prefix that appears in the chat box when you are typing. For some reason, the '[team] ' gets sent to the server for team chat, whatever, replicate it.
         prefix = None
-        chatRoom = self._start_data['chat_room']
+        chatRoom = self.start_data['chat_room']
         if team:
             prefix = '[team] '
-            chatRoom = self._start_data['team_chat_room']
+            chatRoom = self.start_data['team_chat_room']
 
         # self._send(["chat_message", chatRoom, msg, prefix, ""])  # myssix source had extra "" at end of array here? not sure why, but JS frontend doesn't send that.
         self._send(["chat_message", chatRoom, msg, prefix])
@@ -305,16 +391,16 @@ class GeneralsClient(object):
 
             if msg[0] == "game_start":
                 logbook.info(f"Game info: {msg[1]}")
-                self._start_data = msg[1]
+                self.start_data = msg[1]
                 print("logging????")
                 # for handler in logging.root.handlers[:]:
                 #     logging.root.removeHandler(handler)
                 # logging.basicConfig(format='%(levelname)s:%(message)s', filename='D:\\GeneralsLogs\\' + self._start_data['replay_id'] + '.log', level=logbook.debug)
-                self.logFile = f"{self.logFolder}\\{self.username}-{self.mode}-{self._start_data['replay_id']}.txt"
-                self.chatLogFile = f"{self.logFolder}\\_chat\\{self.username}-{self.mode}-{self._start_data['replay_id']}.txt"
+                self.logFile = f"{self.logFolder}\\{self.username}-{self.mode}-{self.start_data['replay_id']}.txt"
+                self.chatLogFile = f"{self.logFolder}\\_chat\\{self.username}-{self.mode}-{self.start_data['replay_id']}.txt"
 
-                logbook.error(f'replay_id:[{self._start_data["replay_id"]}]')
-                print(f'replay_id:[{self._start_data["replay_id"]}]')
+                logbook.error(f'replay_id:[{self.start_data["replay_id"]}]')
+                print(f'replay_id:[{self.start_data["replay_id"]}]')
 
                 _spawn(self._delayed_chat_thread)
                 os.makedirs(f"{self.logFolder}\\_chat", exist_ok=True)
@@ -333,6 +419,8 @@ class GeneralsClient(object):
                 # self._send(['leave_game'])
                 # self.last_update = msg[1]
                 yield msg[0], msg[1]
+            elif msg[0] == 'queue_update':
+                self._handle_queue_update(msg[1])
             elif msg[0] == "ping_tile":
                 yield msg[0], msg[1]
             elif msg[0] in ["game_won", "game_lost"]:
@@ -354,7 +442,7 @@ class GeneralsClient(object):
                     self.can_reply(message)
 
                     recordMessage = True
-                    if self._start_data is not None and 'teams' in self._start_data:
+                    if self.start_data is not None and 'teams' in self.start_data:
                         recordMessage = False
 
                     if fromUsername != self.server_username:
@@ -363,7 +451,7 @@ class GeneralsClient(object):
                         else:
                             recordMessage = False
 
-                        fromTeam = 'team_chat_room' in self._start_data and self._start_data['team_chat_room'] == chat_room
+                        fromTeam = 'team_chat_room' in self.start_data and self.start_data['team_chat_room'] == chat_room
 
                         chatUpdate = ChatUpdate(fromUsername, fromTeam, message)
 
@@ -379,22 +467,18 @@ class GeneralsClient(object):
                                 "!!!!!!!!!!\n!!!!!!!!!!!!!\n!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!\ncouldn't write chat message to file")
                 elif " captured " in chat_msg["text"]:
                     yield "player_capture", chat_msg
-                elif "modifier" in chat_msg["text"]:
-                    self.modifiers = set(self.parse_modifiers(chat_msg["text"]))
-                    if self.map is not None:
-                        self.map.modifiers = self.modifiers
                 else:
                     logbook.info("Sys Message: %s" % chat_msg["text"])
                     if self.writingFile or (
-                        self.chatLogFile is not None
-                        and " surrendered" not in chat_msg["text"]
-                        and " left" not in chat_msg["text"]
-                        and " quit" not in chat_msg["text"]
-                        and " wins!" not in chat_msg["text"]
-                        and "Chat is being recorded." not in chat_msg["text"]
-                        and "Chat is being limited." not in chat_msg["text"]
-                        and "You're sending messages too quickly." not in chat_msg["text"]
-                        and "being recorded" not in chat_msg["text"]
+                            self.chatLogFile is not None
+                            and " surrendered" not in chat_msg["text"]
+                            and " left" not in chat_msg["text"]
+                            and " quit" not in chat_msg["text"]
+                            and " wins!" not in chat_msg["text"]
+                            and "Chat is being recorded." not in chat_msg["text"]
+                            and "Chat is being limited." not in chat_msg["text"]
+                            and "You're sending messages too quickly." not in chat_msg["text"]
+                            and "being recorded" not in chat_msg["text"]
                     ):
                         self.writingFile = True
                         try:
@@ -433,7 +517,7 @@ class GeneralsClient(object):
             if alt in message:
                 self._ws.close()
                 sys.exit(0)
-                
+
         return True
 
     def close(self):
@@ -467,20 +551,21 @@ class GeneralsClient(object):
         sys.exit(2)
 
     def _terminate(self):
-        if self._terminated:
+        if self.terminated:
             return
-        self._terminated = True
+        self.terminated = True
         self._running = False
         if 'map' in self.__dict__ and self.map is not None:
             try:
                 repId = 'none'
-                if self._start_data is not None and 'replay_id' in self._start_data:
-                    repId = self._start_data['replay_id']
+                if self.start_data is not None and 'replay_id' in self.start_data:
+                    repId = self.start_data['replay_id']
                 logbook.info(
                     f"\n\n        IN TERMINATE {repId}  (won? {self.map.result})   \n\n")
             except:
                 logbook.info(traceback.format_exc())
 
+        logbook.info(" PRE lock IN TERMINATE")
         with self._lock:
             # self._send(["leave_game"])
             logbook.info(" in lock IN TERMINATE, calling self.close()")
@@ -500,25 +585,35 @@ class GeneralsClient(object):
 
     def _send_forcestart(self):
         time.sleep(1.5)  # was 2, if custom games break?
-        while 'replay_id' not in self._start_data:
-            if self._gameid is not None:
-                # map size
-                # options = {
-                #    "width": "0.99",
-                #    "height": "0.99",
-                #    "city_density": "0.99",
-                #    #"mountain_density": "0.5"
-                #    #"swamp_density": "1"
-                # }
+        while 'replay_id' not in self.start_data:
+            forcing = True
+            isHost = False
+            if self._currentQueue:
+                if 'options' in self._currentQueue:
+                    gameSpeed = 1.0
+                    if 'game_speed' in self._currentQueue['options']:
+                        rawSpeed = self._currentQueue['options']['game_speed']
+                        if rawSpeed:
+                            gameSpeed = rawSpeed
+                    if gameSpeed > 1.0:
+                        self._send_chat_immediate('Game Speed must be 1.0 or less.')
+                        forcing = False
+                if 'usernames' in self._currentQueue:
+                    isHost = self.server_username == self._currentQueue['usernames'][0]
 
-                # self._send(["set_custom_options", self._gameid, options
-                time.sleep(0.1)
-                if not self.isPrivate:
-                    self._send(["make_custom_public", self._gameid])
+            if self._gameid is not None:
+                if isHost:
+                    self._send(["set_custom_options", self._gameid, self.customOptions])
+
+                    time.sleep(0.1)
+                    # logbook.info(f'and not self._customGameIsPublic {self._customGameIsPublic}')
+                    if not self.isPrivate and not self._customGameIsPublic:
+                        self._send(["make_custom_public", self._gameid])
+
                 time.sleep(0.3)
-            self._send(["set_force_start", self._gameid, True])
-            logbook.info("Sent force_start")
-            time.sleep(3)
+                self._send(["set_force_start", self._gameid, forcing])
+                logbook.info("Sent force_start")
+                time.sleep(3)
 
     def _start_sending_heartbeat(self):
         while True:
@@ -562,7 +657,7 @@ class GeneralsClient(object):
         return self.mode != "ffa" or (self.map is not None and self.map.remainingPlayers <= 2)
 
     def is_message_talking_to_us(self, message: str) -> bool:
-        return "human" in message.lower() or " bot" in message.lower() or message.lower().startswith("bot ") or self.map.remainingPlayers == 2
+        return "human" in message.lower() or " bot" in message.lower() or message.lower().startswith("bot ") or (self.map and self.map.remainingPlayers == 2)
 
     def send_chat_broken_up_by_sentence(self, message: str):
         sentences = message.split('. ')
@@ -750,7 +845,7 @@ class GeneralsClient(object):
 
             if message.lower().startswith("gl ") or message.lower().startswith(
                     "glhf") or message.lower() == "gl" or message.lower().startswith(
-                    "good luck") or message.lower() == "gg gl":
+                "good luck") or message.lower() == "gg gl":
                 responses.append("Good luck to you too!")
                 responses.append("There's no RNG in this game, why would I need luck?")
                 responses.append("What is luck?")
@@ -797,13 +892,51 @@ class GeneralsClient(object):
 
         return True
 
-    def parse_modifiers(self, message: str) -> typing.List[str]:
-        _, modifiersStr = message.split('enabled: ')
-        modifiers = modifiersStr.split(', ')
-        return modifiers
+    def _handle_queue_update(self, update):
+        self._currentQueue = update
+
+        options = {}
+        if 'options' in update:
+            options = update['options']
+
+            if 'map' in options:
+                mapName = options['map']
+                if mapName is not None:
+                    # see if we need to load it
+                    if self.currentCustomMapData is None or self.currentCustomMapData['title'] != mapName:
+                        self.currentCustomMapData = self.load_custom_map_data(mapName)
+                else:
+                    self.currentCustomMapData = None
+
+            if 'public' in options:
+                self._customGameIsPublic = options['public']
+
+            if 'usernames' in update:
+                usernames = update['usernames']
+                teams = update['teams']
+                isHost = self.server_username == usernames[0]
+                if isHost != self._isHost:
+                    if isHost:
+                        self._hostAt = time.perf_counter()
+                    else:
+                        self._hostAt = None
+                    self._isHost = isHost
+
+                if len(usernames) > 1 and isHost:
+                    if self._hostAt < time.perf_counter() - 2.0:
+                        for i in range(1, len(teams)):
+                            if teams[i] < 13:
+                                self._send(['set_custom_host', self._gameid, i])
+                                break
+                    else:
+                        logbook.info(f'not setting custom host, we become host only {time.perf_counter() - self._hostAt:.1f}s ago.')
+
+                else:
+                    logbook.info(f'not setting custom host, serverusername {self.server_username} vs usernames[0] {usernames[0]} == ? {self.server_username == usernames[0]}')
 
 
 def _spawn(f):
     t = threading.Thread(target=f)
     t.daemon = True
     t.start()
+    return t

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import itertools
+import json
 from copy import deepcopy
 from base.client.tile import *
 
@@ -18,8 +19,19 @@ from collections import deque
 
 import BotLogging
 from Interfaces import MapMatrixInterface, TileSet
-MODIFIER_TORUS = 7
+MODIFIER_LEAPFROG = 0
+MODIFIER_CITY_STATE = 1
+MODIFIER_MISTY_VEIL = 2
+MODIFIER_CRYSTAL_CLEAR = 3
+MODIFIER_SILENT_WAR = 4
+MODIFIER_DEFENSELESS = 5
 MODIFIER_WATCHTOWER = 6
+MODIFIER_TORUS = 7
+MODIFIER_CREEPING_FOG = 8
+
+OBSERVATORY_RANGE = 7
+LOOKOUT_RANGE = 2
+WATCHTOWER_RANGE = 4
 
 MAX_ALLY_SPAWN_DISTANCE = 10
 
@@ -38,7 +50,7 @@ T = typing.TypeVar('T')
 
 
 class TeamStats(object):
-    def __init__(self, tileCount: int, score: int, standingArmy: int, cityCount: int, fightingDiff: int, unexplainedTileDelta: int, teamId: int, teamPlayers: typing.List[int], livingPlayers: typing.List[int], turn: int = 0):
+    def __init__(self, tileCount: int, score: int, standingArmy: int, cityCount: int, fightingDiff: int, unexplainedTileDelta: int, teamId: int, teamPlayers: typing.List[int], livingPlayers: typing.List[int], turn: int = 0, deserts: int = 0):
         self.tileCount: int = tileCount
         self.score: int = score
         self.standingArmy: int = standingArmy
@@ -49,9 +61,10 @@ class TeamStats(object):
         self.teamPlayers: typing.List[int] = teamPlayers
         self.livingPlayers: typing.List[int] = livingPlayers
         self.turn: int = turn
+        self.deserts: int = deserts
 
     def __str__(self) -> str:
-        return f'{self.score} {self.tileCount}t {self.cityCount}c  {self.standingArmy}standingArmy {self.fightingDiff}fightingDiff {self.unexplainedTileDelta}unexTileDelta'
+        return f'{self.score} {self.tileCount}t {self.cityCount}c  {self.standingArmy}standingArmy {self.fightingDiff}fightingDiff {self.unexplainedTileDelta}unexTileDelta, {self.deserts}des'
 
 
 class Player(object):
@@ -73,6 +86,12 @@ class Player(object):
         """The tile delta unexplained by known moves."""
 
         self.tiles: typing.List[Tile] = []
+        self.deserts: typing.List[Tile] = []
+
+        self.lostSwamps: int = 0
+        """Swamps this player owned that went to 0 army and went neutral this turn."""
+
+        self.swamps: typing.List[Tile] = []
         self.tileCount: int = 0
         self.standingArmy: int = 0
         self.visibleStandingArmy: int = 0
@@ -187,21 +206,53 @@ class MapBase(object):
         self.teammates: typing.Set[int] = set()
         self.lookouts: typing.Set[Tile] = set()
         self.observatories: typing.Set[Tile] = set()
+        self.swamps: typing.Set[Tile] = set()
+        self.deserts: typing.Set[Tile] = set()
         self.modifiers_by_id = [False for i in range(30)]
+        self.is_custom_map: bool = False
+        self.use_basic_city_counter = False
         if modifiers:
             for m in modifiers:
                 self.modifiers_by_id[m] = True
 
+        self.has_leapfrog = self.modifiers_by_id[MODIFIER_LEAPFROG]
+        # self.has_city_state = self.modifiers_by_id[MODIFIER_CITY_STATE]
+        self.has_misty_veil = self.modifiers_by_id[MODIFIER_MISTY_VEIL]
+        self.has_crystal_clear = self.modifiers_by_id[MODIFIER_CRYSTAL_CLEAR]
+        self.has_silent_war = self.modifiers_by_id[MODIFIER_SILENT_WAR]
+        self.has_defenseless = self.modifiers_by_id[MODIFIER_DEFENSELESS]
+        self.has_watchtower = self.modifiers_by_id[MODIFIER_WATCHTOWER]
+        self.has_torus = self.modifiers_by_id[MODIFIER_TORUS]
+        self.has_creeping_fog = self.modifiers_by_id[MODIFIER_CREEPING_FOG]
+
+        self.is_low_cost_city_game: bool = False
+        self.is_walled_city_game: bool = False
+        self.walled_city_base_value: int | None = None
+
+        self.valid_spawns: typing.Set[Tile] | None = None
+        """When custom maps have pre-defined spawn locations."""
+
         uniqueTeams = set()
+        finalTeamIndexes = {}
+        finalTeams = None
         if teams is not None:
+            finalTeams = []
+            curTeam = 0
             for player, team in enumerate(teams):
-                uniqueTeams.add(team)
+                remappedTeam = finalTeamIndexes.get(team, None)
+                if remappedTeam is not None:
+                    finalTeams.append(remappedTeam)
+                else:
+                    uniqueTeams.add(curTeam)
+                    finalTeamIndexes[team] = curTeam
+                    finalTeams.append(curTeam)
+                    curTeam += 1
                 if team == teams[self.player_index] and player != self.player_index:
                     self.teammates.add(player)
             if len(uniqueTeams) == 2 and len(teams) == 4:
                 self.is_2v2 = True
 
-        self.teams: typing.List[int] | None = teams
+        self.teams: typing.List[int] | None = finalTeams
 
         self.usernames: typing.List[str] = user_names  # List of String Usernames
         self.players: typing.List[Player] = [Player(x) for x in range(len(self.usernames))]
@@ -230,15 +281,6 @@ class MapBase(object):
         self.visible_tiles: typing.Set[Tile] = set()
         """All tiles that are currently visible on the map, as a set."""
 
-        self.unreachable_tiles: typing.Set[Tile] = set()
-        """All tiles that are not in reachable tiles."""
-
-        self.unpathable_tiles: typing.Set[Tile] = set()
-        """All tiles that are not in pathable tiles."""
-
-        self.non_visible_tiles: typing.Set[Tile] = set()
-        """All tiles that are not visible."""
-
         self.notify_tile_captures = []
         self.notify_tile_deltas = []
         self.notify_city_found = []
@@ -256,18 +298,24 @@ class MapBase(object):
         self.army_emergences: typing.Dict[Tile, typing.Tuple[int, int]] = {}
         """Lookup from Tile to (emergedAmount, emergingPlayer)"""
 
+        self.is_city_bonus_turn: bool = turn & 1 == 0
+        self.is_army_bonus_turn: bool = turn % 50 == 0
+
+        self._turn: int = turn  # Integer Turn # (1 turn / 0.5 seconds)
+
         # List of 8 Generals (None if not found)
         self.generals: typing.List[typing.Union[Tile, None]] = [
             None
             for x
             in range(16)]
 
+        self.tiles_by_index: typing.List[Tile] = [None] * (len(map_grid_y_x) * len(map_grid_y_x[0]))
+        for r in map_grid_y_x:
+            for tile in r:
+                self.tiles_by_index[tile.tile_index] = tile
+
         self.init_grid_movable()
 
-        self.is_city_bonus_turn: bool = turn & 1 == 0
-        self.is_army_bonus_turn: bool = turn % 50 == 0
-        
-        self._turn: int = turn  # Integer Turn # (1 turn / 0.5 seconds)
         # List of City Tiles. Need concept of hidden cities from sim..? or maintain two maps, maybe. one the sim maintains perfect knowledge of, and one for each bot with imperfect knowledge from the sim.
         self.replay_url = replay_url
         self.replay_id = replay_id
@@ -289,12 +337,6 @@ class MapBase(object):
 
         self.resume_data: typing.Dict[str, str] = {}
         """Data for resuming a game in unit test. Unused in normal games."""
-
-        self.modifiers: typing.Set[str] = set()
-
-        self.tiles_by_index: typing.List[Tile] = [None] * (len(map_grid_y_x) * len(map_grid_y_x[0]))
-        for tile in self.get_all_tiles():
-            self.tiles_by_index[tile.tile_index] = tile
 
         self.unexplained_deltas = {}
         self.moved_here_set = set()
@@ -340,6 +382,8 @@ class MapBase(object):
             del state['notify_general_revealed']
         if 'notify_player_captures' in state:
             del state['notify_player_captures']
+        if 'distance_mapper' in state:
+            del state['distance_mapper']
 
         return state
 
@@ -354,9 +398,8 @@ class MapBase(object):
         self.notify_player_captures = []
 
     def get_all_tiles(self) -> typing.Generator[Tile, None, None]:
-        for row in self.grid:
-            for tile in row:
-                yield tile
+        for t in self.tiles_by_index:
+            yield t
 
     def get_all_tiles_for_team_of_player(self, player: int) -> typing.Generator[Tile, None, None]:
         for p in self._teammates_by_player[player]:
@@ -462,16 +505,16 @@ class MapBase(object):
             if earliest is None:
                 earliest = scores
             if last is not None:
-                for j, player in enumerate(self.players):
-                    score = scores[j]
-                    lastScore = last[j]
+                for p, player in enumerate(self.players):
+                    score = scores[p]
+                    lastScore = last[p]
                     tileDelta = score.tiles - lastScore.tiles
 
                     # print("player {} delta {}".format(player.index, delta))
-                    if abs(tileDelta) <= 2 and turn % 50 != 0:  # ignore army bonus turns and other player captures
+                    if abs(tileDelta) <= 1 and not self.is_army_bonus_turn:  # ignore army bonus turns and other player captures
                         delta = score.total - lastScore.total
                         if delta > 0:
-                            cityCounts[j] = max(delta, cityCounts[j])
+                            cityCounts[p] = max(delta, cityCounts[p])
             last = scores
         self.remainingPlayers = 0
         for i, player in enumerate(self.players):
@@ -507,17 +550,24 @@ class MapBase(object):
                 else:
                     self.remainingPlayers += 1
 
+        self.use_basic_city_counter = True
+        if (self.remainingPlayers == 2 or self.is_2v2) and (len(self.deserts) == 0 or not self.is_army_bonus_turn):  #  and len(self.swamps) == 0
+            self.use_basic_city_counter = False
+        logbook.info(f'CITY_COUNT turn {self.turn}: use_basic_city_counter {self.use_basic_city_counter} for this turn...')
+
         if not bypassDeltas:
             self.calculate_player_deltas()
 
-        if self.remainingPlayers > 2 and self.is_city_bonus_turn and not self.is_2v2:
+        if self.use_basic_city_counter:
             for i, player in enumerate(self.players):
-                if not player.dead and player.index != self.player_index:
+                if not player.dead and player.index != self.player_index and player.index not in self.teammates:
                     if player.cityCount < cityCounts[i]:
                         player.cityGainedTurn = self.turn
-                    elif player.cityCount > cityCounts[i] > 0:
+                    elif player.cityCount > cityCounts[i]:
                         player.cityLostTurn = self.turn
-                    player.cityCount = cityCounts[i]
+                    if cityCounts[i] > 0:
+                        logbook.info(f'CITY_COUNT DUMB setting player{i} cities from {player.cityCount} to {cityCounts[i]}')
+                        player.cityCount = cityCounts[i]
 
     def handle_player_capture_text(self, text):
         capturer, capturee = text.split(" captured ")
@@ -539,7 +589,7 @@ class MapBase(object):
                 f"\n\n    ~~~~~~~~~\nWE CAPTURED {captureeIdx}, NUKING UNDISCOVEREDS: {self.usernames[captureeIdx]} ({captureeIdx}) by {self.usernames[capturerIdx]} ({capturerIdx})\n    ~~~~~~~~~\n")
             for tile in self.get_all_tiles():
                 if tile.player == captureeIdx and not tile.visible:
-                    tile.reset_wrong_undiscovered_fog_guess()
+                    self.reset_wrong_undiscovered_fog_guess(tile)
 
         logbook.info(
             f"\n\n    ~~~~~~~~~\nPlayer captured: {self.usernames[captureeIdx]} ({captureeIdx}) by {self.usernames[capturerIdx]} ({capturerIdx})\n    ~~~~~~~~~\n")
@@ -558,12 +608,15 @@ class MapBase(object):
             capturedGen.isCity = True
             for eventHandler in self.notify_city_found:
                 eventHandler(capturedGen)
-        self.generals[captureeIdx] = None
+        if captureeIdx == self.player_index:
+            logbook.error(f'YO WTF WHY DO WE HAVE OURSELVES AS CAPTUREE??')
+        else:
+            self.generals[captureeIdx] = None
 
         capturingPlayer = self.players[capturerIdx]
         captureePlayer = self.players[captureeIdx]
         captureePlayer.capturedBy = capturerIdx
-        logbook.info(f'increasing capturer p{capturerIdx} cities from {capturingPlayer.cityCount} by captured players {captureePlayer.cityCount} cityCount')
+        logbook.info(f'CITY_COUNT increasing capturer p{capturerIdx} cities from {capturingPlayer.cityCount} by captured players {captureePlayer.cityCount} cityCount')
         capturingPlayer.cityCount += captureePlayer.cityCount
         for tile in self.get_all_tiles():
             if tile.player != captureeIdx:
@@ -571,7 +624,7 @@ class MapBase(object):
 
             if not tile.discovered:
                 # if tile.isCity:
-                tile.reset_wrong_undiscovered_fog_guess()
+                self.reset_wrong_undiscovered_fog_guess(tile)
                 #
                 # tile.army = 0
                 # tile.tile = TILE_FOG
@@ -599,7 +652,8 @@ class MapBase(object):
 
             if tile.isCity and tile not in capturingPlayer.cities:
                 capturingPlayer.cities.append(tile)
-                capturingPlayer.cityCount += 1
+                # already covered by the capturing/capturee update above...
+                # capturingPlayer.cityCount += 1
 
             for eventHandler in self.notify_tile_captures:
                 eventHandler(tile)
@@ -635,6 +689,7 @@ class MapBase(object):
                 score = 0
                 standingArmy = 0
                 cities = 0
+                deserts = 0
                 fightingDiff = 0
                 unexplainedTileDelta = 0
                 teamPlayers = self._teammates_by_team[curTeamId]
@@ -645,6 +700,8 @@ class MapBase(object):
                     score += player.score
                     standingArmy += player.standingArmy
                     cities += player.cityCount
+                    # TODO get actual desert count with fancy calculations, perhaps...?
+                    deserts += len(player.deserts)
                     fightingDiff += player.actualScoreDelta - player.expectedScoreDelta
                     unexplainedTileDelta += player.unexplainedTileDelta
 
@@ -658,7 +715,8 @@ class MapBase(object):
                     teamId=curTeamId,
                     teamPlayers=teamPlayers,
                     livingPlayers=[p for p in teamPlayers if not self.players[p].dead],
-                    turn=self.turn)
+                    turn=self.turn,
+                    deserts=deserts)
 
                 self._team_stats[curTeamId] = teamStats
                 if curTeamId == teamId:
@@ -731,7 +789,8 @@ class MapBase(object):
             tile_type: int,
             tile_army: int,
             is_city: bool = False,
-            is_general: bool = False):
+            is_general: bool = False,
+            is_desert: bool = False):
         """
         Call this AFTER calling map.update_turn.
         ONLY call this ONCE per turn per tile, or the first deltas will be replaced by the final delta.
@@ -743,6 +802,7 @@ class MapBase(object):
         @param tile_army:
         @param is_city:
         @param is_general:
+        @param is_desert:
         @return:
         """
         curTile: Tile = self.grid[y][x]
@@ -750,8 +810,14 @@ class MapBase(object):
         wasVisible = curTile.visible
         wasDiscovered = curTile.discovered
         wasGeneral = curTile.isGeneral
+        wasLookout = curTile.isLookout
+        wasObservatory = curTile.isObservatory
+        wasDesert = curTile.isDesert
+
         if curTile.isCity and tile_type >= TILE_EMPTY and not is_city:
             curTile.isCity = False
+        if is_desert:
+            curTile.isDesert = True
 
         # does the ACTUAL tile update
         maybeMoved = curTile.update(self, tile_type, tile_army, is_city, is_general)
@@ -777,12 +843,38 @@ class MapBase(object):
         if wasCity != curTile.isCity:
             for eventHandler in self.notify_city_found:
                 eventHandler(curTile)
+            if self.has_watchtower and not is_city and not is_general:
+                self.ensure_watchtower_visibles(curTile)
+
+        if curTile.delta.discovered and self.is_walled_city_game and curTile.isNeutral and is_city and curTile.army < self.walled_city_base_value:
+            logbook.info(f'Setting set_walled_cities lower... from {self.walled_city_base_value} to {curTile.army} because of {curTile}')
+            self.set_walled_cities(curTile.army)
+
         if wasDiscovered != curTile.discovered:
             for eventHandler in self.notify_tile_discovered:
                 eventHandler(curTile)
+            if self.has_watchtower and (is_city or is_general):
+                self.ensure_watchtower_visibles(curTile)
+            if curTile.isMountain:
+                curTile.overridePathable = None
+
+        # if curTile.isSwamp and not wasSwamp:
+        #     self.swamps.add(curTile)
+
+        if not wasDesert and curTile.isDesert:
+            self.deserts.add(curTile)
+
         if wasVisible != curTile.visible:
             for eventHandler in self.notify_tile_vision_changed:
                 eventHandler(curTile)
+        if curTile.isLookout and not wasLookout:
+            self.ensure_lookout_visibles(curTile)
+            self.lookouts.add(curTile)
+
+        if curTile.isObservatory and not wasObservatory:
+            self.ensure_observatory_visibles(curTile)
+            self.observatories.add(curTile)
+
         if wasGeneral != curTile.isGeneral:
             for eventHandler in self.notify_general_revealed:
                 eventHandler(curTile)
@@ -824,15 +916,16 @@ class MapBase(object):
             return self
 
         for curTile in self.get_all_tiles():
-            if curTile.isCity and curTile.delta.oldOwner != curTile.delta.newOwner and not curTile.delta.gainedSight:
+            if curTile.isCity and curTile.delta.oldOwner != curTile.delta.newOwner and not curTile.delta.gainedSight and curTile.delta.newOwner != -1:
                 oldOwner = curTile.delta.oldOwner
                 newOwner = curTile.player
                 # if self.remainingPlayers > 2 or not self.is_city_bonus_turn:
                 #     curTile.
                 if oldOwner != -1:
-                    logbook.info(f'decrementing p{oldOwner}s cities due to {str(curTile)} flipping to p{newOwner}')
+                    logbook.info(f'CITY_COUNT: decrementing p{oldOwner}s cities (was {self.players[oldOwner].cityCount}) due to {str(curTile)} flipping to p{newOwner}')
                     self.players[oldOwner].cityCount -= 1
 
+                logbook.info(f'CITY_COUNT: ^ + INCREMENTING p{newOwner}s cities (was {self.players[newOwner].cityCount}) due to {str(curTile)} flipping to p{newOwner}')
                 self.players[newOwner].cityCount += 1
 
             if curTile.delta.gainedSight:
@@ -850,34 +943,55 @@ class MapBase(object):
             if player is not None:
                 player.cities = []
                 player.tiles = []
+                player.deserts = []
+                player.swamps = []
                 player.visibleStandingArmy = 0
+                player.lostSwamps = 0
 
         # right now all tile deltas are completely raw, as applied by the raw server update, with the exception of lost-vision-fog.
 
-        for x in range(self.cols):
-            for y in range(self.rows):
-                curTile = self.grid[y][x]
+        if not bypassDeltas:
+            if self.is_city_bonus_turn:
+                for curTile in self.tiles_by_index:
+                    if curTile.isCity or curTile.isGeneral:
+                        if not curTile.visible and curTile.player >= 0:
+                            curTile.army += 1
+                    if curTile.isSwamp:
+                        if not curTile.visible and curTile.player >= 0:
+                            curTile.army -= 1
+                            if curTile.army <= 0:
+                                curTile.player = -1
 
-                if curTile.player >= 0:
-                    self.players[curTile.player].tiles.append(curTile)
-                    if curTile.visible:
-                        self.players[curTile.player].visibleStandingArmy += curTile.army - 1
+            if self.is_army_bonus_turn:
+                for curTile in self.tiles_by_index:
+                    if not curTile.visible and curTile.player >= 0 and not curTile.isDesert:
+                        curTile.army += 1
 
-                if curTile.isCity and curTile.player != -1:
-                    self.players[curTile.player].cities.append(curTile)
+        for curTile in self.tiles_by_index:
+            # if curTile.isSwamp:
+            #     self.swamps.add(curTile)
+            # if curTile.isDesert:
+            #     self.deserts.add(curTile)
+            if curTile.player == -1:
+                if curTile.isSwamp and curTile.delta.oldOwner >= 0:
+                    self.players[curTile.delta.oldOwner].lostSwamps += 1
+                continue
+
+            player = self.players[curTile.player]
+            player.tiles.append(curTile)
+            if curTile.visible:
+                player.visibleStandingArmy += curTile.army - 1
+
+            if curTile.isCity:
+                player.cities.append(curTile)
+            if curTile.isDesert:
+                player.deserts.append(curTile)
+            if curTile.isSwamp:
+                if curTile.visible:
+                    player.swamps.append(curTile)
 
         if not bypassDeltas:
             self.detect_movement_and_populate_unexplained_diffs()
-
-        if not bypassDeltas:
-            for x in range(self.cols):
-                for y in range(self.rows):
-                    curTile = self.grid[y][x]
-                    if (not curTile.visible and (
-                            curTile.isCity or curTile.isGeneral) and curTile.player >= 0 and self.is_city_bonus_turn):
-                        curTile.army += 1
-                    if not curTile.visible and curTile.player >= 0 and self.is_army_bonus_turn:
-                        curTile.army += 1
 
         self.update_reachable()
 
@@ -889,40 +1003,58 @@ class MapBase(object):
         return self
 
     def init_grid_movable(self):
+        forceMovableCityGenVisible = self.has_misty_veil and self.has_watchtower
         for x in range(self.cols):
             for y in range(self.rows):
                 tile = self.grid[y][x]
                 if len(tile.adjacents) != 0:
                     continue
 
+                if self.has_misty_veil:
+                    # normally we dont need this because you can't see a tile first by capturing it, but with misty veil the only way to reveal a tile is to capture it (normally) so tiles adjacency is themselves
+                    tile.adjacents.append(tile)
+
                 movableTile = self.GetTileModifierSafe(x - 1, y)
                 if movableTile is not None and movableTile not in tile.movable:
-                    tile.adjacents.append(movableTile)
+                    if not self.has_misty_veil or (forceMovableCityGenVisible and (movableTile.isCity or movableTile.isGeneral)):
+                        tile.adjacents.append(movableTile)
                     tile.movable.append(movableTile)
                 movableTile = self.GetTileModifierSafe(x + 1, y)
                 if movableTile is not None and movableTile not in tile.movable:
-                    tile.adjacents.append(movableTile)
+                    if not self.has_misty_veil or (forceMovableCityGenVisible and (movableTile.isCity or movableTile.isGeneral)):
+                        tile.adjacents.append(movableTile)
                     tile.movable.append(movableTile)
                 movableTile = self.GetTileModifierSafe(x, y - 1)
                 if movableTile is not None and movableTile not in tile.movable:
-                    tile.adjacents.append(movableTile)
+                    if not self.has_misty_veil or (forceMovableCityGenVisible and (movableTile.isCity or movableTile.isGeneral)):
+                        tile.adjacents.append(movableTile)
                     tile.movable.append(movableTile)
                 movableTile = self.GetTileModifierSafe(x, y + 1)
                 if movableTile is not None and movableTile not in tile.movable:
-                    tile.adjacents.append(movableTile)
+                    if not self.has_misty_veil or (forceMovableCityGenVisible and (movableTile.isCity or movableTile.isGeneral)):
+                        tile.adjacents.append(movableTile)
                     tile.movable.append(movableTile)
-                adjTile = self.GetTileModifierSafe(x - 1, y - 1)
-                if adjTile is not None and adjTile not in tile.adjacents:
-                    tile.adjacents.append(adjTile)
-                adjTile = self.GetTileModifierSafe(x + 1, y - 1)
-                if adjTile is not None and adjTile not in tile.adjacents:
-                    tile.adjacents.append(adjTile)
-                adjTile = self.GetTileModifierSafe(x - 1, y + 1)
-                if adjTile is not None and adjTile not in tile.adjacents:
-                    tile.adjacents.append(adjTile)
-                adjTile = self.GetTileModifierSafe(x + 1, y + 1)
-                if adjTile is not None and adjTile not in tile.adjacents:
-                    tile.adjacents.append(adjTile)
+
+                if not self.has_misty_veil:
+                    adjTile = self.GetTileModifierSafe(x - 1, y - 1)
+                    if adjTile is not None and adjTile not in tile.adjacents:
+                        tile.adjacents.append(adjTile)
+                    adjTile = self.GetTileModifierSafe(x + 1, y - 1)
+                    if adjTile is not None and adjTile not in tile.adjacents:
+                        tile.adjacents.append(adjTile)
+                    adjTile = self.GetTileModifierSafe(x - 1, y + 1)
+                    if adjTile is not None and adjTile not in tile.adjacents:
+                        tile.adjacents.append(adjTile)
+                    adjTile = self.GetTileModifierSafe(x + 1, y + 1)
+                    if adjTile is not None and adjTile not in tile.adjacents:
+                        tile.adjacents.append(adjTile)
+
+                if tile.isObservatory:
+                    self.ensure_observatory_visibles(tile)
+                if tile.isLookout:
+                    self.ensure_lookout_visibles(tile)
+                if (tile.isGeneral or tile.isCity) and self.has_watchtower:
+                    self.ensure_watchtower_visibles(tile)
 
                 if tile.isGeneral:
                     if tile.player == -1:
@@ -948,24 +1080,45 @@ class MapBase(object):
                 queue.append(gen)
                 self.players[gen.player].general = gen
 
+        minCityArmy = 10000
+        maxMinCityArmy = self.walled_city_base_value
+        trueMinCityArmy = 10000
         while queue:
             tile = queue.popleft()
+            tile.overridePathable = None
             if tile.visible:
                 visibleTiles.add(tile)
-            isNeutCity = tile.isCity and tile.isNeutral
-            tileIsPathable = not tile.isNotPathable
-            if tile not in pathableTiles and tileIsPathable and not isNeutCity:
+            if tile.isNeutral and tile.isCity:
+                if not tile.delta.gainedSight and tile.delta.armyDelta == 0 or self.turn < 2 and not self.modifiers_by_id[MODIFIER_CITY_STATE]:
+                    trueMinCityArmy = min(tile.army, minCityArmy)
+                    if maxMinCityArmy is None or tile.army > maxMinCityArmy:
+                        minCityArmy = min(tile.army, minCityArmy)
+            tileIsPathable = tile.isPathable
+            if self.is_walled_city_game and not tileIsPathable and not tile.discovered and not tile.isMountain:
+                tile.isCity = True
+                tile.army = self.walled_city_base_value
+                tileIsPathable = True
+                # tile.overridePathable = True
+
+            # if self.is_walled_city_game and tile.isCostlyNeutralCity:
+            #     # tileIsPathable = True
+            #     # tile.isTempFogPrediction = True
+            if tile not in pathableTiles and tileIsPathable and not tile.isCostlyNeutralCity:
                 pathableTiles.add(tile)
                 for movable in tile.movable:
                     queue.append(movable)
                     reachableTiles.add(movable)
 
+        if self.is_custom_map and trueMinCityArmy < 20 and self.turn < 20 and not self.modifiers_by_id[MODIFIER_CITY_STATE]:
+            logbook.info(f'Setting low cost city game...? is cityState {self.modifiers_by_id[MODIFIER_CITY_STATE]}, modifiers {[i for i, m in enumerate(self.modifiers_by_id) if m]}')
+            self.is_low_cost_city_game = True
+
         self.pathable_tiles = pathableTiles
         self.reachable_tiles = reachableTiles
         self.visible_tiles = visibleTiles
-        self.unreachable_tiles = {t for t in self.get_all_tiles() if t not in reachableTiles}
-        self.unpathable_tiles = {t for t in self.get_all_tiles() if t not in pathableTiles}
-        self.non_visible_tiles = {t for t in self.get_all_tiles() if t not in visibleTiles}
+        if self.is_custom_map and 2 < len(self.reachable_tiles) < 3 * len(self.tiles_by_index) / 4:
+            logbook.info(f'Setting set_walled_cities... is cityState {self.modifiers_by_id[MODIFIER_CITY_STATE]}, modifiers {[i for i, m in enumerate(self.modifiers_by_id) if m]}')
+            self.set_walled_cities(minCityArmy)
 
     def clear_deltas_and_score_history(self):
         self.scoreHistory = [None for i in range(50)]
@@ -982,6 +1135,86 @@ class MapBase(object):
             #     tile.delta.armyDelta += 1
         self.army_moved_grid = [[False for x in range(self.cols)] for y in range(self.rows)]
         self.army_emergences: typing.Dict[Tile, int] = {}
+
+    def apply_custom_map_known_data(self, customMapRaw: typing.Dict[str, object]):
+        self.is_custom_map = True
+        # self.custom_map_name = customMapRaw['title']
+        if customMapRaw['width'] != self.cols:
+            raise Exception(f"width {customMapRaw['width']} mismatch with cols {self.cols}")
+        if customMapRaw['height'] != self.cols:
+            raise Exception(f"height {customMapRaw['height']} mismatch with rows {self.rows}")
+
+        mapDataStr = customMapRaw['map']
+        if not isinstance(mapDataStr, str):
+            raise Exception(f"map {customMapRaw['map']} was not string...?")
+
+        for tileIdx, val in enumerate(mapDataStr.split(',')):
+            self.apply_custom_map_tile_str(tileIdx, val)
+
+    def apply_custom_map_tile_str(self, tileIdx: int, val: str):
+        tile = self.tiles_by_index[tileIdx]
+
+        # light format is L_{normalTile}
+        isLight = False
+        if val.startswith('L_'):
+            isLight = True
+            val = val[2:]
+            # TODO do we even care...?
+            # tile.isLight = True
+
+        # general format is g{Team(A-Z)}{Priority(0-99)|''}
+        generalTeam = None
+        generalPriority = None
+        isGeneral = False
+        if val.startswith('g'):
+            isGeneral = True
+            generalTeam = val[1]
+            # general teams can be A-Z
+            if len(val) > 2:
+                generalPriority = int(val[2:])
+            else:
+                generalPriority = 99
+            if self.valid_spawns is None:
+                self.valid_spawns = set()
+            self.valid_spawns.add(tile)
+
+        # neutral army format is n{armyAmt}
+        if val.startswith('n'):
+            armyVal = int(val[1:])
+            tile.army = armyVal
+            return
+
+        if val[0].isdigit() or val[0] == '-':
+            # then this is simply a city
+            tile.isCity = True
+            tile.army = int(val)
+            return
+
+        if val[0] == 'm':
+            tile.isMountain = True
+            tile.army = 0
+            tile.player = -1
+            tile.isCity = False
+            tile.overridePathable = None
+            # tile.discovered = True
+        if val[0] == 's':
+            tile.isSwamp = True
+            self.swamps.add(tile)
+        if val[0] == 'd':
+            tile.isDesert = True
+            self.deserts.add(tile)
+        if val[0] == 'o':
+            tile.isObservatory = True
+            self.observatories.add(tile)
+        if val[0] == 'l':
+            tile.isLookout = True
+            self.lookouts.add(tile)
+
+
+
+
+
+
 
     @staticmethod
     def player_had_priority_over_other(player: int, otherPlayer: int, turn: int):
@@ -1763,16 +1996,18 @@ class MapBase(object):
 
         for city in myPlayer.cities:
             if city.player != myPlayer.index:
+                logbook.info(f'CITY_COUNT player mismatch, decrementing p{myPlayer.index} cities (was {myPlayer.cityCount}) due to {city} not being owned by that player...')
                 myPlayer.cityCount -= 1
                 if city.player == -1:
                     continue
 
+                logbook.info(f'CITY_COUNT ^, incrementing p{city.player} cities (was {self.players[city.player].cityCount}) due to {city} now being owned by that player...')
                 self.players[city.player].cityCount = self.players[city.player].lastCityCount + 1
 
         if self.is_army_bonus_turn:
-            expectedFriendlyDelta += myPlayer.tileCount
+            expectedFriendlyDelta += myPlayer.tileCount - len(myPlayer.deserts)
         if self.is_city_bonus_turn:
-            expectedFriendlyDelta += myPlayer.cityCount
+            expectedFriendlyDelta += myPlayer.cityCount - len(myPlayer.swamps) - myPlayer.lostSwamps
 
         actualMeDelta = myPlayer.score - lastScores[myPlayer.index].total
         actualFriendlyDelta = actualMeDelta
@@ -1785,16 +2020,18 @@ class MapBase(object):
 
                 for city in teammatePlayer.cities:
                     if city.player != teammatePlayer.index:
+                        logbook.info(f'CITY_COUNT teammate mismatch, decrementing p{teammatePlayer.index} cities (was {teammatePlayer.cityCount}) due to {city} not being owned by that player...')
                         teammatePlayer.cityCount -= 1
                         if city.player == -1:
                             continue
 
+                        logbook.info(f'CITY_COUNT ^, incrementing p{city.player} cities (was {self.players[city.player].cityCount}) due to {city} now being owned by that player...')
                         self.players[city.player].cityCount = self.players[city.player].lastCityCount + 1
 
                 if self.is_army_bonus_turn:
-                    expectedFriendlyDelta += teammatePlayer.tileCount
+                    expectedFriendlyDelta += teammatePlayer.tileCount - len(teammatePlayer.deserts)
                 if self.is_city_bonus_turn:
-                    expectedFriendlyDelta += teammatePlayer.cityCount
+                    expectedFriendlyDelta += teammatePlayer.cityCount - len(teammatePlayer.swamps) - teammatePlayer.lostSwamps
 
                 actualFriendlyDelta += teammatePlayer.score - lastScores[teammatePlayer.index].total
 
@@ -1835,14 +2072,16 @@ class MapBase(object):
 
                 teamAlive = True
 
-                if self.is_player_on_team_with(self.player_index, playerIndex):
+                if len(teamPlayer.cities) + 1 != teamPlayer.cityCount and self.is_player_on_team_with(self.player_index, playerIndex):
+                    logbook.error(f'CITY_COUNT - team corrective???? player {teamPlayer.index} - len(teamPlayer.cities) {len(teamPlayer.cities)} != teamPlayer.cityCount {teamPlayer.cityCount} ???')
                     teamPlayer.cityCount = len(teamPlayer.cities) + 1
 
                 expectedEnemyDelta = 0
                 if self.is_army_bonus_turn:
-                    expectedEnemyDelta += teamPlayer.tileCount
+                    expectedEnemyDelta += teamPlayer.tileCount - len(teamPlayer.deserts)
                 if self.is_city_bonus_turn:
                     expectedEnemyDelta += teamPlayer.cityCount
+                    expectedEnemyDelta -= len(teamPlayer.swamps) + teamPlayer.lostSwamps
 
                 logbook.info(
                     f'teamPlayer score {teamPlayer.score}, lastScores teamPlayer total {lastScores[teamPlayer.index].total}')
@@ -1863,7 +2102,7 @@ class MapBase(object):
                 continue
 
             newCityCount = teamCityCount
-            if self.remainingPlayers == 2 or self.is_2v2:
+            if not self.use_basic_city_counter:
                 # if NOT 1v1 we use the outer, dumber city count calculation that works reliably for FFA.
                 # in a 1v1, if we lost army, then opponent also lost equal army (unless we just took a neutral tile)
                 # this means we can still calculate city counts, even when fights are ongoing and both players are losing army
@@ -1874,21 +2113,31 @@ class MapBase(object):
 
                 logbook.info(f'team{teamIndex} realEnemyCities {realEnemyCities} based on actualEnemyTeamDelta {actualEnemyTeamDelta}, friendlyFightDelta {friendlyFightDelta} (teamCurrentCities {teamCurrentCities}, expectedEnemyTeamDelta {expectedEnemyTeamDelta}, cityDifference {cityDifference})')
 
-                if cityDifference <= -10:
-                    # then opp just took a neutral city
-                    newCityCount += 1
+                if cityDifference <= -4:
+                    if cityDifference <= -20:
+                        # then opp just took a neutral city
+                        newCityCount += 1
                     logbook.info(f"set team {teamIndex} cityCount += 1 to {newCityCount} because it appears they just took a city based on realEnemyCities {realEnemyCities}.")
-                elif cityDifference >= 10:
-                    # then our player just took a neutral city, noop
+                elif cityDifference >= 3:
+                    # if cityDifference >= 16:
+                        # then our player just took a neutral city, noop?
                     logbook.info(
                         f"WE just took a city? enemy team cityDifference {cityDifference} > 30 should only happen when we just took a city because of the effect on tiledelta. Ignoring realEnemyCities {realEnemyCities} this turn, realEnemyCities {realEnemyCities} >= 30 and actualEnemyTeamDelta {actualEnemyTeamDelta} < -30")
-                elif self.is_city_bonus_turn and realEnemyCities != teamCurrentCities:
-                    newCityCount = realEnemyCities
-                    logbook.info(
-                        f"want to set team {teamIndex} cityCount to {newCityCount}. "
-                        f"\nexpectedFriendlyDelta {expectedFriendlyDelta}, actualFriendlyDelta {actualFriendlyDelta},"
-                        f"\nexpectedEnemyTeamDelta {expectedEnemyTeamDelta}, actualEnemyTeamDelta {actualEnemyTeamDelta},"
-                        f"\nfrFightDelta {friendlyFightDelta} results in realEnemyCities {realEnemyCities} vs teamCurrentCities {teamCurrentCities}")
+
+                if self.is_city_bonus_turn and realEnemyCities != teamCurrentCities and realEnemyCities > 0:
+                    if abs(realEnemyCities - teamCurrentCities) < 6 or friendlyFightDelta == 0:
+                        newCityCount = realEnemyCities
+                        logbook.info(
+                            f"want to set team {teamIndex} cityCount to {newCityCount}. "
+                            f"\nexpectedFriendlyDelta {expectedFriendlyDelta}, actualFriendlyDelta {actualFriendlyDelta},"
+                            f"\nexpectedEnemyTeamDelta {expectedEnemyTeamDelta}, actualEnemyTeamDelta {actualEnemyTeamDelta},"
+                            f"\nfrFightDelta {friendlyFightDelta} results in realEnemyCities {realEnemyCities} vs teamCurrentCities {teamCurrentCities}")
+                    elif friendlyFightDelta != 0:
+                        logbook.info(
+                            f"WAITING to set team {teamIndex} cityCount to {newCityCount} due to friendly fight delta {friendlyFightDelta} making things questionable..."
+                            f"\nexpectedFriendlyDelta {expectedFriendlyDelta}, actualFriendlyDelta {actualFriendlyDelta},"
+                            f"\nexpectedEnemyTeamDelta {expectedEnemyTeamDelta}, actualEnemyTeamDelta {actualEnemyTeamDelta},"
+                            f"\nfrFightDelta {friendlyFightDelta} results in realEnemyCities {realEnemyCities} vs teamCurrentCities {teamCurrentCities}")
 
             logbook.info(f'cities for team {teamIndex}, as {newCityCount} vs current {teamCurrentCities}?')
 
@@ -1896,9 +2145,9 @@ class MapBase(object):
                 # we have perfect info of our own cities
                 continue
 
-            if self.remainingPlayers > 2 and self.is_2v2 and newCityCount - teamCurrentCities > 5 and teamCurrentCities > 1:
-                logbook.info(f'miscounting cities for team {teamIndex}, as {newCityCount} vs current {teamCurrentCities}? ignoring')
-                continue
+            # if self.remainingPlayers > 2 and self.is_2v2 and newCityCount - teamCurrentCities > 5 and teamCurrentCities > 1:
+            #     logbook.info(f'miscounting cities for team {teamIndex}, as {newCityCount} vs current {teamCurrentCities}? ignoring')
+            #     continue
             # if friendlyFightDelta == 0 or self.remainingPlayers == 2:
             logbook.info(f'Trying to make cities for team {teamIndex} match {newCityCount} vs current {teamCurrentCities}?')
             sum = 0
@@ -1916,7 +2165,7 @@ class MapBase(object):
                         continue
                     teamPlayer.cityCount += 1
                     teamPlayer.cityGainedTurn = self.turn
-                    logbook.info(f'Incrementing p{playerIndex} cities by 1 from {teamPlayer.cityCount - 1} to {teamPlayer.cityCount}')
+                    logbook.info(f'CITY_COUNT team ++ Incrementing p{playerIndex} cities by 1 from {teamPlayer.cityCount - 1} to {teamPlayer.cityCount}')
                     sum += 1
                     if sum >= newCityCount:
                         break
@@ -1929,7 +2178,7 @@ class MapBase(object):
                         continue
                     teamPlayer.cityCount -= 1
                     teamPlayer.cityLostTurn = self.turn
-                    logbook.info(f'Decrementing p{playerIndex} cities by 1 from {teamPlayer.cityCount + 1} to {teamPlayer.cityCount}')
+                    logbook.info(f'CITY_COUNT team -- Decrementing p{playerIndex} cities by 1 from {teamPlayer.cityCount + 1} to {teamPlayer.cityCount}')
                     sum -= 1
                     if sum <= newCityCount:
                         break
@@ -2500,7 +2749,7 @@ class MapBase(object):
         # noinspection PyUnresolvedReferences
         return matrix.grid
 
-    def get_distance_matrix_including_obstacles(self, tile: Tile) -> typing.Dict[Tile, int]:
+    def get_distance_matrix_including_obstacles(self, tile: Tile) -> MapMatrixInterface[int]:
         """
         Includes the distance to mountains / undiscovered obstacles (but does not path to the other side of them).
 
@@ -2588,18 +2837,113 @@ class MapBase(object):
     #     # anyLeft = True
     #     # while anyLeft:
     #     #
+    def ensure_lookout_visibles(self, curTile: Tile):
+        (x, y) = curTile.coords
+        for x2 in range(x - LOOKOUT_RANGE, x + LOOKOUT_RANGE + 1):
+            for y2 in range(y - LOOKOUT_RANGE, y + LOOKOUT_RANGE + 1):
+                t = self.GetTileModifierSafe(x2, y2)
+                if t is not None and t not in curTile.adjacents:
+                    curTile.adjacents.append(t)
+
+    def ensure_observatory_visibles(self, curTile: Tile):
+        (x, y) = curTile.coords
+        for i in range(1, OBSERVATORY_RANGE + 1):
+            left = self.GetTileModifierSafe(x - i, y)
+            right = self.GetTileModifierSafe(x + i, y)
+            up = self.GetTileModifierSafe(x, y - i)
+            down = self.GetTileModifierSafe(x, y + i)
+            if left is not None and left not in curTile.adjacents:
+                curTile.adjacents.append(left)
+            if right is not None and right not in curTile.adjacents:
+                curTile.adjacents.append(right)
+            if up is not None and up not in curTile.adjacents:
+                curTile.adjacents.append(up)
+            if down is not None and down not in curTile.adjacents:
+                curTile.adjacents.append(down)
+
+    def ensure_normal_visibles(self, curTile: Tile):
+        if self.has_misty_veil:
+            if curTile not in curTile.adjacents:
+                curTile.adjacents.append(curTile)
+        else:
+            (x, y) = curTile.coords
+            for x2 in range(x - 1, x + 2):
+                for y2 in range(y - 1, y + 2):
+                    t = self.GetTileModifierSafe(x2, y2)
+                    if t is not None and t not in curTile.adjacents:
+                        curTile.adjacents.append(t)
+
+    def ensure_watchtower_visibles(self, curTile: Tile):
+        hasVision = curTile.isCity or curTile.isGeneral
+        if hasVision:
+            vis = set()
+
+            q = deque([(0, curTile)])
+            while q:
+                (curDist, tile) = q.popleft()
+
+                if curDist >= WATCHTOWER_RANGE:
+                    continue
+
+                for mv in tile.movable:
+                    if mv.tile_index not in vis:
+                        vis.add(mv.tile_index)
+                        q.append((curDist + 1, mv))
+
+            vis.discard(curTile.tile_index)
+            curTile.adjacents = [self.tiles_by_index[i] for i in vis]
+        else:
+            curTile.adjacents = []
+            self.ensure_normal_visibles(curTile)
+
+    def reset_wrong_undiscovered_fog_guess(self, curTile: Tile):
+        resetAsCity = False
+        if not curTile.discovered:
+            if curTile.isCity and (self.is_low_cost_city_game or self.is_walled_city_game):
+                resetAsCity = True
+
+        curTile.reset_wrong_undiscovered_fog_guess()
+
+        if resetAsCity:
+            if self.walled_city_base_value is None:
+                self.walled_city_base_value = 40
+            curTile.isCity = True
+            curTile.player = -1
+            curTile.army = self.walled_city_base_value
+
+    def set_walled_cities(self, wallCityArmy: int):
+        logbook.info(f'UPDATING set_walled_cities WITH {wallCityArmy} army')
+        self.is_walled_city_game = True
+        oldBaseValue = self.walled_city_base_value
+        self.walled_city_base_value = wallCityArmy
+        Tile.PATHABLE_CITY_THRESHOLD = wallCityArmy + 1
+        if oldBaseValue is None or wallCityArmy > oldBaseValue:
+            self.update_reachable()
+
+        # for tile in self.get_all_tiles():
+        #     if not tile.discovered and tile.isCity and tile.army == oldBaseValue:
+        #         tile.army = self.walled_city_base_value
+        #     if tile.isUndiscoveredObstacle and not tile.isMountain:
+        #         tile.isCity = True
+        #         tile.army = self.walled_city_base_value
+        #         # tile.isTempFogPrediction = True
+        #         # tile.visible = False
 
 
 class Map(MapBase):
     """
     Actual live server map that interacts with the crazy array patch diffs.
     """
-    def __init__(self, start_data, data):
+    def __init__(self, start_data, data, customMapRaw: typing.Dict[str, object] | None = None):
         # Start Data
 
         self.stars: typing.List[int] = [0 for x in range(16)]
         self._start_data = start_data
         replay_url = _REPLAY_URLS["na"] + start_data['replay_id']  # String Replay URL # TODO: Use Client Region
+
+        self._map_private = []
+        self._cities_private = []
+        self._deserts_private = []
 
         # First Game Data, sets up all the private server-array-style-tile-caches
         self._apply_server_patch(data)
@@ -2610,11 +2954,36 @@ class Map(MapBase):
             teams = start_data['teams']
 
         mods = []
-        if 'options' in start_data and 'modifiers' in start_data['options']:
-            mods = start_data['options']['modifiers']
+        opts = {}
+        if 'options' in start_data:
+            opts = start_data['options']
+            if 'modifiers' in opts:
+                mods = opts['modifiers']
+
+            gameSpeed = 1.0
+            if 'game_speed' in opts:
+                rawSpeed = opts['game_speed']
+                if rawSpeed:
+                    gameSpeed = float(rawSpeed)
+
+            if gameSpeed > 1.0:
+                raise Exception(f"Refusing to play game at game speed {gameSpeed}")
+
         super().__init__(start_data['playerIndex'], teams, start_data['usernames'], data['turn'], map_grid_y_x, replay_url, start_data['replay_id'], mods)
 
+        if 'map' in opts and opts['map'] is not None:
+            self.is_custom_map = True
+
+        if 'swamps' in start_data:
+            self.swamps.update(self.tiles_by_index[i] for i in start_data['swamps'])
+            for s in self.swamps:
+                s.isSwamp = True
+
+        logbook.info(f'INITIAL SERVER PATCH {json.dumps(data)}')
         self.apply_server_update(data)
+
+        if customMapRaw is not None:
+            self.apply_custom_map_known_data(customMapRaw)
 
     def __getstate__(self):
         state = super().__getstate__()
@@ -2635,15 +3004,32 @@ class Map(MapBase):
 
         self.observatories = set()
 
-        # Check each tile for updates indiscriminately
-        for x in range(self.cols):
-            for y in range(self.rows):
-                tile_type = self._tile_grid[y][x]
-                army_count = self._army_grid[y][x]
-                isCity = (y, x) in self._visible_cities
-                isGeneral = (y, x) in self._visible_generals
+        self.swamps = set()
 
-                self.update_visible_tile(x, y, tile_type, army_count, isCity, isGeneral)
+        self.deserts = set()
+
+        # Check each tile for updates indiscriminately
+        for idx, tile in enumerate(self.tiles_by_index):
+            x, y = tile.coords
+
+            tile_type = self._tile_grid[y][x]
+            army_count = self._army_grid[y][x]
+            isCity = idx in self._visible_cities
+            isGeneral = idx in self._visible_generals
+            isDesert = idx in self._visible_deserts
+
+            self.update_visible_tile(x, y, tile_type, army_count, isCity, isGeneral, isDesert)
+
+        if self.has_misty_veil and self.has_watchtower:
+            # update understanding of visibles
+            for tile in self.tiles_by_index:
+                if tile.delta.oldOwner not in self._teammates_by_player[self.player_index] and tile.player in self._teammates_by_player[self.player_index]:
+                    for mv in tile.movable:
+                        if not mv.discovered and mv.isUndiscoveredObstacle:
+                            mv.isMountain = True
+                            mv.discovered = True
+                            mv.isCity = False
+                            mv.army = 0
 
         mapResult = self.update()
 
@@ -2672,12 +3058,9 @@ class Map(MapBase):
         return scores
 
     def _apply_server_patch(self, data):
-        if not '_map_private' in dir(self):
-            self._map_private = []
-            self._cities_private = []
-
         _apply_diff(self._map_private, data['map_diff'])
         _apply_diff(self._cities_private, data['cities_diff'])
+        _apply_diff(self._deserts_private, data['deserts_diff'])
 
         # Get Number Rows + Columns
         self.rows, self.cols = self._map_private[1], self._map_private[0]
@@ -2690,11 +3073,12 @@ class Map(MapBase):
                            range(self.rows)]
 
         # Update Visible Cities
-        self._visible_cities = [(c // self.cols, c % self.cols) for c in self._cities_private]  # returns [(y,x)]
+        self._visible_cities = set(self._cities_private)
 
         # Update Visible Generals
-        self._visible_generals = [(-1, -1) if g == -1 else (g // self.cols, g % self.cols) for g in
-                                  data['generals']]  # returns [(y,x)]
+        self._visible_generals = set(data['generals'])
+
+        self._visible_deserts = set(self._deserts_private)
 
 
 def new_map_grid(map, initialValueXYFunc):

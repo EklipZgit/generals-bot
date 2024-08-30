@@ -7,6 +7,14 @@ human, (sponsor) user id for EklipZ
 
 
 
+GENERAL ROUND PLANNING:
+Figure out the necessary core-gather-tiles for safety: what do we definitely need to gather.
+	Exclude those from expansion planning, city capturing, etc.
+	Flow-expand with the rest of army?
+	
+
+
+
 THEORY:
 pushing 2's is more efficient than gather-attack during 3rd cycle, almost certainly for sure. Attacking with army gathered from 2's is bad because if you push over enemy territory that they didn't expand, it costs you two-2-gather-moves for every enemy tile you take
 
@@ -42,6 +50,8 @@ Attacking too deep in enemy territory early?
 
 TODO:
 Tile value priority matrix to board analysis.
+
+If implementing anti-human database, monitor city timings, plan attacks to interrupt or hit immediately after to cap
 
 MCTS:
 	Engine should not calculate the general distance win until the end of the scrim. 

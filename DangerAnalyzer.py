@@ -11,6 +11,8 @@ from SearchUtils import *
 from Models import *
 from enum import Enum
 
+from base.client.map import MODIFIER_DEFENSELESS
+
 
 class ThreatType(Enum):
     Kill = 1
@@ -131,7 +133,7 @@ class DangerAnalyzer(object):
 
         self.largeVisibleEnemyTiles: typing.List[Tile] = []
 
-        self.defenseless_modifier: bool = 'Defenseless' in self.map.modifiers
+        self.defenseless_modifier: bool = self.map.modifiers_by_id[MODIFIER_DEFENSELESS]
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -319,37 +321,41 @@ class DangerAnalyzer(object):
                             include = True
                             break
 
-                if include:
-                    added = set()
-                    threatList = []
-                    threatLookup[threatStart] = threatList
-                    if not SearchUtils.any_where(army.expectedPaths, lambda p: not p.tail.tile.isCity and not p.tail.tile.isGeneral):
-                        p = ArmyTracker.get_expected_enemy_expansion_path(self.map, army.tile, self.map.generals[self.map.player_index])
-                        if p is not None:
-                            army.expectedPaths.append(p)
-                    for path in army.expectedPaths:
-                        if path.length <= 0:
-                            continue
-                        if path.start.tile == threatStart:
-                            if path.tail.tile not in added:
-                                if path.tail.tile.isGeneral:
-                                    countGen += 1
-                                    if countGen > 3:
-                                        logbook.info(f'bypassing {countGen}+ general threat {path}')
-                                        continue
-                                elif path.tail.tile.isCity:
-                                    countCity += 1
-                                    if countCity > 3:
-                                        logbook.info(f'bypassing {countCity}+ city threat {path}')
-                                        continue
-                                else:
-                                    countExpansion += 1
-                                    if countExpansion > 5:
-                                        logbook.info(f'bypassing {countExpansion}+ expansion threat {path}')
-                                        continue
-                                added.add(path.tail.tile)
-                                threat = ThreatObj(path.length - 1, path.value, path, ThreatType.Econ, None)
-                                threatList.append(threat)
+                if not include:
+                    continue
+
+                logbook.info(f'CHECKING {army}')
+                added = set()
+                threatList = []
+                threatLookup[threatStart] = threatList
+                if army.value > 4 and not SearchUtils.any_where(army.expectedPaths, lambda p: not p.tail.tile.isCity and not p.tail.tile.isGeneral):
+                    logbook.info(f'LOOKING FOR ADDL PATHS FOR {army} BECAUSE NO ATTACKS ON CITY OR GEN')
+                    p = ArmyTracker.get_expected_enemy_expansion_path(self.map, army.tile, self.map.generals[self.map.player_index])
+                    if p is not None and (p.tail.tile.isCity or p.tail.tile.isGeneral):
+                        army.expectedPaths.append(p)
+                for path in army.expectedPaths:
+                    if path.length <= 0:
+                        continue
+                    if path.start.tile == threatStart:
+                        if path.tail.tile not in added:
+                            if path.tail.tile.isGeneral:
+                                countGen += 1
+                                if countGen > 3:
+                                    logbook.info(f'bypassing {countGen}+ general threat {path}')
+                                    continue
+                            elif path.tail.tile.isCity:
+                                countCity += 1
+                                if countCity > 3:
+                                    logbook.info(f'bypassing {countCity}+ city threat {path}')
+                                    continue
+                            else:
+                                countExpansion += 1
+                                if countExpansion > 4:
+                                    logbook.info(f'bypassing {countExpansion}+ expansion threat {path}')
+                                    continue
+                            added.add(path.tail.tile)
+                            threat = ThreatObj(path.length - 1, path.value, path, ThreatType.Econ, None)
+                            threatList.append(threat)
 
         return threatLookup
 

@@ -977,3 +977,63 @@ class CityContestationTests(TestBase):
 
         cityB = playerMap.GetTile(15, 3)
         self.assertOwned(general.player, cityB)
+
+    def test_should_continue_to_contest_top_city_as_it_is_far_from_enemy_general_and_should_retake_the_land(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_continue_to_contest_top_city_as_it_is_far_from_enemy_general_and_should_retake_the_land___g8BCWKV3x---0--640.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 640, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=640)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_continue_to_contest_top_city_as_it_is_far_from_enemy_general_and_should_retake_the_land")
+    
+    def test_should_continue_to_contest_cities_or_kill_rapidly_in_massive_army_lead_but_econ_deficit(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_continue_to_contest_cities_or_kill_rapidly_in_massive_army_lead_but_econ_deficit___B9nnAUGi_---0--339.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 339, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=339)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '2,11->3,11')
+        simHost.queue_player_moves_str(general.player, '9,8->8,8')
+        simHost.queue_player_moves_str(enemyGeneral.player, '0,12->1,12->1,11->2,11->2,10->3,10->3,11  4,14->4,14->3,14->3,11')
+        # proof
+        # simHost.queue_player_moves_str(general.player, '8,8->7,8->7,11->3,11')
+
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        self.assertNoFriendliesKilled(map, general)
+    
+    def test_should_defend_city_in_advance_despite_general_threat_overriding(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_defend_city_in_advance_despite_general_threat_overriding___ukTs1b7Ls---0--386.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 386, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=386)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_defend_city_in_advance_despite_general_threat_overriding")

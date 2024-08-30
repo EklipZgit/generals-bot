@@ -8,6 +8,7 @@ import SearchUtils
 from Algorithms import TileIslandBuilder, TileIsland
 from Behavior.ArmyInterceptor import InterceptionOptionInfo
 from BoardAnalyzer import BoardAnalyzer
+from MapMatrix import MapMatrix
 from Models import Move
 from Interfaces import TilePlanInterface, MapMatrixInterface
 from Path import Path
@@ -96,337 +97,344 @@ def get_round_plan_with_expansion(
     if additionalOptionValues:
         additionalOptionValues = [v for v in additionalOptionValues if v.requiredDelay + v.length <= turns]
 
+    if perfTimer is None:
+        perfTimer = PerformanceTimer()
+        perfTimer.begin_move(map.turn)
+
     logEntries = []
     try:
 
-        startTime = time.perf_counter()
+        with perfTimer.begin_move_event('pre-exp-search'):
+            startTime = time.perf_counter()
 
-        if turns <= 0:
-            raise AssertionError(f"turns {turns} <= 0 in optimal_expansion...")
+            if turns <= 0:
+                raise AssertionError(f"turns {turns} <= 0 in optimal_expansion...")
 
-        # if turns > 30:
-        #     logEntries.append(f"turns {turns} < 30 in optimal_expansion... Setting to 30")
-        #     turns = 30
+            # if turns > 30:
+            #     logEntries.append(f"turns {turns} < 30 in optimal_expansion... Setting to 30")
+            #     turns = 30
 
-        paths = []
+            paths = []
 
-        # if turns < 8:
-        #     valPerTurnCutoff = 0.0
-        #     valPerTurnCutoffScaledown = 0.3
+            # if turns < 8:
+            #     valPerTurnCutoff = 0.0
+            #     valPerTurnCutoffScaledown = 0.3
 
-        originalNegativeTiles = negativeTiles
-        negativeTiles = negativeTiles.copy()
-        teams = MapBase.get_teams_array(map)
-        targetPlayers = [p for p, t in enumerate(teams) if teams[targetPlayer] == t]
-        friendlyPlayers = [p for p, t in enumerate(teams) if teams[searchingPlayer] == t]
-        remainingTurns = turns
+            originalNegativeTiles = negativeTiles
+            negativeTiles = negativeTiles.copy()
+            teams = MapBase.get_teams_array(map)
+            targetPlayers = [p for p, t in enumerate(teams) if teams[targetPlayer] == t]
+            friendlyPlayers = [p for p, t in enumerate(teams) if teams[searchingPlayer] == t]
+            remainingTurns = turns
 
-        enemyDistMap = boardAnalysis.intergeneral_analysis.bMap
-        generalDistMap = boardAnalysis.intergeneral_analysis.aMap
+            enemyDistMap = boardAnalysis.intergeneral_analysis.bMap
+            generalDistMap = boardAnalysis.intergeneral_analysis.aMap
 
-        enemyDistPenaltyPoint = boardAnalysis.inter_general_distance // 3
-        if turns < 12:
-            enemyDistPenaltyPoint -= 1
-        if turns < 8:
-            enemyDistPenaltyPoint = boardAnalysis.inter_general_distance // 4
-        if turns < 5:
-            enemyDistPenaltyPoint = boardAnalysis.inter_general_distance // 6
-        if turns < 3:
-            enemyDistPenaltyPoint = 0
+            enemyDistPenaltyPoint = boardAnalysis.inter_general_distance // 3
+            if turns < 12:
+                enemyDistPenaltyPoint -= 1
+            if turns < 8:
+                enemyDistPenaltyPoint = boardAnalysis.inter_general_distance // 4
+            if turns < 5:
+                enemyDistPenaltyPoint = boardAnalysis.inter_general_distance // 6
+            if turns < 3:
+                enemyDistPenaltyPoint = 0
 
-        # if len(sortedTiles) < 5:
-        #    logEntries.append("Only had {} tiles to play with, switching cutoffFactor to full...".format(len(sortedTiles)))
-        #    cutoffFactor = fullCutoff
-        # logStuff = True
-        # if player.tileCount > 70 or turns > 25:
-        #     logEntries.append("Not doing algorithm logging for expansion due to player tilecount > 70 or turn count > 25")
-        #     logStuff = False
-        logStuff = DebugHelper.IS_DEBUGGING
+            # if len(sortedTiles) < 5:
+            #    logEntries.append("Only had {} tiles to play with, switching cutoffFactor to full...".format(len(sortedTiles)))
+            #    cutoffFactor = fullCutoff
+            # logStuff = True
+            # if player.tileCount > 70 or turns > 25:
+            #     logEntries.append("Not doing algorithm logging for expansion due to player tilecount > 70 or turn count > 25")
+            #     logStuff = False
+            logStuff = DebugHelper.IS_DEBUGGING
 
-        # Switch this up to use more tiles at the start, just removing the first tile in each path at a time. Maybe this will let us find more 'maximal' paths?
-        def postPathEvalFunction(path: TilePlanInterface, negativeTiles: typing.Set[Tile]) -> float:
-            if isinstance(path, Path) and path.econValue == 0.0:
-                value = 0.0
-                last = path.start.tile
-                # if bonusCapturePointMatrix:
-                #     value += bonusCapturePointMatrix[path.start.tile]
-                nextNode = path.start.next
-                while nextNode is not None:
-                    tile = nextNode.tile
-                    val = _get_tile_path_value(map, tile, last, negativeTiles, targetPlayers, searchingPlayer, enemyDistMap, generalDistMap, territoryMap, enemyDistPenaltyPoint, bonusCapturePointMatrix)
-                    value += val
+            # Switch this up to use more tiles at the start, just removing the first tile in each path at a time. Maybe this will let us find more 'maximal' paths?
+            def postPathEvalFunction(path: TilePlanInterface, negativeTiles: typing.Set[Tile]) -> float:
+                if isinstance(path, Path) and path.econValue == 0.0:
+                    value = 0.0
+                    last = path.start.tile
+                    # if bonusCapturePointMatrix:
+                    #     value += bonusCapturePointMatrix[path.start.tile]
+                    nextNode = path.start.next
+                    while nextNode is not None:
+                        tile = nextNode.tile
+                        val = _get_tile_path_value(map, tile, last, negativeTiles, targetPlayers, searchingPlayer, enemyDistMap, generalDistMap, territoryMap, enemyDistPenaltyPoint, bonusCapturePointMatrix)
+                        value += val
 
-                    last = tile
-                    nextNode = nextNode.next
+                        last = tile
+                        nextNode = nextNode.next
 
-                path.econValue = value
-                return value
-            else:
-                return path.econValue
+                    path.econValue = value
+                    return value
+                else:
+                    return path.econValue
 
-        pathsCrossingTiles: typing.Dict[Tile, typing.List[Path]] = {}
+            pathsCrossingTiles: typing.Dict[Tile, typing.List[Path]] = {}
 
-        tryAvoidSet: typing.Set[Tile] = negativeTiles.copy()
+            tryAvoidSet: typing.Set[Tile] = negativeTiles.copy()
 
-        defaultNoPathValue = (0, None)
+            defaultNoPathValue = (0, None)
 
-        multiPathDict: typing.Dict[Tile, typing.Dict[int, typing.Tuple[float, Path]]] = {}
-        """Contains the current max value path per distance per start tile"""
+            multiPathDict: typing.Dict[Tile, typing.Dict[int, typing.Tuple[float, Path]]] = {}
+            """Contains the current max value path per distance per start tile"""
 
-        alwaysIncludes = []
-        includeForGath: typing.List[Move] = []
+            alwaysIncludes = []
+            includeForGath: typing.List[Move] = []
 
-        if additionalOptionValues is not None:
-            logEntries.append(f"Beginning additional option inclusion.... elapsed {time.perf_counter() - startTime:.4f}")
-            addlPaths = additionalOptionValues
+            if additionalOptionValues is not None:
+                logEntries.append(f"Beginning additional option inclusion.... elapsed {time.perf_counter() - startTime:.4f}")
+                addlPaths = additionalOptionValues
 
-            # counts = {}
-            for option in sorted(addlPaths, key=lambda p: p.econValue / p.length, reverse=True):
-                # for tile in path.tileList:
-                #     count = counts.get(tile, 0)
-                #     counts[tile] = count + 1
-                logEntries.append(f'including addl opt: {option}')
+                # counts = {}
+                for option in sorted(addlPaths, key=lambda p: p.econValue / p.length, reverse=True):
+                    # for tile in path.tileList:
+                    #     count = counts.get(tile, 0)
+                    #     counts[tile] = count + 1
+                    logEntries.append(f'including addl opt: {option}')
 
-                _try_include_alt_sourced_path(
-                    map,
-                    searchingPlayer,
-                    defaultNoPathValue,
-                    multiPathDict,
-                    negativeTiles,
-                    option,
-                    paths,
-                    pathsCrossingTiles,
-                    postPathEvalFunction,
-                    tryAvoidSet,
-                    useIterativeNegTiles=False,
-                    baseValueOverride=option.econValue,
-                    turnOverride=option.length,
+                    _try_include_alt_sourced_path(
+                        map,
+                        searchingPlayer,
+                        defaultNoPathValue,
+                        multiPathDict,
+                        negativeTiles,
+                        option,
+                        paths,
+                        pathsCrossingTiles,
+                        postPathEvalFunction,
+                        tryAvoidSet,
+                        useIterativeNegTiles=False,
+                        baseValueOverride=option.econValue,
+                        turnOverride=option.length,
+                        logEntries=logEntries)
+                logEntries.append(f"Completed additional option inclusion.... elapsed {time.perf_counter() - startTime:.4f}")
+
+            # expansionGather = greedy_backpack_gather(map, tilesLargerThanAverage, turns, None, valueFunc, baseCaseFunc, skipTiles, None, searchingPlayer, priorityFunc, skipFunc = None)
+            if allowLeafMoves and leafMoves is not None and useLeafMovesFirst:
+                logEntries.append(f"Allowing leafMoves FIRST as part of optimal expansion.... elapsed {time.perf_counter() - startTime:.4f}")
+                _include_leaf_moves_in_exp_plan(
+                    allowGatherPlanExtension=allowGatherPlanExtension,
+                    alwaysIncludes=alwaysIncludes,
+                    defaultNoPathValue=defaultNoPathValue,
+                    includeForGath=includeForGath,
+                    leafMoves=leafMoves,
+                    map=map,
+                    multiPathDict=multiPathDict,
+                    negativeTiles=negativeTiles,
+                    paths=paths,
+                    pathsCrossingTiles=pathsCrossingTiles,
+                    postPathEvalFunction=postPathEvalFunction,
+                    searchingPlayer=searchingPlayer,
+                    targetPlayers=targetPlayers,
+                    tryAvoidSet=tryAvoidSet,
+                    useIterativeNegTiles=useIterativeNegTiles,
+                    skipNeutrals=True,
                     logEntries=logEntries)
-            logEntries.append(f"Completed additional option inclusion.... elapsed {time.perf_counter() - startTime:.4f}")
 
-        # expansionGather = greedy_backpack_gather(map, tilesLargerThanAverage, turns, None, valueFunc, baseCaseFunc, skipTiles, None, searchingPlayer, priorityFunc, skipFunc = None)
-        if allowLeafMoves and leafMoves is not None and useLeafMovesFirst:
-            logEntries.append(f"Allowing leafMoves FIRST as part of optimal expansion.... elapsed {time.perf_counter() - startTime:.4f}")
-            _include_leaf_moves_in_exp_plan(
-                allowGatherPlanExtension=allowGatherPlanExtension,
-                alwaysIncludes=alwaysIncludes,
-                defaultNoPathValue=defaultNoPathValue,
-                includeForGath=includeForGath,
-                leafMoves=leafMoves,
-                map=map,
-                multiPathDict=multiPathDict,
-                negativeTiles=negativeTiles,
-                paths=paths,
-                pathsCrossingTiles=pathsCrossingTiles,
-                postPathEvalFunction=postPathEvalFunction,
-                searchingPlayer=searchingPlayer,
-                targetPlayers=targetPlayers,
-                tryAvoidSet=tryAvoidSet,
-                useIterativeNegTiles=useIterativeNegTiles,
-                skipNeutrals=True,
-                logEntries=logEntries)
-
-        if allowGatherPlanExtension:
-            logEntries.append(f"Beginning gather extension.... elapsed {time.perf_counter() - startTime:.4f}")
-            addlPaths = _execute_expansion_gather_to_borders(
-                map,
-                [t.dest for t in includeForGath if t.source not in negativeTiles and t.dest not in negativeTiles],
-                3,
-                preferNeutral=True,
-                negativeTiles=negativeTiles,
-                searchingPlayer=searchingPlayer,
-            )
-
-            counts = {}
-            for path in addlPaths:
-                for tile in path.tileList:
-                    count = counts.get(tile, 0)
-                    counts[tile] = count + 1
-
-            addlPaths = [p for p in sorted(addlPaths, key=lambda p: sum([counts[t] for t in p.tileList]))]
-
-            for path in addlPaths:
-                if SearchUtils.any_where(path.tileList, lambda t: t in negativeTiles):
-                    continue
-
-                _try_include_alt_sourced_path(
+            if allowGatherPlanExtension:
+                logEntries.append(f"Beginning gather extension.... elapsed {time.perf_counter() - startTime:.4f}")
+                addlPaths = _execute_expansion_gather_to_borders(
                     map,
-                    searchingPlayer,
-                    defaultNoPathValue,
-                    multiPathDict,
-                    negativeTiles,
-                    path,
-                    paths,
-                    pathsCrossingTiles,
-                    postPathEvalFunction,
-                    tryAvoidSet,
-                    useIterativeNegTiles,
+                    [t.dest for t in includeForGath if t.source not in negativeTiles and t.dest not in negativeTiles],
+                    3,
+                    preferNeutral=True,
+                    negativeTiles=negativeTiles,
+                    searchingPlayer=searchingPlayer,
+                )
+
+                counts = {}
+                for path in addlPaths:
+                    for tile in path.tileList:
+                        count = counts.get(tile, 0)
+                        counts[tile] = count + 1
+
+                addlPaths = [p for p in sorted(addlPaths, key=lambda p: sum([counts[t] for t in p.tileList]))]
+
+                for path in addlPaths:
+                    if SearchUtils.any_where(path.tileList, lambda t: t in negativeTiles):
+                        continue
+
+                    _try_include_alt_sourced_path(
+                        map,
+                        searchingPlayer,
+                        defaultNoPathValue,
+                        multiPathDict,
+                        negativeTiles,
+                        path,
+                        paths,
+                        pathsCrossingTiles,
+                        postPathEvalFunction,
+                        tryAvoidSet,
+                        useIterativeNegTiles,
+                        logEntries=logEntries)
+                logEntries.append(f"Completed gather extension.... elapsed {time.perf_counter() - startTime:.4f}")
+
+            if allowLeafMoves and leafMoves is not None and useLeafMovesFirst:
+                logEntries.append(f"Second pass initial leaf-moves.... elapsed {time.perf_counter() - startTime:.4f}")
+                _include_leaf_moves_in_exp_plan(
+                    allowGatherPlanExtension=allowGatherPlanExtension,
+                    alwaysIncludes=None,
+                    defaultNoPathValue=defaultNoPathValue,
+                    includeForGath=None,
+                    leafMoves=leafMoves,
+                    map=map,
+                    multiPathDict=multiPathDict,
+                    negativeTiles=negativeTiles,
+                    paths=paths,
+                    pathsCrossingTiles=pathsCrossingTiles,
+                    postPathEvalFunction=postPathEvalFunction,
+                    searchingPlayer=searchingPlayer,
+                    targetPlayers=targetPlayers,
+                    tryAvoidSet=tryAvoidSet,
+                    useIterativeNegTiles=useIterativeNegTiles,
+                    skipNeutrals=False,
                     logEntries=logEntries)
-            logEntries.append(f"Completed gather extension.... elapsed {time.perf_counter() - startTime:.4f}")
-
-        if allowLeafMoves and leafMoves is not None and useLeafMovesFirst:
-            logEntries.append(f"Second pass initial leaf-moves.... elapsed {time.perf_counter() - startTime:.4f}")
-            _include_leaf_moves_in_exp_plan(
-                allowGatherPlanExtension=allowGatherPlanExtension,
-                alwaysIncludes=None,
-                defaultNoPathValue=defaultNoPathValue,
-                includeForGath=None,
-                leafMoves=leafMoves,
-                map=map,
-                multiPathDict=multiPathDict,
-                negativeTiles=negativeTiles,
-                paths=paths,
-                pathsCrossingTiles=pathsCrossingTiles,
-                postPathEvalFunction=postPathEvalFunction,
-                searchingPlayer=searchingPlayer,
-                targetPlayers=targetPlayers,
-                tryAvoidSet=tryAvoidSet,
-                useIterativeNegTiles=useIterativeNegTiles,
-                skipNeutrals=False,
-                logEntries=logEntries)
-
         if includeExpansionSearch:
-            _include_optimal_expansion_options(
+            with perfTimer.begin_move_event(f'legacy path exp {turns}t {time_limit:.3f}ms targ'):
+                _include_optimal_expansion_options(
+                    map,
+                    multiPathDict,
+                    generalDistMap,
+                    enemyDistMap,
+                    territoryMap,
+                    targetPlayer,
+                    targetPlayers,
+                    friendlyPlayers,
+                    searchingPlayer,
+                    negativeTiles,
+                    bonusCapturePointMatrix,
+                    tileIslands,
+                    enemyDistPenaltyPoint,
+                    alwaysIncludes,
+                    tryAvoidSet,
+                    pathsCrossingTiles,
+                    useCutoff,
+                    logStuff,
+                    logEntries,
+                    alwaysIncludeNonTerminatingLeavesInIteration,
+                    smallTileExpansionTimeRatio,
+                    singleIterationPathTimeCap,
+                    time_limit,
+                    useIterativeNegTiles,
+                    forceNoGlobalVisited,
+                    forceGlobalVisitedStage1,
+                    postPathEvalFunction,
+                    defaultNoPathValue,
+                    turns,
+                    lengthWeightOffset,
+                    viewInfo
+                )
+        with perfTimer.begin_move_event('post-exp-search'):
+            # expansionGather = greedy_backpack_gather(map, tilesLargerThanAverage, turns, None, valueFunc, baseCaseFunc, skipTiles, None, searchingPlayer, priorityFunc, skipFunc = None)
+            if allowLeafMoves and leafMoves is not None:
+                logEntries.append("Allowing leafMoves as part of optimal expansion....")
+
+                _include_leaf_moves_in_exp_plan(
+                    allowGatherPlanExtension=allowGatherPlanExtension,
+                    alwaysIncludes=None,
+                    defaultNoPathValue=defaultNoPathValue,
+                    includeForGath=None,
+                    leafMoves=leafMoves,
+                    map=map,
+                    multiPathDict=multiPathDict,
+                    negativeTiles=negativeTiles,
+                    paths=paths,
+                    pathsCrossingTiles=pathsCrossingTiles,
+                    postPathEvalFunction=postPathEvalFunction,
+                    searchingPlayer=searchingPlayer,
+                    targetPlayers=targetPlayers,
+                    tryAvoidSet=tryAvoidSet,
+                    useIterativeNegTiles=useIterativeNegTiles,
+                    skipNeutrals=False,
+                    bypassLeafValueSkip=True,
+                    logEntries=logEntries)
+
+                # for leafMove in leafMoves:
+                #     if (leafMove.source not in negativeTiles
+                #             and leafMove.dest not in negativeTiles
+                #             and (leafMove.dest.player == -1 or leafMove.dest.player in targetPlayers)):
+                #         if leafMove.source.army >= 30:
+                #             logEntries.append(
+                #                 f"Did NOT add leafMove {str(leafMove)} to knapsack input because its value was high. Why wasn't it already input if it is a good move?")
+                #             continue
+                #         if leafMove.source.army - 1 <= leafMove.dest.army:
+                #             continue
+                #
+                #         if not move_can_cap_more(leafMove) and useLeafMovesFirst:
+                #             continue  # already added first
+                #
+                #         if leafMove.dest.isCity and leafMove.dest.isNeutral:
+                #             continue
+                #
+                #         logEntries.append(f"adding leafMove {str(leafMove)} to knapsack input")
+                #         path = Path(leafMove.source.army - leafMove.dest.army - 1)
+                #         path.add_next(leafMove.source)
+                #         path.add_next(leafMove.dest)
+                #         value = postPathEvalFunction(path, negativeTiles)
+                #         cityCount = 0
+                #         if leafMove.source.isGeneral or leafMove.source.isCity:
+                #             cityCount += 1
+                #         paths.append((cityCount, value, path))
+                #         add_path_to_try_avoid_paths_crossing_tiles(path, negativeTiles, tryAvoidSet, pathsCrossingTiles, addToNegativeTiles=useIterativeNegTiles)
+                #
+                #         curTileDict = multiPathDict.get(leafMove.source, {})
+                #         existingMax, existingPath = curTileDict.get(path.length, defaultNoPathValue)
+                #         if value > existingMax:
+                #             logEntries.append(
+                #                 f'leafMove for {str(leafMove.source)} BETTER than existing:\r\n      new {value:.2f} {str(path)}\r\n   exist {existingMax:.2f} {str(existingPath)}')
+                #             curTileDict[path.length] = (value, path)
+                #         else:
+                #             logEntries.append(
+                #                 f'leafMove for {str(leafMove.source)} worse than existing:\r\n      bad {value:.2f} {str(path)}\r\n   exist {existingMax:.2f} {str(existingPath)}')
+                #         multiPathDict[leafMove.source] = curTileDict
+
+            if logStuff:
+                logEntries.append(f'THE FOLLOWING WILL BE INPUT INTO KNAPSACK:')
+                for t, pathsByDist in multiPathDict.items():
+                    for dist, (val, p) in pathsByDist.items():
+                        logEntries.append(f'input tile {str(t)} val {val:.3f} @ dist {dist}: {str(p)}')
+
+            valueOverrides = {}
+            if additionalOptionValues is not None:
+                for opt in additionalOptionValues:
+                    if opt.length + opt.requiredDelay >= remainingTurns:
+                        continue
+                    valueOverrides[opt] = (opt.econValue, opt.length)
+
+        with perfTimer.begin_move_event(f'knapsack_multi_paths {len(valueOverrides)} ext, {len(multiPathDict)} multiPath, {len(pathsCrossingTiles)} crossed'):
+            path, otherPaths, totalTurns, neutCaps, enCaps, totalValue = knapsack_multi_paths(
                 map,
-                multiPathDict,
-                generalDistMap,
-                enemyDistMap,
-                territoryMap,
-                targetPlayer,
-                targetPlayers,
-                friendlyPlayers,
                 searchingPlayer,
-                negativeTiles,
-                bonusCapturePointMatrix,
-                tileIslands,
-                enemyDistPenaltyPoint,
-                alwaysIncludes,
-                tryAvoidSet,
+                friendlyPlayers,
+                targetPlayers,
+                remainingTurns,
                 pathsCrossingTiles,
-                useCutoff,
-                logStuff,
-                logEntries,
-                alwaysIncludeNonTerminatingLeavesInIteration,
-                smallTileExpansionTimeRatio,
-                singleIterationPathTimeCap,
-                time_limit,
-                useIterativeNegTiles,
-                forceNoGlobalVisited,
-                forceGlobalVisitedStage1,
+                multiPathDict,
+                territoryMap,
                 postPathEvalFunction,
-                defaultNoPathValue,
-                turns,
-                lengthWeightOffset,
-                viewInfo
-            )
+                originalNegativeTiles,
+                tryAvoidSet,
+                viewInfo,
+                valueOverrides,
+                leafMoves)
 
-        # expansionGather = greedy_backpack_gather(map, tilesLargerThanAverage, turns, None, valueFunc, baseCaseFunc, skipTiles, None, searchingPlayer, priorityFunc, skipFunc = None)
-        if allowLeafMoves and leafMoves is not None:
-            logEntries.append("Allowing leafMoves as part of optimal expansion....")
-
-            _include_leaf_moves_in_exp_plan(
-                allowGatherPlanExtension=allowGatherPlanExtension,
-                alwaysIncludes=None,
-                defaultNoPathValue=defaultNoPathValue,
-                includeForGath=None,
-                leafMoves=leafMoves,
-                map=map,
-                multiPathDict=multiPathDict,
-                negativeTiles=negativeTiles,
-                paths=paths,
-                pathsCrossingTiles=pathsCrossingTiles,
-                postPathEvalFunction=postPathEvalFunction,
-                searchingPlayer=searchingPlayer,
-                targetPlayers=targetPlayers,
-                tryAvoidSet=tryAvoidSet,
-                useIterativeNegTiles=useIterativeNegTiles,
-                skipNeutrals=False,
-                bypassLeafValueSkip=True,
-                logEntries=logEntries)
-
-            # for leafMove in leafMoves:
-            #     if (leafMove.source not in negativeTiles
-            #             and leafMove.dest not in negativeTiles
-            #             and (leafMove.dest.player == -1 or leafMove.dest.player in targetPlayers)):
-            #         if leafMove.source.army >= 30:
-            #             logEntries.append(
-            #                 f"Did NOT add leafMove {str(leafMove)} to knapsack input because its value was high. Why wasn't it already input if it is a good move?")
-            #             continue
-            #         if leafMove.source.army - 1 <= leafMove.dest.army:
-            #             continue
-            #
-            #         if not move_can_cap_more(leafMove) and useLeafMovesFirst:
-            #             continue  # already added first
-            #
-            #         if leafMove.dest.isCity and leafMove.dest.isNeutral:
-            #             continue
-            #
-            #         logEntries.append(f"adding leafMove {str(leafMove)} to knapsack input")
-            #         path = Path(leafMove.source.army - leafMove.dest.army - 1)
-            #         path.add_next(leafMove.source)
-            #         path.add_next(leafMove.dest)
-            #         value = postPathEvalFunction(path, negativeTiles)
-            #         cityCount = 0
-            #         if leafMove.source.isGeneral or leafMove.source.isCity:
-            #             cityCount += 1
-            #         paths.append((cityCount, value, path))
-            #         add_path_to_try_avoid_paths_crossing_tiles(path, negativeTiles, tryAvoidSet, pathsCrossingTiles, addToNegativeTiles=useIterativeNegTiles)
-            #
-            #         curTileDict = multiPathDict.get(leafMove.source, {})
-            #         existingMax, existingPath = curTileDict.get(path.length, defaultNoPathValue)
-            #         if value > existingMax:
-            #             logEntries.append(
-            #                 f'leafMove for {str(leafMove.source)} BETTER than existing:\r\n      new {value:.2f} {str(path)}\r\n   exist {existingMax:.2f} {str(existingPath)}')
-            #             curTileDict[path.length] = (value, path)
-            #         else:
-            #             logEntries.append(
-            #                 f'leafMove for {str(leafMove.source)} worse than existing:\r\n      bad {value:.2f} {str(path)}\r\n   exist {existingMax:.2f} {str(existingPath)}')
-            #         multiPathDict[leafMove.source] = curTileDict
-
-        if logStuff:
-            logEntries.append(f'THE FOLLOWING WILL BE INPUT INTO KNAPSACK:')
-            for t, pathsByDist in multiPathDict.items():
-                for dist, (val, p) in pathsByDist.items():
-                    logEntries.append(f'input tile {str(t)} val {val:.3f} @ dist {dist}: {str(p)}')
-
-        valueOverrides = {}
-        if additionalOptionValues is not None:
-            for opt in additionalOptionValues:
-                if opt.length + opt.requiredDelay >= remainingTurns:
-                    continue
-                valueOverrides[opt] = (opt.econValue, opt.length)
-
-        path, otherPaths, totalTurns, neutCaps, enCaps, totalValue = knapsack_multi_paths(
-            map,
-            searchingPlayer,
-            friendlyPlayers,
-            targetPlayers,
-            remainingTurns,
-            pathsCrossingTiles,
-            multiPathDict,
-            territoryMap,
-            postPathEvalFunction,
-            originalNegativeTiles,
-            tryAvoidSet,
-            viewInfo,
-            valueOverrides,
-            leafMoves)
-
-        altPath, altOtherPaths, altTotalTurns, altNeutCaps, altEnCaps, altTotalValue = knapsack_multi_paths_no_crossover(
-            map,
-            searchingPlayer,
-            friendlyPlayers,
-            targetPlayers,
-            remainingTurns,
-            pathsCrossingTiles,
-            multiPathDict,
-            territoryMap,
-            postPathEvalFunction,
-            originalNegativeTiles,
-            tryAvoidSet,
-            viewInfo,
-            valueOverrides,
-            leafMoves)
+        with perfTimer.begin_move_event(f'knapsack_no_cross {len(valueOverrides)} ext, {len(multiPathDict)} multiPath, {len(pathsCrossingTiles)} crossed'):
+            altPath, altOtherPaths, altTotalTurns, altNeutCaps, altEnCaps, altTotalValue = knapsack_multi_paths_no_crossover(
+                map,
+                searchingPlayer,
+                friendlyPlayers,
+                targetPlayers,
+                remainingTurns,
+                pathsCrossingTiles,
+                multiPathDict,
+                territoryMap,
+                postPathEvalFunction,
+                originalNegativeTiles,
+                tryAvoidSet,
+                viewInfo,
+                valueOverrides,
+                leafMoves)
 
         if (totalTurns == 0 and altTotalTurns > 0) or (altTotalTurns > 0 and altTotalValue / altTotalTurns > totalValue / totalTurns):
             msg = f'EXP CROSS-KNAP WORSE THAN NON, {altTotalValue}v/{altTotalTurns}t vs {totalValue}v/{totalTurns}t'
@@ -437,49 +445,50 @@ def get_round_plan_with_expansion(
 
             path, otherPaths, totalTurns, neutCaps, enCaps, totalValue = altPath, altOtherPaths, altTotalTurns, altNeutCaps, altEnCaps, altTotalValue
 
-        if viewInfo is not None:
-            _add_expansion_to_view_info(path, otherPaths, viewInfo, colors)
+        with perfTimer.begin_move_event(f'cleanup pre-return, render-prep'):
+            if viewInfo is not None:
+                _add_expansion_to_view_info(path, otherPaths, viewInfo, colors)
 
-        tilesInKnapsackOtherThanCurrent = set()
+            tilesInKnapsackOtherThanCurrent = set()
 
-        if path is not None:
-            otherPaths.insert(0, path)
-        plan = RoundPlan(enCaps, neutCaps, path, otherPaths)
+            if path is not None:
+                otherPaths.insert(0, path)
+            plan = RoundPlan(enCaps, neutCaps, path, otherPaths)
 
-        if path is None:
+            if path is None:
+                logEntries.append(
+                    f"No expansion plan.... :( Duration {time.perf_counter() - startTime:.3f}")
+                return plan
+
             logEntries.append(
-                f"No expansion plan.... :( Duration {time.perf_counter() - startTime:.3f}")
-            return plan
+                f"EXPANSION PLANNED HOLY SHIT? Duration {time.perf_counter() - startTime:.3f}, \r\n    MAIN path {path}")
 
-        logEntries.append(
-            f"EXPANSION PLANNED HOLY SHIT? Duration {time.perf_counter() - startTime:.3f}, \r\n    MAIN path {path}")
+            for otherPath in otherPaths:
+                logEntries.append(f'    otherPath {otherPath}')
 
-        for otherPath in otherPaths:
-            logEntries.append(f'    otherPath {otherPath}')
+            shouldConsiderMoveHalf = should_consider_path_move_half(
+                map,
+                path,
+                negativeTiles=tilesInKnapsackOtherThanCurrent,
+                player=searchingPlayer,
+                enemyDistMap=enemyDistMap,
+                playerDistMap=generalDistMap,
+                withinGenPathThreshold=boardAnalysis.within_extended_play_area_threshold,
+                tilesOnMainPathDist=boardAnalysis.within_core_play_area_threshold)
 
-        shouldConsiderMoveHalf = should_consider_path_move_half(
-            map,
-            path,
-            negativeTiles=tilesInKnapsackOtherThanCurrent,
-            player=searchingPlayer,
-            enemyDistMap=enemyDistMap,
-            playerDistMap=generalDistMap,
-            withinGenPathThreshold=boardAnalysis.within_extended_play_area_threshold,
-            tilesOnMainPathDist=boardAnalysis.within_core_play_area_threshold)
+            if not shouldConsiderMoveHalf:
+                return plan
 
-        if not shouldConsiderMoveHalf:
-            return plan
-
-        if isinstance(path, Path):
-            path.start.move_half = True
-            value = path.calculate_value(searchingPlayer, map.team_ids_by_player_index, originalNegativeTiles)
-            if viewInfo:
-                viewInfo.add_info_line(f'path move_half value was {value} (path {str(path)})')
-            if value <= 0:
-                path.start.move_half = False
+            if isinstance(path, Path):
+                path.start.move_half = True
                 value = path.calculate_value(searchingPlayer, map.team_ids_by_player_index, originalNegativeTiles)
+                if viewInfo:
+                    viewInfo.add_info_line(f'path move_half value was {value} (path {str(path)})')
+                if value <= 0:
+                    path.start.move_half = False
+                    value = path.calculate_value(searchingPlayer, map.team_ids_by_player_index, originalNegativeTiles)
 
-        return plan
+            return plan
 
     finally:
         logbook.info('\n'.join(logEntries))
@@ -531,6 +540,8 @@ def _include_optimal_expansion_options(
 
     if distanceToLargeIslandsMap is None:
         distanceToLargeIslandsMap = tileIslands.large_tile_island_distances_by_team_id[-1]
+    if distanceToLargeIslandsMap is None:
+        distanceToLargeIslandsMap = enemyDistMap
 
     logEntries.append(f"\n\nAttempting Optimal Expansion (tm) for turns {turns} (lengthWeightOffset {lengthWeightOffset}), negatives {str([str(t) for t in negativeTiles])}:\n")
 

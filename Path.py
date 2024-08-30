@@ -339,6 +339,9 @@ class Path(TilePlanInterface):
         @param end: If True, get the subsegment of the LAST {count} moves instead of FIRST {count} moves
         @return:
         """
+        if count <= 0:
+            return Path()
+
         newPath = self.clone()
         i = 0
 

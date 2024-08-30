@@ -17,7 +17,7 @@ class GatherTests(TestBase):
         bot = super().get_debug_render_bot(simHost, player)
 
         bot.info_render_gather_values = True
-        bot.gather_use_pcst = True
+        # bot.gather_use_pcst = True
         # bot.info_render_centrality_distances = True
         Gather.USE_DEBUG_ASSERTS = True
         DebugHelper.IS_DEBUGGING = True
@@ -923,3 +923,41 @@ b1   b1   b1   b1   b1   b1   bG1
         self.assertNoFriendliesKilled(map, general, allyGen)
 
         self.skipTest("TODO add asserts for gather_should_not_crash_in_2v2")
+    
+    def test_pcst_gather_should_not_try_to_warp_between_tiles(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/pcst_gather_should_not_try_to_warp_between_tiles___63A1QDrpm---1--455.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 455, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=455)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        # good enough that it doesn't crash
+    
+    def test_should_gather_backwards_tiles_first(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_gather_backwards_tiles_first___SeEsqyvhl---0--200.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 200, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=200)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertGatheredNear(simHost, general.player, 4, 15, 3, requiredAvgTileValue=1.4)

@@ -3,6 +3,7 @@ import Gather
 from MapMatrix import MapMatrixSet, MapMatrix
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
+from Sim.TextMapLoader import TextMapLoader
 from TestBase import TestBase
 from base.client.tile import TILE_MOUNTAIN, TILE_EMPTY
 from bot_ek0x45 import EklipZBot
@@ -2532,3 +2533,21 @@ class DefenseTests(TestBase):
     # 82f, 74p, 5s after preventing gather
     # 91f, 68p, 4s after fixing iterative gather bug? lol? wtf?
     # 73f, 91p, 5s after idk things that have happened and adding 5 new tests. Also pruning the bad distDict entries that one would never want to gather to, I guess
+    
+    def test_should_not_allow_moves_that_get_bot_killed(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_allow_moves_that_get_bot_killed___l0BMWz6mu---1--347.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 347, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=347)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '11,11->11,15')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+        bot.curPath = TextMapLoader.parse_path(playerMap, '12,14->12,10')
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        self.assertLess(playerMap.GetTile(11, 15).army, 3, 'should ABSOLUTELY NOT have just allowed this tile movement to happen and die. The defense wait-move analysis should be flagging this tile as DO NOT MOVE')

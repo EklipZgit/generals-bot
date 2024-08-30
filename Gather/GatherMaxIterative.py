@@ -1428,6 +1428,9 @@ def knapsack_max_gather_with_values(
             ) = currentPriorityObject
             negArmySum += 1
             negGatheredSum += 1
+            if nextTile.isSwamp:
+                negArmySum += 2
+                negGatheredSum += 2
             # if nextTile.x == 6 and nextTile.y == 2 and map.turn == 224:
             #     pass
             if nextTile not in negativeTiles:
@@ -1455,7 +1458,7 @@ def knapsack_max_gather_with_values(
 
             prioObj = (
                 prioVal,
-                numPrioTiles / max(1, realDist),
+                0 - numPrioTiles / max(1, realDist),
                 realDist,
                 negGatheredSum,
                 negArmySum,
@@ -1622,5 +1625,5 @@ def knapsack_max_gather_with_values(
         totalTurns += g.gatherTurns
 
     logbook.info(
-        f"Concluded knapsack_levels_backpack_gather with {itr.value} iterations. Gather turns {totalTurns}, value {totalValue}. Duration: {time.perf_counter() - startTime:.4f}")
+        f"Concluded knapsack_max_gather_with_values with {itr.value} iterations. Gather turns {totalTurns}, value {totalValue}. Duration: {time.perf_counter() - startTime:.4f}")
     return totalValue, totalTurns, rootNodes

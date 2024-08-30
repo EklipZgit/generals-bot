@@ -46,7 +46,7 @@ class ViewerHost(object):
         self._viewer_event_queue: "Queue[typing.Tuple[str, typing.Any]]" = self.mgr.Queue()
         self._closed_by_user: bool | None = None
         logbook.info("newing up viewer process")
-        self.process: BaseProcess = self.ctx.Process(target=_run_main_viewer_loop, args=(self._update_queue, self._viewer_event_queue, window_title, cell_width, cell_height, noLog, alignTop, alignLeft, BotLogging.LOGGING_QUEUE, minUpdateSleep))
+        self.process: BaseProcess = self.ctx.Process(target=_run_main_viewer_loop, args=(self._update_queue, self._viewer_event_queue, window_title, cell_width, cell_height, noLog, alignTop, alignLeft, BotLogging.LOGGING_QUEUE, minUpdateSleep), daemon=True)
         self.no_log: bool = noLog
         self._started: bool = False
 

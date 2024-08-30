@@ -129,6 +129,7 @@ class GeneralsViewer(object):
         # Table Properies
         self.cellWidth: int = cell_width
         self.cellHeight: int = cell_height
+        self.swampLineInstep: float = 3.0
 
         self.infoLineHeight = 0
         self.infoRowHeight = 0
@@ -207,6 +208,7 @@ class GeneralsViewer(object):
 
         self.cellHeightOverTwo = self.cellHeight / 2
         self.cellWidthOverTwo = self.cellWidth / 2
+        self.swampLineInstep = self.cellWidth / 10
 
         self.board_width_px = self._map.cols * (self.cellWidth + CELL_MARGIN) + CELL_MARGIN
 
@@ -532,10 +534,72 @@ class GeneralsViewer(object):
                                          [pos_left, pos_top + self.plusDepth, self.cellWidth,
                                           self.cellHeight - self.plusDepth * 2])
                     elif tile.isLookout:
-                        # Draw horizontal rect
+                        # Draw vertical rect
                         pygame.draw.rect(self._screen, color,
                                          [pos_left + self.plusDepth, pos_top, self.cellWidth - self.plusDepth * 2,
                                           self.cellHeight])
+
+                    elif tile.isObservatory:
+                        # Draw horizontal rect
+                        pygame.draw.rect(self._screen, color,
+                                         [pos_left, pos_top + self.plusDepth, self.cellWidth,
+                                          self.cellHeight - self.plusDepth * 2])
+                    elif tile.isSwamp:
+                        # Draw three horiz rects
+                        # draw normal tile bg
+                        pygame.draw.rect(self._screen, color,
+                                         [pos_left, pos_top, self.cellWidth,
+                                          self.cellHeight])
+
+                        # pygame.draw.rect(self._screen, BLACK,
+                        #                  [pos_left, pos_top + self.plusDepth, self.cellWidth,
+                        #                   self.cellHeight - self.plusDepth * 2])
+
+                        # TODO shove this on a surface and just blit that thing onto the screen so we dont redraw this stuff every time...
+                        pygame.draw.rect(self._screen, BLACK,
+                                         [pos_left + self.swampLineInstep, pos_top + self.cellHeightOverTwo + 4, self.cellWidth - 2 * self.swampLineInstep,
+                                          2])
+                        pygame.draw.rect(self._screen, BLACK,
+                                         [pos_left + 2 * self.swampLineInstep, pos_top + self.cellHeightOverTwo + 8, self.cellWidth - 4 * self.swampLineInstep,
+                                          2])
+                        pygame.draw.rect(self._screen, BLACK,
+                                         [pos_left + 3 * self.swampLineInstep, pos_top + self.cellHeightOverTwo + 12, self.cellWidth - 6 * self.swampLineInstep,
+                                          2])
+                    elif tile.isDesert:
+                        pygame.draw.rect(self._screen, color,
+                                         [pos_left, pos_top, self.cellWidth,
+                                          self.cellHeight])
+                        # Draw Lil edges
+                        pygame.draw.lines(
+                            self._screen,
+                            BLACK,
+                            closed=False,
+                            points=[
+                                (pos_left,
+                                    pos_top + self.cellHeight - self.cellHeight / 5),  # bottom left
+                                (pos_left + self.cellWidth / 5,
+                                    pos_top + self.cellHeight - self.cellHeight / 3),  # mid left peak
+                                (pos_left + self.cellWidth / 2,
+                                    pos_top + self.cellHeight - self.cellHeight / 5),  # valley
+                                # (pos_left + self.cellWidth / 2,
+                                #     pos_top + self.cellHeight - self.cellHeight / 5),  # right peak
+                            ],
+                            width=2)
+                        pygame.draw.lines(
+                            self._screen,
+                            BLACK,
+                            closed=False,
+                            points=[
+                                (pos_left + self.cellWidth / 6,
+                                    pos_top + self.cellHeight - self.cellHeight / 8),  # bottom left
+                                (pos_left + self.cellWidth / 2,
+                                    pos_top + self.cellHeight - self.cellHeight / 5),  # valley
+                                (pos_left + self.cellWidth * 3 / 4,
+                                    pos_top + self.cellHeight - self.cellHeight / 3),  # right peak
+                                (pos_left + self.cellWidth,
+                                    pos_top + self.cellHeight - self.cellHeight / 5),  # bottom right
+                            ],
+                            width=2)
 
                     elif tile.isObservatory:
                         # Draw vertical rect
@@ -1337,17 +1401,40 @@ class GeneralsViewer(object):
             pColor = (colorR, colorG, colorB)
         elif tile.isNotPathable:  # Obstacle
             pColor = GRAY_DARK
-        elif not tile.discovered:
-            pColor = UNDISCOVERED_GRAY
         elif tile.player == -1 and tile.isCity:
             pColor = NEUT_CITY_GRAY
+            if not tile.discovered:
+                pColor = GRAY_DARK
+
+            if not tile.visible:
+                colorR = pColor[0] // 2 + 30
+                colorG = pColor[1] // 2 + 30
+                colorB = pColor[2] // 2 + 30
+                pColor = (colorR, colorB, colorG)
+
+            if tile.army < 1:
+                offs = 80
+                if not tile.discovered:
+                    offs = 50
+                colorR = pColor[0] + offs
+                colorG = pColor[1] + offs
+                colorB = pColor[2] + offs
+                pColor = (colorR, colorB, colorG)
+        elif not tile.discovered:
+            pColor = UNDISCOVERED_GRAY
+        elif tile.player == -1 and tile.army > 0:
+            pColor = LIGHT_GRAY
             if not tile.visible:
                 colorR = pColor[0] // 2 + 40
                 colorG = pColor[1] // 2 + 40
                 colorB = pColor[2] // 2 + 40
+                if not tile.discovered:
+                    colorR = 2 * pColor[0] // 5 + 30
+                    colorG = 2 * pColor[1] // 5 + 30
+                    colorB = 2 * pColor[2] // 5 + 30
                 pColor = (colorR, colorB, colorG)
-        elif tile.player == -1 and tile.army != 0:
-            pColor = LIGHT_GRAY
+        elif tile.player == -1 and tile.army < 0:
+            pColor = WHITE
             if not tile.visible:
                 colorR = pColor[0] // 2 + 40
                 colorG = pColor[1] // 2 + 40
@@ -1440,6 +1527,7 @@ class GeneralsViewer(object):
 
         for teamScore, teamCycleData in statsSorted:
             if teamCycleData is None:
+                logbook.info(f'Team {teamScore.teamId} had None teamCycleData in viewer...')
                 continue
             teamPlayers = []
 
@@ -1504,7 +1592,7 @@ class GeneralsViewer(object):
 
                         playerFogSubtext = " | ".join(toJoin)
                         visCount = SearchUtils.count(teamPlayer.tiles, lambda t: t.visible)
-                        playerFogSubtext += f'  ({numFog} fog, {visCount} vis)'
+                        playerFogSubtext += f'  ({numFog} fog, {visCount} vis [tot {numFog + visCount} vs {teamPlayer.tileCount}])'
                         self._screen.blit(self._medFont.render(playerFogSubtext, True, WHITE),
                                           (pos_left + 3, pos_top + 2 + 2 * self._medFont.get_height()))
 

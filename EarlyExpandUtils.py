@@ -35,7 +35,13 @@ class CityExpansionPlan(object):
         if plan_paths is None:
             plan_paths = []
         self.plan_paths: typing.List[Path | None] = plan_paths
-
+        self.intended_deserts: typing.Set[Tile] = set()
+        for p in self.plan_paths:
+            if not p:
+                continue
+            for t in p.tileList:
+                if t.isDesert:
+                    self.intended_deserts.add(t)
 
 def get_start_expand_captures(
         map: MapBase,
@@ -133,30 +139,41 @@ def get_start_expand_captures(
             curMoveIdx += 1
 
             nextTile = move.dest
-            if nextTile in alreadyVisited:
+            wasVisited = nextTile in alreadyVisited
+            alreadyVisited.add(nextTile)
+
+            if nextTile.isSwamp:
+                if turn % 2 == 0:
+                    # we'll lose an extra army the turn we arrive
+                    movingArmy -= 1
+                    logbook.info(f'{turn} ({curGenArmy}) - {str(nextTile)} (a{movingArmy}) swamp (bad cycle)')
+                else:
+                    logbook.info(f'{turn} ({curGenArmy}) - {str(nextTile)} (a{movingArmy}) swamp (better cycle)')
+                # we'll lose the army we left behind, too
+                # movingArmy -= 1
+            elif wasVisited:
                 if not noLog:
                     logbook.info(f'{turn} ({curGenArmy}) - {str(nextTile)} (a{movingArmy}) already capped')
+            elif nextTile.isDesert:
+                logbook.info(f'{turn} ({curGenArmy}) - {str(nextTile)} (a{movingArmy}) desert')
+                movingArmy -= 1
             elif nextTile.player == genPlayer:
                 movingArmy += nextTile.army
                 movingArmy -= 1
-                alreadyVisited.add(nextTile)
                 if not noLog:
                     logbook.info(f'{turn} ({curGenArmy}) - {str(nextTile)} (a{movingArmy}) was our tile')
             elif nextTile.player in teamPlayers:
                 movingArmy += nextTile.army
                 movingArmy -= 1
-                alreadyVisited.add(nextTile)
                 if not noLog:
                     logbook.info(f'{turn} ({curGenArmy}) - {str(nextTile)} (a{movingArmy}) was ally tile')
             else:
                 numCapped += 1
-                movingArmy -= 1
+                # TODO wait, we don't decrement this because we currently want to route THROUGH enemy tiles as if they werent there (?) I uncommented this for now to see what goes wrong.
+                movingArmy -= nextTile.army + 1
 
-                alreadyVisited.add(nextTile)
                 if nextTile.player >= 0:
                     enCapped.add(nextTile)
-                    # TODO wait, we don't decrement this because we currently want to route THROUGH enemy tiles as if they werent there (?) I uncommented this for now to see what goes wrong.
-                    movingArmy -= nextTile.army
                     if not noLog:
                         logbook.info(f'{turn} ({curGenArmy}) - {str(nextTile)} (a{movingArmy}) ({len(alreadyVisited)}) CAPPED EN')
                 elif not noLog:
@@ -169,6 +186,7 @@ def get_start_expand_captures(
                     msg = '^^^^^^illegal plan, moved negative army^^^^^^'
                     logbook.error(msg)
                     raise AssertionError(f'{tileState}\r\n{msg}')
+
             if curMoveIdx >= len(curMoves):
                 pathIdx += 1
                 if pathIdx >= len(expandPaths):
@@ -324,7 +342,7 @@ def recalculate_max_plan(plan1: CityExpansionPlan, plan2: CityExpansionPlan, map
 def optimize_first_25(
         map: MapBase,
         general: Tile,
-        tile_minimization_map: MapMatrixInterface[int],
+        tile_minimization_map: MapMatrixInterface[float],
         debug_view_info: typing.Union[None, ViewInfo] = None,
         no_recurse: bool = False,
         skipTiles: typing.Set[Tile] | None = None,
@@ -1093,7 +1111,14 @@ def _optimize_25_launch_segment(
         repeatAvoider, _, closerToEnemyNeg, pathCappedNeg, negAdjWeight, repeats, cappedAdj, maxGenDist, armyLeft = currentPriorityObject
         visited = nextTile in visited_set
         if not visited:
-            if nextTile.player == -1:
+            if nextTile.isSwamp:
+                pathCappedNeg += 1
+                armyLeft -= 1
+                repeats -= 1
+            elif nextTile.isDesert:
+                pass
+                # pathCappedNeg += 1
+            elif nextTile.player == -1:
                 pathCappedNeg -= 1
             elif nextTile.player not in friendlyPlayers:
                 pathCappedNeg -= 2
@@ -1118,6 +1143,11 @@ def _optimize_25_launch_segment(
 
         # 0 is best value we'll get, after which more repeat tiles become 'bad' again
         repeatAvoider = abs(force_wasted_moves - repeats)
+        if nextTile.isSwamp:
+            repeatAvoider += 4
+        if nextTile.isDesert and not visited:
+            repeatAvoider += 2
+
         distToGen = distance_to_gen_map.raw[nextTile.tile_index]
         adjWeight = 0 - negAdjWeight
 

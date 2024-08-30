@@ -53,17 +53,19 @@ class CityScoreData(object):
         self.distance_from_enemy_general: int = 1000
         self.intergeneral_distance_through_city: int = 1000
 
-    def get_weighted_neutral_value(self) -> float:
+    def get_weighted_neutral_value(self, log: bool = True) -> float:
         totalScore = self.city_defensability_score * self.city_relevance_score * self.city_expandability_score * self.city_general_defense_score
         totalScore = totalScore
-        logbook.info(f"cityScore neut {self.tile.x},{self.tile.y}: re{self.city_relevance_score:.4f}, ex{self.city_expandability_score:.4f}, def{self.city_defensability_score:.4f}, gdef{self.city_general_defense_score:.4f}, tot{totalScore:.3f}")
+        if log:
+            logbook.info(f"cityScore neut {self.tile.x},{self.tile.y}: re{self.city_relevance_score:.4f}, ex{self.city_expandability_score:.4f}, def{self.city_defensability_score:.4f}, gdef{self.city_general_defense_score:.4f}, tot{totalScore:.3f}")
         return totalScore
 
-    def get_weighted_enemy_capture_value(self) -> float:
+    def get_weighted_enemy_capture_value(self, log: bool = True) -> float:
         totalScore = self.city_defensability_score * self.city_relevance_score
         if not self.tile.discovered:
             totalScore = totalScore / 2
-        logbook.info(f"cityScore enemy {self.tile.x},{self.tile.y}: re{self.city_relevance_score:.4f}, def{self.city_defensability_score:.4f}, tot{totalScore:.3f}")
+        if log:
+            logbook.info(f"cityScore enemy {self.tile.x},{self.tile.y}: re{self.city_relevance_score:.4f}, def{self.city_defensability_score:.4f}, tot{totalScore:.3f}")
         return totalScore
 
 
@@ -107,28 +109,56 @@ class CityAnalyzer(object):
             if not teammate.dead:
                 allyDistMap = self.map.distance_mapper.get_tile_dist_matrix(teammate.general)
 
-        for tile in self.map.reachable_tiles:
+        expensiveCities = []
+        numCities = [0]
+
+        def foreachFunc(tile: Tile, dist: int):
             # TODO calculate predicted enemy city locations in fog and explore mountains more in places we would WANT cities to be
             tileMightBeUndiscCity = not tile.discovered and tile.isObstacle and tile in self.map.reachable_tiles
             # if not (tile.isCity or tileMightBeUndiscCity):
 
             if not tile.isCity:
-                continue
+                return False
+
+            numCities[0] += 1
 
             score = CityScoreData(tile)
+            isCostlyCity = tile.army > 10 or self.map.is_tile_enemy(tile)
+            isNegCity = tile.army <= 0
+            isFriendly = self.map.is_player_on_team_with(tile.player, board_analysis.general.player)
 
-            self._calculate_nearby_city_scores(tile, board_analysis, score)
+            if isCostlyCity and len(expensiveCities) < 20:
+                expensiveCities.append(tile)
+                self._calculate_nearby_city_scores(tile, board_analysis, score)
+            else:
+                if isNegCity:
+                    score.neutral_city_nearby_score = 100 - tile.army
+                    score.friendly_city_nearby_score = 50 - tile.army
+                else:
+                    score.neutral_city_nearby_score = 50000 / (1 + tile.army)
+                    score.friendly_city_nearby_score = 20000 / (1 + tile.army)
+
             self._calculate_distance_scores(tile, board_analysis, score)
             self._calculate_relevance_score(tile, board_analysis, score)
-            self._calculate_danger_score(tile, board_analysis, score)
-            self._calculate_expandability_score(tile, board_analysis, score)
+
+            if isCostlyCity and len(expensiveCities) < 20:
+                self._calculate_danger_score(tile, board_analysis, score)
+                self._calculate_expandability_score(tile, board_analysis, score)
+            else:
+                score.city_defensability_score = 20000.0 / numCities[0]
+                score.city_expandability_score = 2000.0 / numCities[0]
+                if isCostlyCity:
+                    score.city_general_defense_score = 10.0 / numCities[0]
+                else:
+                    score.city_general_defense_score = 20.0 / numCities[0]
+
             if allyDistMap is not None:
                 self._calculate_2v2_score(tile, board_analysis, allyDistMap, teammate, score)
 
             if tile.isCity:
                 if tile.isNeutral:
                     self.city_scores[tile] = score
-                elif self.map.is_player_on_team_with(tile.player, board_analysis.general.player):
+                elif isFriendly:
                     self.player_city_scores[tile] = score
                     if self.is_contested(tile):
                         self.owned_contested_cities.add(tile)
@@ -140,8 +170,18 @@ class CityAnalyzer(object):
             else:
                 self.undiscovered_mountain_scores[tile] = score
 
+        SearchUtils.breadth_first_foreach_dist(
+            self.map,
+            self.map.players[self.general.player].tiles,
+            maxDepth=25,
+            foreachFunc=foreachFunc,
+            bypassDefaultSkip=True
+        )
+
     def _calculate_distance_scores(self, city: Tile, board_analysis: BoardAnalyzer, score: CityScoreData):
         """
+        O(1)
+
         if the sum of the cities distance from both generals is equal to or greater than the shortest path
         between generals currently, then it does not decrease the path at all. If the sum is less than the shortest
         path lengh, then it decreases the path by that much.
@@ -176,6 +216,14 @@ class CityAnalyzer(object):
         score.general_distances_ratio_squared_capped = distanceRatioSquared
 
     def _calculate_danger_score(self, tile: Tile, board_analysis: BoardAnalyzer, score: CityScoreData):
+        """
+        O(N) worst case
+
+        @param tile:
+        @param board_analysis:
+        @param score:
+        @return:
+        """
         # used to prevent tiles right next to general from being weighted WAY better than tiles 2 tiles away etc
         if self.map.turn > 200 or not tile.isNeutral:
             scaleOffset = 10
@@ -195,16 +243,23 @@ class CityAnalyzer(object):
             else:
                 tilesNearbyEnemyCounter.add(1)
 
-        maxDist = board_analysis.intergeneral_analysis.shortestPathWay.distance // 4
+        maxDist = min(15, board_analysis.intergeneral_analysis.shortestPathWay.distance // 4)
         self.foreach_around_city(tile, board_analysis, maxDist, scoreNearbyTerritoryFunc)
 
         score.city_defensability_score = (score.friendly_city_nearby_score + tilesNearbyFriendlyCounter.value // 2) / score.general_distances_ratio_squared_capped / tilesNearbyEnemyCounter.value
 
     def _calculate_nearby_city_scores(self, tile: Tile, board_analysis: BoardAnalyzer, score: CityScoreData):
+        """
+        O(N) to map size worst case
+        @param tile:
+        @param board_analysis:
+        @param score:
+        @return:
+        """
         nearbyFriendlyCityScore = Counter(0)
         nearbyEnemyCityScore = Counter(0)
         nearbyNeutralCityScore = Counter(0)
-        maxDist = board_analysis.intergeneral_analysis.shortestPathWay.distance // 3
+        maxDist = min(15, board_analysis.intergeneral_analysis.shortestPathWay.distance // 3)
 
         def scoreNearbyCitiesFunc(curTile: Tile, distance: int):
             if curTile.isCity or curTile.isGeneral and curTile != tile:
@@ -222,6 +277,14 @@ class CityAnalyzer(object):
         score.friendly_city_nearby_score = nearbyFriendlyCityScore.value
 
     def _calculate_relevance_score(self, tile: Tile, board_analysis: BoardAnalyzer, score: CityScoreData):
+        """
+        O(1)
+
+        @param tile:
+        @param board_analysis:
+        @param score:
+        @return:
+        """
         score.neighboring_city_relevance = (2 * score.friendly_city_nearby_score + score.neutral_city_nearby_score) / (score.enemy_city_nearby_score + 2)
 
         # base offset keeps the very closest cities from being orders of magnitude higher score than 1-2 tiles away
@@ -237,6 +300,14 @@ class CityAnalyzer(object):
         score.city_relevance_score = pathRelevance
 
     def _calculate_expandability_score(self, tile: Tile, board_analysis: BoardAnalyzer, score: CityScoreData):
+        """
+        O(N) worst case
+
+        @param tile:
+        @param board_analysis:
+        @param score:
+        @return:
+        """
         initExpValue = 40
         if tile.isNeutral:
             initExpValue = max(1, 60 - tile.army)
@@ -258,7 +329,7 @@ class CityAnalyzer(object):
             # and then just give points for nearby neutral tiles in general
             expCounter.add(0.4)
 
-        maxDist = board_analysis.intergeneral_analysis.shortestPathWay.distance // 4
+        maxDist = min(15, board_analysis.intergeneral_analysis.shortestPathWay.distance // 4)
         self.foreach_around_city(tile, board_analysis, maxDist, scoreNearbyExpandabilityFunc)
 
         score.city_expandability_score = expCounter.value
@@ -270,6 +341,16 @@ class CityAnalyzer(object):
             ally_dist_map: MapMatrixInterface[int],
             teammate: Player,
             score: CityScoreData):
+        """
+        O(1)
+
+        @param tile:
+        @param board_analysis:
+        @param ally_dist_map:
+        @param teammate:
+        @param score:
+        @return:
+        """
 
         usDistFromCity = board_analysis.intergeneral_analysis.aMap[tile]
         allyDistFromUs = board_analysis.intergeneral_analysis.aMap[teammate.general]
@@ -306,11 +387,11 @@ class CityAnalyzer(object):
             bypassDefaultSkip=True)
 
     def get_sorted_neutral_scores(self) -> typing.List[typing.Tuple[Tile, CityScoreData]]:
-        tileScores = [t for t in sorted(self.city_scores.items(), reverse=True, key=lambda ts: ts[1].get_weighted_neutral_value())]
+        tileScores = [t for t in sorted(self.city_scores.items(), reverse=True, key=lambda ts: ts[1].get_weighted_neutral_value(log=len(self.city_scores) < 20))]
         return tileScores
 
     def get_sorted_enemy_scores(self) -> typing.List[typing.Tuple[Tile, CityScoreData]]:
-        enemyTileScores = [t for t in sorted(self.enemy_city_scores.items(), reverse=True, key=lambda ts: ts[1].get_weighted_enemy_capture_value())]
+        enemyTileScores = [t for t in sorted(self.enemy_city_scores.items(), reverse=True, key=lambda ts: ts[1].get_weighted_enemy_capture_value(log=len(self.enemy_city_scores) < 20))]
         return enemyTileScores
 
     def is_contested(self, city: Tile, captureCutoffAgoTurns: int = 20, enemyTerritorySearchDepth: int = 4) -> bool:

@@ -744,3 +744,46 @@ class OpponentTrackerTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for should_fully_recognize_finding_all_of_the_fog_army_in_the_fog")
+
+    def test_should_track_fog_tiles_from_fog_island_captures(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+
+        for hasVisionOfSource in [True, False]:
+            with self.subTest(hasVisionOfSource=hasVisionOfSource):
+                mapFile = 'GameContinuationEntries/should_track_fog_tiles_from_fog_island_captures___RyhgMQip8---1--191.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 191, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=191)
+
+                if not hasVisionOfSource:
+                    self.swap_tiles(map, 11, 6, 11, 7);
+                    self.swap_tiles(rawMap, 11, 6, 11, 7);
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, '11,5->11,4')
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                startingCountDict = bot.opponent_tracker.get_player_fog_tile_count_dict(enemyGeneral.player)
+                self.assertEqual(35, startingCountDict[1])
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+                self.assertNoFriendliesKilled(map, general)
+
+                endingCountDict = bot.opponent_tracker.get_player_fog_tile_count_dict(enemyGeneral.player)
+                if hasVisionOfSource:
+                    self.assertEqual(36, endingCountDict[1])
+                else:
+                    self.assertEqual(37, endingCountDict[1])
+
+                self.skipTest("TODO add asserts for should_track_fog_tiles_from_fog_island_captures")
+
+    def swap_tiles(self, map, x1, y1, x2, y2):
+        old1 = map.GetTile(x1, y1)
+        old2 = map.GetTile(x2, y2)
+
+        swapArmy = old1.army
+        swapPlayer = old1.player
+

@@ -296,7 +296,13 @@ def _pcst_gradient_search(
     if rootTiles:
         rootCount = len(rootTiles)
 
+    curPrizeIterLimit = 3
     costCutoffsToTry = [0.5, 1.0, 2.0, 8.0, 32.0, 128.0]
+    if map.cols * map.rows > 1000:
+        costCutoffsToTry = [0.5, 2.0, 32.0, 128.0]
+    if map.cols * map.rows > 2000:
+        curPrizeIterLimit = 2
+        costCutoffsToTry = [0.5, 2.0, 128.0]
     results = []
 
     prevCutoff = None
@@ -309,7 +315,6 @@ def _pcst_gradient_search(
             continue
 
         costIters += 1
-        curPrizeIterLimit = 3
         prizeMax, prizeMin, vertices = _pcst_gradient_descent_prize_basis(
             map,
             targetNodeCount=targetNodeCount,
@@ -488,7 +493,6 @@ def _adjust_weights(minVal: float, midVal: float, maxVal: float, bestVals: typin
     midVal = (minVal + maxVal) / 2
 
     return minVal, midVal, maxVal, changed
-
 
 
 def _pcst_gradient_quadrant_search(

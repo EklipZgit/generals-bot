@@ -286,8 +286,8 @@ class WinConditionAnalyzer(object):
         maxThreat = 0
         maxThreatTurns = 0
         analyzedCount = 0
-        for city in sorted(self.map.players[self.map.player_index].cities, key=lambda t: self.board_analysis.intergeneral_analysis.bMap[t]):
-            isEnemySide = self.board_analysis.intergeneral_analysis.bMap[city] * 1.2 < self.board_analysis.intergeneral_analysis.aMap[city]
+        for city in sorted(self.map.players[self.map.player_index].cities, key=lambda t: self.board_analysis.intergeneral_analysis.bMap.raw[t.tile_index]):
+            isEnemySide = self.board_analysis.intergeneral_analysis.bMap.raw[city.tile_index] * 1.2 < self.board_analysis.intergeneral_analysis.aMap.raw[city.tile_index]
             isContested = city in self.city_analyzer.owned_contested_cities
 
             if not isEnemySide and not isContested:
@@ -838,7 +838,7 @@ class WinConditionAnalyzer(object):
         return False
 
     def get_tile_dist_to_enemy(self, tile: Tile) -> int:
-        return self.board_analysis.intergeneral_analysis.bMap[tile]
+        return self.board_analysis.intergeneral_analysis.bMap.raw[tile.tile_index]
 
     def get_additional_fog_gather_risk(self, gatherNodes: typing.List[GatherTreeNode], asPlayer: int, inTurns: int, forceFogRisk: bool = False) -> int:
         """

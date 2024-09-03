@@ -839,16 +839,18 @@ def get_revealed_count_and_max_kill_turns_and_positive_path(
     if path is None:
         return 0, 1000, 1000, 1000.0, MapMatrix(map, 1000), path
 
-    unrevealed = {t for t in toReveal}
+    unrevealed = {t.tile_index for t in toReveal}
     ogLen = len(unrevealed)
     if ogLen == 0:
         return 0, 1000, 1000, 1000.0, MapMatrix(map, 1000), path
 
+    distMap = MapMatrix(map, 1000)
     visited = set()
     wentPositive = False
     army = 0
     finalArmy = army
     i = 0
+    t: Tile
     for i, t in enumerate(path.tileList):
         if t not in visited:
             if map.is_tile_friendly(t):
@@ -866,7 +868,14 @@ def get_revealed_count_and_max_kill_turns_and_positive_path(
             finalArmy = army
 
             visited.add(t)
-            unrevealed.difference_update(t.adjacents)
+            for adj in t.adjacents:
+                if adj.tile_index in unrevealed:
+                    unrevealed.discard(adj.tile_index)
+                    distMap.raw[adj.tile_index] = map.distance_mapper.get_distance_between(t, adj) + i
+
+            if len(unrevealed) == 1:
+                finalAdjIndex = unrevealed.pop()
+                distMap.raw[finalAdjIndex] = map.distance_mapper.get_distance_between(t, map.tiles_by_index[finalAdjIndex]) + i
 
     if not wentPositive:
         logbook.warning(f'get_revealed_count_and_max_kill_turns_and_positive_path army NEVER went positive with starting cutoffArmy {cutoffKillArmy}. Path {path}')
@@ -874,7 +883,7 @@ def get_revealed_count_and_max_kill_turns_and_positive_path(
     if i < path.length:
         path = path.get_subsegment(i)
 
-    distMap = SearchUtils.build_distance_map_matrix_with_start_dist(map, enumerate(path.tileList), maxDepth=15)
+    # distMap = SearchUtils.build_distance_map_matrix_with_start_dist(map, enumerate(path.tileList), maxDepth=15)
 
     maxKillTurns = max(distMap.raw[t.tile_index] for t in toReveal)
     minKillTurns = min(distMap.raw[t.tile_index] for t in toReveal)

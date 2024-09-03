@@ -190,20 +190,45 @@ class ArmyInterception(object):
 
         maxValPerTurn = -100000
         maxThreatInfo = None
+        isMaxThreatKill = False
 
+        killThreats = []
+        # check kill threats first
         for threatInfo in threats:
+            if threatInfo.threat.threatType != ThreatType.Kill or threatInfo.threat.threatValue < 0:
+                continue
+
+            killThreats.append(threatInfo)
+
             val = threatInfo.econ_value
             valPerTurn = threatInfo.econ_value_per_turn
-            if threatInfo.threat.threatType == ThreatType.Kill and threatInfo.threat.threatValue > 0 and (maxThreatInfo is None or maxThreatInfo.threat.threatType != ThreatType.Kill or maxThreatInfo.threat.turns > threatInfo.threat.turns):
-                # TODO make a more thoughtful decision about always using this as max threat val?
-                maxThreatInfo = threatInfo
-                break
-            if valPerTurn == maxValPerTurn and threatInfo.threat.path.length > maxThreatInfo.threat.path.length:
+            if valPerTurn == maxValPerTurn and threatInfo.threat.path.length < maxThreatInfo.threat.path.length:
                 maxValPerTurn -= 1
 
             if valPerTurn > maxValPerTurn:
                 maxValPerTurn = valPerTurn
-                maxVal = val
+                maxThreatInfo = threatInfo
+                isMaxThreatKill = True
+
+        # check non-kill threats second
+        for threatInfo in threats:
+            if threatInfo in killThreats:
+                continue
+
+            val = threatInfo.econ_value
+            valPerTurn = threatInfo.econ_value_per_turn
+            # only allow replacing kill with non-kill threats when the non-kill threat is much shorter..?
+            if isMaxThreatKill and threatInfo.threat.path.length > maxThreatInfo.threat.path.length // 2:
+                continue
+            
+            if valPerTurn == maxValPerTurn and threatInfo.threat.path.length > maxThreatInfo.threat.path.length:
+                maxValPerTurn -= 1
+
+            if valPerTurn > maxValPerTurn:
+                if isMaxThreatKill:
+                    logbook.warn(f'WARNING: replacing best_enemy_threat kill threat with non-kill:\r\nreplacing: {maxThreatInfo.threat}\r\nwith: {threatInfo.threat}')
+                isMaxThreatKill = False
+                maxValPerTurn = valPerTurn
                 maxThreatInfo = threatInfo
 
         self.best_enemy_threat: ThreatValueInfo = maxThreatInfo

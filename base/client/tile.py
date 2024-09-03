@@ -351,21 +351,28 @@ class Tile(object):
     # SLOTS VERSION
     def __getstate__(self) -> typing.Dict[str, typing.Any]:
         state = { slot: getattr(self, slot) for slot in self.__slots__ }
-        if "movable" in state:
-            del state["movable"]
-        if "adjacents" in state:
-            del state["adjacents"]
-        if "visibleTo" in state:
-            del state["visibleTo"]
+        # if len(self.movable) > 0 and not isinstance(self.movable[0], int):
+
+        try:
+            if "movable" in state:
+                state["movable"] = [t.tile_index for t in self.movable]
+            if "adjacents" in state:
+                state["adjacents"] = [t.tile_index for t in self.adjacents]
+                # del state["adjacents"]
+            if "visibleTo" in state:
+                state["visibleTo"] = [t.tile_index for t in self.visibleTo]
+                # del state["visibleTo"]
+        except:
+            pass
+
         return state
 
     def __setstate__(self, state: typing.Dict[str, typing.Any]):
         for slot, val in state.items():
             setattr(self, slot, val)
-
-        self.movable = []
-        self.adjacents = []
-        self.visibleTo = []
+        # self.movable = []
+        # self.adjacents = []
+        # self.visibleTo = []
 
     @property
     def isNeutral(self) -> bool:
@@ -390,6 +397,11 @@ class Tile(object):
         return self.isCity and self.player == -1 and self.army > Tile.PATHABLE_CITY_THRESHOLD
 
     @property
+    def isCostlyNeutral(self) -> bool:
+        """True if neutral that costs more than 10"""
+        return self.player == -1 and self.army > Tile.PATHABLE_CITY_THRESHOLD
+
+    @property
     def isPathable(self) -> bool:
         """False if mountain or undiscovered obstacle, True for all other tiles INCLUDING for discovered neutral cities"""
         return not self.isNotPathable
@@ -397,7 +409,7 @@ class Tile(object):
     @property
     def isObstacle(self) -> bool:
         """True if mountain, undiscovered obstacle, or discovered neutral city"""
-        return self.isMountain or (self.tile == TILE_OBSTACLE and not self.discovered and not self.isCity) or self.isCostlyNeutralCity
+        return self.isMountain or (self.tile == TILE_OBSTACLE and not self.discovered and not self.isCity) or self.isCostlyNeutral
 
     @property
     def movableNoObstacles(self) -> typing.Generator[Tile, None, None]:
@@ -580,16 +592,8 @@ class Tile(object):
                 self.delta.discovered = True
                 if tile == TILE_EMPTY and not self.isSwamp:
                     self.discoveredAsNeutral = True
-                if self.isGeneral and not isGeneral:
-                    self.isGeneral = False
-                    if map.generals[self.player] == self:
-                        map.generals[self.player] = None
-                        map.players[self.player].general = None
-                    # try:
-                    #     idx = map.generals.index(self)
-                    #     map.generals[idx] = None
-                    # except:
-                    #     pass
+            if self.isGeneral and not isGeneral:
+                self.isGeneral = False
             self.lastSeen = map.turn
             if not self.visible:
                 self.delta.gainedSight = True
@@ -682,8 +686,6 @@ class Tile(object):
                 self.delta.discoveredExGeneralCity = True
 
         elif isGeneral:
-            playerObj = map.players[self._player]
-            playerObj.general = self
             self.isGeneral = True
 
         if self.delta.oldOwner != self.delta.newOwner:

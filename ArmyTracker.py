@@ -68,6 +68,9 @@ class ArmyTracker(object):
         self.uneliminated_emergence_event_city_perfect_info: typing.List[typing.Set[Tile]] = [set() for player in self.map.players]
         """Whether a given emergence event had perfect city info or not."""
 
+        self.pathed_fog_emergence_tiles = set()
+        """Tiles that have been pathed successfully with good paths and thus have no emergence associated with them. Reset each turn."""
+
         self.seen_player_lookup: typing.List[bool] = [False for player in self.map.players]
         """Whether a player has been seen."""
 
@@ -94,7 +97,7 @@ class ArmyTracker(object):
         """Cities that were revealed or changed players or mountains that were fog-guess-cities will get stuck here during map updates."""
 
         self.lastMove: Move | None = None
-        self.track_threshold: int = 10
+        self.track_threshold: int = 3
         """Minimum tile value required to track an 'army' for performance reasons."""
         self.update_track_threshold()
 
@@ -150,6 +153,7 @@ class ArmyTracker(object):
             turn: int,
             boardAnalysis: BoardAnalyzer
     ):
+        self.pathed_fog_emergence_tiles = set()
         self._flipped_by_army_tracker_this_turn = []
         self._boardAnalysis = boardAnalysis
         self.skip_emergence_tile_pathings = set()
@@ -173,8 +177,8 @@ class ArmyTracker(object):
                         # Then they can't have spawned at any tile with only one liberty.
                         self.limit_player_spawn_by_good_start(player)
 
-        with self.perf_timer.begin_move_event('ArmyTracker flipped tiles / neutral discovery'):
-            self._handle_flipped_tiles()
+        with self.perf_timer.begin_move_event('ArmyTracker neutral discovery'):
+            self._pre_army_track_handle_flipped_tiles()
 
         with self.perf_timer.begin_move_event('ArmyTracker city rescan'):
             self.rescan_city_information()
@@ -204,12 +208,18 @@ class ArmyTracker(object):
         # if we have perfect info about a players general / cities, we don't need to track emergence, clear the emergence map
         for player in self.map.players:
             if self.has_perfect_information_of_player_cities_and_general(player.index):
-                self.emergenceLocationMap[player.index] = MapMatrix(self.map, 0.0)
+                logbook.info(f'Resetting p{player.index} emergences because we have perfect info at the moment.')
+                self._reset_player_emergences(player.index)
 
         self.fogPaths = []
 
         with self.perf_timer.begin_move_event('ArmyTracker army movement'):
             self.track_army_movement()
+
+        with self.perf_timer.begin_move_event('ArmyTracker non-neutral flipped tiles'):
+            self._post_army_track_handle_flipped_tiles()
+        self._flipped_tiles.clear()
+
         with self.perf_timer.begin_move_event('ArmyTracker find new armies'):
             self.find_new_armies()
 
@@ -617,9 +627,6 @@ class ArmyTracker(object):
 
                 if emergedAmount < 0:
                     emergedAmount = 0 - emergedAmount
-
-                if len(self.map.players[emergingPlayer].tiles) < 4:
-                    emergedAmount += 7
 
                 logbook.info(f'Respecting maps determined unexplained emergence of {emergedAmount} by player {emergingPlayer} on tile {repr(tile)} (from tile if known {repr(tile.delta.fromTile)})')
                 emergedArmy = self.handle_unaccounted_delta(tile, emergingPlayer, emergedAmount)
@@ -1941,10 +1948,11 @@ class ArmyTracker(object):
         emergenceValueCovered = sourceFogArmyPath.value - armyTile.army
         self.fogPaths.append(fogPath)
         minRatio = 0.85
+        leeway = min(4, self.map.turn // 50) + 1
 
-        isGoodResolution = emergenceValueCovered + 3 > delta * minRatio  # +3 offsets incorrect fog guess tiles moved over by the army at lower emergence values
+        isGoodResolution = emergenceValueCovered + leeway > delta * minRatio  # +3 offsets incorrect fog guess tiles moved over by the army at lower emergence values
         logbook.info(
-            f"emergenceValueCovered ({emergenceValueCovered}) > armyTile.army * {minRatio} ({armyTile.army * minRatio:.1f}) : {isGoodResolution}")
+            f"emergenceValueCovered ({emergenceValueCovered} + leeway {leeway}) > delta {delta} * {minRatio} ({armyTile.army * minRatio:.1f}) : {isGoodResolution}")
         if not isGoodResolution:
             armyEmergenceValue = max(4.0, delta - emergenceValueCovered)
             logbook.info(
@@ -2252,15 +2260,15 @@ class ArmyTracker(object):
 
         depthLimit = self.get_emergence_max_depth_to_general_or_none(player, tile, unaccountedForDelta)
 
-        sourceFogArmyPath = self.find_fog_source(player, tile, unaccountedForDelta, depthLimit=depthLimit)
-        if sourceFogArmyPath is not None:
-            self.unaccounted_tile_diffs.pop(tile, 0)
-
-            if tile not in self.skip_emergence_tile_pathings:
+        if tile not in self.skip_emergence_tile_pathings and len(self.uneliminated_emergence_events[player]) > 0:
+            sourceFogArmyPath = self.find_fog_source(player, tile, unaccountedForDelta, depthLimit=depthLimit)
+            if sourceFogArmyPath is not None:
+                self.unaccounted_tile_diffs.pop(tile, 0)
+                # we can only depth-limit when we found SOME fog army path...
                 if depthLimit is not None and depthLimit < 40 and tile.delta.toTile is None:
-                    logbook.info(f'WHOO LIMITING GENERAL BY {depthLimit} BASED ON SHEER STANDING ARMY EMERGENCE')
-
                     maxDistToGen = depthLimit
+                    logbook.info(f'WHOO LIMITING GENERAL BY {depthLimit} from {tile} BASED ON SHEER STANDING ARMY EMERGENCE')
+
                     self._limit_general_position_to_within_tile_and_distance(player, tile, maxDistToGen, alsoIncreaseEmergence=True, skipIfLongerThanExisting=True, emergenceAmount=unaccountedForDelta)
 
                 if sourceFogArmyPath.start.tile.player != player:
@@ -2268,7 +2276,9 @@ class ArmyTracker(object):
                         raise Exception(f'WTF trying to path from a different general...? {sourceFogArmyPath}')
                     sourceFogArmyPath.start.tile.player = player
 
-                self.use_fog_source_path_and_increase_emergence(tile, sourceFogArmyPath, unaccountedForDelta, depthLimit=depthLimit)
+                wasGoodPath = self.use_fog_source_path_and_increase_emergence(tile, sourceFogArmyPath, unaccountedForDelta, depthLimit=depthLimit)
+                if wasGoodPath:
+                    self.pathed_fog_emergence_tiles.add(tile)
 
                 return self.resolve_fog_emergence(player, sourceFogArmyPath, tile)
 
@@ -2374,10 +2384,12 @@ class ArmyTracker(object):
         @return:
         """
 
+        emgMap = self.emergenceLocationMap[armyPlayer]
+
         def reasonablePathDetector(sourceTile: Tile, armyAmt: int, dist: int) -> bool:
             if sourceTile.isObstacle:
                 return False
-            if self.emergenceLocationMap[armyPlayer][sourceTile] <= 0:
+            if emgMap.raw[sourceTile.tile_index] <= 0:
                 return False
             if sourceTile.visible:
                 return False
@@ -2414,6 +2426,8 @@ class ArmyTracker(object):
                 if tile.visible:
                     visibleMapTileCount += 1
 
+            emgMap = self.emergenceLocationMap[player.index]
+
             if actualTileCount < mapTileCount:
                 logbook.info(f'reducing player {player.index} over-tiles')
                 realDists = SearchUtils.build_distance_map_matrix(self.map, list(self.tiles_ever_owned_by_player[player.index]))
@@ -2423,7 +2437,7 @@ class ArmyTracker(object):
                 for tile in player.tiles:
                     if not tile.discovered:
                         dist = realDists[tile]
-                        emergenceBonus = max(0.0, self.emergenceLocationMap[player.index][tile])
+                        emergenceBonus = max(0.0, emgMap.raw[tile.tile_index])
                         tilesAsEncountered.put((emergenceBonus / (dist + 1) - 3 * dist + tile.army, tile))
 
                 while mapTileCount > actualTileCount and tilesAsEncountered.queue:
@@ -2580,7 +2594,7 @@ class ArmyTracker(object):
                     # if tile not in visited:
                     q.append((curPlayer, tile))
 
-    def _handle_flipped_tiles(self):
+    def _pre_army_track_handle_flipped_tiles(self):
         """To be called every time a tile is flipped from one owner to another owner by the map updates themselves."""
 
         for tile in self._flipped_tiles:
@@ -2596,6 +2610,10 @@ class ArmyTracker(object):
                         if not mv.visible:
                             for playerMat in self.valid_general_positions_by_player:
                                 playerMat.raw[mv.tile_index] = False
+
+    def _post_army_track_handle_flipped_tiles(self):
+        """To be called every time a tile is flipped from one owner to another owner by the map updates themselves."""
+
         reTilePlayers = set()
         for oldOwner, tile in self._flipped_by_army_tracker_this_turn:
 
@@ -2635,13 +2653,13 @@ class ArmyTracker(object):
 
                 for player in self.map.players:
                     # if not self.valid_general_positions_by_player[player.index]
-                    emergence = self.emergenceLocationMap[player.index][tile]
+                    emergence = self.emergenceLocationMap[player.index].raw[tile.tile_index]
                     for movable in tile.movable:
-                        movableEmergence = self.emergenceLocationMap[player.index][movable]
                         if movable.discovered:
                             continue
+                        movableEmergence = self.emergenceLocationMap[player.index].raw[movable.tile_index]
                         if emergence > movableEmergence:
-                            self.emergenceLocationMap[player.index][movable] = movableEmergence + emergence // 2
+                            self.emergenceLocationMap[player.index].raw[movable.tile_index] = movableEmergence + emergence // 2
 
             elif tile.player >= 0 and SearchUtils.any_where(tile.movable, lambda t: not t.discovered):
                 reFogLandPlayers.add(tile.player)
@@ -2651,7 +2669,7 @@ class ArmyTracker(object):
 
             if tile.delta.discovered:
                 for player in self.map.players:
-                    self.valid_general_positions_by_player[player.index].discard(tile)
+                    self.valid_general_positions_by_player[player.index].raw[tile.tile_index] = False
 
                 if tile.isGeneral or (tile.isCity and tile.delta.discoveredExGeneralCity):
                     generalPositionPlayer = tile.player
@@ -2667,20 +2685,20 @@ class ArmyTracker(object):
                                     if dist > MAX_ALLY_SPAWN_DISTANCE:
                                         self.valid_general_positions_by_player[player.index].discard(t)
                                 # TODO stop bypassing default skip once server patch goes live with 2v2 ally distance limit check!
+                                logbook.info(f'Limiting limitSpawnAroundAllyGen OUTSIDE dist {MAX_ALLY_SPAWN_DISTANCE} from {tile}')
                                 SearchUtils.breadth_first_foreach_dist(self.map, [tile], 1000, foreachFunc=limitSpawnAroundAllyGen, bypassDefaultSkip=True)
                             continue
 
                         def limitSpawnAroundOtherGen(t: Tile):
                             self.valid_general_positions_by_player[player.index].discard(t)
 
+                        logbook.info(f'Limiting limitSpawnAroundOtherGen at dist {self.min_spawn_distance} from {tile}')
                         SearchUtils.breadth_first_foreach(self.map, [tile], self.min_spawn_distance, foreachFunc=limitSpawnAroundOtherGen, bypassDefaultSkip=True)
 
                     if generalPositionPlayer != -1:
                         for t in self.map.get_all_tiles():
-                            if t != tile:
-                                self.valid_general_positions_by_player[generalPositionPlayer].discard(t)
-                            else:
-                                self.valid_general_positions_by_player[generalPositionPlayer].add(t)
+                            self.valid_general_positions_by_player[generalPositionPlayer].raw[t.tile_index] = False
+                        self.valid_general_positions_by_player[generalPositionPlayer].raw[tile.tile_index] = True
 
         mustReLimit = False
         for tile in self._flipped_tiles:
@@ -2688,6 +2706,7 @@ class ArmyTracker(object):
                 mustReLimit = True
                 break
 
+        # TODO why do we do this before we add new limitations below...?
         if mustReLimit:
             self.re_limit_gen_locations()
 
@@ -2713,11 +2732,17 @@ class ArmyTracker(object):
             if skip:
                 continue
 
-            p = self.map.players[tile.player]
-
-            if p.tileCount > 75 or p.cityCount > 1:
+            if tile in self.pathed_fog_emergence_tiles:
+                # then we knew about this army, skip it.
                 continue
 
+            p = self.map.players[tile.player]
+
+            if (p.tileCount > 75 or p.cityCount > 1) and not self.map.is_custom_map:
+                # self.re_limit_gen_locations()
+                continue
+
+            logbook.info(f'_flipped_tiles running limit_gen_position_from_emergence p{p}, tile {tile}')
             self.limit_gen_position_from_emergence(p, tile)
 
         for player in reFogLandPlayers:
@@ -2738,8 +2763,6 @@ class ArmyTracker(object):
                     visibleElims = [t for t in self.tiles_ever_owned_by_player[p.index] if t.visible]
                     self._limit_general_position_to_within_tiles_and_distance(p.index, visibleElims, limitDist, alsoIncreaseEmergence=False)
 
-        self._flipped_tiles.clear()
-
         for player in recheckPlayers:
             self._check_over_elimination(player)
 
@@ -2747,7 +2770,6 @@ class ArmyTracker(object):
         # ok then this tile is a candidate for limiting distance from general...?
         pLaunchTiming = self.player_launch_timings[tile.player]
         maxDist = self.map.turn - pLaunchTiming
-        playerPreviouslyVisibleTiles = [t for t in p.tiles if (t.visible or t.delta.lostSight) and not t.delta.gainedSight and t.delta.oldOwner == t.delta.newOwner]
         maxDist = min(maxDist, p.tileCount - 1)
         # if not tile.delta.gainedSight:
         #     maxDist = min(maxDist, p.tileCount)
@@ -2773,11 +2795,15 @@ class ArmyTracker(object):
                     if self.map.turn >= turnToRetraverseAndGetFurther:
                         maxExtraDist = self.map.turn - turnToRetraverseAndGetFurther + 1
                         maxExtraDist = min(maxExtraDist, tilesCapturedInAddlLaunches)
-                        maxDist = min(maxDist, cycle1Trail1DistLimitAkaStartArmy + maxExtraDist)
-                        # then they can be further away than their initial trail was as they could have retraversed.
+                        if maxDist < cycle1Trail1DistLimitAkaStartArmy + maxExtraDist:
+                            maxDist = cycle1Trail1DistLimitAkaStartArmy + maxExtraDist
+                            logbook.info(f'self.map.turn >= turnToRetraverseAndGetFurther {turnToRetraverseAndGetFurther}, maxDist = min(maxDist {maxDist}, cycle1Trail1DistLimitAkaStartArmy + maxExtraDist {cycle1Trail1DistLimitAkaStartArmy + maxExtraDist} ')
+                            # then they can be further away than their initial trail was as they could have retraversed.
                     elif trail1EndTurn < 44:
                         # then this is their second trail, but they don't have time to get further than original launch dist so, we can still limit by that..
-                        maxDist = min(maxDist, cycle1Trail1DistLimitAkaStartArmy)
+                        if maxDist > cycle1Trail1DistLimitAkaStartArmy:
+                            logbook.info(f'Preferring cycle1Trail1DistLimitAkaStartArmy {cycle1Trail1DistLimitAkaStartArmy} over existing maxDist {maxDist}')
+                            maxDist = cycle1Trail1DistLimitAkaStartArmy
                     else:
                         logbook.info(f'because of weird nonstandard launch, they may be full retraversing, so using their tile count as limit in order to not over-limit')
                         maxDist = p.tileCount
@@ -2798,9 +2824,9 @@ class ArmyTracker(object):
                 # this function doesn't expect you to include the emerging tile, where our calculation above does.
                 maxDist = limitByRawStandingArmy
 
-        increaseEmergence = self.map.turn < 51 or maxDist < 5
-        if len(playerPreviouslyVisibleTiles) == 0:
-            # throw out the army emergence deltas for the very first emergence, as we want to use the dist limiter exclusively for first contact.
+        increaseEmergence = self.map.turn < 51 or maxDist < 15
+        if len(self.uneliminated_emergence_events[p.index]) == 0 or (len(self.uneliminated_emergence_events[p.index]) == 1 and self.uneliminated_emergence_events[p.index].get(tile, 0) > maxDist):
+            logbook.info(f'throwing out p{p.index} emergences for the very first emergence, as we want to use the dist limiter exclusively for first contact.')
             self._reset_player_emergences(p.index)
             # tile.delta.unexplainedDelta = 0
             self.skip_emergence_tile_pathings.add(tile)
@@ -2814,10 +2840,13 @@ class ArmyTracker(object):
 
     def re_limit_gen_locations(self):
         for p, playerElims in enumerate(self.uneliminated_emergence_events):
-            for prevElimTile, prevElimDist in playerElims.items():
-                cityPerfectInfo = prevElimTile in self.uneliminated_emergence_event_city_perfect_info[p]
-                logbook.info(f'RE-eliminating p{p} t{prevElimTile} d{prevElimDist}, perfectCity{cityPerfectInfo}')
-                self._limit_general_position_to_within_tile_and_distance(p, prevElimTile, prevElimDist, alsoIncreaseEmergence=False, overrideCityPerfectInfo=cityPerfectInfo)  # alsoIncreaseEmergence=self.map.turn < 56)
+            self.re_limit_player_gen_locations(p, playerElims)
+    
+    def re_limit_player_gen_locations(self, player: int, playerElimEvents: typing.Dict[Tile, int]):
+        for prevElimTile, prevElimDist in playerElimEvents.items():
+            cityPerfectInfo = prevElimTile in self.uneliminated_emergence_event_city_perfect_info[player]
+            logbook.info(f'RE-eliminating p{player} t{prevElimTile} d{prevElimDist}, perfectCity{cityPerfectInfo}')
+            self._limit_general_position_to_within_tile_and_distance(player, prevElimTile, prevElimDist, alsoIncreaseEmergence=False, overrideCityPerfectInfo=cityPerfectInfo)  # alsoIncreaseEmergence=self.map.turn < 56)
 
     def _handle_flipped_discovered_as_neutrals(self):
         with self.perf_timer.begin_move_event('handling discovered-as-neutral'):
@@ -2842,7 +2871,7 @@ class ArmyTracker(object):
                         self.tile_discovered_neutral(adj)
 
             if len(alreadyRan) > 0:
-                with self.perf_timer.begin_move_event('gen re-limit'):
+                with self.perf_timer.begin_move_event(f'gen re-limit for {len(alreadyRan)} alreadyRan'):
                     self.re_limit_gen_locations()
 
     def _limit_general_position_to_within_tile_and_distance(self, player: int, tile: Tile, maxDist: int, alsoIncreaseEmergence: bool = True, skipIfLongerThanExisting: bool = False, overrideCityPerfectInfo: bool | None = None, emergenceAmount: int = -1):
@@ -2855,7 +2884,8 @@ class ArmyTracker(object):
                 return
 
         if emergenceAmount == -1 and len(playerUnelim) == 0:
-            emergenceAmount = max(20, self.map.turn / 2)
+            emergenceAmount = max(20, 5000 / self.map.turn)
+            # emergenceAmount = max(20, self.map.turn / 2)
 
         elims = self._limit_general_position_to_within_tiles_and_distance(player, [tile], maxDist, alsoIncreaseEmergence, overrideCityPerfectInfo=overrideCityPerfectInfo, emergenceAmount=emergenceAmount)
         shouldSave = elims > 0 or len(playerUnelim) < 3
@@ -2894,14 +2924,17 @@ class ArmyTracker(object):
         if hasPerfectInfoOfPlayerCities is None:
             hasPerfectInfoOfPlayerCities = self.has_perfect_information_of_player_cities(player)
 
+        validPositions = self.valid_general_positions_by_player[player]
+        emgMap = self.emergenceLocationMap[player]
+
         def limiter(t: Tile, dist: int) -> bool:
-            if self.valid_general_positions_by_player[player][t]:
+            if validPositions.raw[t.tile_index]:
                 validSet.add(t)
                 if alsoIncreaseEmergence:
                     launchDistDiff = abs(launchDist - dist)
                     launchDistFactor = (divOffset + launchDistDiff)
                     launchEmergence = emFactor // launchDistFactor
-                    self.emergenceLocationMap[player][t] += launchEmergence
+                    emgMap.raw[t.tile_index] += launchEmergence
             if t.discoveredAsNeutral and t not in self.tiles_ever_owned_by_player[player]:  # and (t.visible or self.map.turn < 50)   # should be solved without the visible check by adding the lost-sight-ever-owned-by-player hack to allow pathing through the fog now.
                 return True
             if (t.isCostlyNeutralCity and (t.visible or hasPerfectInfoOfPlayerCities)) or t.isMountain or (t.isUndiscoveredObstacle and hasPerfectInfoOfPlayerCities) or t.isGeneral:
@@ -2931,10 +2964,10 @@ class ArmyTracker(object):
 
         elims = 0
         for t in self.map.get_all_tiles():
-            if t not in validSet and t in self.valid_general_positions_by_player[player]:
+            if t not in validSet and validPositions.raw[t.tile_index]:
                 # logbook.info(f'elimin')
                 elims += 1
-                self.valid_general_positions_by_player[player].discard(t)
+                validPositions.raw[t.tile_index] = False
                 if elims < 5:
                     logbook.info(f'elim {elims} was {str(t)} (will stop logging at 5)')
 
@@ -3694,17 +3727,39 @@ class ArmyTracker(object):
     def _check_over_elimination(self, player: int):
         if player == -1:
             return
+        if self.map.players[player].dead:
+            return
 
         validGenPos = self.valid_general_positions_by_player[player]
         numValid = 0
         lastValid = None
-        for tile in self.map.pathable_tiles:
-            if tile in validGenPos:
+        genPos = self.map.pathable_tiles
+        if self.map.valid_spawns:
+            genPos = self.map.valid_spawns
+        
+        for tile in genPos:
+            if validGenPos.raw[tile.tile_index]:
                 numValid += 1
                 lastValid = tile
 
+        mustResetAndIncrease = False
         if numValid == 0:
+            mustResetAndIncrease = True
             logbook.error(f'having to reset general valid positions for p{player} due to over elimination')
+
+        if numValid == 1:
+            if (lastValid.visible or lastValid.discovered):
+                if not lastValid.isGeneral:
+                    logbook.error(f'For player {player} we only have one valid tile left, {lastValid}, however we have already discovered that tile. Refusing to set gen position...')
+                    mustResetAndIncrease = True
+            else:
+                logbook.info(f'SETTING THE ONLY VALID REMAINING TILE TO BE GENERAL {lastValid} for player p{player}')
+                lastValid.player = player
+                lastValid.isGeneral = True
+                self.map.generals[player] = lastValid
+                self.map.players[player].general = lastValid
+        
+        if mustResetAndIncrease:
             validTiles = self.map.pathable_tiles
             if self.map.valid_spawns:
                 validTiles = self.map.valid_spawns
@@ -3714,13 +3769,7 @@ class ArmyTracker(object):
             playerEvents = self.uneliminated_emergence_events[player]
             for tile, distance in list(playerEvents.items()):
                 playerEvents[tile] = distance + 2
-
-        if numValid == 1 and not lastValid.isGeneral and not self.map.players[player].dead:
-            lastValid.player = player
-            lastValid.isGeneral = True
-            self.map.generals[player] = lastValid
-            self.map.players[player].general = lastValid
-
+            # self.re_limit_player_gen_locations(player, playerEvents)
 
     @classmethod
     def get_expected_enemy_expansion_path(

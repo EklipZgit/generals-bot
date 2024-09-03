@@ -7,6 +7,7 @@ from BoardAnalyzer import BoardAnalyzer
 from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrix
 from SearchUtils import Counter
+from Utils import ScaleUtils
 from base.client.map import MapBase, Tile, Player
 
 
@@ -83,6 +84,11 @@ class CityAnalyzer(object):
         self.enemy_contested_cities: typing.Set[Tile] = set()
         """Contains all player owned cities that have been recently contested."""
 
+        self.reachability_costs_matrix: MapMatrixInterface[int] = None
+        self.reachable_from_matrix: MapMatrixInterface[Tile | None] = None
+
+        self.ensure_reachability_matrix_built()
+
     def __getstate__(self):
         state = self.__dict__.copy()
         if "map" in state:
@@ -101,6 +107,9 @@ class CityAnalyzer(object):
         self.owned_contested_cities: typing.Set[Tile] = set()
         self.enemy_contested_cities: typing.Set[Tile] = set()
 
+        if self.reachability_costs_matrix is None:
+            self.ensure_reachability_matrix_built(force=True)
+
         allyDistMap = None
         teammate = None
 
@@ -114,8 +123,10 @@ class CityAnalyzer(object):
 
         def foreachFunc(tile: Tile, dist: int):
             # TODO calculate predicted enemy city locations in fog and explore mountains more in places we would WANT cities to be
-            tileMightBeUndiscCity = not tile.discovered and tile.isObstacle and tile in self.map.reachable_tiles
+            # tileMightBeUndiscCity = not tile.discovered and tile.isObstacle and tile in self.map.reachable_tiles
             # if not (tile.isCity or tileMightBeUndiscCity):
+            if tile.isMountain:
+                return True
 
             if not tile.isCity:
                 return False
@@ -123,11 +134,11 @@ class CityAnalyzer(object):
             numCities[0] += 1
 
             score = CityScoreData(tile)
-            isCostlyCity = tile.army > 10 or self.map.is_tile_enemy(tile)
+            isCostlyCity = tile.army > 5 or self.map.is_tile_enemy(tile)
             isNegCity = tile.army <= 0
             isFriendly = self.map.is_player_on_team_with(tile.player, board_analysis.general.player)
 
-            if isCostlyCity and len(expensiveCities) < 20:
+            if isCostlyCity and len(expensiveCities) < 30:
                 expensiveCities.append(tile)
                 self._calculate_nearby_city_scores(tile, board_analysis, score)
             else:
@@ -141,7 +152,7 @@ class CityAnalyzer(object):
             self._calculate_distance_scores(tile, board_analysis, score)
             self._calculate_relevance_score(tile, board_analysis, score)
 
-            if isCostlyCity and len(expensiveCities) < 20:
+            if isCostlyCity and len(expensiveCities) < 30:
                 self._calculate_danger_score(tile, board_analysis, score)
                 self._calculate_expandability_score(tile, board_analysis, score)
             else:
@@ -155,28 +166,41 @@ class CityAnalyzer(object):
             if allyDistMap is not None:
                 self._calculate_2v2_score(tile, board_analysis, allyDistMap, teammate, score)
 
-            if tile.isCity:
-                if tile.isNeutral:
-                    self.city_scores[tile] = score
-                elif isFriendly:
-                    self.player_city_scores[tile] = score
-                    if self.is_contested(tile):
-                        self.owned_contested_cities.add(tile)
-                elif tile.player not in self.map.teammates:
-                    self.enemy_city_scores[tile] = score
-                    if self.is_contested(tile):
-                        self.enemy_contested_cities.add(tile)
-
+            # if tile.isCity:
+            if tile.isNeutral:
+                self.city_scores[tile] = score
+            elif isFriendly:
+                self.player_city_scores[tile] = score
+                if self.is_contested(tile):
+                    self.owned_contested_cities.add(tile)
             else:
-                self.undiscovered_mountain_scores[tile] = score
+                self.enemy_city_scores[tile] = score
+                if self.is_contested(tile):
+                    self.enemy_contested_cities.add(tile)
+            #
+            # else:
+            #     self.undiscovered_mountain_scores[tile] = score
 
         SearchUtils.breadth_first_foreach_dist(
             self.map,
             self.map.players[self.general.player].tiles,
-            maxDepth=25,
+            maxDepth=30,
             foreachFunc=foreachFunc,
             bypassDefaultSkip=True
         )
+
+    def reset_reachability(self):
+        self.reachability_costs_matrix = None
+        self.reachable_from_matrix = None
+
+    def ensure_reachability_matrix_built(self, force: bool = False):
+        if self.reachability_costs_matrix is not None and not force:
+            return
+        if len(self.map.swamps) > 0 or self.map.is_walled_city_game:
+            self.reachable_from_matrix, self.reachability_costs_matrix = SearchUtils.build_reachability_cost_map_matrix(self.map, [self.general])
+        else:
+            self.reachability_costs_matrix = MapMatrix(self.map, 0)
+            self.reachable_from_matrix = MapMatrix(self.map, None)
 
     def _calculate_distance_scores(self, city: Tile, board_analysis: BoardAnalyzer, score: CityScoreData):
         """
@@ -266,7 +290,13 @@ class CityAnalyzer(object):
                 if self.map.is_player_on_team_with(curTile.player, board_analysis.general.player):
                     nearbyFriendlyCityScore.add(maxDist - distance)
                 elif curTile.player == -1:
-                    nearbyNeutralCityScore.add(maxDist - distance)
+                    distMult = maxDist - distance
+                    if curTile.army < 4:
+                        nearbyNeutralCityScore.add(distMult * ScaleUtils.rescale_value(min(curTile.army, -100), -100, 4, 40, 5))
+                    elif curTile.army < 40:
+                        nearbyNeutralCityScore.add(distMult * ScaleUtils.rescale_value(curTile.army, 4, 40, 4, 1))
+                    else:
+                        nearbyNeutralCityScore.add(distMult)
                 else:
                     nearbyEnemyCityScore.add(maxDist - distance)
 

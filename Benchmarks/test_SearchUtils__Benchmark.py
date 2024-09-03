@@ -61,7 +61,7 @@ class SearchUtilsBenchmarkTests(TestBase):
 
         ranges = [2, 4, 7, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70]
 
-        self.run_shortest_path_algo_comparison(map, ranges, skipFloyd=False)
+        self.run_shortest_path_algo_comparison(map, ranges, skipFloyd=True)
 
     def test_benchmark_distmap_algos(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -138,6 +138,7 @@ class SearchUtilsBenchmarkTests(TestBase):
         totalSumPQTime = 0.0
         totalSumHQTime = 0.0
         totalSumAStarTime = 0.0
+        totalSumABdTime = 0.0
         totalSumAStarDistTime = 0.0
         totalSumAStarMatrixTime = 0.0
         totalSumBfsFindTime = 0.0
@@ -149,6 +150,7 @@ class SearchUtilsBenchmarkTests(TestBase):
             sumPQTime = 0.0
             sumHQTime = 0.0
             sumAStarTime = 0.0
+            sumABdTime = 0.0
             sumAStarDistTime = 0.0
             sumAStarMatrixTime = 0.0
             sumBfsFindTime = 0.0
@@ -171,9 +173,9 @@ class SearchUtilsBenchmarkTests(TestBase):
                     # pPq = SearchUtils.bidirectional_a_star_pq(pointA, pointB)
                     # sumPQTime += time.perf_counter() - start
 
-                    # start = time.perf_counter()
-                    # pHq = SearchUtils.bidirectional_a_star(pointA, pointB)
-                    # sumHQTime += time.perf_counter() - start
+                    start = time.perf_counter()
+                    pABd = SearchUtils.bidirectional_a_star(pointA, pointB)
+                    sumABdTime += time.perf_counter() - start
 
                     start = time.perf_counter()
                     pAStar = SearchUtils.a_star_find([pointA], pointB, noLog=True)
@@ -218,6 +220,7 @@ class SearchUtilsBenchmarkTests(TestBase):
                             or pAStarDist != pAStar.length
                             or pFindDist != pAStar.length
                             or pAStarMatrix.length != pAStar.length
+                            or pABd.length != pAStar.length
                     ):
                         vi = self.get_renderable_view_info(map)
                         # vi.color_path(PathColorer(
@@ -234,6 +237,9 @@ class SearchUtilsBenchmarkTests(TestBase):
                         ))
                         vi.color_path(PathColorer(
                             pAStarMatrix, 0, 0, 0
+                        ))
+                        vi.color_path(PathColorer(
+                            pABd, 19, 79, 255
                         ))
                         self.render_view_info(map, vi, "mismatch")
 
@@ -270,11 +276,12 @@ class SearchUtilsBenchmarkTests(TestBase):
                         self.render_view_info(map, vi, f"mismatch distmapper (dual cache) {dualCacheDistMapperDist} vs {pAStar.length}")
 
             logbook.info(
-                f'{lastRange}-{r}, iters {iters}: floyd {floydTime:.5f} vs dumbass {dumbassDistTime:.5f} vs distMapper {sumDistMapperTime:.5f} vs distMapperDual {sumDualCacheDistMapperTime:.5f} vs PQ {sumPQTime:.5f} vs HQ {sumHQTime:.5f} vs find {sumBfsFindTime:.5f} vs aStar {sumAStarTime:.5f} vs aStarMatrix {sumAStarMatrixTime:.5f} vs aStarDist {sumAStarDistTime:.5f}, vs bfsFindDist {sumBfsFindDistTime:.5f}')
+                f'{lastRange}-{r}, iters {iters}: floyd {floydTime:.5f} vs dumbass {dumbassDistTime:.5f} vs distMapper {sumDistMapperTime:.5f} vs distMapperDual {sumDualCacheDistMapperTime:.5f} vs PQ {sumPQTime:.5f} vs HQ {sumHQTime:.5f} vs find {sumBfsFindTime:.5f} vs aStar {sumAStarTime:.5f} vs aStarMatrix {sumAStarMatrixTime:.5f} vs aStarDist {sumAStarDistTime:.5f}, vs bfsFindDist {sumBfsFindDistTime:.5f}, vs aStarBd {sumABdTime:.5f}')
             lastRange = r
 
             totalSumPQTime += sumPQTime
             totalSumHQTime += sumHQTime
+            totalSumABdTime += sumABdTime
             totalSumAStarTime += sumAStarTime
             totalSumAStarDistTime += sumAStarDistTime
             totalSumAStarMatrixTime += sumAStarMatrixTime
@@ -282,7 +289,7 @@ class SearchUtilsBenchmarkTests(TestBase):
             totalSumBfsFindDistTime += sumBfsFindDistTime
             totalSumBfsFindDistNoNeutTime += sumBfsFindDistNoNeutTime
         logbook.info(
-            f'FINAL RESULTS floyd {floydTime:.5f} vs dumbass {dumbassDistTime:.5f} vs distMapper {sumDistMapperTime:.5f} vs distMapperDual {sumDualCacheDistMapperTime:.5f} vs PQ {totalSumPQTime:.5f} vs HQ {totalSumHQTime:.5f} vs find {totalSumBfsFindTime:.5f} vs aStar {totalSumAStarTime:.5f} vs aStarMatrix {totalSumAStarMatrixTime:.5f} vs aStarDist {totalSumAStarDistTime:.5f}, vs bfsFindDist {totalSumBfsFindDistTime:.5f}')
+            f'FINAL RESULTS floyd {floydTime:.5f} vs dumbass {dumbassDistTime:.5f} vs distMapper {sumDistMapperTime:.5f} vs distMapperDual {sumDualCacheDistMapperTime:.5f} vs PQ {totalSumPQTime:.5f} vs HQ {totalSumHQTime:.5f} vs find {totalSumBfsFindTime:.5f} vs aStar {totalSumAStarTime:.5f} vs aStarMatrix {totalSumAStarMatrixTime:.5f} vs aStarDist {totalSumAStarDistTime:.5f}, vs bfsFindDist {totalSumBfsFindDistTime:.5f}, vs aStarBd {totalSumABdTime:.5f}')
 
         def test_bench_set_empty_checking_perf(self):
             numPops = 500000000

@@ -20,6 +20,7 @@ class GeneralPredictionTests(TestBase):
 
         bot.info_render_tile_deltas = True
         bot.info_render_army_emergence_values = True
+        # bot.info_render_
         # bot.info_render_general_undiscovered_prediction_values = True
 
         return bot
@@ -65,6 +66,7 @@ class GeneralPredictionTests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(general.player, '9,23->9,24')
         bot = self.get_debug_render_bot(simHost, general.player)
+        bot.armyTracker.player_launch_timings[enemyGeneral.player] = 26
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -228,7 +230,7 @@ class GeneralPredictionTests(TestBase):
             self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][tile], f'{str(tile)} should not be allowed')
     
     def test_should_immediately_re_evaluate_target_path(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_immediately_re_evaluate_target_path___Pmzuw7IAX---0--49_actual_spawn.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 49, fill_out_tiles=True)
 
@@ -1141,6 +1143,9 @@ class GeneralPredictionTests(TestBase):
 
                 badEmergence = self.get_emergence_xy(bot, 14, 13)
 
+                for tile in tilesAllowedIndexedByGenArmy[generalArmy:]:
+                    self.assertInvalidGeneralPosition(bot, tile)
+
                 for tile in tilesAllowedIndexedByGenArmy[:generalArmy]:
                     if tile is None:
                         continue
@@ -1149,11 +1154,8 @@ class GeneralPredictionTests(TestBase):
                     if not tile.isGeneral:
                         self.assertEmergenceGreaterThan(bot, tile, badEmergence)
 
-                for tile in tilesAllowedIndexedByGenArmy[generalArmy:]:
-                    self.assertInvalidGeneralPosition(bot, tile)
-
     def test_doesnt_over_limit_optimal_starts(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         projRoot = pathlib.Path(__file__).parent
         folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
         files = os.listdir(folderWithHistoricals)
@@ -1216,6 +1218,7 @@ class GeneralPredictionTests(TestBase):
         # TwVCPfKGk.txtmap
         # uG1xBBXcL.txtmap
         # uZ8hgO5YQ.txtmap
+        file = '7x8to-3LP.txtmap'
 
         map, general = self.load_map_and_general(f'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat/{file}', turn=51)
         enPlayer = (general.player + 1) & 1
@@ -1234,7 +1237,7 @@ class GeneralPredictionTests(TestBase):
                 self.fail(f'should not have eliminated {general}')
 
     def test_doesnt_over_limit_optimal_starts__mountain_replace_test(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         projRoot = pathlib.Path(__file__).parent
         folderWithHistoricals = projRoot / f'../Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'
         files = os.listdir(folderWithHistoricals)
@@ -1312,16 +1315,6 @@ class GeneralPredictionTests(TestBase):
             logbook.info(traceback.format_exc())
             return None
 
-# 11f, 65p
-# 7f, 72p
-# 9f, 70p
-# 9f, 71p
-# 8f, 73p
-# 17f, 73p after making lots of fixes for adding more emergence events
-# 15f, 79p after fixing the ever_owned_by_player order issue with drop_chained_bad_fog on tile-discovered-as-neutral
-# 15f, 90p after adding limits for emergences from obvious locations based on pure, raw unfettered standing army.
-# -------
-# 10f, 87p, 1s  AFTER MOVED DIVE RELATED TESTS TO OTHER TEST FILE    
     def test_should_not_misEliminate_gen_position_for_weird_start(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_misEliminate_gen_position_for_weird_start___ElZH_kmpU---0--15.txtmap'
@@ -1364,3 +1357,38 @@ class GeneralPredictionTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
 
         self.assertFalse(playerMap.GetTile(39,36).isGeneral)
+    
+    def test_should_not_overlimit_on_army_that_enters_and_leaves_fog(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_overlimit_on_army_that_enters_and_leaves_fog___Gm0k2qU_c---1--92.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 92, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=92)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '9,7->6,7')
+        simHost.queue_player_moves_str(general.player, '5,9->7,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.armyTracker.player_launch_timings[enemyGeneral.player] = 27
+        bot.get_army_at_x_y(9, 7)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertValidGeneralPositionXY(bot, 10, 17)
+
+# 11f, 65p
+# 7f, 72p
+# 9f, 70p
+# 9f, 71p
+# 8f, 73p
+# 17f, 73p after making lots of fixes for adding more emergence events
+# 15f, 79p after fixing the ever_owned_by_player order issue with drop_chained_bad_fog on tile-discovered-as-neutral
+# 15f, 90p after adding limits for emergences from obvious locations based on pure, raw unfettered standing army.
+# -------
+# 10f, 87p, 1s  AFTER MOVED DIVE RELATED TESTS TO OTHER TEST FILE
+# 22f, 868p after adding the million blah blah blah
+# 8f, 880p (49s) after fixing stuff up and moving the gen position limiting to after the emergence pathing.

@@ -202,11 +202,11 @@ class GatherTreeNode(typing.Generic[T]):
         for n in gatherNodes:
             leaves = GatherTreeNode.get_tree_leaves([n])
             distOffs = 0
-            if n.tile.isGeneral:
-                distOffs = 1
+            # if n.tile.isGeneral:
+            #     distOffs = 1
             leavesGreaterThanDistance = []
             for g in leaves:
-                if distMap[g.tile] >= dist - distOffs or (g.toTile and distMap[g.toTile] >= dist - distOffs):
+                if distMap.raw[g.tile.tile_index] >= dist - distOffs or (g.toTile and distMap[g.toTile] >= dist - distOffs):
                     leavesGreaterThanDistance.append(g)
             if includeAll:
                 leavesToInclude.extend(leavesGreaterThanDistance)

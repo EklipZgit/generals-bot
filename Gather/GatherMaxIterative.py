@@ -1429,8 +1429,12 @@ def knapsack_max_gather_with_values(
             negArmySum += 1
             negGatheredSum += 1
             if nextTile.isSwamp:
-                negArmySum += 2
-                negGatheredSum += 2
+                if nextTile.player != searchingPlayer or nextTile.army == 1:
+                    negArmySum += 1
+                    negGatheredSum += 1
+                    realDist += 4
+                    numPrioTiles -= 2
+                # if not useTrueValueGathered:
             # if nextTile.x == 6 and nextTile.y == 2 and map.turn == 224:
             #     pass
             if nextTile not in negativeTiles:

@@ -154,13 +154,18 @@ class GeneralsViewer(object):
             self._viewInfo = viewInfo
         if map is not None:
             self._map = map
+            # for tile in map.tiles_by_index:
+            #     tile.movable = [map.tiles_by_index[i] for i in tile.movable]
+            #     tile.adjacents = [map.tiles_by_index[i] for i in tile.adjacents]
+            #     tile.visibleTo = [map.tiles_by_index[i] for i in tile.visibleTo]
+            # if self._map.tiles_by_index[0].movable[0]
             # self._real_width = self._map.cols
             # if self._map.cols < 11:
             #     for y, row in enumerate(self._map.grid):
             #         for x in range(self._map.cols, 11):
             #             row.append(Tile(x, y, TILE_MOUNTAIN, 0))
             #     self._map.cols = 11
-            self._map.init_grid_movable()
+            # self._map.init_grid_movable()
             if self._map.is_2v2:
                 self._scores = map.scores
             else:
@@ -516,9 +521,8 @@ class GeneralsViewer(object):
             #    self._screen.blit(self._font.render(str(score['total']) + " on " + str(score['tiles']), True, WHITE), (score_width * i + 3, pos_top + 1 + self._font.get_height()))
 
             # Draw Grid
-            for row in range(self._map.rows):
-                for column in range(self._map.cols):
-                    tile = self._map.grid[row][column]
+            for row, rowArr in enumerate(self._map.grid):
+                for column, tile in enumerate(rowArr):
                     # Determine BG Color
                     color = self.get_tile_color(tile)
 
@@ -751,7 +755,7 @@ class GeneralsViewer(object):
                     color_font = self.get_font_color(tile)
                     color_small_font = self.get_small_font_color(tile)
 
-                    if tile not in self._map.pathable_tiles and not tile.isNotPathable and not tile.isCity and not tile.isMountain:
+                    if tile not in self._map.pathable_tiles and tile.isPathable and not tile.isCity and not tile.isMountain:
                         textVal = "   X"
                         self._screen.blit(self._medFont.render(textVal, True, color_font),
                                           (pos_left + 2, pos_top + self.cellHeight / 4))

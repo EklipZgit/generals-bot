@@ -22,7 +22,7 @@ from Interfaces import MapMatrixInterface, TileSet
 from Path import Path
 from test.test_float import INF
 from base.client.tile import Tile
-from base.client.map import MapBase, new_value_grid
+from base.client.map import MapBase
 from MapMatrix import MapMatrix, MapMatrixSet
 
 BYPASS_TIMEOUTS_FOR_DEBUGGING = False
@@ -221,7 +221,8 @@ def dest_breadth_first_target(
             if ignoreGoalArmy and (negativeTiles is None or goal not in negativeTiles):
                 # then we have to inversely increment so we dont have to figure that out in the loop every time
                 if not map.is_player_on_team_with(searchingPlayer, goal.player):
-                    startArmy -= goal.army
+                    if goal.army > 0:
+                        startArmy -= goal.army
                 else:
                     startArmy += goal.army
 
@@ -247,7 +248,7 @@ def dest_breadth_first_target(
                 f"PopSkipped skipTile current {current.toString()}, army {army}, goalInc {goalInc}, targetArmy {targetArmy}")
             continue
         if current.isMountain or (
-                noNeutralCities and current.isCostlyNeutralCity and current not in goalList) or (
+                noNeutralCities and current.isCostlyNeutral and current not in goalList) or (
                 not current.discovered and current.isNotPathable
         ):
             if not noLog and iter < 100:
@@ -267,26 +268,28 @@ def dest_breadth_first_target(
         if (current.isCity and current.player != -1) or current.isGeneral:
             if isTeam:
                 goalInc -= 0.5
-                if isInc:
-                    nextArmy -= int(goalInc * 2)
+                # if isInc:
+                #     nextArmy -= int(goalInc * 2)
             else:
                 goalInc += 0.5
-                if isInc:
-                    nextArmy += int(goalInc * 2)
+                # if isInc:
+                #     nextArmy += int(goalInc * 2)
 
         notNegativeTile = negativeTiles is None or current not in negativeTiles
 
-        if isTeam:
-            if notNegativeTile:
-                nextArmy += current.army
-        else:
-            if notNegativeTile:
-                nextArmy -= current.army
+        # we screw up the paths if we let negatives happen, we think a 1 can make it all the way across the map to capture a 1000...?
+        if current.army > 0:
+            if isTeam:
+                if notNegativeTile:
+                    nextArmy += current.army
             else:
-                nextArmy -= 1
+                if notNegativeTile:
+                    nextArmy -= current.army
+                else:
+                    nextArmy -= 1
 
         if current.isSwamp:
-            nextArmy -= 1
+            nextArmy -= 2
 
         newDist = dist + 1
 
@@ -385,6 +388,10 @@ def _shortestPathHeur(goals, cur) -> int:
 
 
 def _shortestPathHeurTile(goal, cur) -> int:
+    # MUCH much slower
+    # return (abs(goal.x - cur.x)**2 + abs(goal.y - cur.y)**2)**0.5
+
+    # TODO need to replace with torus safe calls to map...
     return abs(goal.x - cur.x) + abs(goal.y - cur.y)
 
 
@@ -398,7 +405,7 @@ def a_star_kill(
         ignoreStartTile=False,
         requireExtraArmy=0,
         negativeTiles=None):
-    frontier = HeapQueue()
+    frontier = []
     came_from = {}
     cost_so_far = {}
     if isinstance(startTiles, dict):
@@ -411,9 +418,9 @@ def a_star_kill(
             startArmy -= requireExtraArmy
             # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
             #    startArmy = start.army / 2
-            cost_so_far[start] = (startDist, 0 - startArmy)
-            frontier.put((cost_so_far[start], start))
-            came_from[start] = None
+            cost_so_far[start.tile_index] = (startDist, 0 - startArmy)
+            heapq.heappush(frontier, ((_shortestPathHeur(goalSet, start) + startDist, 0 - startArmy), start))
+            came_from[start.tile_index] = None
     else:
         for start in startTiles:
             logbook.info(f"a* enqueued start tile {start.toString()} with extraArmy {requireExtraArmy}")
@@ -423,29 +430,21 @@ def a_star_kill(
             startArmy -= requireExtraArmy
             # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
             #    startArmy = start.army / 2
-            cost_so_far[start] = (0, 0 - startArmy)
-            frontier.put((cost_so_far[start], start))
-            came_from[start] = None
+            cost_so_far[start.tile_index] = (0, 0 - startArmy)
+            heapq.heappush(frontier, ((_shortestPathHeur(goalSet, start), 0 - startArmy), start))
+            came_from[start.tile_index] = None
 
     start = time.perf_counter()
     iter = 0
     foundDist = -1
     foundArmy = -1
-    goal = False
     depthEvaluated = 0
 
-    qq = frontier.queue
-    while qq:
+    while frontier:
         iter += 1
-        if iter & 64 == 0 and time.perf_counter() - start > maxTime and not BYPASS_TIMEOUTS_FOR_DEBUGGING:
-            logbook.info("breaking A* early")
-            break
-        prio, current = frontier.get()
-        x = current.x
-        y = current.y
-        curCost = cost_so_far[current]
-        dist = curCost[0]
-        army = 0 - curCost[1]
+        prio, current = heapq.heappop(frontier)
+        dist, negArmy = cost_so_far[current.tile_index]
+        army = 0 - negArmy
 
         if dist > depthEvaluated:
             depthEvaluated = dist
@@ -453,47 +452,50 @@ def a_star_kill(
             if army > 1 and army > foundArmy:
                 foundDist = dist
                 foundArmy = army
-                goal = True
                 break
             else:  # skip paths that go through target, that wouldn't make sense
                 # logbook.info("a* path went through target")
                 continue
-        if dist < maxDepth:
-            for next in current.movable:  # new spots to try
-                if next == came_from[current]:
-                    continue
-                if next.isMountain or ((not next.discovered) and next.isNotPathable):
-                    # logbook.info("a* mountain")
-                    continue
-                if restrictionEvalFuncs is not None:
-                    if current in restrictionEvalFuncs:
-                        if not restrictionEvalFuncs[current](next):
-                            logbook.info(f"dangerous, vetod: {current.x},{current.y}")
-                            continue
-                        else:
-                            logbook.info(f"safe: {current.x},{current.y}")
+        if dist >= maxDepth:
+            continue
 
-                inc = 0 if not ((next.isCity and next.player != -1) or next.isGeneral) else (dist + 1) / 2
-
-                # new_cost = cost_so_far[current] + graph.cost(current, next)
-                nextArmy = army - 1
-                if negativeTiles is None or next not in negativeTiles:
-                    if startTiles[0].player == next.player:
-                        nextArmy += next.army + inc
+        newDist = dist + 1
+        for next in current.movable:  # new spots to try
+            if next == came_from[current.tile_index]:
+                continue
+            if next.isMountain or ((not next.discovered) and next.isNotPathable):
+                # logbook.info("a* mountain")
+                continue
+            if restrictionEvalFuncs is not None:
+                if current in restrictionEvalFuncs:
+                    if not restrictionEvalFuncs[current.tile_index](next):
+                        logbook.info(f"dangerous, vetod: {current.x},{current.y}")
+                        continue
                     else:
-                        nextArmy -= (next.army + inc)
-                    # if next.isCity and next.player == -1:
-                    #     nextArmy -= next.army * 2
-                if nextArmy <= 0 and army > 0:  # prune out paths that go negative after initially going positive
-                    # logbook.info("a* next army <= 0: {}".format(nextArmy))
-                    continue
-                new_cost = (dist + 1, (0 - nextArmy))
-                if next not in cost_so_far or new_cost < cost_so_far[next]:
-                    cost_so_far[next] = new_cost
-                    priority = (dist + 1 + _shortestPathHeur(goalSet, next), 0 - nextArmy)
-                    frontier.put((priority, next))
-                    # logbook.info("a* enqueued next")
-                    came_from[next] = current
+                        logbook.info(f"safe: {current.x},{current.y}")
+
+            inc = 0 if not ((next.isCity and next.player != -1) or next.isGeneral) else (dist + 1) / 2
+
+            # new_cost = cost_so_far[current.tile_index] + graph.cost(current, next)
+            nextArmy = army - 1
+            if negativeTiles is None or next not in negativeTiles:
+                if startTiles[0].player == next.player:
+                    nextArmy += next.army + inc
+                else:
+                    nextArmy -= (next.army + inc)
+                # if next.isCity and next.player == -1:
+                #     nextArmy -= next.army * 2
+            if nextArmy <= 0 < army:  # prune out paths that go negative after initially going positive
+                # logbook.info("a* next army <= 0: {}".format(nextArmy))
+                continue
+            new_cost = (newDist, (0 - nextArmy))
+            curCost = cost_so_far.get(next.tile_index, (1000, -10000))
+            if new_cost < curCost:
+                cost_so_far[next.tile_index] = new_cost
+                priority = (newDist + _shortestPathHeur(goalSet, next), 0 - nextArmy)
+                heapq.heappush(frontier, (priority, next))
+                # logbook.info("a* enqueued next")
+                came_from[next.tile_index] = current
     logbook.info(
         f"A* KILL SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
     goal = None
@@ -507,9 +509,9 @@ def a_star_kill(
     pathObject.add_next(goal)
     node = goal
     dist = foundDist
-    while came_from[node] is not None:
+    while came_from[node.tile_index] is not None:
         # logbook.info("Node {},{}".format(node.x, node.y))
-        node = came_from[node]
+        node = came_from[node.tile_index]
         dist -= 1
         pathObject.add_start(node)
     logbook.info(f"A* FOUND KILLPATH OF LENGTH {pathObject.length} VALUE {pathObject.value}\n{pathObject.toString()}")
@@ -528,6 +530,81 @@ def a_star_find(
         noLog: bool = False):
     frontier = []
     came_from = {}
+    if isinstance(startTiles, dict):
+        for start in startTiles.keys():
+            startDist = startTiles[start]
+            if not noLog:
+                logbook.info(f"a* enqueued start tile {start.toString()}")
+            # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
+            #    startArmy = start.army / 2
+            heapq.heappush(frontier, (startDist + _shortestPathHeurTile(goal, start), startDist, start))
+            came_from[start.tile_index] = None
+    else:
+        for start in startTiles:
+            if not noLog:
+                logbook.info(f"a* enqueued start tile {start.toString()}")
+            # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
+            #    startArmy = start.army / 2
+            heapq.heappush(frontier, (_shortestPathHeurTile(goal, start), 0, start))
+            came_from[start.tile_index] = None
+    start = time.perf_counter()
+    iter = 0
+    depthEvaluated = 0
+
+    while frontier:
+        iter += 1
+        prio, dist, current = heapq.heappop(frontier)
+
+        if dist > depthEvaluated:
+            depthEvaluated = dist
+        if current is goal:
+            break
+
+        new_cost = dist + 1
+        if dist < maxDepth:
+            for next in current.movable:  # new spots to try
+                if next.isMountain or ((not next.discovered) and next.isNotPathable):
+                    # logbook.info("a* mountain")
+                    continue
+                if next.isCostlyNeutral and not allowNeutralCities:
+                    continue
+                if next.tile_index in came_from:
+                    continue
+
+                priority = new_cost + _shortestPathHeurTile(goal, next)
+                heapq.heappush(frontier, (priority, new_cost, next))
+                # logbook.info("a* enqueued next")
+                came_from[next.tile_index] = current
+
+    if not noLog:
+        logbook.info(
+            f"a_star_find SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
+
+    if goal.tile_index not in came_from:
+        return None
+
+    pathObject = Path()
+    pathObject.add_next(goal)
+    node = goal
+    while came_from[node.tile_index] is not None:
+        # logbook.info("Node {},{}".format(node.x, node.y))
+        node = came_from[node.tile_index]
+        pathObject.add_start(node)
+
+    if not noLog:
+        logbook.info(f"a_star_find FOUND PATH OF LENGTH {pathObject.length} VALUE {pathObject.value}\n{pathObject}")
+    # pathObject.calculate_value(startTiles[0].player, teams=map._teams)
+    return pathObject
+
+
+def a_star_find_official(
+        startTiles,
+        goal: Tile,
+        maxDepth: int = 200,
+        allowNeutralCities: bool = False,
+        noLog: bool = False):
+    frontier = []
+    came_from = {}
     cost_so_far = {}
     if isinstance(startTiles, dict):
         for start in startTiles.keys():
@@ -536,18 +613,18 @@ def a_star_find(
                 logbook.info(f"a* enqueued start tile {start.toString()}")
             # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
             #    startArmy = start.army / 2
-            cost_so_far[start] = startDist
-            heapq.heappush(frontier, (cost_so_far[start], start))
-            came_from[start] = None
+            cost_so_far[start.tile_index] = startDist
+            heapq.heappush(frontier, (startDist + _shortestPathHeurTile(goal, start), startDist, start))
+            came_from[start.tile_index] = None
     else:
         for start in startTiles:
             if not noLog:
                 logbook.info(f"a* enqueued start tile {start.toString()}")
             # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
             #    startArmy = start.army / 2
-            cost_so_far[start] = 0
-            heapq.heappush(frontier, (cost_so_far[start], start))
-            came_from[start] = None
+            cost_so_far[start.tile_index] = 0
+            heapq.heappush(frontier, (_shortestPathHeurTile(goal, start), 0, start))
+            came_from[start.tile_index] = None
     start = time.perf_counter()
     iter = 0
     foundDist = -1
@@ -555,47 +632,44 @@ def a_star_find(
 
     while frontier:
         iter += 1
-        prio, current = heapq.heappop(frontier)
-        dist = cost_so_far[current]
+        prio, dist, current = heapq.heappop(frontier)
 
         if dist > depthEvaluated:
             depthEvaluated = dist
-        if current == goal:
+        if current is goal:
             foundDist = dist
             break
 
+        new_cost = dist + 1
         if dist < maxDepth:
             for next in current.movable:  # new spots to try
-                if next == came_from[current]:
-                    continue
                 if next.isMountain or ((not next.discovered) and next.isNotPathable):
                     # logbook.info("a* mountain")
                     continue
-                if next.isCostlyNeutralCity and not allowNeutralCities:
+                if next.isCostlyNeutral and not allowNeutralCities:
                     continue
 
-                new_cost = dist + 1
-                curNextCost = cost_so_far.get(next, None)
-                if next not in cost_so_far or new_cost < curNextCost:
-                    cost_so_far[next] = new_cost
-                    priority = dist + 1 + _shortestPathHeurTile(goal, next)
-                    heapq.heappush(frontier, (priority, next))
+                curNextCost = cost_so_far.get(next.tile_index, 1000)
+                if new_cost < curNextCost:
+                    cost_so_far[next.tile_index] = new_cost
+                    priority = new_cost + _shortestPathHeurTile(goal, next)
+                    heapq.heappush(frontier, (priority, new_cost, next))
                     # logbook.info("a* enqueued next")
-                    came_from[next] = current
+                    came_from[next.tile_index] = current
 
     if not noLog:
         logbook.info(
             f"a_star_find SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
 
-    if goal not in came_from:
+    if goal.tile_index not in came_from:
         return None
 
     pathObject = Path()
     pathObject.add_next(goal)
     node = goal
-    while came_from[node] is not None:
+    while came_from[node.tile_index] is not None:
         # logbook.info("Node {},{}".format(node.x, node.y))
-        node = came_from[node]
+        node = came_from[node.tile_index]
         pathObject.add_start(node)
 
     if not noLog:
@@ -610,6 +684,7 @@ def a_star_find_raw(
         maxDepth: int = 200,
         allowNeutralCities: bool = False,
         noLog: bool = False) -> typing.List[Tile] | None:
+    """Returns tile list instead of path object"""
     frontier = []
     came_from = {}
     cost_so_far = {}
@@ -620,18 +695,18 @@ def a_star_find_raw(
                 logbook.info(f"a* enqueued start tile {start.toString()}")
             # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
             #    startArmy = start.army / 2
-            cost_so_far[start] = startDist
-            heapq.heappush(frontier, (cost_so_far[start], start))
-            came_from[start] = None
+            cost_so_far[start.tile_index] = startDist
+            heapq.heappush(frontier, (startDist + _shortestPathHeurTile(goal, start), startDist, start))
+            came_from[start.tile_index] = None
     else:
         for start in startTiles:
             if not noLog:
                 logbook.info(f"a* enqueued start tile {start.toString()}")
             # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
             #    startArmy = start.army / 2
-            cost_so_far[start] = 0
-            heapq.heappush(frontier, (cost_so_far[start], start))
-            came_from[start] = None
+            cost_so_far[start.tile_index] = 0
+            heapq.heappush(frontier, (_shortestPathHeurTile(goal, start), 0, start))
+            came_from[start.tile_index] = None
     start = time.perf_counter()
     iter = 0
     foundDist = -1
@@ -639,45 +714,42 @@ def a_star_find_raw(
 
     while frontier:
         iter += 1
-        prio, current = heapq.heappop(frontier)
-        dist = cost_so_far[current]
+        prio, dist, current = heapq.heappop(frontier)
 
         if dist > depthEvaluated:
             depthEvaluated = dist
-        if current == goal:
+        if current is goal:
             foundDist = dist
             break
 
+        new_cost = dist + 1
         if dist < maxDepth:
             for next in current.movable:  # new spots to try
-                if next == came_from[current]:
-                    continue
                 if next.isMountain or ((not next.discovered) and next.isNotPathable):
                     # logbook.info("a* mountain")
                     continue
-                if next.isCostlyNeutralCity and not allowNeutralCities:
+                if next.isCostlyNeutral and not allowNeutralCities:
                     continue
 
-                new_cost = dist + 1
-                curNextCost = cost_so_far.get(next, None)
-                if next not in cost_so_far or new_cost < curNextCost:
-                    cost_so_far[next] = new_cost
-                    priority = dist + 1 + _shortestPathHeurTile(goal, next)
-                    heapq.heappush(frontier, (priority, next))
+                curNextCost = cost_so_far.get(next.tile_index, 1000)
+                if new_cost < curNextCost:
+                    cost_so_far[next.tile_index] = new_cost
+                    priority = new_cost + _shortestPathHeurTile(goal, next)
+                    heapq.heappush(frontier, (priority, new_cost, next))
                     # logbook.info("a* enqueued next")
-                    came_from[next] = current
+                    came_from[next.tile_index] = current
 
     if not noLog:
         logbook.info(
             f"a_star_find_raw SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
 
-    if goal not in came_from:
+    if goal.tile_index not in came_from:
         return None
 
     tileList = [goal]
     node = goal
-    while came_from[node] is not None:
-        node = came_from[node]
+    while came_from[node.tile_index] is not None:
+        node = came_from[node.tile_index]
         tileList.append(node)
 
     if not noLog:
@@ -704,67 +776,65 @@ def a_star_find_raw_with_try_avoid(
                 logbook.info(f"a* enqueued start tile {start.toString()}")
             # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
             #    startArmy = start.army / 2
-            cost_so_far[start] = startDist
-            heapq.heappush(frontier, (cost_so_far[start], start))
-            came_from[start] = None
+            cost_so_far[start.tile_index] = startDist
+            heapq.heappush(frontier, (startDist + _shortestPathHeurTile(goal, start), startDist, start))
+            came_from[start.tile_index] = None
     else:
         for start in startTiles:
             if not noLog:
                 logbook.info(f"a* enqueued start tile {start.toString()}")
             # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
             #    startArmy = start.army / 2
-            cost_so_far[start] = 0
-            heapq.heappush(frontier, (cost_so_far[start], start))
-            came_from[start] = None
+            cost_so_far[start.tile_index] = 0
+            heapq.heappush(frontier, (_shortestPathHeurTile(goal, start), 0, start))
+            came_from[start.tile_index] = None
     start = time.perf_counter()
     iter = 0
     depthEvaluated = 0
 
     while frontier:
         iter += 1
-        prio, current = heapq.heappop(frontier)
-        dist = cost_so_far[current]
+        prio, dist, current = heapq.heappop(frontier)
 
         if dist > depthEvaluated:
             depthEvaluated = dist
-        if current == goal:
+        if current is goal:
             break
 
         if dist < maxDepth:
             for next in current.movable:  # new spots to try
-                if next == came_from[current]:
-                    continue
                 if next.isMountain or ((not next.discovered) and next.isNotPathable):
                     # logbook.info("a* mountain")
                     continue
-                if next.isCostlyNeutralCity and not allowNeutralCities:
+                if next.isCostlyNeutral and not allowNeutralCities:
                     continue
 
                 new_cost = dist + 1
                 if next in tryAvoid:
                     new_cost += 0.05
-                curNextCost = cost_so_far.get(next, None)
-                if next not in cost_so_far or new_cost < curNextCost:
-                    cost_so_far[next] = new_cost
+
+                curNextCost = cost_so_far.get(next.tile_index, 1000)
+                if new_cost < curNextCost:
+                    cost_so_far[next.tile_index] = new_cost
                     extraCost = 0
                     if next in tryAvoid:
                         extraCost = 0.3
-                    priority = dist + 1 + _shortestPathHeurTile(goal, next) + extraCost
-                    heapq.heappush(frontier, (priority, next))
+                    priority = new_cost + _shortestPathHeurTile(goal, next) + extraCost
+                    heapq.heappush(frontier, (priority, new_cost, next))
                     # logbook.info("a* enqueued next")
-                    came_from[next] = current
+                    came_from[next.tile_index] = current
 
     if not noLog:
         logbook.info(
             f"a_star_find_raw SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
 
-    if goal not in came_from:
+    if goal.tile_index not in came_from:
         return None
 
     tileList = [goal]
     node = goal
-    while came_from[node] is not None:
-        node = came_from[node]
+    while came_from[node.tile_index] is not None:
+        node = came_from[node.tile_index]
         tileList.append(node)
 
     if not noLog:
@@ -783,7 +853,6 @@ def a_star_find_matrix(
         noLog: bool = False):
     frontier = []
     came_from: MapMatrixInterface[Tile | None] = MapMatrix(map, None)
-    cost_so_far: MapMatrixInterface[int] = MapMatrix(map, 1000)
     if isinstance(startTiles, dict):
         for start in startTiles.keys():
             startDist = startTiles[start]
@@ -791,74 +860,61 @@ def a_star_find_matrix(
                 logbook.info(f"a* enqueued start tile {start.toString()}")
             # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
             #    startArmy = start.army / 2
-            cost_so_far[start] = startDist
-            heapq.heappush(frontier, (cost_so_far[start], start))
-            came_from[start] = None
+            heapq.heappush(frontier, (startDist + _shortestPathHeurTile(goal, start), startDist, start))
+            came_from.raw[start.tile_index] = start
     else:
         for start in startTiles:
             if not noLog:
                 logbook.info(f"a* enqueued start tile {start.toString()}")
             # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
             #    startArmy = start.army / 2
-            cost_so_far[start] = 0
-            heapq.heappush(frontier, (cost_so_far[start], start))
-            came_from[start] = None
+            heapq.heappush(frontier, (_shortestPathHeurTile(goal, start), 0, start))
+            came_from.raw[start.tile_index] = start
 
     start = time.perf_counter()
     iter = 0
-    foundDist = -1
     depthEvaluated = 0
 
     while frontier:
         iter += 1
-        prio, current = heapq.heappop(frontier)
-        dist = cost_so_far[current]
+        prio, dist, current = heapq.heappop(frontier)
 
         if dist > depthEvaluated:
             depthEvaluated = dist
-        if current == goal:
-            foundDist = dist
+        if current is goal:
             break
 
+        new_cost = dist + 1
         if dist < maxDepth:
             for next in current.movable:  # new spots to try
-                if next == came_from[current]:
+                if came_from.raw[next.tile_index] is not None:
                     continue
+                came_from.raw[next.tile_index] = current
                 if next.isMountain or ((not next.discovered) and next.isNotPathable):
                     # logbook.info("a* mountain")
                     continue
-                if next.isCostlyNeutralCity and not allowNeutralCities:
+                if next.isCostlyNeutral and not allowNeutralCities:
                     continue
 
-                new_cost = dist + 1
-                curNextCost = cost_so_far[next]
-                if next not in cost_so_far or new_cost < curNextCost:
-                    cost_so_far[next] = new_cost
-                    priority = dist + 1 + _shortestPathHeurTile(goal, next)
-                    heapq.heappush(frontier, (priority, next))
-                    # logbook.info("a* enqueued next")
-                    came_from[next] = current
+                priority = new_cost + _shortestPathHeurTile(goal, next)
+                heapq.heappush(frontier, (priority, new_cost, next))
 
     if not noLog:
         logbook.info(
             f"A* FIND SEARCH ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
 
-    if goal not in came_from:
+    if not came_from.raw[goal.tile_index]:
         return None
 
     pathObject = Path()
     pathObject.add_next(goal)
     node = goal
-    dist = foundDist
-    while came_from[node] is not None:
-        # logbook.info("Node {},{}".format(node.x, node.y))
-        node = came_from[node]
-        dist -= 1
+    while came_from.raw[node.tile_index] is not None and came_from.raw[node.tile_index] is not node:
+        node = came_from.raw[node.tile_index]
         pathObject.add_start(node)
 
     if not noLog:
         logbook.info(f"A* FOUND KILLPATH OF LENGTH {pathObject.length} VALUE {pathObject.value}\n{pathObject.toString()}")
-    # pathObject.calculate_value(startTiles[0].player, teams=map._teams)
     return pathObject
 
 
@@ -877,16 +933,16 @@ def a_star_find_dist(
                 logbook.info(f"a* enqueued start tile {start.toString()}")
             # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
             #    startArmy = start.army / 2
-            cost_so_far[start] = startDist
-            heapq.heappush(frontier, (cost_so_far[start], start))
+            cost_so_far[start.tile_index] = startDist
+            heapq.heappush(frontier, (_shortestPathHeurTile(goal, start) + startDist, 0, start))
     else:
         for start in startTiles:
             if not noLog:
                 logbook.info(f"a* enqueued start tile {start.toString()}")
             # if (start.player == map.player_index and start.isGeneral and map.turn > GENERAL_HALF_TURN):
             #    startArmy = start.army / 2
-            cost_so_far[start] = 0
-            heapq.heappush(frontier, (cost_so_far[start], start))
+            cost_so_far[start.tile_index] = 0
+            heapq.heappush(frontier, (_shortestPathHeurTile(goal, start), 0, start))
     start = time.perf_counter()
     iter = 0
     foundDist = -1
@@ -894,29 +950,28 @@ def a_star_find_dist(
 
     while frontier:
         iter += 1
-        prio, current = heapq.heappop(frontier)
-        dist = cost_so_far[current]
+        prio, dist, current = heapq.heappop(frontier)
 
         if dist > depthEvaluated:
             depthEvaluated = dist
-        if current == goal:
+        if current is goal:
             foundDist = dist
             break
 
+        new_cost = dist + 1
         if dist < maxDepth:
             for next in current.movable:  # new spots to try
                 if next.isMountain or ((not next.discovered) and next.isNotPathable):
                     # logbook.info("a* mountain")
                     continue
-                if next.isCostlyNeutralCity and not allowNeutralCities:
+                if next.isCostlyNeutral and not allowNeutralCities:
                     continue
 
-                new_cost = dist + 1
-                curNextCost = cost_so_far.get(next, None)
-                if next not in cost_so_far or new_cost < curNextCost:
-                    cost_so_far[next] = new_cost
-                    priority = dist + 1 + _shortestPathHeurTile(goal, next)
-                    heapq.heappush(frontier, (priority, next))
+                curNextCost = cost_so_far.get(next.tile_index, 1000)
+                if new_cost < curNextCost:
+                    cost_so_far[next.tile_index] = new_cost
+                    priority = new_cost + _shortestPathHeurTile(goal, next)
+                    heapq.heappush(frontier, (priority, new_cost, next))
                     # logbook.info("a* enqueued next")
 
     if not noLog:
@@ -926,6 +981,7 @@ def a_star_find_dist(
     return foundDist
 
 
+# TODO this is in need of optimization
 def breadth_first_dynamic(
         map,
         startTiles,
@@ -1056,7 +1112,7 @@ def breadth_first_dynamic(
                 if next == parent:
                     continue
                 if (next.isMountain
-                        or (noNeutralCities and next.isCostlyNeutralCity)
+                        or (noNeutralCities and next.isCostlyNeutral)
                         or (not next.discovered and next.isNotPathable)):
                     continue
                 newDist = dist + 1
@@ -1215,7 +1271,7 @@ def breadth_first_dynamic_max(
             #    logbook.info("{}  EVAL".format(current.toString()))
 
             for adj in current.movable:
-                skipMt = adj.isMountain or adj.isCostlyNeutralCity
+                skipMt = adj.isMountain or adj.isCostlyNeutral
                 skipSearching = adj.player == searchingPlayer
                 # 2 is very important unless army amounts get fixed to not include tile val
                 skipArmy = army - adj.army < 2
@@ -1336,9 +1392,9 @@ def breadth_first_dynamic_max(
         # if dist not in visited[current.x][current.y] or visited[current.x][current.y][dist][0] > prioVals:
         # if current in globalVisitedSet or (skipTiles != None and current in skipTiles):
         if useGlobalVisitedSet:
-            if current in globalVisitedSet:
+            if current.tile_index in globalVisitedSet:
                 continue
-            globalVisitedSet.add(current)
+            globalVisitedSet.add(current.tile_index)
         if skipTiles and current in skipTiles:
             continue
 
@@ -1368,7 +1424,7 @@ def breadth_first_dynamic_max(
             if next == parent:
                 continue
             if (next.isMountain
-                    or (noNeutralCities and next.isCostlyNeutralCity)
+                    or (noNeutralCities and next.isCostlyNeutral)
                     or (next.isUndiscoveredObstacle and noNeutralUndiscoveredObstacles)):
                 continue
             nextVal = priorityFunc(next, prioVals) if not includePath else priorityFunc(next, prioVals, nodeList)
@@ -1435,7 +1491,7 @@ def breadth_first_dynamic_max(
         # TODO this needs to change to .econValue...?
         if priorityMatrix:
             for tile in pathObject.tileList[matrixStart:pathObject.length - matrixEndOffset]:
-                pathObject.value += priorityMatrix[tile]
+                pathObject.value += priorityMatrix.raw[tile.tile_index]
 
     if pathObject.length == 0:
         if not noLog:
@@ -1569,7 +1625,7 @@ def breadth_first_dynamic_max_per_tile(
             #    logbook.info("{}  EVAL".format(current.toString()))
 
             for adj in current.movable:
-                skipMt = adj.isMountain or adj.isCostlyNeutralCity
+                skipMt = adj.isMountain or adj.isCostlyNeutral
                 skipSearching = adj.player == searchingPlayer
                 # 2 is very important unless army amounts get fixed to not include tile val
                 skipArmy = army - adj.army < 2
@@ -1656,9 +1712,9 @@ def breadth_first_dynamic_max_per_tile(
         # if dist not in visited[current.x][current.y] or visited[current.x][current.y][dist][0] > prioVals:
         # if current in globalVisitedSet or (skipTiles != None and current in skipTiles):
         if useGlobalVisitedSet:
-            if current in globalVisitedSet:
+            if current.tile_index in globalVisitedSet:
                 continue
-            globalVisitedSet.add(current)
+            globalVisitedSet.add(current.tile_index)
         if skipTiles and current in skipTiles:
             continue
 
@@ -1695,7 +1751,7 @@ def breadth_first_dynamic_max_per_tile(
             if next == parent:
                 continue
             if (next.isMountain
-                    or (noNeutralCities and next.isCostlyNeutralCity)
+                    or (noNeutralCities and next.isCostlyNeutral)
                     or (not next.discovered and next.isNotPathable)):
                 continue
             nextPrio = priorityFunc(next, prioVals) if not includePath else priorityFunc(next, prioVals, nodeList)
@@ -1762,7 +1818,7 @@ def breadth_first_dynamic_max_per_tile(
 
         if priorityMatrix:
             for tile in pathObject.tileList[matrixStart:pathObject.length - matrixEndOffset]:
-                pathObject.value += priorityMatrix[tile]
+                pathObject.value += priorityMatrix.raw[tile.tile_index]
 
         if pathObject.length == 0:
             if not noLog:
@@ -1896,7 +1952,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
             #    logbook.info("{}  EVAL".format(current.toString()))
 
             for adj in current.movable:
-                skipMt = adj.isMountain or adj.isCostlyNeutralCity
+                skipMt = adj.isMountain or adj.isCostlyNeutral
                 skipSearching = adj.player == searchingPlayer
                 # 2 is very important unless army amounts get fixed to not include tile val
                 skipArmy = army - adj.army < 2
@@ -1991,9 +2047,9 @@ def breadth_first_dynamic_max_per_tile_per_distance(
         # if dist not in visited[current.x][current.y] or visited[current.x][current.y][dist][0] > prioVals:
         # if current in globalVisitedSet or (skipTiles != None and current in skipTiles):
         if useGlobalVisitedSet:
-            if current in globalVisitedSet:
+            if current.tile_index in globalVisitedSet:
                 continue
-            globalVisitedSet.add(current)
+            globalVisitedSet.add(current.tile_index)
             if skipTiles and current in skipTiles:
                 continue
 
@@ -2036,7 +2092,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
             if next == parent:
                 continue
             if (next.isMountain
-                    or (noNeutralCities and next.isCostlyNeutralCity)
+                    or (noNeutralCities and next.isCostlyNeutral)
                     or (not next.discovered and next.isNotPathable)):
                 continue
             if next in globalVisitedSet:
@@ -2117,7 +2173,7 @@ def breadth_first_dynamic_max_per_tile_per_distance(
 
                 if priorityMatrix:
                     for tile in pathObject.tileList[matrixStart:pathObject.length - matrixEndOffset]:
-                        pathObject.value += priorityMatrix[tile]
+                        pathObject.value += priorityMatrix.raw[tile.tile_index]
 
             if pathObject.length == 0:
                 if not noLog:
@@ -2234,7 +2290,7 @@ def breadth_first_dynamic_max_global_visited(
             #    logbook.info("{}  EVAL".format(current.toString()))
 
             for adj in current.movable:
-                skipMt = adj.isMountain or adj.isCostlyNeutralCity
+                skipMt = adj.isMountain or adj.isCostlyNeutral
                 skipSearching = adj.player == searchingPlayer
                 # 2 is very important unless army amounts get fixed to not include tile val
                 skipArmy = army - adj.army < 2
@@ -2386,7 +2442,7 @@ def breadth_first_dynamic_max_global_visited(
             if next == parent:
                 continue
             if (next.isMountain
-                    or (noNeutralCities and next.isCostlyNeutralCity)
+                    or (noNeutralCities and next.isCostlyNeutral)
                     or (next.isUndiscoveredObstacle and noNeutralUndiscoveredObstacles)):
                 continue
             nextVal = priorityFunc(next, prioVals)
@@ -2463,7 +2519,7 @@ def breadth_first_dynamic_max_global_visited(
         # TODO this needs to change to .econValue...?
         if priorityMatrix:
             for tile in pathObject.tileList[matrixStart:pathObject.length - matrixEndOffset]:
-                pathObject.value += priorityMatrix[tile]
+                pathObject.value += priorityMatrix.raw[tile.tile_index]
 
     if pathObject.length == 0:
         if not noLog:
@@ -2585,7 +2641,7 @@ def breadth_first_dynamic_max_per_tile_global_visited(
             #    logbook.info("{}  EVAL".format(current.toString()))
 
             for adj in current.movable:
-                skipMt = adj.isMountain or adj.isCostlyNeutralCity
+                skipMt = adj.isMountain or adj.isCostlyNeutral
                 skipSearching = adj.player == searchingPlayer
                 # 2 is very important unless army amounts get fixed to not include tile val
                 skipArmy = army - adj.army < 2
@@ -2706,7 +2762,7 @@ def breadth_first_dynamic_max_per_tile_global_visited(
             if next == parent:
                 continue
             if (next.isMountain
-                    or (noNeutralCities and next.isCostlyNeutralCity)
+                    or (noNeutralCities and next.isCostlyNeutral)
                     or (not next.discovered and next.isNotPathable)):
                 continue
             nextPrio = priorityFunc(next, prioVals)
@@ -2785,7 +2841,7 @@ def breadth_first_dynamic_max_per_tile_global_visited(
 
         if priorityMatrix:
             for tile in pathObject.tileList[matrixStart:pathObject.length - matrixEndOffset]:
-                pathObject.value += priorityMatrix[tile]
+                pathObject.value += priorityMatrix.raw[tile.tile_index]
 
         if pathObject.length == 0:
             if not noLog:
@@ -2916,7 +2972,7 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
             #    logbook.info("{}  EVAL".format(current.toString()))
 
             for adj in current.movable:
-                skipMt = adj.isMountain or adj.isCostlyNeutralCity
+                skipMt = adj.isMountain or adj.isCostlyNeutral
                 skipSearching = adj.player == searchingPlayer
                 # 2 is very important unless army amounts get fixed to not include tile val
                 skipArmy = army - adj.army < 2
@@ -3070,7 +3126,7 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
             # if next.tile_index in visited:
             #     continue
             if (next.isMountain
-                    or (noNeutralCities and next.isCostlyNeutralCity)
+                    or (noNeutralCities and next.isCostlyNeutral)
                     or (not next.discovered and next.isNotPathable)):
                 continue
             nextPrio = priorityFunc(next, prioVals)
@@ -3156,7 +3212,7 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
 
                 if priorityMatrix:
                     for tile in pathObject.tileList[matrixStart:pathObject.length - matrixEndOffset]:
-                        pathObject.value += priorityMatrix[tile]
+                        pathObject.value += priorityMatrix.raw[tile.tile_index]
 
             if pathObject.length == 0:
                 if not noLog:
@@ -3293,9 +3349,9 @@ def bidirectional_breadth_first_dynamic(
         if dist not in visited[current.x][current.y] or visited[current.x][current.y][dist][0] > prioVals:
             visited[current.x][current.y][dist] = (prioVals, parent)
         # TODO no globalVisitedSet
-        if current in globalVisitedSet or (skipTiles and current in skipTiles):
+        if current.tile_index in globalVisitedSet or (skipTiles and current in skipTiles):
             continue
-        globalVisitedSet.add(current)
+        globalVisitedSet.add(current.tile_index)
         if goalFunc(current, prioVals) and (foundVal is None or prioVals < foundVal):
             foundGoal = True
             foundDist = dist
@@ -3310,7 +3366,7 @@ def bidirectional_breadth_first_dynamic(
                 if next == parent:
                     continue
                 if (next.isMountain
-                        or (noNeutralCities and next.isCostlyNeutralCity)
+                        or (noNeutralCities and next.isCostlyNeutral)
                         or (not next.discovered and next.isNotPathable)):
                     continue
                 newDist = dist + 1
@@ -3354,7 +3410,6 @@ def bidirectional_breadth_first_dynamic(
         f"BI-DIR DYNAMIC BFS FOUND PATH LENGTH {pathObject.length} VALUE {pathObject.value}\n   {pathObject.toString()}")
     return pathObject
 
-
 def breadth_first_find_queue(
         map,
         startTiles,
@@ -3363,7 +3418,7 @@ def breadth_first_find_queue(
         maxDepth=200,
         noNeutralCities=False,
         negativeTiles=None,
-        skipTiles=None,
+        skipTiles: typing.Iterable[Tile] | None = None,
         bypassDefaultSkipLogic: bool = False,
         searchingPlayer=-2,
         ignoreStartTile=False,
@@ -3371,6 +3426,8 @@ def breadth_first_find_queue(
         noLog: bool = False,
 ) -> Path | None:
     """
+    ALWAYS slower than a-star-find. Do not use...
+
     goalFunc is goalFunc(current, army, dist)
     prioFunc is prioFunc(tile) - bigger is better, tuples supported, True comes before False etc.
     bypassDefaultSkipLogic allows you to search through undiscovered mountains etc.
@@ -3381,7 +3438,6 @@ def breadth_first_find_queue(
 
     frontier = deque()
     nodeValues: MapMatrixInterface[typing.Tuple[int, Tile | None]] = MapMatrix(map)  # (army, fromTile)
-    visited: typing.Set[Tile] = set()
     if isinstance(startTiles, dict):
         for tile in startTiles.keys():
             (startDist, startArmy) = startTiles[tile]
@@ -3414,6 +3470,11 @@ def breadth_first_find_queue(
             if ignoreStartTile:
                 startArmy = 0
             frontier.appendleft((tile, 0, startArmy, goalInc))
+
+    if skipTiles:
+        for t in skipTiles:
+            nodeValues.raw[t.tile_index] = (None, None)
+
     iter = 0
     start = time.perf_counter()
     foundGoal = False
@@ -3421,36 +3482,29 @@ def breadth_first_find_queue(
     foundDist = 1000
     endNode = None
     depthEvaluated = 0
-    while frontier:
+    while frontier and not foundGoal:
         iter += 1
         (current, dist, army, goalInc) = frontier.pop()
-        if current in visited or (skipTiles and current in skipTiles):
-            continue
-        visited.add(current)
-        if goalFunc(current, army, dist) and (dist < foundDist or (dist == foundDist and army > foundArmy)):
-            foundGoal = True
-            foundDist = dist
-            foundArmy = army
-            endNode = current
         if dist > depthEvaluated:
             depthEvaluated = dist
             if foundGoal:
                 break
         if dist <= maxDepth and not foundGoal:
             nextSearch = current.movable
-            if prioFunc is not None:
-                nextSearch = sorted(current.movable, key=prioFunc, reverse=True)
+            # if prioFunc is not None:
+            #     nextSearch = sorted(current.movable, key=prioFunc, reverse=True)
+            newDist = dist + 1
             for nextTile in nextSearch:  # new spots to try
-                if (
-                    (
-                        not bypassDefaultSkipLogic
-                        and (
-                            nextTile.isMountain
-                            or (noNeutralCities and nextTile.isCostlyNeutralCity)
-                            or (not nextTile.discovered and nextTile.isNotPathable)
+                curTuple = nodeValues.raw[nextTile.tile_index]
+                if (curTuple is not None
+                        or (
+                                not bypassDefaultSkipLogic
+                                and (
+                                        nextTile.isMountain
+                                        or (noNeutralCities and nextTile.isCostlyNeutral)
+                                        or (not nextTile.discovered and nextTile.isNotPathable)
+                                )
                         )
-                    )
-                    or nextTile in visited
                 ):
                     continue
 
@@ -3462,10 +3516,13 @@ def breadth_first_find_queue(
                         nextArmy += nextTile.army + inc
                     else:
                         nextArmy -= (nextTile.army + inc)
-                newDist = dist + 1
-                curTuple = nodeValues.raw[nextTile.tile_index]
-                if curTuple is None or curTuple[0] < nextArmy:
-                    nodeValues.raw[nextTile.tile_index] = (nextArmy, current)
+                nodeValues.raw[nextTile.tile_index] = (nextArmy, current)
+                if goalFunc(nextTile, nextArmy, newDist):
+                    foundGoal = True
+                    foundDist = newDist
+                    foundArmy = nextArmy
+                    endNode = nextTile
+                    break
                 frontier.appendleft((nextTile, newDist, nextArmy, goalInc))
 
     if not noLog:
@@ -3475,36 +3532,19 @@ def breadth_first_find_queue(
         return None
 
     node = endNode
-    dist = foundDist
     nodes = []
     army = foundArmy
-    # logbook.info(json.dumps(visited))
-    # logbook.info("PPRINT FULL")
-    # logbook.info(pformat(visited))
 
     while node is not None:
-        # logbook.info("ARMY {} NODE {},{}  DIST {}".format(army, node.x, node.y, dist))
         nodes.append((army, node))
 
-        # logbook.info(pformat(visited[node.x][node.y]))
         (army, node) = nodeValues.raw[node.tile_index]
-        dist -= 1
-    (startArmy, startNode) = nodes[0]
     pathObject = Path(foundArmy)
-    pathObject.add_next(startNode)
-    dist = foundDist
-    for i, armyNode in enumerate(nodes[-2::-1]):
+    revNodes = nodes[::-1]
+    for i, armyNode in enumerate(revNodes):
         (curArmy, curNode) = armyNode
         if curNode is not None:
-            # logbook.info("curArmy {} NODE {},{}".format(curArmy, curNode.x, curNode.y))
             pathObject.add_next(curNode)
-            dist -= 1
-
-    # while (node != None):
-    #     army, node = visited[node.x][node.y]
-    #     if (node != None):
-    #         dist -= 1
-    #         path = PathNode(node, path, army, dist, -1, None)
 
     if not noLog:
         logbook.info(
@@ -3522,13 +3562,14 @@ def breadth_first_find_dist_queue(
         noLog: bool = False,
 ) -> Path | None:
     """
+    NEVER USE THIS. Distmapper is better and if we DID need a distance func, aStarDistance is faster. in all cases, even at distance 2.
     goalFunc is goalFunc(current, dist)
     prioFunc is prioFunc(tile) - bigger is better, tuples supported, True comes before False etc.
     bypassDefaultSkipLogic allows you to search through undiscovered mountains etc.
     """
 
     frontier = deque()
-    visited: typing.Set[Tile] = set()
+    visited: typing.Set[int] = set()
     if isinstance(startTiles, dict):
         for tile in startTiles.keys():
             startDist = startTiles[tile]
@@ -3536,37 +3577,45 @@ def breadth_first_find_dist_queue(
                 # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
                 continue
             frontier.appendleft((tile, startDist))
+            visited.add(tile.tile_index)
     else:
         for tile in startTiles:
             if tile.isMountain and not bypassDefaultSkipLogic:
                 # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
                 continue
             frontier.appendleft((tile, 0))
+            visited.add(tile.tile_index)
+
+    if skipTiles:
+        for t in skipTiles:
+            visited.add(t.tile_index)
+
     iter = 0
     start = time.perf_counter()
     foundDist = 1000
     while frontier:
         iter += 1
         (current, dist) = frontier.pop()
-        if current in visited or (skipTiles and current in skipTiles):
-            continue
-        visited.add(current)
         if goalFunc(current, dist):
             foundDist = dist
             break
-        for next in current.movable:  # new spots to try
+        for nextTile in current.movable:  # new spots to try
             if (
-                not bypassDefaultSkipLogic
-                and (
-                    next.isMountain
-                    or (noNeutralCities and next.isCostlyNeutralCity)
-                    or (not next.discovered and next.isNotPathable)
+                nextTile.tile_index in visited
+                or (
+                    not bypassDefaultSkipLogic
+                    and (
+                        nextTile.isMountain
+                        or (noNeutralCities and nextTile.isCostlyNeutral)
+                        or (not nextTile.discovered and nextTile.isNotPathable)
+                    )
                 )
             ):
                 continue
+            visited.add(nextTile.tile_index)
 
             newDist = dist + 1
-            frontier.appendleft((next, newDist))
+            frontier.appendleft((nextTile, newDist))
 
     if not noLog:
         logbook.info(
@@ -3602,12 +3651,12 @@ def breadth_first_foreach(
         return
 
     frontier = deque()
-    globalVisited = MapMatrixSet(map)
+    globalVisited = set()
     if skipTiles:
         for tile in skipTiles:
             if not noLog:
                 logbook.info(f"    skipTiles contained {tile}")
-            globalVisited.raw[tile.tile_index] = True
+            globalVisited.add(tile.tile_index)
 
     for tile in startTiles:
         if tile.isMountain:
@@ -3623,11 +3672,11 @@ def breadth_first_foreach(
         iter += 1
 
         (current, dist) = frontier.pop()
-        if globalVisited.raw[current.tile_index]:
+        if current.tile_index in globalVisited:
             continue
         if dist > maxDepth:
             break
-        globalVisited.raw[current.tile_index] = True
+        globalVisited.add(current.tile_index)
         if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)) and dist > 0:
             continue
 
@@ -3670,12 +3719,12 @@ def breadth_first_foreach_with_state(
         return
 
     frontier = deque()
-    globalVisited = MapMatrixSet(map)
+    globalVisited = set()
     if skipTiles:
         for tile in skipTiles:
             if not noLog:
                 logbook.info(f"    skipTiles contained {tile}")
-            globalVisited.raw[tile.tile_index] = True
+            globalVisited.add(tile.tile_index)
 
     if isinstance(startTiles, dict):
         for tile, startVal in startTiles.items():
@@ -3692,11 +3741,11 @@ def breadth_first_foreach_with_state(
         iter += 1
 
         (current, dist, state) = frontier.pop()
-        if globalVisited.raw[current.tile_index]:
+        if current.tile_index in globalVisited:
             continue
         if dist > maxDepth:
             break
-        globalVisited.raw[current.tile_index] = True
+        globalVisited.add(current.tile_index)
         if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)) and dist > 0:
             continue
 
@@ -3740,12 +3789,12 @@ def breadth_first_foreach_with_state_and_start_dist(
         return
 
     frontier = HeapQueue()
-    globalVisited = MapMatrixSet(map)
+    globalVisited = set()
     if skipTiles:
         for tile in skipTiles:
             if not noLog:
                 logbook.info(f"    skipTiles contained {tile}")
-            globalVisited.raw[tile.tile_index] = True
+            globalVisited.add(tile.tile_index)
 
     if isinstance(startTiles, dict):
         for tile, (startDist, startVal) in startTiles.items():
@@ -3761,11 +3810,11 @@ def breadth_first_foreach_with_state_and_start_dist(
         iter += 1
 
         (dist, state, current) = frontier.get()
-        if globalVisited.raw[current.tile_index]:
+        if current.tile_index in globalVisited:
             continue
         if dist > maxDepth:
             break
-        globalVisited.raw[current.tile_index] = True
+        globalVisited.add(current.tile_index)
         if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)) and dist > 0:
             continue
 
@@ -3809,10 +3858,10 @@ def breadth_first_foreach_dist(
         return
 
     frontier = deque()
-    globalVisited = MapMatrixSet(map)
+    globalVisited = set()
     if skipTiles:
         for tile in skipTiles:
-            globalVisited.raw[tile.tile_index] = True
+            globalVisited.add(tile.tile_index)
 
     for tile in startTiles:
         if tile.isMountain:
@@ -3828,11 +3877,11 @@ def breadth_first_foreach_dist(
         iter += 1
 
         (current, dist) = frontier.pop()
-        if globalVisited.raw[current.tile_index]:
+        if current.tile_index in globalVisited:
             continue
         if dist > maxDepth:
             break
-        globalVisited.raw[current.tile_index] = True
+        globalVisited.add(current.tile_index)
         if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)):
             continue
 
@@ -3869,11 +3918,7 @@ def breadth_first_foreach_dist_fast_incl_neut_cities(
 
     frontier: typing.Deque[typing.Tuple[Tile, int]] = deque()
 
-    # TODO benchmark this...? TODO if we ALWAYS mapmatrix then we can direct-access grid for better perf.
-    if maxDepth < map.rows // 3:
-        globalVisited = set()
-    else:
-        globalVisited = MapMatrixSet(map)
+    globalVisited = set()
 
     for tile in startTiles:
         frontier.appendleft((tile, 0))
@@ -3882,11 +3927,11 @@ def breadth_first_foreach_dist_fast_incl_neut_cities(
         (current, dist) = frontier.pop()
         if current.isNotPathable:
             continue
-        if current in globalVisited:
+        if current.tile_index in globalVisited:
             continue
         if dist > maxDepth:
             break
-        globalVisited.add(current)
+        globalVisited.add(current.tile_index)
 
         if foreachFunc(current, dist):
             continue
@@ -3915,11 +3960,7 @@ def breadth_first_foreach_dist_fast_with_start_dist_incl_neut_cities(
     """
     frontier: typing.Deque[typing.Tuple[Tile, int, int]] = deque()
 
-    # TODO benchmark this...? TODO if we ALWAYS mapmatrix then we can direct-access grid for better perf.
-    if maxDepth < map.rows // 3:
-        globalVisited = set()
-    else:
-        globalVisited = MapMatrixSet(map)
+    globalVisited = set()
 
     for dist, tile in startTiles:
         frontier.appendleft((tile, dist, 0))
@@ -3928,11 +3969,11 @@ def breadth_first_foreach_dist_fast_with_start_dist_incl_neut_cities(
         (current, dist, depth) = frontier.pop()
         if current.isNotPathable:
             continue
-        if current in globalVisited:
+        if current.tile_index in globalVisited:
             continue
         if depth > maxDepth:
             break
-        globalVisited.add(current)
+        globalVisited.add(current.tile_index)
 
         if foreachFunc(current, dist):
             continue
@@ -3964,11 +4005,7 @@ def breadth_first_foreach_dist_fast_no_neut_cities(
 
     frontier: typing.Deque[typing.Tuple[Tile, int]] = deque()
 
-    # TODO benchmark this...? TODO if we ALWAYS mapmatrix then we can direct-access grid for better perf.
-    if maxDepth < map.rows // 3:
-        globalVisited = set()
-    else:
-        globalVisited = MapMatrixSet(map)
+    globalVisited = set()
 
     for tile in startTiles:
         if tile.isMountain:
@@ -3980,11 +4017,11 @@ def breadth_first_foreach_dist_fast_no_neut_cities(
         (current, dist) = frontier.pop()
         if current.isObstacle:
             continue
-        if current in globalVisited:
+        if current.tile_index in globalVisited:
             continue
         if dist > maxDepth:
             break
-        globalVisited.add(current)
+        globalVisited.add(current.tile_index)
 
         if foreachFunc(current, dist):
             continue
@@ -4015,22 +4052,18 @@ def breadth_first_foreach_dist_fast_no_default_skip(
 
     frontier: typing.Deque[typing.Tuple[Tile, int]] = deque()
 
-    # TODO benchmark this...? TODO if we ALWAYS mapmatrix then we can direct-access grid for better perf.
-    if maxDepth < map.rows // 3:
-        globalVisited = set()
-    else:
-        globalVisited = MapMatrixSet(map)
+    globalVisited = set()
 
     for tile in startTiles:
         frontier.appendleft((tile, 0))
 
     while frontier:
         (current, dist) = frontier.pop()
-        if current in globalVisited:
+        if current.tile_index in globalVisited:
             continue
         if dist > maxDepth:
             break
-        globalVisited.add(current)
+        globalVisited.add(current.tile_index)
 
         if foreachFunc(current, dist):
             continue
@@ -4062,11 +4095,7 @@ def breadth_first_foreach_fast_no_neut_cities(
 
     frontier: typing.Deque[typing.Tuple[Tile, int]] = deque()
 
-    # TODO benchmark this...? TODO if we ALWAYS mapmatrix then we can direct-access grid for better perf.
-    if maxDepth < map.rows // 3:
-        globalVisited = set()
-    else:
-        globalVisited = MapMatrixSet(map)
+    globalVisited = set()
 
     for tile in startTiles:
         if tile.isMountain:
@@ -4078,11 +4107,11 @@ def breadth_first_foreach_fast_no_neut_cities(
         (current, dist) = frontier.pop()
         if current.isObstacle:
             continue
-        if current in globalVisited:
+        if current.tile_index in globalVisited:
             continue
         if dist > maxDepth:
             break
-        globalVisited.add(current)
+        globalVisited.add(current.tile_index)
 
         if foreachFunc(current):
             continue
@@ -4126,7 +4155,7 @@ def breadth_first_foreach_dist_revisit_callback(
     globalVisited = MapMatrix(map, None)
     if skipTiles:
         for tile in skipTiles:
-            globalVisited[tile.x][tile.y] = 1000
+            globalVisited.raw[tile.tile_index] = 1000
 
     for tile in startTiles:
         if tile.isMountain:
@@ -4141,14 +4170,14 @@ def breadth_first_foreach_dist_revisit_callback(
         iter += 1
 
         (current, dist) = frontier.pop()
-        prevDist = globalVisited[current.x][current.y]
+        prevDist = globalVisited.raw[current.tile_index]
         if prevDist:
             if prevDist < dist:
                 revisitFunc(current, dist)
             continue
         if dist > maxDepth:
             break
-        globalVisited[current.x][current.y] = True
+        globalVisited.add(current.tile_index)
         if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)):
             continue
         if foreachFunc(current, dist):
@@ -4160,71 +4189,6 @@ def breadth_first_foreach_dist_revisit_callback(
     if not noLog:
         logbook.info(
             f"Completed breadth_first_foreach_dist_revisit_callback. startTiles[0] {startTiles[0].x},{startTiles[0].y}: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
-
-
-def build_distance_map_incl_mountains(map, startTiles, skipTiles=None) -> typing.List[typing.List[int]]:
-    """
-    Builds a distance map to everything including mountains (but does not path through mountains / neutral cities).
-
-    @param map:
-    @param startTiles:
-    @param skipTiles:
-    @return:
-    """
-    distanceMap = new_value_grid(map, 1000)
-
-    if skipTiles is not None and not isinstance(skipTiles, set):
-        newSkipTiles = {t for t in skipTiles}
-        skipTiles = newSkipTiles
-
-    if skipTiles is None:
-        def bfs_dist_mapper(tile, dist) -> bool:
-            if dist < distanceMap[tile.x][tile.y]:
-                distanceMap[tile.x][tile.y] = dist
-
-            return tile.isObstacle
-    else:
-        def bfs_dist_mapper(tile, dist) -> bool:
-            if tile in skipTiles:
-                return True
-
-            if dist < distanceMap[tile.x][tile.y]:
-                distanceMap[tile.x][tile.y] = dist
-
-            return tile.isObstacle
-
-    breadth_first_foreach_dist_fast_no_default_skip(map, startTiles, 1000, bfs_dist_mapper)
-    return distanceMap
-
-
-def build_distance_map(map: MapBase, startTiles: typing.List[Tile], skipTiles: typing.Set[Tile] | typing.Iterable[Tile] | None = None, maxDepth: int = 1000) -> typing.List[typing.List[int]]:
-    distanceMap = new_value_grid(map, 1000)
-
-    if skipTiles is not None and not isinstance(skipTiles, set):
-        newSkipTiles = {t for t in skipTiles}
-        skipTiles = newSkipTiles
-
-    if not skipTiles:
-        def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
-            distanceMap[tile.x][tile.y] = dist
-
-            return tile.isCostlyNeutralCity
-    else:
-        def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
-            if tile in skipTiles:
-                return True
-
-            distanceMap[tile.x][tile.y] = dist
-
-            return tile.isCostlyNeutralCity
-
-    breadth_first_foreach_dist_fast_incl_neut_cities(
-        map,
-        startTiles,
-        maxDepth,
-        bfs_dist_mapper)
-
-    return distanceMap
 
 
 def build_distance_map_matrix(map, startTiles, skipTiles=None, maxDepth: int = 1000) -> MapMatrixInterface[int]:
@@ -4248,7 +4212,7 @@ def build_distance_map_matrix(map, startTiles, skipTiles=None, maxDepth: int = 1
         def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
             distanceMap.raw[tile.tile_index] = dist
 
-            return tile.isCostlyNeutralCity
+            return tile.isCostlyNeutral
     else:
         def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
             if tile in skipTiles:
@@ -4256,7 +4220,7 @@ def build_distance_map_matrix(map, startTiles, skipTiles=None, maxDepth: int = 1
 
             distanceMap.raw[tile.tile_index] = dist
 
-            return tile.isCostlyNeutralCity
+            return tile.isCostlyNeutral
 
     breadth_first_foreach_dist_fast_incl_neut_cities(
         map,
@@ -4288,7 +4252,7 @@ def build_distance_map_matrix_with_start_dist(map, startTiles: typing.Iterable[t
         def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
             distanceMap.raw[tile.tile_index] = dist
 
-            return tile.isCostlyNeutralCity
+            return tile.isCostlyNeutral
     else:
         def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
             if tile in skipTiles:
@@ -4296,15 +4260,11 @@ def build_distance_map_matrix_with_start_dist(map, startTiles: typing.Iterable[t
 
             distanceMap.raw[tile.tile_index] = dist
 
-            return tile.isCostlyNeutralCity
+            return tile.isCostlyNeutral
 
     frontier: typing.Deque[typing.Tuple[Tile, int, int]] = deque()
 
-    # TODO benchmark this...? TODO if we ALWAYS mapmatrix then we can direct-access grid for better perf.
-    if maxDepth < map.rows // 3:
-        globalVisited = set()
-    else:
-        globalVisited = MapMatrixSet(map)
+    globalVisited = set()
 
     for dist, tile in startTiles:
         frontier.appendleft((tile, dist, 0))
@@ -4313,11 +4273,11 @@ def build_distance_map_matrix_with_start_dist(map, startTiles: typing.Iterable[t
         (current, dist, depth) = frontier.pop()
         if current.isNotPathable:
             continue
-        if current in globalVisited:
+        if current.tile_index in globalVisited:
             continue
         if depth > maxDepth:
             break
-        globalVisited.add(current)
+        globalVisited.add(current.tile_index)
 
         if bfs_dist_mapper(current, dist):
             continue
@@ -4328,6 +4288,133 @@ def build_distance_map_matrix_with_start_dist(map, startTiles: typing.Iterable[t
             frontier.appendleft((n, newDist, newDepth))
 
     return distanceMap
+
+#
+# def build_reachability_cost_map_matrix(map, startTiles: typing.Iterable[Tile], maxDepth: int = 1000) -> MapMatrixInterface[int]:
+#     """
+#     Builds a distance map to all reachable tiles (including neutral cities). Does not put distances in for mountains / undiscovered obstacles.
+#
+#     @param map:
+#     @param startTiles:
+#     @param maxDepth:
+#     @return:
+#     """
+#     distanceMap = MapMatrix(map, 1000)
+#     costMap = MapMatrix(map, 0)
+#
+#     frontier: typing.List[typing.Tuple[int, int, int, int, Tile]] = []
+#     """weightedDistance, cost, true distance, move cost weight, Tile"""
+#
+#     globalVisited = set()
+#
+#     for tile in startTiles:
+#         heapq.heappush(frontier, (0, 0, 1, tile))
+#         globalVisited.add(tile.tile_index)
+#
+#     while frontier:
+#         (weightedDist, cost, dist, curCostPerMove, current) = heapq.heappop(frontier)
+#
+#         nextDist = dist + 1
+#         for n in current.movable:  # new spots to try
+#             if n.tile_index in globalVisited:
+#                 continue
+#             globalVisited.add(n.tile_index)
+#             nextCost = cost
+#             nextCostPerMove = curCostPerMove
+#
+#             distanceMap.raw[n.tile_index] = weightedDist
+#             costMap.raw[n.tile_index] = cost
+#
+#             nextCost = curCost
+#             if n.isCostlyNeutral:
+#                 # extra cost for bad cities
+#                 nextCost *= 2
+#                 weightedDist += 2 * curCost
+#             elif n.isNotPathable:
+#                 continue
+#             nextDist = weightedDist
+#             if n.isCity and n.isNeutral:
+#
+#                 curCost *= 2
+#                 weightedDist
+#             if n.isCity and n.isNeutral:
+#                 curCost *= 2
+#             if dist > maxDepth:
+#                 break
+#
+#             distanceMap.raw[current.tile_index] = weightedDist
+#
+#             heapq.heappush(frontier, (nextWeightedDist, nextCost, nextDist, curCost, n))
+#
+#     return distanceMap
+
+
+def build_reachability_cost_map_matrix(map, startTiles: typing.Iterable[Tile], maxDepth: int = 1000) -> typing.Tuple[MapMatrixInterface[typing.List[Tile]], MapMatrixInterface[int]]:
+    """
+    Maps out the costs to reach all tiles. Maps out the tiles that lead to other tiles.
+
+    @param map:
+    @param startTiles:
+    @param maxDepth:
+    @return:
+    """
+    costMap = MapMatrix(map, 10000)
+    throughMap = MapMatrix(map, None)
+
+    frontier: typing.Deque[typing.Tuple[int, Tile, Tile | None]] = deque()
+    """true distance, Tile, throughTile"""
+
+    nextFrontier: typing.List[typing.Tuple[int, int, Tile, Tile | None]] = []
+    """next cost, true distance, Tile, throughCaptureTile"""
+
+    globalVisited = set()
+
+    for tile in startTiles:
+        nextFrontier.append((0, 0, tile, None))
+        globalVisited.add(tile.tile_index)
+        costMap.raw[tile.tile_index] = 0
+
+    while nextFrontier:
+        startCost, startDist, startTile, throughCaptureTile = heapq.heappop(nextFrontier)
+        # curCost, curDist, curTile = startCost, startDist, startTile
+        # while curCost == startCost:
+        #     frontier.append((curDist, curTile))
+        #     if not nextFrontier:
+        #         break
+        #     curCost, curDist, curTile = heapq.heappop(nextFrontier)
+        #
+        # if curCost > startCost:
+        #     heapq.heappush(nextFrontier, (curCost, curDist, curTile))
+
+        frontier.append((startDist, startTile, throughCaptureTile))
+
+        cost = startCost
+        while frontier:
+            (dist, current, throughTile) = frontier.popleft()
+
+            if dist > maxDepth:
+                continue
+
+            nextDist = dist + 1
+            for n in current.movable:
+                if n.tile_index in globalVisited:
+                    continue
+                globalVisited.add(n.tile_index)
+
+                costMap.raw[n.tile_index] = cost
+                throughMap.raw[n.tile_index] = throughTile
+
+                if not n.isCostlyNeutral and n.isNotPathable:
+                    continue
+
+                if n.isSwamp:
+                    heapq.heappush(nextFrontier, (cost + 1 + n.army, nextDist, n, throughTile))
+                elif n.player == -1 and n.army > 0:
+                    heapq.heappush(nextFrontier, (cost + n.army, nextDist, n, n))
+                else:
+                    frontier.append((nextDist, n, throughTile))
+
+    return throughMap, costMap
 
 
 def build_distance_map_matrix_with_start_dist_increasing(map, startTiles: typing.Iterable[typing.Tuple[int, Tile]], skipTiles=None, maxDepth: int = 1000) -> MapMatrixInterface[int]:
@@ -4352,7 +4439,7 @@ def build_distance_map_matrix_with_start_dist_increasing(map, startTiles: typing
         def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
             distanceMap.raw[tile.tile_index] = dist
 
-            return tile.isCostlyNeutralCity
+            return tile.isCostlyNeutral
     else:
         def bfs_dist_mapper(tile: Tile, dist: int) -> bool:
             if tile in skipTiles:
@@ -4360,15 +4447,11 @@ def build_distance_map_matrix_with_start_dist_increasing(map, startTiles: typing
 
             distanceMap.raw[tile.tile_index] = dist
 
-            return tile.isCostlyNeutralCity
+            return tile.isCostlyNeutral
 
     frontier: typing.Deque[typing.Tuple[Tile, int, int]] = deque()
 
-    # TODO benchmark this...? TODO if we ALWAYS mapmatrix then we can direct-access grid for better perf.
-    if maxDepth < map.rows // 3:
-        globalVisited = set()
-    else:
-        globalVisited = MapMatrixSet(map)
+    globalVisited = set()
 
     for dist, tile in startTiles:
         frontier.appendleft((tile, dist, 0))
@@ -4377,11 +4460,11 @@ def build_distance_map_matrix_with_start_dist_increasing(map, startTiles: typing
         (current, dist, depth) = frontier.pop()
         if current.isNotPathable:
             continue
-        if current in globalVisited:
+        if current.tile_index in globalVisited:
             continue
         if depth > maxDepth:
             break
-        globalVisited.add(current)
+        globalVisited.add(current.tile_index)
 
         if bfs_dist_mapper(current, dist):
             continue
@@ -4448,23 +4531,23 @@ def build_distance_map_matrix_include_set(map, startTiles, containsSet: typing.C
         return distanceMap
 
     frontier = deque()
-    globalVisited = MapMatrixSet(map)
+    globalVisited = set()
 
     for tile in startTiles:
         frontier.appendleft((tile, 0))
 
     while frontier:
         (current, dist) = frontier.pop()
-        if current in globalVisited:
+        if current.tile_index in globalVisited:
             continue
         if dist > maxDepth:
             break
-        globalVisited.add(current)
+        globalVisited.add(current.tile_index)
         if current.isMountain or (not current.discovered and current.isNotPathable):
             continue
 
-        distanceMap[current] = dist
-        if current.isCostlyNeutralCity:
+        distanceMap.raw[current.tile_index] = dist
+        if current.isCostlyNeutral:
             continue
 
         newDist = dist + 1
@@ -4532,7 +4615,7 @@ def bidirectional_a_star_pq(start: Tile, goal: Tile, allowNeutralCities: bool = 
             for v in curTile.movable:
                 if v.isMountain:
                     continue
-                if v.isCostlyNeutralCity and not allowNeutralCities:
+                if v.isCostlyNeutral and not allowNeutralCities:
                     continue
                 # weight = graph[curTile][v]['weight']
                 weight = 1
@@ -4556,7 +4639,7 @@ def bidirectional_a_star_pq(start: Tile, goal: Tile, allowNeutralCities: bool = 
             for v in curTile.movable:
                 if v.isMountain:
                     continue
-                if v.isCostlyNeutralCity and not allowNeutralCities:
+                if v.isCostlyNeutral and not allowNeutralCities:
                     continue
                 # weight = graph[curTile][v]['weight']
                 weight = 1
@@ -4631,30 +4714,20 @@ def bidirectional_a_star(start: Tile, goal: Tile, allowNeutralCities: bool = Fal
 
     pq_s = []
     pq_t = []
-    g_s = dict()
-    g_t = dict()
+    startCosts = dict()
+    goalCosts = dict()
 
-    g_s[start] = 0
-    g_t[goal] = 0
+    startCosts[start.tile_index] = 0
+    goalCosts[goal.tile_index] = 0
 
-    cameFrom1 = dict()
-    cameFrom2 = dict()
+    startCameFrom = dict()
+    goalCameFrom = dict()
 
-    def euclidean_distance(v: Tile, goal: Tile) -> float:
-        return ((v.x - goal.x)**2 + (v.y - goal.y)**2) ** 0.5
-        # return abs(v.x - goal.x) + abs(v.y - goal.y)
+    startCameFrom[start.tile_index] = False
+    goalCameFrom[goal.tile_index] = False
 
-    def h1(v: Tile) -> float:  # heuristic for forward search (from start to goal)
-        return euclidean_distance(v, goal)
-
-    def h2(v: Tile) -> float:  # heuristic for backward search (from goal to start)
-        return euclidean_distance(v, start)
-
-    cameFrom1[start] = False
-    cameFrom2[goal] = False
-
-    heapq.heappush(pq_s, (h1(start), start))
-    heapq.heappush(pq_t, (h2(goal), goal))
+    heapq.heappush(pq_s, (_shortestPathHeurTile(goal, start), 0, start))
+    heapq.heappush(pq_t, (_shortestPathHeurTile(start, goal), 0, goal))
 
     i = 0
 
@@ -4666,63 +4739,51 @@ def bidirectional_a_star(start: Tile, goal: Tile, allowNeutralCities: bool = Fal
         i += 1
         if i & 1 == 1:  # alternate between forward and backward A*
             curTile: Tile
-            fu, curTile = heapq.heappop(pq_s)
-            # closed_s.add(curTile)
+            fu, dist, curTile = heapq.heappop(pq_s)
+            if fu > mu:
+                continue
+            curTileCost = dist + weight
             for v in curTile.movable:
                 if v.isMountain:
                     continue
-                if v.isCostlyNeutralCity and not allowNeutralCities:
+                if v.isCostlyNeutral and not allowNeutralCities:
                     continue
-                # weight = graph[curTile][v]['weight']
-                curTileCost = g_s[curTile] + weight
-                if v in g_s:
-                    if curTileCost < g_s[v]:
-                        g_s[v] = curTileCost
-                        cameFrom1[v] = curTile
+                if v.tile_index in startCosts:
+                    continue
 
-                        # closed_s.discard(v)
-                        # if v in pq_s:
-                        #     pq_s.update((g_s[v]+h1(v), v))
-                        # else:
-                        #     pq_s.append((g_s[v]+h1(v), v))
-                else:
-                    g_s[v] = curTileCost
-                    cameFrom1[v] = curTile
-                    heapq.heappush(pq_s, (curTileCost+h1(v), v))
+                nextHeur = curTileCost+_shortestPathHeurTile(goal, v)
+                # if nextHeur > mu:
+                #     continue
+                startCosts[v.tile_index] = curTileCost
+                startCameFrom[v.tile_index] = curTile
+                heapq.heappush(pq_s, (nextHeur, curTileCost, v))
         else:
-            fu, curTile = heapq.heappop(pq_t)
-            # closed_t.add(curTile)
+            fu, dist, curTile = heapq.heappop(pq_t)
+            if fu > mu:
+                continue
+            curTileCost = dist + weight
             for v in curTile.movable:
                 if v.isMountain:
                     continue
-                if v.isCostlyNeutralCity and not allowNeutralCities:
+                if v.isCostlyNeutral and not allowNeutralCities:
                     continue
-                # weight = graph[curTile][v]['weight']
+                if v.tile_index in goalCosts:
+                    continue
 
-                curTileCost = g_t[curTile] + weight
-                if v in g_t:
-                    if curTileCost < g_t[v]:
-                        g_t[v] = curTileCost
-                        cameFrom2[v] = curTile
+                nextHeur = curTileCost+_shortestPathHeurTile(start, v)
+#                 if nextHeur > mu:
+#                     continue
+                goalCosts[v.tile_index] = curTileCost
+                goalCameFrom[v.tile_index] = curTile
+                heapq.heappush(pq_t, (nextHeur, curTileCost, v))
 
-                        # closed_t.discard(v)
-                        # if v in pq_t:
-                        #     pq_t.update((g_t[v]+h2(v), v))
-                        # else:
-                        #     pq_t.append((g_t[v]+h2(v), v))
-                else:
-                    g_t[v] = curTileCost
-                    cameFrom2[v] = curTile
-                    heapq.heappush(pq_t, (curTileCost+h2(v), v))
-
-        if curTile in cameFrom1 and curTile in cameFrom2:
-            curMu = g_s[curTile] + g_t[curTile]
+        if curTile.tile_index in startCameFrom and curTile.tile_index in goalCameFrom:
+            curMu = startCosts[curTile.tile_index] + goalCosts[curTile.tile_index]
             # logbook.info(f'mu {curTile} g_s {g_s[curTile]} g_t {g_t[curTile]} = {curMu} vs best {mu}')
             if curMu < mu:
                 mu = curMu
                 connection = curTile
-                # done = True
-                if len(pq_t) and len(pq_s):
+                if pq_t and pq_s:
                     stopping_distance = max(pq_t[0][0], pq_s[0][0])
                     if mu <= stopping_distance:
                         connection = curTile
@@ -4738,21 +4799,21 @@ def bidirectional_a_star(start: Tile, goal: Tile, allowNeutralCities: bool = Fal
     pathForwards = []
     current = connection
     #print current
-    while current != False:
+    while current is not False:
         #print predecessor
         pathForwards.append(current)
-        current = cameFrom1[current]
+        current = startCameFrom[current.tile_index]
 
     path = Path()
     for tile in reversed(pathForwards):
         path.add_next(tile)
 
     current = connection
-    successor = cameFrom2[current]
-    while successor != False:
+    successor = goalCameFrom[current.tile_index]
+    while successor is not False:
         path.add_next(successor)
         current = successor
-        successor = cameFrom2[current]
+        successor = goalCameFrom[current.tile_index]
 
     return path
 

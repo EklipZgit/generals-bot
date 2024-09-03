@@ -4,6 +4,7 @@ import logbook
 import typing
 
 from Communication import TileCompressor, CommunicationConstants, TeammateCommunication
+from Interfaces import MapMatrixInterface
 from base.client.map import Tile, MapBase
 
 
@@ -48,7 +49,7 @@ class CoordinatedDefense(object):
             self,
             map: MapBase,
             tileCompressor: TileCompressor,
-            teammateTileDistanceMap: typing.List[typing.List[int]],
+            teammateTileDistanceMap: MapMatrixInterface[int],
             charsLeft: int = CommunicationConstants.TEAM_CHAT_CHARACTER_LIMIT
     ) -> TeammateCommunication | None:
         """Compress the defense as much as possible, dropping tiles that are furthest from ally tiles as they are least likely to interact with those"""
@@ -70,7 +71,7 @@ class CoordinatedDefense(object):
         if len(builtMsg) == 0:
             return None
 
-        negativeTilesOrderedByDist = list(sorted(self.blocked_tiles_by_us, key=lambda t: teammateTileDistanceMap[t.x][t.y]))
+        negativeTilesOrderedByDist = list(sorted(self.blocked_tiles_by_us, key=lambda t: teammateTileDistanceMap.raw[t.tile_index]))
 
         builtMsg.append('N')
         charsLeft -= 1

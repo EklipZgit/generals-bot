@@ -433,8 +433,11 @@ class TextMapLoader(object):
 
         if 'is_custom_map' in data:
             map.is_custom_map = bool(data['is_custom_map'])
+        # if 'valid_spawns' in data:
+        #     map.valid_spawns = bool(data['is_custom_map'])
         if 'walled_city_base_value' in data:
             map.walled_city_base_value = int(data['walled_city_base_value'])
+            map.is_walled_city_game = True
         if 'PATHABLE_CITY_THRESHOLD' in data:
             Tile.PATHABLE_CITY_THRESHOLD = int(data['PATHABLE_CITY_THRESHOLD'])
         else:

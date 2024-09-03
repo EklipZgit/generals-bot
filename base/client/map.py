@@ -368,22 +368,27 @@ class MapBase(object):
     def __getstate__(self):
         state = self.__dict__.copy()
 
-        if 'notify_tile_captures' in state:
-            del state['notify_tile_captures']
-        if 'notify_tile_deltas' in state:
-            del state['notify_tile_deltas']
-        if 'notify_city_found' in state:
-            del state['notify_city_found']
-        if 'notify_tile_discovered' in state:
-            del state['notify_tile_discovered']
-        if 'notify_tile_vision_changed' in state:
-            del state['notify_tile_vision_changed']
-        if 'notify_general_revealed' in state:
-            del state['notify_general_revealed']
-        if 'notify_player_captures' in state:
-            del state['notify_player_captures']
-        if 'distance_mapper' in state:
-            del state['distance_mapper']
+        state.pop('notify_tile_captures', None)
+        state.pop('notify_tile_deltas', None)
+        state.pop('notify_city_found', None)
+        state.pop('notify_tile_discovered', None)
+        state.pop('notify_tile_vision_changed', None)
+        state.pop('notify_general_revealed', None)
+        state.pop('notify_player_captures', None)
+        oldDistMapper = state.pop('distance_mapper', None)
+        state.pop('resume_data', None)
+
+        if isinstance(self.pathable_tiles, set):
+            state['pathable_tiles'] = [t.tile_index for t in state['pathable_tiles']]
+            # state['reachable_tiles'] = [t.tile_index for t in state['pathable_tiles']]
+            # state['visible_tiles'] = [t.tile_index for t in state['pathable_tiles']]
+            # state.pop('pathable_tiles', None)
+            state.pop('reachable_tiles', None)
+            state.pop('visible_tiles', None)
+        state.pop('grid', None)
+        state.pop('unexplained_deltas', None)
+        state.pop('moved_here_set', None)
+        state.pop('army_moved_grid', None)
 
         return state
 
@@ -397,6 +402,35 @@ class MapBase(object):
         self.notify_general_revealed = []
         self.notify_player_captures = []
 
+        # logbook.info(f'SETTING GRID to {self.cols} x {self.rows} ...?')
+        self.grid = [[None for x in range(self.cols)] for y in range(self.rows)]
+        for tile in self.tiles_by_index:
+            self.grid[tile.y][tile.x] = tile
+
+        self.pathable_tiles = {self.tiles_by_index[i] for i in self.pathable_tiles}
+
+        for tile in self.tiles_by_index:
+            tile.movable = [self.tiles_by_index[i] for i in tile.movable]
+            tile.adjacents = [self.tiles_by_index[i] for i in tile.adjacents]
+            tile.visibleTo = [self.tiles_by_index[i] for i in tile.visibleTo]
+
+    """
+    vvv
+Beginning: calculating general danger / threats (0.0711 in)
+[2024-09-01 17:46:08.952167] INFO: Generic: ------  fastest threat analyzer: depth 16
+Traceback (most recent call last):
+  File "D:\2019_reformat_Backup\generals-bot\base\viewer.py", line 415, in run_main_viewer_loop
+    self._drawGrid()
+  File "D:\2019_reformat_Backup\generals-bot\base\viewer.py", line 526, in _drawGrid
+    tile = self._map.grid[row][column]
+           ^^^^^^^^^^^^^^
+AttributeError: 'Map' object has no attribute 'grid'
+
+[2024-09-01 17:46:08.952167] INFO: Generic: DEST BFS FOUND KILLPATH OF LENGTH 1 VALUE 112
+[112a 1t] 20,18 -> 21,18
+[2024-09-01 17:46:08.952167] INFO: Generic: saveTile blocks path to our king: 20,18
+[2024-09-01 17:46:08.953167] INFO: Generic: dest BFS found KILL against 
+    """
     def get_all_tiles(self) -> typing.Generator[Tile, None, None]:
         for t in self.tiles_by_index:
             yield t
@@ -881,10 +915,17 @@ class MapBase(object):
             if curTile.isGeneral and curTile.visible:
                 logbook.info(f' SET map.generals[{curTile.player}] = {curTile} IN map.py (was {self.generals[curTile.player]})')
                 self.generals[curTile.player] = curTile
+                self.players[curTile.player].general = curTile
             elif curTile.visible:
-                if curTile.delta.oldOwner != -1 and self.generals[curTile.delta.oldOwner] == curTile:
-                    logbook.info(f' SET oldOwner map.generals[{curTile.delta.oldOwner}] = NONE IN map.py (was {self.generals[curTile.delta.oldOwner]})')
-                    self.generals[curTile.delta.oldOwner] = None
+                for i, t in enumerate(self.generals):
+                    if i >= len(self.players):
+                        break
+                    if t == curTile:
+                        logbook.info(f' SET p{i} map.generals[{i}] = NONE IN map.py (was {self.generals[curTile.delta.oldOwner]})')
+                        self.generals[i] = None
+                    player = self.players[i]
+                    if player.general == curTile:
+                        player.general = None
             else:
                 logbook.error(f' WTF is going on with generals?? tile {curTile}  delta {curTile.delta}  isGeneral{curTile.isGeneral} wasGeneral{wasGeneral}')
                 logbook.error(f'    generals {str(self.generals)}')
@@ -1122,9 +1163,20 @@ class MapBase(object):
         self.pathable_tiles = pathableTiles
         self.reachable_tiles = reachableTiles
         self.visible_tiles = visibleTiles
-        if self.is_custom_map and 2 < len(self.reachable_tiles) < 3 * len(self.tiles_by_index) / 4:
-            logbook.info(f'Setting set_walled_cities... is cityState {self.modifiers_by_id[MODIFIER_CITY_STATE]}, modifiers {[i for i, m in enumerate(self.modifiers_by_id) if m]}')
-            self.set_walled_cities(minCityArmy)
+        if self.is_custom_map:
+            changeWall = False
+            if 2 < len(self.reachable_tiles) < 3 * len(self.tiles_by_index) / 4:
+                changeWall = True
+            elif self.valid_spawns:
+                for s in self.valid_spawns:
+                    if s not in self.reachable_tiles:
+                        logbook.info(f'Increasing walled cities from {self.walled_city_base_value} to {minCityArmy} due to spawn {s} unreachable...')
+                        changeWall = True
+                        break
+
+            if changeWall:
+                logbook.info(f'Setting set_walled_cities... is cityState {self.modifiers_by_id[MODIFIER_CITY_STATE]}, modifiers {[i for i, m in enumerate(self.modifiers_by_id) if m]}')
+                self.set_walled_cities(minCityArmy)
 
     def clear_deltas_and_score_history(self):
         self.scoreHistory = [None for i in range(50)]
@@ -1147,7 +1199,7 @@ class MapBase(object):
         # self.custom_map_name = customMapRaw['title']
         if customMapRaw['width'] != self.cols:
             raise Exception(f"width {customMapRaw['width']} mismatch with cols {self.cols}")
-        if customMapRaw['height'] != self.cols:
+        if customMapRaw['height'] != self.rows:
             raise Exception(f"height {customMapRaw['height']} mismatch with rows {self.rows}")
 
         mapDataStr = customMapRaw['map']
@@ -1155,6 +1207,9 @@ class MapBase(object):
             raise Exception(f"map {customMapRaw['map']} was not string...?")
 
         for tileIdx, val in enumerate(mapDataStr.split(',')):
+            if tileIdx >= len(self.tiles_by_index):
+                logbook.error(f'OUT OF BOUNDS CUSTOM SPLIT {tileIdx} >= {len(self.tiles_by_index)};; val was {val}')
+                continue
             self.apply_custom_map_tile_str(tileIdx, val)
 
     def apply_custom_map_tile_str(self, tileIdx: int, val: str):
@@ -1170,16 +1225,18 @@ class MapBase(object):
 
         # general format is g{Team(A-Z)}{Priority(0-99)|''}
         generalTeam = None
-        generalPriority = None
+        generalPriority = 99
         isGeneral = False
         if val.startswith('g'):
             isGeneral = True
-            generalTeam = val[1]
-            # general teams can be A-Z
-            if len(val) > 2:
-                generalPriority = int(val[2:])
-            else:
-                generalPriority = 99
+            if len(val) > 1:
+                generalTeam = val[1]
+                if generalTeam.isdigit():
+                    generalTeam = None
+                    generalPriority = int(val[1:])
+                # general teams can be A-Z
+                elif len(val) > 2:
+                    generalPriority = int(val[2:])
             if self.valid_spawns is None:
                 self.valid_spawns = set()
             self.valid_spawns.add(tile)
@@ -1196,7 +1253,7 @@ class MapBase(object):
             tile.army = int(val)
             return
 
-        if val[0] == 'm':
+        if val[0] in ['m', 'o', 'l']:
             tile.isMountain = True
             tile.army = 0
             tile.player = -1
@@ -1215,12 +1272,6 @@ class MapBase(object):
         if val[0] == 'l':
             tile.isLookout = True
             self.lookouts.add(tile)
-
-
-
-
-
-
 
     @staticmethod
     def player_had_priority_over_other(player: int, otherPlayer: int, turn: int):
@@ -2742,19 +2793,6 @@ class MapBase(object):
     def get_distance_between(self, tileA: Tile, tileB: Tile) -> int:
         return self.distance_mapper.get_distance_between(tileA, tileB)
 
-    def get_distance_2d_array_including_obstacles(self, tile: Tile) -> typing.List[typing.List[int]]:
-        """
-        Includes the distance to mountains / undiscovered obstacles (but does not path to the other side of them).
-        DO NOT MODIFY THE OUTPUT FROM THIS METHOD.
-
-        @param tile:
-        @return:
-        """
-        matrix = self.distance_mapper.get_tile_dist_matrix(tile)
-        # Because we know this will be mapmatrix, not dict, we hack this here and ignore the warning.
-        # noinspection PyUnresolvedReferences
-        return matrix.grid
-
     def get_distance_matrix_including_obstacles(self, tile: Tile) -> MapMatrixInterface[int]:
         """
         Includes the distance to mountains / undiscovered obstacles (but does not path to the other side of them).
@@ -2997,7 +3035,7 @@ class Map(MapBase):
         return state
 
     def __setstate__(self, state):
-        super().__dict__.update(state)
+        super().__setstate__(state)
 
     def apply_server_update(self, data):
         self._apply_server_patch(data)

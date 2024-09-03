@@ -1,6 +1,8 @@
 import time
 import typing
 
+from Algorithms import WatchmanRouteUtils
+from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
 from bot_ek0x45 import EklipZBot
@@ -308,3 +310,29 @@ class GeneralPredictionTests(TestBase):
 
 # 8f, 6p, 0s After splitting tests out from our dear friend GeneralPrediction tests.
 # 1f, 17p, 0s After making defense take kill probability into account for death-races, and never chosing worse-but-shorter kill-chance king-kill-paths in the race searcher.
+    
+    def test_should_not_miscalculate_the_max_distance_to_kill_for_double_back_paths(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_miscalculate_the_max_distance_to_kill_for_double-back_paths___k3lQmUUTN---0--137.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 137, fill_out_tiles=True)
+        self.move_enemy_general(map, enemyGeneral, 7, 12)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=137)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '14,13->15,13->15,5->16,5')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        path = Path.from_string(playerMap, '9,6->9,7->9,8->9,9->8,9->7,9->7,10->6,10->6,11')
+
+        # chance = bot.get_kill_race_chance(path, enGenProbabilityCutoff=0.0, turnsToDeath=10, cutoffKillArmy=6, againstPlayer=enemyGeneral.player)
+
+        toReveal = bot.get_target_player_possible_general_location_tiles_sorted(elimNearbyRange=0, player=enemyGeneral.player, cutoffEmergenceRatio=0.0, includeCities=False)
+        revealedCount, maxKillTurns, minKillTurns, avgKillTurns, rawKillDistByTileMatrix, bestRevealedPath = WatchmanRouteUtils.get_revealed_count_and_max_kill_turns_and_positive_path(playerMap, path, toReveal, cutoffKillArmy=9)
+        self.assertEqual(10, maxKillTurns, 'having to doubleback from the left means it takes 10t to reach bottom. Not 8...')
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        self.assertEqual(map.player_index, winner)

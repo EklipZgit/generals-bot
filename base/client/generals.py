@@ -111,6 +111,7 @@ class GeneralsClient(object):
         self._gio_session_id = None
         self.public_server = public_server
         self.lastCommunicationTime = time.time_ns() / (10 ** 9)
+        self._gameid = gameid  # Set Game ID
 
         self._seen_update = False
         self._move_id = 1
@@ -156,17 +157,8 @@ class GeneralsClient(object):
         if not public_server and "[Bot]" not in username:
             self.server_username = "[Bot] " + username
 
-        self._chosen_custom_map = None
-        if gameid and gameid.endswith('CustMap'):
-            self._chosen_custom_map = random.choice(
-                [
-                    'Moneymores_2',
-                    # 'King of the hills.',  # too big, currently lags things out
-                    # 'King of the Hill (FFA)'  # bot needs to take cities towards central clusters. Bot needs to have some issue fixed where it does dumb shit
-                    '1v1 Ultimate',
-                    'city city',
-                ]
-            )
+        self._chosen_custom_map: str | None = None
+        self._cycle_custom_map_if_custom()
 
         self.customOptions = {
             # "width": "0.99",
@@ -178,9 +170,6 @@ class GeneralsClient(object):
             'observatory_density': None,
             'lookout_density': None,
         }
-
-        if gameid and gameid.endswith('TESTING'):
-            self.customOptions['map'] = '一战Redux'
 
         if gameid and gameid.endswith('AltTiles'):
             self.customOptions['swamp_density'] = 0.04
@@ -587,7 +576,7 @@ class GeneralsClient(object):
         time.sleep(1.5)  # was 2, if custom games break?
         while 'replay_id' not in self.start_data:
             forcing = True
-            isHost = False
+            isHost = True
             if self._currentQueue:
                 if 'options' in self._currentQueue:
                     gameSpeed = 1.0
@@ -918,6 +907,9 @@ class GeneralsClient(object):
                 if isHost != self._isHost:
                     if isHost:
                         self._hostAt = time.perf_counter()
+                        self._cycle_custom_map_if_custom()
+                        self.customOptions['map'] = self._chosen_custom_map
+                        self._send(["set_custom_options", self._gameid, self.customOptions])
                     else:
                         self._hostAt = None
                     self._isHost = isHost
@@ -933,6 +925,38 @@ class GeneralsClient(object):
 
                 else:
                     logbook.info(f'not setting custom host, serverusername {self.server_username} vs usernames[0] {usernames[0]} == ? {self.server_username == usernames[0]}')
+
+    def _cycle_custom_map_if_custom(self):
+        if self._gameid and self._gameid.endswith('CustMap'):
+            self._chosen_custom_map = random.choice(
+                [
+                    'Moneymores_2',
+                    '一战Redux',
+                    'King of the hills.',
+                    'King of the Hill (FFA)',
+                    '1v1 Ultimate',
+                    'city city',
+                    '迷宫（经典）',  # lots of 10 cost cities in little grid with pockets :D not completely fair but fun
+                    '世界之战',  # This one isn't great, it doesn't handle the super far swamps well, and doesn't prioritize cracking open new islands.
+                    # '数海拾贝 2 - yizcdl2357',  # is ok  IS NOT FUN TO PLAY AS A HUMAN
+                    'iji++--0001',  # fair-ish map with fork path in middle and 8 starting cities
+                    'Plots',
+                    'Speed',
+                ]
+            )
+
+        if self._gameid and self._gameid.endswith('TESTING'):
+            # self._chosen_custom_map = '一战Redux'
+            # self._chosen_custom_map = 'King of the Hill (FFA)'
+            self._chosen_custom_map = 'King of the hills.'
+            self._chosen_custom_map = '迷宫（经典）'
+            self._chosen_custom_map = '世界之战'  # This one isn't great, it doesn't handle the super far swamps well, and doesn't prioritize cracking open new islands.
+            self._chosen_custom_map = '摸黑行动1'  # almost really cool, but doesn't play that well because the middle city is too much advantage
+
+            self._chosen_custom_map = '摸黑行动1'  #
+            self._chosen_custom_map = '摸黑行动1'  #
+            self._chosen_custom_map = 'Speed'  #
+            # self._chosen_custom_map = 'Plots'  #  ??
 
 
 def _spawn(f):

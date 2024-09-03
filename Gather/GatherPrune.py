@@ -635,6 +635,9 @@ def prune_mst_to_max_army_per_turn_with_values(
                 cityGatherDepthCounter.add(node.trunkDistance)
             else:
                 cityCounter.add(-1)
+        if node.tile.isSwamp:
+            if not node.tile.isNeutral:
+                cityCounter.add(-1)
 
     GatherTreeNode.foreach_tree_node(rootNodes, cityCounterFunc)
 
@@ -660,9 +663,13 @@ def prune_mst_to_max_army_per_turn_with_values(
         if pruneValPerTurn < curValuePerTurn.value or armyLeftIfPruned < minArmy:
             return True
 
-        if teams[node.tile.player] == teams[searchingPlayer] and (node.tile.isCity or node.tile.isGeneral):
-            cityGatherDepthCounter.add(0 - node.trunkDistance)
-            cityCounter.add(-1)
+        if teams[node.tile.player] == teams[searchingPlayer]:
+            if node.tile.isCity or node.tile.isGeneral:
+                cityGatherDepthCounter.add(0 - node.trunkDistance)
+                cityCounter.add(-1)
+            elif node.tile.isSwamp:
+                cityGatherDepthCounter.add(0 - node.trunkDistance)
+                cityCounter.add(1)
 
         curValuePerTurn.value = pruneValPerTurn
         return False

@@ -349,19 +349,26 @@ class GameSimulator(object):
         if self.sim_map.turn != self.turn:
             raise AssertionError(f'Something desynced, sim_map.turn + 1 was {self.sim_map.turn} while sim turn was {self.turn}')
 
-        for row in self.sim_map.grid:
-            for mapTile in row:
-                updated = False
-                if self.turn & 1 == 0 and (mapTile.isGeneral or (mapTile.isCity and not mapTile.isNeutral)):
+        isCityBonus = self.turn & 1 == 0
+        isArmyBonus = self.turn % 50 == 0
+        for mapTile in self.sim_map.tiles_by_index:
+            updated = False
+            if isCityBonus:
+                if mapTile.isGeneral or (mapTile.isCity and not mapTile.isNeutral):
                     mapTile.army += 1
                     updated = True
-
-                if self.turn % 50 == 0 and mapTile.player >= 0:
-                    mapTile.army += 1
+                if mapTile.isSwamp and mapTile.player >= 0:
+                    mapTile.army -= 1
+                    if mapTile.army == 0:
+                        mapTile.player = -1
                     updated = True
 
-                if updated:
-                    self.tiles_updated_this_cycle.add(mapTile)
+            if isArmyBonus and mapTile.player >= 0 and not mapTile.isDesert:
+                mapTile.army += 1
+                updated = True
+
+            if updated:
+                self.tiles_updated_this_cycle.add(mapTile)
 
     def _update_scores(self):
         scores = [Score(player.index, 0, 0, player.dead) for player in self.players]

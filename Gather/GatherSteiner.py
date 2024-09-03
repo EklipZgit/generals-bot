@@ -838,6 +838,8 @@ def _pcst_iteration_internal(
         extraCost = tileExtraCostMatrix.raw[tileIndex] if tileExtraCostMatrix is not None else 0.0
         # if tile.army > 1 or not map.is_tile_friendly(tile):
         prize += prizeOffset
+        if tile.player == -1 and tile.army < 0:
+            prize = 0
 
         # prizes.append(max(0.0, prize))
         if prize < scaleNegativesBelow:

@@ -130,7 +130,7 @@ class TeammateCommunicator(object):
         messages = []
         curMessage: TeammateCommunication | None = None
         if self.coordinated_defense is not None and self.is_teammate_coordinated_bot:
-            teammateTileDistMap = SearchUtils.build_distance_map(self.map, self.teammate_player.tiles)
+            teammateTileDistMap = SearchUtils.build_distance_map_matrix(self.map, self.teammate_player.tiles)
             nextMessage = self.coordinated_defense.get_as_bot_communication(self.map, self.tile_compressor, teammateTileDistMap)
             curMessage = self._try_combine_messages(messages, curMessage, nextMessage)
 

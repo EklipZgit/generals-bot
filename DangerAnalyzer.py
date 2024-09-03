@@ -151,7 +151,8 @@ class DangerAnalyzer(object):
 
         self.nonGeneralTargets = defenseTiles
         self.fastestThreat = self.getFastestThreat(depth, armies, self.map.player_index)
-        self.fastestCityThreat = self.getFastestThreat(depth, armies, self.map.player_index, generalOnly=False, requireMovement=True)
+        if self.map.players[self.map.player_index].cityCount < 30:
+            self.fastestCityThreat = self.getFastestThreat(depth, armies, self.map.player_index, generalOnly=False, requireMovement=True)
         # TODO why was this here...?
         # if self.fastestCityThreat is not None and self.fastestThreat is not None:
         #     if self.fastestCityThreat.armyAnalysis.tileB == self.fastestThreat.armyAnalysis.tileB:

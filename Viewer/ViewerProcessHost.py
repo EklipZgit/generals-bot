@@ -126,8 +126,8 @@ class ViewerHost(object):
                 logbook.info(f'outer update publish catch, error: ')
                 logbook.info(traceback.format_exc())
         except:
-            logbook.info(f'outer update publish catch, error: ')
-            logbook.info(traceback.format_exc())
+            logbook.error(f'outer update publish catch, error: ')
+            logbook.error(traceback.format_exc())
 
     def handle_viewer_events(self):
         try:

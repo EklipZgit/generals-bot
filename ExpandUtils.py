@@ -101,6 +101,9 @@ def get_round_plan_with_expansion(
         perfTimer = PerformanceTimer()
         perfTimer.begin_move(map.turn)
 
+    if leafMoves:
+        leafMoves = [m for m in leafMoves if m.source.player == searchingPlayer and m.source.army > 1]
+
     logEntries = []
     try:
 
@@ -621,6 +624,10 @@ def _include_optimal_expansion_options(
 
         if currentTile.isCity and currentTile.isNeutral:
             return None
+        if currentTile.isDesert and currentTile.player == -1:
+            return None
+        if currentTile.isSwamp:
+            return None
 
         if distSoFar > 0 and tileCapturePoints < 0:
             dist = distSoFar + lengthWeightOffset
@@ -659,7 +666,7 @@ def _include_optimal_expansion_options(
 
     ENEMY_EXPANSION_TILE_PENALTY = 0.7
 
-    def default_priority_func_basic(nextTile, currentPriorityObject):
+    def default_priority_func_basic(nextTile: Tile, currentPriorityObject):
         (
             distSoFar,
             prioWeighted,
@@ -695,11 +702,11 @@ def _include_optimal_expansion_options(
         nextTileSet.add(nextTile)
 
         # only reward closeness to enemy up to a point then penalize it
-        cutoffEnemyDist = abs(enemyDistMap[nextTile] - enemyDistPenaltyPoint)
+        cutoffEnemyDist = abs(enemyDistMap.raw[nextTile.tile_index] - enemyDistPenaltyPoint)
         addedPriority = 3 * (0 - cutoffEnemyDist ** 0.5 + 1)
 
         # reward away from our general but not THAT far away
-        cutoffGenDist = abs(generalDistMap[nextTile])
+        cutoffGenDist = abs(generalDistMap.raw[nextTile.tile_index])
         addedPriority += 3 * (cutoffGenDist ** 0.5 - 1)
 
         # negTileCapturePoints += cutoffEnemyDist / 100
@@ -710,6 +717,8 @@ def _include_optimal_expansion_options(
             if nextTile.player in friendlyPlayers:
                 armyRemaining += nextTile.army
             else:
+                if nextTile.player == -1 and nextTile.army < 0:
+                    negTileCapturePoints += nextTile.army
                 armyRemaining -= nextTile.army
         if armyRemaining <= 0:
             return None
@@ -729,6 +738,7 @@ def _include_optimal_expansion_options(
                 nextTile in tryAvoidSet
                 or nextTile in negativeTiles
                 or nextTile in tileSetSoFar
+                or nextTile.isSwamp
         ):
             # our tiles and non-target enemy tiles get negatively weighted
             addedPriority -= 1
@@ -739,19 +749,20 @@ def _include_optimal_expansion_options(
                 targetPlayer != -1
                 and (
                         nextTile.player in targetPlayers
-                        or (not nextTile.visible and respectTerritoryMap and territoryMap[nextTile] in targetPlayers)
+                        or (not nextTile.visible and respectTerritoryMap and territoryMap.raw[nextTile.tile_index] in targetPlayers)
                 )
         ):
-            # if nextTile.player == -1:
-            #     # these are usually 1 or more army since usually after army bonus
-            #     armyRemaining -= 1
-            addedPriority += 8
-            if nextTile.player != -1:
-                negTileCapturePoints -= 2.0
-                distSoFar -= 0.99
-            else:
-                negTileCapturePoints -= 1.5
-            enemyTiles -= 1
+            if not nextTile.isDesert:
+                # if nextTile.player == -1:
+                #     # these are usually 1 or more army since usually after army bonus
+                #     armyRemaining -= 1
+                addedPriority += 8
+                if nextTile.player != -1:
+                    negTileCapturePoints -= 2.0
+                    distSoFar -= 0.99
+                else:
+                    negTileCapturePoints -= 1.5
+                enemyTiles -= 1
 
             ## points for locking all nearby enemy tiles down
             # numEnemyNear = count(nextTile.adjacents, lambda adjTile: adjTile.player in targetPlayers)
@@ -780,9 +791,12 @@ def _include_optimal_expansion_options(
         if nextTile in tryAvoidSet:
             addedPriority -= 5
             negTileCapturePoints += 0.2
+        if nextTile.isSwamp:
+            negTileCapturePoints += 1.1
+            distSoFar += 2.1
 
         if bonusCapturePointMatrix is not None:
-            bonusPoints = bonusCapturePointMatrix[nextTile]
+            bonusPoints = bonusCapturePointMatrix.raw[nextTile.tile_index]
             if bonusPoints < 0.0 or usefulMove:  # for penalized tiles, always apply the penalty. For rewarded tiles, only reward when it is a move that does something.
                 negTileCapturePoints -= bonusPoints
             if bonusPoints < -10:
@@ -804,7 +818,7 @@ def _include_optimal_expansion_options(
         newPathPriority = pathPriority - addedPriority
         # newPathPriority = addedPriority
         # prioPerTurn = newPathPriority/distSoFar
-        prioPerTurn = (negTileCapturePoints) / (distSoFar + wastedMoves)  # - addedPriority / 4
+        prioPerTurn = negTileCapturePoints / (distSoFar + wastedMoves)  # - addedPriority / 4
         # if iter[0] < 50 and fullLog:
         #     logEntries.append(
         #         f" - nextTile {str(nextTile)}, waste [{wastedMoves:.2f}], prioPerTurn [{prioPerTurn:.2f}], dsf {distSoFar}, capPts [{negTileCapturePoints:.2f}], negArmRem [{0 - armyRemaining}]\n    eTiles {enemyTiles}, nTiles {neutralTiles}, npPrio {newPathPriority:.2f}, nextTileSet {len(nextTileSet)}\n    nextAdjSet {None}, enemyExpVal {enemyExpansionValue}, nextEnExpSet {None}")
@@ -1516,6 +1530,9 @@ def _execute_expansion_gather_to_borders(
 
             if priorityMatrix:
                 negGatheredSum += priorityMatrix[nextTile]
+            if nextTile.isSwamp:
+                negGatheredSum += 1
+                negArmySum += 1
 
             # if nextTile.player != searchingPlayer and not (nextTile.player == -1 and nextTile.isCity):
             #    negDistanceSum -= 1
@@ -1815,7 +1832,7 @@ def _get_tile_path_value(
         generalDistMap,
         territoryMap,
         enemyDistPenaltyPoint,
-        bonusCapturePointMatrix: MapMatrixInterface[float] | None):
+        bonusCapturePointMatrix: MapMatrixInterface[float] | None) -> float:
     value = 0.0
     if tile in negativeTiles:
         value -= 0.1
@@ -1824,14 +1841,21 @@ def _get_tile_path_value(
 
         if tile.player in targetPlayers:
             value += 2.1
-        elif not tile.discovered and territoryMap[tile] in targetPlayers:
-            value += 1.45
-        elif not tile.visible and territoryMap[tile] in targetPlayers:
-            value += 1.2
-        elif tile.player == -1:
-            value += 1.0
+            if tile.isCity and tile.army < 10:
+                value += 15 - tile.army
+        elif not tile.discovered and territoryMap.raw[tile.tile_index] in targetPlayers:
+            value += 0.45
+        elif not tile.visible and territoryMap.raw[tile.tile_index] in targetPlayers:
+            value += 0.2
+        if tile.player == -1:
+            value += 1.0 - tile.army
+            if tile.isCity and tile.army < 10:
+                value += 25 - tile.army
         elif map.is_player_on_team_with(searchingPlayer, tile.player):
             value -= 0.2 / max(0.5, tile.army)
+
+        if tile.isSwamp:
+            value -= 2.0
 
         # if tile.visible:
         #     value += 0.02
@@ -1839,15 +1863,15 @@ def _get_tile_path_value(
         if not tile.discovered:
             value += 0.01
         if bonusCapturePointMatrix is not None:
-            value += bonusCapturePointMatrix[tile]
+            value += bonusCapturePointMatrix.raw[tile.tile_index]
 
         # elif lastTile is not None and tile.player == searchingPlayer:
         #     value -= 0.05
 
-        sourceEnDist = enemyDistMap[lastTile]
-        destEnDist = enemyDistMap[tile]
-        sourceGenDist = generalDistMap[lastTile]
-        destGenDist = generalDistMap[tile]
+        sourceEnDist = enemyDistMap.raw[lastTile.tile_index]
+        destEnDist = enemyDistMap.raw[tile.tile_index]
+        sourceGenDist = generalDistMap.raw[lastTile.tile_index]
+        destGenDist = generalDistMap.raw[tile.tile_index]
 
         sourceDistSum = sourceEnDist + sourceGenDist
         destDistSum = destEnDist + destGenDist

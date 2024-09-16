@@ -3,8 +3,6 @@ from __future__ import annotations
 import typing
 from collections import deque
 
-import logbook
-
 from Interfaces import MapMatrixInterface
 from base.client.tile import Tile
 
@@ -206,11 +204,12 @@ class GatherTreeNode(typing.Generic[T]):
             #     distOffs = 1
             leavesGreaterThanDistance = []
             for g in leaves:
-                if distMap.raw[g.tile.tile_index] >= dist - distOffs or (g.toTile and distMap[g.toTile] >= dist - distOffs):
+                if distMap.raw[g.tile.tile_index] >= dist - distOffs or (g.toTile and distMap.raw[g.toTile.tile_index] >= dist - distOffs):
                     leavesGreaterThanDistance.append(g)
-            if includeAll:
-                leavesToInclude.extend(leavesGreaterThanDistance)
-                continue
+            # TODO is this causing the early-gather bullshit?
+            # if includeAll:
+            #     leavesToInclude.extend(leavesGreaterThanDistance)
+            #     continue
 
             for leaf in leavesGreaterThanDistance:
                 leafContribution = (leaf.tile.army - 1)

@@ -15,7 +15,8 @@ from MctsLudii import MctsDUCT, MoveSelectionFunction
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost, GameSimulator
 from TestBase import TestBase
-from base.client.tile import Tile, MapBase
+from base.client.map import MapBase
+from base.client.tile import Tile
 from bot_ek0x45 import EklipZBot
 
 SIM_VS_ENGINE_ALL_TILE_TYPES_TEST_MAP = """
@@ -47,6 +48,10 @@ dTiles=2
 
 
 class ArmyEngineTests(TestBase):
+    def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
+        bot = super().get_debug_render_bot(simHost, player)
+        bot.disable_engine = False
+
     def render_step_engine_analysis(
             self,
             engine: ArmyEngine,
@@ -110,7 +115,8 @@ class ArmyEngineTests(TestBase):
             self.assertEqual(enPlayer, simGen.player, "Engine claimed player general was captured by enemy.")
             # after the capture in the engine we don't really worry about all the tile diff execution stuff, but maybe we should since 2v2...?
         else:
-            for tile, engineSimTile in boardState.friendly_living_armies.items():
+            for tileIdx, engineSimTile in boardState.friendly_living_armies.items():
+                tile = sim.sim_map.tiles_by_index[tileIdx]
                 realTile = sim.sim_map.GetTile(tile.x, tile.y)
 
                 if realTile.army != engineSimTile.army:
@@ -120,7 +126,8 @@ class ArmyEngineTests(TestBase):
                 if frPlayer != realTile.player:
                     failures.append(f'friendly army {tile} - frPlayer {frPlayer} != realTile.player {realTile.player}')
 
-            for tile, engineSimTile in boardState.enemy_living_armies.items():
+            for tileIdx, engineSimTile in boardState.enemy_living_armies.items():
+                tile = sim.sim_map.tiles_by_index[tileIdx]
                 realTile = sim.sim_map.GetTile(tile.x, tile.y)
 
                 if realTile.army != engineSimTile.army:
@@ -130,7 +137,8 @@ class ArmyEngineTests(TestBase):
                 if enPlayer != realTile.player:
                     failures.append(f'enemy army {tile} - enPlayer {enPlayer} != realTile.player {realTile.player}')
 
-            for tile, engineSimTile in boardState.sim_tiles.items():
+            for tileIdx, engineSimTile in boardState.sim_tiles.items():
+                tile = sim.sim_map.tiles_by_index[tileIdx]
                 realTile = sim.sim_map.GetTile(tile.x, tile.y)
 
                 if realTile.army != engineSimTile.army:
@@ -894,7 +902,7 @@ bot_target_player=1
 aTiles=20
 bTiles=20
 """
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
         # Both should have half the board if this gens correctly..
         map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102)
@@ -972,7 +980,7 @@ bTiles=20
                 # self.assertEqual(0, baseState.tile_differential)
                 # self.assertEqual(0, baseState.city_differential)
 
-                armyEngine.iteration_limit = 1000
+                armyEngine.iteration_limit = 200
                 armyEngine.time_limit = 1000
                 result = armyEngine.scan(5, logEvals=False, mcts=True)
                 if debugMode:
@@ -1036,7 +1044,7 @@ bTiles=20
                 self.assertEqual(0, baseState.city_differential)
 
                 result = armyEngine.scan(4, logEvals=False, mcts=True)
-                armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(map, [general])
+                armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix_with_skip(map, [general])
                 if debugMode:
                     self.render_sim_analysis(map, result)
 
@@ -1207,7 +1215,7 @@ bTiles=20
                 armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = True
-                armyEngine.force_friendly_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(map, [enemyGen])
+                armyEngine.force_friendly_towards_or_parallel_to = SearchUtils.build_distance_map_matrix_with_skip(map, [enemyGen])
                 armyEngine.allow_friendly_no_op = False
                 baseState = armyEngine.get_base_board_state()
                 self.assertEqual(0, baseState.tile_differential)
@@ -1803,11 +1811,12 @@ bTiles=15
                     else:
                         self.assertEqual(1, len(simState1.enemy_living_armies))
                         self.assertEqual(0, len(simState1.friendly_living_armies))
-                        self.assertIn(aArmy.tile, simState1.enemy_living_armies, "b should have an army left where a's army used to be")
+                        self.assertIn(aArmy.tile.tile_index, simState1.enemy_living_armies, "b should have an army left where a's army used to be")
                         self.assertFalse(simState1.kills_all_enemy_armies)
                         self.assertTrue(simState1.kills_all_friendly_armies)
 
-                    for tile, simTile in simState1.sim_tiles.items():
+                    for tileIdx, simTile in simState1.sim_tiles.items():
+                        tile = simTile.source_tile
                         if simTile.source_tile == expect9ArmyTile:
                             self.assertEqual(9, simTile.army)
                             self.assertEqual(winningPlayer, simTile.player)
@@ -1839,7 +1848,7 @@ bot_target_player=1
 aTiles=20
 bTiles=20
 """
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
         # Both should have half the board if this gens correctly..
         map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102)
@@ -1973,7 +1982,7 @@ bTiles=20
                 armyEngine.friendly_has_kill_threat = True
                 armyEngine.enemy_has_kill_threat = True
                 armyEngine.log_everything = True
-                armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(map, [general])
+                armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix_with_skip(map, [general])
                 result = armyEngine.scan(5, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
@@ -2006,7 +2015,7 @@ bTiles=20
         armyEngine.friendly_has_kill_threat = True
         armyEngine.enemy_has_kill_threat = True
         # TODO switch to this method of parameterizing this
-        armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(map, [general])
+        armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix_with_skip(map, [general])
         result = armyEngine.scan(5, logEvals=False, mcts=True)
         if debugMode:
             self.render_sim_analysis(map, result)
@@ -2175,7 +2184,7 @@ bTiles=20
         armyEngine = ArmyEngine(m, [aArmy], [bArmy], eklipz_bot.board_analysis)
         armyEngine.friendly_has_kill_threat = True
         armyEngine.enemy_has_kill_threat = True
-        armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(m, [general])
+        armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix_with_skip(m, [general])
         result = armyEngine.scan(5, logEvals=False, mcts=True)
         if debugMode:
             self.render_sim_analysis(m, result)
@@ -2206,7 +2215,7 @@ bTiles=20
         armyEngine = ArmyEngine(m, [aArmy], [bArmy], eklipz_bot.board_analysis)
         armyEngine.friendly_has_kill_threat = False
         armyEngine.enemy_has_kill_threat = False
-        armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(m, [general])
+        armyEngine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix_with_skip(m, [general])
         result = armyEngine.scan(6, logEvals=False, noThrow=debugMode, mcts=True)
         if debugMode:
             self.render_step_engine_analysis(armyEngine, simHost.sim, result, aArmy, bArmy)
@@ -2686,11 +2695,11 @@ bTiles=20
         # self.assertGreater(len(result.expected_best_moves), 1)
 
     def test__should_realize_it_can_save_one_move_behind__when_paths_fed_into_mcts_pre_explore(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
 
         for turn in [792, 793]:
             for defenseBlockedByMountain in [True, False]:
-                for shortCircuit in [True, False]:
+                for shortCircuit in [False, True]:
                     for canDefend in [False, True]:
                         for includeDefensePath in [False, True]:
                             with self.subTest(shortCircuit=shortCircuit, canDefend=canDefend, includeDefensePath=includeDefensePath, defenseBlockedByMountain=defenseBlockedByMountain, turn=turn):
@@ -2720,7 +2729,8 @@ bTiles=20
                                 armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts)
                                 armyEngine.enemy_has_kill_threat = shortCircuit
                                 armyEngine.time_limit = 1000000.0
-                                armyEngine.iteration_limit = 5000
+                                armyEngine.iteration_limit = 50000
+                                armyEngine.mcts_runner.logAll = True
                                 # armyEngine.mcts_runner
 
                                 offensePath = Path()

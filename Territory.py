@@ -149,7 +149,7 @@ class TerritoryClassifier(object):
         for team in self.team_indexes:
             startTiles = []
             for tile in self.map.pathable_tiles:
-                if self.map.is_player_on_team(self.territoryMap[tile], team):
+                if self.map.is_player_on_team(self.territoryMap.raw[tile.tile_index], team):
                     startTiles.append(tile)
 
             self.territoryTeamDistances[team] = SearchUtils.build_distance_map_matrix(self.map, startTiles)

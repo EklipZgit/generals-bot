@@ -10,7 +10,6 @@ from BoardAnalyzer import BoardAnalyzer
 from DangerAnalyzer import ThreatObj, ThreatType
 from Models import Move
 from Interfaces import TilePlanInterface, MapMatrixInterface
-from MapMatrix import MapMatrix
 from Path import Path
 from base.client.map import MapBase, Tile
 
@@ -27,6 +26,13 @@ RECAPTURE_VALUE = 2.21
 
 
 class ThreatValueInfo(object):
+    __slots__ = (
+        'threat',
+        'econ_value',
+        'turns_used_by_enemy',
+        'econ_value_per_turn',
+    )
+
     def __init__(self, threat: ThreatObj, econValue: float, turns: int):
         self.threat: ThreatObj = threat
         self.econ_value: float = econValue
@@ -41,6 +47,12 @@ class ThreatValueInfo(object):
 
 
 class ThreatBlockInfo(object):
+    __slots__ = (
+        'tile',
+        'amount_needed_to_block',
+        'blocked_destinations',
+    )
+
     def __init__(self, tile: Tile, amount_needed_to_block: int):
         self.tile: Tile = tile
         self.amount_needed_to_block: int = amount_needed_to_block
@@ -56,6 +68,15 @@ class ThreatBlockInfo(object):
 
 
 class InterceptPointTileInfo(object):
+    __slots__ = (
+        'tile',
+        'max_delay_turns',
+        'max_extra_moves_to_capture',
+        'max_choke_width',
+        'max_intercept_turn_offset',
+        'max_search_dist',
+    )
+
     def __init__(self, tile: Tile, maxDelayTurns: int, maxExtraMoves: int, maxChokeWidth: int, maxInterceptTurnOffset: int):
         self.tile: Tile = tile
 
@@ -82,8 +103,33 @@ class InterceptPointTileInfo(object):
 
 
 class InterceptionOptionInfo(TilePlanInterface):
+    __slots__ = (
+        'path',
+        '_econ_value',
+        '_turns',
+        'damage_blocked',
+        'intercepting_army_remaining',
+        'recapture_turns',
+        'best_case_intercept_moves',
+        'worst_case_intercept_moves',
+        '_requiredDelay',
+        'friendly_army_reaching_intercept',
+        'intercept',
+    )
 
-    def __init__(self, path: Path, econValue: float, turns: int, damageBlocked: float, interceptingArmyRemaining: int, bestCaseInterceptMoves: int, worstCaseInterceptMoves: int, recaptureTurns: int, requiredDelay: int):
+    def __init__(
+            self,
+            path: Path,
+            econValue: float,
+            turns: int,
+            damageBlocked: float,
+            interceptingArmyRemaining: int,
+            bestCaseInterceptMoves: int,
+            worstCaseInterceptMoves: int,
+            recaptureTurns: int,
+            requiredDelay: int,
+            friendlyArmyReachingIntercept: int,
+    ):
         self.path: Path = path
         self._econ_value: float = econValue
         self._turns: int = turns
@@ -93,7 +139,7 @@ class InterceptionOptionInfo(TilePlanInterface):
         """The amount of the attacking army that will likely be remaining after the intercept completes AT the intercept point."""
 
         self.recapture_turns: int = recaptureTurns
-        """Number of turns used to recapture at round end."""
+        """Number of turns AVAILABLE to recapture at round end that have NOT been included already in the option, based on army left over at intercept."""
 
         self.best_case_intercept_moves: int = bestCaseInterceptMoves
         """Best case turns-to-intercept, if they walk right towards our army."""
@@ -102,6 +148,8 @@ class InterceptionOptionInfo(TilePlanInterface):
         """Worst case turns-to-intercept"""
 
         self._requiredDelay: int = requiredDelay
+
+        self.friendly_army_reaching_intercept: int = friendlyArmyReachingIntercept
 
         self.intercept: ArmyInterception | None = None
 
@@ -153,10 +201,10 @@ class InterceptionOptionInfo(TilePlanInterface):
         return self.path.pop_first_move()
 
     def __str__(self):
-        return f'int {self.econValue:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt) dBlk {self.damage_blocked:.2f}, armyLeft {self.intercepting_army_remaining}, bcm {self.best_case_intercept_moves}, del {self.requiredDelay}, path {self.path}'
+        return f'int {self.path.start.tile}@{self.path.tail.tile}: {self.econValue:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt) dBlk {self.damage_blocked:.2f}, eRem {self.intercepting_army_remaining}, bct {self.best_case_intercept_moves}, del{self.requiredDelay}'
 
     def __repr__(self):
-        return str(self)
+        return f'{str(self)}, path {self.path}'
 
     def clone(self) -> InterceptionOptionInfo:
         clone = InterceptionOptionInfo(
@@ -168,11 +216,25 @@ class InterceptionOptionInfo(TilePlanInterface):
             self.best_case_intercept_moves,
             self.worst_case_intercept_moves,
             self.recapture_turns,
-            self._requiredDelay)
+            self._requiredDelay,
+            self.friendly_army_reaching_intercept)
         return clone
 
 
 class ArmyInterception(object):
+    __slots__ = (
+        'threat_values',
+        'threats',
+        'ignored_threats',
+        'base_threat_army',
+        'common_intercept_chokes',
+        'furthest_common_intercept_distances',
+        'target_tile',
+        'kill_enemy_threat',
+        'best_enemy_threat',
+        'intercept_options',
+    )
+
     def __init__(
         self,
         threats: typing.List[ThreatValueInfo],
@@ -210,6 +272,9 @@ class ArmyInterception(object):
                 maxThreatInfo = threatInfo
                 isMaxThreatKill = True
 
+        self.kill_enemy_threat: ThreatValueInfo = maxThreatInfo
+        """The highest econ kill threat, should one exist."""
+
         # check non-kill threats second
         for threatInfo in threats:
             if threatInfo in killThreats:
@@ -217,14 +282,8 @@ class ArmyInterception(object):
 
             val = threatInfo.econ_value
             valPerTurn = threatInfo.econ_value_per_turn
-            # only allow replacing kill with non-kill threats when the non-kill threat is much shorter..?
-            if isMaxThreatKill and threatInfo.threat.path.length > maxThreatInfo.threat.path.length // 2:
-                continue
-            
-            if valPerTurn == maxValPerTurn and threatInfo.threat.path.length > maxThreatInfo.threat.path.length:
-                maxValPerTurn -= 1
 
-            if valPerTurn > maxValPerTurn:
+            if valPerTurn > maxValPerTurn or (valPerTurn == maxValPerTurn and threatInfo.threat.path.length > maxThreatInfo.threat.path.length):
                 if isMaxThreatKill:
                     logbook.warn(f'WARNING: replacing best_enemy_threat kill threat with non-kill:\r\nreplacing: {maxThreatInfo.threat}\r\nwith: {threatInfo.threat}')
                 isMaxThreatKill = False
@@ -233,6 +292,8 @@ class ArmyInterception(object):
 
         self.best_enemy_threat: ThreatValueInfo = maxThreatInfo
         """The highest econ value per turn threat. MAY NOT BE A KILL THREAT WHILE A KILL THREAT EXISTS."""
+        if self.kill_enemy_threat is None:
+            self.kill_enemy_threat = self.best_enemy_threat
 
         self.intercept_options: typing.Dict[int, InterceptionOptionInfo] = {}
         """turnsToIntercept -> econValueOfIntercept, interceptPath"""
@@ -264,6 +325,12 @@ class ArmyInterception(object):
 
 
 class ArmyInterceptor(object):
+    __slots__ = (
+        'map',
+        'board_analysis',
+        'log_debug',
+    )
+
     def __init__(
         self,
         map: MapBase,
@@ -305,7 +372,7 @@ class ArmyInterceptor(object):
         if len(interception.intercept_options) == 0:
             logbook.warn(f'No intercept options found, retrying shared chokes but being more lenient filtering out threats')
             # try again, more friendly
-            altThreatValues = [t for t in threatValues if t.threat.path.get_first_move().dest.lastMovedTurn < self.map.turn]
+            altThreatValues = [t for t in threatValues if t.threat.path.get_first_move().dest != t.threat.path.start.tile.delta.fromTile]
             if len(threatValues) > len(altThreatValues) > 0:
                 newIgnored = [t.threat for t in threatValues if t not in altThreatValues]
                 newIgnored.extend(ignoredThreats)
@@ -769,16 +836,19 @@ class ArmyInterceptor(object):
         maxDepth = longestThreat.turns + 1
 
         averageEnemyPositionByTurn: typing.Dict[int, typing.Tuple[float, float]] = {}
-        for i in range(0, interception.best_enemy_threat.threat.path.length):
+        for i in range(0, interception.kill_enemy_threat.threat.path.length):
             numThreatsAtThisDist = 0
             allThreatsX = 0
             allThreatsY = 0
             for threat in interception.threat_values:
+                mult = 1
+                if threat.threat.threatType == ThreatType.Kill and threat.threat.path.tail.tile.isGeneral:
+                    mult = 3
                 distances = threat.threat.armyAnalysis.tileDistancesLookup.get(i, None)
                 if not distances:
                     continue
 
-                numThreatsAtThisDist += 1
+                numThreatsAtThisDist += mult
                 xSum = 0
                 ySum = 0
                 numTilesAtThisDist = 0
@@ -789,8 +859,8 @@ class ArmyInterceptor(object):
 
                 xAvg = xSum / numTilesAtThisDist
                 yAvg = ySum / numTilesAtThisDist
-                allThreatsX += xAvg
-                allThreatsY += yAvg
+                allThreatsX += xAvg * mult
+                allThreatsY += yAvg * mult
 
             if numThreatsAtThisDist == 0:
                 continue
@@ -815,6 +885,11 @@ class ArmyInterceptor(object):
 
             turnsToIntercept = interceptInfo.max_delay_turns
             depth = interceptInfo.max_search_dist
+            if depth <= 0:
+                if self.log_debug:
+                    logbook.info(f'\r\n\r\nSkipping tile {str(tile)} with depth / max_search_dist {depth}')
+                continue
+
             if self.log_debug:
                 logbook.info(f'\r\n\r\nChecking tile {str(tile)} with depth {depth} / threatDistFromCommon {threatDistFromCommon} / min(maxDepth={maxDepth}, turnsToIntercept={turnsToIntercept}')
 
@@ -937,7 +1012,8 @@ class ArmyInterceptor(object):
                         bestCaseInterceptMoves=bestCaseInterceptMoves,
                         worstCaseInterceptMoves=worstCaseInterceptMoves,
                         recaptureTurns=recaptureTurns,
-                        requiredDelay=1 if shouldDelay else 0)
+                        requiredDelay=1 if shouldDelay else 0,
+                        friendlyArmyReachingIntercept=enemyArmyCollidedWithAtIntercept - enemyArmyLeftAfterIntercept)
 
                     opt.intercept = interception
 
@@ -1317,18 +1393,24 @@ class ArmyInterceptor(object):
                 for t in tilesAtDist:
                     if tile in t.movable:
                         # + 2 because of chase moves...?
-                        bestCaseInterceptTurn = min(bestCaseInterceptTurn, i + 2)
+                        offs = 1
+                        if not self.map.player_has_priority_over_other(self.map.player_index, best_enemy_threat.threatPlayer, self.map.turn + i):
+                            offs += 1
+                        bestCaseInterceptTurn = min(bestCaseInterceptTurn, i + offs)
                     elif t == tile:
                         if len(tilesAtDist) == 1:
                             directIntercept = True
                         bestCaseInterceptTurn = min(bestCaseInterceptTurn, i)
-                    elif allInMovable and tile not in t.adjacents:  # short circuit the adjacents check early if we've already failed the all-in-movable test.
+                    elif allInMovable:  # short circuit the adjacents check early if we've already failed the all-in-movable test.
                         allInMovable = False
 
                 if directIntercept:
                     worstCaseInterceptTurn = min(i, worstCaseInterceptTurn)
                 elif allInMovable:
-                    worstCaseInterceptTurn = min(i + 2, worstCaseInterceptTurn)
+                    offs = 1
+                    if not self.map.player_has_priority_over_other(self.map.player_index, best_enemy_threat.threatPlayer, self.map.turn + i):
+                        offs += 1
+                    worstCaseInterceptTurn = min(i + offs, worstCaseInterceptTurn)
                 else:
                     # intDist = best_enemy_threat.armyAnalysis.interceptDistances.raw[tile.tile_index]
                     # if intDist is not None:
@@ -1437,6 +1519,9 @@ class ArmyInterceptor(object):
             for threat in otherThreats:
                 realThreatVal = threat.path.calculate_value(threat.threatPlayer, self.map.team_ids_by_player_index, doNotSaveToPath=True)
                 self.ensure_threat_army_analysis(threat)
+                if threat.armyAnalysis.shortestPathWay is None or not threat.armyAnalysis.shortestPathWay.tiles:
+                    logbook.error(f'Yo, wtf? Shortest pathway for threat {threat} had no tiles...?')
+                    continue
                 gen = self.map.generals[self.map.player_index]
                 towardsUs = self.map.get_distance_between(gen, threat.path.start.tile) - self.map.get_distance_between(gen, threat.path.tail.tile) > 0
                 if not towardsUs:
@@ -1459,7 +1544,7 @@ class ArmyInterceptor(object):
 
                     for moveable in chokeTile.movable:
                         # if moveable not in threat.armyAnalysis.shortestPathWay.tiles:
-                        if canDie or (moveable not in threat.path.tileSet and (moveable not in threat.armyAnalysis.shortestPathWay.tiles or threat.armyAnalysis.bMap[moveable] >= threat.armyAnalysis.bMap[chokeTile])):
+                        if canDie or (moveable not in threat.path.tileSet and (moveable not in threat.armyAnalysis.shortestPathWay.tiles or threat.armyAnalysis.bMap.raw[moveable.tile_index] >= threat.armyAnalysis.bMap.raw[chokeTile.tile_index])):
                             blockInfo.add_blocked_destination(moveable)
 
                     if blockInfo.amount_needed_to_block < blockAmount:

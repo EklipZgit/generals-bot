@@ -9,7 +9,6 @@ from base.client.tile import Tile
 T = typing.TypeVar('T', bound='Parent')  # use string
 
 
-
 class PathMove(object):
     def __init__(self, tile: Tile, next: PathMove | None = None, prev: PathMove | None = None, move_half: bool = False):
         self.tile: Tile = tile
@@ -45,6 +44,7 @@ class PathMove(object):
 
     def __repr__(self) -> str:
         return str(self)
+
 
 class TilePlanInterface(ABC):
     @property

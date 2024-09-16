@@ -820,7 +820,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-Human -left -game 1v1 -sleepMax 60'
+        $command = 'Run-Human -left -game 1v1 -sleepMax 90'
         try {
             Invoke-Expression $command
         } finally {
@@ -835,7 +835,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-Human -right -game ffa -sleepMax 30'
+        $command = 'Run-Human -right -game ffa -sleepMax 120'
         try {
             # Invoke-Expression $command
         } finally {
@@ -862,7 +862,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-HumanTeammate -game team -right -sleepMax 30'
+        $command = 'Run-HumanTeammate -game team -right -sleepMax 60'
         try {
             Invoke-Expression $command
         } finally {
@@ -902,7 +902,22 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeCust'
+        $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeCustMap1'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    <#
+    Human in custom lobby with custom maps
+    #>
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeCustMap2'
         try {
             Invoke-Expression $command
         } finally {
@@ -917,7 +932,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeAltTiles'
+        $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeAltTiles1'
         try {
             Invoke-Expression $command
         } finally {
@@ -932,7 +947,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeNormal'
+        $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeNormal1'
         try {
             Invoke-Expression $command
         } finally {
@@ -940,6 +955,9 @@ function Start-WindowsTerminalLiveBots {
             Start-Sleep -Seconds 1
         }
     }
+
+    # ALT TESTING
+    # Run-Human -name 'HaltWhoGoesThere' -game custom -private -sleepMax 1 -roomID Human.exeNormal1
 }
 
 

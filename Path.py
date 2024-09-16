@@ -7,8 +7,6 @@
 
 from __future__ import annotations
 
-import queue
-
 import logbook
 import typing
 from Models import GatherTreeNode, Move
@@ -17,9 +15,6 @@ from collections import deque
 from Interfaces.TilePlanInterface import TilePlanInterface, PathMove
 from base.client.tile import Tile
 from base.client.map import MapBase
-
-
-# class PartialPathPlan(Path):
 
 
 class Path(TilePlanInterface):
@@ -519,12 +514,14 @@ class Path(TilePlanInterface):
 
 
 class MoveListPath(Path):
+    __slots__ = ()
+
     # noinspection PyMissingConstructor
     def __init__(self, moves: typing.List[Move | None]):
+        # super().__init__(0)
         self.start: PathMove | None = None
-        self._pathQueue: typing.Deque[Move | None] = deque()
-
         self.tail: PathMove | None = None
+        self._pathQueue: typing.Deque[Move | None] = deque()
         self._tileList: typing.List[Tile] | None = None
         self._tileSet: typing.Set[Tile] | None = None
         self._adjacentSet: typing.Set[Tile] | None = None

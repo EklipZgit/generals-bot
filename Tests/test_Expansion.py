@@ -19,6 +19,7 @@ class ExpansionTests(TestBase):
         bot.info_render_general_undiscovered_prediction_values = True
         bot.info_render_leaf_move_values = True
         bot.info_render_tile_islands = True
+        # bot.info_render_tile_states = True
         # bot.expansion_use_legacy = False
 
         return bot
@@ -1476,3 +1477,62 @@ bot_target_player=1
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=20)
         self.assertNoFriendliesKilled(map, general)
+    
+    def test_should_expand_leafmoves_not_do_wonky_gather(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_expand_leafmoves_not_do_wonky_gather___Human.exe-TEST__3b2955b3-e948-43bc-ab08-e8daf573fae6---1--73.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 73, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=73)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=27)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertOwned(general.player, playerMap.GetTile(7, 3), 'should not have done wonky stuff')
+        self.assertOwned(general.player, playerMap.GetTile(9, 2), 'should not have done wonky stuff')
+    
+    def test_should_capture_enemy_tiles_on_path_not_neutrals(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_capture_enemy_tiles_on_path_not_neutrals___YAZlmHb12---0--449.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 449, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=449)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwned(general.player, playerMap.GetTile(6, 14), 'should capture enemy tile, not neutral, wtf')
+    
+    def test_should_capture_enemy_tiles_not_be_a_dumbass(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_capture_enemy_tiles_not_be_a_dumbass___DkSaJ-904---1--136__real.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136, fill_out_tiles=True)
+
+        mapFile = 'GameContinuationEntries/should_capture_enemy_tiles_not_be_a_dumbass___DkSaJ-904---1--136.txtmap'
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=136)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '10,11->9,11  11,11->12,11  4,9->3,9')
+        simHost.queue_player_moves_str(general.player, '8,12->9,12')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        self.assertNoFriendliesKilled(map, general)
+
+

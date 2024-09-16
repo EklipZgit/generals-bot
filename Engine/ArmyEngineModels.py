@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import typing
+from collections import deque
 
 from numba import int64, jit, float32, boolean, types
 from numba.experimental import jitclass
@@ -10,10 +11,12 @@ from base.client.tile import Tile
 
 
 class SimTile(object):
+    __slots__ = ('source_tile', 'army', 'player')
+
     def __init__(self, sourceTile: Tile, army: int | None = None, player: int | None = None):
-        self.source_tile = sourceTile
-        self.army = sourceTile.army if army is None else army
-        self.player = sourceTile.player if player is None else player
+        self.source_tile: Tile = sourceTile
+        self.army: int = sourceTile.army if army is None else army
+        self.player: int = sourceTile.player if player is None else player
 
     def __str__(self):
         return f"[{self.source_tile.x},{self.source_tile.y} p{self.player} a{self.army} ({repr(self.source_tile)})]"
@@ -74,9 +77,10 @@ class ArmySimState(object):
             self,
             turn: int,
             evaluationParams: ArmySimEvaluationParams,
-            simTiles: typing.Dict[Tile, SimTile] | None = None,
-            friendlyLivingArmies: typing.Dict[Tile, SimTile] | None = None,
-            enemyLivingArmies: typing.Dict[Tile, SimTile] | None = None,
+            simTiles: typing.Dict[int, SimTile] | None = None,
+            friendlyLivingArmies: typing.Dict[int, SimTile] | None = None,
+            enemyLivingArmies: typing.Dict[int, SimTile] | None = None,
+            noKeys: bool = False
     ):
         if simTiles is None:
             simTiles = {}
@@ -121,12 +125,12 @@ class ArmySimState(object):
         self.kills_all_enemy_armies: bool = False
         """If our armies kill all enemy armies with 3+ army to spare (ignoring remaining tile capture)"""
 
-        self.sim_tiles: typing.Dict[Tile, SimTile] = simTiles
+        self.sim_tiles: typing.Dict[int, SimTile] = simTiles
         """
         the set of tiles that have been involved in the scrim so far, tracking the current owner and army amount on them
         """
 
-        self.incrementing: typing.Set[Tile] = set()
+        self.incrementing: typing.Set[Tile] = set() if not noKeys else None
         """
         The set of tiles in the scrim that are currently incrementing (city or general)
         """
@@ -138,12 +142,22 @@ class ArmySimState(object):
         Positive means we gained city bonus overall, negative means enemy gained city bonus overall.
         """
 
-        self.friendly_living_armies: typing.Dict[Tile, SimTile] = friendlyLivingArmies
+        self.friendly_living_armies: typing.Dict[int, SimTile] = friendlyLivingArmies
         """
         Actively alive friendly armies at this point in the board state
         """
 
-        self.enemy_living_armies: typing.Dict[Tile, SimTile] = enemyLivingArmies
+        self.enemy_living_armies: typing.Dict[int, SimTile] = enemyLivingArmies
+        """
+        Actively alive enemy armies at this point in the board state
+        """
+
+        self.friendly_living_armies_l: typing.List[int] = [t for t in friendlyLivingArmies.keys()] if not noKeys else None
+        """
+        Actively alive friendly armies at this point in the board state
+        """
+
+        self.enemy_living_armies_l: typing.List[int] = [t for t in enemyLivingArmies.keys()] if not noKeys else None
         """
         Actively alive enemy armies at this point in the board state
         """
@@ -174,13 +188,19 @@ class ArmySimState(object):
         """ Generate the friendly moves. MUST set this before running a scan. """
 
         self.enemy_move_generator: typing.Callable[[ArmySimState], typing.List[Move | None]] = None
+        """ Generate the enemy moves. MUST set this before running a scan. """
+
+        self.friendly_random_move_generator: typing.Callable[[ArmySimState], Move | None] = None
         """ Generate the friendly moves. MUST set this before running a scan. """
+
+        self.enemy_random_move_generator: typing.Callable[[ArmySimState], Move | None] = None
+        """ Generate the enemy moves. MUST set this before running a scan. """
 
         self.initial_differential: int = 0
         """ The players existing econ differential so that the engine can evaluate just the positives/negatives from the starting point relative to game state rather than a massive global diff. """
 
     def get_child_board(self) -> ArmySimState:
-        copy = self.clone()
+        copy = self.clone(noKeys=True)
         copy.friendly_move = None
         copy.enemy_move = None
         copy.depth += 1
@@ -198,13 +218,14 @@ class ArmySimState(object):
         self.depth += 1
         self.turn += 1
 
-    def clone(self) -> ArmySimState:
+    def clone(self, noKeys: bool = False) -> ArmySimState:
         copy = ArmySimState(
             self.turn,
             self.eval_params,
             self.sim_tiles.copy(),
             self.friendly_living_armies.copy(),
-            self.enemy_living_armies.copy()
+            self.enemy_living_armies.copy(),
+            noKeys=noKeys,
         )
         copy.tile_differential = self.tile_differential
         copy.city_differential = self.city_differential
@@ -220,6 +241,8 @@ class ArmySimState(object):
         copy.repetition_count = self.repetition_count
         copy.friendly_move_generator = self.friendly_move_generator
         copy.enemy_move_generator = self.enemy_move_generator
+        copy.friendly_random_move_generator = self.friendly_random_move_generator
+        copy.enemy_random_move_generator = self.enemy_random_move_generator
         copy.initial_differential = self.initial_differential
         copy.prev_friendly_move = self.prev_friendly_move
         copy.prev_enemy_move = self.prev_enemy_move
@@ -232,13 +255,13 @@ class ArmySimState(object):
         return copy
 
     def get_moves_string(self):
-        frMoves = []
-        enMoves = []
+        frMoves = deque()
+        enMoves = deque()
         curState = self
         # intentionally while .parent_board isn't none to skip the top board, since it will show both moves as None
         while curState.parent_board is not None:
-            frMoves.insert(0, curState.friendly_move)
-            enMoves.insert(0, curState.enemy_move)
+            frMoves.appendleft(curState.friendly_move)
+            enMoves.appendleft(curState.enemy_move)
             curState = curState.parent_board
 
         fr = f'fr: {" -> ".join([str(move.dest).ljust(5) if move is not None else "None " for move in frMoves])}'
@@ -297,9 +320,9 @@ class ArmySimState(object):
             + self.controlled_city_turn_differential  # TODO consider bonus points for this, because we get these econ rewards NOW not 'maybe at end of round'. Right now, every 2 turns controlling opponent city counts as 2 neutral captures.
         )
         if self.captures_enemy:
-            econDiff += 100000 // (self.depth + 4)
+            econDiff += 100000 // (self.depth + 20)
         if self.captured_by_enemy:
-            econDiff -= 100000 // (self.depth + 4)
+            econDiff -= 100000 // (self.depth + 20)
         # skipped moves are worth 0.7 econ each
         econDiff -= (self.depth - self.friendly_skipped_move_count) * self.eval_params.friendly_move_penalty_10_fraction
         # enemy skipped moves are worth slightly less..? than ours?
@@ -356,6 +379,12 @@ class ArmySimState(object):
     def generate_enemy_moves(self) -> typing.List[Move | None]:
         return self.enemy_move_generator(self)
 
+    def generate_random_friendly_move(self) -> Move | None:
+        return self.friendly_random_move_generator(self)
+
+    def generate_random_enemy_move(self) -> Move | None:
+        return self.enemy_random_move_generator(self)
+
 
 class ArmySimResult(object):
     def __init__(self, resultState: ArmySimState | None = None):
@@ -391,12 +420,12 @@ class ArmySimCache(object):
             friendlyMove: Move,
             enemyMove: Move,
             simState: ArmySimState,
-            subTreeCache: typing.Dict[Tile, ArmySimCache] | None = None
+            subTreeCache: typing.Dict[int, ArmySimCache] | None = None
     ):
         self.friendly_move: Move = friendlyMove
         self.enemy_move: Move = enemyMove
         self.sim_state: ArmySimState = simState
-        self.move_tree_cache: typing.Dict[Tile, ArmySimCache] | None = subTreeCache
+        self.move_tree_cache: typing.Dict[int, ArmySimCache] | None = subTreeCache
 
 
 # https://numba.pydata.org/numba-doc/latest/reference/types.html#basic-types

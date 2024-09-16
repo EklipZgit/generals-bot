@@ -63,7 +63,13 @@ def generate_player_map(player_index: int, map_raw: MapBase) -> MapBase:
                 tile.tile = TILE_MOUNTAIN
                 tile.isMountain = True
         elif map.is_custom_map:
-            map.update_visible_tile(realTile.x, realTile.y, realTile.tile if realTile.tile < TILE_EMPTY else TILE_FOG, realTile.army if realTile.tile < 0 else 0, realTile.isCity, is_general=False, is_desert=realTile.isDesert)
+            tileToSend = realTile.tile
+            if realTile.tile >= TILE_EMPTY:
+                tileToSend = TILE_FOG
+                if realTile.isCity or realTile.isMountain:
+                    tileToSend = TILE_OBSTACLE
+
+            map.update_visible_tile(realTile.x, realTile.y, tileToSend, realTile.army if realTile.tile < 0 else 0, realTile.isCity, is_general=False, is_desert=realTile.isDesert)
             if realTile.isMountain:
                 tile.tile = TILE_MOUNTAIN
                 tile.isMountain = True

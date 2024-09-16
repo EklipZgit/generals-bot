@@ -379,7 +379,9 @@ class TextMapLoader(object):
                 armies[curTile] = army
             army.name = name
             army.value = int(value)
-            army.entangledValue = int(value)
+            if entangledValue != "None" and entangledValue:
+                army.entangledValue = int(entangledValue)
+
             army.expectedPaths = expectedPaths
             army.last_seen_turn = int(lastSeenTurn)
             army.last_moved_turn = int(lastMovedTurn)
@@ -415,10 +417,7 @@ class TextMapLoader(object):
 
         if f'teams' in data:
             teams = data['teams'].split(',')
-            map.teams = [int(s) for s in teams]
-            playerTeam = map.teams[map.player_index]
-            map.teammates.update([p for p, t in enumerate(map.teams) if t == playerTeam and p != map.player_index])
-            map.friendly_team = playerTeam
+            map.set_teams([int(s) for s in teams])
         else:
             map.friendly_team = MapBase.get_teams_array(map)[map.player_index]
 
@@ -441,7 +440,7 @@ class TextMapLoader(object):
         if 'PATHABLE_CITY_THRESHOLD' in data:
             Tile.PATHABLE_CITY_THRESHOLD = int(data['PATHABLE_CITY_THRESHOLD'])
         else:
-            Tile.PATHABLE_CITY_THRESHOLD = 10000  # old replays, no cities were ever pathable.
+            Tile.PATHABLE_CITY_THRESHOLD = 5   # old replays, no cities were ever pathable. However setting negative makes all neutrals unpathable.
 
         for player in map.players:
             char, index = playerCharMap[player.index]

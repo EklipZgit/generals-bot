@@ -105,26 +105,26 @@ def _get_sub_knapsack_gather(
 
     #         subSkip = initSkip
 
-    if len(startTilesDict) < remainingTurns // 10:
-        return _get_single_line_iterative_starter(
-            fullTurns,
-            ignoreStartTile,
-            incrementBackward,
-            logEntries,
-            map,
-            negativeTiles,
-            preferNeutral,
-            priorityFunc,
-            priorityMatrix,
-            remainingTurns,
-            searchingPlayer,
-            shouldLog,
-            subSkip,
-            skipTiles,
-            startTilesDict,
-            useTrueValueGathered,
-            valueFunc,
-            pathValueFunc=pathValueFunc)
+    # if len(startTilesDict) < remainingTurns // 10:
+    #     return _get_single_line_iterative_starter(
+    #         fullTurns,
+    #         ignoreStartTile,
+    #         incrementBackward,
+    #         logEntries,
+    #         map,
+    #         negativeTiles,
+    #         preferNeutral,
+    #         priorityFunc,
+    #         priorityMatrix,
+    #         remainingTurns,
+    #         searchingPlayer,
+    #         shouldLog,
+    #         subSkip,
+    #         skipTiles,
+    #         startTilesDict,
+    #         useTrueValueGathered,
+    #         valueFunc,
+    #         pathValueFunc=pathValueFunc)
 
     valuePerTurnPathPerTilePerDistance = SearchUtils.breadth_first_dynamic_max_per_tile_per_distance_global_visited(
         map,
@@ -1329,8 +1329,8 @@ def knapsack_depth_gather_with_values(
                 priorityObject
         ):
             (
-                threatDist,
                 depthDist,
+                threatDist,
                 realDist,  # realDist is
                 negPrioTilesPerTurn,
                 negGatheredSum,
@@ -1389,7 +1389,7 @@ def knapsack_depth_gather_with_values(
                 realDist,  # then by the real distance
             ) = valueObj
 
-            if shouldLog:
+            if shouldLog or DebugHelper.IS_DEBUGGING:
                 logEntries.append(f"PATH VALUE {path}: {gatheredSum:.2f}")
 
             return gatheredSum
@@ -1404,8 +1404,8 @@ def knapsack_depth_gather_with_values(
 
         def default_priority_func(nextTile, currentPriorityObject):
             (
-                threatDist,
                 depthDist,
+                threatDist,  # CANNOT put threat distance first, or else we block more direct paths with weird paths that try to intercept the target. See test_should_defend_i_guess__lol__how_did_i_break_depth_search_so_badly__longer
                 realDist,
                 negPrioTilesPerTurn,
                 negGatheredSum,
@@ -1441,8 +1441,8 @@ def knapsack_depth_gather_with_values(
             realDist += 1
             depthDist += 1
             prioObj = (
-                threatDist + 1,
                 depthDist,
+                threatDist + 1,
                 realDist,
                 0 - numPrioTiles / max(1, realDist),
                 negGatheredSum,
@@ -1483,8 +1483,8 @@ def knapsack_depth_gather_with_values(
                 armyNegSum += tile.army
 
             prioObj = (
-                0 - initialDistance,  # threatDist
                 startingDist,   # depthDist
+                0 - initialDistance,  # threatDist
                 0,  # realDist
                 0,
                 gathNegSum,  # gath neg
@@ -1497,8 +1497,8 @@ def knapsack_depth_gather_with_values(
             if fromPrio is not None:
                 # return fromPrio
                 (
-                    threatDist,
                     depthDist,
+                    threatDist,
                     realDist,
                     negPrioTilesPerTurn,
                     gathNegSum,
@@ -1513,8 +1513,8 @@ def knapsack_depth_gather_with_values(
                     logEntries.append(f'BASE FROM: {tile} -> {str(fromPrio)}')
 
                 prioObj = (
-                    threatDist, # if distPriorityMap is not None else 0 ?? allow normal gathers to go back to just happy silly friendly gathering?
                     depthDist,  # 0 = N failed defense tests (backs off to the spot where )
+                    threatDist, # if distPriorityMap is not None else 0 ?? allow normal gathers to go back to just happy silly friendly gathering?
                     0,
                     0,  # negPrioTilesPerTurn,
                     0, # gathNegSum,  # gath neg  # we DONT want to increase the value of gathers from start tiles just based on what THIS start tile had gathered so far, wtf

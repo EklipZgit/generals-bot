@@ -144,6 +144,7 @@ class SearchUtilsBenchmarkTests(TestBase):
         totalSumBfsFindTime = 0.0
         totalSumBfsFindDistTime = 0.0
         totalSumBfsFindDistNoNeutTime = 0.0
+        totalIters = 0
 
         lastRange = 0
         for r in ranges:
@@ -157,6 +158,9 @@ class SearchUtilsBenchmarkTests(TestBase):
             sumBfsFindDistTime = 0.0
             sumBfsFindDistNoNeutTime = 0.0
             iters = 0
+
+            # distance_mapper.recalculate()
+            # distance_mapper_dual_cache.recalculate()
 
             for pointA in points:
                 for pointB in points:
@@ -274,7 +278,7 @@ class SearchUtilsBenchmarkTests(TestBase):
                             pAStar, 0, 255, 255
                         ))
                         self.render_view_info(map, vi, f"mismatch distmapper (dual cache) {dualCacheDistMapperDist} vs {pAStar.length}")
-
+            totalIters += iters
             logbook.info(
                 f'{lastRange}-{r}, iters {iters}: floyd {floydTime:.5f} vs dumbass {dumbassDistTime:.5f} vs distMapper {sumDistMapperTime:.5f} vs distMapperDual {sumDualCacheDistMapperTime:.5f} vs PQ {sumPQTime:.5f} vs HQ {sumHQTime:.5f} vs find {sumBfsFindTime:.5f} vs aStar {sumAStarTime:.5f} vs aStarMatrix {sumAStarMatrixTime:.5f} vs aStarDist {sumAStarDistTime:.5f}, vs bfsFindDist {sumBfsFindDistTime:.5f}, vs aStarBd {sumABdTime:.5f}')
             lastRange = r
@@ -289,7 +293,7 @@ class SearchUtilsBenchmarkTests(TestBase):
             totalSumBfsFindDistTime += sumBfsFindDistTime
             totalSumBfsFindDistNoNeutTime += sumBfsFindDistNoNeutTime
         logbook.info(
-            f'FINAL RESULTS floyd {floydTime:.5f} vs dumbass {dumbassDistTime:.5f} vs distMapper {sumDistMapperTime:.5f} vs distMapperDual {sumDualCacheDistMapperTime:.5f} vs PQ {totalSumPQTime:.5f} vs HQ {totalSumHQTime:.5f} vs find {totalSumBfsFindTime:.5f} vs aStar {totalSumAStarTime:.5f} vs aStarMatrix {totalSumAStarMatrixTime:.5f} vs aStarDist {totalSumAStarDistTime:.5f}, vs bfsFindDist {totalSumBfsFindDistTime:.5f}, vs aStarBd {totalSumABdTime:.5f}')
+            f'FINAL RESULTS iters {totalIters}: floyd {floydTime:.5f} vs dumbass {dumbassDistTime:.5f} vs distMapper {sumDistMapperTime:.5f} vs distMapperDual {sumDualCacheDistMapperTime:.5f} vs PQ {totalSumPQTime:.5f} vs HQ {totalSumHQTime:.5f} vs find {totalSumBfsFindTime:.5f} vs aStar {totalSumAStarTime:.5f} vs aStarMatrix {totalSumAStarMatrixTime:.5f} vs aStarDist {totalSumAStarDistTime:.5f}, vs bfsFindDist {totalSumBfsFindDistTime:.5f}, vs aStarBd {totalSumABdTime:.5f}')
 
         def test_bench_set_empty_checking_perf(self):
             numPops = 500000000

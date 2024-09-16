@@ -50,6 +50,20 @@ T = typing.TypeVar('T')
 
 
 class TeamStats(object):
+    __slots__ = (
+        'tileCount',
+        'score',
+        'standingArmy',
+        'cityCount',
+        'fightingDiff',
+        'unexplainedTileDelta',
+        'teamId',
+        'teamPlayers',
+        'livingPlayers',
+        'turn',
+        'deserts',
+    )
+
     def __init__(self, tileCount: int, score: int, standingArmy: int, cityCount: int, fightingDiff: int, unexplainedTileDelta: int, teamId: int, teamPlayers: typing.List[int], livingPlayers: typing.List[int], turn: int = 0, deserts: int = 0):
         self.tileCount: int = tileCount
         self.score: int = score
@@ -68,6 +82,45 @@ class TeamStats(object):
 
 
 class Player(object):
+    __slots__ = (
+        'cities',
+        'general',
+        'index',
+        'stars',
+        'score',
+        'team',
+        'scoreDelta',
+        'tileDelta',
+        'unexplainedTileDelta',
+        'tiles',
+        'deserts',
+        'desertCount',
+        'lostSwamps',
+        'swamps',
+        'tileCount',
+        'standingArmy',
+        'visibleStandingArmy',
+        'cityCount',
+        'lastCityCount',
+        'cityLostTurn',
+        'cityGainedTurn',
+        'delta25tiles',
+        'delta25score',
+        'actualScoreDelta',
+        'expectedScoreDelta',
+        'knownScoreDelta',
+        'fighting_with_player',
+        'last_move',
+        'dead',
+        'leftGame',
+        'leftGameTurn',
+        'capturedBy',
+        'knowsKingLocation',
+        'knowsAllyKingLocation',
+        'aggression_factor',
+        'last_seen_move_turn',
+    )
+
     def __init__(self, player_index: int):
         self.cities: typing.List[Tile] = []
         self.general: Tile | None = None
@@ -87,6 +140,7 @@ class Player(object):
 
         self.tiles: typing.List[Tile] = []
         self.deserts: typing.List[Tile] = []
+        self.desertCount: int = 0
 
         self.lostSwamps: int = 0
         """Swamps this player owned that went to 0 army and went neutral this turn."""
@@ -141,6 +195,13 @@ class Player(object):
 
 
 class Score(object):
+    __slots__ = (
+        'player',
+        'total',
+        'tiles',
+        'dead',
+    )
+
     def __init__(self, player: int, total: int, tiles: int, dead: bool):
         self.player: int = player
         self.total: int = total
@@ -178,6 +239,12 @@ class DistanceMapper:
 
     def recalculate(self):
         """Wipe all cached distances."""
+        raise NotImplementedError()
+
+    def dump_times(self):
+        raise NotImplementedError()
+
+    def reset_times(self):
         raise NotImplementedError()
 
 
@@ -232,42 +299,20 @@ class MapBase(object):
         self.valid_spawns: typing.Set[Tile] | None = None
         """When custom maps have pre-defined spawn locations."""
 
-        uniqueTeams = set()
-        finalTeamIndexes = {}
-        finalTeams = None
-        if teams is not None:
-            finalTeams = []
-            curTeam = 0
-            for player, team in enumerate(teams):
-                remappedTeam = finalTeamIndexes.get(team, None)
-                if remappedTeam is not None:
-                    finalTeams.append(remappedTeam)
-                else:
-                    uniqueTeams.add(curTeam)
-                    finalTeamIndexes[team] = curTeam
-                    finalTeams.append(curTeam)
-                    curTeam += 1
-                if team == teams[self.player_index] and player != self.player_index:
-                    self.teammates.add(player)
-            if len(uniqueTeams) == 2 and len(teams) == 4:
-                self.is_2v2 = True
-
-        self.teams: typing.List[int] | None = finalTeams
-
         self.usernames: typing.List[str] = user_names  # List of String Usernames
         self.players: typing.List[Player] = [Player(x) for x in range(len(self.usernames))]
 
-        self.team_ids_by_player_index = MapBase._build_teams_array(self)
-        for p, t in enumerate(self.team_ids_by_player_index):
-            if t != -1:
-                self.players[p].team = t
-        self._teammates_by_player: typing.List[typing.List[int]] = [[p.index for p in self.players if p.team == t] for t in self.team_ids_by_player_index]
-        self._teammates_by_player[-1].append(-1)  # neutrals only teammate is neutral
-        self._teammates_by_player_no_self: typing.List[typing.List[int]] = [[p.index for p in self.players if p.team == t if p.index != pIdx] for pIdx, t in enumerate(self.team_ids_by_player_index)]
-        self._teammates_by_team = [[p.index for p in self.players if p.team == i] for i in range(max(self.team_ids_by_player_index) + 2)]  # +2 so we have an entry for each time ID AND -1
-        self._teammates_by_team[-1].append(-1)  # neutrals only teammate is neutral
-        self._team_stats: typing.List[TeamStats | None] = [None for i in range(max(self.team_ids_by_player_index) + 2)]  # +2 so we have an entry for each time ID AND -1
-        self.friendly_team: int = self.team_ids_by_player_index[player_index]
+        self.unique_teams: typing.List[int] = [p.index for p in self.players]
+        """Array of the team ids that are in the game."""
+
+        self.teams: typing.List[int] | None = None
+        self.team_ids_by_player_index: typing.List[int] = []
+        self._teammates_by_player: typing.List[typing.List[int]] = []
+        self._teammates_by_player_no_self: typing.List[typing.List[int]] = []
+        self._teammates_by_team: typing.List[typing.List[int]] = []
+        self._team_stats: typing.List[TeamStats | None] = []
+        self.friendly_team: int = 0
+        self.set_teams(teams)
 
         self.pathable_tiles: typing.Set[Tile] = set()
         """Tiles PATHABLE from the general spawn on the map, including neutral cities but not including mountains/undiscovered obstacles"""
@@ -309,7 +354,7 @@ class MapBase(object):
             for x
             in range(16)]
 
-        self.tiles_by_index: typing.List[Tile] = [None] * (len(map_grid_y_x) * len(map_grid_y_x[0]))
+        self.tiles_by_index: typing.List[Tile] = [None] * self.rows * self.cols
         for r in map_grid_y_x:
             for tile in r:
                 self.tiles_by_index[tile.tile_index] = tile
@@ -402,7 +447,7 @@ class MapBase(object):
         self.notify_general_revealed = []
         self.notify_player_captures = []
 
-        # logbook.info(f'SETTING GRID to {self.cols} x {self.rows} ...?')
+        # tiles by index is the only list of tiles included in state.
         self.grid = [[None for x in range(self.cols)] for y in range(self.rows)]
         for tile in self.tiles_by_index:
             self.grid[tile.y][tile.x] = tile
@@ -1163,6 +1208,8 @@ AttributeError: 'Map' object has no attribute 'grid'
         self.pathable_tiles = pathableTiles
         self.reachable_tiles = reachableTiles
         self.visible_tiles = visibleTiles
+        t = self.GetTile(2, 6)
+        # print(f'map {self.player_index} - {t} pathable: {t.isPathable} isCity: {t.isCity} isObstacle: {t.isObstacle} overridePathable: {t.overridePathable} in self.pathable_tiles: {t in self.pathable_tiles}, TilePATH {Tile.PATHABLE_CITY_THRESHOLD}')
         if self.is_custom_map:
             changeWall = False
             if 2 < len(self.reachable_tiles) < 3 * len(self.tiles_by_index) / 4:
@@ -2788,10 +2835,10 @@ AttributeError: 'Map' object has no attribute 'grid'
         return x, y
 
     def get_distance_between_or_none(self, tileA: Tile, tileB: Tile) -> int | None:
-        return self.distance_mapper.get_distance_between_or_none(tileA, tileB)
+        return self.distance_mapper.get_distance_between_or_none_dual_cache(tileA, tileB)
 
     def get_distance_between(self, tileA: Tile, tileB: Tile) -> int:
-        return self.distance_mapper.get_distance_between(tileA, tileB)
+        return self.distance_mapper.get_distance_between_dual_cache(tileA, tileB)
 
     def get_distance_matrix_including_obstacles(self, tile: Tile) -> MapMatrixInterface[int]:
         """
@@ -2813,9 +2860,10 @@ AttributeError: 'Map' object has no attribute 'grid'
 
     @staticmethod
     def _build_teams_array(map: MapBase) -> typing.List[int]:
-        teams = [i for i in range(len(map.players))]
         if map.teams is not None:
-            teams = [t for t in map.teams]
+            teams = map.teams.copy()
+        else:
+            teams = [i for i in range(len(map.players))]
 
         teams.append(-1)  # put -1 at the end so that if -1 gets passed as the array index, the team is -1 for -1.
 
@@ -2972,6 +3020,40 @@ AttributeError: 'Map' object has no attribute 'grid'
         #         tile.army = self.walled_city_base_value
         #         # tile.isTempFogPrediction = True
         #         # tile.visible = False
+
+    def set_teams(self, teams):
+        finalTeamIndexes = {}
+        finalTeams = None
+        if teams is not None:
+            self.unique_teams = []
+            finalTeams = []
+            curTeam = 0
+            for player, team in enumerate(teams):
+                try:
+                    remappedTeam = finalTeamIndexes[team]
+                    finalTeams.append(remappedTeam)
+                except KeyError:
+                    self.unique_teams.append(curTeam)
+                    finalTeamIndexes[team] = curTeam
+                    finalTeams.append(curTeam)
+                    curTeam += 1
+                if team == teams[self.player_index] and player != self.player_index:
+                    self.teammates.add(player)
+            if len(self.unique_teams) == 2 and len(teams) == 4:
+                self.is_2v2 = True
+
+        self.teams = finalTeams
+        self.team_ids_by_player_index = MapBase._build_teams_array(self)
+        for p, t in enumerate(self.team_ids_by_player_index):
+            if t != -1:
+                self.players[p].team = t
+        self._teammates_by_player = [[p.index for p in self.players if p.team == t] for t in self.team_ids_by_player_index]
+        self._teammates_by_player[-1].append(-1)  # neutrals only teammate is neutral
+        self._teammates_by_player_no_self = [[p.index for p in self.players if p.team == t if p.index != pIdx] for pIdx, t in enumerate(self.team_ids_by_player_index)]
+        self._teammates_by_team = [[p.index for p in self.players if p.team == i] for i in range(max(self.team_ids_by_player_index) + 2)]  # +2 so we have an entry for each time ID AND -1
+        self._teammates_by_team[-1].append(-1)  # neutrals only teammate is neutral
+        self._team_stats = [TeamStats(0, 0, 0, 0, 0, 0, 0, [], [], 0, 0) for i in range(max(self.team_ids_by_player_index) + 2)]  # +2 so we have an entry for each time ID AND -1
+        self.friendly_team = self.team_ids_by_player_index[self.player_index]
 
 
 class Map(MapBase):

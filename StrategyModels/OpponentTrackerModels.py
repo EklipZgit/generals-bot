@@ -48,6 +48,9 @@ class CycleStatsData:
         self._approximate_fog_army_available_total_true: int = 0
         """The unmodified absolute max expected fog army available (not down-adjusted each cycle, this should be the TRUE raw cap and if ever exceeded should mean a real bug happened.."""
 
+        self.number_assumed_two_expansions_that_may_be_fog_distance: int = 0
+        """The number of 2 expansions we assumed in the fog that may instead be an army traversing fog."""
+
         self.approximate_fog_city_army: int = 0
         """The amount of army probably accumulated on cities / generals currently unused. Takes into account the amount of cities they can gather per cycle etc."""
 
@@ -88,6 +91,9 @@ class CycleStatsData:
 
     def __str__(self) -> str:
         return f'g:{self.approximate_army_gathered_this_cycle:3d}  Δt:{self.tiles_gained:2d}  Δc:{self.cities_gained:d}   a:{self.approximate_fog_army_available_total:3d}/c:{self.approximate_fog_city_army:2d} (true {self.approximate_fog_army_available_total})'
+
+    def __repr__(self) -> str:
+        return f't{self.team} ({"+".join([str(p) for p in self.players])}) - {str(self)}'
 
 
 class PlayerMoveCategory(Enum):

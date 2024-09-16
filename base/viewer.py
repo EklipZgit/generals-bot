@@ -5,6 +5,7 @@
     Game Viewer
 """
 import gc
+import json
 import os
 import pathlib
 import queue
@@ -1522,10 +1523,18 @@ class GeneralsViewer(object):
         # Sort Scores by score then by the turn they left the game if they are dead.
 
         statsSorted = []
-        for team in self._viewInfo.team_cycle_stats.keys():
-            statsSorted.append((self._map.get_team_stats_by_team_id(team), self._viewInfo.team_cycle_stats[team]))
+        for team in self._map.unique_teams:
+            # logbook.info(f'starting stats for team: {team}')
+            if team >= len(self._viewInfo.team_cycle_stats):
+                logbook.info(f'skipped {team} ??')
+                continue
+            stats = self._map.get_team_stats_by_team_id(team)
+            # logbook.info(f'stats for team {team}: {repr(stats)}')
+            cycleData = self._viewInfo.team_cycle_stats[team]
+            # logbook.info(f'cycleData for team {team}: {repr(cycleData)}')
+            statsSorted.append((stats, cycleData))
 
-        statsSorted = sorted(statsSorted, key=lambda s: (s[0].score, self._map.players[s[1].players[0]].leftGameTurn if s[1] is not None else False), reverse=True)
+        statsSorted = list(sorted(statsSorted, key=lambda s: (s[0].score, self._map.players[s[1].players[0]].leftGameTurn if s[1] is not None else False), reverse=True))
 
         pos_left = 0
 

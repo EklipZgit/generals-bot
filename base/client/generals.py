@@ -171,7 +171,7 @@ class GeneralsClient(object):
             'lookout_density': None,
         }
 
-        if gameid and gameid.endswith('AltTiles'):
+        if gameid and gameid.__contains__('AltTiles'):
             self.customOptions['swamp_density'] = 0.04
             self.customOptions['desert_density'] = 0.05
             self.customOptions['observatory_density'] = 0.04
@@ -927,7 +927,7 @@ class GeneralsClient(object):
                     logbook.info(f'not setting custom host, serverusername {self.server_username} vs usernames[0] {usernames[0]} == ? {self.server_username == usernames[0]}')
 
     def _cycle_custom_map_if_custom(self):
-        if self._gameid and self._gameid.endswith('CustMap'):
+        if self._gameid and self._gameid.__contains__('CustMap'):
             self._chosen_custom_map = random.choice(
                 [
                     'Moneymores_2',
@@ -942,6 +942,7 @@ class GeneralsClient(object):
                     'iji++--0001',  # fair-ish map with fork path in middle and 8 starting cities
                     'Plots',
                     'Speed',
+                    'King of the Lit Hill v2'
                 ]
             )
 

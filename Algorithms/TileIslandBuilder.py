@@ -545,7 +545,7 @@ class TileIslandBuilder(object):
         islandTiles = [t for t in itertools.chain.from_iterable(i.tiles_by_army for i in largeIslands)]
 
         largeIslandSet = {i for i in largeIslands}
-        distanceToLargeIslandsMap = SearchUtils.build_distance_map_matrix(self.map, islandTiles)
+        distanceToLargeIslandsMap = SearchUtils.build_distance_map_matrix_with_skip(self.map, islandTiles)
 
         self.large_tile_island_distances_by_team_id[team] = distanceToLargeIslandsMap
         self.large_tile_islands_by_team_id[team] = largeIslandSet

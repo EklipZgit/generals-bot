@@ -83,6 +83,7 @@ def get_round_plan_with_expansion(
         bonusCapturePointMatrix: MapMatrixInterface[float] | None = None,
         colors: typing.Tuple[int, int, int] = (235, 240, 50),
         additionalOptionValues: typing.List[TilePlanInterface] | None = None,
+        includeExtraGenAndCityArmy: bool = False,
         perfTimer: PerformanceTimer | None = None,
 ) -> RoundPlan:
     """
@@ -125,6 +126,8 @@ def get_round_plan_with_expansion(
 
             originalNegativeTiles = negativeTiles
             negativeTiles = negativeTiles.copy()
+            realCapMat = bonusCapturePointMatrix
+            realNegs = negativeTiles
             teams = MapBase.get_teams_array(map)
             targetPlayers = [p for p, t in enumerate(teams) if teams[targetPlayer] == t]
             friendlyPlayers = [p for p, t in enumerate(teams) if teams[searchingPlayer] == t]
@@ -214,26 +217,38 @@ def get_round_plan_with_expansion(
                 logEntries.append(f"Completed additional option inclusion.... elapsed {time.perf_counter() - startTime:.4f}")
 
             # expansionGather = greedy_backpack_gather(map, tilesLargerThanAverage, turns, None, valueFunc, baseCaseFunc, skipTiles, None, searchingPlayer, priorityFunc, skipFunc = None)
-            if allowLeafMoves and leafMoves is not None and useLeafMovesFirst:
-                logEntries.append(f"Allowing leafMoves FIRST as part of optimal expansion.... elapsed {time.perf_counter() - startTime:.4f}")
-                _include_leaf_moves_in_exp_plan(
-                    allowGatherPlanExtension=allowGatherPlanExtension,
-                    alwaysIncludes=alwaysIncludes,
-                    defaultNoPathValue=defaultNoPathValue,
-                    includeForGath=includeForGath,
-                    leafMoves=leafMoves,
-                    map=map,
-                    multiPathDict=multiPathDict,
-                    negativeTiles=negativeTiles,
-                    paths=paths,
-                    pathsCrossingTiles=pathsCrossingTiles,
-                    postPathEvalFunction=postPathEvalFunction,
-                    searchingPlayer=searchingPlayer,
-                    targetPlayers=targetPlayers,
-                    tryAvoidSet=tryAvoidSet,
-                    useIterativeNegTiles=useIterativeNegTiles,
-                    skipNeutrals=True,
-                    logEntries=logEntries)
+            if allowLeafMoves and leafMoves is not None:
+                if useLeafMovesFirst:
+                    logEntries.append(f"Allowing leafMoves FIRST as part of optimal expansion.... elapsed {time.perf_counter() - startTime:.4f}")
+                    _include_leaf_moves_in_exp_plan(
+                        allowGatherPlanExtension=allowGatherPlanExtension,
+                        alwaysIncludes=alwaysIncludes,
+                        defaultNoPathValue=defaultNoPathValue,
+                        includeForGath=includeForGath,
+                        leafMoves=leafMoves,
+                        map=map,
+                        multiPathDict=multiPathDict,
+                        negativeTiles=negativeTiles,
+                        paths=paths,
+                        pathsCrossingTiles=pathsCrossingTiles,
+                        postPathEvalFunction=postPathEvalFunction,
+                        searchingPlayer=searchingPlayer,
+                        targetPlayers=targetPlayers,
+                        tryAvoidSet=tryAvoidSet,
+                        useIterativeNegTiles=useIterativeNegTiles,
+                        skipNeutrals=True,
+                        logEntries=logEntries)
+                elif bonusCapturePointMatrix is not None:
+                    bonusCapturePointMatrix = bonusCapturePointMatrix.copy()
+                    negativeTiles = realNegs.copy()
+                    for lm in leafMoves:
+                        cost = 0.3
+                        if lm.dest.player != -1:
+                            cost = 0.6
+                        bonusCapturePointMatrix.raw[lm.source.tile_index] -= cost
+                        bonusCapturePointMatrix.raw[lm.dest.tile_index] -= cost
+                        negativeTiles.add(lm.source)
+                        negativeTiles.add(lm.dest)
 
             if allowGatherPlanExtension:
                 logEntries.append(f"Beginning gather extension.... elapsed {time.perf_counter() - startTime:.4f}")
@@ -249,10 +264,9 @@ def get_round_plan_with_expansion(
                 counts = {}
                 for path in addlPaths:
                     for tile in path.tileList:
-                        count = counts.get(tile, 0)
-                        counts[tile] = count + 1
+                        counts[tile.tile_index] = counts.get(tile.tile_index, 0) + 1
 
-                addlPaths = [p for p in sorted(addlPaths, key=lambda p: sum([counts[t] for t in p.tileList]))]
+                addlPaths = [p for p in sorted(addlPaths, key=lambda p: sum([counts[t.tile_index] for t in p.tileList]))]
 
                 for path in addlPaths:
                     if SearchUtils.any_where(path.tileList, lambda t: t in negativeTiles):
@@ -272,7 +286,6 @@ def get_round_plan_with_expansion(
                         useIterativeNegTiles,
                         logEntries=logEntries)
                 logEntries.append(f"Completed gather extension.... elapsed {time.perf_counter() - startTime:.4f}")
-
             if allowLeafMoves and leafMoves is not None and useLeafMovesFirst:
                 logEntries.append(f"Second pass initial leaf-moves.... elapsed {time.perf_counter() - startTime:.4f}")
                 _include_leaf_moves_in_exp_plan(
@@ -293,6 +306,7 @@ def get_round_plan_with_expansion(
                     useIterativeNegTiles=useIterativeNegTiles,
                     skipNeutrals=False,
                     logEntries=logEntries)
+        negativeTiles = realNegs
         if includeExpansionSearch:
             with perfTimer.begin_move_event(f'legacy path exp {turns}t {time_limit:.3f}ms targ'):
                 _include_optimal_expansion_options(
@@ -326,8 +340,12 @@ def get_round_plan_with_expansion(
                     defaultNoPathValue,
                     turns,
                     lengthWeightOffset,
+                    includeExtraGenAndCityArmy,
                     viewInfo
                 )
+
+        bonusCapturePointMatrix = realCapMat
+
         with perfTimer.begin_move_event('post-exp-search'):
             # expansionGather = greedy_backpack_gather(map, tilesLargerThanAverage, turns, None, valueFunc, baseCaseFunc, skipTiles, None, searchingPlayer, priorityFunc, skipFunc = None)
             if allowLeafMoves and leafMoves is not None:
@@ -341,13 +359,13 @@ def get_round_plan_with_expansion(
                     leafMoves=leafMoves,
                     map=map,
                     multiPathDict=multiPathDict,
-                    negativeTiles=negativeTiles,
+                    negativeTiles=originalNegativeTiles,
                     paths=paths,
                     pathsCrossingTiles=pathsCrossingTiles,
                     postPathEvalFunction=postPathEvalFunction,
                     searchingPlayer=searchingPlayer,
                     targetPlayers=targetPlayers,
-                    tryAvoidSet=tryAvoidSet,
+                    tryAvoidSet=tryAvoidSet,  # .union(negativeTiles)
                     useIterativeNegTiles=useIterativeNegTiles,
                     skipNeutrals=False,
                     bypassLeafValueSkip=True,
@@ -528,18 +546,21 @@ def _include_optimal_expansion_options(
     defaultNoPathValue,
     turns,
     lengthWeightOffset,
-    viewInfo,
+    includeExtraGenAndCityArmy: bool = False,
+    viewInfo: ViewInfo | None = None,
 ):
     remainingTurns = turns
     startTime = time.perf_counter()
-    respectTerritoryMap = map.players[targetPlayer].tileCount // 2 > len(map.players[targetPlayer].tiles)
-    respectTerritoryMap = False
     targetTeam = -1
     if targetPlayer >= 0:
         targetTeam = map.players[targetPlayer].team
 
     largeIslandSet = tileIslands.large_tile_islands_by_team_id[targetTeam]
     distanceToLargeIslandsMap = tileIslands.large_tile_island_distances_by_team_id[targetTeam]
+    bonusCityAndGenArmy = 0
+    if includeExtraGenAndCityArmy:
+        # then we'll include the max bonus that they could receive in the entire turns duration:
+        bonusCityAndGenArmy = turns // 2
 
     if distanceToLargeIslandsMap is None:
         distanceToLargeIslandsMap = tileIslands.large_tile_island_distances_by_team_id[-1]
@@ -629,7 +650,7 @@ def _include_optimal_expansion_options(
         if currentTile.isSwamp:
             return None
 
-        if distSoFar > 0 and tileCapturePoints < 0:
+        if distSoFar > 0 > tileCapturePoints:
             dist = distSoFar + lengthWeightOffset
             # negative points for wasted moves until the end of expansion
             value = 0 - tileCapturePoints  # - 2 * wastedMoves * lengthWeightOffset
@@ -664,7 +685,9 @@ def _include_optimal_expansion_options(
     #    #return (posPathPrio, 0-armyRemaining, distSoFar)
     #    return (0-(enemyTiles*2 + neutralTiles) / (max(1, distSoFar)), 0-enemyTiles / (max(1, distSoFar)), posPathPrio, distSoFar)
 
-    ENEMY_EXPANSION_TILE_PENALTY = 0.7
+    # making this too high leads to repetitions, for some reason...?
+    ENEMY_EXPANSION_TILE_PENALTY = 0.85
+    """The penalty for vacating a 3+ tile next to an enemy tile"""
 
     def default_priority_func_basic(nextTile: Tile, currentPriorityObject):
         (
@@ -674,8 +697,8 @@ def _include_optimal_expansion_options(
             wastedMoves,
             negTileCapturePoints,
             negArmyRemaining,
-            enemyTiles,
-            neutralTiles,
+            negEnemyTiles,
+            negNeutralTiles,
             pathPriority,
             tileSetSoFar,
             # adjacentSetSoFar,
@@ -695,11 +718,11 @@ def _include_optimal_expansion_options(
 
         armyRemaining -= 1
 
-        if nextTile in tileSetSoFar:
+        if nextTile.tile_index in tileSetSoFar:
             return None
 
         nextTileSet = tileSetSoFar.copy()
-        nextTileSet.add(nextTile)
+        nextTileSet.add(nextTile.tile_index)
 
         # only reward closeness to enemy up to a point then penalize it
         cutoffEnemyDist = abs(enemyDistMap.raw[nextTile.tile_index] - enemyDistPenaltyPoint)
@@ -747,10 +770,7 @@ def _include_optimal_expansion_options(
             wastedMoves += 0.5
         elif (
                 targetPlayer != -1
-                and (
-                        nextTile.player in targetPlayers
-                        or (not nextTile.visible and respectTerritoryMap and territoryMap.raw[nextTile.tile_index] in targetPlayers)
-                )
+                and nextTile.player in targetPlayers
         ):
             if not nextTile.isDesert:
                 # if nextTile.player == -1:
@@ -762,7 +782,7 @@ def _include_optimal_expansion_options(
                     distSoFar -= 0.99
                 else:
                     negTileCapturePoints -= 1.5
-                enemyTiles -= 1
+            negEnemyTiles -= 1
 
             ## points for locking all nearby enemy tiles down
             # numEnemyNear = count(nextTile.adjacents, lambda adjTile: adjTile.player in targetPlayers)
@@ -774,7 +794,7 @@ def _include_optimal_expansion_options(
             #    neutralTiles -= 12
             # we'd prefer to be killing enemy tiles, yeah?
             # wastedMoves += 0.2
-            neutralTiles -= 1
+            negNeutralTiles -= 1
             negTileCapturePoints -= 1
             # points for capping tiles in general
             addedPriority += 2
@@ -824,13 +844,13 @@ def _include_optimal_expansion_options(
         #         f" - nextTile {str(nextTile)}, waste [{wastedMoves:.2f}], prioPerTurn [{prioPerTurn:.2f}], dsf {distSoFar}, capPts [{negTileCapturePoints:.2f}], negArmRem [{0 - armyRemaining}]\n    eTiles {enemyTiles}, nTiles {neutralTiles}, npPrio {newPathPriority:.2f}, nextTileSet {len(nextTileSet)}\n    nextAdjSet {None}, enemyExpVal {enemyExpansionValue}, nextEnExpSet {None}")
 
         hitIsland = False
-        if enemyTiles + neutralTiles > 3:
+        if negEnemyTiles + negNeutralTiles > 3:
             island = tileIslands.tile_island_lookup.raw[nextTile.tile_index]
             if island in largeIslandSet and armyRemaining > 10:
                 logEntries.append(f'HIT ISLAND {island.name} AT TILE {nextTile} WITH {armyRemaining} ARMY, TERMING')
                 hitIsland = True
 
-        return distSoFar, prioPerTurn, fakeDistSoFar, wastedMoves, negTileCapturePoints, 0 - armyRemaining, enemyTiles, neutralTiles, newPathPriority, nextTileSet, hitIsland  # , nextAdjacentSet, enemyExpansionValue, nextEnemyExpansionSet
+        return distSoFar, prioPerTurn, fakeDistSoFar, wastedMoves, negTileCapturePoints, 0 - armyRemaining, negEnemyTiles, negNeutralTiles, newPathPriority, nextTileSet, hitIsland  # , nextAdjacentSet, enemyExpansionValue, nextEnemyExpansionSet
 
     priorityFunc = default_priority_func_basic
 
@@ -858,27 +878,27 @@ def _include_optimal_expansion_options(
     # boundFunc = default_bound_func
 
     def initial_value_func_default(tile):
-        startingSet = set()
-        startingSet.add(tile)
-        startingAdjSet = set()
-        for adj in tile.adjacents:
-            startingAdjSet.add(adj)
-        startingEnemyExpansionTiles = set()
+        # There has GOT to be a better way here
+        startingSet = {tile.tile_index}
+        # startingAdjSet = {adj.tile_index for adj in tile.adjacents}
+        # startingEnemyExpansionTiles = set()
         enemyExpansionValue = 0
-        tileCapturePoints = 0
+        negTileCapturePoints = 0
 
         tileArmy = tile.army
 
         cityUsage = cityUsages.get(tile, None)
         if cityUsage is not None:
             tileArmy = 5
+        elif (tile.isCity or tile.isGeneral) and tile.player == searchingPlayer:
+            tileArmy += bonusCityAndGenArmy
 
         for adj in tile.movable:
-            if adj.army > 3 and not map.is_tile_on_team_with(adj, searchingPlayer) and adj.player != -1 and adj not in negativeTiles:
-                startingEnemyExpansionTiles.add(adj)
+            if not map.is_tile_on_team_with(adj, searchingPlayer) and adj.player != -1 and 2 < adj.army < 10 and adj not in negativeTiles:
+                # startingEnemyExpansionTiles.add(adj)
                 enemyExpansionValue += (adj.army - 1) // 2
-                tileCapturePoints += ENEMY_EXPANSION_TILE_PENALTY
-        return 0, -10000, 0, 0, tileCapturePoints, 0 - tileArmy, 0, 0, 0, startingSet, False  # , startingAdjSet, enemyExpansionValue, startingEnemyExpansionTiles
+                negTileCapturePoints += ENEMY_EXPANSION_TILE_PENALTY
+        return 0, -10000, 0, 0, negTileCapturePoints, 0 - tileArmy, 0, 0, 0, startingSet, False  # , startingAdjSet, enemyExpansionValue, startingEnemyExpansionTiles
 
     initFunc = initial_value_func_default
 
@@ -1175,7 +1195,12 @@ def _process_new_expansion_paths(
 ) -> typing.List[typing.Tuple[float, Path]]:
     newPaths = []
     for tile, tilePaths in newPathDict.items():
-        curTileDict = multiPathDict.get(tile, {})
+        try:
+            curTileDict = multiPathDict[tile]
+        except KeyError:
+            curTileDict = {}
+            multiPathDict[tile] = curTileDict
+
         anyPathInc = False
         values = {}
         for path in tilePaths:
@@ -1184,6 +1209,8 @@ def _process_new_expansion_paths(
             vpt = value / path.length
             if value >= 0.2 and vpt >= valPerTurnCutoff:
                 anyPathInc = True
+
+        # TODO EXTEND CITY DELAY CAPTURE OPTIONS HERE TO PASS test_Expansion should_capture_enemy_tiles_not_be_a_dumbass
 
         if anyPathInc:
             for path in tilePaths:
@@ -1231,14 +1258,16 @@ def _process_new_expansion_paths(
                     islandCapValue = 1.0
 
                 while True:
-                    existingMax, existingPath = curTileDict.get(curDist, defaultNoPathValue)
+                    try:
+                        existingMax, existingPath = curTileDict[curDist]
+                    except KeyError:
+                        existingMax, existingPath = defaultNoPathValue
                     if curValue > existingMax:
                         path.econValue = curValue
                         node = path.start
                         while node is not None:
                             if (node.tile.isGeneral and node.tile.player == searchingPlayer) or (node.tile.isCity and map.is_tile_on_team_with(node.tile, searchingPlayer)):
-                                usage = cityUsages.get(node.tile, 0)
-                                cityUsages[node.tile] = usage + 1
+                                cityUsages[node.tile] = cityUsages.get(node.tile, 0) + 1
                             node = node.next
                         if existingPath is not None and logStuff and USE_DEBUG_LOGGING:
                             logEntries.append(f'path for {str(tile)} dist {curDist} BETTER than existing:\r\n      new {curValue:.3f} {str(path)}\r\n   exist {existingMax:.3f} {str(existingPath)}')
@@ -1768,10 +1797,12 @@ def _group_expand_paths_by_crossovers(
     pathsGrouped: typing.Dict[int, typing.Set[TilePlanInterface]] = {}
     for path in allPaths:
         groupNumber = pathGroupLookup[path]
-        groupList = pathsGrouped.get(groupNumber, set())
-        groupList.add(path)
-        if len(groupList) == 1:
+        try:
+            groupList = pathsGrouped[groupNumber]
+        except KeyError:
+            groupList = set()
             pathsGrouped[groupNumber] = groupList
+        groupList.add(path)
 
     final = {}
     for g, pathSet in pathsGrouped.items():
@@ -1779,7 +1810,10 @@ def _group_expand_paths_by_crossovers(
             # If the group is pretty big, we would never pick a low value dist 4 over a high value dist 4, so prune those immediately.
             lookupByDist = {}
             for path in pathSet:
-                existing = lookupByDist.get(path.length, None)
+                try:
+                    existing = lookupByDist[path.length]
+                except KeyError:
+                    existing = None
                 if not existing or existing.econValue < path.econValue:
                     lookupByDist[path.length] = path
 

@@ -23,7 +23,7 @@ from bot_ek0x45 import EklipZBot
 
 from Viewer.ViewerProcessHost import ViewerHost
 
-FORCE_NO_VIEWER = False     # if you want the bot GUI to stop distracting you from work but you dont want to stop and restart all the bot shells with noUI, flip this flag and it will force the GUI off :)
+FORCE_NO_VIEWER = True     # if you want the bot GUI to stop distracting you from work but you dont want to stop and restart all the bot shells with noUI, flip this flag and it will force the GUI off :)
 FORCE_PRIVATE = False       # if you're making changes that are gonna break the bot and want to force it to only play in private rooms temporarily but dont want to kill all the shell loops, flip this flag, and it will keep restarting and wait for the flag to be flipped back before queuing again (except private games).
 
 
@@ -153,6 +153,8 @@ class BotHostBase(object):
             logbook.info(f'MOVE {currentMap.turn} TIMINGS:\r\n' + '\r\n'.join(moveTimer.get_events_organized_longest_to_shortest(limit=100, indentSize=3)))
             ArmyAnalyzer.dump_times()
             ArmyAnalyzer.reset_times()
+            self.eklipz_bot._map.distance_mapper.dump_times()
+            self.eklipz_bot._map.distance_mapper.reset_times()
 
             with moveTimer.begin_event(f'Main thread check for pygame exit'):
                 if self.is_viewer_closed_by_user():

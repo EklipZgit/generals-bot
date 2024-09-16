@@ -9,6 +9,8 @@ from ViewInfo import ViewInfo, TargetStyle
 from base.client.map import MapBase, TeamStats, Tile, Player, PLAYER_CHAR_BY_INDEX
 
 ENABLE_DEBUG_ASSERTS = False
+SAFE_PLAYERS_CAP = 20
+"""Must always be at least one more than the max game size"""
 
 
 class FogGatherQueue(object):
@@ -281,20 +283,20 @@ class OpponentTracker(object):
     def __init__(self, map: MapBase, viewInfo: ViewInfo | None = None):
         self.outbound_emergence_notifications: typing.List[typing.Callable[[int, Tile, bool], None]] = []
         self.map: MapBase = map
-        self.team_score_data_history: typing.Dict[int, typing.Dict[int, TeamStats | None]] = {}
+        self.team_score_data_history: typing.List[typing.Dict[int, TeamStats | None]] = [{} for i in range(SAFE_PLAYERS_CAP)]
         self.targetPlayer: int = -1
         self.skip_this_turn: bool = False
         """Set to true when loading up a unit test so that the end of original turn stats are kept instead of running on top of those again."""
 
-        self.current_team_scores: typing.Dict[int, TeamStats | None] = {}
+        self.current_team_scores: typing.List[TeamStats | None] = [map.get_team_stats_by_team_id(i) for i in range(max(map.unique_teams) + 2)]
         """Track the current (or during scan, last turn) data for diffing what happened since last turn"""
 
-        self.last_team_scores: typing.Dict[int, TeamStats | None] = {}
+        self.last_team_scores: typing.List[TeamStats | None] = [None for i in range(SAFE_PLAYERS_CAP)]
         """Track the last (or during scan, two turns ago) data for diffing what happened since two turns ago, useful for things like city changes since army increments only tick on even turns."""
 
-        self.team_cycle_stats_history: typing.Dict[int, typing.Dict[int, CycleStatsData | None]] = {}
+        self.team_cycle_stats_history: typing.List[typing.Dict[int, CycleStatsData | None]] = [None for i in range(SAFE_PLAYERS_CAP)]
 
-        self.current_team_cycle_stats: typing.Dict[int, CycleStatsData] = {}
+        self.current_team_cycle_stats: typing.List[CycleStatsData] = [None for i in range(SAFE_PLAYERS_CAP)]
 
         self.assumed_player_average_tile_values: typing.List[float] = [0.0 for _ in map.players]
         """The assumed average value of land the player owns, used when looking at attacks that happen against the player in the fog, whether by us or someone else."""
@@ -303,7 +305,7 @@ class OpponentTracker(object):
         self.team_attack_cycle_timings: typing.List[typing.List[TeamAttackData]] = [[TeamAttackData(t, 43, expectedEfficiency=0.5, expectedTrueEfficiency=0.5)] for t in range(max(map.team_ids_by_player_index) + 2)]
         """The turn the player / team attacked historically per cycle"""
 
-        self.last_player_move_type: typing.Dict[int, PlayerMoveCategory] = {}
+        self.last_player_move_type: typing.List[PlayerMoveCategory | None] = [None for p in self.map.players]
 
         rawTeams = self.map.teams
         if rawTeams is None:
@@ -312,9 +314,9 @@ class OpponentTracker(object):
         self._team_indexes = []
 
         self._team_lookup_by_player: typing.List[int] = MapBase.get_teams_array(map)
-        self._players_lookup_by_team: typing.Dict[int, typing.List[int]] = {}
+        self._players_lookup_by_team: typing.List[typing.List[int]] = [[] for i in range(SAFE_PLAYERS_CAP)]
 
-        self._gather_queues_new_by_player: typing.Dict[int, FogGatherQueue] = {}
+        self._gather_queues_new_by_player: typing.List[FogGatherQueue] = [FogGatherQueue(p.index) for p in self.map.players]
 
         self._emergences: typing.List[typing.Tuple[Tile, int, int]] = []
         self._revealed: typing.Set[Tile] = set()
@@ -324,26 +326,24 @@ class OpponentTracker(object):
 
         # lastCycleTurn = self.get_last_cycle_end_turn()
 
-        for team in rawTeams:
-            if team not in self.team_score_data_history:
-                for player in self.map.players:
-                    if rawTeams[player.index] == team:
-                        playerList = self._players_lookup_by_team.get(team, [])
-                        playerList.append(player.index)
-                        self._players_lookup_by_team[team] = playerList
-                        self.assumed_player_average_tile_values[player.index] = 1.0
-                        self._gather_queues_new_by_player[player.index] = FogGatherQueue(player.index)
-                        self.last_player_move_type[player.index] = PlayerMoveCategory.FogGather
+        for team in self.map.unique_teams:
+            for player in self.map.players:
+                if player.team == team:
+                    playerList = self._players_lookup_by_team[team]
+                    playerList.append(player.index)
+                    self._players_lookup_by_team[team] = playerList
+                    self.assumed_player_average_tile_values[player.index] = 1.0
+                    self.last_player_move_type[player.index] = PlayerMoveCategory.FogGather
 
-                self.team_score_data_history[team] = {}
-                teamPlayers = self.get_team_players(team)
-                turn0Stats = CycleStatsData(team, teamPlayers)
-                self.team_score_data_history[team][0] = TeamStats(0, 0, 0, len(turn0Stats.players), 0, 0, team, teamPlayers, teamPlayers, self.map.turn - 1, 0)
-                self.current_team_cycle_stats[team] = turn0Stats
-                self.team_cycle_stats_history[team] = {}
-                self._team_indexes.append(team)
-                self.current_team_scores[team] = None
-                self.last_team_scores[team] = None
+            self.team_score_data_history[team] = {}
+            teamPlayers = self.get_team_players(team)
+            turn0Stats = CycleStatsData(team, teamPlayers)
+            self.team_score_data_history[team][0] = TeamStats(0, 0, 0, len(turn0Stats.players), 0, 0, team, teamPlayers, teamPlayers, self.map.turn - 1, 0)
+            self.current_team_cycle_stats[team] = turn0Stats
+            self.team_cycle_stats_history[team] = {}
+            self._team_indexes.append(team)
+            self.current_team_scores[team] = None
+            self.last_team_scores[team] = None
 
     def analyze_turn(self, targetPlayer: int):
         self.current_differential_vs_us_by_team: typing.Dict[int, CycleStatsData]
@@ -536,7 +536,7 @@ class OpponentTracker(object):
         data = []
 
         for team in self._team_indexes:
-            stats = self.current_team_cycle_stats.get(team, None)
+            stats = self.current_team_cycle_stats[team]
             if stats is not None:
                 data.append(f'ot_{team}_stats_moves_spent_capturing_fog_tiles={stats.moves_spent_capturing_fog_tiles}')
                 data.append(f'ot_{team}_stats_moves_spent_capturing_visible_tiles={stats.moves_spent_capturing_visible_tiles}')
@@ -548,6 +548,7 @@ class OpponentTracker(object):
                 data.append(f'ot_{team}_stats_army_annihilated_total={stats.army_annihilated_total}')
                 data.append(f'ot_{team}_stats_approximate_fog_army_available_total={stats.approximate_fog_army_available_total}')
                 data.append(f'ot_{team}_stats_approximate_fog_army_available_total_true={stats.approximate_fog_army_available_total_true}')
+                data.append(f'ot_{team}_stats_number_assumed_two_expansions_that_may_be_fog_distance={stats.number_assumed_two_expansions_that_may_be_fog_distance}')
                 data.append(f'ot_{team}_stats_approximate_fog_city_army={stats.approximate_fog_city_army}')
 
         tileCountsByPlayer = self.get_all_player_fog_tile_count_dict()
@@ -582,6 +583,7 @@ class OpponentTracker(object):
                     data.append(f'ot_{team}_c_{cycleTurn}_stats_army_annihilated_total={stats.army_annihilated_total}')
                     data.append(f'ot_{team}_c_{cycleTurn}_stats_approximate_fog_army_available_total={stats.approximate_fog_army_available_total}')
                     data.append(f'ot_{team}_c_{cycleTurn}_stats_approximate_fog_army_available_total_true={stats.approximate_fog_army_available_total_true}')
+                    data.append(f'ot_{team}_c_{cycleTurn}_stats_number_assumed_two_expansions_that_may_be_fog_distance={stats.number_assumed_two_expansions_that_may_be_fog_distance}')
                     data.append(f'ot_{team}_c_{cycleTurn}_stats_approximate_fog_city_army={stats.approximate_fog_city_army}')
 
         curCycle = self.get_cycle_index()
@@ -635,6 +637,10 @@ class OpponentTracker(object):
                         stats.approximate_fog_army_available_total_true = int(data[f'ot_{team}_c_{cycleTurn}_stats_approximate_fog_army_available_total_true'])
                     else:
                         stats.approximate_fog_army_available_total_true = int(data[f'ot_{team}_c_{cycleTurn}_stats_approximate_fog_army_available_total'])
+                    if f'ot_{team}_c_{cycleTurn}_stats_number_assumed_two_expansions_that_may_be_fog_distance' in data:
+                        stats.number_assumed_two_expansions_that_may_be_fog_distance = int(data[f'ot_{team}_c_{cycleTurn}_stats_number_assumed_two_expansions_that_may_be_fog_distance'])
+                    else:
+                        stats.number_assumed_two_expansions_that_may_be_fog_distance = stats.moves_spent_capturing_fog_tiles
                     stats.approximate_fog_city_army = int(data[f'ot_{team}_c_{cycleTurn}_stats_approximate_fog_city_army'])
                     self.team_cycle_stats_history[team][cycleTurn] = stats
 
@@ -660,6 +666,10 @@ class OpponentTracker(object):
                     stats.approximate_fog_army_available_total_true = int(data[f'ot_{team}_stats_approximate_fog_army_available_total_true'])
                 else:
                     stats.approximate_fog_army_available_total_true = int(data[f'ot_{team}_stats_approximate_fog_army_available_total'])
+                if f'ot_{team}_stats_number_assumed_two_expansions_that_may_be_fog_distance' in data:
+                    stats.number_assumed_two_expansions_that_may_be_fog_distance = int(data[f'ot_{team}_stats_number_assumed_two_expansions_that_may_be_fog_distance'])
+                else:
+                    stats.number_assumed_two_expansions_that_may_be_fog_distance = stats.moves_spent_capturing_fog_tiles
                 stats.approximate_fog_city_army = int(data[f'ot_{team}_stats_approximate_fog_city_army'])
 
         for player in self.map.players:
@@ -897,6 +907,7 @@ class OpponentTracker(object):
             currentCycleStats.approximate_army_gathered_this_cycle -= 1
             currentCycleStats.approximate_fog_army_available_total -= 1
             currentCycleStats.approximate_fog_army_available_total_true -= 1
+            currentCycleStats.number_assumed_two_expansions_that_may_be_fog_distance += 1
 
         self._check_available_fog_army(currentCycleStats, forceFullArmyUsageFirst=True)
 
@@ -1383,8 +1394,8 @@ class OpponentTracker(object):
         teamScores = self.current_team_scores[currentCycleStats.team]
         cityDistanceWasteApprox = max(0, 3 * (teamScores.cityCount - 1)) - max(0, 6 * (teamScores.cityCount - 2))
         cityOffset = currentCycleStats.approximate_fog_city_army - cityDistanceWasteApprox
-        teamTotalFogEmergenceEstTrue = currentCycleStats.approximate_fog_army_available_total_true + cityOffset
-        teamTotalFogEmergenceEst = currentCycleStats.approximate_fog_army_available_total + cityOffset
+        teamTotalFogEmergenceEstAvailableTrue = currentCycleStats.approximate_fog_army_available_total_true + cityOffset
+        teamTotalFogEmergenceEstAvailable = currentCycleStats.approximate_fog_army_available_total + cityOffset
 
         visibleArmyLarge = 0
         for pIdx in teamScores.livingPlayers:
@@ -1403,8 +1414,8 @@ class OpponentTracker(object):
 
                 visibleArmyLarge += tile.army - 1
 
-        possibleArmyTrue = teamTotalFogEmergenceEstTrue + visibleArmyLarge
-        possibleArmy = teamTotalFogEmergenceEst + visibleArmyLarge
+        possibleArmyTrue = teamTotalFogEmergenceEstAvailableTrue + visibleArmyLarge
+        possibleArmy = teamTotalFogEmergenceEstAvailable + visibleArmyLarge
 
         efficiencyRatio = 1.00
         if possibleArmy > 0:
@@ -1430,21 +1441,21 @@ class OpponentTracker(object):
                 efficiencyRatioTrue=efficiencyRatioTrue)
 
         # .90 seemed high
-        thresh = (teamTotalFogEmergenceEst - 1) * 0.87
+        thresh = (teamTotalFogEmergenceEstAvailable - 1) * 0.87
         fullFogReset = False
         if emergence > thresh:
             logbook.info(
-                f'E+: fullFogReset - emergence {emergence} > thresh {thresh:.1f} (based on teamTotalFogEmergenceEst {teamTotalFogEmergenceEst})')
-            if emergence > teamTotalFogEmergenceEst:
-                msg = f'UNDEREST BY {emergence - teamTotalFogEmergenceEst}! E+: fullFogReset - emergence {emergence} > thresh {thresh:.1f} (based on teamTotalFogEmergenceEst {teamTotalFogEmergenceEst})'
+                f'E+: fullFogReset - emergence {emergence} > thresh {thresh:.1f} (based on teamTotalFogEmergenceEst {teamTotalFogEmergenceEstAvailable})')
+            if emergence > teamTotalFogEmergenceEstAvailable:
+                msg = f'UNDEREST BY {emergence - teamTotalFogEmergenceEstAvailable}! E+: fullFogReset - emergence {emergence} > thresh {thresh:.1f} (based on teamTotalFogEmergenceEst {teamTotalFogEmergenceEstAvailable})'
                 logbook.error(msg)
                 if self.view_info is not None:
                     self.view_info.add_info_line(msg)
                     self.view_info.add_targeted_tile(tile, TargetStyle.ORANGE)
             fullFogReset = True
-            if emergence >= teamTotalFogEmergenceEst + cityDistanceWasteApprox - 4 and not (tile.delta.gainedSight and tile.army < emergence):
-                maxDist = max(1, teamTotalFogEmergenceEst + cityDistanceWasteApprox - emergence + 2) * 2
-                self.view_info.add_info_line(f'BC emgnce {emergence} VS teamTotalFogEmergenceEst {teamTotalFogEmergenceEst}+cityWaste{cityDistanceWasteApprox}, CONF WITHIN {maxDist} {tile}')
+            if emergence >= teamTotalFogEmergenceEstAvailable + cityDistanceWasteApprox - 4 and not (tile.delta.gainedSight and tile.army < emergence):
+                maxDist = max(1, teamTotalFogEmergenceEstAvailable + cityDistanceWasteApprox - emergence + 2) * 2
+                self.view_info.add_info_line(f'BC emgnce {emergence} VS teamTotalFogEmergenceEst {teamTotalFogEmergenceEstAvailable}+cityWaste{cityDistanceWasteApprox}, CONF WITHIN {maxDist} {tile}')
                 self.send_general_distance_notification(maxDist, tile, generalConfidence=teamScores.cityCount == 1)
 
         logbook.info(
@@ -1461,7 +1472,7 @@ class OpponentTracker(object):
             currentCycleStats.approximate_fog_city_army -= currentCycleStats.approximate_fog_city_army // 2
 
         if fullFogReset:
-            if currentCycleStats.approximate_fog_army_available_total + currentCycleStats.approximate_fog_city_army - 6 * teamScores.cityCount > teamTotalFogEmergenceEst * 0.1:
+            if currentCycleStats.approximate_fog_army_available_total + currentCycleStats.approximate_fog_city_army - 6 * teamScores.cityCount > teamTotalFogEmergenceEstAvailable * 0.1:
                 currentCycleStats.approximate_fog_army_available_total = 0
                 # TODO better estimation of city distances to gather path
                 currentCycleStats.approximate_fog_city_army = 3 * teamScores.cityCount + max(0, (10 * teamScores.cityCount - 2))
@@ -1489,7 +1500,7 @@ class OpponentTracker(object):
 
         return playerTurnsSpentGathering - otherPlayerTurnsSpentGathering
 
-    def get_approximate_greedy_turns_available(self, againstPlayer: int, ourArmyNonIncrement: int, cityLimit: int = 3, opponentArmyOffset: int = 0) -> int:
+    def get_approximate_greedy_turns_available(self, againstPlayer: int, ourArmyNonIncrement: int, cityLimit: int | None = None, opponentArmyOffset: int = 0) -> int:
         stats = self.get_current_cycle_stats_by_player(againstPlayer)
         ourScores = self.get_current_team_scores_by_player(self.map.player_index)
 
@@ -1499,6 +1510,11 @@ class OpponentTracker(object):
             return 20
 
         armyRisk = stats.approximate_fog_army_available_total + opponentArmyOffset
+
+        inTurns = 50 - self.map.turn % 50
+        if cityLimit is None:
+            enScores = self.get_current_team_scores_by_player(againstPlayer)
+            cityLimit = int(inTurns * enScores.tileCount / max(1, enScores.cityCount)) + 1
 
         cityTotal = self.get_next_fog_city_amounts(againstPlayer, cityLimit=cityLimit)
 
@@ -1542,13 +1558,16 @@ class OpponentTracker(object):
         logbook.info('\n'.join(logEntries))
         return i
 
-    def get_approximate_fog_army_risk(self, player: int, cityLimit: int = 3, inTurns: int = 0) -> int:
+    def get_approximate_fog_army_risk(self, player: int, cityLimit: int | None = None, inTurns: int = 0) -> int:
         stats = self.get_current_cycle_stats_by_player(player)
         if stats is None:
             return 0
 
         armyRisk = stats.approximate_fog_army_available_total
 
+        if cityLimit is None:
+            enScores = self.get_current_team_scores_by_player(player)
+            cityLimit = int(inTurns * enScores.tileCount / max(1, enScores.cityCount)) + 1
         cityTotal = self.get_next_fog_city_amounts(player, cityLimit=cityLimit)
 
         armyRisk += cityTotal

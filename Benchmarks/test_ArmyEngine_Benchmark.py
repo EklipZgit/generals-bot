@@ -15,7 +15,6 @@ from MctsLudii import MctsDUCT, MoveSelectionFunction
 from PerformanceTelemetry import PerformanceTelemetry
 from Sim.GameSimulator import GameSimulatorHost, GameSimulator
 from TestBase import TestBase
-from base.client.tile import Tile, MapBase
 from bot_ek0x45 import EklipZBot
 
 
@@ -1177,7 +1176,7 @@ dur 0.3073, iter   109, nodesExplored   109, rollouts   109,
         dur 0.3047, iter   116, nodesExplored   116, rollouts   116, 
                               backprops   549, rolloutExpansions  6209, biasedRolloutExpansions   839
         """
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         results = {}
 
@@ -1217,6 +1216,7 @@ dur 0.3073, iter   109, nodesExplored   109, rollouts   109,
                                 #                             allAfkExceptMapPlayer=True)
                                 # bot = self.get_debug_render_bot(simHost, general.player)
                                 bot = EklipZBot()
+                                # sim = GameSimulator(map)
                                 bot.initialize_from_map_for_first_time(map)
                                 bot.targetPlayer = enemyGeneral.player
                                 bot.targetPlayerObj = map.players[enemyGeneral.player]
@@ -1224,6 +1224,8 @@ dur 0.3073, iter   109, nodesExplored   109, rollouts   109,
                                 bot.perf_timer.begin_move(42)
                                 bot.init_turn()
                                 bot.perform_move_prep()
+                                bot.targetPlayer = enemyGeneral.player
+                                bot.targetPlayerObj = map.players[enemyGeneral.player]
 
                                 # bot.mcts_engine.explore_factor = 0.2
                                 bot.mcts_engine.biased_playouts_allowed_per_trial = biasedMax
@@ -1231,13 +1233,16 @@ dur 0.3073, iter   109, nodesExplored   109, rollouts   109,
                                 bot.mcts_engine.performance_telemetry = sharedTelemetry
                                 # bot.mcts_engine.use_killer_move = False
                                 bot.behavior_end_of_turn_scrim_army_count = allowedArmyCount
+                                bot.disable_engine = False
                                 # bot.init_turn()
                                 # bot.viewInfo.turnInc()
                                 # bot.viewInfo.armyTracker = bot.armyTracker
                                 start = time.perf_counter()
                                 # self.begin_capturing_logging()
-                                duration = time.perf_counter() - start
+                                if debugMode:
+                                    self.begin_capturing_logging()
                                 result = bot.find_end_of_turn_sim_result(None, None, time_limit=0.3)
+                                duration = time.perf_counter() - start
                                 summary = bot.mcts_engine.last_summary
 
                                 key = allowedArmyCount, extraValuableTiles, valuableTileArmy, rolloutDepth, biasedMax
@@ -1250,7 +1255,7 @@ dur 0.3073, iter   109, nodesExplored   109, rollouts   109,
                                 if debugMode or duration < 0.2:
                                     bot.extract_engine_result_paths_and_render_sim_moves(result)
                                     bot.prep_view_info_for_render()
-                                    self.render_view_info(bot._map, bot.viewInfo)
+                                    self.render_view_info(bot._map, bot.viewInfo, f'duration {duration:.3f}??')
 
         self.begin_capturing_logging()
         logbook.info('nArmy, nTile, +Army, depth, biasD')

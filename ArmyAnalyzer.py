@@ -31,6 +31,9 @@ class PathWay:
 
     def add_tile(self, tile):
         self.tiles.add(tile)
+    #
+    # def __getstate__(self) -> typing.Dict[str, typing.Any]:
+    #     s = self.s
 
 
 SENTINAL = "~"
@@ -39,6 +42,23 @@ INF_PATH_WAY = PathWay(distance=1000)
 
 
 class ArmyAnalyzer:
+    # __slots__ = (
+    #     'map',
+    #     'tileA',
+    #     'tileB',
+    #     'pathWayLookupMatrix',
+    #     'pathWays',
+    #     'shortestPathWay',
+    #     'chokeWidths',
+    #     'interceptChokes',
+    #     'interceptTurns',
+    #     'interceptDistances',
+    #     'tileDistancesLookup',
+    #     'aMap',
+    #     'bMap',
+    #     'tile',
+    # )
+
     TimeSpentBuildingPathwaysChokeWidthsAndMinPath: float = 0.0
     TimeSpentBuildingInterceptChokes: float = 0.0
     TimeSpentInInit: float = 0.0
@@ -106,8 +126,8 @@ class ArmyAnalyzer:
             SearchUtils.breadth_first_foreach_fast_no_neut_cities(map, [t for t in map.pathable_tiles if map.is_tile_on_team_with(t, self.tileA.player) or t == self.tileB], maxDepth=bypassRetraverseThreshold, foreachFunc=foreachFunc)
             logbook.info(f'building distance maps except skipping {len(skip)} tiles')  # : {" | ".join([str(t) for t in skip])}
 
-            self.aMap = SearchUtils.build_distance_map_matrix(map, [self.tileA], skip)
-            self.bMap = SearchUtils.build_distance_map_matrix(map, [self.tileB], skip)
+            self.aMap = SearchUtils.build_distance_map_matrix_with_skip(map, [self.tileA], skip)
+            self.bMap = SearchUtils.build_distance_map_matrix_with_skip(map, [self.tileB], skip)
 
         ArmyAnalyzer.TimeSpentInInit += time.perf_counter() - startTime
 
@@ -151,8 +171,8 @@ class ArmyAnalyzer:
 
     # This is heavily optimized at this point.
     def build_chokes_and_pathways(self, maxDist: int = 100):
-        self.shortestPathWay = self.build_pathway(self.tileA, 1000)
-        maxDistOffset = self.shortestPathWay.distance + maxDist
+        maxDistOffset = self.bMap.raw[self.tileA.tile_index] + maxDist
+        chokeCounterMap = {}
         for tile in self.map.pathable_tiles:
             # build the pathway
             path = self.pathWayLookupMatrix.raw[tile.tile_index]
@@ -163,19 +183,22 @@ class ArmyAnalyzer:
             if path is not INF_PATH_WAY:
                 self.pathWays.append(path)
 
-                chokeCounterMap = {}
+                chokeCounterMap.clear()
                 for pathTile in path.tiles:
-                    if pathTile.isMountain or (pathTile.tile == TILE_OBSTACLE and not pathTile.discovered and not pathTile.isCity) or (pathTile.isCity and pathTile.player == -1):
+                    if pathTile.isObstacle or (pathTile.isTempFogPrediction and pathTile.isCity and not pathTile.discovered):
                         continue
 
                     chokeKey = self._get_choke_key(pathTile)
                     chokeCounterMap[chokeKey] = chokeCounterMap.get(chokeKey, 0) + 1
 
+                # this HAS to be separate loop because that choke key is not unique to the tile, so the above loop needs to add all the chokes up first, THEN we need to assign the choke widths.
                 for pathTile in path.tiles:
-                    if pathTile.isMountain or (pathTile.tile == TILE_OBSTACLE and not pathTile.discovered and not pathTile.isCity) or (pathTile.isCity and pathTile.player == -1):
+                    if pathTile.isObstacle or (pathTile.isTempFogPrediction and pathTile.isCity and not pathTile.discovered):
                         continue
                     cw = chokeCounterMap[self._get_choke_key(pathTile)]
                     self.chokeWidths.raw[pathTile.tile_index] = cw
+
+        self.shortestPathWay = self.pathWayLookupMatrix.raw[self.tileA.tile_index]
 
     # recurse
     def build_pathway(self, tile, maxDist) -> PathWay:
@@ -227,7 +250,7 @@ class ArmyAnalyzer:
         q.append(self.tileB)
 
         # visited = MapMatrixSet(self.map)
-        visited = set()
+        visited = {self.tileB.tile_index}
         pw = self.pathWayLookupMatrix.raw[self.tileA.tile_index]
         if pw is None:
             return
@@ -236,21 +259,19 @@ class ArmyAnalyzer:
 
         while q:
             nextTile = q.popleft()
-            # we only care about the shorted pathway tiles for this?
+            # we only care about the shortest pathway tiles for this?
             if self.pathWayLookupMatrix.raw[nextTile.tile_index] != pw:
                 continue
-            if nextTile in visited:
-                continue
 
-            visited.add(nextTile)
             nextBDist = self.bMap.raw[nextTile.tile_index]
 
             pw = self.pathWayLookupMatrix.raw[nextTile.tile_index]
 
             offsetDist = nextBDist + pw.distance - shortestDist
-
-            curSet = distancesLookup.get(offsetDist, [])
-            if len(curSet) == 0:
+            try:
+                curSet = distancesLookup[offsetDist]
+            except KeyError:
+                curSet = []
                 distancesLookup[offsetDist] = curSet
 
             curSet.append(nextTile)
@@ -258,7 +279,8 @@ class ArmyAnalyzer:
             for t in nextTile.movable:
                 if t.isObstacle:
                     continue  # TODO ??
-                if t not in visited:  # and t in self.shortestPathWay.tiles
+                if t.tile_index not in visited:  # and t in self.shortestPathWay.tiles
+                    visited.add(t.tile_index)
                     nPw = self.pathWayLookupMatrix.raw[t.tile_index]
                     if nPw is None:
                         continue
@@ -272,7 +294,10 @@ class ArmyAnalyzer:
         oneChokes = set()
 
         for r in range(self.shortestPathWay.distance + 1):
-            curSet = distancesLookup.get(r, None)
+            try:
+                curSet = distancesLookup[r]
+            except KeyError:
+                curSet = None
             if not curSet:
                 continue
             if len(curSet) == 1:
@@ -387,17 +412,20 @@ class ArmyAnalyzer:
                 return None
             prevCw, _ = stateObj
             newCw = prevCw + 1
-            self.chokeWidths[tile] = newCw
+            self.chokeWidths.raw[tile.tile_index] = newCw
             # This is what lets us include the tiles 1 away from shortest path, which is good for finding common one-tile-away shared split intercept points
             return newCw, 0
 
         startTiles: typing.Dict[Tile, typing.Tuple[int, typing.Tuple[int, int]]] = {}
         for tile in shortestTiles:
-            ourDist = self.chokeWidths[tile]
+            ourDist = self.chokeWidths.raw[tile.tile_index]
             if ourDist is None:
                 continue
             for adj in tile.movable:
-                existing = startTiles.get(adj, None)
+                try:
+                    existing = startTiles[adj]
+                except KeyError:
+                    existing = None
                 if not existing or existing[0] > ourDist:
                     startTiles[adj] = (ourDist, (ourDist, 0))
 

@@ -71,8 +71,8 @@ class ViewInfo(object):
         self.allInCounter: int = 0
         self.givingUpCounter: int = 0
         self.targetPlayer: int = -1
-        self.team_cycle_stats: typing.Dict[int, CycleStatsData] = {}
-        self.team_last_cycle_stats: typing.Dict[int, CycleStatsData] = {}
+        self.team_cycle_stats: typing.List[CycleStatsData] = []
+        self.team_last_cycle_stats: typing.List[CycleStatsData] = []
         self.player_fog_tile_counts: typing.Dict[int, typing.Dict[int, int]] = {}
         self.player_fog_risks: typing.List[int] = []
         self.generalApproximations: typing.List[typing.Tuple[float, float, int, Tile | None]] = []

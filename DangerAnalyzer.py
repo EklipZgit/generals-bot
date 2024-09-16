@@ -57,7 +57,7 @@ class ThreatObj(object):
         for tile in self.path.tileList:
             ogDist = distDict.pop(tile, None)
             # if dist is None:
-            dist = self.armyAnalysis.aMap[tile] + offset
+            dist = self.armyAnalysis.aMap.raw[tile.tile_index] + offset
             newDist = dist
             if includePriority and hasPriority:
                 newDist -= 1
@@ -72,8 +72,8 @@ class ThreatObj(object):
             else:  # and not self.path.start.next.tile in tile.movable:
                 # pathWay = self.armyAnalysis.pathWayLookupMatrix[tile]
                 # neighbors = where(pathWay.tiles, lambda t: t != tile and self.armyAnalysis.aMap[t] == self.armyAnalysis.aMap[tile] and self.armyAnalysis.bMap[t] == self.armyAnalysis.bMap[tile])
-                chokeWidth = self.armyAnalysis.chokeWidths.get(tile, None)
-                interceptChoke = self.armyAnalysis.interceptChokes.get(tile, None)
+                chokeWidth = self.armyAnalysis.chokeWidths.raw[tile.tile_index]
+                interceptChoke = self.armyAnalysis.interceptChokes.raw[tile.tile_index]
                 if allowNonChoke or (interceptChoke is not None and interceptChoke < 3):
                     if chokeWidth is not None:
                         newDist = dist + chokeWidth - 1  # this 2 is almost certainly wrong, but makes some tests pass.
@@ -430,7 +430,7 @@ class DangerAnalyzer(object):
         if generalOnly:
             targets = [general]
 
-        searchArmyAmount = 0.5
+        searchArmyAmount = 1
         if pretendTilesVacated:
             searchArmyAmount -= general.army - 1
 

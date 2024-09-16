@@ -2101,3 +2101,21 @@ class ArmyInterceptionTests(TestBase):
             self.begin_capturing_logging()
             winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=12)
             self.assertNoFriendliesKilled(map, general)
+    
+    def test_should_always_defend_general__can_split_from_this_position(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_always_defend_general__can_split_from_this_position___Human.exe-TEST__2d81a8a8-1900-45b0-a579-614a6d2893eb---0--229.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 229, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=229)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '0,10->0,14')
+        simHost.queue_player_moves_str(general.player, '0,12->1,12')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        self.assertNoFriendliesKilled(map, general)

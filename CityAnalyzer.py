@@ -27,7 +27,8 @@ class CityScoreData(object):
         self.intergeneral_distance_differential: int = 0
         """The difference between the path through the city between gens, and the current map shortest path. 
         If this value is positive, it decreased the shortest path by that much.
-        If the difference is negative, the amount negative indicates how 'out of the way' of the main path the city is.
+        If the difference is negative, the amount negative indicates how 'out of the way' of the main path the city is. 
+        Measured in moves from both generals so 1 off the main path with be -2, then -4. Odd numbers cant exist.
         """
 
         self.general_distances_ratio: float = 1.0
@@ -284,21 +285,30 @@ class CityAnalyzer(object):
         nearbyEnemyCityScore = Counter(0)
         nearbyNeutralCityScore = Counter(0)
         maxDist = min(15, board_analysis.intergeneral_analysis.shortestPathWay.distance // 3)
-
+        frPlayer = board_analysis.general.player
         def scoreNearbyCitiesFunc(curTile: Tile, distance: int):
-            if curTile.isCity or curTile.isGeneral and curTile != tile:
-                if self.map.is_player_on_team_with(curTile.player, board_analysis.general.player):
-                    nearbyFriendlyCityScore.add(maxDist - distance)
+            if curTile == tile:
+                return
+            isFriendly = self.map.is_player_on_team_with(curTile.player, frPlayer)
+            if curTile.isCity or curTile.isGeneral:
+                if isFriendly:
+                    nearbyFriendlyCityScore.value += (maxDist - distance)
                 elif curTile.player == -1:
                     distMult = maxDist - distance
                     if curTile.army < 4:
-                        nearbyNeutralCityScore.add(distMult * ScaleUtils.rescale_value(min(curTile.army, -100), -100, 4, 40, 5))
+                        nearbyNeutralCityScore.value += (distMult * ScaleUtils.rescale_value(min(curTile.army, -100), -100, 4, 40, 5))
                     elif curTile.army < 40:
-                        nearbyNeutralCityScore.add(distMult * ScaleUtils.rescale_value(curTile.army, 4, 40, 4, 1))
+                        nearbyNeutralCityScore.value += (distMult * ScaleUtils.rescale_value(curTile.army, 4, 40, 4, 1))
                     else:
-                        nearbyNeutralCityScore.add(distMult)
+                        nearbyNeutralCityScore.value += distMult
                 else:
-                    nearbyEnemyCityScore.add(maxDist - distance)
+                    nearbyEnemyCityScore.value += (maxDist - distance)
+            elif curTile.player >= 0:
+                distMult = maxDist - distance
+                if isFriendly:
+                    nearbyFriendlyCityScore.value += 0.1 * distMult * (curTile.army - 1)
+                else:
+                    nearbyEnemyCityScore.value += 0.1 * distMult * (curTile.army - 1)
 
         self.foreach_around_city(tile, board_analysis, maxDist, scoreNearbyCitiesFunc)
 
@@ -321,9 +331,8 @@ class CityAnalyzer(object):
         baseOffset = -5
         # +baseOffset - 15 for example, where +baseOffset is on the shortest path and 15 is way out of the way
         differentialNormalizedPositive = 0 - min(baseOffset, score.intergeneral_distance_differential + baseOffset)
-
         pathRelevance = score.neighboring_city_relevance / differentialNormalizedPositive
-
+        # logbook.warn(f'TODO REMOVE pathRelevance probably not working right, tile {tile} scored {pathRelevance:.3f} (from neighboring_city_relevance {score.neighboring_city_relevance:.3f} / differentialNormalizedPositive {differentialNormalizedPositive}; intergeneral_distance_differential {score.intergeneral_distance_differential})')
         if pathRelevance < 0:
             pathRelevance = 0
 

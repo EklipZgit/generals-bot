@@ -17,7 +17,7 @@ from numba import jit, float32, int32
 import numpy
 from scipy.special import expit
 
-from Models import Move
+from Models import Move, MoveBase
 from Engine.ArmyEngineModels import ArmySimState, ArmySimEvaluationParams
 from PerformanceTelemetry import PerformanceTelemetry
 from PerformanceTimer import PerformanceTimer
@@ -39,8 +39,8 @@ NO_KILLER_VALUE_TUPLE = (0, 0.0)
 
 
 class BoardMoves(object):
-    def __init__(self, actions: typing.List[Move | None]):
-        self.playerMoves: typing.List[Move | None] = actions
+    def __init__(self, actions: typing.List[MoveBase | None]):
+        self.playerMoves: typing.List[MoveBase | None] = actions
         """ Each players move at this board state. """
 
     def __hash__(self):
@@ -70,13 +70,13 @@ class MctsDUCT(object):
             logStuff: bool = True,
             nodeSelectionFunction: MoveSelectionFunction = MoveSelectionFunction.MaxAverageValue,
     ):
-        self.min_expanded_visit_count_to_count_for_score: int = 25
+        self.min_expanded_visit_count_to_count_for_score: int = 15
         """Basically this is setting the minimum number of trials that must have been run below a given board state before its score will be used as the 'net_economy_differential' for the sim."""
 
-        self.min_expanded_visit_count_to_count_for_moves: int = 20
+        self.min_expanded_visit_count_to_count_for_moves: int = 15
         """Shouldn't really matter, just for pruning the last moves the engine suggests if they haven't been well explored, so they dont look so weird/confusing."""
 
-        self.killer_move_cache: typing.List[typing.Dict[Move | None, typing.Tuple[int, float]]] = [{}, {}]
+        self.killer_move_cache: typing.List[typing.Dict[MoveBase | None, typing.Tuple[int, float]]] = [{}, {}]
         """MCTS Node style cache from move to (visitCount, scoreSum)"""
 
         self.performance_telemetry: PerformanceTelemetry = PerformanceTelemetry()
@@ -99,15 +99,17 @@ class MctsDUCT(object):
 
         self.offset_initial_differential: bool = True
 
-        self.biased_playouts_allowed_per_trial: int = 9  # 7 beat 4 on 0.5 ratio 262-236
-        self.biased_move_ratio_while_available: float = 0.4
+        # self.biased_playouts_allowed_per_trial: int = 9  # 7 beat 4 on 0.5 ratio 262-236
+        # self.biased_move_ratio_while_available: float = 0.4
+        self.biased_playouts_allowed_per_trial: int = 7   # 7 beat 4 on 0.5 ratio 262-236
+        self.biased_move_ratio_while_available: float = 0.2
 
-        self.killer_move_exploit_ratio: float = 0.25
-        self.use_killer_move: bool = True
+        self.killer_move_exploit_ratio: float = 0.2
+        self.use_killer_move: bool = False
         self._killer_move_calculated_anti_ratio: float = self._calculate_killer_anti_ratio()
         # 4 outperformed 6 in 52-37 games, but might've been the flipped a-b
         # after fixing a-b and other tuning, 6 beat 4 28-21
-        self.rollout_depth: int = 10
+        self.rollout_depth: int = 100
         self.min_random_playout_moves_initial: int = 1
         self.allow_random_repetitions: bool = False
         self.allow_random_no_ops: bool = False
@@ -117,7 +119,7 @@ class MctsDUCT(object):
 
         self.exploit_factor: float = 1.0
         self.explore_factor: float = 0.55  # 1.05 was old, 2.0 was the original from the code I copied lol
-        self.utility_compression_ratio: float = 0.0002
+        self.utility_compression_ratio: float = 0.0005
 
         # dropped, this performed horrible on False so algo is definitely implemented correct.
         # self.skip_first_result_backpropogation: bool = True
@@ -143,7 +145,7 @@ class MctsDUCT(object):
             context: Context,
             maxTime: float,
             maxIterations: int,
-            forcedPreExpansions: typing.List[typing.List[Move | None]] | None = None,
+            forcedPreExpansions: typing.List[typing.List[MoveBase | None]] | None = None,
             # maxDepth: int,  # he didn't use this
     ) -> MctsEngineSummary:
         # Start out by creating a new root node (no tree reuse in this example)
@@ -364,17 +366,17 @@ class MctsDUCT(object):
             self,
             current: MctsNode,
             forcingPlayer: int = -1,
-            forcedMove: Move | None = None,
+            forcedMove: MoveBase | None = None,
     ) -> MctsNode:
         # Every player selects its move based on its own, decoupled statistics
-        playerMoves: typing.List[Move | None] = []
+        playerMoves: typing.List[MoveBase | None] = []
         game: Game = current.context.game
         numPlayers: int = game.numPlayers
 
         twoParentLog: float = MctsDUCT.two_parent_log_jit(self.explore_factor, current.totalVisitCount)
 
         for p in range(numPlayers):
-            bestMove: Move | None = None
+            bestMove: MoveBase | None = None
             bestValue: float = -1000000000  # negative inf
             numBestFound: int = 0
 
@@ -529,7 +531,7 @@ class MctsDUCT(object):
         return summary
 
     def robust_child_selection_func(self, node: MctsNode) -> typing.Tuple[float, BoardMoves]:
-        playerMoves: typing.List[Move | None] = []
+        playerMoves: typing.List[MoveBase | None] = []
         playerScores: typing.List[float] = []
         playerVisitCounts: typing.List[int] = []
 
@@ -557,11 +559,11 @@ class MctsDUCT(object):
                     avgScore = sumScores / visitCount
 
                 if visitCount > bestVisitCount:
-                    logbook.info(f'p{p} t{node.context.turn} new best move {str(move)} had \r\n'
-                                 f'   visitCount {visitCount} > bestVisitCount {bestVisitCount}, \r\n'
-                                 f'   avgScore {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f}) vs bestAvgScore {bestAvgScore:.3f} ({self.decompress_player_utility(bestAvgScore) / 10:.1f}), \r\n'
-                                 f'   new bestMove {str(move)} > old bestMove {str(bestMove)}, \r\n'
-                                 f'   new bestState {str(node.context.board_state)}')
+                    # logbook.info(f'p{p} t{node.context.turn} new best move {str(move)} had \r\n'
+                    #              f'   visitCount {visitCount} > bestVisitCount {bestVisitCount}, \r\n'
+                    #              f'   avgScore {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f}) vs bestAvgScore {bestAvgScore:.3f} ({self.decompress_player_utility(bestAvgScore) / 10:.1f}), \r\n'
+                    #              f'   new bestMove {str(move)} > old bestMove {str(bestMove)}, \r\n'
+                    #              f'   new bestState {str(node.context.board_state)}')
                     bestVisitCount = visitCount
                     bestMove = move
                     bestAvgScore = avgScore
@@ -607,7 +609,7 @@ class MctsDUCT(object):
         return playerScores[0], boardMove
 
     def maximum_average_value_selection_func(self, node: MctsNode) -> typing.Tuple[float, BoardMoves]:
-        playerMoves: typing.List[Move | None] = []
+        playerMoves: typing.List[MoveBase | None] = []
         playerScores: typing.List[float] = []
         playerVisitCounts: typing.List[int] = []
 
@@ -636,11 +638,11 @@ class MctsDUCT(object):
                     avgScore = sumScores / visitCount
 
                 if avgScore > bestAvgScore:
-                    logs.append(f'p{p} t{node.context.turn} new best move {str(move)} had \r\n'
-                                 f'   avgScore {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f}) > bestAvgScore {bestAvgScore:.3f} ({self.decompress_player_utility(bestAvgScore) / 10:.1f}), \r\n'
-                                 f'   visitCount {visitCount} > bestVisitCount {bestVisitCount}, \r\n'
-                                 f'   new bestMove {str(move)} > old bestMove {str(bestMove)}, \r\n'
-                                 f'   new bestState {str(node.context.board_state)}')
+                    # logs.append(f'p{p} t{node.context.turn} new best move {str(move)} had \r\n'
+                    #              f'   avgScore {avgScore:.3f} ({self.decompress_player_utility(avgScore) / 10:.1f}) > bestAvgScore {bestAvgScore:.3f} ({self.decompress_player_utility(bestAvgScore) / 10:.1f}), \r\n'
+                    #              f'   visitCount {visitCount} > bestVisitCount {bestVisitCount}, \r\n'
+                    #              f'   new bestMove {str(move)} > old bestMove {str(bestMove)}, \r\n'
+                    #              f'   new bestState {str(node.context.board_state)}')
                     bestVisitCount = visitCount
                     bestMove = move
                     bestAvgScore = avgScore
@@ -673,7 +675,7 @@ class MctsDUCT(object):
                      f'   visitCounts {str(playerVisitCounts)}, \r\n'
                      f'   bestAvgScores {str([f"{s:.3f} ({self.decompress_player_utility(s) / 10:.1f})" for s in playerScores])}')
 
-        logbook.info('\n'.join(logs))
+        logbook.info('\n' + '\n'.join(logs))
 
         return playerScores[0], boardMove
 
@@ -813,12 +815,12 @@ class MctsEngineSummary(object):
             curNode = curNode.children.get(bestMoves, None)
 
             # break if we hit a node that hasn't really been tested outside of a single trial, instead do a biased final trial.
-            if curNode is None or (curNode.totalVisitCount <= minExpandedVisitCountToCountForMoves and not curNode.context.trial.over()):
+            if curNode is None or (curNode.totalVisitCount <= minExpandedVisitCountToCountForMoves and not curNode.context.trial.over() and not lastNode == rootNode):
                 break
 
             nextScore, bestMoves = selectionFunc(curNode)
 
-            if curNode.totalVisitCount > minExpandedVisitCountToCountForScore or curNode.context.trial.over():
+            if curNode.totalVisitCount > minExpandedVisitCountToCountForScore or curNode.context.trial.over() or lastNode == rootNode:
                 # dont record score for nodes once we hit low confidence.
                 score = nextScore
 
@@ -920,7 +922,7 @@ class MctsNode(object):
         game: Game = context.game
         numPlayers: int = game.numPlayers
 
-        self.legalMovesPerPlayer: typing.List[typing.List[Move | None]] = [[] for p in range(numPlayers)]
+        self.legalMovesPerPlayer: typing.List[typing.List[MoveBase | None]] = [[] for p in range(numPlayers)]
         """ For every player index, a list of legal moves in this node """
 
         # allLegalMoves: typing.List[BoardMoves] = context.get_legal_moves()
@@ -936,13 +938,13 @@ class MctsNode(object):
 
         self.legalMovesPerPlayer[1] = self.context.board_state.generate_enemy_moves()
 
-        self.visitCounts: typing.List[typing.List[int]] = [[0 for move in playerMoves] for playerMoves in self.legalMovesPerPlayer]
+        self.visitCounts: typing.List[typing.List[int]] = [[0] * len(playerMoves) for playerMoves in self.legalMovesPerPlayer]
         """ For every player, for every child move, a visit count """
 
-        self.scoreSums: typing.List[typing.List[float]] = [[0.0 for move in playerMoves] for playerMoves in self.legalMovesPerPlayer]
+        self.scoreSums: typing.List[typing.List[float]] = [[0.0] * len(playerMoves) for playerMoves in self.legalMovesPerPlayer]
         """ For every player, for every child move, a sum of backpropagated scores """
 
-        self.lastSelectedMovesPerPlayer: typing.List[int] = [NO_MOVE_FOUND for p in range(numPlayers)]
+        self.lastSelectedMovesPerPlayer: typing.List[int] = [NO_MOVE_FOUND] * numPlayers
         """
         For every player, the index of the legal move we selected for
         that player in this node in the last (current) MCTS iteration.
@@ -961,9 +963,9 @@ class Context(object):
         self.game: Game | None = None
         self.engine = None  # untyped to avoid circular refs for now
         self.board_state: ArmySimState | None = None
-        # self.frMoves: typing.List[Move | None] = None
+        # self.frMoves: typing.List[MoveBase | None] = None
         # """available friendly moves"""
-        # self.enMoves: typing.List[Move | None] = None
+        # self.enMoves: typing.List[MoveBase | None] = None
         # """available enemy moves"""
         if toClone is not None:
             # TODO this might need to be raw clone not child_board, dunno yet.
@@ -984,9 +986,9 @@ class Context(object):
         self.trial = Trial(self)
     #
     # def get_legal_moves(self) -> typing.List[BoardMoves]:
-    #     self.frMoves: typing.List[Move | None] = self.board_state.generate_friendly_moves()
+    #     self.frMoves: typing.List[MoveBase | None] = self.board_state.generate_friendly_moves()
     #
-    #     self.enMoves: typing.List[Move | None] = self.board_state.generate_enemy_moves()
+    #     self.enMoves: typing.List[MoveBase | None] = self.board_state.generate_enemy_moves()
     #
     #     moves: typing.List[BoardMoves] = []
     #     for frIdx, frMove in enumerate(self.frMoves):
@@ -1087,12 +1089,12 @@ class Game(object):
 
             while True:
                 # logbook.info(f'playouting {str(trial.context.board_state)} at t{trial.context.turn}')
-                with self.telemetry.monitor_telemetry('playout over check'):
-                    if (
-                        trial.over()
-                        or maxNumPlayoutActions <= trial.numMoves() - numStartMoves
-                    ):
-                        break
+                # with self.telemetry.monitor_telemetry('playout over check'):  # this is plenty fast
+                if (
+                    trial.over()
+                    or maxNumPlayoutActions <= trial.numMoves() - numStartMoves
+                ):
+                    break
 
                 # if maxNumBiasedActions >= 0:
                 #     numAllowedBiasedActions = max(0, maxNumBiasedActions - (trial.numMoves() - numStartMoves))
@@ -1102,11 +1104,12 @@ class Game(object):
                 with self.telemetry.monitor_telemetry('playout move including bias/nonbias switch'):
                     if iter >= minRandomInitialMoves and numAllowedBiasedActions > 0 and (alwaysBiased or random.random() <= biasedMoveRatio):
                         with self.telemetry.monitor_telemetry('move playout biased'):
-                            trial = self.playout_biased_move(trial)
+                            self.playout_biased_move(trial)
+                            # self.playout_biased_move__comparison_engine_slow(trial)
                             numAllowedBiasedActions -= 1
                     else:
                         with self.telemetry.monitor_telemetry('move playout random'):
-                            trial = self.playout_random_move(trial)
+                            self.playout_random_move(trial)
                 iter += 1
                 if iter > maxNumPlayoutActions + 1:
                     logbook.info(f'inf looping? {str(trial.context.board_state)}')
@@ -1141,33 +1144,35 @@ class Game(object):
                 perfTelemetry=self.telemetry)
             context.turn += 1
 
-    def playout_random_move(self, trial: Trial) -> Trial:
+    def playout_random_move(self, trial: Trial):
         bs = trial.context.board_state
 
         with self.telemetry.monitor_telemetry('random move gen'):
-            frMoves: typing.List[Move | None] = bs.generate_friendly_moves()
+            frMove = bs.generate_random_friendly_move()
+            enMove = bs.generate_random_enemy_move()
 
-            enMoves: typing.List[Move | None] = bs.generate_enemy_moves()
+        # with self.telemetry.monitor_telemetry('random rep removal'):
+        #     # TODO not efficient, move to some sort of move generator, or make these all yields so they can be filtered live
+        #     if not self._allowRandomRepetitions:
+        #         if bs.friendly_move is not None:
+        #             while frMove is not None and bs.friendly_move.source == frMove.dest:
+        #                 frMove = bs.generate_random_friendly_move()
+        #         if bs.enemy_move is not None:
+        #             while enMove is not None and bs.enemy_move.source == enMove.dest:
+        #                 enMove = bs.generate_random_enemy_move()
+        #
+        #     # if not self._allowRandomNoOps:
+        #     #     frMoves = [m for m in frMoves if m is not None]
+        #     #     enMoves = [m for m in enMoves if m is not None]
+        #
+        # with self.telemetry.monitor_telemetry('random move select'):
+        #     chosenFr = random.choice(frMoves) if len(frMoves) > 0 else None
+        #
+        #     chosenEn = random.choice(enMoves) if len(enMoves) > 0 else None
 
-        with self.telemetry.monitor_telemetry('random rep removal'):
-            # TODO not efficient, move to some sort of move generator, or make these all yields so they can be filtered live
-            if not self._allowRandomRepetitions:
-                frMoves = [m for m in frMoves if m is None or bs.friendly_move is None or m.dest != bs.friendly_move.source]
-                enMoves = [m for m in enMoves if m is None or bs.enemy_move is None or m.dest != bs.enemy_move.source]
-
-            if not self._allowRandomNoOps:
-                frMoves = [m for m in frMoves if m is not None]
-                enMoves = [m for m in enMoves if m is not None]
-
-        with self.telemetry.monitor_telemetry('random move select'):
-            chosenFr = random.choice(frMoves) if len(frMoves) > 0 else None
-
-            chosenEn = random.choice(enMoves) if len(enMoves) > 0 else None
-
-        chosen = BoardMoves([chosenFr, chosenEn])
+        chosen = BoardMoves([frMove, enMove])
         self.apply(trial.context, chosen, noClone=True)
         trial.moves.append(chosen)
-        return trial
 
     def playout_biased_move__comparison_engine_slow(
             self,
@@ -1203,14 +1208,14 @@ class Game(object):
     def playout_biased_move(
             self,
             trial: Trial
-    ) -> Trial:
+    ):
         c = trial.context
         bs = c.board_state
 
         with self.telemetry.monitor_telemetry('biased move gen'):
-            frMoves: typing.List[Move | None] = bs.generate_friendly_moves()
+            frMoves: typing.List[MoveBase | None] = bs.generate_friendly_moves()
 
-            enMoves: typing.List[Move | None] = bs.generate_enemy_moves()
+            enMoves: typing.List[MoveBase | None] = bs.generate_enemy_moves()
 
         with self.telemetry.monitor_telemetry('biased move select'):
             bestFrMove = self.pick_best_move_heuristic(self.friendly_player, self.enemy_player, self.teams, frMoves, bs, prevMove=bs.friendly_move)
@@ -1230,17 +1235,15 @@ class Game(object):
 
         self._biased_rollout_expansions += 1
 
-        return trial
-
     @staticmethod
     def pick_best_move_heuristic(
         player: int,
         otherPlayer: int,
         teams: typing.List[int],
-        moves: typing.List[Move | None],
+        moves: typing.List[MoveBase | None],
         boardState: ArmySimState,
-        prevMove: Move | None,
-    ) -> Move | None:
+        prevMove: MoveBase | None,
+    ) -> MoveBase | None:
         best = None
         bestVal = -1
         numBestFound = 1
@@ -1249,7 +1252,7 @@ class Game(object):
                 continue  # none already covered by the existing bestVal = 0 and best = None
 
             val = 2  # cap neutral
-            st = boardState.sim_tiles.get(move.dest, None)
+            st = boardState.sim_tiles.get(move.dest.tile_index, None)
 
             # new logic
             p = move.dest.player
@@ -1267,7 +1270,7 @@ class Game(object):
             elif teams[p] == teams[otherPlayer]:
                 val = 6
                 if move.dest.isCity or move.dest.isGeneral:
-                    src = boardState.sim_tiles.get(move.source)
+                    src = boardState.sim_tiles[move.source.tile_index]
                     if src.army - 1 > a:
                         val += 10
                         if move.dest.isGeneral:

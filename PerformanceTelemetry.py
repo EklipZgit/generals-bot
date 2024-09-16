@@ -55,5 +55,5 @@ class PerformanceTelemetry(object):
 
     def __str__(self) -> str:
         sorted = self.get_data_sorted()
-        return '\n'.join([f'{totalTime:00.4f} {count} - {eventName}' for eventName, count, totalTime in sorted])
+        return '\n' + '\n'.join([f'{totalTime:00.4f} {count} - {eventName}' for eventName, count, totalTime in sorted])
 

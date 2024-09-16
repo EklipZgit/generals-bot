@@ -205,8 +205,7 @@ class BoardAnalyzer:
         if len(self.intergeneral_analysis.shortestPathWay.tiles) > 0:
             self.shortest_path_distances = SearchUtils.build_distance_map_matrix(
                 self.map,
-                [tile for tile in self.intergeneral_analysis.shortestPathWay.tiles],
-                skipTiles=None)
+                self.intergeneral_analysis.shortestPathWay.tiles)
         else:
             self.shortest_path_distances = SearchUtils.build_distance_map_matrix(self.map, [self.general])
 

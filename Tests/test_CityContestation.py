@@ -1095,3 +1095,23 @@ class CityContestationTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for should_prep_for_the_inevitable_attack_on_at_risk_city")
+
+    # this is just a bad test, the bot already lost this game and no amount of tweaking the data at this point will convince it its a good idea to retake that city. Because at this point, it's not.
+    # def test_should_contest_city_that_got_captured(self):
+    #     debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+    #     mapFile = 'GameContinuationEntries/should_contest_city_that_got_captured___toBfrn5Br---1--381.txtmap'
+    #     map, general, enemyGeneral = self.load_map_and_generals(mapFile, 381, fill_out_tiles=True)
+    #
+    #     rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=381)
+    #
+    #     self.enable_search_time_limits_and_disable_debug_asserts()
+    #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+    #     simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+    #     bot = self.get_debug_render_bot(simHost, general.player)
+    #     playerMap = simHost.get_player_map(general.player)
+    #
+    #     self.begin_capturing_logging()
+    #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+    #     self.assertNoFriendliesKilled(map, general)
+    #     city = playerMap.GetTile(10, 10)
+    #     self.assertOwned(general.player, city, 'shouldnt just stand there watching this city tick up...')

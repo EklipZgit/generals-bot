@@ -130,8 +130,13 @@ class TestBase(unittest.TestCase):
                 numPlayers = index + 1
 
         numPlayers = max(numPlayers, player_index + 1)
+        teams = None
+        if 'teams' in data:
+            teams = data['teams'].split(',')
+            teams = [int(t) for t in teams]
+            numPlayers = max(numPlayers, len(teams))
 
-        map = self.get_test_map(board, turn=turn, dont_set_seen_visible_discovered=respect_undiscovered, num_players=numPlayers)
+        map = self.get_test_map(board, turn=turn, dont_set_seen_visible_discovered=respect_undiscovered, num_players=numPlayers, teams=teams)
         TextMapLoader.load_map_data_into_map(map, data)
         if turn is not None:
             map.turn = turn
@@ -409,7 +414,7 @@ class TestBase(unittest.TestCase):
             tile.player = army.player
             ent.expectedPaths = ArmyTracker.get_army_expected_path(bot._map, army, bot.general, bot.armyTracker.player_targets)
 
-    def get_test_map(self, tiles: typing.List[typing.List[Tile]], turn: int | None = None, player_index: int = 0, dont_set_seen_visible_discovered: bool = False, num_players: int = -1) -> MapBase:
+    def get_test_map(self, tiles: typing.List[typing.List[Tile]], turn: int | None = None, player_index: int = 0, dont_set_seen_visible_discovered: bool = False, num_players: int = -1, teams: typing.List[int] | None = None) -> MapBase:
         self._initialize()
         figureOutPlayerCount = num_players == -1
         num_players = max(num_players, 2)
@@ -432,7 +437,7 @@ class TestBase(unittest.TestCase):
         if turn is None:
             turn = 1
 
-        map = MapBase(player_index=player_index, teams=None, user_names=usernames[0:num_players], turn=turn, map_grid_y_x=tiles, replay_url='42069')
+        map = MapBase(player_index=player_index, teams=teams, user_names=usernames[0:num_players], turn=turn, map_grid_y_x=tiles, replay_url='42069')
         map.update_scores(fakeScores)
         map.update_turn(turn)
         map.update(bypassDeltas=True)
@@ -751,7 +756,7 @@ class TestBase(unittest.TestCase):
                     furthestTile = tile
             return furthestTile
 
-        distMap = SearchUtils.build_distance_map_matrix(map, [general])
+        distMap = SearchUtils.build_distance_map_matrix_with_skip(map, [general])
         for tile in map.pathable_tiles:
             tileDist = distMap[tile]
             if tileDist > maxDist:

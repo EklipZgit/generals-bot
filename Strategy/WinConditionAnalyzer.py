@@ -100,7 +100,7 @@ class WinConditionAnalyzer(object):
         enTargetCities = self.city_analyzer.get_sorted_enemy_scores()
 
         ourOffense = 0
-        attackTime = self.recommended_offense_plan_turns
+        attackTime = max(min(self.board_analysis.inter_general_distance, remainingTurns), self.recommended_offense_plan_turns)
         if self.our_best_attack_plan is not None:
             ourOffense = self.our_best_attack_plan.gathered_army
 
@@ -154,9 +154,9 @@ class WinConditionAnalyzer(object):
                 self.contestable_city_offense_plans[city] = ourOffensePlan
                 ourOffense = ourOffensePlan.gathered_army
 
-                enDefense = self.opponent_tracker.get_approximate_fog_army_risk(self.target_player, cityLimit=4, inTurns=attackTime)
+                enDefense = self.opponent_tracker.get_approximate_fog_army_risk(self.target_player, cityLimit=None, inTurns=attackTime - self.board_analysis.intergeneral_analysis.bMap.raw[city.tile_index])
                 # TODO why we using this instead of just the get attack plan against... which should do the same thing?
-                bestVisibleDefenseTurns, bestVisibleDefenseValue = self.get_dynamic_turns_visible_defense_against([city], attackTime, asPlayer=self.target_player, minArmy=ourOffense)
+                bestVisibleDefenseTurns, bestVisibleDefenseValue = self.get_dynamic_turns_visible_defense_against([city], attackTime - self.board_analysis.intergeneral_analysis.bMap.raw[city.tile_index], asPlayer=self.target_player, minArmy=ourOffense)
                 if bestVisibleDefenseTurns > 0:
                     visibleVt = bestVisibleDefenseValue / bestVisibleDefenseTurns
                     fogVt = enDefense / attackTime
@@ -641,7 +641,7 @@ class WinConditionAnalyzer(object):
             tile: Tile,
             maxTurns: int,
             asPlayer: int,
-            timeLimit: float = 0.005,
+            timeLimit: float = 0.01,
             negativeTiles: TileSet | None = None,
             minTurns: int = 0
     ) -> Gather.GatherCapturePlan:
@@ -977,7 +977,7 @@ class WinConditionAnalyzer(object):
         return None
 
     def _get_rough_offense(self):
-        attackTime = min(self.map.remainingCycleTurns, self.board_analysis.inter_general_distance + 5)
+        attackTime = max(10, min(self.map.remainingCycleTurns, self.board_analysis.inter_general_distance + 5))
         self.our_best_attack_plan = None
 
         if self.target_player_location is not None and not self.target_player_location.isObstacle:

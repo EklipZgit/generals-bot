@@ -756,8 +756,8 @@ class OpponentTrackerTests(TestBase):
                 rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=191)
 
                 if not hasVisionOfSource:
-                    self.swap_tiles(map, 11, 6, 11, 7);
-                    self.swap_tiles(rawMap, 11, 6, 11, 7);
+                    self.swap_tiles(map, 11, 6, 11, 7)
+                    self.swap_tiles(rawMap, 11, 6, 11, 7)
 
                 self.enable_search_time_limits_and_disable_debug_asserts()
                 simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
@@ -778,8 +778,6 @@ class OpponentTrackerTests(TestBase):
                 else:
                     self.assertEqual(37, endingCountDict[1])
 
-                self.skipTest("TODO add asserts for should_track_fog_tiles_from_fog_island_captures")
-
     def swap_tiles(self, map, x1, y1, x2, y2):
         old1 = map.GetTile(x1, y1)
         old2 = map.GetTile(x2, y2)
@@ -787,3 +785,81 @@ class OpponentTrackerTests(TestBase):
         swapArmy = old1.army
         swapPlayer = old1.player
 
+    def test_shouldnt_imagine_more_army_on_visible_annihilation(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_imagine_more_army_on_visible_annihilation___toBfrn5Br---1--380.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 380, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=380)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '15,3->15,2')
+        simHost.queue_player_moves_str(general.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertLess(bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total, 102)
+    
+    def test_should_not_subtract_army_for_2_tiles_after_round_end_wtf__no_cap(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_subtract_army_for_2_tiles_after_round_end_wtf___Oj7tD77mu---1--52__real.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 52, fill_out_tiles=True)
+
+        mapFile = 'GameContinuationEntries/should_not_subtract_army_for_2_tiles_after_round_end_wtf___Oj7tD77mu---1--52.txtmap'
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=52)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '7,6->6,6')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # should expect the standard game state, no moves played
+        self.assertEqual(2, bot.opponent_tracker.current_team_cycle_stats[enemyGeneral.player].approximate_fog_army_available_total)
+        self.assertEqual(2, bot.opponent_tracker.current_team_cycle_stats[enemyGeneral.player].approximate_fog_army_available_total_true)
+        self.assertEqual(7, bot.opponent_tracker.current_team_cycle_stats[enemyGeneral.player].approximate_fog_city_army)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        # should expect gathered a 2
+        self.assertEqual(3, bot.opponent_tracker.current_team_cycle_stats[enemyGeneral.player].approximate_fog_army_available_total)
+        self.assertEqual(3, bot.opponent_tracker.current_team_cycle_stats[enemyGeneral.player].approximate_fog_army_available_total_true)
+        # zero reason to touch city army...
+        self.assertEqual(7, bot.opponent_tracker.current_team_cycle_stats[enemyGeneral.player].approximate_fog_city_army)
+
+    def test_should_not_subtract_army_for_2_tiles_after_round_end_wtf__with_cap(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_subtract_army_for_2_tiles_after_round_end_wtf___Oj7tD77mu---1--52__real.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 52, fill_out_tiles=True)
+
+        mapFile = 'GameContinuationEntries/should_not_subtract_army_for_2_tiles_after_round_end_wtf___Oj7tD77mu---1--52.txtmap'
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=52)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '7,6->6,6')
+        simHost.queue_player_moves_str(enemyGeneral.player, '2,8->2,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # should expect the standard game state, no moves played
+        self.assertEqual(2, bot.opponent_tracker.current_team_cycle_stats[enemyGeneral.player].approximate_fog_army_available_total)
+        self.assertEqual(2, bot.opponent_tracker.current_team_cycle_stats[enemyGeneral.player].approximate_fog_army_available_total_true)
+        self.assertEqual(7, bot.opponent_tracker.current_team_cycle_stats[enemyGeneral.player].approximate_fog_city_army)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        # should expect captured fog neut with a 2
+        self.assertEqual(2, bot.opponent_tracker.current_team_cycle_stats[enemyGeneral.player].approximate_fog_army_available_total)
+        self.assertEqual(2, bot.opponent_tracker.current_team_cycle_stats[enemyGeneral.player].approximate_fog_army_available_total_true)
+        # zero reason to touch city army...
+        self.assertEqual(7, bot.opponent_tracker.current_team_cycle_stats[enemyGeneral.player].approximate_fog_city_army)

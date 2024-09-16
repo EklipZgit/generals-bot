@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import random
+
 import logbook
 import time
 import typing
@@ -13,7 +15,7 @@ from ArmyAnalyzer import ArmyAnalyzer
 from ArmyTracker import Army
 from BoardAnalyzer import BoardAnalyzer
 from Interfaces import MapMatrixInterface
-from Models import Move
+from Models import Move, MoveBase
 from Engine.ArmyEngineModels import ArmySimState, ArmySimResult, SimTile, ArmySimEvaluationParams
 from MctsLudii import MctsDUCT, Game, Context, MctsEngineSummary
 from Path import Path
@@ -57,7 +59,7 @@ class ArmyEngine(object):
         self.time_in_nash_eq: float = 0.0
         self.time_in_nash: float = 0.0
 
-        self.forced_pre_expansions: typing.List[typing.List[Move | None]] | None = None
+        self.forced_pre_expansions: typing.List[typing.List[MoveBase | None]] | None = None
         """
         Feed lists of moves into this (where the moving player is determined by the owner of the first source tile in the move list)
         and MCTS will be forced to pre-expand these nodes against random moves from the opponent out to full as one of the first orders of business
@@ -242,13 +244,17 @@ class ArmyEngine(object):
 
         nextTurn = currentTurn + 1
 
-        frMoves: typing.List[Move | None] = boardState.generate_friendly_moves()
+        frMoves: typing.List[MoveBase | None] = boardState.generate_friendly_moves()
 
-        enMoves: typing.List[Move | None] = boardState.generate_enemy_moves()
+        enMoves: typing.List[MoveBase | None] = boardState.generate_enemy_moves()
 
-        payoffs: typing.List[typing.List[None | ArmySimState]] = [[None for e in enMoves] for f in frMoves]
+        # payoffs: typing.List[typing.List[None | ArmySimState]] = [[None for e in enMoves] for f in frMoves]
 
-        nashPayoffs: typing.List[typing.List[int]] = [[0 for e in enMoves] for f in frMoves]
+        # nashPayoffs: typing.List[typing.List[int]] = [[0 for e in enMoves] for f in frMoves]
+
+        payoffs: typing.List[typing.List[None | ArmySimState]] = [[None] * len(enMoves) for f in frMoves]
+
+        nashPayoffs: typing.List[typing.List[int]] = [[0] * len(enMoves) for f in frMoves]
 
         for frIdx, frMove in enumerate(frMoves):
             for enIdx, enMove in enumerate(enMoves):
@@ -278,8 +284,8 @@ class ArmyEngine(object):
                 # frMoves[frMove].append(nextResult)
                 # enMoves[enMove].append(nextResult)
 
-        frEqMoves = [e for e in enumerate(frMoves)]
-        enEqMoves = [e for e in enumerate(enMoves)]
+        frEqMoves = [(i, m) for i, m in enumerate(frMoves)]
+        enEqMoves = [(i, m) for i, m in enumerate(enMoves)]
         if boardState.depth < 1:
             nashStart = time.perf_counter()
             nashA = numpy.array(nashPayoffs)
@@ -310,8 +316,8 @@ class ArmyEngine(object):
             self,
             turn: int,
             boardState: ArmySimState,
-            frMove: Move | None,
-            enMove: Move | None,
+            frMove: MoveBase | None,
+            enMove: MoveBase | None,
             noClone: bool = False,
             perfTelemetry: PerformanceTelemetry = PerformanceTelemetry(),
     ) -> ArmySimState:
@@ -355,53 +361,46 @@ class ArmyEngine(object):
         if nextBoardState.turn == self.next_cycle_turn:  # TODO this can only go 50 moves deep for now, after that we stop incrementing army bonuses.
             with perfTelemetry.monitor_telemetry('next board army bonus'):
                 nextBoardState.controlled_city_turn_differential += nextBoardState.city_differential - self.base_city_differential
-                for tile, simTile in nextBoardState.sim_tiles.items():
+                for tileIdx, simTile in nextBoardState.sim_tiles.items():
+                    tile = simTile.source_tile
                     if simTile.player >= 0:
                         newSimTile = SimTile(simTile.source_tile, simTile.army + 1, simTile.player)
 
                         if tile.isCity or tile.isGeneral:
                             newSimTile.army += 1
 
-                        nextBoardState.sim_tiles[tile] = newSimTile
+                        nextBoardState.sim_tiles[tileIdx] = newSimTile
                         if newSimTile.player == self.friendly_player:
-                            st = nextBoardState.friendly_living_armies.pop(tile, None)
+                            st = nextBoardState.friendly_living_armies.pop(tileIdx, None)
                             if st:
-                                nextBoardState.friendly_living_armies[tile] = newSimTile
+                                nextBoardState.friendly_living_armies[tileIdx] = newSimTile
                         else:
-                            st = nextBoardState.enemy_living_armies.pop(tile, None)
+                            st = nextBoardState.enemy_living_armies.pop(tileIdx, None)
                             if st:
-                                nextBoardState.enemy_living_armies[tile] = newSimTile
+                                nextBoardState.enemy_living_armies[tileIdx] = newSimTile
 
         elif nextBoardState.turn & 1 == 0:
             with perfTelemetry.monitor_telemetry('next board city bonus'):
                 nextBoardState.controlled_city_turn_differential += nextBoardState.city_differential - self.base_city_differential
 
                 for tile in nextBoardState.incrementing:
-                    simTile = nextBoardState.sim_tiles[tile]
+                    simTile = nextBoardState.sim_tiles[tile.tile_index]
                     newSimTile = SimTile(simTile.source_tile, simTile.army + 1, simTile.player)
 
-                    nextBoardState.sim_tiles[tile] = newSimTile
+                    nextBoardState.sim_tiles[tile.tile_index] = newSimTile
                     if newSimTile.player == self.friendly_player:
-                        st = nextBoardState.friendly_living_armies.pop(tile, None)
+                        st = nextBoardState.friendly_living_armies.pop(tile.tile_index, None)
                         if st is not None:
-                            nextBoardState.friendly_living_armies[tile] = newSimTile
+                            nextBoardState.friendly_living_armies[tile.tile_index] = newSimTile
                     else:
-                        st = nextBoardState.enemy_living_armies.pop(tile, None)
+                        st = nextBoardState.enemy_living_armies.pop(tile.tile_index, None)
                         if st is not None:
-                            nextBoardState.enemy_living_armies[tile] = newSimTile
-
-                # if nextBoardState.turn % 50 == 0:
-                #     for simTile in list(nextBoardState.sim_tiles.values()):
-                #         if simTile.player >= 0:
-                #             nextBoardState.sim_tiles[simTile.source_tile] = SimTile(simTile.source_tile, simTile.army + 1, simTile.player)
-                    # for simTile in nextBoardState.friendly_living_armies.values():
-                    #     simTile.army += 1
-                    # for simTile in nextBoardState.enemy_living_armies.values():
-                    #     simTile.army += 1
-
+                            nextBoardState.enemy_living_armies[tile.tile_index] = newSimTile
+        nextBoardState.friendly_living_armies_l = list(nextBoardState.friendly_living_armies.keys())
+        nextBoardState.enemy_living_armies_l = list(nextBoardState.enemy_living_armies.keys())
         return nextBoardState
 
-    def execute(self, nextBoardState: ArmySimState, move: Move | None, movingPlayer: int, otherPlayer: int):
+    def execute(self, nextBoardState: ArmySimState, move: MoveBase | None, movingPlayer: int, otherPlayer: int):
         if move is None:
             return
 
@@ -414,7 +413,7 @@ class ArmyEngine(object):
         destTile = move.dest
         sourceTile = move.source
 
-        source = nextBoardState.sim_tiles[sourceTile]
+        source = nextBoardState.sim_tiles[sourceTile.tile_index]
         movingArmy = source.army - 1
         if move.move_half:
             movingArmy = source.army // 2
@@ -424,7 +423,7 @@ class ArmyEngine(object):
             # TODO, do we need to clear any armies here or anything weird?
             return
 
-        dest = nextBoardState.sim_tiles.get(destTile)
+        dest = nextBoardState.sim_tiles.get(destTile.tile_index)
         if not dest:
             dest = SimTile(destTile)
             if destTile.isCity or destTile.isGeneral:
@@ -444,7 +443,7 @@ class ArmyEngine(object):
                     tileDif = 2
                     if dest.source_tile.isCity:
                         cityDif = 2
-                    if dest.source_tile.isGeneral and (self.map.teams is None or self.map.teams[otherPlayer] != self.map.teams[movingPlayer]):
+                    if dest.source_tile.isGeneral and (self.map.team_ids_by_player_index[otherPlayer] != self.map.team_ids_by_player_index[movingPlayer]):
                         capsGeneral = True
                 else:  # then the player is capturing neutral / third party tiles
                     tileDif = 1
@@ -460,8 +459,8 @@ class ArmyEngine(object):
             if resultDest.source_tile.isGeneral:
                 resultDest.player = resultDest.source_tile.player
 
-        nextBoardState.sim_tiles[source.source_tile] = SimTile(source.source_tile, source.army - movingArmy, movingPlayer)
-        nextBoardState.sim_tiles[dest.source_tile] = resultDest
+        nextBoardState.sim_tiles[source.source_tile.tile_index] = SimTile(source.source_tile, source.army - movingArmy, movingPlayer)
+        nextBoardState.sim_tiles[dest.source_tile.tile_index] = resultDest
 
         movingPlayerArmies = nextBoardState.friendly_living_armies
         otherPlayerArmies = nextBoardState.enemy_living_armies
@@ -482,20 +481,20 @@ class ArmyEngine(object):
                 else:
                     nextBoardState.captures_enemy = True
 
-        movingArmy = movingPlayerArmies.pop(source.source_tile, None)
+        movingArmy = movingPlayerArmies.pop(source.source_tile.tile_index, None)
         # if movingArmy is None:
         #     raise AssertionError("IDK???")
         capped = movingPlayer == resultDest.player
 
-        otherArmy = otherPlayerArmies.pop(destTile, None)
+        otherArmy = otherPlayerArmies.pop(destTile.tile_index, None)
 
         if capped:
             if resultDest.army > 1:
-                movingPlayerArmies[destTile] = resultDest
+                movingPlayerArmies[destTile.tile_index] = resultDest
 
         elif resultDest.army > 1:
             if otherArmy is not None:
-                otherPlayerArmies[destTile] = resultDest
+                otherPlayerArmies[destTile.tile_index] = resultDest
 
         nextBoardState.tile_differential += tileDif
         nextBoardState.city_differential += cityDif
@@ -505,9 +504,8 @@ class ArmyEngine(object):
             return True
         if playerB == -1:
             return False
-        if self.map.teams is not None:
-            if self.map.teams[playerANotNeutral] == self.map.teams[playerB]:
-                return True
+        if self.map.team_ids_by_player_index[playerANotNeutral] == self.map.team_ids_by_player_index[playerB]:
+            return True
         return False
 
     def get_base_board_state(self) -> ArmySimState:
@@ -516,16 +514,16 @@ class ArmyEngine(object):
         for friendlyArmy in self.friendly_armies:
             # if friendlyArmy.value > 0:
             st = SimTile(friendlyArmy.tile, friendlyArmy.value + 1, friendlyArmy.player)
-            baseBoardState.friendly_living_armies[friendlyArmy.tile] = st
-            baseBoardState.sim_tiles[friendlyArmy.tile] = st
+            baseBoardState.friendly_living_armies[friendlyArmy.tile.tile_index] = st
+            baseBoardState.sim_tiles[friendlyArmy.tile.tile_index] = st
             if friendlyArmy.tile.isCity or friendlyArmy.tile.isGeneral:
                 baseBoardState.incrementing.add(friendlyArmy.tile)
 
         for enemyArmy in self.enemy_armies:
             # if enemyArmy.value > 0:
             st = SimTile(enemyArmy.tile, enemyArmy.value + 1, self.enemy_player)
-            baseBoardState.enemy_living_armies[enemyArmy.tile] = st
-            baseBoardState.sim_tiles[enemyArmy.tile] = st
+            baseBoardState.enemy_living_armies[enemyArmy.tile.tile_index] = st
+            baseBoardState.sim_tiles[enemyArmy.tile.tile_index] = st
             if enemyArmy.tile.isCity or enemyArmy.tile.isGeneral:
                 baseBoardState.incrementing.add(enemyArmy.tile)
 
@@ -533,6 +531,8 @@ class ArmyEngine(object):
         baseBoardState.city_differential = self.map.players[self.friendly_player].cityCount - self.map.players[self.enemy_player].cityCount
         baseBoardState.friendly_move_generator = self.generate_friendly_moves
         baseBoardState.enemy_move_generator = self.generate_enemy_moves
+        baseBoardState.friendly_random_move_generator = self.generate_random_friendly_move
+        baseBoardState.enemy_random_move_generator = self.generate_random_enemy_move
         baseBoardState.initial_differential = baseBoardState.tile_differential + baseBoardState.city_differential * 25
 
         self.base_city_differential = baseBoardState.city_differential
@@ -553,9 +553,10 @@ class ArmyEngine(object):
         closestFrThreat = 100
         closestFrSaveTile = None
         closestFrThreatTile = None
-        for tile, simTile in boardState.friendly_living_armies.items():
-            distToEnemy = self.board_analysis.intergeneral_analysis.bMap[tile]
-            distToGen = self.board_analysis.intergeneral_analysis.aMap[tile]
+        for tileIdx, simTile in boardState.friendly_living_armies.items():
+            tile = simTile.source_tile
+            distToEnemy = self.board_analysis.intergeneral_analysis.bMap.raw[tileIdx]
+            distToGen = self.board_analysis.intergeneral_analysis.aMap.raw[tileIdx]
             if distToGen < closestFrSave:
                 closestFrSave = distToGen
                 closestFrSaveTile = tile
@@ -568,9 +569,10 @@ class ArmyEngine(object):
         closestEnThreat = 100
         closestEnSaveTile = None
         closestEnThreatTile = None
-        for tile, simTile in boardState.enemy_living_armies.items():
-            distToEnemy = self.board_analysis.intergeneral_analysis.bMap[tile]
-            distToGen = self.board_analysis.intergeneral_analysis.aMap[tile]
+        for tileIdx, simTile in boardState.enemy_living_armies.items():
+            tile = simTile.source_tile
+            distToEnemy = self.board_analysis.intergeneral_analysis.bMap.raw[tileIdx]
+            distToGen = self.board_analysis.intergeneral_analysis.aMap.raw[tileIdx]
             if distToEnemy < closestEnSave:
                 closestEnSave = distToEnemy
                 closestEnSaveTile = tile
@@ -640,34 +642,74 @@ class ArmyEngine(object):
 
         return False
 
-    def generate_friendly_moves(self, boardState: ArmySimState) -> typing.List[Move | None]:
+    def generate_friendly_moves(self, boardState: ArmySimState) -> typing.List[MoveBase | None]:
         moves = self._generate_moves(boardState.friendly_living_armies, boardState, allowOptionalNoOp=self.allow_friendly_no_op, filter=self._friendly_move_filter)
         return moves
 
-    def generate_enemy_moves(self, boardState: ArmySimState) -> typing.List[Move | None]:
+    def generate_enemy_moves(self, boardState: ArmySimState) -> typing.List[MoveBase | None]:
         moves = self._generate_moves(boardState.enemy_living_armies, boardState, allowOptionalNoOp=self.allow_enemy_no_op, filter=self._enemy_move_filter)
         return moves
 
     def _generate_moves(
             self,
-            armies: typing.Dict[Tile, SimTile],
+            armies: typing.Dict[int, SimTile],
             boardState: ArmySimState,
             allowOptionalNoOp: bool = True,
             filter: typing.Callable[[Tile, Tile, ArmySimState], bool] | None = None
-    ) -> typing.List[Move | None]:
+    ) -> typing.List[MoveBase | None]:
         moves = []
-        for armyTile in armies:
+        for simTile in armies.values():
+            armyTile = simTile.source_tile
             for dest in armyTile.movable:
                 if dest.isObstacle:
                     continue
                 if filter is not None and filter(armyTile, dest, boardState):
                     continue
-                moves.append(Move(armyTile, dest))
+                moves.append(MoveBase(armyTile, dest))
 
         if allowOptionalNoOp or len(moves) == 0:
             moves.append(None)
 
         return moves
+
+    def generate_random_friendly_move(self, boardState: ArmySimState) -> MoveBase | None:
+        move = self._generate_random_move(boardState.friendly_living_armies_l, boardState.friendly_living_armies, boardState, allowOptionalNoOp=self.allow_friendly_no_op, filter=self._friendly_move_filter)
+        return move
+
+    def generate_random_enemy_move(self, boardState: ArmySimState) -> MoveBase | None:
+        move = self._generate_random_move(boardState.enemy_living_armies_l, boardState.enemy_living_armies, boardState, allowOptionalNoOp=self.allow_enemy_no_op, filter=self._enemy_move_filter)
+        return move
+
+    def _generate_random_move(
+            self,
+            armiesIdxs: typing.List[int],
+            armies: typing.Dict[int, SimTile],
+            boardState: ArmySimState,
+            allowOptionalNoOp: bool = True,
+            filter: typing.Callable[[Tile, Tile, ArmySimState], bool] | None = None
+    ) -> MoveBase | None:
+        try:
+            simTile = armies[random.choice(armiesIdxs)]
+        except IndexError:
+            return None
+        armyTile = simTile.source_tile
+
+        moves = []
+        for dest in armyTile.movable:
+            if dest.isObstacle:
+                continue
+            if filter is not None and filter(armyTile, dest, boardState):
+                continue
+            moves.append(dest)
+
+        if allowOptionalNoOp:
+            moves.append(None)
+
+        toTile = random.choice(moves)
+        if toTile is None:
+            return None
+
+        return MoveBase(armyTile, toTile)
 
     def set_final_board_state_depth_estimation(self, boardState: ArmySimState):
         pass
@@ -710,24 +752,19 @@ class ArmyEngine(object):
 
             logbook.info(f'{str(frMove).rjust(colWidth - 2)}  {"".join(payoffRow)}')
 
-    def are_tiles_adjacent(self, saveTile: Tile | None, threatTile: Tile | None):
-        if threatTile is not None and saveTile is not None and threatTile in saveTile.movable:
-            return True
-        return False
-
     def get_comparison_based_expected_result_state(
             self,
             curDepth: int,
-            frEqMoves: typing.List[typing.Tuple[int, Move | None]],
-            enEqMoves: typing.List[typing.Tuple[int, Move | None]],
+            frEqMoves: typing.List[typing.Tuple[int, MoveBase | None]],
+            enEqMoves: typing.List[typing.Tuple[int, MoveBase | None]],
             payoffs: typing.List[typing.List[ArmySimState]]
     ) -> ArmySimState:
         # enemy is going to choose the move that results in the lowest maximum board state
 
         # build response matrix
 
-        bestEnemyMove: Move | None = None
-        bestEnemyMoveExpectedFriendlyMove: Move | None = None
+        bestEnemyMove: MoveBase | None = None
+        bestEnemyMoveExpectedFriendlyMove: MoveBase | None = None
         bestEnemyMoveWorstCaseFriendlyResponse: ArmySimState | None = None
         for enIdx, enMove in enEqMoves:
             curEnemyMoveWorstCaseFriendlyResponse: ArmySimState | None = None
@@ -745,8 +782,8 @@ class ArmyEngine(object):
         # we can assume that any moves we have where the opponent move results in a better state is a move the opponent MUST NOT make because we have already determined that they must make a weaker move?
 
         # friendly is going to choose the move that results in the highest minimum board state
-        bestFriendlyMove: Move | None = None
-        bestFriendlyMoveExpectedEnemyMove: Move | None = None
+        bestFriendlyMove: MoveBase | None = None
+        bestFriendlyMoveExpectedEnemyMove: MoveBase | None = None
         bestFriendlyMoveWorstCaseOpponentResponse: ArmySimState = None
         for frIdx, frMove in frEqMoves:
             curFriendlyMoveWorstCaseOpponentResponse: ArmySimState = None
@@ -785,10 +822,10 @@ class ArmyEngine(object):
             self,
             game: nashpy.Game,
             boardState: ArmySimState,
-            frEnumMoves: typing.List[typing.Tuple[int, Move | None]],
-            enEnumMoves: typing.List[typing.Tuple[int, Move | None]],
+            frEnumMoves: typing.List[typing.Tuple[int, MoveBase | None]],
+            enEnumMoves: typing.List[typing.Tuple[int, MoveBase | None]],
             payoffs: typing.List[typing.List[ArmySimState]]
-    ) -> typing.Tuple[typing.List[typing.Tuple[int, Move | None]], typing.List[typing.Tuple[int, Move | None]]]:
+    ) -> typing.Tuple[typing.List[typing.Tuple[int, MoveBase | None]], typing.List[typing.Tuple[int, MoveBase | None]]]:
         # hack do this for now
         # return self.get_comparison_based_expected_result_state(boardState.depth, frEnumMoves, enEnumMoves, payoffs)
 
@@ -800,10 +837,10 @@ class ArmyEngine(object):
             self,
             boardState: ArmySimState,
             game: nashpy.Game,
-            frEnumMoves: typing.List[typing.Tuple[int, Move | None]],
-            enEnumMoves: typing.List[typing.Tuple[int, Move | None]],
+            frEnumMoves: typing.List[typing.Tuple[int, MoveBase | None]],
+            enEnumMoves: typing.List[typing.Tuple[int, MoveBase | None]],
             payoffs: typing.List[typing.List[ArmySimState]]
-    ) -> typing.Tuple[typing.List[typing.Tuple[int, Move | None]], typing.List[typing.Tuple[int, Move | None]]]:
+    ) -> typing.Tuple[typing.List[typing.Tuple[int, MoveBase | None]], typing.List[typing.Tuple[int, MoveBase | None]]]:
         """
         Returns just the enumeration of the moves that are part of the equilibrium.
 
@@ -856,10 +893,10 @@ class ArmyEngine(object):
             self,
             boardState: ArmySimState,
             game: nashpy.Game,
-            frEnumMoves: typing.List[typing.Tuple[int, Move | None]],
-            enEnumMoves: typing.List[typing.Tuple[int, Move | None]],
+            frEnumMoves: typing.List[typing.Tuple[int, MoveBase | None]],
+            enEnumMoves: typing.List[typing.Tuple[int, MoveBase | None]],
             payoffs: typing.List[typing.List[ArmySimState]]
-    ) -> typing.Tuple[typing.List[typing.Tuple[int, Move | None]], typing.List[typing.Tuple[int, Move | None]]]:
+    ) -> typing.Tuple[typing.List[typing.Tuple[int, MoveBase | None]], typing.List[typing.Tuple[int, MoveBase | None]]]:
         """
         Returns just the enumeration of the moves that are part of the equilibrium.
 
@@ -985,9 +1022,7 @@ class ArmyEngine(object):
         # multiFriendly = len(self.friendly_armies) > 1
         # multiEnemy = len(self.enemy_armies) > 1
         self.mcts_runner.reset()
-        teams = self.map.teams
-        if teams is None:
-            teams = [i for i in range(len(self.map.players))]
+        teams = self.map.team_ids_by_player_index
         game: Game = Game(
             player=self.friendly_player,
             enemyPlayer=self.enemy_player,
@@ -1025,7 +1060,7 @@ class ArmyEngine(object):
             if simTile.source_tile.isGeneral or simTile.player != player:
                 continue
             armyGained = simTile.army - simTile.army // 2
-            nextBoardState.sim_tiles[simTile.source_tile] = SimTile(simTile.source_tile, armyGained, byPlayer)
+            nextBoardState.sim_tiles[simTile.source_tile.tile_index] = SimTile(simTile.source_tile, armyGained, byPlayer)
             econDelta += armyGained
             econDelta += 1  # for the tile itselves econ.
 

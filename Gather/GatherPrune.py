@@ -134,6 +134,7 @@ def prune_mst_to_turns(
         preferPrune: typing.Set[Tile] | None = None,
         allowNegative: bool = True,
         invalidMoveFunc: typing.Callable[[GatherTreeNode], bool] | None = None,
+        forcePrunePreferPrune: bool = False,
 ) -> typing.List[GatherTreeNode]:
     """
     Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
@@ -161,6 +162,7 @@ def prune_mst_to_turns(
         preferPrune=preferPrune,
         allowNegative=allowNegative,
         invalidMoveFunc=invalidMoveFunc,
+        forcePrunePreferPrune=forcePrunePreferPrune,
     )
 
     return rootNodes
@@ -180,6 +182,7 @@ def prune_mst_to_turns_with_values(
         allowNegative: bool = True,
         overpruneCutoff: int | None = None,
         logEntries: typing.List[str] | None = None,
+        forcePrunePreferPrune: bool = False,
 ) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
     """
     Prunes bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
@@ -248,9 +251,25 @@ def prune_mst_to_turns_with_values(
         return turnsLeft - node.gatherTurns < overpruneCutoff
         # return False
 
+    pruneCallbackFunc = None
+    if not forcePrunePreferPrune:
+        def untilFunc(node, _, turnsLeft, curValue) -> bool:
+            return turnsLeft <= turns
+    else:
+        mustPrune = preferPrune.copy()
+
+        def untilFunc(node, _, turnsLeft, curValue) -> bool:
+            logbook.info(f'until {node.tile}: turnsLeft {turnsLeft} <= turns {turns} mustPrune {len(mustPrune)}  {mustPrune}')
+            return turnsLeft <= turns and len(mustPrune) == 0
+
+        def callback(node, _, turnsLeft):
+            mustPrune.discard(node.tile)
+            logbook.info(f'discard {node.tile}: mustPrune {len(mustPrune)}  {mustPrune}')
+        pruneCallbackFunc = callback
+
     gathTurns, gathVal, rootNodes = prune_mst_until(
         rootNodes,
-        untilFunc=lambda node, _, turnsLeft, curValue: turnsLeft <= turns,
+        untilFunc=untilFunc,
         pruneOrderFunc=pruneFunc,
         invalidMoveFunc=invalidMoveFunc,
         pruneOverrideFunc=pruneOverrideFunc,
@@ -263,6 +282,7 @@ def prune_mst_to_turns_with_values(
         logEntries=logEntries,
         allowNegative=allowNegative,
         parentPruneFunc=parentPruneFunc,
+        pruneCallbackFunc=pruneCallbackFunc,
     )
 
     return gathTurns, gathVal, rootNodes
@@ -438,28 +458,37 @@ def prune_mst_to_army_with_values(
             if teams[n.tile.player] == [searchingPlayer]:
                 citySkipTiles.add(n.tile)
 
-    def cityCounterFunc(node: GatherTreeNode):
+    def cityCounterAddFunc(node: GatherTreeNode):
         if (node.tile.isGeneral or node.tile.isCity) and not node.tile.isNeutral and node.tile not in citySkipTiles:
             if teams[node.tile.player] == teams[searchingPlayer]:
                 cityCounter.add(1)
                 # each time we add one of these we must gather all the other cities in the tree first too so we lose that many increment turns + that
                 cityGatherDepthCounter.add(node.trunkDistance)
+                logbook.info(f'cityCounter adding {node.tile}, now {cityCounter.value}, cityGatherDepthCounter {cityGatherDepthCounter.value}')
             else:
                 cityCounter.add(-1)
+                cityGatherDepthCounter.add(node.trunkDistance)
+                logbook.info(f'cityCounter adding neg {node.tile}, now {cityCounter.value}, cityGatherDepthCounter {cityGatherDepthCounter.value}')
 
         for child in node.children:
-            cityCounterFunc(child)
+            cityCounterAddFunc(child)
 
     for n in rootNodes:
-        cityCounterFunc(n)
+        cityCounterAddFunc(n)
 
     def setCountersToPruneCitiesRecurse(node: GatherTreeNode):
         for child in node.children:
             setCountersToPruneCitiesRecurse(child)
 
-        if teams[node.tile.player] == teams[searchingPlayer] and (node.tile.isCity or node.tile.isGeneral):
-            cityGatherDepthCounter.add(0 - node.trunkDistance)
-            cityCounter.add(-1)
+        if (node.tile.isCity or node.tile.isGeneral) and not node.tile.isNeutral:
+            if teams[node.tile.player] == teams[searchingPlayer]:
+                cityGatherDepthCounter.add(0 - node.trunkDistance)
+                cityCounter.add(-1)
+                logbook.info(f'cityCounter removing {node.tile}, now {cityCounter.value}, cityGatherDepthCounter {cityGatherDepthCounter.value}')
+            else:
+                cityGatherDepthCounter.add(node.trunkDistance)
+                cityCounter.add(1)
+                logbook.info(f'cityCounter removing neg {node.tile}, now {cityCounter.value}, cityGatherDepthCounter {cityGatherDepthCounter.value}')
 
     if invalidMoveFunc is None:
         def invalid_move_func(node: GatherTreeNode):
@@ -484,9 +513,11 @@ def prune_mst_to_army_with_values(
         cityIncrementAmount = getCurrentCityIncAmount(turnsLeftIfPruned)
         armyLeftIfPruned = curValue - node.value + cityIncrementAmount
 
+        logbook.info(f'{node.tile}: value {node.value}, armyLeftIfPruned = {armyLeftIfPruned} (curValue {curValue}, cityIncrementAmount {cityIncrementAmount}, cityCounter {cityCounter.value}, turnsLeftIfPruned {turnsLeftIfPruned})')
         if armyLeftIfPruned < army:
             # not pruning here, put the city increments back
-            cityCounterFunc(node)
+            logbook.info(f'{node.tile} cant prune, calling cityCounterFunc() to add pruned back')
+            cityCounterAddFunc(node)
             return True
 
         return False
@@ -782,6 +813,7 @@ def prune_mst_until(
         parentPruneFunc: typing.Callable[[Tile, GatherTreeNode], None] | None = None,
         allowNegative: bool = True,
         logEntries: typing.List[str] | None = None,
+        pruneCallbackFunc: typing.Callable[[GatherTreeNode, int, int], None] | None = None,
 ) -> typing.Tuple[int, int, typing.List[GatherTreeNode]]:
     """
     Prunes excess / bad nodes from an MST. Does NOT prune empty 'root' nodes (nodes where fromTile is none).
@@ -799,6 +831,7 @@ def prune_mst_until(
     @param tileDictToPrune: Optionally, also prune tiles out of this dictionary
     @param invalidMoveFunc: func(GatherTreeNode) -> bool, return true if you want a leaf GatherTreeNode to always be pruned. By emptyVal, if none is passed, then gather nodes that begin at an enemy tile or that are 1's will always be pruned as invalid.
     @param parentPruneFunc: func(Tile, GatherTreeNode) When a node is pruned this function will be called for each parent tile above the node being pruned and passed the node being pruned.
+    @param pruneCallbackFunc: Func[curNode, GatherTreeNodeCountRemaining, curValue] called for every node pruned (including children pruned by pruning branches). Called with the post-prune value, but each node decrements turns by 1 when pruning branches.
 
     @return: (totalCount, totalValue, The list same list of rootnodes passed in, modified).
     """
@@ -897,7 +930,6 @@ def prune_mst_until(
 
             if not noLog:
                 logEntries.append(f'pruning tree node {str(current)}')
-
             # now remove this leaf from its parent and bubble the value change all the way up
             curValue -= current.value
             parent: GatherTreeNode | None = nodeMap.get(current.toTile, None)
@@ -960,6 +992,8 @@ def prune_mst_until(
                     tileDictToPrune.pop(toDropFromLookup.tile, None)
                 nodeMap.pop(toDropFromLookup.tile, None)
                 count -= 1
+                if pruneCallbackFunc:
+                    pruneCallbackFunc(toDropFromLookup, count, curValue)
                 if not noLog:
                     logEntries.append(
                         f"    popped/pruned BRANCH CHILD {toDropFromLookup.tile.toString()} value {toDropFromLookup.value:.1f} count {count}")

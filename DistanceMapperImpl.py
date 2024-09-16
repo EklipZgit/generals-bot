@@ -1,3 +1,4 @@
+import time
 import typing
 from collections import deque
 
@@ -22,42 +23,60 @@ class DistanceMapperImpl(DistanceMapper):
     def __init__(self, map: MapBase):
         self.map: MapBase = map
         self._dists: MapMatrixInterface[MapMatrixInterface[int] | None] = MapMatrix(map)
+        self.time_total: float = 0.0
+        self.time_building_distmaps: float = 0.0
+        self.resets_total: int = 0
 
     def get_distance_between_or_none(self, tileA: Tile, tileB: Tile) -> int | None:
+        """Performs worse than the dual cache version."""
         dist = self.get_distance_between(tileA, tileB)
+        # above is already timed
+        start = time.perf_counter()
 
         if dist > 999:
             # TODO this is a debug assert setup...
             if tileB in self.map.reachable_tiles and tileA in self.map.reachable_tiles:
-                logbook.warn(f'tileA {str(tileA)} and tileB {str(tileB)} both in reachable, but had bad distance. Force recalculating all distances...')
+                logbook.error(f'tileA {str(tileA)} and tileB {str(tileB)} both in reachable, but had bad distance. Force recalculating all distances...')
                 self.recalculate()
+                self.time_total += time.perf_counter() - start
                 return self.get_distance_between(tileA, tileB)
+            self.time_total += time.perf_counter() - start
             return None
         else:
+            self.time_total += time.perf_counter() - start
             return dist
 
     def get_distance_between_or_none_dual_cache(self, tileA: Tile, tileB: Tile) -> int | None:
         dist = self.get_distance_between_dual_cache(tileA, tileB)
+        # above is already timed
+        start = time.perf_counter()
 
         if dist > 999:
             # TODO this is a debug assert setup...
             if tileB in self.map.reachable_tiles and tileA in self.map.reachable_tiles:
-                logbook.warn(f'tileA {str(tileA)} and tileB {str(tileB)} both in reachable, but had bad distance. Force recalculating all distances...')
+                logbook.error(f'tileA {str(tileA)} and tileB {str(tileB)} both in reachable, but had bad distance. Force recalculating all distances...')
                 self.recalculate()
+                self.time_total += time.perf_counter() - start
                 return self.get_distance_between(tileA, tileB)
+            self.time_total += time.perf_counter() - start
             return None
         else:
+            self.time_total += time.perf_counter() - start
             return dist
 
     def get_distance_between(self, tileA: Tile, tileB: Tile) -> int:
+        start = time.perf_counter()
+        """Performs worse than the dual cache version."""
         tileDists = self._dists.raw[tileA.tile_index]
         if tileDists is None:
             tileDists = self._build_distance_map_matrix_fast(tileA)
             self._dists.raw[tileA.tile_index] = tileDists
 
+        self.time_total += time.perf_counter() - start
         return tileDists.raw[tileB.tile_index]
 
     def get_distance_between_dual_cache(self, tileA: Tile, tileB: Tile) -> int:
+        start = time.perf_counter()
         tileDists = self._dists.raw[tileA.tile_index]
         if tileDists is None:
             bDists = self._dists.raw[tileB.tile_index]
@@ -67,48 +86,61 @@ class DistanceMapperImpl(DistanceMapper):
             else:
                 return bDists.raw[tileA.tile_index]
 
+        self.time_total += time.perf_counter() - start
         return tileDists.raw[tileB.tile_index]
 
     def get_tile_dist_matrix(self, tile: Tile) -> MapMatrixInterface[int]:
+        start = time.perf_counter()
         tileDists = self._dists.raw[tile.tile_index]
         if tileDists is None:
             tileDists = self._build_distance_map_matrix_fast(tile)
             self._dists.raw[tile.tile_index] = tileDists
 
+        self.time_total += time.perf_counter() - start
         return tileDists
 
     def _build_distance_map_matrix_fast(self, startTile: Tile) -> MapMatrixInterface[int]:
+        start = time.perf_counter()
         distanceMap = MapMatrix(self.map, UNREACHABLE)
 
         frontier = deque()
-
-        distanceMap.raw[startTile.tile_index] = 0
-        for mov in startTile.movable:
-            frontier.append((mov, 1))
+        raw = distanceMap.raw
+        raw[startTile.tile_index] = 0
+        frontier.append((startTile, 0))
 
         dist: int
         current: Tile
         while frontier:
             (current, dist) = frontier.popleft()
-            if distanceMap.raw[current.tile_index] != UNREACHABLE:
-                continue
-
-            distanceMap.raw[current.tile_index] = dist
-
-            if current.isObstacle:
-                continue
-
             newDist = dist + 1
             for n in current.movable:  # new spots to try
-                if distanceMap.raw[n.tile_index] != UNREACHABLE:
+                if raw[n.tile_index] != UNREACHABLE:
+                    continue
+
+                raw[n.tile_index] = newDist
+
+                if n.isObstacle:
                     continue
 
                 frontier.append((n, newDist))
 
+        self.time_building_distmaps += time.perf_counter() - start
         return distanceMap
 
     def recalculate(self):
         logbook.info(f'RESETTING CACHED DISTANCE MAPS IN DistanceMapperImpl')
+        self.resets_total += 1
         # for tile in self.map.get_all_tiles():
         #     self._dists.raw[tile.tile_index] = None
         self._dists = MapMatrix(self.map, None)
+
+    def dump_times(self):
+        logbook.info(f'OVERALL TIME SPENT IN DISTANCE MAPPER:\r\n'
+                     f'         Distmaps: {self.time_building_distmaps:.5f}s\r\n'
+                     f'         Time total: {self.time_total:.5f}s\r\n'
+                     f'         Num resets: {self.resets_total}\r\n')
+
+    def reset_times(self):
+        self.time_total = 0.0
+        self.time_building_distmaps = 0.0
+        self.resets_total = 0

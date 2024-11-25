@@ -1109,6 +1109,9 @@ def _optimize_25_launch_segment(
     # must always prioritize the tiles furthest from general first, to make sure we dequeue in the right order
     def prio_func(nextTile: Tile, currentPriorityObject, pathList: typing.List[typing.Tuple[Tile, typing.Any]] = []):
         repeatAvoider, _, closerToEnemyNeg, pathCappedNeg, negAdjWeight, repeats, cappedAdj, maxGenDist, armyLeft = currentPriorityObject
+        if nextTile.isGeneral:
+            return None
+
         visited = nextTile in visited_set
         if not visited:
             if nextTile.isSwamp:
@@ -1156,11 +1159,11 @@ def _optimize_25_launch_segment(
             # Fixes test__only_got_24_when_seems_easy_25__V2__turn50__force_11_launch
             adjAdjust = 0.0
             for tile in nextTile.movable:
-                if tile.isObstacle or tile.player != -1 or tile in visited_set or tile is pathList[-1][0] or tile is pathList[-2][0]:
+                if tile.isObstacle or tile.player != -1 or tile in visited_set or tile is pathList[-1][0] or tile is pathList[-2][0] or (tile.isGeneral and tile.tile_index != general.tile_index):
                     continue
                 adjCapable = 0
                 for tileAdj in tile.movable:
-                    if tileAdj.isObstacle or tileAdj.player != -1 or tileAdj in visited_set or tileAdj is nextTile or tileAdj is pathList[-1][0] or tileAdj is pathList[-2][0]:
+                    if tileAdj.isObstacle or tileAdj.player != -1 or tileAdj in visited_set or tileAdj is nextTile or tileAdj is pathList[-1][0] or tileAdj is pathList[-2][0] or (tileAdj.isGeneral and tileAdj.tile_index != general.tile_index):
                         continue
                     adjCapable += 1
                 adjAdjust += adjCapableRewards[adjCapable]

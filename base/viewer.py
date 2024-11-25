@@ -125,6 +125,7 @@ class GeneralsViewer(object):
         self.Arrow = None
         self.lineArrow: DirectionalShape = None
         self.redLineArrow: DirectionalShape = None
+        self.has_rendered_initial: bool = False
         self.line = None
         self.noLog: bool = no_log
         # Table Properies
@@ -149,6 +150,8 @@ class GeneralsViewer(object):
         self.square_inner_5: Rect = None
         self._red_x: Surface = None
         self._min_sleep_time: float = min_sleep_time
+
+        self.player_colors: typing.List[int] = PLAYER_COLORS
 
     def updateGrid(self, viewInfo: ViewInfo, map: MapBase):
         if viewInfo is not None:
@@ -224,6 +227,9 @@ class GeneralsViewer(object):
 
         self.tile_surface = pygame.Surface((self.cellWidth, self.cellHeight))
         self.player_fight_indicator_width = 2 * self.cellWidth
+
+        if self._map.is_2v2:
+            self.player_colors = TWO_VS_TWO_PLAYER_COLORS
 
         x = leftPos  # + 3
         if not alignLeft:
@@ -352,6 +358,11 @@ class GeneralsViewer(object):
                     return
 
         self._initViewier(alignTop=alignTop, alignLeft=alignLeft)
+        self._drawGrid()
+        if not self.has_rendered_initial:
+            self.has_rendered_initial = True
+
+            self._event_queue.put(('INITIALIZED', None))
         self.last_update_received = time.perf_counter()
 
         done = False
@@ -511,7 +522,7 @@ class GeneralsViewer(object):
             self.draw_player_scores()
 
             # for i, score in enumerate(self._scores):
-            #    score_color = PLAYER_COLORS[int(score['i'])]
+            #    score_color = self.player_colors[int(score['i'])]
             #    if (score['dead'] == True):
             #        score_color = GRAY_DARK
             #    pygame.draw.rect(self._screen, score_color, [score_width * i, pos_top, score_width, SCORES_ROW_HEIGHT])
@@ -628,7 +639,7 @@ class GeneralsViewer(object):
                         if tile.player != tileTerritoryPlayer:
                             territoryColor = None
                             if tileTerritoryPlayer != -1:
-                                territoryColor = PLAYER_COLORS[tileTerritoryPlayer]
+                                territoryColor = self.player_colors[tileTerritoryPlayer]
                                 pygame.draw.rect(self._screen, territoryColor,
                                                  [pos_left + self.cellWidth - territoryMarkerSize, pos_top,
                                                   territoryMarkerSize,
@@ -713,7 +724,7 @@ class GeneralsViewer(object):
 
             for i, approx in enumerate(self._viewInfo.generalApproximations):
                 if approx[2] > 0:
-                    pColor = PLAYER_COLORS[i]
+                    pColor = self.player_colors[i]
                     pos_left = (CELL_MARGIN + self.cellWidth) * approx[0] + CELL_MARGIN
                     pos_top = (CELL_MARGIN + self.cellHeight) * approx[1] + CELL_MARGIN
                     pos_left_circle = int(pos_left + (self.cellWidth / 2))
@@ -1035,7 +1046,7 @@ class GeneralsViewer(object):
         tile = army.tile
         (playerR, playerG, playerB) = R, G, B
         if army.player != army.tile.player:
-            (playerR, playerG, playerB) = PLAYER_COLORS[army.player]
+            (playerR, playerG, playerB) = self.player_colors[army.player]
             playerR += 50
             playerG += 50
             playerB += 50
@@ -1053,7 +1064,7 @@ class GeneralsViewer(object):
         pos_top = (CELL_MARGIN + self.cellHeight) * tile.y + CELL_MARGIN
         armyStr = army.name
         if army.last_moved_turn > 0:
-            armyStr = f'{army.name}-{self._map.turn - army.last_moved_turn}'
+            armyStr = f'{army.name}-{self._map.turn - army.last_seen_turn}'
         self._screen.blit(self._medFont.render(armyStr, True, WHITE), (pos_left + self.cellWidth - 10, pos_top))
 
     def draw_armies(self):
@@ -1086,13 +1097,13 @@ class GeneralsViewer(object):
         alphaScale = 180 // (len(included) + 1)
 
         for player in included:
-            self._viewInfo.add_map_division(self._viewInfo.armyTracker.valid_general_positions_by_player[player.index], PLAYER_COLORS[player.index], alpha=190)
+            self._viewInfo.add_map_division(self._viewInfo.armyTracker.valid_general_positions_by_player[player.index], self.player_colors[player.index], alpha=190)
 
             whitenedPlayerColor = Utils.rescale_color(
                 valToScale=0.2,
                 valueMin=0.0,
                 valueMax=1.0,
-                colorMin=PLAYER_COLORS[player.index],
+                colorMin=self.player_colors[player.index],
                 colorMax=GRAY,
             )
 
@@ -1102,13 +1113,13 @@ class GeneralsViewer(object):
         alphaMin = 100
         for tile, emergenceTuple in self._map.army_emergences.items():
             emergenceValue, emergencePlayer = emergenceTuple
-            (playerR, playerG, playerB) = PLAYER_COLORS[emergencePlayer]
+            (playerR, playerG, playerB) = self.player_colors[emergencePlayer]
             playerR = int(playerR * 1.25 + 20)
             playerG = int(playerG * 1.25 + 20)
             playerB = int(playerB * 1.25 + 20)
 
             if tile.player != emergencePlayer:
-                (playerR, playerG, playerB) = PLAYER_COLORS[emergencePlayer]
+                (playerR, playerG, playerB) = self.player_colors[emergencePlayer]
 
             alpha = min(alphaMin, max(255, int(Utils.rescale_value(abs(emergenceValue), 0, 50, alphaMin, 255))))
             # playerR = (playerR + 256) // 2
@@ -1212,7 +1223,7 @@ class GeneralsViewer(object):
             interChokeColor = CHOKE_PURPLE
 
         if innerChokeColor is None:
-            innerChokeColor = P_DARK_GREEN
+            innerChokeColor = DARK_GREEN
 
         if outerChokeColor is None:
             outerChokeColor = P_TEAL
@@ -1387,7 +1398,7 @@ class GeneralsViewer(object):
         elif tile.isMountain:  # Mountain
             pColor = BLACK
         elif tile.player >= 0:
-            playercolor = PLAYER_COLORS[tile.player]
+            playercolor = self.player_colors[tile.player]
             colorR = playercolor[0]
             colorG = playercolor[1]
             colorB = playercolor[2]
@@ -1555,7 +1566,7 @@ class GeneralsViewer(object):
                 if teamPlayer is None:
                     continue
 
-                score_color = PLAYER_COLORS[teamPlayer.index]
+                score_color = self.player_colors[teamPlayer.index]
                 if teamPlayer.leftGame:
                     # make them 70% black after leaving game
                     score_color = Utils.rescale_color(0.6, 0, 1.0, score_color, GRAY)
@@ -1568,7 +1579,7 @@ class GeneralsViewer(object):
                 pygame.draw.rect(self._screen, score_color, [pos_left, pos_top, curScoreWidth, self.scoreRowHeight])
 
                 if teamPlayer.fighting_with_player >= 0:
-                    otherPlayerColor = PLAYER_COLORS[teamPlayer.fighting_with_player]
+                    otherPlayerColor = self.player_colors[teamPlayer.fighting_with_player]
                     desiredHeight = self.cellHeight // 5
                     pygame.draw.rect(self._screen, otherPlayerColor,[pos_left, pos_top + self.scoreRowHeight - desiredHeight, curScoreWidth, desiredHeight])
 

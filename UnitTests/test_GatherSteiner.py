@@ -20,7 +20,7 @@ from bot_ek0x45 import EklipZBot
 class GatherSteinerUnitTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
-        Gather.USE_DEBUG_ASSERTS = True
+        GatherDebug.USE_DEBUG_ASSERTS = True
         super().__init__(methodName)
 
     def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:

@@ -828,3 +828,57 @@ player_index=0
                     # TODO we need some property for this, for indicating when an intercept could not be delayed without taking the extra damage.
                     #   Sometimes it's better to wait when they have no turnaround options, other times like now we MUST not wait.
                     # self.assertEqual(bestOpt.allowedDelay, 0, 'must NOT delay a move to be safe (and prevent econ damage), here.')
+    #
+    # def test_should_intercept_attack_lmao(self):
+    #     # TODO I mean realistically, opponent should NOT move down here, and SHOULD go left or up, so really the bot is probably ok to say no intercept here
+    #     #  and just let expansion be the reason it moves up / left from general?
+    #     debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+    #     mapFile = 'GameContinuationEntries/should_intercept_attack_lmao___Hq7BF7XYj---1--76.txtmap'
+    #     map, general, enemyGeneral = self.load_map_and_generals(mapFile, 76, fill_out_tiles=True)
+    #
+    #     plan = self.get_interception_plan(map, general, enemyGeneral, enTile=map.GetTile(14, 15), fromTile=map.GetTile(14, 14), additionalPath='14,15->14,17->15,17')
+    #
+    #     if debugMode:
+    #         self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
+    #
+    #     # we SHOULD find an intercept, but plan to delay it.
+    #     bestOpt = self.get_best_intercept_option(plan)
+    #     self.assertIsNotNone(bestOpt)
+    #     self.assertEqual((15, 17), bestOpt.path.start.tile.coords, 'should be intercepting from general')
+    #     self.assertEqual((15, 16), bestOpt.path.start.next.tile.coords, 'should be intercepting upwards')
+    #     self.assertEqual(bestOpt.requiredDelay, 0, 'must NOT delay a move to be safe, here.')
+    #     self.assertFalse(bestOpt.path.start.move_half)
+
+    def test_should_intercept_in_one_only__anything_else_dies_or_loses_econ_wtf(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_intercept_in_one_only__anything_else_dies_or_loses_econ_wtf___Human.exe-TEST__d7e2b2f9-2685-4c2f-9777-da4592c829d8---1--77.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 77, fill_out_tiles=True)
+
+        plan = self.get_interception_plan(map, general, enemyGeneral, enTile=map.GetTile(14, 16), fromTile=map.GetTile(14, 15), additionalPath='14,16->14,17->15,17')
+
+        if debugMode:
+            self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
+
+        planTileInfo = plan.common_intercept_chokes[map.GetTile(14, 16)]
+        self.assertEqual(1, planTileInfo.max_delay_turns, 'if we dont reach it this turn, it gets away. Obviously.')
+
+        # we SHOULD find an intercept, but plan to delay it.
+        bestOpt = self.get_best_intercept_option(plan)
+        self.assertIsNotNone(bestOpt)
+        self.assertEqual((11, 3), bestOpt.path.start.tile.coords, 'should be intercepting from general')
+        self.assertEqual(bestOpt.requiredDelay, 0, 'must NOT delay a move to be safe, here.')
+        self.assertFalse(bestOpt.path.start.move_half)
+
+        #
+        # self.enable_search_time_limits_and_disable_debug_asserts()
+        # simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # simHost.queue_player_moves_str(enemyGeneral.player, path)
+        # bot = self.get_debug_render_bot(simHost, general.player)
+        # playerMap = simHost.get_player_map(general.player)
+        #
+        # self.begin_capturing_logging()
+        # winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        # self.assertNoFriendliesKilled(map, general)
+        #
+        # self.assertOwnedXY(playerMap, 14, 17)
+        # self.assertOwnedXY(playerMap, 13, 17)

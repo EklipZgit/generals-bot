@@ -12,6 +12,24 @@ from base.client.map import MapBase, Tile, Player
 
 
 class CityScoreData(object):
+    __slots__ = (
+        'tile',
+        'city_expandability_score',
+        'city_defensability_score',
+        'city_general_defense_score',
+        'city_relevance_score',
+        'intergeneral_distance_differential',
+        'general_distances_ratio',
+        'general_distances_ratio_squared_capped',
+        'friendly_city_nearby_score',
+        'enemy_city_nearby_score',
+        'neutral_city_nearby_score',
+        'neighboring_city_relevance',
+        'distance_from_player_general',
+        'distance_from_enemy_general',
+        'intergeneral_distance_through_city',
+    )
+
     def __init__(self, tile: Tile):
         self.tile: Tile = tile
         self.city_expandability_score: float = 0.0
@@ -85,6 +103,9 @@ class CityAnalyzer(object):
         self.enemy_contested_cities: typing.Set[Tile] = set()
         """Contains all player owned cities that have been recently contested."""
 
+        self.large_neutral_negatives: typing.Set[Tile] = set()
+        """Contains large negative neutral tiles (value / distance to your land > 4; equivalent to 2 econ per turn for capturing them and returning.)"""
+
         self.reachability_costs_matrix: MapMatrixInterface[int] = None
         self.reachable_from_matrix: MapMatrixInterface[Tile | None] = None
 
@@ -107,6 +128,7 @@ class CityAnalyzer(object):
         self.undiscovered_mountain_scores: typing.Dict[Tile, CityScoreData] = {}
         self.owned_contested_cities: typing.Set[Tile] = set()
         self.enemy_contested_cities: typing.Set[Tile] = set()
+        self.large_neutral_negatives: typing.Set[Tile] = set()
 
         if self.reachability_costs_matrix is None:
             self.ensure_reachability_matrix_built(force=True)
@@ -126,6 +148,10 @@ class CityAnalyzer(object):
             # TODO calculate predicted enemy city locations in fog and explore mountains more in places we would WANT cities to be
             # tileMightBeUndiscCity = not tile.discovered and tile.isObstacle and tile in self.map.reachable_tiles
             # if not (tile.isCity or tileMightBeUndiscCity):
+            if tile.player == -1 and tile.army < 0 and (0 - tile.army) / (dist + 1) >= 4:
+                self.large_neutral_negatives.add(tile)
+
+
             if tile.isMountain:
                 return True
 

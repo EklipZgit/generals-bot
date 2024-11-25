@@ -49,6 +49,7 @@ class ViewerHost(object):
         self.process: BaseProcess = self.ctx.Process(target=_run_main_viewer_loop, args=(self._update_queue, self._viewer_event_queue, window_title, cell_width, cell_height, noLog, alignTop, alignLeft, BotLogging.LOGGING_QUEUE, minUpdateSleep), daemon=True)
         self.no_log: bool = noLog
         self._started: bool = False
+        self._recieved_init_ack: bool = False
 
     def __getstate__(self):
         raise AssertionError('this should never get serialized')
@@ -128,11 +129,16 @@ class ViewerHost(object):
         except:
             logbook.error(f'outer update publish catch, error: ')
             logbook.error(traceback.format_exc())
+        if not self._recieved_init_ack:
+            self.wait_viewer_initialized()
+            self._recieved_init_ack: bool = True
 
     def handle_viewer_events(self):
         try:
             while True:
                 eventType, eventValue = self._viewer_event_queue.get(block=False)
+                if eventType == 'INITIALIZED':
+                    self._recieved_init_ack: bool = True
                 if eventType == 'CLOSED':
                     closedByUser = eventValue
                     self._closed_by_user = closedByUser
@@ -147,6 +153,28 @@ class ViewerHost(object):
         except BrokenPipeError:
             if self._closed_by_user is None:
                 self._closed_by_user = False
+
+    def wait_viewer_initialized(self):
+        if self._recieved_init_ack:
+            return
+
+        start = time.perf_counter()
+        while time.perf_counter() - start < 15.0:
+            try:
+                eventType, eventValue = self._viewer_event_queue.get(block=True, timeout=0.5)
+                if eventType != 'INITIALIZED':
+                    raise Exception("UNEXPECTED VIEWER EVENT: " + eventType)
+                self._recieved_init_ack = True
+                break
+            except queue.Empty:
+                time.sleep(0.05)
+                pass
+            except BrokenPipeError:
+                if self._closed_by_user is None:
+                    self._closed_by_user = False
+
+        if not self._recieved_init_ack:
+            raise Exception("VIEWER FAILED TO INITIALIZE")
 
 
 class DebugLiveViewerHost(object):

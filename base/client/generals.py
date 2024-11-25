@@ -32,10 +32,10 @@ _ENDPOINT_BOT = "://botws.generals.io/socket.io/?EIO=4"
 _ENDPOINT_LOCAL = "://localhost:8080/socket.io/?EIO=4"
 _ENDPOINT_PUBLIC = "://ws.generals.io/socket.io/?EIO=4"
 
-# # force bot server bots to local:
-# _ENDPOINT_BOT = _ENDPOINT_LOCAL
-# BOTWSPREFIX = "ws"
-# BOTHTTPPREFIX = "http"
+# force bot server bots to local:
+_ENDPOINT_BOT = _ENDPOINT_LOCAL
+BOTWSPREFIX = "ws"
+BOTHTTPPREFIX = "http"
 
 # # force public bots to local:
 # _ENDPOINT_PUBLIC = _ENDPOINT_LOCAL
@@ -195,6 +195,9 @@ class GeneralsClient(object):
         logbook.debug("Joining game, userid: " + userid)
 
         supporterColorSelection = None
+        supporterColorSelection = 5
+        if self.userid.endswith('_i4'):
+            supporterColorSelection = 15
 
         if mode == "custom":
             force_start = True
@@ -601,6 +604,10 @@ class GeneralsClient(object):
 
                 time.sleep(0.3)
                 self._send(["set_force_start", self._gameid, forcing])
+                color = 5
+                if self.userid.endswith('_i4'):
+                    color = 15
+                self._send(["set_color", None, color])
                 logbook.info("Sent force_start")
                 time.sleep(3)
 
@@ -942,7 +949,8 @@ class GeneralsClient(object):
                     'iji++--0001',  # fair-ish map with fork path in middle and 8 starting cities
                     'Plots',
                     'Speed',
-                    'King of the Lit Hill v2'
+                    'King of the Lit Hill v2',
+                    '海岛战(Dinosaur\'s map #2)',
                 ]
             )
 

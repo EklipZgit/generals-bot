@@ -18,7 +18,7 @@ from MapMatrix import MapMatrixSet, TileSet
 from PerformanceTimer import PerformanceTimer
 from SearchUtils import *
 from Path import Path
-from base.client.map import Tile, TILE_OBSTACLE, TileDelta, Player, MODIFIER_TORUS, MAX_ALLY_SPAWN_DISTANCE
+from base.client.map import Tile, TILE_OBSTACLE, TileDelta, Player, MODIFIER_TORUS, MAX_ALLY_SPAWN_DISTANCE, MIN_ALLY_SPAWN_DISTANCE
 
 
 class PlayerAggressionTracker(object):
@@ -232,6 +232,7 @@ class ArmyTracker(object):
 
         for army in self.armies.values():
             if army.tile.visible:
+                logbook.info(f'updating {army}  last seen turn to {self.map.turn}')
                 army.last_seen_turn = self.map.turn
 
         for player in self.map.players:
@@ -801,7 +802,8 @@ class ArmyTracker(object):
             army.expectedPaths = ArmyTracker.get_army_expected_path(self.map, army, self.general, self.player_targets)
             logbook.info(f'set army {str(army)} expected paths to {str(army.expectedPaths)}')
 
-        army.last_moved_turn = self.map.turn - 1
+        if army.last_seen_turn > self.map.turn - 6:
+            army.last_moved_turn = self.map.turn - 1
 
         for listener in self.notify_army_moved:
             listener(army)
@@ -2694,9 +2696,12 @@ class ArmyTracker(object):
                             continue
                         if self.map.is_player_on_team_with(player.index, generalPositionPlayer):
                             if generalPositionPlayer != player.index and self.map.is_2v2:
-                                def limitSpawnAroundAllyGen(t: Tile, dist: int):
-                                    if dist > MAX_ALLY_SPAWN_DISTANCE:
+                                def limitSpawnAroundAllyGen(t: Tile, dist: int) -> bool:
+                                    if t.isObstacle or t.isCity:
+                                        return True
+                                    if dist > MAX_ALLY_SPAWN_DISTANCE or dist < MIN_ALLY_SPAWN_DISTANCE:
                                         self.valid_general_positions_by_player[player.index].discard(t)
+                                    return False
                                 # TODO stop bypassing default skip once server patch goes live with 2v2 ally distance limit check!
                                 logbook.info(f'Limiting limitSpawnAroundAllyGen OUTSIDE dist {MAX_ALLY_SPAWN_DISTANCE} from {tile}')
                                 SearchUtils.breadth_first_foreach_dist(self.map, [tile], 1000, foreachFunc=limitSpawnAroundAllyGen, bypassDefaultSkip=True)
@@ -2872,7 +2877,7 @@ class ArmyTracker(object):
         for prevElimTile, prevElimDist in playerElimEvents.items():
             cityPerfectInfo = prevElimTile in self.uneliminated_emergence_event_city_perfect_info[player]
             logbook.info(f'RE-eliminating p{player} t{prevElimTile} d{prevElimDist}, perfectCity{cityPerfectInfo}')
-            self._limit_general_position_to_within_tile_and_distance(player, prevElimTile, prevElimDist, alsoIncreaseEmergence=False, overrideCityPerfectInfo=cityPerfectInfo)  # alsoIncreaseEmergence=self.map.turn < 56)
+            self._limit_general_position_to_within_tile_and_distance(player, prevElimTile, prevElimDist, alsoIncreaseEmergence=False, overrideCityPerfectInfo=cityPerfectInfo, bypass2v2Partner=True)  # alsoIncreaseEmergence=self.map.turn < 56)
 
     def _handle_flipped_discovered_as_neutrals(self):
         with self.perf_timer.begin_move_event('handling discovered-as-neutral'):
@@ -2900,7 +2905,34 @@ class ArmyTracker(object):
                 with self.perf_timer.begin_move_event(f'gen re-limit for {len(alreadyRan)} alreadyRan'):
                     self.re_limit_gen_locations()
 
-    def _limit_general_position_to_within_tile_and_distance(self, player: int, tile: Tile, maxDist: int, alsoIncreaseEmergence: bool = True, skipIfLongerThanExisting: bool = False, overrideCityPerfectInfo: bool | None = None, emergenceAmount: int = -1):
+    def _limit_general_position_to_within_tile_and_distance(
+            self,
+            player: int,
+            tile: Tile,
+            maxDist: int,
+            alsoIncreaseEmergence: bool = True,
+            skipIfLongerThanExisting: bool = False,
+            overrideCityPerfectInfo: bool | None = None,
+            emergenceAmount: int = -1,
+            bypass2v2Partner: bool = False):
+
+        if not bypass2v2Partner and self.map.is_2v2:
+            teammates = self.map.get_teammates_no_self(player)
+            for teammate in teammates:
+                if not self.map.players[teammate].dead:
+                    allyMaxDist = maxDist + MAX_ALLY_SPAWN_DISTANCE
+                    logbook.info(f'ALSO limiting ally {teammate} to distance {allyMaxDist} from {tile}')
+                    self._limit_general_position_to_within_tile_and_distance(
+                        teammate,
+                        tile,
+                        allyMaxDist,
+                        alsoIncreaseEmergence,
+                        skipIfLongerThanExisting,
+                        overrideCityPerfectInfo,
+                        emergenceAmount,
+                        bypass2v2Partner=True,
+                    )
+
         playerUnelim = self.uneliminated_emergence_events[player]
         existingLimit = playerUnelim.get(tile, None)
 
@@ -3218,7 +3250,7 @@ class ArmyTracker(object):
                 potential.append(adj)
 
         if len(potential) > 1:
-            logbook.info(f"    Army {str(army)} IS BEING ENTANGLED BACK INTO THE FOG")
+            logbook.info(f"    Army {str(army)} IS BEING ENTANGLED BACK INTO THE FOG (last seen {army.last_seen_turn})")
             entangledArmies = army.get_split_for_fog(potential)
             for i, fogBoi in enumerate(potential):
                 logbook.info(
@@ -3795,17 +3827,21 @@ class ArmyTracker(object):
             logbook.error(f'having to reset general valid positions for p{player} due to over elimination')
 
         if numValid == 1:
-            if (lastValid.visible or lastValid.discovered):
+            if lastValid.visible or lastValid.discovered:
                 if not lastValid.isGeneral:
                     logbook.error(f'For player {player} we only have one valid tile left, {lastValid}, however we have already discovered that tile. Refusing to set gen position...')
                     mustResetAndIncrease = True
             else:
                 logbook.info(f'SETTING THE ONLY VALID REMAINING TILE TO BE GENERAL {lastValid} for player p{player}')
-                lastValid.player = player
-                lastValid.isGeneral = True
-                self.map.generals[player] = lastValid
-                self.map.players[player].general = lastValid
-        
+                if not lastValid.isGeneral:
+                    lastValid.isGeneral = True
+                    lastValid.player = player
+                    self.map.generals[player] = lastValid
+                    self.map.players[player].general = lastValid
+                elif lastValid.player != player:
+                    logbook.error(f'For player {player} we only have one valid tile left, {lastValid}, however we think thats a different general...')
+                    mustResetAndIncrease = True
+
         if mustResetAndIncrease:
             validTiles = self.map.pathable_tiles
             if self.map.valid_spawns:

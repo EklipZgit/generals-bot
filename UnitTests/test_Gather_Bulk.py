@@ -25,7 +25,7 @@ class GatherBulkTests(TestBase):
 
         bot.info_render_gather_values = True
         bot.info_render_centrality_distances = True
-        Gather.USE_DEBUG_ASSERTS = True
+        GatherDebug.USE_DEBUG_ASSERTS = True
         DebugHelper.IS_DEBUGGING = True
 
         return bot
@@ -74,9 +74,9 @@ class GatherBulkTests(TestBase):
         msgs = []
         if testTiming:
             # dont skew the timing with the expensive debug asserts.
-            Gather.USE_DEBUG_ASSERTS = False
+            GatherDebug.USE_DEBUG_ASSERTS = False
         else:
-            Gather.USE_DEBUG_ASSERTS = True
+            GatherDebug.USE_DEBUG_ASSERTS = True
 
         bot = simHost.bot_hosts[general.player].eklipz_bot
 
@@ -1308,7 +1308,7 @@ player_index=0
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 100)
 
         self.begin_capturing_logging()
-        Gather.USE_DEBUG_ASSERTS = True
+        GatherDebug.USE_DEBUG_ASSERTS = True
         start = time.perf_counter()
         targets = [enemyGeneral]
         depth = 35
@@ -1382,7 +1382,7 @@ player_index=0
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 100)
 
         self.begin_capturing_logging()
-        Gather.USE_DEBUG_ASSERTS = True
+        GatherDebug.USE_DEBUG_ASSERTS = True
         start = time.perf_counter()
         targets = [enemyGeneral]
         depth = 35
@@ -1456,7 +1456,7 @@ player_index=0
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 100)
 
         self.begin_capturing_logging()
-        Gather.USE_DEBUG_ASSERTS = True
+        GatherDebug.USE_DEBUG_ASSERTS = True
         Gather.USE_DEBUG_LOGGING = True
         start = time.perf_counter()
         targets = {enemyGeneral}
@@ -1528,7 +1528,7 @@ player_index=0
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 100)
 
         self.begin_capturing_logging()
-        Gather.USE_DEBUG_ASSERTS = True
+        GatherDebug.USE_DEBUG_ASSERTS = True
         Gather.USE_DEBUG_LOGGING = True
         start = time.perf_counter()
         targets = {enemyGeneral}
@@ -1615,7 +1615,7 @@ player_index=0
         # ....print_stats()
         # ...     )
         self.begin_capturing_logging()
-        Gather.USE_DEBUG_ASSERTS = True
+        GatherDebug.USE_DEBUG_ASSERTS = True
         Gather.USE_DEBUG_LOGGING = True
         targets = {enemyGeneral}
         depth = 35

@@ -6,7 +6,7 @@ import DebugHelper
 import KnapsackUtils
 import SearchUtils
 from Algorithms import TileIslandBuilder, TileIsland
-from Behavior.ArmyInterceptor import InterceptionOptionInfo
+from Behavior.ArmyInterceptor import InterceptionOptionInfo, ThreatBlockInfo
 from BoardAnalyzer import BoardAnalyzer
 from MapMatrix import MapMatrix
 from Models import Move
@@ -19,6 +19,7 @@ from base.client.map import Tile, MapBase
 
 
 USE_DEBUG_LOGGING = False
+ENEMY_TILE_CAP_VALUE = 2.2
 
 
 class RoundPlan(object):
@@ -84,6 +85,7 @@ def get_round_plan_with_expansion(
         colors: typing.Tuple[int, int, int] = (235, 240, 50),
         additionalOptionValues: typing.List[TilePlanInterface] | None = None,
         includeExtraGenAndCityArmy: bool = False,
+        threatBlockingTiles: typing.Dict[Tile, ThreatBlockInfo] | None = None,
         perfTimer: PerformanceTimer | None = None,
 ) -> RoundPlan:
     """
@@ -154,6 +156,7 @@ def get_round_plan_with_expansion(
             #     logEntries.append("Not doing algorithm logging for expansion due to player tilecount > 70 or turn count > 25")
             #     logStuff = False
             logStuff = DebugHelper.IS_DEBUGGING
+            # logStuff = True
 
             # Switch this up to use more tiles at the start, just removing the first tile in each path at a time. Maybe this will let us find more 'maximal' paths?
             def postPathEvalFunction(path: TilePlanInterface, negativeTiles: typing.Set[Tile]) -> float:
@@ -165,7 +168,7 @@ def get_round_plan_with_expansion(
                     nextNode = path.start.next
                     while nextNode is not None:
                         tile = nextNode.tile
-                        val = _get_tile_path_value(map, tile, last, negativeTiles, targetPlayers, searchingPlayer, enemyDistMap, generalDistMap, territoryMap, enemyDistPenaltyPoint, bonusCapturePointMatrix)
+                        val = _get_tile_path_value(map, tile, last, negativeTiles, targetPlayers, searchingPlayer, enemyDistMap, generalDistMap, territoryMap, enemyDistPenaltyPoint, realCapMat)
                         value += val
 
                         last = tile
@@ -247,8 +250,8 @@ def get_round_plan_with_expansion(
                             cost = 0.6
                         bonusCapturePointMatrix.raw[lm.source.tile_index] -= cost
                         bonusCapturePointMatrix.raw[lm.dest.tile_index] -= cost
-                        negativeTiles.add(lm.source)
-                        negativeTiles.add(lm.dest)
+                        # negativeTiles.add(lm.source)
+                        # negativeTiles.add(lm.dest)
 
             if allowGatherPlanExtension:
                 logEntries.append(f"Beginning gather extension.... elapsed {time.perf_counter() - startTime:.4f}")
@@ -309,6 +312,10 @@ def get_round_plan_with_expansion(
         negativeTiles = realNegs
         if includeExpansionSearch:
             with perfTimer.begin_move_event(f'legacy path exp {turns}t {time_limit:.3f}ms targ'):
+                blocks = MapMatrix(map, None)
+                if threatBlockingTiles:
+                    for tile, threatBlockInf in threatBlockingTiles.items():
+                        blocks.raw[tile.tile_index] = threatBlockInf
                 _include_optimal_expansion_options(
                     map,
                     multiPathDict,
@@ -338,6 +345,7 @@ def get_round_plan_with_expansion(
                     forceGlobalVisitedStage1,
                     postPathEvalFunction,
                     defaultNoPathValue,
+                    blocks,
                     turns,
                     lengthWeightOffset,
                     includeExtraGenAndCityArmy,
@@ -544,6 +552,7 @@ def _include_optimal_expansion_options(
     forceGlobalVisitedStage1,
     postPathEvalFunction,
     defaultNoPathValue,
+    threatBlockingTiles: MapMatrixInterface[ThreatBlockInfo | None],
     turns,
     lengthWeightOffset,
     includeExtraGenAndCityArmy: bool = False,
@@ -602,6 +611,7 @@ def _include_optimal_expansion_options(
             neutralTiles,
             pathPriority,
             tileSetSoFar,
+            fromTile,
             # adjacentSetSoFar,
             # enemyExpansionValue,
             # enemyExpansionTileSet
@@ -630,6 +640,7 @@ def _include_optimal_expansion_options(
             neutralTiles,
             pathPriority,
             tileSetSoFar,
+            fromTile,
             # adjacentSetSoFar,
             # enemyExpansionValue,
             # enemyExpansionTileSet
@@ -701,6 +712,7 @@ def _include_optimal_expansion_options(
             negNeutralTiles,
             pathPriority,
             tileSetSoFar,
+            fromTile,
             # adjacentSetSoFar,
             # enemyExpansionValue,
             # enemyExpansionTileSet
@@ -708,7 +720,15 @@ def _include_optimal_expansion_options(
         ) = currentPriorityObject
         if hitIsland:
             return None
-        nextTerritory = territoryMap[nextTile]
+        if fromTile:
+            blocks = threatBlockingTiles.raw[fromTile.tile_index]
+            if blocks:
+                if nextTile in blocks.blocked_destinations:
+                    # this isn't true. The prio func isn't where the visited happens. Someone else can still try to visit this next tile.
+                    # logEntries.append(f'PREVENTING {fromTile} -> {nextTile} BY RETURNING None FOR {nextTile} WHICH IS NOT IDEAL SINCE THIS NOW BLOCKS {nextTile} UNNECESSARILY FROM THE REST OF THE SEARCH')
+                    return None
+
+        nextTerritory = territoryMap.raw[nextTile.tile_index]
         armyRemaining = 0 - negArmyRemaining
         distSoFar += 1
         fakeDistSoFar += 1
@@ -850,7 +870,23 @@ def _include_optimal_expansion_options(
                 logEntries.append(f'HIT ISLAND {island.name} AT TILE {nextTile} WITH {armyRemaining} ARMY, TERMING')
                 hitIsland = True
 
-        return distSoFar, prioPerTurn, fakeDistSoFar, wastedMoves, negTileCapturePoints, 0 - armyRemaining, negEnemyTiles, negNeutralTiles, newPathPriority, nextTileSet, hitIsland  # , nextAdjacentSet, enemyExpansionValue, nextEnemyExpansionSet
+        return (
+            distSoFar,
+            prioPerTurn,
+            fakeDistSoFar,
+            wastedMoves,
+            negTileCapturePoints,
+            0 - armyRemaining,
+            negEnemyTiles,
+            negNeutralTiles,
+            newPathPriority,
+            nextTileSet,
+            nextTile,
+            # nextAdjacentSet,
+            # enemyExpansionValue,
+            # nextEnemyExpansionSet,
+            hitIsland,
+        )
 
     priorityFunc = default_priority_func_basic
 
@@ -898,7 +934,23 @@ def _include_optimal_expansion_options(
                 # startingEnemyExpansionTiles.add(adj)
                 enemyExpansionValue += (adj.army - 1) // 2
                 negTileCapturePoints += ENEMY_EXPANSION_TILE_PENALTY
-        return 0, -10000, 0, 0, negTileCapturePoints, 0 - tileArmy, 0, 0, 0, startingSet, False  # , startingAdjSet, enemyExpansionValue, startingEnemyExpansionTiles
+        return (
+            0,
+            -10000,
+            0,
+            0,
+            negTileCapturePoints,
+            0 - tileArmy,
+            0,
+            0,
+            0,
+            startingSet,
+            tile,  # fromTile
+            # startingAdjSet,
+            # enemyExpansionValue,
+            # startingEnemyExpansionTiles,
+            False,
+        )
 
     initFunc = initial_value_func_default
 
@@ -1115,6 +1167,12 @@ def _include_optimal_expansion_options(
             # fullOnlyArmyDistFunc=fullOnly_func,
             # boundFunc=boundFunc,
             noLog=not DebugHelper.IS_DEBUGGING)
+            # noLog=False)
+        if logStuff:
+            logEntries.append(f'RAW PATH OUTPUTS:')
+            for t, paths in newPathDict.items():
+                for path in paths:
+                    logEntries.append(f'   {t} : {path.econValue:.2f}/{path.length}t ({path.econValue/path.length:.2f}vt) : {path}')
 
         newPaths = _process_new_expansion_paths(
             cityUsages,
@@ -1221,6 +1279,7 @@ def _process_new_expansion_paths(
                 reachedIsland: TileIsland | None = tileIslands.tile_island_lookup.raw[path.tail.tile.tile_index]
                 if reachedIsland not in largeIslandSet:
                     reachedIsland = None
+                # reachedIsland = None
                 # else:
                 #     while reachedIsland.full_island:
                 #         reachedIsland = reachedIsland.full_island
@@ -1253,7 +1312,7 @@ def _process_new_expansion_paths(
                 tilesInIslandIdx = 2
                 curValue = value
 
-                islandCapValue = 2.2
+                islandCapValue = ENEMY_TILE_CAP_VALUE
                 if reachedIsland and reachedIsland.team == -1:
                     islandCapValue = 1.0
 
@@ -1301,7 +1360,7 @@ def _process_new_expansion_paths(
                         path = path.clone()
                         closest = None
                         for t in path.tail.tile.movable:
-                            if t not in path.tileSet and t in fullIsland.tile_set and (closest is None or enemyDistMap[closest] > enemyDistMap[t]):
+                            if t not in path.tileSet and t in fullIsland.tile_set and (closest is None or enemyDistMap.raw[closest.tile_index] > enemyDistMap.raw[t.tile_index]):
                                 closest = t
 
                         if not closest:
@@ -1874,7 +1933,7 @@ def _get_tile_path_value(
     else:
 
         if tile.player in targetPlayers:
-            value += 2.1
+            value += ENEMY_TILE_CAP_VALUE
             if tile.isCity and tile.army < 10:
                 value += 15 - tile.army
         elif not tile.discovered and territoryMap.raw[tile.tile_index] in targetPlayers:
@@ -2465,29 +2524,49 @@ def _get_capture_counts(
     return turnsUsed, enemyCapped, neutralCapped, visited
 
 
-def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: TilePlanInterface, originalNegativeTiles: typing.Set[Tile]) -> float:
+def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: TilePlanInterface, originalNegativeTiles: typing.Set[Tile], econVt: float) -> float:
     # rating = max(0, path.value) ** 0.5
     if isinstance(path, InterceptionOptionInfo) and path.requiredDelay <= 0:
         # intercepts are high priority no matter what, and always more important than other intercepts of smaller tile amounts.
         return path.intercept.target_tile.army
 
+    # ok actually, we want to play in this order:
+    #   stuff with lots of army remaining?
+    #   fog neutral captures first because they could be better than expected (unless FFA?)
+    #   enemy predicted captures last because they are most likely to turn out to be worse than expected
+    #   stuff closer to us first?
+
     rating = 0
+    if isinstance(path, Path):
+        if path.value >= 0:
+            rating = (path.value ** 0.5) / 5
     first = path.get_first_move().source
     for t in path.tileSet:
         if t == first:
             continue
-        if t.player not in friendlyPlayers:
-            rating += 0.5
-            if t.player >= 0:
-                rating += 1.0
-                if not t.visible:
-                    rating += 1.0
-                if not t.discovered:
-                    rating += 2.0
+
         if not t.visible:
-            rating += 0.25
-        if not t.discovered:
-            rating += 0.1
+            if t.player == -1:
+                rating += 0.3
+                if not t.discovered:
+                    rating += 0.2
+            elif t.player not in friendlyPlayers:
+                rating -= 0.2
+                if not t.discovered:
+                    rating -= 0.3
+
+        # if t.player not in friendlyPlayers:
+        #     rating += 0.5
+        #     if t.player >= 0:
+        #         rating += 1.0
+        #         if not t.visible:
+        #             rating += 1.0
+        #         if not t.discovered:
+        #             rating += 2.0
+        # if not t.visible:
+        #     rating += 0.25
+        # if not t.discovered:
+        #     rating += 0.1
 
     return rating
 
@@ -2533,25 +2612,30 @@ def find_optimal_expansion_path_to_move_first(
     if len(waitingPaths) == len(maxPaths):
         waitingPaths = set()
 
-    maxVal = 0
-    maxUncertainty = 0
-    path: Path | None = None
+    maxVal = -10000
+    maxVt = -1000
+    maxUncertainty = -10000
+    path: TilePlanInterface | None = None
     for p in maxPaths:
         thisVal = postPathEvalFunction(p, originalNegativeTiles)
-        thisUncertainty = _get_uncertainty_capture_rating(friendlyPlayers, p, originalNegativeTiles)
 
-        thisUncertainty = thisUncertainty / (p.length + 1)
-
+        thisTurns = p.length
         if valueOverrides is not None:
             overrides = valueOverrides.get(p, None)
             if overrides is not None:
-                thisVal, overTurns = overrides
+                thisVal, thisTurns = overrides
 
-        if thisUncertainty > maxUncertainty or (thisUncertainty == maxUncertainty and thisVal > maxVal):
+        thisVt = thisVal / thisTurns
+        thisUncertainty = _get_uncertainty_capture_rating(friendlyPlayers, p, originalNegativeTiles, thisVt)
+
+        thisUncertainty = thisUncertainty / (thisTurns + 1)
+
+        if thisUncertainty > maxUncertainty or (thisUncertainty == maxUncertainty and thisVt > maxVt):
             if p not in waitingPaths:
                 logbook.info(f'    path uncert{thisUncertainty:.2f} v{thisVal:.2f} > uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)} and is new best')
                 path = p
                 maxVal = thisVal
+                maxVt = thisVt
                 maxUncertainty = thisUncertainty
             else:
                 logbook.info(

@@ -375,7 +375,7 @@ bot_target_player=1
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '7,6->7,5')
-        simHost.queue_player_moves_str(enemyAllyGen.player, '7,6->7,5')
+        # simHost.queue_player_moves_str(enemyAllyGen.player, '7,6->7,5')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
@@ -384,7 +384,7 @@ bot_target_player=1
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=13)
         self.assertNoFriendliesKilled(map, general, allyGen)
-
+        self.assertNoRepetition(simHost)
     
     def test_should_not_run_down_into_non_enemy_territory_with_kill_threat_army(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1343,16 +1343,6 @@ bot_target_player=1
         self.assertGreater(plan.econValue / plan.length, 0.7)
         self.assertEqual(41, bot.expansion_plan.turns_used)
 
-# 15f-23p-2s totally original
-# 17f-21p RE 19-19 minus the self-tile-penalty
-# 15f-23p-2s self-tile-penalty 0.2 instead of 0.5
-# 16f-22p-2s with cutoff
-# 17f-21p-2s no cutoff
-# 14-24 with cutoff tweak
-# 15-23 with revamp of including all paths from tile if any path from tile meets value per turn cutoff
-# 13-25 ^ but rolled back early one?
-# 25f 30p
-# 28f 49p 2s ish, some are inconsistent, between 26 and 30f    
     def test_should_prefer_capping_central_tiles_over_edges_near_end_of_round(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_prefer_capping_central_tiles_over_edges_near_end_of_round___CqXBGqAAd---0--147.txtmap'
@@ -1415,10 +1405,10 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
         self.assertNoFriendliesKilled(map, general)
 
-        self.skipTest("TODO add asserts for shouldnt_thing_moving_corner_is_worth_expansion_points")
+        self.assertTileDifferentialGreaterThan(-6, simHost, 'should take 3 enemy tiles, wtf')
     
     def test_shouldnt_think_moving_corner_is_worth_expansion_points_earlier(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1453,12 +1443,13 @@ bot_target_player=1
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
+        simHost.queue_player_leafmoves(enemyGeneral.player)
 
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=50)
         self.assertNoFriendliesKilled(map, general)
 
-        self.skipTest("TODO add asserts for first_fifty_should_not_do_stupid_stuff_out_of_cave")
+        self.assertPlayerTileCountGreater(simHost, general.player, 51, "can easily capture 52 tiles out of a good launch here.")
 
     def test_should_take_enemy_tiles_till_end_of_round_not_do_weird_neutral_crap(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1475,8 +1466,9 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=20)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=11)
         self.assertNoFriendliesKilled(map, general)
+        self.assertTileDifferentialGreaterThan(4, simHost, 'should take enemy tiles with all army')
     
     def test_should_expand_leafmoves_not_do_wonky_gather(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1496,6 +1488,7 @@ bot_target_player=1
         self.assertNoFriendliesKilled(map, general)
         self.assertOwned(general.player, playerMap.GetTile(7, 3), 'should not have done wonky stuff')
         self.assertOwned(general.player, playerMap.GetTile(9, 2), 'should not have done wonky stuff')
+        self.assertPlayerTileCountGreater(simHost, general.player, 52, "can easily capture 52 tiles out of a good launch here.")
     
     def test_should_capture_enemy_tiles_on_path_not_neutrals(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1509,6 +1502,7 @@ bot_target_player=1
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
+        bot.get_army_at_x_y(4, 4).last_moved_turn = map.turn - 5
 
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
@@ -1528,11 +1522,81 @@ bot_target_player=1
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '10,11->9,11  11,11->12,11  4,9->3,9')
         simHost.queue_player_moves_str(general.player, '8,12->9,12')
+        #proof
+        # simHost.queue_player_moves_str(general.player, '9,12->9,11->10,11')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
         self.assertNoFriendliesKilled(map, general)
+        self.assertTileDifferentialGreaterThan(1, simHost, 'should cap the tiles because general can do stuff rest of round...')
 
+    def test_should_use_troops_that_are_on_the_attack_line(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_use_troops_that_are_on_the_attack_line___4ZLGUD3Zg---0--339.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 339, fill_out_tiles=True)
 
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=339)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '9,5->8,5->8,3->9,3->9,2')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=11)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertTileDifferentialGreaterThan(12, simHost, 'can literally capture one tile per move the entire rest of the round except 1')
+    
+    def test_should_continue_expanding_after_intercept_wtf(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_continue_expanding_after_intercept_wtf___XMwaFxYjc---1--85.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 85, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=85)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '9,4->10,4')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertTileDifferentialGreaterThan(14, simHost, 'because shouldnt ignore good moves')
+
+# 15f-23p-2s totally original
+# 17f-21p RE 19-19 minus the self-tile-penalty
+# 15f-23p-2s self-tile-penalty 0.2 instead of 0.5
+# 16f-22p-2s with cutoff
+# 17f-21p-2s no cutoff
+# 14-24 with cutoff tweak
+# 15-23 with revamp of including all paths from tile if any path from tile meets value per turn cutoff
+# 13-25 ^ but rolled back early one?
+# 25f 30p
+# 28f 49p 2s ish, some are inconsistent, between 26 and 30f
+# 35f 45p with intercepts included in expansion but after fixing not using core path properly
+    
+    def test_should_just_capture_tiles_not_do_neutral_land_crap(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_just_capture_tiles_not_do_neutral_land_crap___AvMPH9hWV---0--78.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 78, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=78)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        #proof
+        # simHost.queue_player_moves_str(general.player, '8,6->10,6->10,5->8,5->8,4->8,3')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=22)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTileDifferentialGreaterThan(12, simHost)

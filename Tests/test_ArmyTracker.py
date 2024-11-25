@@ -109,7 +109,7 @@ class ArmyTrackerTests(TestBase):
         bTile = map.GetTile(2, 1)
         aTile.army = aArmy
         bTile.army = bArmy
-        Gather.USE_DEBUG_ASSERTS = False
+        GatherDebug.USE_DEBUG_ASSERTS = False
         mapVision = map
         simHost = GameSimulatorHost(map, player_with_viewer=-2, playerMapVision=mapVision)
         simHost.apply_map_vision(enemyGeneral.player, mapVision)

@@ -639,12 +639,12 @@ class GameSimulatorHost(object):
 
             if botHost.has_viewer and run_real_time:
                 botHost.initialize_viewer(botHost.eklipz_bot.no_file_logging, onClick=self.on_click)
-                botHost._viewer.send_update_to_viewer(botHost.eklipz_bot.viewInfo, botHost.eklipz_bot._map)
-                botHost._viewer.send_update_to_viewer(botHost.eklipz_bot.viewInfo, botHost.eklipz_bot._map)
                 botHost.run_viewer_loop()
+                botHost._viewer.send_update_to_viewer(botHost.eklipz_bot.viewInfo, botHost.eklipz_bot._map)
+                # botHost._viewer.send_update_to_viewer(botHost.eklipz_bot.viewInfo, botHost.eklipz_bot._map)
 
         if run_real_time:
-            stopSleep = time.perf_counter() + 3.0
+            stopSleep = time.perf_counter() + 0.5
             while time.perf_counter() < stopSleep:
                 # time to look at the first move, pygame doesn't start up that quickly
                 time.sleep(0.2)

@@ -27,7 +27,7 @@ from Behavior.ArmyInterceptor import ArmyInterception, ArmyInterceptor, Intercep
 from BehaviorAlgorithms.IterativeExpansion import FlowExpansionPlanOption, IslandFlowNode, ArmyFlowExpander, IslandMaxFlowGraph
 from BoardAnalyzer import BoardAnalyzer
 from DangerAnalyzer import ThreatType, ThreatObj
-from Gather import GatherCapturePlan
+from Gather import GatherCapturePlan, GatherDebug
 from Models import Move
 from DistanceMapperImpl import DistanceMapperImpl
 from Interfaces import MapMatrixInterface
@@ -47,7 +47,7 @@ __unittest = True
 
 
 class TestBase(unittest.TestCase):
-    GLOBAL_BYPASS_REAL_TIME_TEST = False
+    GLOBAL_BYPASS_REAL_TIME_TEST = True
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -689,14 +689,14 @@ class TestBase(unittest.TestCase):
     def disable_search_time_limits_and_enable_debug_asserts(self):
         SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING = DebugHelper.IS_DEBUGGING
         EarlyExpandUtils.DEBUG_ASSERTS = True
-        Gather.USE_DEBUG_ASSERTS = True
+        GatherDebug.USE_DEBUG_ASSERTS = True
         BotHost.FORCE_NO_VIEWER = False
         base.client.map.ENABLE_DEBUG_ASSERTS = True
 
     def enable_search_time_limits_and_disable_debug_asserts(self):
         SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING = False
         EarlyExpandUtils.DEBUG_ASSERTS = False
-        Gather.USE_DEBUG_ASSERTS = False
+        GatherDebug.USE_DEBUG_ASSERTS = False
         BotHost.FORCE_NO_VIEWER = False
         base.client.map.ENABLE_DEBUG_ASSERTS = False
 
@@ -866,6 +866,13 @@ class TestBase(unittest.TestCase):
         self.assertIn(map.GetTile(x, y), container)
 
     def assertOwned(self, player: int, tile: Tile, reason: str | None = None):
+        if not reason:
+            reason = f'expected player {player} to own {tile}'
+        self.assertEqual(player, tile.player, reason)
+
+    def assertOwnedXY(self, map: MapBase, x: int, y: int, reason: str | None = None):
+        tile = map.GetTile(x, y)
+        player = map.player_index
         if not reason:
             reason = f'expected player {player} to own {tile}'
         self.assertEqual(player, tile.player, reason)
@@ -1451,7 +1458,7 @@ class TestBase(unittest.TestCase):
         builder.recalculate_tile_islands(enemyGeneral)
         analysis = BoardAnalyzer(map, general)
         analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
-        Gather.USE_DEBUG_ASSERTS = True
+        GatherDebug.USE_DEBUG_ASSERTS = True
 
         # if debugMode:
         #     self.render_tile_islands(map, builder)
@@ -1742,7 +1749,31 @@ class TestBase(unittest.TestCase):
         interceptor = ArmyInterceptor(map, analysis, useDebugLogging=useDebugLogging)
         return interceptor
 
-    def get_interception_plan(self, map: MapBase, general: Tile, enemyGeneral: Tile, enTile: Tile | None = None, turnsLeftInCycle: int = -1, useDebugLogging: bool = True, additionalPath: str | None = None, justCityAndGeneralThreats: bool = False, fromTile: Tile | None = None) -> ArmyInterception:
+    def get_interception_plan(
+            self,
+            map: MapBase,
+            general: Tile,
+            enemyGeneral: Tile,
+            enTile: Tile | None = None,
+            turnsLeftInCycle: int = -1,
+            useDebugLogging: bool = True,
+            additionalPath: str | None = None,
+            justCityAndGeneralThreats: bool = False,
+            fromTile: Tile | None = None
+    ) -> ArmyInterception:
+        """
+
+        @param map:
+        @param general:
+        @param enemyGeneral:
+        @param enTile: If not provided, the largest visible enemy tile will be used.
+        @param turnsLeftInCycle:
+        @param useDebugLogging:
+        @param additionalPath: string path if provided to guarantee the enTile includes some path that may not get auto-detected, if behavior is not reproing.
+        @param justCityAndGeneralThreats:
+        @param fromTile: the tile the enemy tile just moved from (important sometimes in intercepts). If not provided, will try to autodetect the from tile based on nearby 1's or 2's.
+        @return:
+        """
         if turnsLeftInCycle == -1:
             turnsLeftInCycle = 50 - map.turn % 50
 
@@ -2177,9 +2208,12 @@ class TestBase(unittest.TestCase):
                 maxStr = 'NEW MAX '
                 maxOpt = opt
 
-            opt1, opt2 = str(opt).split(', path ')
-            viewInfo.add_info_line(f'dist {dist} @{plan.target_tile}: {opt1}')
-            viewInfo.add_info_line(f'   {maxStr} {opt2}')
+            # opt1, opt2 = str(opt).split(', path ')
+            # viewInfo.add_info_line(f'dist {dist} @{plan.target_tile}: {opt1}')
+            # viewInfo.add_info_line(f'   {maxStr} {opt2}')
+            optStr = str(opt)
+            viewInfo.add_info_line(f'dist {dist} @{plan.target_tile}: {optStr}')
+            viewInfo.add_info_line(f'   {maxStr}')
             viewInfo.color_path(PathColorer(
                 path,
                 10,

@@ -10,7 +10,7 @@ def solve_multiple_choice_knapsack(
         values: typing.List[int],
         groups: typing.List[int],
         noLog: bool = True,
-        longRuntimeThreshold = 0.025
+        longRuntimeThreshold = 0.005
 ) -> typing.Tuple[int, typing.List[typing.Any]]:
     """
     Solves knapsack where you need to knapsack a bunch of things, but must pick at most one thing from each group of things

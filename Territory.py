@@ -120,8 +120,8 @@ class TerritoryClassifier(object):
             else:
                 userName = self.map.usernames[maxPlayer]
 
-            if evaluatingTile.player != maxPlayer and evaluatingTile.player != -1:
-                logbook.info("Tile {} is in player {} {} territory".format(evaluatingTile.toString(), maxPlayer, userName))
+            # if evaluatingTile.player != maxPlayer and evaluatingTile.player != -1:
+            #     logbook.info("Tile {} is in player {} {} territory".format(evaluatingTile.toString(), maxPlayer, userName))
 
             self.territoryMap[evaluatingTile] = maxPlayer
 

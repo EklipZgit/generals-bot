@@ -129,16 +129,17 @@ def _build_pcst_tile_prize_matrix(
             if gatherMatrix:
                 prize += gatherMatrix.raw[tile.tile_index]
         else:
-            if not prioritizeCaptureHighArmyTiles:
-                extraCost = tile.army * enemyArmyFactor
-                if captureMatrix and tile.army < enemyArmyLimit:
-                    capVal = captureMatrix.raw[tile.tile_index]
-                    prize = capVal
-            else:
-                if captureMatrix and tile.army < enemyArmyLimit:
-                    prize = float(tile.army) * enemyArmyFactor
-                    capVal = captureMatrix.raw[tile.tile_index]
-                    prize += capVal
+            if tile.army >= -1:
+                if not prioritizeCaptureHighArmyTiles:
+                    extraCost = tile.army * enemyArmyFactor
+                    if captureMatrix and tile.army < enemyArmyLimit:
+                        capVal = captureMatrix.raw[tile.tile_index]
+                        prize = capVal
+                else:
+                    if captureMatrix and tile.army < enemyArmyLimit:
+                        prize = float(tile.army) * enemyArmyFactor
+                        capVal = captureMatrix.raw[tile.tile_index]
+                        prize += capVal
 
         minCost = min(extraCost, minCost)
         minPrize = min(prize, minPrize)

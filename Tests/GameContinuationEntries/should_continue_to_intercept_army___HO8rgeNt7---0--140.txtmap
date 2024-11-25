@@ -38,7 +38,6 @@ bot_is_rapid_capturing_neut_cities=False
 bot_is_blocking_neutral_city_captures=True
 bot_finishing_exploration=False
 bot_targeting_army=8,8
-bot_cur_path=[51 len 3] 11,11 -> 11,10 -> 12,10 -> 13,10
 aUsername=Human.exe
 aTiles=46
 aScore=109

@@ -190,19 +190,17 @@ This allows you to have different bots running on different monitors, etc.
 
     Start-Sleep -Seconds 1
 
-    if (-not `$$($nolog.tostring())) {
-        `$rand = Get-Random -Maximum 100
-        if (`$rand -eq 0) {
-            Get-ChildItem "$logFolder" | 
-                ? { `$_.FullName -notlike '*_chat*' } | 
-                ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-120) } | 
-                Remove-Item -Force -Recurse -ErrorAction Ignore
-            
-            Get-ChildItem "$groupedFolder" -Directory | 
-                ? { `$_.FullName -notlike '*_chat*' } | 
-                ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-120) } |
-                Remove-Item -Force -Recurse -ErrorAction Ignore
-        }
+    `$rand = Get-Random -Maximum 100
+    if (`$rand -eq 0) {
+        Get-ChildItem "$logFolder" | 
+            ? { `$_.FullName -notlike '*_chat*' } | 
+            ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-120) } | 
+            Remove-Item -Force -Recurse -ErrorAction Ignore
+        
+        Get-ChildItem "$groupedFolder" -Directory | 
+            ? { `$_.FullName -notlike '*_chat*' } | 
+            ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-120) } |
+            Remove-Item -Force -Recurse -ErrorAction Ignore
     }
 "@
 
@@ -246,26 +244,54 @@ function Run-SoraAI {
 }
 
 
+
+function Run-SoraAlt {
+    Param(
+        $game = @('1v1', '1v1'),
+        [switch]$public,
+        [switch]$nolog,
+        [int]$sleepMax = 3
+    )
+    while ($true)
+    {
+        $userId = 'soraAlt1Abc'
+        $name = "asdfjk;l :D:D"
+        $time = (Get-Date).TimeOfDay;
+        if ($time -lt ([timespan]'06:00:00')) {
+            $userId = 'soraAlt2Abc'
+            $name = "oaisdnvzsxdfg98"
+        } elseif ($time -lt ([timespan]'12:00:00')) {
+            $userId = 'soraAlt3Abc'
+            $name = "ShowerPower"
+        } elseif ($time -lt ([timespan]'18:00:00')) {
+            $userId = 'soraAlt4Abc'
+            $name = "wsedxbvtioun"
+        }
+
+        # $userId = 'soraAlt1Abc'
+        # $name = "asdfjk;l :D:D"
+        # $userId = 'soraAlt2Abc'
+        # $name = "oaisdnvzsxdfg98"
+        # $userId = 'soraAlt3Abc'
+        # $name = "ShowerPower"
+        # $userId = 'soraAlt4Abc'
+        # $name = "wsedxbvtioun"
+
+        foreach ($g in $game)
+        {
+            run-botonce -game $g -name $name -userID $userId -path "D:\2019_reformat_Backup\Sora_AI\run_bot.py" -public:$public -nolog:$nolog
+            SleepLeastOfTwo -sleepMax $sleepMax
+        }
+    }
+}
+
+
 function Run-SoraAITeammate {
     Param(
     )
     while ($true)
     {
         run-botonce -game 'team' -name "Sora_ai_2" -userID "EKSORA2" -path "D:\2019_reformat_Backup\Sora_AI\run_bot.py" -nolog -public:$public
-    }
-}
-
-
-function Run-Blob {
-    Param(
-        $game = @('ffa')
-    )
-    while ($true)
-    {
-        foreach ($g in $game)
-        {
-            run-botonce -game $g -name "PurdBlob" -path "D:\2019_reformat_Backup\generals-blob-and-path\bot_blob.py" -nolog -noui
-        }
     }
 }
 
@@ -708,12 +734,57 @@ function Start-WindowsTerminalBigFfaBots {
     }
 
     <#
+    ffa only 2
+    #>
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'run-bot -game ffa -name "EklipZ_ai_i2" -right -noui -nolog'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    <#
+    ffa only 3
+    #>
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'run-bot -game ffa -name "EklipZ_ai_i3" -right -noui -nolog'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    <#
+    ffa only 4
+    #>
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'run-bot -game ffa -name "EklipZ_ai_i4" -right -noui -nolog'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    <#
     ffa only
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai" -right'
+        $command = 'run-bot -game ffa -name "EklipZ_ai" -right -nolog'
         try {
             Invoke-Expression $command
         } finally {
@@ -721,7 +792,7 @@ function Start-WindowsTerminalBigFfaBots {
             Start-Sleep -Seconds 1
         }
     }
-    # starts a windows terminal that runs the FFA bots and a second instance of Sora AI that joins 1v1s
+
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
@@ -733,30 +804,7 @@ function Start-WindowsTerminalBigFfaBots {
             Start-Sleep -Seconds 1
         }
     }
-    # time for the terminal window to open
-    start-sleep -seconds 3
-    wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'Run-Path -game ffa'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-    wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'Run-Path -game ffa'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
@@ -768,6 +816,31 @@ function Start-WindowsTerminalBigFfaBots {
             Start-Sleep -Seconds 1
         }
     }
+    
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-Path -game ffa'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-Path -game ffa'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
@@ -835,7 +908,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-Human -right -game ffa -sleepMax 120'
+        $command = 'Run-Human -right -game ffa -sleepMax 120 -nolog'
         try {
             # Invoke-Expression $command
         } finally {
@@ -850,7 +923,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-Human -game team -right -sleepMax 5'
+        $command = 'Run-Human -game team -right -sleepMax 5 -nolog'
         try {
             Invoke-Expression $command
         } finally {
@@ -862,7 +935,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-HumanTeammate -game team -right -sleepMax 60'
+        $command = 'Run-HumanTeammate -game team -right -sleepMax 60 -nolog -noui'
         try {
             Invoke-Expression $command
         } finally {
@@ -874,7 +947,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-Teammate -sleepMax 90 -left'
+        $command = 'Run-Teammate -sleepMax 90 -left -nolog'
         try {
             Invoke-Expression $command
         } finally {
@@ -882,12 +955,39 @@ function Start-WindowsTerminalLiveBots {
             Start-Sleep -Seconds 1
         }
     }
+    # SECOND teammate for local testing:
+    # run-teammate -sleepMax 1 -left -name Teammate2.exe
 
     <# Teammate in team lobby #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-Teammate -sleepMax 1 -left -roomID teammate' 
+        $command = 'Run-Teammate -sleepMax 1 -left -roomID teammate -nolog' 
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    # weak bots
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'run-blob -game 1v1 -sleepMax 120 -name "QueueT" -public'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\";
+        . .\run-bot.ps1;
+        $command = 'run-path -game 1v1 -sleepMax 120 -name "a98i40pwpfah" -public'
         try {
             Invoke-Expression $command
         } finally {
@@ -902,7 +1002,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeCustMap1'
+        $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeCustMap1 -nolog'
         try {
             Invoke-Expression $command
         } finally {
@@ -917,7 +1017,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeCustMap2'
+        $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeCustMap2 -nolog'
         try {
             Invoke-Expression $command
         } finally {
@@ -932,7 +1032,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeAltTiles1'
+        $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeAltTiles1 -nolog'
         try {
             Invoke-Expression $command
         } finally {
@@ -947,7 +1047,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:\2019_reformat_Backup\generals-bot\"; 
         . .\run-bot.ps1;
-        $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeNormal1'
+        $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeNormal1 -nolog'
         try {
             Invoke-Expression $command
         } finally {
@@ -958,6 +1058,72 @@ function Start-WindowsTerminalLiveBots {
 
     # ALT TESTING
     # Run-Human -name 'HaltWhoGoesThere' -game custom -private -sleepMax 1 -roomID Human.exeNormal1
+}
+
+
+
+
+# starts a windows terminal that runs the standard live bots and opens dev tabs
+function Start-WindowsTerminalBotServer2v2Bots {
+    Param(
+    )
+
+    $windowName = 'Bot2v2Bots'
+
+    <#
+    Human 2v2 partners
+    #>
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-Human -game team -right -sleepMax 5 -nolog -botServer'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+
+    # time for the terminal window to open
+    start-sleep -seconds 3
+
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-HumanTeammate -game team -right -sleepMax 10 -nolog -noui -botServer'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-Teammate -sleepMax 10 -left -nolog -botServer'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'Run-Teammate -sleepMax 10 -left -nolog -name Teammate2.exe -botServer'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
 }
 
 
@@ -1061,18 +1227,39 @@ function Start-WindowsTerminalBotServerLiveBots {
 
 function Run-Path {
     Param(
-        $game = @('ffa')
+        $game = @('ffa'),
+        $name = "PurdPath",
+        [switch]$public,
+        [int]$sleepMax = 3
     )
     while ($true)
     {
         foreach ($g in $game)
         {
-            run-botonce -game $g -name "PurdPath" -path "D:\2019_reformat_Backup\generals-blob-and-path\bot_path_collect.py" -nolog -noui
+            run-botonce -game $g -name $name -path "D:\2019_reformat_Backup\generals-blob-and-path\bot_path_collect.py" -nolog -noui -public:$public
+            SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
 }
 
 
+
+function Run-Blob {
+    Param(
+        $game = @('ffa'),
+        $name = "PurdBlob",
+        [switch]$public,
+        [int]$sleepMax = 3
+    )
+    while ($true)
+    {
+        foreach ($g in $game)
+        {
+            run-botonce -game $g -name $name -path "D:\2019_reformat_Backup\generals-blob-and-path\bot_blob.py" -nolog -noui -public:$public
+            SleepLeastOfTwo -sleepMax $sleepMax
+        }
+    }
+}
 
 
 function Run-Bot { 
@@ -1162,19 +1349,22 @@ function Run-Human {
         $roomID = 'getRekt',
         [switch] $left,
         [switch] $private,
+        [switch] $noui,
         [switch] $nolog,
-        $name = 'Human.exe'
+        $name = 'Human.exe',
+        [switch] $botServer
     )
     $splat = @{
-        noui = $false
+        noui = $noui
         right = -not $left
         nolog = $nolog
+        public = -not $botServer
     }
     while ($true)
     {
         foreach ($g in $game)
         {
-            Run-BotOnce -game $g -name $name -roomID $roomID -public @splat -privateGame:$private
+            Run-BotOnce -game $g -name $name -roomID $roomID @splat -privateGame:$private
             SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
@@ -1204,19 +1394,22 @@ function Run-HumanTeammate {
     Param(
         [switch] $left,
         $roomID = 'getRekt',
-        [switch] $nolog
+        [switch] $noui,
+        [switch] $nolog,
+        [switch] $botServer
     )
 
     $splat = @{
-        noui = $false
+        noui = $noui
         right = -not $left
         userID = 'efgHuman.py'
         nolog = $nolog
+        public = -not $botServer
     }
 
     while ($true)
     {
-        Run-BotOnce -game "team" -roomID $roomID -name "Exe.human" -public @splat
+        Run-BotOnce -game "team" -roomID $roomID -name "Exe.human" @splat
     }
 }
 
@@ -1226,20 +1419,29 @@ function Run-Teammate {
         [switch] $left,
         $sleepMax = 120,
         $roomID = 'matchmaking',
-        [switch] $nolog
+        [switch] $noui,
+        [switch] $nolog,
+        $name = "Teammate.exe",
+        [switch] $botServer
     )
 
+    $userId = 'efgBuddy.exe'
+    if ($name -ne 'Teammate.exe') {
+        $userId = "efg$($name)";
+    }
+
     $splat = @{
-        noui = $false
+        noui = $noui
         right = -not $left
-        userID = 'efgBuddy.exe'
+        userID = $userId
         roomID = $roomID
         nolog = $nolog
+        public = -not $botServer
     }
 
     while ($true)
     {
-        Run-BotOnce -game "team" -name "Teammate.exe" -public @splat
+        Run-BotOnce -game "team" -name $name @splat
 
         $sleepTimeA = (Get-Random -Min 0 -Max $sleepMax)
         $sleepTime = $sleepTimeA

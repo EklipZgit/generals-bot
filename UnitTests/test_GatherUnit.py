@@ -17,7 +17,7 @@ class GatherUnitTests(TestBase):
 
         bot.info_render_gather_values = True
         bot.info_render_centrality_distances = True
-        Gather.USE_DEBUG_ASSERTS = True
+        GatherDebug.USE_DEBUG_ASSERTS = True
         DebugHelper.IS_DEBUGGING = True
 
         return bot

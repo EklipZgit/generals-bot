@@ -19,7 +19,7 @@ class GatherCapturePlanTests(TestBase):
         bot.info_render_gather_values = True
         # bot.gather_use_pcst = True
         # bot.info_render_centrality_distances = True
-        Gather.USE_DEBUG_ASSERTS = True
+        GatherDebug.USE_DEBUG_ASSERTS = True
         DebugHelper.IS_DEBUGGING = True
 
         return bot
@@ -278,7 +278,7 @@ player_index=0
                 negativeTiles = set()
                 # this is actually invalid because the tiles werent all contiguous, so turn off debug asserts.
                 # we SHOULD produce a valid plan as output.
-                Gather.USE_DEBUG_ASSERTS = False
+                GatherDebug.USE_DEBUG_ASSERTS = False
                 plan = Gather.convert_contiguous_tile_tree_to_gather_capture_plan(
                     map,
                     rootTiles=rootTiles,

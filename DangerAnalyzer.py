@@ -275,6 +275,9 @@ class DangerAnalyzer(object):
             if army is None:
                 continue
 
+            if army.last_seen_turn < self.map.turn - 15:
+                continue
+
             added = tailLookup.get(threatStart)
 
             for path in army.expectedPaths:
@@ -310,15 +313,19 @@ class DangerAnalyzer(object):
                 if army.tile in threatLookup:
                     continue  # already added
 
+                if army.last_seen_turn < self.map.turn - 15:
+                    continue
+
                 include = False
                 if alwaysIncludeArmy == army:
                     include = True
-                elif alwaysIncludeRecentlyMoved and army.last_moved_turn > self.map.turn - 2:
+                elif alwaysIncludeRecentlyMoved and army.last_moved_turn > self.map.turn - 2 and army.last_seen_turn > self.map.turn - 10:
                     for path in army.expectedPaths:
                         include = True
-                elif includeArmiesWithThreats:
+                elif includeArmiesWithThreats and army.last_seen_turn > self.map.turn - 10:
                     for path in army.expectedPaths:
-                        if sum(map(lambda t: 1 if self.map.is_tile_friendly(t) else 0, path.tileList)) > 3:
+                        posPath = Path.get_positive_subsegment(path, army.player, self.map.team_ids_by_player_index)
+                        if sum(map(lambda t: 1 if self.map.is_tile_friendly(t) else 0, posPath.tileList)) > 3:
                             include = True
                             break
 

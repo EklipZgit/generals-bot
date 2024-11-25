@@ -249,11 +249,11 @@ def _k_prune_reconnect_greedy(
 
         # if liveRenderer:
         #     liveRenderer.view_info.add_stats_line(f'RED = {len(curSet)} iteration start tiles (out of {pruneTo})')
-        #     liveRenderer.view_info.add_map_zone(curSet.copy(), base.Colors.P_DARK_RED, alpha=60)
+        #     liveRenderer.view_info.add_map_zone(curSet.copy(), base.Colors.DARK_RED, alpha=60)
 
         if liveRenderer:
             liveRenderer.view_info.add_stats_line(f'RED = {len(curSet)} reconnect start tiles (out of {pruneTo})')
-            liveRenderer.view_info.add_map_zone(curSet.copy(), base.Colors.P_DARK_RED, alpha=120)
+            liveRenderer.view_info.add_map_zone(curSet.copy(), base.Colors.DARK_RED, alpha=120)
 
         newTiles, forest = _reconnect(
             map,

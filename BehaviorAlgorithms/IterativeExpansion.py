@@ -570,7 +570,7 @@ class ArmyFlowExpander(object):
             else:
                 raise NotImplemented(str(method))
         except Exception as ex:
-            if Gather.USE_DEBUG_ASSERTS and self.log_debug:
+            if GatherDebug.USE_DEBUG_ASSERTS and self.log_debug:
                 self.live_render_invalid_flow_config(islands, graphData.graph, f'{ex}')
             raise
 
@@ -1225,14 +1225,14 @@ class ArmyFlowExpander(object):
                 if plan.length == 0:
                     msg = f'plan had length 0 for {turns} - econValue: {econValue:.2f} | armyRemainingInIncompleteSource: {armyRemainingInIncompleteSource} | unusedSourceArmy: {unusedSourceArmy} | gathedArmySum: {gathedArmySum} | rootNodes: {rootNodes} | incompleteTarget: {incompleteTarget} | incompleteSource: {incompleteSource}'
                     logbook.info(msg)
-                    if Gather.USE_DEBUG_ASSERTS:
+                    if GatherDebug.USE_DEBUG_ASSERTS:
                         raise Exception(msg)
                     continue
 
                 if plan.get_first_move() is None:
                     msg = f'plan wasnt able to produce a first move for {turns} - econValue: {econValue:.2f} | armyRemainingInIncompleteSource: {armyRemainingInIncompleteSource} | unusedSourceArmy: {unusedSourceArmy} | gathedArmySum: {gathedArmySum} | rootNodes: {rootNodes} | incompleteTarget: {incompleteTarget} | incompleteSource: {incompleteSource}'
                     logbook.info(msg)
-                    if Gather.USE_DEBUG_ASSERTS:
+                    if GatherDebug.USE_DEBUG_ASSERTS:
                         raise Exception(msg)
                     continue
 
@@ -2082,7 +2082,7 @@ class ArmyFlowExpander(object):
 
         if incompleteSourceNode:
             tiles = self._find_island_consumed_tiles_from_borders(islandBuilder, incompleteSourceNode, gathing, capping, unusedSourceArmy, incompleteSourceNode.flow_to, negativeTiles)
-            if Gather.USE_DEBUG_ASSERTS and (capping or gathing):
+            if GatherDebug.USE_DEBUG_ASSERTS and (capping or gathing):
                 anyConnected = False
                 for t in tiles:
                     for mv in t.movableNoObstacles:
@@ -2118,7 +2118,7 @@ class ArmyFlowExpander(object):
             incompleteUsedTurns = turns - len(gathing) - len(capping) + 1
             if incompleteUsedTurns > 0:
                 tiles = self._find_island_consumed_tiles_from_borders_by_count(islandBuilder, incompleteTargetNode, gathing, capping, incompleteUsedTurns, incompleteTargetFrom, negativeTiles)
-                if Gather.USE_DEBUG_ASSERTS:
+                if GatherDebug.USE_DEBUG_ASSERTS:
                     anyConnected = False
                     for t in tiles:
                         for mv in t.movableNoObstacles:

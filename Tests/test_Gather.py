@@ -19,7 +19,7 @@ class GatherTests(TestBase):
         bot.info_render_gather_values = True
         # bot.gather_use_pcst = True
         # bot.info_render_centrality_distances = True
-        Gather.USE_DEBUG_ASSERTS = True
+        GatherDebug.USE_DEBUG_ASSERTS = True
         DebugHelper.IS_DEBUGGING = True
 
         return bot
@@ -283,7 +283,7 @@ class GatherTests(TestBase):
                 self.set_general_emergence_around(16, 7, simHost, general.player, enemyGeneral.player, 30)
                 #
                 # bot.info_render_gather_values = False
-                # Gather.USE_DEBUG_ASSERTS = False
+                # GatherDebug.USE_DEBUG_ASSERTS = False
                 # DebugHelper.IS_DEBUGGING = False
                 # self.begin_capturing_logging()
                 # _, _, _, gathers = bot.get_gather_to_target_tiles([enemyGeneral], 0.2, gatherTurns=73)

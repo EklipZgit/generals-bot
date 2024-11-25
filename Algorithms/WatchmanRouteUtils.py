@@ -9,6 +9,7 @@ import logbook
 import networkx
 import networkx as nx
 
+import DebugHelper
 import SearchUtils
 from Algorithms import TravelingSalesmanUtils
 from Interfaces import TileSet, MapMatrixInterface
@@ -34,6 +35,10 @@ def get_watchman_path(map: MapBase, startTile: Tile, toDiscover: typing.Iterable
     startTime = time.perf_counter()
     pivot_wrp = PivotIterativeWRP(startTile, map, set(toDiscover), initialArmy=initialArmy)
     path = pivot_wrp.solve(cutoffTime=startTime + timeLimit)
+
+    if path is None or path.length == 0:
+        return None
+
     return path
 
 
@@ -520,7 +525,10 @@ class PivotWRP:
                 componentWatchers.add(t)
 
             if len(componentWatchers) == 0:
-                raise AssertionError(f'no watchers for {pivot}??? ({repr(pivot)}) - self.map.is_walled_city_game {self.map.is_walled_city_game}, self.map.is_low_cost_city_game {self.map.is_low_cost_city_game}')
+                if DebugHelper.IS_DEBUGGING:
+                    raise AssertionError(f'no watchers for {pivot}??? ({repr(pivot)}) - self.map.is_walled_city_game {self.map.is_walled_city_game}, self.map.is_low_cost_city_game {self.map.is_low_cost_city_game}')
+                logbook.error(f'no watchers for {pivot}??? ({repr(pivot)}) - self.map.is_walled_city_game {self.map.is_walled_city_game}, self.map.is_low_cost_city_game {self.map.is_low_cost_city_game}. Ignoring tile...')
+                continue
 
             frontiers.update(componentWatchers)
             component = PivotComponent(pivot, componentWatchers)

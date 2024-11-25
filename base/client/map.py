@@ -34,6 +34,7 @@ LOOKOUT_RANGE = 2
 WATCHTOWER_RANGE = 4
 
 MAX_ALLY_SPAWN_DISTANCE = 10
+MIN_ALLY_SPAWN_DISTANCE = 3
 
 ENABLE_DEBUG_ASSERTS = False
 
@@ -536,6 +537,41 @@ AttributeError: 'Map' object has no attribute 'grid'
 
         return pow(pow(abs(bestX - x2), 2) + pow(abs(bestY - y2), 2), 0.5)
 
+    def euclidDistExp(self, x: float, y: float, x2: float, y2: float) -> float:
+        """Euclid distance, but no square roots. Only valid for comparison, do not use as actual distances. Faster than map.euclidDist (due to no square root)"""
+        bestX = x
+        bestY = y
+
+        if self.modifiers_by_id[MODIFIER_TORUS]:
+            stdX = abs(x - x2)
+            best = stdX
+            xPlus = abs(x - x2 + self.cols)
+            if xPlus < best:
+                best = xPlus
+                bestX = x + self.cols
+
+            xMinus = abs(x2 - x + self.cols)
+            if xMinus < best:
+                best = xMinus
+                bestX = x - self.cols
+
+            stdY = abs(y - y2)
+            best = stdY
+            yPlus = abs(y - y2 + self.cols)
+            if yPlus < best:
+                best = yPlus
+                bestY = y + self.cols
+
+            yMinus = abs(y2 - y + self.cols)
+            if yMinus < best:
+                best = yMinus
+                bestY = y - self.cols
+
+        if bestX == x2 and bestY == y2:
+            return 0
+
+        return pow(abs(bestX - x2), 2) + pow(abs(bestY - y2), 2)
+
     def euclidDistTile(self, a: Tile, b: Tile) -> float:
         return self.euclidDist(a.x, a.y, b.x, b.y)
 
@@ -578,7 +614,8 @@ AttributeError: 'Map' object has no attribute 'grid'
         last = self.scoreHistory[len(self.scoreHistory) - 1]
         earliest = last
         for i in range(len(self.scoreHistory) - 2, 0, -1):
-            turn = self.turn - i
+            priorTurn = self.turn - i
+            # logbook.info(f'DUMB cityCount i {i} turn {priorTurn}')
             scores = self.scoreHistory[i]
             # print("turn {}".format(turn))
             if earliest is None:
@@ -590,10 +627,11 @@ AttributeError: 'Map' object has no attribute 'grid'
                     tileDelta = score.tiles - lastScore.tiles
 
                     # print("player {} delta {}".format(player.index, delta))
-                    if abs(tileDelta) <= 1 and not self.is_army_bonus_turn:  # ignore army bonus turns and other player captures
+                    if abs(tileDelta) <= 1 and not priorTurn % 50 == 0:  # ignore army bonus turns and other player captures
                         delta = score.total - lastScore.total
-                        if delta > 0:
-                            cityCounts[p] = max(delta, cityCounts[p])
+                        if delta > 0 and delta > cityCounts[p]:
+                            # logbook.info(f'player {p} delta {delta} is new DUMB city count? score.total {score.total} lastScore.total {lastScore.total} turn {priorTurn}')
+                            cityCounts[p] = delta
             last = scores
         self.remainingPlayers = 0
         for i, player in enumerate(self.players):
@@ -1104,36 +1142,44 @@ AttributeError: 'Map' object has no attribute 'grid'
                 if movableTile is not None and movableTile not in tile.movable:
                     if not self.has_misty_veil or (forceMovableCityGenVisible and (movableTile.isCity or movableTile.isGeneral)):
                         tile.adjacents.append(movableTile)
+                        movableTile.visibleTo.append(tile)
                     tile.movable.append(movableTile)
                 movableTile = self.GetTileModifierSafe(x + 1, y)
                 if movableTile is not None and movableTile not in tile.movable:
                     if not self.has_misty_veil or (forceMovableCityGenVisible and (movableTile.isCity or movableTile.isGeneral)):
                         tile.adjacents.append(movableTile)
+                        movableTile.visibleTo.append(tile)
                     tile.movable.append(movableTile)
                 movableTile = self.GetTileModifierSafe(x, y - 1)
                 if movableTile is not None and movableTile not in tile.movable:
                     if not self.has_misty_veil or (forceMovableCityGenVisible and (movableTile.isCity or movableTile.isGeneral)):
                         tile.adjacents.append(movableTile)
+                        movableTile.visibleTo.append(tile)
                     tile.movable.append(movableTile)
                 movableTile = self.GetTileModifierSafe(x, y + 1)
                 if movableTile is not None and movableTile not in tile.movable:
                     if not self.has_misty_veil or (forceMovableCityGenVisible and (movableTile.isCity or movableTile.isGeneral)):
                         tile.adjacents.append(movableTile)
+                        movableTile.visibleTo.append(tile)
                     tile.movable.append(movableTile)
 
                 if not self.has_misty_veil:
                     adjTile = self.GetTileModifierSafe(x - 1, y - 1)
                     if adjTile is not None and adjTile not in tile.adjacents:
                         tile.adjacents.append(adjTile)
+                        adjTile.visibleTo.append(tile)
                     adjTile = self.GetTileModifierSafe(x + 1, y - 1)
                     if adjTile is not None and adjTile not in tile.adjacents:
                         tile.adjacents.append(adjTile)
+                        adjTile.visibleTo.append(tile)
                     adjTile = self.GetTileModifierSafe(x - 1, y + 1)
                     if adjTile is not None and adjTile not in tile.adjacents:
                         tile.adjacents.append(adjTile)
+                        adjTile.visibleTo.append(tile)
                     adjTile = self.GetTileModifierSafe(x + 1, y + 1)
                     if adjTile is not None and adjTile not in tile.adjacents:
                         tile.adjacents.append(adjTile)
+                        adjTile.visibleTo.append(tile)
 
                 if tile.isObservatory:
                     self.ensure_observatory_visibles(tile)
@@ -1150,6 +1196,7 @@ AttributeError: 'Map' object has no attribute 'grid'
 
                 if not MapBase.DO_NOT_RANDOMIZE:
                     random.shuffle(tile.adjacents)
+                    random.shuffle(tile.visibleTo)
                     random.shuffle(tile.movable)
 
         self.update_reachable()
@@ -2905,30 +2952,7 @@ AttributeError: 'Map' object has no attribute 'grid'
         elif not tile.delta.armyMovedHere and isMovedHere:
             tile.delta.armyMovedHere = True
             self.moved_here_set.add(tile)
-    #
-    # def _brute_force_movement(self, candidateMoves: typing.List[typing.Tuple[int, Tile, Tile]]):
-    #     if not candidateMoves:
-    #         return
-    #
-    #     groupedByPlayer = {pIdx: [] for pIdx in range(len(self.players))}
-    #
-    #     if len(candidateMoves) > 20:
-    #         logbook.info(f'bypassing brute force because too many candidate move options...')
-    #
-    #     for candPlayer, fromTile, toTile in candidateMoves:
-    #         mvOpt = groupedByPlayer[candPlayer]
-    #         mvOpt.append((fromTile, toTile))
-    #
-    #     for cross in itertools.product(*all_lists):
-    #         combo = [item for item in cross if item is not None]  # Remove "None" elements
-    #         if combo:  # Ignore the empty list
-    #             print(combo)
-    #     # pIdxs = [0 for i in range(len(self.players))]
-    #     #
-    #     # combs = []
-    #     # anyLeft = True
-    #     # while anyLeft:
-    #     #
+
     def ensure_lookout_visibles(self, curTile: Tile):
         (x, y) = curTile.coords
         for x2 in range(x - LOOKOUT_RANGE, x + LOOKOUT_RANGE + 1):
@@ -2936,6 +2960,8 @@ AttributeError: 'Map' object has no attribute 'grid'
                 t = self.GetTileModifierSafe(x2, y2)
                 if t is not None and t not in curTile.adjacents:
                     curTile.adjacents.append(t)
+                    if curTile not in t.visibleTo:
+                        t.visibleTo.append(curTile)
 
     def ensure_observatory_visibles(self, curTile: Tile):
         (x, y) = curTile.coords
@@ -2946,17 +2972,27 @@ AttributeError: 'Map' object has no attribute 'grid'
             down = self.GetTileModifierSafe(x, y + i)
             if left is not None and left not in curTile.adjacents:
                 curTile.adjacents.append(left)
+                if curTile not in left.visibleTo:
+                    left.visibleTo.append(curTile)
             if right is not None and right not in curTile.adjacents:
                 curTile.adjacents.append(right)
+                if curTile not in right.visibleTo:
+                    right.visibleTo.append(curTile)
             if up is not None and up not in curTile.adjacents:
                 curTile.adjacents.append(up)
+                if curTile not in up.visibleTo:
+                    up.visibleTo.append(curTile)
             if down is not None and down not in curTile.adjacents:
                 curTile.adjacents.append(down)
+                if curTile not in down.visibleTo:
+                    down.visibleTo.append(curTile)
 
     def ensure_normal_visibles(self, curTile: Tile):
         if self.has_misty_veil:
             if curTile not in curTile.adjacents:
                 curTile.adjacents.append(curTile)
+            if curTile not in curTile.visibleTo:
+                curTile.visibleTo.append(curTile)
         else:
             (x, y) = curTile.coords
             for x2 in range(x - 1, x + 2):
@@ -2964,6 +3000,8 @@ AttributeError: 'Map' object has no attribute 'grid'
                     t = self.GetTileModifierSafe(x2, y2)
                     if t is not None and t not in curTile.adjacents:
                         curTile.adjacents.append(t)
+                        if curTile not in t.visibleTo:
+                            t.visibleTo.append(curTile)
 
     def ensure_watchtower_visibles(self, curTile: Tile):
         hasVision = curTile.isCity or curTile.isGeneral
@@ -2984,6 +3022,10 @@ AttributeError: 'Map' object has no attribute 'grid'
 
             vis.discard(curTile.tile_index)
             curTile.adjacents = [self.tiles_by_index[i] for i in vis]
+            for i in vis:
+                t = self.tiles_by_index[i]
+                if curTile not in t.visibleTo:
+                    t.visibleTo.append(curTile)
         else:
             curTile.adjacents = []
             self.ensure_normal_visibles(curTile)

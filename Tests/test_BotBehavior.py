@@ -3023,3 +3023,28 @@ whoever has less extra troops will always get ahead
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
         self.assertNoFriendliesKilled(map, general)
+    
+    def test_should_pull_backwards_3s_after_taking_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_pull_backwards_3s_after_taking_city____vJ88k0wu---0--268__real.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 268, fill_out_tiles=False)
+
+        mapFile = 'GameContinuationEntries/should_pull_backwards_3s_after_taking_city____vJ88k0wu---0--268.txtmap'
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=268)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None  None  None  None  None  None  3,22->3,9->2,9->2,2->0,2->0,3')
+        simHost.queue_player_moves_str(general.player, '2,5->2,6')
+        # proof
+        # simHost.queue_player_moves_str(general.player, '0,15->1,15->1,16->3,16  1,10->1,11->2,11  1,13->1,12->2,12  2,11->2,12->3,12  4,13->3,13  8,5->7,5->7,6  7,7->7,6->5,6->5,5->2,5->2,6  1,6->2,6')
+
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.info_render_gather_matrix_values = True
+        bot.info_render_gather_values = True
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=31)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertOwnedXY(playerMap, 2, 6)

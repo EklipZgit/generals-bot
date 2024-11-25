@@ -199,8 +199,9 @@ class TileIslandBuilder(object):
         self.force_territory_borders_to_single_tile_islands: bool = True
         """If True, any tile that borders a different teams territory will be a single-tile-island. Useful for algorithms that dont safely deal with skews along borders between islands."""
 
+        self.log_debug: bool = False
+
     def recalculate_tile_islands(self, enemyGeneralExpectedLocation: Tile | None, mode: IslandBuildMode = IslandBuildMode.GroupByArmy):
-        logbook.info('recalculate_tile_islands starting')
         start = time.perf_counter()
         self.borders_by_island = {}
         self.tile_islands_by_unique_id = {}
@@ -229,7 +230,7 @@ class TileIslandBuilder(object):
             # if tile not in self.map.reachableTiles:
             #     continue
 
-            existingIsland = self.tile_island_lookup[tile]
+            existingIsland = self.tile_island_lookup.raw[tile.tile_index]
             if existingIsland is not None:
                 continue
 
@@ -272,13 +273,66 @@ class TileIslandBuilder(object):
     def update_tile_islands(self, enemyGeneralExpectedLocation: Tile | None, mode: IslandBuildMode = IslandBuildMode.GroupByArmy):
         # TODO do a partial recalc instead of full rebuild..
         self.recalculate_tile_islands(enemyGeneralExpectedLocation, mode)
-        # logbook.info('update_tile_islands starting')
-        # start = time.perf_counter()
-        # for tile in self.map.get_all_tiles():
-        #     island = self.tile_island_lookup.raw[tile.tile_index]
-        #
-        # complete = time.perf_counter() - start
-        # logbook.info(f'islands updated in {complete:.5f}s')
+        return
+        logbook.info('update_tile_islands starting')
+        start = time.perf_counter()
+
+        for idx, tile in enumerate(self.map.tiles_by_index):
+            if tile.army != tile.delta.oldArmy or self.map.team_ids_by_player_index[tile.player] != self.map.team_ids_by_player_index[tile.delta.oldOwner]:
+                self._split_tile_to_isolated_island_if_necessary(tile)
+
+        # self.log_debug
+        complete = time.perf_counter() - start
+        logbook.info(f'islands updated in {complete:.5f}s')
+
+    def _split_tile_to_isolated_island_if_necessary(self, tile: Tile):
+        existingIsland = self.tile_island_lookup.raw[tile.tile_index]
+        tileTeam = self.map.team_ids_by_player_index[tile.player]
+        changedTeam = existingIsland.team != tileTeam
+        if existingIsland.tile_count > 1 or changedTeam:
+            # then split it to its own island
+            newIsland = TileIsland([tile], tileTeam, 1, tile.army)
+            toUpdateIsland = existingIsland
+            dropTile = True
+            breakAfter = False
+            while toUpdateIsland is not None:
+                if dropTile:
+                    toUpdateIsland.tile_count -= 1
+                    toUpdateIsland.sum_army -= tile.delta.oldArmy
+                    toUpdateIsland.tiles_by_army.remove(tile)
+                else:
+                    toUpdateIsland.sum_army -= tile.delta.oldArmy
+                    toUpdateIsland.sum_army += tile.army
+                    if breakAfter:
+                        break
+
+                toUpdateIsland = toUpdateIsland.full_island
+                if not changedTeam:
+                    dropTile = False
+                    breakAfter = True
+
+        else:
+            if changedTeam:
+                pass
+            else:
+                # update its army in place
+                armyDiff = tile.army - tile.delta.oldArmy
+                existingIsland.sum_army += armyDiff
+        # self.tile_island_lookup
+        # self.all_tile_islands
+        """Does not include unreachable islands"""
+
+        # self.tile_islands_by_player
+        # self.tile_islands_by_team_id
+        # self.tile_islands_by_unique_id
+        # self.large_tile_islands_by_team_id
+        # self.large_tile_island_distances_by_team_id
+        # self._team_stats_by_player
+        # self._team_stats_by_team_id
+        # self.break_apart_neutral_islands
+        # self.borders_by_island
+        """If True, any tile that borders a different teams territory will be a single-tile-island. Useful for algorithms that dont safely deal with skews along borders between islands."""
+
 
     def _build_island_from_tile(self, startTile: Tile, player: int) -> TileIsland:
         teamId = self.teams[player]
@@ -349,7 +403,7 @@ class TileIslandBuilder(object):
                 if movable.isObstacle:
                     continue
 
-                adjIsland = self.tile_island_lookup[movable]
+                adjIsland = self.tile_island_lookup.raw[movable.tile_index]
                 if adjIsland is island:
                     continue
 
@@ -386,7 +440,7 @@ class TileIslandBuilder(object):
             if largestEnemyBorder is None:
                 largestEnemyBorder = island
 
-            sets = bifurcate_set_into_n_contiguous(self.map, largestEnemyBorder.tile_set, island.tile_set, breakIntoSubCount)
+            sets = bifurcate_set_into_n_contiguous(self.map, largestEnemyBorder.tile_set, island.tile_set, breakIntoSubCount, self.log_debug)
             # logbook.info(f'bifurcated {len(island.tile_set)} tiles  into {len(sets)} sets (desired {breakIntoSubCount}, totalTiles {sum(itertools.chain(len(s.set) for s in sets))})')
             for namedTileSet in sets:
                 tileSet = namedTileSet.set
@@ -398,7 +452,7 @@ class TileIslandBuilder(object):
 
                 brokenInto.append(newIsland)
                 for tile in tileSet:
-                    self.tile_island_lookup[tile] = newIsland
+                    self.tile_island_lookup.raw[tile.tile_index] = newIsland
 
             island.child_islands = brokenInto.copy()
 
@@ -426,7 +480,7 @@ class TileIslandBuilder(object):
 
                 brokenUp.append(newIsland)
                 for t in tilesInIsland:
-                    self.tile_island_lookup[t] = newIsland
+                    self.tile_island_lookup.raw[t.tile_index] = newIsland
 
         if len(brokenUp) == 0:
             return [island]
@@ -448,7 +502,8 @@ class TileIslandBuilder(object):
                 newIsland.tile_count_all_adjacent_friendly = island.tile_count_all_adjacent_friendly
                 newIsland.name = f'+{IslandNamer.get_letter()}'
 
-                logbook.info(f'new broken island {newIsland}')
+                if self.log_debug:
+                    logbook.info(f'new broken island {newIsland}')
 
                 brokenUp.append(newIsland)
                 for i in subset:
@@ -550,7 +605,8 @@ class TileIslandBuilder(object):
         self.large_tile_island_distances_by_team_id[team] = distanceToLargeIslandsMap
         self.large_tile_islands_by_team_id[team] = largeIslandSet
 
-        logbook.info(f'LARGE TILE ISLANDS (targetTeam {targetTeam}) ARE {", ".join([str(i) for i in largeIslands])}')
+        if self.log_debug:
+            logbook.info(f'LARGE TILE ISLANDS (targetTeam {targetTeam}) ARE {", ".join([str(i) for i in largeIslands])}')
 
     def get_inner_border_tiles(self, islandWhoseBorderTilesToReturn: TileIsland, islandTilesMustBorder: TileIsland | None = None, skipFriendlyBorders: bool = True) -> typing.Set[Tile]:
         """
@@ -733,7 +789,8 @@ def bifurcate_set_into_n_contiguous(
         map: MapBase,
         startPoints: typing.Set[Tile],
         setToBifurcate: typing.Concatenate[typing.Container[Tile], typing.Iterable[Tile]],
-        numBreaks: int
+        numBreaks: int,
+        logDebug: bool = False
 ) -> typing.List[NamedSet]:
     if len(setToBifurcate) <= numBreaks:
         return [NamedSet({t}, IslandNamer.get_letter()) for t in setToBifurcate]
@@ -847,8 +904,9 @@ def bifurcate_set_into_n_contiguous(
         # these need to be marked back to incomplete or else we can't join them back up again.
         setHolder.complete = False
 
-    logbook.info(
-        f'split {len(setToBifurcate)} tiles into {len(completedSets)} sets of rough size {breakThreshold} in {time.perf_counter() - fullStart:.5f}\r\nRECOMBINING SMALLEST:')
+    if logDebug:
+        logbook.info(
+            f'split {len(setToBifurcate)} tiles into {len(completedSets)} sets of rough size {breakThreshold} in {time.perf_counter() - fullStart:.5f}\r\nRECOMBINING SMALLEST:')
 
     # join small sets to larger
 
@@ -893,7 +951,8 @@ def bifurcate_set_into_n_contiguous(
         reMergedSets.append(NamedSet(actualSet, setHolder.name))
     finalConvertTime = time.perf_counter() - start
 
-    logbook.info(f'bifurcated {len(setToBifurcate)} tiles into {len(reMergedSets)} sets of rough size {breakThreshold} in {time.perf_counter() - fullStart:.5f} (iterations:{iter}, fullIterTime:{fullIterTime:.5f}, timeSpentJoiningResultingSets:{timeSpentJoiningResultingSets:.5f}, timeInUpdateIfWrongCheck:{timeInUpdateIfWrongCheck:.5f}, finalConvertTime:{finalConvertTime:.5f}, buildingNoOptionsTime:{buildingNoOptionsTime:.5f})')
+    if logDebug:
+        logbook.info(f'bifurcated {len(setToBifurcate)} tiles into {len(reMergedSets)} sets of rough size {breakThreshold} in {time.perf_counter() - fullStart:.5f} (iterations:{iter}, fullIterTime:{fullIterTime:.5f}, timeSpentJoiningResultingSets:{timeSpentJoiningResultingSets:.5f}, timeInUpdateIfWrongCheck:{timeInUpdateIfWrongCheck:.5f}, finalConvertTime:{finalConvertTime:.5f}, buildingNoOptionsTime:{buildingNoOptionsTime:.5f})')
 
     return reMergedSets
 

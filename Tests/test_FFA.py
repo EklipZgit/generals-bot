@@ -66,3 +66,32 @@ class FFATests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=35)
         self.assertIsNone(winner)
 
+    def test_should_gather_for_large_attacks_out_of_vision_range_in_rounds(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_gather_for_large_attacks_out_of_vision_range_in_rounds___EklipZ_ai-SUlNa6E3r---7--50.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 50, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=50)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        bot.timings = None
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        # 12 moves minimum to gather out of vision
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertEqual(1, playerMap.GetTile(23, 15).army, 'should have gathered everything')
+        self.assertEqual(1, playerMap.GetTile(22,15).army, 'should have gathered everything')
+        self.assertEqual(1, playerMap.GetTile(22,16).army, 'should have gathered everything')
+        self.assertEqual(1, playerMap.GetTile(22, 17).army, 'should have gathered everything')
+        self.assertEqual(1, playerMap.GetTile(22, 18).army, 'should have gathered everything')
+        self.assertEqual(1, playerMap.GetTile(23, 17).army, 'should have gathered everything')
+        self.assertEqual(1, playerMap.GetTile(23, 18).army, 'should have gathered everything')
+        self.assertEqual(1, playerMap.GetTile(23, 20).army, 'should have gathered everything')
+        self.assertEqual(15, playerMap.players[general.player].tileCount, "should not have captured land")
+

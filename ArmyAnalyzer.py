@@ -349,13 +349,14 @@ class ArmyAnalyzer:
 
         def foreachFunc(tile: Tile, stateObj: typing.Tuple[int, int, Tile | None]) -> typing.Tuple[int, int, Tile | None]:
             dist, interceptMoves, fromTile = stateObj
-            self.interceptChokes[tile] = dist
-            self.interceptDistances[tile] = interceptMoves
+            self.interceptChokes.raw[tile.tile_index] = dist
+            self.interceptDistances.raw[tile.tile_index] = interceptMoves
             # This is what lets us include the tiles 1 away from shortest path, which is good for finding common one-tile-away shared split intercept points
             if tile not in shortestSet:
                 return None
             return dist + 1, interceptMoves + 1, tile
 
+        threatDist = self.shortestPathWay.distance
         startTiles: typing.Dict[Tile, typing.Tuple[int, typing.Tuple[int, int, Tile | None]]] = {}
         """Tile -> (startDist, (prioStartDist, interceptMoves, fromTile))"""
 
@@ -374,7 +375,7 @@ class ArmyAnalyzer:
         furthestZeroChoke = 0
         for zeroChoke in zeroChokes:
             if zeroChoke != self.tileA:
-                dist = self.bMap[zeroChoke]
+                dist = self.bMap.raw[zeroChoke.tile_index]
                 if dist > furthestZeroChoke:
                     furthestZeroChoke = dist
             # normally we can reach a zero choke one turn behind our opponent and be safe.
@@ -385,23 +386,28 @@ class ArmyAnalyzer:
         for zeroChoke in zeroChokes:
             if zeroChoke.isGeneral:
                 # must get to general 1 ahead of opp to be safe
-                self.interceptChokes[zeroChoke] = 1
+                self.interceptChokes.raw[zeroChoke.tile_index] = 1
                 # we must get to a tile next to our general at the same time as opp, no chasing, or we lose on priority. TODO take into account priority?
                 for tile in zeroChoke.movable:
-                    existingVal = self.interceptChokes[tile]
+                    existingVal = self.interceptChokes.raw[tile.tile_index]
                     if existingVal is not None:
-                        self.interceptChokes[tile] = existingVal + 1
+                        self.interceptChokes.raw[tile.tile_index] = existingVal + 1
 
         for icTile in self.map.pathable_tiles:
-            chokeDist = self.interceptChokes[icTile]
+            chokeDist = self.interceptChokes.raw[icTile.tile_index]
             if chokeDist is not None:
-                aDist = self.aMap[icTile]
+                aDist = self.aMap.raw[icTile.tile_index]
+                bDist = self.bMap.raw[icTile.tile_index]
                 # anything above our closest choke, we can move in by 1
                 # if bDist < furthestZeroChoke:
                 #     bDist += 1
-                interceptWorstCaseDist = self.interceptDistances[icTile]
-                interceptTurns = self.shortestPathWay.distance - aDist + 1  # - chokeDist - interceptWorstCaseDist
-                self.interceptTurns[icTile] = interceptTurns
+                interceptWorstCaseDist = self.interceptDistances.raw[icTile.tile_index]
+                interceptTurns = threatDist - aDist + 1  # - chokeDist - interceptWorstCaseDist
+                if bDist >= threatDist:
+                    # we're behind our general
+                    interceptTurns -= bDist - threatDist + 1
+
+                self.interceptTurns.raw[icTile.tile_index] = interceptTurns
 
         self.fix_choke_widths(self.shortestPathWay.tiles)
 

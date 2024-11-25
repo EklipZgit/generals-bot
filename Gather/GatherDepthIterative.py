@@ -1329,9 +1329,9 @@ def knapsack_depth_gather_with_values(
                 priorityObject
         ):
             (
+                realDist,  # realDist is
                 depthDist,
                 threatDist,
-                realDist,  # realDist is
                 negPrioTilesPerTurn,
                 negGatheredSum,
                 negArmySum,
@@ -1362,11 +1362,11 @@ def knapsack_depth_gather_with_values(
                 val = value
 
             prioObj = (val,  # most army
+                       0 - realDist,
                        0 - threatDist,
                        # then by the furthest 'distance' (which when gathering to a path, weights short paths to the top of the path higher which is important)
                        0 - negGatheredSum,  # then by maximum amount gathered...?
                        0 - depthDist,  # furthest distance traveled
-                       realDist,  # then by the real distance
                        # 0 - xSum,
                        # 0 - ySum
                        )
@@ -1383,10 +1383,10 @@ def knapsack_depth_gather_with_values(
         def default_path_value_func(path, valueObj) -> float:
             (
                 value,  # most army
+                negRealDist,  # then by the real distance
                 negThreatDist,
                 gatheredSum,  # then by maximum amount gathered...?
                 negDepthDist,  # furthest distance traveled
-                realDist,  # then by the real distance
             ) = valueObj
 
             if shouldLog or DebugHelper.IS_DEBUGGING:
@@ -1404,9 +1404,9 @@ def knapsack_depth_gather_with_values(
 
         def default_priority_func(nextTile, currentPriorityObject):
             (
+                realDist,
                 depthDist,
                 threatDist,  # CANNOT put threat distance first, or else we block more direct paths with weird paths that try to intercept the target. See test_should_defend_i_guess__lol__how_did_i_break_depth_search_so_badly__longer
-                realDist,
                 negPrioTilesPerTurn,
                 negGatheredSum,
                 negArmySum,
@@ -1441,9 +1441,9 @@ def knapsack_depth_gather_with_values(
             realDist += 1
             depthDist += 1
             prioObj = (
+                realDist,
                 depthDist,
                 threatDist + 1,
-                realDist,
                 0 - numPrioTiles / max(1, realDist),
                 negGatheredSum,
                 negArmySum,
@@ -1483,9 +1483,9 @@ def knapsack_depth_gather_with_values(
                 armyNegSum += tile.army
 
             prioObj = (
+                0,  # realDist
                 startingDist,   # depthDist
                 0 - initialDistance,  # threatDist
-                0,  # realDist
                 0,
                 gathNegSum,  # gath neg
                 armyNegSum,  # army neg
@@ -1497,9 +1497,9 @@ def knapsack_depth_gather_with_values(
             if fromPrio is not None:
                 # return fromPrio
                 (
+                    realDist,
                     depthDist,
                     threatDist,
-                    realDist,
                     negPrioTilesPerTurn,
                     gathNegSum,
                     armyNegSum,
@@ -1513,9 +1513,9 @@ def knapsack_depth_gather_with_values(
                     logEntries.append(f'BASE FROM: {tile} -> {str(fromPrio)}')
 
                 prioObj = (
+                    0, # realdist
                     depthDist,  # 0 = N failed defense tests (backs off to the spot where )
                     threatDist, # if distPriorityMap is not None else 0 ?? allow normal gathers to go back to just happy silly friendly gathering?
-                    0,
                     0,  # negPrioTilesPerTurn,
                     0, # gathNegSum,  # gath neg  # we DONT want to increase the value of gathers from start tiles just based on what THIS start tile had gathered so far, wtf
                     0, # armyNegSum,  # army neg

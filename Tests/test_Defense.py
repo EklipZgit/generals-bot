@@ -2,6 +2,7 @@ import DebugHelper
 import Gather
 from Gather import GatherDebug
 from MapMatrix import MapMatrixSet, MapMatrix
+from Models import Move
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from Sim.TextMapLoader import TextMapLoader
@@ -16,7 +17,7 @@ class DefenseTests(TestBase):
 
         bot.info_render_gather_values = True
         bot.info_render_centrality_distances = True
-        Gather.USE_DEBUG_ASSERTS = True
+        GatherDebug.USE_DEBUG_ASSERTS = False
         DebugHelper.IS_DEBUGGING = True
 
         return bot
@@ -1533,7 +1534,7 @@ class DefenseTests(TestBase):
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=479)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
-        # Gather.USE_DEBUG_ASSERTS = True
+        # GatherDebug.USE_DEBUG_ASSERTS = True
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '15,13->13,13->13,12->11,12->11,9->9,9->9,3->7,3')
         bot = self.get_debug_render_bot(simHost, general.player)
@@ -2290,7 +2291,7 @@ class DefenseTests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '2,13->1,13->1,15->2,15->2,16->8,16->8,15->12,15')
         bot = self.get_debug_render_bot(simHost, general.player)
-        Gather.USE_DEBUG_ASSERTS = False
+        GatherDebug.USE_DEBUG_ASSERTS = False
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -2669,3 +2670,31 @@ class DefenseTests(TestBase):
 # 82f 88p ^ with intercept def hybrid fixed so it actually triggers
 # 85f 85p ^ but flipthingy 0 again
 # 82f 88p ^ reverted
+# 98f 74p threatDist and depthDist swapped
+# 87f 84p realDist moved first
+# 78f 93p value func use realDist    
+    def test_shouldnt_mis_recognize_safe_general_move_as_unsafe(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for path in [
+            'unittest',
+            '2,2->0,2->0,3',
+            '2,2->2,3->0,3',
+        ]:
+            with self.subTest(path=path):
+                mapFile = 'GameContinuationEntries/shouldnt_mis_recognize_safe_general_move_as_unsafe___Human.exe-TEST__d18e4604-ed4e-412b-9ee2-c8c897c7a9be---0--295.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 295, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=295)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+                if path != 'unittest':
+                    simHost.queue_player_moves_str(enemyGeneral.player, path)
+
+                    self.begin_capturing_logging()
+                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+                    self.assertNoFriendliesKilled(map, general)
+                else:
+                    self.assertTrue(bot.is_move_safe_valid(Move(playerMap.GetTile(0, 3), playerMap.GetTile(1, 3))))

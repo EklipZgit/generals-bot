@@ -1194,7 +1194,7 @@ bot_target_player=1
 aTiles=20
 bTiles=20
 """
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
 
         for turn in [0, 1]:
             with self.subTest(turn=turn):
@@ -1224,6 +1224,130 @@ bTiles=20
                 result = armyEngine.scan(3, logEvals=True, mcts=True)
                 if debugMode:
                     self.render_sim_analysis(map, result)
+
+                # b must assume a will attack and block
+                self.assertFalse(result.best_result_state.captured_by_enemy)
+                self.assertFalse(result.best_result_state.captures_enemy)
+
+    def test_engine__detects_basic_forced_move(self):
+        rawMap = """
+|    |    |    |    |    
+          aG1          
+
+     M    M           
+                    b1
+
+
+
+     M         
+     b25  M        
+a25       bG1          
+|    |    |    |    |    
+loadAsIs=True
+player_index=0
+bot_target_player=1
+aTiles=20
+bTiles=20
+"""
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+
+        for turn in [1, 0]:
+            with self.subTest(turn=turn):
+                # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
+                # Both should have half the board if this gens correctly..
+                map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102 + turn)
+                self.ensure_player_tiles_and_scores(map, general, generalTileCount=20)
+
+                self.begin_capturing_logging()
+                aArmy, bArmy = self.get_test_army_tiles(map, general, enemyGen)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+
+                boardAnalysis = BoardAnalyzer(map, general)
+                boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
+
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+
+                simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGen.player)
+
+                mcts: MctsDUCT = MctsDUCT()
+                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts, timeCap=60)
+                # armyEngine.friendly_has_kill_threat = True
+                # armyEngine.enemy_has_kill_threat = True
+                armyEngine.allow_enemy_no_op = True
+                # armyEngine.force_friendly_towards_or_parallel_to = SearchUtils.build_distance_map_matrix_with_skip(map, [enemyGen])
+                armyEngine.allow_friendly_no_op = True
+                baseState = armyEngine.get_base_board_state()
+                self.assertEqual(0, baseState.tile_differential)
+                self.assertEqual(0, baseState.city_differential)
+
+                result = armyEngine.scan(3, logEvals=True, mcts=True)
+                if debugMode:
+                    # self.render_sim_analysis(map, result)
+
+                    self.render_step_engine_analysis(armyEngine, simHost.sim, result, aArmy, bArmy)
+
+                # b must assume a will attack and block
+                self.assertFalse(result.best_result_state.captured_by_enemy)
+                self.assertFalse(result.best_result_state.captures_enemy)
+
+    def test_engine__detects_basic_forced_move__big_tiles(self):
+        rawMap = """
+|    |    |    |    |    
+          aG1          
+
+     M    M           
+                    b1
+
+
+
+     M         
+     b50  M        
+a50       bG1          
+|    |    |    |    |    
+loadAsIs=True
+player_index=0
+bot_target_player=1
+aTiles=20
+bTiles=20
+"""
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+
+        for turn in [1, 0]:
+            with self.subTest(turn=turn):
+                # 5x10 map with gens opposite, both armies near middle, neither can do anything special.
+                # Both should have half the board if this gens correctly..
+                map, general, enemyGen = self.load_map_and_generals_from_string(rawMap, 102 + turn)
+                self.ensure_player_tiles_and_scores(map, general, generalTileCount=20)
+
+                self.begin_capturing_logging()
+                aArmy, bArmy = self.get_test_army_tiles(map, general, enemyGen)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+
+                boardAnalysis = BoardAnalyzer(map, general)
+                boardAnalysis.rebuild_intergeneral_analysis(enemyGen)
+
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+
+                simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGen.player)
+
+                mcts: MctsDUCT = MctsDUCT()
+                armyEngine = ArmyEngine(map, [aArmy], [bArmy], boardAnalysis, mctsRunner=mcts, timeCap=60)
+                # armyEngine.friendly_has_kill_threat = True
+                # armyEngine.enemy_has_kill_threat = True
+                armyEngine.allow_enemy_no_op = True
+                # armyEngine.force_friendly_towards_or_parallel_to = SearchUtils.build_distance_map_matrix_with_skip(map, [enemyGen])
+                armyEngine.allow_friendly_no_op = True
+                baseState = armyEngine.get_base_board_state()
+                self.assertEqual(0, baseState.tile_differential)
+                self.assertEqual(0, baseState.city_differential)
+
+                result = armyEngine.scan(3, logEvals=True, mcts=True)
+                if debugMode:
+                    # self.render_sim_analysis(map, result)
+
+                    self.render_step_engine_analysis(armyEngine, simHost.sim, result, aArmy, bArmy)
 
                 # b must assume a will attack and block
                 self.assertFalse(result.best_result_state.captured_by_enemy)

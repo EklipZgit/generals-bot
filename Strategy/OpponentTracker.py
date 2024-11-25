@@ -1559,6 +1559,7 @@ class OpponentTracker(object):
         return i
 
     def get_approximate_fog_army_risk(self, player: int, cityLimit: int | None = None, inTurns: int = 0) -> int:
+        """Very fast, does not do any searches"""
         stats = self.get_current_cycle_stats_by_player(player)
         if stats is None:
             return 0
@@ -1746,8 +1747,8 @@ class OpponentTracker(object):
             playerArmy = ourStats.score
 
         winningOnArmy = playerArmy + offset >= targetArmy * byRatio
-        logbook.info(
-            f"winning_on_army({byRatio}): playerArmy {playerArmy} >= targetArmy {targetArmy} (weighted {targetArmy * byRatio:.1f}) ?  {winningOnArmy}")
+        # logbook.info(
+        #     f"winning_on_army({byRatio}): playerArmy {playerArmy} >= targetArmy {targetArmy} (weighted {targetArmy * byRatio:.1f}) ?  {winningOnArmy}")
         return winningOnArmy
 
     def get_team_annihilated_fog(self, team: int) -> int:

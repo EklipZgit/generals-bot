@@ -300,6 +300,29 @@ class Path(TilePlanInterface):
         sub.value = val
         return sub
 
+    def get_subsegment_until_visible_to_player(self, players: typing.List[int]) -> Path:
+        # have to offset the first [val - 1] I guess since the first tile didn't get moved to
+        val = 1
+        node = self.start
+        i = 0
+        while node is not None:
+            tile = node.tile
+            shouldBreak = False
+            for vSource in tile.visibleTo:
+                if vSource.player in players:
+                    shouldBreak = True
+                    break
+            if shouldBreak:
+                break
+
+            node = node.next
+            i += 1
+
+        if i <= 1:
+            i = 2
+        sub = self.get_subsegment(i - 1)
+        return sub
+
     def clone(self) -> Path:
         newPath = Path(self.value)
         node = self.start

@@ -85,7 +85,11 @@ class TextMapLoader(object):
             kvpStr = rows[i].strip()
             if not kvpStr:
                 continue
-            key, value = kvpStr.split('=')
+            split = kvpStr.split('=')
+            if len(split) != 2:
+                raise AssertionError(f'kvp line {kvpStr} was invalid')
+
+            key, value = split
             if key in mapData:
                 raise AssertionError(f'key {key} in file twice')
             mapData[key] = value

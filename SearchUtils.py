@@ -17,6 +17,7 @@ from collections import deque
 
 from heapq_max import heappush_max, heappop_max
 
+import DebugHelper
 # from numba import jit, float32, int64
 
 from Interfaces import MapMatrixInterface, TileSet
@@ -1179,7 +1180,7 @@ def breadth_first_dynamic_max(
         ignoreNonPlayerArmy: bool = False,
         ignoreIncrement: bool = True,
         forceOld: bool = False
-):
+) -> Path | None:
     """
     @param map:
     @param startTiles: startTiles dict is (startPriorityObject, distance) = startTiles[tile]
@@ -1440,7 +1441,7 @@ def breadth_first_dynamic_max(
     for tileTuple in maxList:
         tile, prioVal = tileTuple
         if tile is not None:
-            if not noLog:
+            if not noLog and DebugHelper.IS_DEBUGGING:
                 if prioVal is not None:
                     prioStr = '] ['.join(str(x) for x in prioVal)
                     logbook.info(f"  PATH TILE {str(tile)}: Prio [{prioStr}]")

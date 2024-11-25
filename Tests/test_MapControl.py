@@ -14,7 +14,7 @@ class MapControlTests(TestBase):
 
         bot.info_render_gather_values = True
         # bot.info_render_centrality_distances = True
-        Gather.USE_DEBUG_ASSERTS = True
+        GatherDebug.USE_DEBUG_ASSERTS = True
         DebugHelper.IS_DEBUGGING = True
         bot.info_render_expansion_matrix_values = True
         # bot.info_render_general_undiscovered_prediction_values = True

@@ -4990,6 +4990,9 @@ class EklipZBot(object):
             self.is_all_in_losing = False
             return False
 
+        if not self.is_all_in() and self.force_far_gathers:
+            return False
+
         customRatioOffset = 0.0
         if self.is_weird_custom:
             customRatioOffset += 0.03
@@ -9715,8 +9718,14 @@ class EklipZBot(object):
                     if isFfa and self._map.players[threatPlayer].aggression_factor < 50 and not tile.visible:
                         skippedIntercepts.append(tile)
                         continue
+
+                    isCloseThreat = threats[0].turns <= self.target_player_gather_path.length / 4 and self.board_analysis.intergeneral_analysis.aMap.raw[tile.tile_index] < self.target_player_gather_path.length / 2
                     
-                    if isFfa and threatArmy.last_seen_turn < self._map.turn - 5:
+                    if isFfa and threatArmy.last_seen_turn < self._map.turn - 4 and not isCloseThreat:
+                        skippedIntercepts.append(tile)
+                        continue
+
+                    if self._map.turn - threatArmy.last_seen_turn > max(1.0, self.target_player_gather_path.length / 5) and not isCloseThreat:
                         skippedIntercepts.append(tile)
                         continue
 

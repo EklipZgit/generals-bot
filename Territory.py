@@ -11,7 +11,7 @@ import json
 
 import SearchUtils
 from SearchUtils import *
-from test.test_float import INF
+from math import inf as INF
 
 from base.client.map import new_map_grid
 

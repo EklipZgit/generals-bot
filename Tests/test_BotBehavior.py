@@ -1417,7 +1417,7 @@ class BotBehaviorTests(TestBase):
         self.assertPlayerTileCountGreater(simHost, general.player, 76)
     
     def test_should_intercept_army_instead_of_allowing_city_capture(self):
-        # ref D:\KeptGeneralsLogs\almostBeatSpraget_Human.exe-1v1-2023-10-09_01-49-26---6ZAGySdUX
+        # ref D:/KeptGeneralsLogs/almostBeatSpraget_Human.exe-1v1-2023-10-09_01-49-26---6ZAGySdUX
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_intercept_army_instead_of_allowing_city_capture___6ZAGySdUX---1--201.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 201, fill_out_tiles=True)
@@ -1441,7 +1441,7 @@ class BotBehaviorTests(TestBase):
         self.assertEqual(general.player, city.player, "should not have let Spraget capture the city")
     
     def test_should_play_defensive_when_just_recaptured_city(self):
-        # ref D:\KeptGeneralsLogs\almostBeatSpraget_Human.exe-1v1-2023-10-09_01-49-26---6ZAGySdUX
+        # ref D:/KeptGeneralsLogs/almostBeatSpraget_Human.exe-1v1-2023-10-09_01-49-26---6ZAGySdUX
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_play_defensive_when_just_recaptured_city___6ZAGySdUX---1--214.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 214, fill_out_tiles=True)
@@ -1464,7 +1464,7 @@ class BotBehaviorTests(TestBase):
         self.assertGatheredNear(simHost, general.player, 4, 8, 4, requiredAvgTileValue=1.5)
 
     def test_should_detect_incoming_all_in_attack_and_maintain_defense_when_up_on_econ_and_opp_keeps_gathering(self):
-        # ref D:\KeptGeneralsLogs\almostBeatSpraget_Human.exe-1v1-2023-10-09_01-49-26---6ZAGySdUX
+        # ref D:/KeptGeneralsLogs/almostBeatSpraget_Human.exe-1v1-2023-10-09_01-49-26---6ZAGySdUX
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_play_defensive_when_just_recaptured_city___6ZAGySdUX---1--214.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 214, fill_out_tiles=True)

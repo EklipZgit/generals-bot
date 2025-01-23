@@ -228,7 +228,7 @@ class BotHostBase(object):
 
             mapStr = f'{mapStr}\n{ekBotData}'
 
-            mapFilePath = "{}\\{}.txtmap".format(self.eklipz_bot.logDirectory, map.turn)
+            mapFilePath = "{}//{}.txtmap".format(self.eklipz_bot.logDirectory, map.turn)
 
             with open(mapFilePath, 'w') as mapFile:
                 mapFile.write(mapStr)

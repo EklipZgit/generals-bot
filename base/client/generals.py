@@ -387,15 +387,15 @@ class GeneralsClient(object):
                 print("logging????")
                 # for handler in logging.root.handlers[:]:
                 #     logging.root.removeHandler(handler)
-                # logging.basicConfig(format='%(levelname)s:%(message)s', filename='D:\\GeneralsLogs\\' + self._start_data['replay_id'] + '.log', level=logbook.debug)
-                self.logFile = f"{self.logFolder}\\{self.username}-{self.mode}-{self.start_data['replay_id']}.txt"
-                self.chatLogFile = f"{self.logFolder}\\_chat\\{self.username}-{self.mode}-{self.start_data['replay_id']}.txt"
+                # logging.basicConfig(format='%(levelname)s:%(message)s', filename='D://GeneralsLogs//' + self._start_data['replay_id'] + '.log', level=logbook.debug)
+                self.logFile = f"{self.logFolder}//{self.username}-{self.mode}-{self.start_data['replay_id']}.txt"
+                self.chatLogFile = f"{self.logFolder}//_chat//{self.username}-{self.mode}-{self.start_data['replay_id']}.txt"
 
                 logbook.error(f'replay_id:[{self.start_data["replay_id"]}]')
                 print(f'replay_id:[{self.start_data["replay_id"]}]')
 
                 _spawn(self._delayed_chat_thread)
-                os.makedirs(f"{self.logFolder}\\_chat", exist_ok=True)
+                os.makedirs(f"{self.logFolder}//_chat", exist_ok=True)
                 if _LOG_WS:
                     try:
                         with open(self.logFile, "a+") as myfile:

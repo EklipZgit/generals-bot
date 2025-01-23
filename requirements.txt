@@ -19,3 +19,4 @@ heapq_max
 disjoint-set
 unionfind
 logbook
+certifi

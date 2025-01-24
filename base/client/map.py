@@ -465,9 +465,9 @@ class MapBase(object):
 Beginning: calculating general danger / threats (0.0711 in)
 [2024-09-01 17:46:08.952167] INFO: Generic: ------  fastest threat analyzer: depth 16
 Traceback (most recent call last):
-  File "D:\2019_reformat_Backup\generals-bot\base\viewer.py", line 415, in run_main_viewer_loop
+  File "D:/2019_reformat_Backup/generals-bot/base/viewer.py", line 415, in run_main_viewer_loop
     self._drawGrid()
-  File "D:\2019_reformat_Backup\generals-bot\base\viewer.py", line 526, in _drawGrid
+  File "D:/2019_reformat_Backup/generals-bot/base/viewer.py", line 526, in _drawGrid
     tile = self._map.grid[row][column]
            ^^^^^^^^^^^^^^
 AttributeError: 'Map' object has no attribute 'grid'

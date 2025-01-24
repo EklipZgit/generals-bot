@@ -10,7 +10,7 @@ function Run-BotOnce {
         [switch]$privateGame, 
         $roomID = $null,
         [switch]$noui,
-        $path = "$PSScriptRoot\BotHost.py",
+        $path = "$PSScriptRoot/BotHost.py",
         $userID = $null,
         [switch]$nolog,
         [switch]$publicLobby
@@ -38,8 +38,8 @@ function Run-BotOnce {
     $configFile = "$PSScriptRoot/../run_config.txt"
     if (-not (Test-Path $configFile)) {
         throw "Unable to find a run_config.txt file one folder above this scripts folder at $configFile. The file should contain multiple lines with:
-log_folder=D:\GeneralsLogs
-grouped_folder=D:\GeneralsLogs\GroupedLogs
+log_folder=D:/GeneralsLogs
+grouped_folder=D:/GeneralsLogs/GroupedLogs
 left_pos=0
 right_pos=1920
 top_pos=0
@@ -118,7 +118,7 @@ This allows you to have different bots running on different monitors, etc.
     `$cleanName = '$name'.Replace('[', '').Replace(']', '')
     `$logName = "`$cleanName-$game-$df$roomName"
     `$logFile = "`$logName.txt"
-    `$logPath = "$logFolder\`$logFile"
+    `$logPath = "$logFolder/`$logFile"
 
     if (-not `$$($nolog.ToString()))
     {
@@ -206,7 +206,7 @@ This allows you to have different bots running on different monitors, etc.
 
     $randNums = 1..10 | Get-Random -Count 10
     $randName = $randNums -join ''
-    $ps1File = "$PSScriptRoot\..\temp\$randName.ps1"
+    $ps1File = "$PSScriptRoot/../temp/$randName.ps1"
     $exeString | Out-File $ps1File
     Write-Verbose $ps1File -Verbose
     Start-Process Powershell "-File $ps1File" -Wait -NoNewWindow
@@ -237,7 +237,7 @@ function Run-SoraAI {
 
         foreach ($g in $game)
         {
-            run-botonce -game $g -name "Sora AI" -userID $userId -path "D:\2019_reformat_Backup\Sora_AI\run_bot.py" -public:$public -nolog:$nolog
+            run-botonce -game $g -name "Sora AI" -userID $userId -path "D:/2019_reformat_Backup/Sora_AI/run_bot.py" -public:$public -nolog:$nolog
             SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
@@ -279,7 +279,7 @@ function Run-SoraAlt {
 
         foreach ($g in $game)
         {
-            run-botonce -game $g -name $name -userID $userId -path "D:\2019_reformat_Backup\Sora_AI\run_bot.py" -public:$public -nolog:$nolog
+            run-botonce -game $g -name $name -userID $userId -path "D:/2019_reformat_Backup/Sora_AI/run_bot.py" -public:$public -nolog:$nolog
             SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
@@ -291,7 +291,7 @@ function Run-SoraAITeammate {
     )
     while ($true)
     {
-        run-botonce -game 'team' -name "Sora_ai_2" -userID "EKSORA2" -path "D:\2019_reformat_Backup\Sora_AI\run_bot.py" -nolog -public:$public
+        run-botonce -game 'team' -name "Sora_ai_2" -userID "EKSORA2" -path "D:/2019_reformat_Backup/Sora_AI/run_bot.py" -nolog -public:$public
     }
 }
 
@@ -304,8 +304,8 @@ function Start-WindowsTerminalAltBots {
     
     # starts a windows terminal that runs the FFA bots and a second instance of Sora AI that joins 1v1s
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Blob -game ffa'
         try {
             Invoke-Expression $command
@@ -317,8 +317,8 @@ function Start-WindowsTerminalAltBots {
     # time for the terminal window to open
     start-sleep -seconds 3
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Path -game ffa'
         try {
             Invoke-Expression $command
@@ -328,8 +328,8 @@ function Start-WindowsTerminalAltBots {
         }
     }
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Path -game 1v1, ffa'
         try {
             Invoke-Expression $command
@@ -339,8 +339,8 @@ function Start-WindowsTerminalAltBots {
         }
     }
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Blob -game 1v1, ffa'
         try {
             Invoke-Expression $command
@@ -350,8 +350,8 @@ function Start-WindowsTerminalAltBots {
         }
     }
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-SoraAI -game ffa'
         try {
             Invoke-Expression $command
@@ -361,8 +361,8 @@ function Start-WindowsTerminalAltBots {
         }
     }
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-SoraAI -game 1v1,ffa,1v1'
         try {
             Invoke-Expression $command
@@ -386,9 +386,9 @@ function Start-WindowsTerminalHistoricalBots {
     original timings and bugs from 2019, with connection code fixed
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa, 1v1, 1v1, 1v1 -name "EklipZ_ai_14" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-07-24\bot_ek0x45.py'
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        $command = 'run-bot -game ffa, 1v1, 1v1, 1v1 -name "EklipZ_ai_14" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-07-24/bot_ek0x45.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -409,9 +409,9 @@ function Start-WindowsTerminalHistoricalBots {
         Increase army emergence fog distance to 10 from 6, first 3 tiles into undiscovered get same rating
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa, 1v1, 1v1, ffa -name "EklipZ_ai_13" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-07-29\bot_ek0x45.py'
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        $command = 'run-bot -game ffa, 1v1, 1v1, ffa -name "EklipZ_ai_13" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-07-29/bot_ek0x45.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -428,9 +428,9 @@ function Start-WindowsTerminalHistoricalBots {
     play turns 25-50 more aggressively (too aggressively?)
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa, 1v1, ffa, 1v1 -name "EklipZ_ai_12" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-07-31\bot_ek0x45.py'
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        $command = 'run-bot -game ffa, 1v1, ffa, 1v1 -name "EklipZ_ai_12" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-07-31/bot_ek0x45.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -443,9 +443,9 @@ function Start-WindowsTerminalHistoricalBots {
         tile exclusion radius around them to prioritize killing them over gather path gather movement if adequate tile counts are near them.
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa, 1v1, ffa, 1v1 -name "EklipZ_ai_11" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-04\BotHost.py'
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        $command = 'run-bot -game ffa, 1v1, ffa, 1v1 -name "EklipZ_ai_11" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-04/BotHost.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -457,9 +457,9 @@ function Start-WindowsTerminalHistoricalBots {
     semi-optimal first 25, unit tests
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa, 1v1, ffa -name "EklipZ_ai_10" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-07\BotHost.py'
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        $command = 'run-bot -game ffa, 1v1, ffa -name "EklipZ_ai_10" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-07/BotHost.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -474,9 +474,9 @@ function Start-WindowsTerminalHistoricalBots {
     reduced neutral city aggressiveness right before launch timings.
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa, 1v1, ffa -name "EklipZ_ai_09" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-08\BotHost.py'
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        $command = 'run-bot -game ffa, 1v1, ffa -name "EklipZ_ai_09" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-08/BotHost.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -500,9 +500,9 @@ function Start-WindowsTerminalHistoricalBots {
     iterative gather pruning (still sometimes gathers stupid small bits at end for some reason...?)
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa, ffa, 1v1, ffa -name "EklipZ_ai_08" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-26\BotHost.py'
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        $command = 'run-bot -game ffa, ffa, 1v1, ffa -name "EklipZ_ai_08" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-26/BotHost.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -519,9 +519,9 @@ function Start-WindowsTerminalHistoricalBots {
     Dropped file logging.
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa, ffa, 1v1, ffa, 1v1 -name "EklipZ_ai_07" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-09-15\BotHost.py'
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        $command = 'run-bot -game ffa, ffa, 1v1, ffa, 1v1 -name "EklipZ_ai_07" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-09-15/BotHost.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -540,9 +540,9 @@ function Start-WindowsTerminalHistoricalBots {
     found-no-move mcts (need to tune back for historical bots I think)
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa, ffa, 1v1, ffa, 1v1 -name "EklipZ_ai_06" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-10-23\BotHost.py'
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        $command = 'run-bot -game ffa, ffa, 1v1, ffa, 1v1 -name "EklipZ_ai_06" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-10-23/BotHost.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -568,9 +568,9 @@ function Start-WindowsTerminalBigFfaBots {
     original timings and bugs from 2019, with connection code fixed
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_14" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-07-24\bot_ek0x45.py'
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        $command = 'run-bot -game ffa -name "EklipZ_ai_14" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-07-24/bot_ek0x45.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -591,9 +591,9 @@ function Start-WindowsTerminalBigFfaBots {
         Increase army emergence fog distance to 10 from 6, first 3 tiles into undiscovered get same rating
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_13" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-07-29\bot_ek0x45.py'
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        $command = 'run-bot -game ffa -name "EklipZ_ai_13" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-07-29/bot_ek0x45.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -610,9 +610,9 @@ function Start-WindowsTerminalBigFfaBots {
     play turns 25-50 more aggressively (too aggressively?)
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_12" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-07-31\bot_ek0x45.py'
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        $command = 'run-bot -game ffa -name "EklipZ_ai_12" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-07-31/bot_ek0x45.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -625,9 +625,9 @@ function Start-WindowsTerminalBigFfaBots {
         tile exclusion radius around them to prioritize killing them over gather path gather movement if adequate tile counts are near them.
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_11" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-04\BotHost.py'
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        $command = 'run-bot -game ffa -name "EklipZ_ai_11" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-04/BotHost.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -639,9 +639,9 @@ function Start-WindowsTerminalBigFfaBots {
     semi-optimal first 25, unit tests
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_10" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-07\BotHost.py'
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        $command = 'run-bot -game ffa -name "EklipZ_ai_10" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-07/BotHost.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -656,9 +656,9 @@ function Start-WindowsTerminalBigFfaBots {
     reduced neutral city aggressiveness right before launch timings.
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_09" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-08\BotHost.py'
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        $command = 'run-bot -game ffa -name "EklipZ_ai_09" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-08/BotHost.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -682,9 +682,9 @@ function Start-WindowsTerminalBigFfaBots {
     iterative gather pruning (still sometimes gathers stupid small bits at end for some reason...?)
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_08" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-08-26\BotHost.py'
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        $command = 'run-bot -game ffa -name "EklipZ_ai_08" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-26/BotHost.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -701,9 +701,9 @@ function Start-WindowsTerminalBigFfaBots {
     Dropped file logging.
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_07" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-09-15\BotHost.py'
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        $command = 'run-bot -game ffa -name "EklipZ_ai_07" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-09-15/BotHost.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -722,9 +722,9 @@ function Start-WindowsTerminalBigFfaBots {
     found-no-move mcts (need to tune back for historical bots I think)
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_06" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-10-23\BotHost.py'
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        $command = 'run-bot -game ffa -name "EklipZ_ai_06" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-10-23/BotHost.py'
         try {
             Invoke-Expression $command
         } finally {
@@ -737,8 +737,8 @@ function Start-WindowsTerminalBigFfaBots {
     ffa only 2
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'run-bot -game ffa -name "EklipZ_ai_i2" -right -noui -nolog'
         try {
             Invoke-Expression $command
@@ -752,8 +752,8 @@ function Start-WindowsTerminalBigFfaBots {
     ffa only 3
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'run-bot -game ffa -name "EklipZ_ai_i3" -right -noui -nolog'
         try {
             Invoke-Expression $command
@@ -767,8 +767,8 @@ function Start-WindowsTerminalBigFfaBots {
     ffa only 4
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'run-bot -game ffa -name "EklipZ_ai_i4" -right -noui -nolog'
         try {
             Invoke-Expression $command
@@ -827,8 +827,8 @@ function Start-WindowsTerminalBigFfaBots {
     ffa only
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'run-bot -game ffa -name "EklipZ_ai" -right -nolog'
         try {
             Invoke-Expression $command
@@ -839,8 +839,8 @@ function Start-WindowsTerminalBigFfaBots {
     }
 
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Blob -game ffa'
         try {
             Invoke-Expression $command
@@ -851,8 +851,8 @@ function Start-WindowsTerminalBigFfaBots {
     }
 
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Blob -game ffa'
         try {
             Invoke-Expression $command
@@ -863,8 +863,8 @@ function Start-WindowsTerminalBigFfaBots {
     }
     
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Path -game ffa'
         try {
             Invoke-Expression $command
@@ -875,8 +875,8 @@ function Start-WindowsTerminalBigFfaBots {
     }
 
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Path -game ffa'
         try {
             Invoke-Expression $command
@@ -887,8 +887,8 @@ function Start-WindowsTerminalBigFfaBots {
     }
 
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-SoraAI -game ffa'
         try {
             Invoke-Expression $command
@@ -899,8 +899,8 @@ function Start-WindowsTerminalBigFfaBots {
     }
     
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-SoraAI -game ffa'
         try {
             Invoke-Expression $command
@@ -924,9 +924,9 @@ function Start-WindowsTerminalLiveBots {
     dev tab
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        . .\game-result-analysis-utils.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        . ./game-result-analysis-utils.ps1;
     }
 
     # time for the terminal window to open
@@ -936,8 +936,8 @@ function Start-WindowsTerminalLiveBots {
     Human 1v1
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Human -left -game 1v1 -sleepMax 240'
         try {
             Invoke-Expression $command
@@ -951,8 +951,8 @@ function Start-WindowsTerminalLiveBots {
     Human ffa
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Human -right -game ffa -sleepMax 120 -nolog'
         try {
             # Invoke-Expression $command
@@ -966,8 +966,8 @@ function Start-WindowsTerminalLiveBots {
     Human 2v2 partners
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Human -game team -right -sleepMax 5 -nolog'
         try {
             Invoke-Expression $command
@@ -978,8 +978,8 @@ function Start-WindowsTerminalLiveBots {
     }
 
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-HumanTeammate -game team -right -sleepMax 60 -nolog -noui'
         try {
             Invoke-Expression $command
@@ -990,8 +990,8 @@ function Start-WindowsTerminalLiveBots {
     }
 
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Teammate -sleepMax 90 -left -nolog'
         try {
             Invoke-Expression $command
@@ -1005,8 +1005,8 @@ function Start-WindowsTerminalLiveBots {
 
     <# Teammate in team lobby #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Teammate -sleepMax 1 -left -roomID teammate -nolog' 
         try {
             Invoke-Expression $command
@@ -1018,8 +1018,8 @@ function Start-WindowsTerminalLiveBots {
 
     # weak bots
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'run-blob -game 1v1 -sleepMax 120 -name "QueueT" -public'
         try {
             Invoke-Expression $command
@@ -1030,8 +1030,8 @@ function Start-WindowsTerminalLiveBots {
     }
 
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\";
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/";
+        . ./run-bot.ps1;
         $command = 'run-path -game 1v1 -sleepMax 120 -name "a98i40pwpfah" -public'
         try {
             Invoke-Expression $command
@@ -1042,8 +1042,8 @@ function Start-WindowsTerminalLiveBots {
     }
 
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\";
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/";
+        . ./run-bot.ps1;
         $command = 'run-SoraAlt -public -sleepMax 180'
         try {
             Invoke-Expression $command
@@ -1057,8 +1057,8 @@ function Start-WindowsTerminalLiveBots {
     Human in custom lobby with custom maps
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeCustMap1 -nolog'
         try {
             Invoke-Expression $command
@@ -1072,8 +1072,8 @@ function Start-WindowsTerminalLiveBots {
     Human in custom lobby with custom maps
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeCustMap2 -nolog'
         try {
             Invoke-Expression $command
@@ -1087,8 +1087,8 @@ function Start-WindowsTerminalLiveBots {
     Human in custom lobby with alt tiles
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeAltTiles1 -nolog'
         try {
             Invoke-Expression $command
@@ -1102,8 +1102,8 @@ function Start-WindowsTerminalLiveBots {
     Human in custom lobby with normal setup
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeNormal1 -nolog'
         try {
             Invoke-Expression $command
@@ -1131,8 +1131,8 @@ function Start-WindowsTerminalBotServer2v2Bots {
     Human 2v2 partners
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Human -game team -right -sleepMax 5 -nolog -botServer'
         try {
             Invoke-Expression $command
@@ -1147,8 +1147,8 @@ function Start-WindowsTerminalBotServer2v2Bots {
     start-sleep -seconds 3
 
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-HumanTeammate -game team -right -sleepMax 10 -nolog -noui -botServer'
         try {
             Invoke-Expression $command
@@ -1159,8 +1159,8 @@ function Start-WindowsTerminalBotServer2v2Bots {
     }
 
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Teammate -sleepMax 10 -left -nolog -botServer'
         try {
             Invoke-Expression $command
@@ -1171,8 +1171,8 @@ function Start-WindowsTerminalBotServer2v2Bots {
     }
 
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'Run-Teammate -sleepMax 10 -left -nolog -name Teammate2.exe -botServer'
         try {
             Invoke-Expression $command
@@ -1196,8 +1196,8 @@ function Start-WindowsTerminalBotServerLiveBots {
     FFA
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'run-bot -game ffa -name "EklipZ_ai" -right'
         try {
             Invoke-Expression $command
@@ -1214,8 +1214,8 @@ function Start-WindowsTerminalBotServerLiveBots {
     1v1 only
     #>
     wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:\2019_reformat_Backup\generals-bot\";
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/";
+        . ./run-bot.ps1;
         $command = 'run-bot -game 1v1 -name "EklipZ_ai" -right'
         try {
             Invoke-Expression $command
@@ -1229,8 +1229,8 @@ function Start-WindowsTerminalBotServerLiveBots {
     # 1v1 ffa cycler
     # #>
     # wt -w $windowName new-tab pwsh -NoExit -c { 
-    #     cd "D:\2019_reformat_Backup\generals-bot\"; 
-    #     . .\run-bot.ps1;
+    #     cd "D:/2019_reformat_Backup/generals-bot/"; 
+    #     . ./run-bot.ps1;
     #     $command = 'run-bot -game 1v1, 1v1, ffa, 1v1 -name "EklipZ_ai" -right'
     #     try {
     #         Invoke-Expression $command
@@ -1244,18 +1244,18 @@ function Start-WindowsTerminalBotServerLiveBots {
     dev tab
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        . .\game-result-analysis-utils.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        . ./game-result-analysis-utils.ps1;
     }
 
     <#
     private ek 14
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
-        $command = 'run-bot -game 1v1 -name "EklipZ_ai_14" -noui -nolog -path D:\2019_reformat_Backup\generals-bot-historical\generals-bot-2023-07-24\bot_ek0x45.py -privateGame testing'
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
+        $command = 'run-bot -game 1v1 -name "EklipZ_ai_14" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-07-24/bot_ek0x45.py -privateGame testing'
         try {
             Invoke-Expression $command
         } finally {
@@ -1268,8 +1268,8 @@ function Start-WindowsTerminalBotServerLiveBots {
     private live
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:\2019_reformat_Backup\generals-bot\"; 
-        . .\run-bot.ps1;
+        cd "D:/2019_reformat_Backup/generals-bot/"; 
+        . ./run-bot.ps1;
         $command = 'run-bot -game 1v1 -name "EklipZ_ai" -left -privateGame testing'
         try {
             Invoke-Expression $command
@@ -1293,7 +1293,7 @@ function Run-Path {
     {
         foreach ($g in $game)
         {
-            run-botonce -game $g -name $name -path "D:\2019_reformat_Backup\generals-blob-and-path\bot_path_collect.py" -nolog -noui -public:$public
+            run-botonce -game $g -name $name -path "D:/2019_reformat_Backup/generals-blob-and-path/bot_path_collect.py" -nolog -noui -public:$public
             SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
@@ -1312,7 +1312,7 @@ function Run-Blob {
     {
         foreach ($g in $game)
         {
-            run-botonce -game $g -name $name -path "D:\2019_reformat_Backup\generals-blob-and-path\bot_blob.py" -nolog -noui -public:$public
+            run-botonce -game $g -name $name -path "D:/2019_reformat_Backup/generals-blob-and-path/bot_blob.py" -nolog -noui -public:$public
             SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
@@ -1329,7 +1329,7 @@ function Run-Bot {
         $privateGame,  
         $roomID, 
         [switch]$noui,
-        $path = "D:\2019_reformat_Backup\generals-bot\BotHost.py",
+        $path = "D:/2019_reformat_Backup/generals-bot/BotHost.py",
         [switch]$nolog,
         [switch]$publicLobby,
         $sleepMax = 30
@@ -1365,7 +1365,7 @@ function Run-BotCheckpoint {
     )
     $games = $game
     $date = Get-Date -Format 'yyyy-MM-dd'
-    $checkpointLoc = "D:\2019_reformat_Backup\generals-bot-historical\generals-bot-$date"
+    $checkpointLoc = "D:/2019_reformat_Backup/generals-bot-historical/generals-bot-$date"
     Create-Checkpoint -backup $checkpointLoc
 
     while($true)
@@ -1375,11 +1375,11 @@ function Run-BotCheckpoint {
             write-verbose $g -verbose
             $psboundparameters['game'] = $g
             $botFile = "bot_ek0x45.py"
-            if (Test-Path "$checkpointLoc\BotHost.py")
+            if (Test-Path "$checkpointLoc/BotHost.py")
             {
                 $botFile = "BotHost.py"    
             }
-            Run-BotOnce @psboundparameters -path "$checkpointLoc\$botFile"
+            Run-BotOnce @psboundparameters -path "$checkpointLoc/$botFile"
         }
     }
 }
@@ -1387,9 +1387,9 @@ function Run-BotCheckpoint {
 
 function Create-Checkpoint {
     Param(
-        $source = 'D:\2019_reformat_Backup\generals-bot\',
-        $dest = 'D:\2019_reformat_Backup\generals-bot-checkpoint\',
-        $backup = "D:\2019_reformat_Backup\generals-bot-historical\generals-bot-$(Get-Date -Format 'yyyy-MM-dd')"
+        $source = 'D:/2019_reformat_Backup/generals-bot/',
+        $dest = 'D:/2019_reformat_Backup/generals-bot-checkpoint/',
+        $backup = "D:/2019_reformat_Backup/generals-bot-historical/generals-bot-$(Get-Date -Format 'yyyy-MM-dd')"
     )
     if ($backup)
     {

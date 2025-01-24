@@ -3,8 +3,8 @@
 #>
 function Copy-Turn25StartResultsToUnitTest {
     Param(
-        $DestFolder = "D:\2019_reformat_backup\generals-bot\Tests\EarlyExpandUtilsTestMaps\SampleTurn25MapsToTryToBeat",
-        $LogFolder = "D:\GeneralsLogs\GroupedLogs"
+        $DestFolder = "D:/2019_reformat_backup/generals-bot/Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat",
+        $LogFolder = "D:/GeneralsLogs/GroupedLogs"
     )
     
     $items = Get-ChildItem -Path $LogFolder -Recurse -Filter '50.txtmap'
@@ -24,15 +24,15 @@ function Copy-Turn25StartResultsToUnitTest {
             continue
         }
         
-        $item | Copy-Item -Destination "$DestFolder\$newName.txtmap"
+        $item | Copy-Item -Destination "$DestFolder/$newName.txtmap"
     }
 }
 
 
 function Copy-WinMapsToWonMapsDirectory {
     Param(
-        $DestFolder = "D:\2019_reformat_backup\generals-bot\Tests\WonFullMapVisionSampleMaps",
-        $LogFolder = "D:\GeneralsLogs\GroupedLogs"
+        $DestFolder = "D:/2019_reformat_backup/generals-bot/Tests/WonFullMapVisionSampleMaps",
+        $LogFolder = "D:/GeneralsLogs/GroupedLogs"
     )
 
     if (-not (Test-Path $DestFolder))
@@ -121,7 +121,7 @@ function Copy-WinMapsToWonMapsDirectory {
         }
 
         $newName = "$newName---$foundPlayer--$maxFileInt"
-        Copy-Item -Path $maxFilePath -Destination "$DestFolder\$newName.txtmap"
+        Copy-Item -Path $maxFilePath -Destination "$DestFolder/$newName.txtmap"
     }
 }
 
@@ -130,8 +130,8 @@ function Create-ManyTestsByTurnFromFolders {
         $TestNamePrefix = "",
         $TestCategory = "",
         $Turn = 1,
-        $LogFolderRoot = "D:\2019_reformat_backup\bot_logs\",
-        $DestFolderRoot = "D:\2019_reformat_backup\generals-bot\Tests\"
+        $LogFolderRoot = "D:/2019_reformat_backup/bot_logs/",
+        $DestFolderRoot = "D:/2019_reformat_backup/generals-bot/Tests/"
     )
 
     $folders = foreach ($f in Get-ChildItem $LogFolderRoot -Directory)
@@ -159,12 +159,12 @@ function Create-TestContinuingGameFrom {
         [Parameter(Position=1)]
         $TestName = "shouldnt_die_in_some_scenario",
 
-        $DestFolderRoot = "D:\2019_reformat_backup\generals-bot\Tests\"
+        $DestFolderRoot = "D:/2019_reformat_backup/generals-bot/Tests/"
     )
 
     $TestName = $TestName.Replace(' ', '_')
 
-    $destFolder = "$($DestFolderRoot.Replace("\UnitTests\", "\Tests\"))\GameContinuationEntries"
+    $destFolder = "$($DestFolderRoot.Replace("/UnitTests/", "/Tests/"))/GameContinuationEntries"
     if (-not (Test-Path $destFolder))
     {
         mkdir $destFolder -Force
@@ -217,9 +217,9 @@ function Create-TestContinuingGameFrom {
     $newName = ($map.Directory.BaseName -split '---') | Select -Last 1
     $newName = "$newName---$player--$turn"
     $newName = "$($TestName)___$newName.txtmap"
-    $map | Copy-Item -Destination "$DestFolder\$newName" -ErrorAction Stop
+    $map | Copy-Item -Destination "$DestFolder/$newName" -ErrorAction Stop
 
-    $testFile = "$DestFolderRoot\test_$TestCategory.py"
+    $testFile = "$DestFolderRoot/test_$TestCategory.py"
     $testFileContent = Get-Content $testFile -Raw -ErrorAction Stop
 
     $countsByPlayer = @{
@@ -282,7 +282,7 @@ function Create-UnitTestContinuingGameFrom {
         [Parameter(Position=1)]
         $TestName = "shouldnt_die_in_some_scenario",
 
-        $DestFolderRoot = "D:\2019_reformat_backup\generals-bot\UnitTests\"
+        $DestFolderRoot = "D:/2019_reformat_backup/generals-bot/UnitTests/"
     )
 
     Create-TestContinuingGameFrom -TestMapFile $TestMapFile -TestCategory $TestCategory -TestName $TestName -DestFolderRoot $DestFolderRoot

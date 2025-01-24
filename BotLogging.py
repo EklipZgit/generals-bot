@@ -16,7 +16,7 @@ LOGGING_QUEUE = None
 
 def add_file_log_output(botName: str, gameMode: str, replayId: str, logFolder: str | None = None):
     # if logFolder is None:
-    #     logFolder = "D:\\GeneralsLogs"
+    #     logFolder = "D://GeneralsLogs"
     # fileName = f'{botName}-{gameMode}-{replayId}.txt'
     # fileHandler = logging.FileHandler("{0}/__{1}".format(logFolder, fileName))
     # fileHandler.setFormatter(FILE_FORMATTER)
@@ -75,7 +75,7 @@ def set_up_logger(logLevel: int, mainProcess: bool = False, queue = None):
         logbook.info('yo, first log')
 
         # # logging.basicConfig(format='%(message)s', level=logbook.debug, force=True)
-        # # logging.basicConfig(format='%(levelname)s:%(message)s', filename="D:\\GeneralsLogs\\test.txt", level=logbook.debug, force=True)
+        # # logging.basicConfig(format='%(levelname)s:%(message)s', filename="D://GeneralsLogs//test.txt", level=logbook.debug, force=True)
         # rootLogger = logging.getLogger()
         # rootLogger.setLevel(logLevel)
         #
@@ -121,7 +121,7 @@ def get_file_logging_directory(rawBotName: str, replayId: str) -> str:
     fileSafeUserName = fileSafeUserName.replace("[Bot]", "")
     # logbook.info("\n\n\nFILE SAFE USERNAME\n {}\n\n".format(fileSafeUserName))
     logFolder = get_config_log_folder()
-    logDirectory = f"{logFolder}\\{fileSafeUserName}-{replayId}"
+    logDirectory = f"{logFolder}//{fileSafeUserName}-{replayId}"
 
     if not os.path.exists(logDirectory):
         try:

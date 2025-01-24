@@ -1499,7 +1499,7 @@ class GeneralsViewer(object):
 
     def save_image(self):
         try:
-            pygame.image.save(self._screen, f"{self.logDirectory}\\{self._map.turn}.png")
+            pygame.image.save(self._screen, f"{self.logDirectory}//{self._map.turn}.png")
         except:
             logbook.error(traceback.format_exc())
 

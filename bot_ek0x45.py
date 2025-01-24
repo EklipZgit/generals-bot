@@ -919,7 +919,7 @@ class EklipZBot(object):
         self.was_allowing_neutral_cities_last_turn = not self.is_blocking_neutral_city_captures
         self.is_blocking_neutral_city_captures = False
 
-        if self._map.is_2v2:
+        if self._map.is_2v2 or len(self._map.get_teammates_no_self(self._map.player_index)) > 0:
             playerTeam = self._map.teams[self._map.player_index]
             self.teammate = [p for p, t in enumerate(self._map.teams) if t == playerTeam and p != self._map.player_index][0]
             teammatePlayer = self._map.players[self.teammate]
@@ -1317,7 +1317,7 @@ class EklipZBot(object):
         timings = Timings(cycleDuration, quickExpandSplit, gatherSplit, launchTiming, offset, self._map.turn + cycleDuration - correction, disallowEnemyGather)
         timings.is_early_flank_launch = isOurPathAMostlyFogAltPath
 
-        if self._map.is_2v2 and self.teammate_communicator.is_team_lead and self.target_player_gather_path is not None and correction < timings.launchTiming and self._map.turn >= 50:
+        if self.teammate_general is not None and self.teammate_communicator.is_team_lead and self.target_player_gather_path is not None and correction < timings.launchTiming and self._map.turn >= 50:
             self.send_teammate_communication(
                 f'Launch turn {(self._map.turn + timings.launchTiming - correction) // 2} from here:',
                 pingTile=self.target_player_gather_path.start.tile,
@@ -1979,7 +1979,7 @@ class EklipZBot(object):
                 return killMove
 
         defenseCriticalTileSet = set()
-        if self._map.is_2v2 and self.teammate_general is not None and self.teammate_general.player in self._map.teammates:
+        if self.teammate_general is not None and self.teammate_general.player in self._map.teammates:
             for army in self.armyTracker.armies.values():
                 if army.player in self._map.teammates:
                     if army.last_moved_turn > self._map.turn - 3:
@@ -7741,7 +7741,7 @@ class EklipZBot(object):
             isDelayed = interceptingOption.requiredDelay > 0
             # notEnoughDamageBlocked = interceptingOption.damage_blocked < threat.threatValue
             notEnoughDamageBlocked = False
-            armyLeftOver = interceptingOption.intercepting_army_remaining > 0
+            armyLeftOver = threat.threatValue - interceptingOption.friendly_army_reaching_intercept > 0
             if threat.path.tail.tile.isGeneral:
                 if tookTooLong or notEnoughDamageBlocked or armyLeftOver:
                     self.viewInfo.add_info_line(
@@ -7759,17 +7759,24 @@ class EklipZBot(object):
             intOptInfo = f' {interceptingOption}'
         mv = self.get_first_path_move(interceptPath)
         if self.detect_repetition(mv, 6, 3):
-            self.info(f'DEF int REP SKIP... incl{intOptInfo}: long {"T" if tookTooLong else "F"}, notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, {interceptPath}')
+            self.info(f'DEF int REP SKIP... incl{intOptInfo}: long {"T" if tookTooLong else "F"}')
+            self.info(f'    notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, {interceptPath}')
             mv = None
         elif self.detect_repetition(mv, 4, 2):
             self.curPath = interceptPath.get_subsegment(3)
-            self.info(f'DEF int REP incl{intOptInfo}: long {"T" if tookTooLong else "F"}, notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, {interceptPath}')
+            self.info(f'DEF int REP incl{intOptInfo}: long {"T" if tookTooLong else "F"}')
+            self.info(f'    notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, {interceptPath}')
         else:
-            self.info(f'DEF int incl{intOptInfo}: long {"T" if tookTooLong else "F"}, notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, {interceptPath}')
+            self.info(f'DEF int incl{intOptInfo}: long {"T" if tookTooLong else "F"}')
+            self.info(f'    notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, {interceptPath}')
         return mv, interceptPath, interceptingOption, isDelayed
 
     def check_kill_threat_only_defense_interception(self, threat: ThreatObj) -> typing.Tuple[Move | None, Path | None, InterceptionOptionInfo | None, bool]:
         if not threat.path.tail.tile.isGeneral:
+            return None, None, None, False
+
+        if self.get_elapsed() > 0.06:
+            self.viewInfo.add_info_line(f'BYPASSING DEF SOLO int of {threat.path.start.tile}->{threat.path.tail.tile} due to elapsed {self.get_elapsed():.3f}')
             return None, None, None, False
 
         threatInterceptionPlan = self.army_interceptor.get_interception_plan([threat], self._map.remainingCycleTurns)
@@ -7925,8 +7932,8 @@ class EklipZBot(object):
         return None, None, False, bestRemainingDefense
 
     def get_defense_path_option_from_options_if_available(self, threatInterceptionPlan: ArmyInterception, threat: ThreatObj) -> typing.Tuple[InterceptionOptionInfo | None, TilePlanInterface | None]:
-        if not self.expansion_plan.includes_intercept:  # or self.expansion_plan.intercept_waiting
-            return None, None
+        # if not self.expansion_plan.includes_intercept:  # or self.expansion_plan.intercept_waiting
+        #     return None, None
 
         interceptPath = self.expansion_plan.selected_option
         interceptingOption = None
@@ -7936,6 +7943,9 @@ class EklipZBot(object):
                 interceptPath = interceptPath.path
                 if interceptingOption not in threatInterceptionPlan.intercept_options.values():
                     return None, None
+
+        if interceptingOption is None:
+            interceptPath = None
 
         includesIntercept = False
         for delayedInterceptOption in self.expansion_plan.intercept_waiting:
@@ -7947,14 +7957,35 @@ class EklipZBot(object):
                 isDelayed = True
                 break
 
+        if interceptingOption is None:
+            vt = 0
+            at = 0
+            for turns, intercept in threatInterceptionPlan.intercept_options.items():
+                optVt = intercept.econValue / turns
+                optAt = intercept.friendly_army_reaching_intercept / turns
+
+                if optVt > vt:
+                    vt = optVt
+                    at = optAt
+                    self.info(f'{turns}: val/turn {optVt:.2f} > {vt:.2f}, replacing {interceptingOption} with {intercept}')
+                    interceptingOption = intercept
+                    interceptPath = interceptingOption.path
+                elif vt < 1 and optAt > at:
+                    vt = optVt
+                    at = optAt
+                    self.info(f'{turns}: army/turn {optAt:.2f} > {at:.2f} (vt {optVt:.2f} vs {vt:.2f}), replacing {interceptingOption} with {intercept}')
+                    interceptingOption = intercept
+                    interceptPath = interceptingOption.path
+
         if not includesIntercept and interceptingOption in threatInterceptionPlan.intercept_options.values():
-            if interceptingOption.intercepting_army_remaining <= 0:
+            # if interceptingOption.intercepting_army_remaining <= 0:
+            if threat.threatValue - interceptingOption.friendly_army_reaching_intercept < 0:
                 includesIntercept = True
                 interceptingOption = threatInterceptionPlan.get_intercept_option_by_path(interceptPath)
                 if interceptingOption is not None:
                     isDelayed = interceptingOption.requiredDelay > 0
             else:
-                self.viewInfo.add_info_line(f'not safe to intercept w remaining {interceptingOption.intercepting_army_remaining}')
+                self.viewInfo.add_info_line(f'not safe to intercept {threat.threatValue} capture threat w remaining {interceptingOption.friendly_army_reaching_intercept}')
                 return None, None
 
         return interceptPath, interceptingOption

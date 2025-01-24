@@ -197,7 +197,9 @@ class GeneralsClient(object):
         supporterColorSelection = None
         supporterColorSelection = 5
         if self.userid.endswith('_i4'):
-            supporterColorSelection = 15
+            supporterColorSelection = 6
+        if self.userid.endswith('_i3'):
+            supporterColorSelection = 14
 
         if mode == "custom":
             force_start = True

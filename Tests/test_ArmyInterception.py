@@ -2107,22 +2107,28 @@ class ArmyInterceptionTests(TestBase):
     
     def test_should_intercept_preventing_massive_damage(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        for turn in [136, 137]:
-            mapFile = 'GameContinuationEntries/should_intercept_preventing_massive_damage___TbmnknZ-M---1--136.txtmap'
-            map, general, enemyGeneral = self.load_map_and_generals(mapFile, turn, fill_out_tiles=True)
+        for armyOffs in [0, -1, 1, -2, 2]:
+            for turn in [136, 137]:
+                doDebug = debugMode
+                with self.subTest(armyOffs=armyOffs, turn=turn):
+                    for i in range(5):
+                        mapFile = 'GameContinuationEntries/should_intercept_preventing_massive_damage___TbmnknZ-M---1--136.txtmap'
+                        map, general, enemyGeneral = self.load_map_and_generals(mapFile, turn, fill_out_tiles=True)
 
-            rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=turn)
+                        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=turn)
+                        rawMap.GetTile(8, 16).army += armyOffs
 
-            self.enable_search_time_limits_and_disable_debug_asserts()
-            simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-            simHost.queue_player_moves_str(enemyGeneral.player, '8,15->4,15->4,14->2,14->2,17')
-            bot = self.get_debug_render_bot(simHost, general.player)
-            playerMap = simHost.get_player_map(general.player)
+                        self.enable_search_time_limits_and_disable_debug_asserts()
+                        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                        simHost.queue_player_moves_str(enemyGeneral.player, '8,15->4,15->4,14->2,14->2,17')
+                        bot = self.get_debug_render_bot(simHost, general.player)
+                        playerMap = simHost.get_player_map(general.player)
+                        self.begin_capturing_logging()
+                        winner = simHost.run_sim(run_real_time=doDebug, turn_time=0.25, turns=2)
+                        self.assertNoFriendliesKilled(map, general)
+                        self.assertLess(playerMap.players[enemyGeneral.player].score, 45, 'shouldnt have let this army run rampant...')
 
-            self.begin_capturing_logging()
-            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
-            self.assertNoFriendliesKilled(map, general)
-            self.assertOwned(general.player, playerMap.GetTile(6, 15), 'shouldnt have let this army run rampant...')
+                        doDebug = False
 
     def test_should_not_chase_around_obstacles_that_lead_to_death(self):
         for i in range(5):

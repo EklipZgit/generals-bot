@@ -214,7 +214,7 @@ class InterceptionOptionInfo(TilePlanInterface):
         tgTile = 'NONE'
         if self.intercept is not None:
             tgTile = str(self.intercept.target_tile)
-        return f'int {self.path.start.tile}@{tgTile}->{self.path.tail.tile}: {self.econValue:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt) dBlk {self.damage_blocked:.2f}, eRem {self.intercepting_army_remaining}, bct {self.best_case_intercept_moves}, wct {self.worst_case_intercept_moves}, del{self.requiredDelay}'
+        return f'int {self.path.start.tile}@{tgTile}->{self.path.tail.tile}: {self.econValue:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt), re {self.recapture_turns}, dBlk {self.damage_blocked:.2f}, eRem {self.intercepting_army_remaining}, bct {self.best_case_intercept_moves}, wct {self.worst_case_intercept_moves}, del{self.requiredDelay}'
         # else:
         #     return f'int ?@{self.intercept.target_tile}->?: {self.econValue:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt) dBlk {self.damage_blocked:.2f}, eRem {self.intercepting_army_remaining}, bct {self.best_case_intercept_moves}, del{self.requiredDelay}'
 
@@ -897,7 +897,7 @@ class ArmyInterceptor(object):
 
         furthestBackCommonIntercept = max(interception.common_intercept_chokes.keys(), key=lambda t: interception.threats[0].armyAnalysis.bMap[t])
         interception.furthest_common_intercept_distances = self.map.distance_mapper.get_tile_dist_matrix(furthestBackCommonIntercept)
-        threatDistFromCommon = interception.furthest_common_intercept_distances[interception.target_tile]
+        threatDistFromCommon = interception.furthest_common_intercept_distances.raw[interception.target_tile.tile_index]
         longestThreat = max(interception.threats, key=lambda t: t.turns)
         maxDepth = longestThreat.turns + 1
 
@@ -1193,6 +1193,7 @@ class ArmyInterceptor(object):
 
         threatTile = interception.threats[0].path.start.tile
 
+
         def valueFunc(curTile: Tile, prioObj):
             (
                 dist,
@@ -1212,6 +1213,8 @@ class ArmyInterceptor(object):
                 return None
 
             recapVal = 0 - (negTileCapPoints + negArmy)
+
+            a = self.map
 
             return (
                 recapVal,
@@ -1233,7 +1236,7 @@ class ArmyInterceptor(object):
 
             dist += 1
 
-            if interception.furthest_common_intercept_distances[nextTile] > threatDistFromCommon + 1:
+            if interception.furthest_common_intercept_distances.raw[nextTile.tile_index] > threatDistFromCommon + 1:
                 return None
 
             if nextTile.isCity and nextTile.isNeutral:
@@ -1361,12 +1364,12 @@ class ArmyInterceptor(object):
         ) = self._get_result_of_executing_paths_to_intercept_point(interception, best_enemy_threat, interceptPath, turnsLeftInCycle)
         if self.log_debug:
             logbook.info(f'_get_result_of_executing_paths_to_intercept_point {interceptPath}:' +
-                        f'turnsLeft: {turnsLeft}' +
-                        f'armyAccumulatedByInterceptPath: {armyAccumulatedByInterceptPath}' +
-                        f'bestCaseInterceptTurn: {bestCaseInterceptTurn}' +
-                        f'worstCaseInterceptTurn: {worstCaseInterceptTurn}' +
-                        f'enInterceptPointPathNode: {enInterceptPointPathNode}' +
-                        f'enPhysicalArmyAtTile: {enPhysicalArmyAtTile}'
+                        f'\nturnsLeft: {turnsLeft}' +
+                        f'\narmyAccumulatedByInterceptPath: {armyAccumulatedByInterceptPath}' +
+                        f'\nbestCaseInterceptTurn: {bestCaseInterceptTurn}' +
+                        f'\nworstCaseInterceptTurn: {worstCaseInterceptTurn}' +
+                        f'\nenInterceptPointPathNode: {enInterceptPointPathNode}' +
+                        f'\nenPhysicalArmyAtTile: {enPhysicalArmyAtTile}'
             )
 
         enInterceptPointTile = enInterceptPointPathNode.tile
@@ -1503,7 +1506,9 @@ class ArmyInterceptor(object):
         enInterceptPointPathNode = None
         turnsLeft = turnsLeftInCycle  # - 1??? We're tracking the turn the move executes, not the turn the move is played, I suppose thats fine.
         turnsUsed = 0
+        hasPrio = self.map.player_has_priority_over_other(self.map.player_index, best_enemy_threat.threatPlayer, self.map.turn)
         for i, tile in enumerate(interceptPath.tileList):
+            hasPrio = not hasPrio
             if turnsLeft == 0:
                 break
             if enPathNode is None:
@@ -1524,14 +1529,14 @@ class ArmyInterceptor(object):
                     armyAccumulatedByInterceptPath -= tile.army + 1
 
             tilesAtDist = best_enemy_threat.armyAnalysis.tileDistancesLookup.get(i, None)
-            if tilesAtDist:
+            if tilesAtDist and i > 0:
                 allInMovable = len(tilesAtDist) < 4
                 directIntercept = False
                 for t in tilesAtDist:
                     if tile in t.movable:
                         # + 2 because of chase moves...?
                         offs = 1
-                        if not self.map.player_has_priority_over_other(self.map.player_index, best_enemy_threat.threatPlayer, self.map.turn + i):
+                        if not hasPrio:
                             offs += 1
                         bestCaseInterceptTurn = min(bestCaseInterceptTurn, i + offs)
                     elif t == tile:
@@ -1545,7 +1550,7 @@ class ArmyInterceptor(object):
                     worstCaseInterceptTurn = min(i, worstCaseInterceptTurn)
                 elif allInMovable:
                     offs = 1
-                    if not self.map.player_has_priority_over_other(self.map.player_index, best_enemy_threat.threatPlayer, self.map.turn + i):
+                    if not hasPrio:
                         offs += 1
                     worstCaseInterceptTurn = min(i + offs, worstCaseInterceptTurn)
                 else:

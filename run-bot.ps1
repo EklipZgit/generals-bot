@@ -779,6 +779,51 @@ function Start-WindowsTerminalBigFfaBots {
     }
 
     <#
+    ffa only 2
+    #>
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'run-bot -game ffa -name "EklipZ_ai_i2" -right -noui -nolog'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    <#
+    ffa only 3
+    #>
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'run-bot -game ffa -name "EklipZ_ai_i3" -right -noui -nolog'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    <#
+    ffa only 4
+    #>
+    wt -w $windowName new-tab pwsh -NoExit -c { 
+        cd "D:\2019_reformat_Backup\generals-bot\"; 
+        . .\run-bot.ps1;
+        $command = 'run-bot -game ffa -name "EklipZ_ai_i4" -right -noui -nolog'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    <#
     ffa only
     #>
     wt -w $windowName new-tab pwsh -NoExit -c { 

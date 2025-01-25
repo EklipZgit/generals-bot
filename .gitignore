@@ -1,3 +1,9 @@
+# cppimport temp files
+
+.rendered.*.cpp
+*.pyd
+
+
 # Mac DS Store
 .DS_Store
 

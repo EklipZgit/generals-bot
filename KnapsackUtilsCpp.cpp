@@ -46,6 +46,7 @@ PYBIND11_MODULE(KnapsackUtilsCpp, m) {
 }
 /*
 <%
+cfg['extra_compile_args'] = ['/std:c++17']
 setup_pybind11(cfg)
 %>
 */

@@ -1,10 +1,16 @@
-import cppimport.import_hook
+# import cppimport.import_hook
 import logbook
 import math
 import time
 import typing
+import cppimport
 
-from KnapsackUtilsCpp import multiple_choice_knapsack_loop
+kuc = cppimport.imp('KnapsackUtilsCpp')   # Gets WAY further than anything else, I think? But ends up creating a second nested cpp/cpp/ folder and then dies
+# kuc = cppimport.imp_from_filepath('cpp/KnapsackUtilsCpp.cpp')  # fails to load in cppimport\templating.py
+# kuc = cppimport.imp_from_filepath('KnapsackUtilsCpp.cpp')  # ditto
+# kuc = cppimport.imp_from_filepath('./cpp/KnapsackUtilsCpp.cpp')  # ditto
+# kuc = cppimport.imp_from_filepath('D:\\2019_reformat_Backup\\generals-bot\\cpp\\KnapsackUtilsCpp.cpp')  # loads and compiles KnapsackUtilsCpp.cp311-win_amd64.pyd in same cpp folder before dying at ModuleNotFoundError: No module named 'KnapsackUtilsCpp'
+# from KnapsackUtilsCpp import multiple_choice_knapsack_loop
 
 def solve_multiple_choice_knapsack(
         items: typing.List[typing.Any],
@@ -83,7 +89,7 @@ def solve_multiple_choice_knapsack(
     if not noLog:
         logbook.info(f'estimated knapsack time: {estTime:.3f} (n {n} * capacity {capacity} * math.sqrt(maxGroupSize {maxGroupSize}) {maxGrSq:.1f})')
 
-    K = multiple_choice_knapsack_loop(capacity,n,weights,values,groups,K, groupStartEnds)
+    K = kuc.multiple_choice_knapsack_loop(capacity, n, weights, values, groups, K, groupStartEnds)
     
     res = K[n][capacity]
     timeTaken = time.perf_counter() - timeStart

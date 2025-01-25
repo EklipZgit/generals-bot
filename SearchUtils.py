@@ -22,7 +22,7 @@ import DebugHelper
 
 from Interfaces import MapMatrixInterface, TileSet
 from Path import Path
-from test.test_float import INF
+from math import inf as INF
 from base.client.tile import Tile
 from base.client.map import MapBase
 from MapMatrix import MapMatrix, MapMatrixSet

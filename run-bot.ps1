@@ -127,8 +127,8 @@ This allows you to have different bots running on different monitors, etc.
 
     try 
     {
-        #Write-Verbose `"python.exe $path -name $name -g $game $argString`" -verbose
-        python.exe "$path" -name '$name' -g '$game' @arguments 2>&1 
+        #Write-Verbose `"python $path -name $name -g $game $argString`" -verbose
+        python "$path" -name '$name' -g '$game' @arguments 2>&1
     } 
     catch 
     {
@@ -209,7 +209,11 @@ This allows you to have different bots running on different monitors, etc.
     $ps1File = "$PSScriptRoot/../temp/$randName.ps1"
     $exeString | Out-File $ps1File
     Write-Verbose $ps1File -Verbose
-    Start-Process Powershell "-File $ps1File" -Wait -NoNewWindow
+    if ($IsWindows) {
+        Start-Process Powershell "-File $ps1File" -Wait -NoNewWindow
+    } elseif ($IsLinux) {
+        Start-Process pwsh "-File $ps1File" -Wait -NoNewWindow
+    }
     try {
         Remove-Item $ps1File
     }

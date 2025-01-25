@@ -9,7 +9,7 @@ import typing
 import DebugHelper
 import Gather
 from BenchmarkTools import GatherBenchmarker, GatherSort
-from Gather import GatherCapturePlan
+from Gather import GatherCapturePlan, GatherDebug
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from Sim.TextMapLoader import TextMapLoader

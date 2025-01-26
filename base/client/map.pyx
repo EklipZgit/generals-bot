@@ -16,6 +16,7 @@ import random
 import typing
 import uuid
 from collections import deque
+import cython
 
 import BotLogging
 from Interfaces import MapMatrixInterface, TileSet

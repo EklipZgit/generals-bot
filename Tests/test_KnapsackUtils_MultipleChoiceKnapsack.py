@@ -195,7 +195,7 @@ class KnapsackUtils_MCKP_Tests(TestBase):
         self.assertGreater(len(items), 20)
         endTime = time.perf_counter()
         duration = endTime - start
-        self.assertLess(duration, 0.03)
+        self.assertLess(duration, 0.003)
 
     def test_multiple_choice_knapsack_solver__should_not_have_insane_time_complexity__high_item_count_low_group_count(self):
         # envision our worst case gather scenario, lets say a depth 75 gather. We might want to run this 50 times against 200 items from maybe 40 groups each time
@@ -215,7 +215,7 @@ class KnapsackUtils_MCKP_Tests(TestBase):
         self.assertGreater(len(items), 20)
         endTime = time.perf_counter()
         duration = endTime - start
-        self.assertLess(duration, 0.03)
+        self.assertLess(duration, 0.003)
 
     def test_multiple_choice_knapsack_solver__should_not_have_insane_time_complexity__low_item_count_same_group_count(self):
         # TIME PERFORMANCE NOTES:
@@ -245,7 +245,7 @@ class KnapsackUtils_MCKP_Tests(TestBase):
         endTime = time.perf_counter()
         duration = endTime - start
 
-        self.assertLess(duration, 0.15)
+        self.assertLess(duration, 0.015)
 
     # TESTS STOLEN FROM https://github.com/tmarinkovic/multiple-choice-knapsack-problem/blob/master/test/knapsack/MultipleChoiceKnapsackProblemTest.java
     def test_shouldReturnDesiredSolution2(self):

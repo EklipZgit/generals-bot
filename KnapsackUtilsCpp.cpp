@@ -46,7 +46,12 @@ PYBIND11_MODULE(KnapsackUtilsCpp, m) {
 }
 /*
 <%
-cfg['extra_compile_args'] = ['/std:c++17']
+import sys
+compiler_args = {
+    'linux': [],
+    'windows': ['/std:c++17']
+}
+cfg['extra_compile_args'] = compiler_args.get(sys.platform, [])
 setup_pybind11(cfg)
 %>
 */

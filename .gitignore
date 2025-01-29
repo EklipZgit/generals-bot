@@ -102,3 +102,6 @@ ENV/
 
 # Wildcard Ignore
 *_ignore.*
+
+# VsCode
+.vscode/

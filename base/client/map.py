@@ -10,38 +10,35 @@ import itertools
 import json
 from copy import deepcopy
 from base.client.tile import *
-from base.client.tile import Tile
 
 import logbook
 import random
 import typing
 import uuid
 from collections import deque
-import cython
-from libcpp cimport bool as cbool
 
 import BotLogging
 from Interfaces import MapMatrixInterface, TileSet
-MODIFIER_LEAPFROG: int = 0
-MODIFIER_CITY_STATE: int = 1
-MODIFIER_MISTY_VEIL: int = 2
-MODIFIER_CRYSTAL_CLEAR: int = 3
-MODIFIER_SILENT_WAR: int = 4
-MODIFIER_DEFENSELESS: int = 5
-MODIFIER_WATCHTOWER: int = 6
-MODIFIER_TORUS: int = 7
-MODIFIER_CREEPING_FOG: int = 8
+MODIFIER_LEAPFROG = 0
+MODIFIER_CITY_STATE = 1
+MODIFIER_MISTY_VEIL = 2
+MODIFIER_CRYSTAL_CLEAR = 3
+MODIFIER_SILENT_WAR = 4
+MODIFIER_DEFENSELESS = 5
+MODIFIER_WATCHTOWER = 6
+MODIFIER_TORUS = 7
+MODIFIER_CREEPING_FOG = 8
 
-OBSERVATORY_RANGE: int = 7
-LOOKOUT_RANGE: int = 2
-WATCHTOWER_RANGE: int = 4
+OBSERVATORY_RANGE = 7
+LOOKOUT_RANGE = 2
+WATCHTOWER_RANGE = 4
 
-MAX_ALLY_SPAWN_DISTANCE: int = 10
-MIN_ALLY_SPAWN_DISTANCE: int = 3
+MAX_ALLY_SPAWN_DISTANCE = 10
+MIN_ALLY_SPAWN_DISTANCE = 3
 
-ENABLE_DEBUG_ASSERTS: bool = False
+ENABLE_DEBUG_ASSERTS = False
 
-LEFT_GAME_FFA_CAPTURE_LIMIT: int = 50
+LEFT_GAME_FFA_CAPTURE_LIMIT = 50
 """How many turns after an FFA player disconnects that you can capture their gen."""
 
 
@@ -224,7 +221,7 @@ class Score(object):
         return f'p{self.player}{" DEAD" if self.dead else ""} {self.total} {self.tiles}t'
 
 
-cdef class DistanceMapper:
+class DistanceMapper:
     def get_distance_between_or_none(self, tileA: Tile, tileB: Tile) -> int | None:
         raise NotImplementedError()
 
@@ -252,93 +249,9 @@ cdef class DistanceMapper:
         raise NotImplementedError()
 
 
-cdef class MapBase(object):
+class MapBase(object):
     DO_NOT_RANDOMIZE: bool = False
     """Static property to prevent randomizing the tile adjacency matrix."""
-    
-    remainingCycleTurns: cython.int
-    cycleTurn: cython.int
-    distance_mapper: DistanceMapper
-    last_player_index_submitted_move: typing.Optional[typing.Tuple[Tile, Tile, bool]]
-    player_index: cython.int
-    is_2v2: cbool
-    cdef typing.Set[int] teammates
-    cdef typing.Set[Tile] lookouts
-    cdef typing.Set[Tile] observatories
-    cdef typing.Set[Tile] swamps
-    cdef typing.Set[Tile] deserts
-    modifiers_by_id: typing.List[cbool]
-    is_custom_map: cbool
-    use_basic_city_counter: cbool
-    has_leapfrog: cbool
-    has_misty_veil: cbool
-    has_crystal_clear: cbool
-    has_silent_war: cbool
-    has_defenseless: cbool
-    has_watchtower: cbool
-    has_torus: cbool
-    has_creeping_fog: cbool
-    is_low_cost_city_game: cbool
-    is_walled_city_game: cbool
-    walled_city_base_value: cython.int
-    valid_spawns: typing.Optional[typing.Set[Tile]]
-    usernames: typing.List[str]
-    players: typing.List[Player]
-    unique_teams: typing.List[cython.int]
-    teams: typing.Optional[typing.List[cython.int]]
-    team_ids_by_player_index: typing.List[cython.int]
-    _teammates_by_player: typing.List[typing.List[cython.int]]
-    _teammates_by_player_no_self: typing.List[typing.List[cython.int]]
-    _teammates_by_team: typing.List[typing.List[cython.int]]
-    _team_stats: typing.List[typing.Optional[TeamStats]]
-    friendly_team: cython.int
-    pathable_tiles: typing.Set[Tile]
-    reachable_tiles: typing.Set[Tile]
-    visible_tiles: typing.Set[Tile]
-    
-    
-    notify_tile_captures: typing.List
-    notify_tile_deltas: typing.List
-    notify_city_found: typing.List
-    notify_tile_discovered: typing.List
-    notify_tile_vision_changed: typing.List
-    notify_general_revealed: typing.List
-    notify_player_captures: typing.List
-    
-    rows: cython.int
-    cols: cython.int
-    grid: typing.List[typing.List[Tile]]
-    army_moved_grid: typing.List[typing.List[cbool]]
-    army_emergences: typing.Dict[Tile, typing.Tuple[cython.int, cython.int]]
-
-    is_city_bonus_turn: cbool
-    is_army_bonus_turn: cbool
-
-    _turn: cython.int
-
-    # List of 8 Generals (None if not found)
-    generals: typing.Union[Tile, None][16]
-
-    tiles_by_index: typing.List[Tile]
-
-    replay_url: typing.Optional[str]
-    replay_id: typing.Optional[str]
-
-    scores: Score[16]
-
-    complete: cbool
-    
-    result: cbool
-
-    scoreHistory: typing.List[typing.Optional[typing.List[Score]]]
-    remainingPlayers: cython.int
-
-    resume_data: typing.Dict[str, str]
-
-    unexplained_deltas: typing.Mapping[object, cython.int]
-    moved_here_set: typing.Mapping
-
-
 
     def __init__(self,
                  player_index: int,
@@ -348,7 +261,7 @@ cdef class MapBase(object):
                  map_grid_y_x: typing.List[typing.List[Tile]],  # dont need to init movable and stuff
                  replay_url: str,
                  replay_id: typing.Union[None, str] = None,
-                 modifiers: typing.Optional[typing.List[int]] = None
+                 modifiers: typing.List[int] | None = None
                  ):
         # Start Data
         self.remainingCycleTurns: int = 0
@@ -382,7 +295,7 @@ cdef class MapBase(object):
 
         self.is_low_cost_city_game: bool = False
         self.is_walled_city_game: bool = False
-        self.walled_city_base_value: int = 0
+        self.walled_city_base_value: int | None = None
 
         self.valid_spawns: typing.Set[Tile] | None = None
         """When custom maps have pre-defined spawn locations."""

@@ -1,6 +1,3 @@
-import KnapsackUtilsCython
-import time
-import KnapsackUtilsPy
 import random
 import timeit
 
@@ -30,5 +27,6 @@ def main():
         print(f"{cythontime=} {cppimporttime=} {cppimporttime/cythontime=}")
 
 
+# run as python -m Benchmarks.test_Knapsack_Benchmark
 if __name__ == '__main__':
     main()

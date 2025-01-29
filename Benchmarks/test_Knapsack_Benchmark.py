@@ -21,8 +21,8 @@ args = [get_args(i) for i in [2, 3, 10, 50, 100, 500, 1500, 2000]]
 def main():
     for a in args:
         code = f'solve_multiple_choice_knapsack(**{a})' 
-        cythontime = timeit.timeit(code, setup="from KnapsackUtilsCython import solve_multiple_choice_knapsack", number=10)
-        cppimporttime = timeit.timeit(code, setup="from KnapsackUtilsPy import solve_multiple_choice_knapsack", number=10)
+        cythontime = timeit.timeit(code, setup="from KnapsackUtilsCython import solve_multiple_choice_knapsack", number=10)/10
+        cppimporttime = timeit.timeit(code, setup="from KnapsackUtilsPy import solve_multiple_choice_knapsack", number=10)/10
         print(f"{len(a['items'])=}")
         print(f"{cythontime=} {cppimporttime=} {cppimporttime/cythontime=}")
 

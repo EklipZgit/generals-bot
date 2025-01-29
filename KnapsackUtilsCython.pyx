@@ -3,8 +3,6 @@ import math
 import time
 import typing
 import cython
-import numpy as np
-cimport numpy as np
 from cpython cimport array
 import array
 
@@ -123,8 +121,9 @@ cpdef typing.Tuple[int, typing.List[typing.Any]] solve_multiple_choice_knapsack_
     if not noLog:
         logbook.info(f'estimated knapsack time: {estTime:.3f} (n {n} * capacity {capacity} * math.sqrt(maxGroupSize {maxGroupSize}) {maxGrSq:.1f})')
         
-    curCapacity = 0
-    while curCapacity <= capacity:
+    for curCapacity in range(capacity+1):
+    # curCapacity = 0
+    # while curCapacity <= capacity:
         i = 0
         while i <= n:
             if i == 0 or curCapacity == 0:
@@ -145,7 +144,7 @@ cpdef typing.Tuple[int, typing.List[typing.Any]] solve_multiple_choice_knapsack_
             else:
                 arrset(K, n+1, i, curCapacity, arrget(K, n+1, i - 1, curCapacity))
             i += 1
-        curCapacity += 1
+        # curCapacity += 1
     res = arrget(K, n+1, n, capacity)
     timeTaken = time.perf_counter() - timeStart
     if not noLog:
@@ -200,14 +199,6 @@ cpdef typing.Tuple[int, typing.List[typing.Any]] solve_multiple_choice_knapsack_
             f"multiple choice knapsack completed on {n} items for capacity {capacity} finding value {arrget(K, n+1, n, capacity)} in Duration {time.perf_counter() - timeStart:.3f}")
 
     return arrget(K, n+1, n, capacity), includedItems
-
-
-# cdef cython.int arrget(np.ndarray arr, cython.int dim, cython.int i, cython.int j):
-#     return arr[i,j]
-
-# cdef arrset(np.ndarray arr, cython.int dim, cython.int i, cython.int j, cython.int val):
-#     arr[i,j] = val
-    
         
 cdef cython.int arrget(cython.int[:] arr, cython.int dim, cython.int i, cython.int j):
     return arr[j*dim+i]

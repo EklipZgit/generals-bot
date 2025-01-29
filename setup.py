@@ -42,7 +42,6 @@ __version__ = "0.0.1"
 
 extensions = [
     Extension(str(file).removesuffix(".pyx"), [file],
-        include_dirs=["/usr/local/lib64/python3.13/site-packages/numpy/_core/include"],
         extra_compile_args=["-ggdb3"]
     )
     for file in pathlib.Path('.').glob('*pyx')

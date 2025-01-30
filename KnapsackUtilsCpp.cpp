@@ -1,22 +1,50 @@
 // cppimport
+
+/*
+<%
+import sys
+compiler_args = {
+    'linux': ['-std=c++20', '-ggdb3'],
+    'win32': ['/std:c++17']
+}
+cfg['extra_compile_args'] = compiler_args.get(sys.platform, [])
+setup_pybind11(cfg)
+%>
+*/
+
+#define PYBIND11_DETAILED_ERROR_MESSAGES
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <pybind11/chrono.h>
 #include <vector>
+#include <tuple>
+#include <stdexcept>
+#include <cmath>
+#include <chrono>
+#include <pybind11/embed.h>
 
-using IntList = std::vector<int>;
+#define FMTARG(x) py::arg(#x) = (x)
+
+using namespace pybind11::literals;
+namespace py = pybind11;
+
+using IntList = const std::vector<int>;
+
 
 std::vector<std::vector<int>>& multiple_choice_knapsack_loop(
-    size_t capacity,
-    size_t n,
+    int capacity,
+    int n,
     IntList& weights,
     IntList& values,
     IntList& groups,
     std::vector<std::vector<int>>& K,
     std::vector<std::pair<int, int>>& groupStartEnds
 ) {
-    for (int curCapacity = 1; curCapacity < capacity + 1; ++curCapacity) {
-        for (size_t i = 1; i < n+1; ++i) {
-            if (weights[i - 1] <= curCapacity) {
+    for (int curCapacity = 0; curCapacity < capacity + 1; ++curCapacity) {
+        for (int i = 0; i < n+1; ++i) {
+            if (i == 0 || curCapacity == 0) {
+                K[i][curCapacity] = 0;
+            } else if (weights[i - 1] <= curCapacity) {
                 int sub_max = 0;
                 int prev_group = groups[i-1] - 1;
                 int subKRow = curCapacity - weights[i - 1];
@@ -37,23 +65,157 @@ std::vector<std::vector<int>>& multiple_choice_knapsack_loop(
     return K;
 }
 
+std::tuple<int, std::vector<py::object>> solve_multiple_choice_knapsack(
+    const std::vector<py::object>& items,
+    int capacity,
+    const std::vector<int>& weights,
+    const std::vector<int>& values,
+    const std::vector<int>& groups,
+    bool noLog = true,
+    double longRuntimeThreshold = 0.005)
+{
+    py::object logbook_info = py::module_::import("logbook").attr("info");
+
+    using namespace std::chrono;
+    auto timeStart = high_resolution_clock::now();
+    
+    if (groups.empty() || groups[0] != 0) {
+        throw std::invalid_argument("Groups must start with 0 and increment by one for each new group.");
+    }
+    
+    std::vector<std::pair<int, int>> groupStartEnds;
+    int lastGroup = -1, lastGroupIndex = 0, maxGroupSize = 0, curGroupSize = 0;
+    for (size_t i = 0; i < groups.size(); ++i) {
+        int group = groups[i];
+        if (group > lastGroup) {
+            if (curGroupSize > maxGroupSize) maxGroupSize = curGroupSize;
+            if (lastGroup > -1) groupStartEnds.emplace_back(lastGroupIndex, i);
+            if (group > lastGroup + 1) throw std::invalid_argument("Groups must be contiguous.");
+            lastGroupIndex = i;
+            lastGroup = group;
+            curGroupSize = 0;
+        }
+        curGroupSize++;
+    }
+    groupStartEnds.emplace_back(lastGroupIndex, groups.size());
+    if (curGroupSize > maxGroupSize) maxGroupSize = curGroupSize;
+    
+    int n = values.size();
+    std::vector<std::vector<int>> K(n + 1, std::vector<int>(capacity + 1, 0));
+
+    double maxGrSq = std::sqrt(maxGroupSize);
+    double estTime = n * capacity * std::sqrt(maxGroupSize) * 0.00000022;
+    if (maxGroupSize == n) estTime = n * capacity * 0.00000022;
+    
+    if (estTime > longRuntimeThreshold) {
+        throw std::runtime_error("Knapsack potential long run detected");
+    }
+
+    if (!noLog) {
+        logbook_info("estimated knapsack time: {estTime:.3f} (n {n} * capacity {capacity} * math.sqrt(maxGroupSize {maxGroupSize}) {maxGrSq:.1f})"_s.format(**py::dict(FMTARG(estTime), FMTARG(n), FMTARG(maxGroupSize), FMTARG(capacity), FMTARG(maxGrSq))));
+    }
+
+    for (int curCapacity = 0; curCapacity < capacity + 1; ++curCapacity) {
+        for (size_t i = 0; i < n+1; ++i) {
+            if (i == 0 || curCapacity == 0) {
+                K[i][curCapacity] = 0;
+            } else if (weights[i - 1] <= curCapacity) {
+                int sub_max = 0;
+                int prev_group = groups[i-1] - 1;
+                int subKRow = curCapacity - weights[i - 1];
+                if (prev_group >= 0) {
+                    auto [prevGroupStart, prevGroupEnd] = groupStartEnds[prev_group];
+                    for (int j = prevGroupStart + 1; j < prevGroupEnd + 1; ++j) {
+                        if (groups[j - 1] == prev_group && K[j][subKRow] > sub_max) {
+                            sub_max = K[j][subKRow];
+                        }
+                    }
+                }
+                K[i][curCapacity] = std::max(sub_max + values[i - 1], K[i - 1][curCapacity]);
+            } else {
+                K[i][curCapacity] = K[i - 1][curCapacity];
+            }
+        }
+    }
+
+    int res = K[n][capacity];
+
+    if (!noLog) {
+        auto timeTaken = high_resolution_clock::now() - timeStart;
+        logbook_info("Value Found {res} in {timeTaken}"_s.format(**py::dict("res"_a=res, "timeTaken"_a=timeTaken)));
+    }
+
+    std::vector<py::object> includedItems;
+    std::vector<int> includedGroups;
+    int w = capacity, lastTakenGroup = -1;
+    for (int i = n; i > 0 && res > 0; --i) {
+        if (w < 0) {
+            auto errmsg = "w < 0 in knapsack items determiner?? res {res} i {i} w {w}"_s.format(**py::dict(FMTARG(res), FMTARG(i), FMTARG(w))).cast<std::string>();
+            PyErr_SetString(PyExc_AssertionError, errmsg.c_str());
+            throw py::error_already_set();
+        }
+
+        // either the result comes from the
+        // top (K[i-1][w]) or from (val[i-1]
+        // + K[i-1] [w-wt[i-1]]) as in Knapsack
+        // table. If it comes from the latter
+        // one/ it means the item is included.
+        // THIS IS WHY VALUE MUST BE INTS
+        if (res == K[i - 1][w]) continue;
+
+        int group = groups[i - 1];
+        if (group == lastTakenGroup) continue;
+        includedGroups.push_back(group);
+        lastTakenGroup = group;
+        includedItems.push_back(items[i - 1]);
+        if (!noLog) {
+            logbook_info("item at index {i-1} with value {values[i-1]} and weight {weights[i-1]} was included... adding it to output. (Res {res})"_s.format(**py::dict("values"_a=py::dict(FMTARG(i-1)), "weights"_a=py::dict(FMTARG(i-1)), FMTARG(res), FMTARG(i-1))));
+        }
+        res -= values[i - 1];
+        w -= weights[i - 1];
+    }
+    return {K[n][capacity], includedItems};
+}
+
+std::tuple<int, std::vector<py::object>> solve_knapsack(
+    const std::vector<py::object>& items,
+    int capacity,
+    const std::vector<int>& weights,
+    const std::vector<int>& values)
+{
+    int n = items.size();
+    std::vector<std::vector<int>> K(n + 1, std::vector<int>(capacity + 1, 0));
+    for (int i = 0; i <= n; ++i) {
+        for (int w = 0; w <= capacity; ++w) {
+            if (i == 0 || w == 0) {
+                K[i][w] = 0;
+            } else if (weights[i - 1] <= w) {
+                K[i][w] = std::max(values[i - 1] + K[i - 1][w - weights[i - 1]], K[i - 1][w]);
+            } else {
+                K[i][w] = K[i - 1][w];
+            }
+        }
+    }
+    
+    int res = K[n][capacity];
+    std::vector<py::object> includedItems;
+    int w = capacity;
+    for (int i = n; i > 0 && res > 0; --i) {
+        if (res == K[i - 1][w]) continue;
+        includedItems.push_back(items[i - 1]);
+        res -= values[i - 1];
+        w -= weights[i - 1];
+    }
+    return {K[n][capacity], includedItems};
+}
+
 PYBIND11_MODULE(KnapsackUtilsCpp, m) {
     m.doc() = "multiple_choice_knapsack_loop native"; // optional module docstring
 
     m.def("multiple_choice_knapsack_loop", &multiple_choice_knapsack_loop, "multiple_choice_knapsack_loop native");
+    m.def("solve_multiple_choice_knapsack", &solve_multiple_choice_knapsack, "items"_a, "capacity"_a, "weights"_a, "values"_a, "groups"_a, "noLog"_a, "longRuntimeThreshold"_a);
+    m.def("solve_knapsack", &solve_knapsack);
 }
-/*
-<%
-import sys
-compiler_args = {
-    'linux': [],
-    'win32': ['/std:c++17']
-}
-cfg['extra_compile_args'] = compiler_args.get(sys.platform, [])
-setup_pybind11(cfg)
-%>
-*/
-
 
 /*
 def solve_multiple_choice_knapsack(

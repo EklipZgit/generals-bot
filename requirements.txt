@@ -23,3 +23,5 @@ certifi
 
 cppimport
 cython
+pandas
+tqdm

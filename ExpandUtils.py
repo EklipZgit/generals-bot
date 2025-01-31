@@ -444,6 +444,7 @@ def get_round_plan_with_expansion(
                 postPathEvalFunction,
                 originalNegativeTiles,
                 tryAvoidSet,
+                perfTimer,
                 viewInfo,
                 valueOverrides,
                 leafMoves)
@@ -461,6 +462,7 @@ def get_round_plan_with_expansion(
                 postPathEvalFunction,
                 originalNegativeTiles,
                 tryAvoidSet,
+                perfTimer,
                 viewInfo,
                 valueOverrides,
                 leafMoves)
@@ -2029,6 +2031,7 @@ def knapsack_multi_paths(
         postPathEvalFunction: typing.Callable[[Path, typing.Set[Tile]], float],
         negativeTiles: typing.Set[Tile],
         tryAvoidSet: typing.Set[Tile],
+        perfTimer: PerformanceTimer,
         viewInfo: ViewInfo | None,
         valueOverrides: typing.Dict[TilePlanInterface, typing.Tuple[float, int]] | None = None,
         leafMoves: typing.List[Move] | None = None,
@@ -2047,58 +2050,64 @@ def knapsack_multi_paths(
     @param postPathEvalFunction:
     @param negativeTiles:
     @param tryAvoidSet:
+    @param perfTimer:
     @param viewInfo:
     @param valueOverrides: path->(value, dist)
     @param leafMoves: optionally include leafMoves. Will be used to backfill any gaps in the knapsack
     @return:
     """
     startTime = time.perf_counter()
-    tilePathGroupsRebuilt: typing.Dict[int, typing.List[TilePlanInterface]] = _group_expand_paths_by_crossovers(
-        pathsCrossingTiles,
-        multiPathDict,
-        groupPruneThreshold=min(remainingTurns, 20))
+    with perfTimer.begin_move_event(f'_group_expand_paths_by_crossovers multiPathStartTiles {len(multiPathDict)}, crossedTiles {len(pathsCrossingTiles)}'):
+        tilePathGroupsRebuilt: typing.Dict[int, typing.List[TilePlanInterface]] = _group_expand_paths_by_crossovers(
+            pathsCrossingTiles,
+            multiPathDict,
+            groupPruneThreshold=min(remainingTurns, 20))
 
-    allPaths = []
-    combinedTurnLengths = 0
-    groupsWithPaths = 0
-    for grp, paths in tilePathGroupsRebuilt.items():
-        if len(paths) > 0:
-            groupsWithPaths += 1
+    with perfTimer.begin_move_event(f'input prep after _group_expand_paths_by_crossovers'):
+        allPaths = []
+        combinedTurnLengths = 0
+        groupsWithPaths = 0
+        for grp, paths in tilePathGroupsRebuilt.items():
+            if len(paths) > 0:
+                groupsWithPaths += 1
 
-    for tile in multiPathDict.keys():
-        pathValues = multiPathDict[tile].values()
-        for val, p in pathValues:
-            allPaths.append((val, p))
-            combinedTurnLengths += p.length
-    logbook.info(
-        f'EXP MULT KNAP {groupsWithPaths} grps, {len(allPaths)} paths, {remainingTurns} turns, combinedPathLengths {combinedTurnLengths} (used {time.perf_counter() - startTime:.4f}s):')
-    startTime = time.perf_counter()
-    if DebugHelper.IS_DEBUGGING:
-        for val, p in allPaths:
-            dist = p.length
-            if valueOverrides is not None:
-                tpl = valueOverrides.get(p, None)
-                if tpl is not None:
-                    floatVal, dist = tpl
-            logbook.info(f'    INPUT {val:.2f} dist {dist}: {str(p)}')
+        for tile in multiPathDict.keys():
+            pathValues = multiPathDict[tile].values()
+            for val, p in pathValues:
+                allPaths.append((val, p))
+                combinedTurnLengths += p.length
+        logbook.info(
+            f'EXP MULT KNAP {groupsWithPaths} grps, {len(allPaths)} paths, {remainingTurns} turns, combinedPathLengths {combinedTurnLengths} (used {time.perf_counter() - startTime:.4f}s):')
+        startTime = time.perf_counter()
+        if DebugHelper.IS_DEBUGGING:
+            for val, p in allPaths:
+                dist = p.length
+                if valueOverrides is not None:
+                    tpl = valueOverrides.get(p, None)
+                    if tpl is not None:
+                        floatVal, dist = tpl
+                logbook.info(f'    INPUT {val:.2f} dist {dist}: {str(p)}')
 
-    enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed, visited = extract_paths_from_knapsack_groups(
-        map,
-        searchingPlayer,
-        friendlyPlayers,
-        targetPlayers,
-        remainingTurns,
-        tilePathGroupsRebuilt,
-        negativeTiles,
-        postPathEvalFunction,
-        territoryMap,
-        tryAvoidSet,
-        valueOverrides,
-        leafMoves)
+    with perfTimer.begin_move_event(f'MCKP multi-path run'):
+        enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed, visited = extract_paths_from_knapsack_groups(
+            map,
+            searchingPlayer,
+            friendlyPlayers,
+            targetPlayers,
+            remainingTurns,
+            tilePathGroupsRebuilt,
+            negativeTiles,
+            postPathEvalFunction,
+            territoryMap,
+            tryAvoidSet,
+            valueOverrides,
+            perfTimer,
+            leafMoves)
 
-    logbook.info(
-        f'MEXPX en{enemyCapped} neut{neutralCapped} {turnsUsed}/{remainingTurns}t {totalValue}v num paths {len(maxPaths)} (used {time.perf_counter() - startTime:.4f}s)')
-    otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, negativeTiles) / pa.length, reverse=True)]
+    with perfTimer.begin_move_event(f'post-MCKP path conversion / postPathEvalFunction'):
+        logbook.info(
+            f'MEXPX en{enemyCapped} neut{neutralCapped} {turnsUsed}/{remainingTurns}t {totalValue}v num paths {len(maxPaths)} (used {time.perf_counter() - startTime:.4f}s)')
+        otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, negativeTiles) / pa.length, reverse=True)]
 
     return path, otherPaths, turnsUsed, neutralCapped, enemyCapped, totalValue
 
@@ -2134,6 +2143,7 @@ def knapsack_multi_paths_no_crossover(
         postPathEvalFunction: typing.Callable[[Path, typing.Set[Tile]], float],
         negativeTiles: typing.Set[Tile],
         tryAvoidSet: typing.Set[Tile],
+        perfTimer: PerformanceTimer,
         viewInfo: ViewInfo | None,
         valueOverrides: typing.Dict[TilePlanInterface, typing.Tuple[float, int]] | None = None,
         leafMoves: typing.List[Move] | None = None
@@ -2166,67 +2176,70 @@ def knapsack_multi_paths_no_crossover(
     # group cityPaths by first tile captured, instead
     cityPaths = {}
 
-    for tile, pathsByDist in multiPathDict.items():
-        if len(pathsByDist) == 0:
-            continue
-
-        groupsWithPaths += 1
-        groupPaths = []
-
-        for dist, pathTuple in pathsByDist.items():
-            val, p = pathTuple
-
-            # if (tile.isCity or tile.isGeneral) and p.length < 5:
-            if (tile.isCity or tile.isGeneral) and dist < remainingTurns // 2:
-                # if coming from a city, group by the first tile captured instead of by the city itself...?
-                groupTile = tile
-                for t in p.tileSet:
-                    if not map.is_player_on_team_with(tile.player, t.player):
-                        groupTile = t
-                        break
-
-                existingGroup = groups.get(groupTile, [])
-                existingGroup.append(p)
-
-                groups[groupTile] = existingGroup
-
+    with perfTimer.begin_move_event(f'no crossover group builder multiPathStartTiles {len(multiPathDict)}, crossedTiles {len(pathsCrossingTiles)} (unused)'):
+        for tile, pathsByDist in multiPathDict.items():
+            if len(pathsByDist) == 0:
                 continue
 
-            groupPaths.append(p)
+            groupsWithPaths += 1
+            groupPaths = []
 
-        groups[tile] = groupPaths
+            for dist, pathTuple in pathsByDist.items():
+                val, p = pathTuple
 
-    combinedTurnLengths = 0
-    for tile in multiPathDict.keys():
-        pathValues = multiPathDict[tile].values()
-        for val, p in pathValues:
-            allPaths.append((val, p))
-            combinedTurnLengths += p.length
-    logbook.info(
-        f'EXP MULT NO CROSS KNAP {groupsWithPaths} grps, {len(allPaths)} paths, {remainingTurns} turns, combinedPathLengths {combinedTurnLengths} (used {time.perf_counter() - startTime:.4f}s):')
-    startTime = time.perf_counter()
-    if DebugHelper.IS_DEBUGGING:
-        for val, p in allPaths:
-            logbook.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
+                # if (tile.isCity or tile.isGeneral) and p.length < 5:
+                if (tile.isCity or tile.isGeneral) and dist < remainingTurns // 2:
+                    # if coming from a city, group by the first tile captured instead of by the city itself...?
+                    groupTile = tile
+                    for t in p.tileSet:
+                        if not map.is_player_on_team_with(tile.player, t.player):
+                            groupTile = t
+                            break
 
-    enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed, visited = extract_paths_from_knapsack_groups(
-        map,
-        searchingPlayer,
-        friendlyPlayers,
-        targetPlayers,
-        remainingTurns,
-        groups,
-        negativeTiles,
-        postPathEvalFunction,
-        territoryMap,
-        tryAvoidSet,
-        valueOverrides,
-        leafMoves)
+                    existingGroup = groups.get(groupTile, [])
+                    existingGroup.append(p)
 
-    logbook.info(
-        f'MEXPNX en{enemyCapped} neut{neutralCapped} {turnsUsed}/{remainingTurns}t {totalValue}v num paths {len(maxPaths)} (used {time.perf_counter() - startTime:.4f}s)')
+                    groups[groupTile] = existingGroup
 
-    otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, negativeTiles) / pa.length, reverse=True)]
+                    continue
+
+                groupPaths.append(p)
+
+            groups[tile] = groupPaths
+
+        combinedTurnLengths = 0
+        for tile in multiPathDict.keys():
+            pathValues = multiPathDict[tile].values()
+            for val, p in pathValues:
+                allPaths.append((val, p))
+                combinedTurnLengths += p.length
+        logbook.info(
+            f'EXP MULT NO CROSS KNAP {groupsWithPaths} grps, {len(allPaths)} paths, {remainingTurns} turns, combinedPathLengths {combinedTurnLengths} (used {time.perf_counter() - startTime:.4f}s):')
+        startTime = time.perf_counter()
+        if DebugHelper.IS_DEBUGGING:
+            for val, p in allPaths:
+                logbook.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
+
+    with perfTimer.begin_move_event(f'extract_paths_from_knapsack_groups'):
+        enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed, visited = extract_paths_from_knapsack_groups(
+            map,
+            searchingPlayer,
+            friendlyPlayers,
+            targetPlayers,
+            remainingTurns,
+            groups,
+            negativeTiles,
+            postPathEvalFunction,
+            territoryMap,
+            tryAvoidSet,
+            valueOverrides,
+            perfTimer,
+            leafMoves)
+
+        logbook.info(
+            f'MEXPNX en{enemyCapped} neut{neutralCapped} {turnsUsed}/{remainingTurns}t {totalValue}v num paths {len(maxPaths)} (used {time.perf_counter() - startTime:.4f}s)')
+
+        otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, negativeTiles) / pa.length, reverse=True)]
 
     return path, otherPaths, turnsUsed, neutralCapped, enemyCapped, totalValue
 
@@ -2243,40 +2256,45 @@ def extract_paths_from_knapsack_groups(
         territoryMap,
         tryAvoidSet,
         valueOverrides,
+        perfTimer: PerformanceTimer,
         leafMoves: typing.List[Move],
 ):
-    valFunc = get_multiple_choice_expansion_knapsack_val_converter(valueOverrides, postPathEvalFunction, negativeTiles)
+    with perfTimer.begin_move_event('get_multiple_choice_expansion_knapsack_val_converter'):
+        valFunc = get_multiple_choice_expansion_knapsack_val_converter(valueOverrides, postPathEvalFunction, negativeTiles)
 
-    totalValue, maxPaths = expansion_knapsack_gather_iteration(
-        remainingTurns,
-        groups,
-        shouldLog=DebugHelper.IS_DEBUGGING,
-        valueFunc=valFunc
-    )
+    with perfTimer.begin_move_event('expansion_knapsack_gather_iteration'):
+        totalValue, maxPaths = expansion_knapsack_gather_iteration(
+            remainingTurns,
+            groups,
+            shouldLog=DebugHelper.IS_DEBUGGING,
+            valueFunc=valFunc
+        )
 
-    path = find_optimal_expansion_path_to_move_first(
-        map,
-        maxPaths,
-        tryAvoidSet,
-        negativeTiles,
-        postPathEvalFunction,
-        remainingTurns,
-        searchingPlayer,
-        friendlyPlayers,
-        territoryMap,
-        valueOverrides)
+    with perfTimer.begin_move_event('find_optimal_expansion_path_to_move_first'):
+        path = find_optimal_expansion_path_to_move_first(
+            map,
+            maxPaths,
+            tryAvoidSet,
+            negativeTiles,
+            postPathEvalFunction,
+            remainingTurns,
+            searchingPlayer,
+            friendlyPlayers,
+            territoryMap,
+            valueOverrides)
 
-    otherPaths = [p for p in maxPaths if p != path]
+        otherPaths = [p for p in maxPaths if p != path]
 
-    turnsUsed, enemyCapped, neutralCapped, visited = _get_capture_counts(
-        searchingPlayer,
-        friendlyPlayers,
-        targetPlayers,
-        path,
-        otherPaths,
-        negativeTiles,
-        valueOverrides,
-        leafMoves)
+    with perfTimer.begin_move_event('_get_capture_counts'):
+        turnsUsed, enemyCapped, neutralCapped, visited = _get_capture_counts(
+            searchingPlayer,
+            friendlyPlayers,
+            targetPlayers,
+            path,
+            otherPaths,
+            negativeTiles,
+            valueOverrides,
+            leafMoves)
 
     return enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed, visited
 

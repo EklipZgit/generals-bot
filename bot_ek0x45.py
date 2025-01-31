@@ -5687,7 +5687,7 @@ class EklipZBot(object):
         if self.targetPlayer == -1 and self._map.remainingPlayers > 2 and not self._map.is_2v2:
             # To avoid launching out into the middle of the FFA, just return the general tile and the next tile in the path as the path.
             # this sort of triggers camping-city-taking behavior at the moment.
-            fakeGenPath = path.get_subsegment(1)
+            fakeGenPath = path.get_subsegment(11)
             logbook.info(f"FakeGenPath because FFA: {str(fakeGenPath)}")
             return fakeGenPath
 

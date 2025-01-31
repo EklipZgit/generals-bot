@@ -73,6 +73,8 @@ class CaptureLineTracker(object):
             longVal = 0.0
 
             for opt in opts:
+                if opt.length == 0:
+                    continue
                 optVt = opt.econValue / opt.length
                 timeToFirstCap = -1
                 turn = 0

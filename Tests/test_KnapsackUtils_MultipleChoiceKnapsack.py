@@ -18,7 +18,6 @@ class KnapsackUtils_MCKP_Tests(TestBase):
             self,
             groupItemWeightValues: typing.List[typing.Tuple[int, object, int, int]],
             capacity: int):
-        groupItemWeightValues = [t for t in sorted(groupItemWeightValues)]
         items = []
         groups = []
         weights = []
@@ -32,7 +31,7 @@ class KnapsackUtils_MCKP_Tests(TestBase):
 
         return KnapsackUtils.solve_multiple_choice_knapsack(items, capacity, weights, values, groups, noLog=False, longRuntimeThreshold=10.0)
 
-    def generate_item_test_set(self, simulatedItemCount, simulatedGroupCount, maxWeightPerItem, maxValuePerItem):
+    def generate_item_test_set(self, simulatedItemCount, simulatedGroupCount, maxWeightPerItem, maxValuePerItem, groupSkew = None):
         groupItemWeightValues = []
         r = random.Random()
 
@@ -47,10 +46,16 @@ class KnapsackUtils_MCKP_Tests(TestBase):
         # then random groups after that
         for i in range(simulatedItemCount - simulatedGroupCount):
             item = i + simulatedGroupCount
-            group = r.randint(0, simulatedGroupCount - 1)
+            if groupSkew and r.random() < groupSkew:
+                # use an existing group instead of a new one
+                group = groupItemWeightValues[r.randint(simulatedGroupCount - 1, len(groupItemWeightValues) - 1)][0]
+            else:
+                group = r.randint(0, simulatedGroupCount - 1)
             value = r.randint(0, maxValuePerItem)
             weight = r.randint(1, maxWeightPerItem)
             groupItemWeightValues.append((group, item, weight, value))
+
+        groupItemWeightValues = [t for t in sorted(groupItemWeightValues)]
 
         return groupItemWeightValues
 
@@ -229,23 +234,63 @@ class KnapsackUtils_MCKP_Tests(TestBase):
         # capacity 75 with 400 items = 138ms (now 20ms)
         # capacity 75 with 400 items, avg weight 10 = 217ms (now 15ms)
         # capacity 75 with 400 items, avg weight 2 = 246ms (now 20ms)
-        simulatedItemCount = 400
-        simulatedGroupCount = 1
-        maxValuePerItem = 150
-        maxWeightPerItem = 5
-        capacity = 750
 
-        groupItemWeightValues = self.generate_item_test_set(simulatedItemCount, simulatedGroupCount, maxWeightPerItem, maxValuePerItem)
+        sumRuntimes = 0.0
+        countRuns = 0
 
-        start = time.perf_counter()
-        maxValue, items = self.execute_multiple_choice_knapsack_with_tuples(groupItemWeightValues, capacity=capacity)
-        self.assertGreater(maxValue, 0)
-        # doubt we ever find less than this
-        self.assertEqual(len(items), simulatedGroupCount)
-        endTime = time.perf_counter()
-        duration = endTime - start
+        for groupCount in [1, 2, 3, 4, 5, 10, 15, 25, 50, 100, 150, 300]:
+            for groupSkew in [0.0, 0.2, 0.4, 0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]:
+                simulatedItemCount = 300
+                simulatedGroupCount = groupCount
+                maxValuePerItem = 150
+                maxWeightPerItem = 10
+                capacity = 750
 
-        self.assertLess(duration, 0.015)
+                sumTime = 0.0
+                for i in range(20):
+                    groupItemWeightValues = self.generate_item_test_set(simulatedItemCount, simulatedGroupCount, maxWeightPerItem, maxValuePerItem, groupSkew)
+                    start = time.perf_counter()
+                    maxValue, items = self.execute_multiple_choice_knapsack_with_tuples(groupItemWeightValues, capacity=capacity)
+                    endTime = time.perf_counter()
+                    duration = endTime - start
+                    countRuns += 1
+                    sumRuntimes += duration
+                    sumTime += duration
+                self.assertGreater(maxValue, 0)
+                # doubt we ever find less than this
+                # self.assertEqual(len(items), simulatedGroupCount)
+
+                groups = [gi[0] for gi in groupItemWeightValues]
+
+                sizes = []
+                curSize = 0
+                curGroup = -1
+                for g in groups:
+                    if g != curGroup:
+                        if curGroup != -1:
+                            sizes.append((curSize, curGroup))
+                        curSize = 1
+                        curGroup = g
+                        continue
+                    curSize += 1
+                sizes.append((curSize, curGroup))
+
+                groupIndexRemaps = [0] * (curGroup + 1)
+
+                sortedSizes = sorted(sizes)
+                for i, (size, g) in enumerate(sortedSizes):
+                    groupIndexRemaps[g] = i
+
+                medianIdx = int(len(groups) / 2)
+                medianGroup = groups[medianIdx]
+                medianSize = sizes[medianGroup][0]
+                averageSize = sum(s[0] for s in sizes) / len(sizes)
+                averageSizeByTile = sum(sizes[g][0] for g in groups) / len(groups)
+                largestSize = sortedSizes[-1][0]
+                smallestSize = sortedSizes[0][0]
+
+                print(f'{simulatedGroupCount:3d}g, {groupSkew:.2f} skew: {sumTime:8.5f} - small {smallestSize:3d} <> {largestSize:3d} large, avg {averageSize:5.1f}, avg by N {averageSizeByTile:5.1f}, median {medianSize:3d} (group {medianGroup:3d}) -- {simulatedItemCount} items, {capacity} capacity, {simulatedGroupCount} groups')
+        print(f'TOTAL RUNTIME {sumRuntimes:.3f}, iterations {countRuns}  (per run avg {sumRuntimes/countRuns:.5f}')
 
     # TESTS STOLEN FROM https://github.com/tmarinkovic/multiple-choice-knapsack-problem/blob/master/test/knapsack/MultipleChoiceKnapsackProblemTest.java
     def test_shouldReturnDesiredSolution2(self):

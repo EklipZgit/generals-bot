@@ -25,3 +25,4 @@ cppimport
 cython
 pandas
 tqdm
+setuptools

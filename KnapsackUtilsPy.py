@@ -4,6 +4,9 @@ import math
 import time
 import typing
 
+raise RuntimeError("This module is deprecated")
+
+
 def solve_multiple_choice_knapsack_purepy(
         items: typing.List[typing.Any],
         capacity: int,
@@ -33,8 +36,6 @@ def solve_multiple_choice_knapsack_purepy(
     @return: returns a tuple of the maximum value that was found to fit in the knapsack, along with the list of optimal items that reached that max value.
     """
     
-    raise RuntimeError("This function is deprecated")
-
     timeStart = time.perf_counter()
     groupStartEnds: typing.List[typing.Tuple[int, int]] = []
     if groups[0] != 0:

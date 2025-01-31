@@ -120,7 +120,7 @@ def compare_versions():
         brute_args = [
             (a, setup, 0.4) for a in args
         ]
-        for a, duration in zip(args, brute(worker, tqdm.tqdm(brute_args, desc=f"Running {version}"), 32)):
+        for a, duration in zip(args, brute(worker, tqdm.tqdm(brute_args, desc=f"Running {version}"), processes=32)):
             rows[str(a)][version] = duration
 
         
@@ -130,9 +130,10 @@ def compare_versions():
         
     # df["pure_py/cpp_full"] = df["pure_py"] / df["cpp_full"]
     # df["cpp_loop/cpp_full"] = df["cpp_loop"] / df["cpp_full"]
-    df["cpp_full/cpp_noinit"] = df["cpp_full"] / df["cpp_noinit"]
+    # df["cpp_full/cpp_noinit"] = df["cpp_full"] / df["cpp_noinit"]
 
-    print(df.sort_values(['cpp_full/cpp_noinit', 'len(items)', 'group count']))
+    print(df)
+    # print(df.sort_values(['cpp_full/cpp_noinit', 'len(items)', 'group count']))
     
 def plot_runtime():
     cppfull = "cpp_full"

@@ -92,8 +92,8 @@ def get_group_len(groups, **args):
 VERSIONS = {
     # "cython": "from KnapsackUtilsCython import solve_multiple_choice_knapsack",
     # "cpp_loop": "from KnapsackUtilsPy import solve_multiple_choice_knapsack",
-    "cpp_full": "from KnapsackUtilsPy import solve_multiple_choice_knapsack_full_cppimport as solve_multiple_choice_knapsack",
-    "cpp_noinit": "from KnapsackUtilsPy import solve_multiple_choice_knapsack_no_check as solve_multiple_choice_knapsack",
+    "cpp_full": "from KnapsackUtils import solve_multiple_choice_knapsack as solve_multiple_choice_knapsack",
+    # "cpp_noinit": "from KnapsackUtils import solve_multiple_choice_knapsack as solve_multiple_choice_knapsack",
     # "pure_py": "from KnapsackUtilsPy import solve_multiple_choice_knapsack_purepy as solve_multiple_choice_knapsack",
 }    
 

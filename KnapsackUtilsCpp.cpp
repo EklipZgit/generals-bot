@@ -115,11 +115,13 @@ std::tuple<int, std::vector<py::object>> solve_multiple_choice_knapsack(
         logbook_info("estimated knapsack time: {estTime:.3f} (n {n} * capacity {capacity} * math.sqrt(maxGroupSize {maxGroupSize}) {maxGrSq:.1f})"_s.format(**py::dict(FMTARG(estTime), FMTARG(n), FMTARG(maxGroupSize), FMTARG(capacity), FMTARG(maxGrSq))));
     }
 
-    for (int curCapacity = 0; curCapacity < capacity + 1; ++curCapacity) {
-        for (size_t i = 0; i < n+1; ++i) {
-            if (i == 0 || curCapacity == 0) {
-                K[i][curCapacity] = 0;
-            } else if (weights[i - 1] <= curCapacity) {
+    for (int curCapacity = 1; curCapacity < capacity + 1; ++curCapacity) {
+        for (int i = 1; i < n+1; ++i) {
+            /// K is zero-initialized.
+            // if (i == 0 || curCapacity == 0) {
+            //     K[i][curCapacity] = 0;
+            // } 
+            else if (weights[i - 1] <= curCapacity) {
                 int sub_max = 0;
                 int prev_group = groups[i-1] - 1;
                 int subKRow = curCapacity - weights[i - 1];

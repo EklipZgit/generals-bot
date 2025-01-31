@@ -35,6 +35,16 @@ namespace py = pybind11;
     throw py::error_already_set();
 }
 
+static double estimateRuntime(
+    int n,
+    int capacity,
+    int maxGroupSize)
+{
+    double maxGrSq = std::sqrt(maxGroupSize);
+    double estTime = n * capacity * std::sqrt(maxGroupSize) * 0.00000022;
+    if (maxGroupSize == n) estTime = n * capacity * 0.00000022;
+    return estTime;
+}
 
 /**
  *  Solves knapsack where you need to knapsack a bunch of things, but must pick at most one thing from each group of things
@@ -92,16 +102,14 @@ std::tuple<int, std::vector<py::object>> solve_multiple_choice_knapsack(
     int n = values.size();
     std::vector<std::vector<int>> K(n + 1, std::vector<int>(capacity + 1, 0));
 
-    double maxGrSq = std::sqrt(maxGroupSize);
-    double estTime = n * capacity * std::sqrt(maxGroupSize) * 0.00000022;
-    if (maxGroupSize == n) estTime = n * capacity * 0.00000022;
+    double estTime = estimateRuntime(n, capacity, maxGroupSize);
     
     if (estTime > longRuntimeThreshold) {
         throw std::runtime_error("Knapsack potential long run detected");
     }
 
     if (!noLog) {
-        logbook_info("estimated knapsack time: {estTime:.3f} (n {n} * capacity {capacity} * math.sqrt(maxGroupSize {maxGroupSize}) {maxGrSq:.1f})"_s.format(**py::dict(FMTARG(estTime), FMTARG(n), FMTARG(maxGroupSize), FMTARG(capacity), FMTARG(maxGrSq))));
+        logbook_info("estimated knapsack time: {estTime:.3f} (n {n} * capacity {capacity} * math.sqrt(maxGroupSize {maxGroupSize}))"_s.format(**py::dict(FMTARG(estTime), FMTARG(n), FMTARG(maxGroupSize), FMTARG(capacity))));
     }
 
     for (int curCapacity = 1; curCapacity < capacity + 1; ++curCapacity) {

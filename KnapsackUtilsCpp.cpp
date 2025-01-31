@@ -28,43 +28,6 @@ setup_pybind11(cfg)
 using namespace pybind11::literals;
 namespace py = pybind11;
 
-using IntList = const std::vector<int>;
-
-
-std::vector<std::vector<int>>& multiple_choice_knapsack_loop(
-    int capacity,
-    int n,
-    IntList& weights,
-    IntList& values,
-    IntList& groups,
-    std::vector<std::vector<int>>& K,
-    std::vector<std::pair<int, int>>& groupStartEnds
-) {
-    for (int curCapacity = 0; curCapacity < capacity + 1; ++curCapacity) {
-        for (int i = 0; i < n+1; ++i) {
-            if (i == 0 || curCapacity == 0) {
-                K[i][curCapacity] = 0;
-            } else if (weights[i - 1] <= curCapacity) {
-                int sub_max = 0;
-                int prev_group = groups[i-1] - 1;
-                int subKRow = curCapacity - weights[i - 1];
-                if (prev_group >= 0) {
-                    auto [prevGroupStart, prevGroupEnd] = groupStartEnds[prev_group];
-                    for (int j = prevGroupStart + 1; j < prevGroupEnd + 1; ++j) {
-                        if (K[j][subKRow] > sub_max) {
-                            sub_max = K[j][subKRow];
-                        }
-                    }
-                }
-                K[i][curCapacity] = std::max(sub_max + values[i - 1], K[i - 1][curCapacity]);
-            } else {
-                K[i][curCapacity] = K[i - 1][curCapacity];
-            }
-        }
-    }
-    return K;
-}
-
 std::tuple<int, std::vector<py::object>> solve_multiple_choice_knapsack(
     const std::vector<py::object>& items,
     int capacity,
@@ -120,15 +83,15 @@ std::tuple<int, std::vector<py::object>> solve_multiple_choice_knapsack(
             /// K is zero-initialized.
             // if (i == 0 || curCapacity == 0) {
             //     K[i][curCapacity] = 0;
-            // } 
-            else if (weights[i - 1] <= curCapacity) {
+            // } else
+            if (weights[i - 1] <= curCapacity) {
                 int sub_max = 0;
                 int prev_group = groups[i-1] - 1;
                 int subKRow = curCapacity - weights[i - 1];
                 if (prev_group >= 0) {
                     auto [prevGroupStart, prevGroupEnd] = groupStartEnds[prev_group];
                     for (int j = prevGroupStart + 1; j < prevGroupEnd + 1; ++j) {
-                        if (groups[j - 1] == prev_group && K[j][subKRow] > sub_max) {
+                        if (K[j][subKRow] > sub_max) {
                             sub_max = K[j][subKRow];
                         }
                     }
@@ -212,9 +175,8 @@ std::tuple<int, std::vector<py::object>> solve_knapsack(
 }
 
 PYBIND11_MODULE(KnapsackUtilsCpp, m) {
-    m.doc() = "multiple_choice_knapsack_loop native"; // optional module docstring
+    m.doc() = "C++ impl of multiple_choice_knapsack"; // optional module docstring
 
-    m.def("multiple_choice_knapsack_loop", &multiple_choice_knapsack_loop, "multiple_choice_knapsack_loop native");
     m.def("solve_multiple_choice_knapsack", &solve_multiple_choice_knapsack, "items"_a, "capacity"_a, "weights"_a, "values"_a, "groups"_a, "noLog"_a, "longRuntimeThreshold"_a);
     m.def("solve_knapsack", &solve_knapsack);
 }

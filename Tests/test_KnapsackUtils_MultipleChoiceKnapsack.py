@@ -238,17 +238,76 @@ class KnapsackUtils_MCKP_Tests(TestBase):
         sumRuntimes = 0.0
         countRuns = 0
 
-        for groupCount in [1, 2, 3, 4, 5, 10, 15, 25, 50, 100, 150, 300]:
-            for groupSkew in [0.0, 0.2, 0.4, 0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]:
-                simulatedItemCount = 300
+        for groupCount in [2, 3, 4, 5, 10, 15, 25, 50, 100]:
+            for groupSkew in [
+                0.0,
+                # 0.2,
+                # 0.4,
+                # 0.5,
+                # 0.6,
+                # 0.7,
+                0.75,
+                0.8,
+                0.85,
+                0.9,
+                0.95
+            ]:
+                simulatedItemCount = 250
                 simulatedGroupCount = groupCount
-                maxValuePerItem = 150
-                maxWeightPerItem = 10
-                capacity = 750
+                maxValuePerItem = 100
+                maxWeightPerItem = 25
+                capacity = 100
 
                 sumTime = 0.0
-                for i in range(20):
+                for i in range(500):
                     groupItemWeightValues = self.generate_item_test_set(simulatedItemCount, simulatedGroupCount, maxWeightPerItem, maxValuePerItem, groupSkew)
+
+                    groups = [gi[0] for gi in groupItemWeightValues]
+
+                    sizes = []
+                    curSize = 0
+                    curGroup = -1
+                    for g in groups:
+                        if g != curGroup:
+                            if curGroup != -1:
+                                sizes.append((curSize, curGroup))
+                            curSize = 1
+                            curGroup = g
+                            continue
+                        curSize += 1
+                    sizes.append((curSize, curGroup))
+
+                    groupIndexRemaps = [0] * (curGroup + 1)
+
+                    sortedSizes = sorted(sizes)
+                    for i, (size, g) in enumerate(sortedSizes):
+                        groupIndexRemaps[g] = i
+
+                    medianIdx = int(len(groups) / 2)
+                    medianGroup = groups[medianIdx]
+                    medianSize = sizes[medianGroup][0]
+                    averageSize = sum(s[0] for s in sizes) / len(sizes)
+                    averageSizeByTile = sum(sizes[g][0] for g in groups) / len(groups)
+                    largestSize = sortedSizes[-1][0]
+                    smallestSize = sortedSizes[0][0]
+                    #
+                    # # Randomized
+                    random.shuffle(groupIndexRemaps)
+
+                    # lastIdx = len(groupIndexRemaps) - 1
+                    # for i in range(0, int(lastIdx / 2), 2):
+                    #     groupIndexRemaps[i], groupIndexRemaps[lastIdx - i] = groupIndexRemaps[lastIdx - i], groupIndexRemaps[i]
+
+                    # SORT (randomized if randomized above)
+                    for j in range(len(groupItemWeightValues)):
+                        (g, i, w, v) = groupItemWeightValues[j]
+                        newG = groupIndexRemaps[g]
+                        # reverse
+                        # newG = simulatedGroupCount - groupIndexRemaps[g] - 1
+                        groupItemWeightValues[j] = (newG, i, w, v)
+
+                    groupItemWeightValues = sorted(groupItemWeightValues)
+
                     start = time.perf_counter()
                     maxValue, items = self.execute_multiple_choice_knapsack_with_tuples(groupItemWeightValues, capacity=capacity)
                     endTime = time.perf_counter()
@@ -259,35 +318,6 @@ class KnapsackUtils_MCKP_Tests(TestBase):
                 self.assertGreater(maxValue, 0)
                 # doubt we ever find less than this
                 # self.assertEqual(len(items), simulatedGroupCount)
-
-                groups = [gi[0] for gi in groupItemWeightValues]
-
-                sizes = []
-                curSize = 0
-                curGroup = -1
-                for g in groups:
-                    if g != curGroup:
-                        if curGroup != -1:
-                            sizes.append((curSize, curGroup))
-                        curSize = 1
-                        curGroup = g
-                        continue
-                    curSize += 1
-                sizes.append((curSize, curGroup))
-
-                groupIndexRemaps = [0] * (curGroup + 1)
-
-                sortedSizes = sorted(sizes)
-                for i, (size, g) in enumerate(sortedSizes):
-                    groupIndexRemaps[g] = i
-
-                medianIdx = int(len(groups) / 2)
-                medianGroup = groups[medianIdx]
-                medianSize = sizes[medianGroup][0]
-                averageSize = sum(s[0] for s in sizes) / len(sizes)
-                averageSizeByTile = sum(sizes[g][0] for g in groups) / len(groups)
-                largestSize = sortedSizes[-1][0]
-                smallestSize = sortedSizes[0][0]
 
                 print(f'{simulatedGroupCount:3d}g, {groupSkew:.2f} skew: {sumTime:8.5f} - small {smallestSize:3d} <> {largestSize:3d} large, avg {averageSize:5.1f}, avg by N {averageSizeByTile:5.1f}, median {medianSize:3d} (group {medianGroup:3d}) -- {simulatedItemCount} items, {capacity} capacity, {simulatedGroupCount} groups')
         print(f'TOTAL RUNTIME {sumRuntimes:.3f}, iterations {countRuns}  (per run avg {sumRuntimes/countRuns:.5f}')

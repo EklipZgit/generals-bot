@@ -14,18 +14,16 @@ std::vector<std::vector<int>>& multiple_choice_knapsack_loop(
     std::vector<std::vector<int>>& K,
     std::vector<std::pair<int, int>>& groupStartEnds
 ) {
-    for (int curCapacity = 0; curCapacity < capacity + 1; ++curCapacity) {
-        for (size_t i = 0; i < n+1; ++i) {
-            if (i == 0 || curCapacity == 0) {
-                K[i][curCapacity] = 0;
-            } else if (weights[i - 1] <= curCapacity) {
+    for (int curCapacity = 1; curCapacity < capacity + 1; ++curCapacity) {
+        for (size_t i = 1; i < n+1; ++i) {
+            if (weights[i - 1] <= curCapacity) {
                 int sub_max = 0;
                 int prev_group = groups[i-1] - 1;
                 int subKRow = curCapacity - weights[i - 1];
                 if (prev_group >= 0) {
                     auto [prevGroupStart, prevGroupEnd] = groupStartEnds[prev_group];
                     for (int j = prevGroupStart + 1; j < prevGroupEnd + 1; ++j) {
-                        if (groups[j - 1] == prev_group && K[j][subKRow] > sub_max) {
+                        if (K[j][subKRow] > sub_max) {
                             sub_max = K[j][subKRow];
                         }
                     }

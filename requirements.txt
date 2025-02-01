@@ -22,3 +22,7 @@ logbook
 certifi
 
 cppimport
+cython
+pandas
+tqdm
+setuptools

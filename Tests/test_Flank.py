@@ -5,7 +5,8 @@ from Directives import Timings
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
-from base.client.tile import Tile, MapBase, TILE_FOG
+from base.client.tile import Tile, TILE_FOG
+from base.client.map import MapBase
 from bot_ek0x45 import EklipZBot
 
 

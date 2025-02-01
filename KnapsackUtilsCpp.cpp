@@ -79,7 +79,7 @@ std::tuple<int, std::vector<py::object>> solve_multiple_choice_knapsack(
     auto timeStart = high_resolution_clock::now();
     
     if (groups.empty() || groups[0] != 0) {
-        throw std::invalid_argument("Groups must start with 0 and increment by one for each new group.");
+        raiseAssertionError("Groups must start with 0 and increment by one for each new group. Items should be ordered by group.");
     }
     
     std::vector<std::pair<int, int>> groupStartEnds;
@@ -89,7 +89,7 @@ std::tuple<int, std::vector<py::object>> solve_multiple_choice_knapsack(
         if (group > lastGroup) {
             if (curGroupSize > maxGroupSize) maxGroupSize = curGroupSize;
             if (lastGroup > -1) groupStartEnds.emplace_back(lastGroupIndex, i);
-            if (group > lastGroup + 1) throw std::invalid_argument("Groups must be contiguous.");
+            if (group > lastGroup + 1) raiseAssertionError("Groups must have no gaps. if you have group 0, and 2, group 1 must be included between them.");
             lastGroupIndex = i;
             lastGroup = group;
             curGroupSize = 0;
@@ -105,7 +105,9 @@ std::tuple<int, std::vector<py::object>> solve_multiple_choice_knapsack(
     double estTime = estimateRuntime(n, capacity, maxGroupSize);
     
     if (estTime > longRuntimeThreshold) {
-        throw std::runtime_error("Knapsack potential long run detected");
+        raiseAssertionError("Knapsack potential long run est {estTime:.3f}: the inputs (n {n} * capacity {capacity} * math.sqrt(maxGroupSize {maxGroupSize}) {maxGrSq}) are going to result in a substantial runtime, maybe try a different algorithm"_s.format(**py::dict(
+            FMTARG(n), FMTARG(capacity), FMTARG(maxGroupSize), "maxGrSq"_a = std::sqrt(maxGroupSize), FMTARG(estTime)
+        )).cast<std::string>());
     }
 
     if (!noLog) {

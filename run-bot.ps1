@@ -942,7 +942,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c { 
         cd "D:/2019_reformat_Backup/generals-bot/"; 
         . ./run-bot.ps1;
-        $command = 'Run-Human -left -game 1v1 -sleepMax 240'
+        $command = 'Run-Human -left -game 1v1 -sleepMax 1200'
         try {
             Invoke-Expression $command
         } finally {
@@ -998,7 +998,7 @@ function Start-WindowsTerminalLiveBots {
         . ./run-bot.ps1;
         $command = 'Run-Teammate -sleepMax 90 -left -nolog'
         try {
-            Invoke-Expression $command
+            # Invoke-Expression $command
         } finally {
             Write-Host $command
             Start-Sleep -Seconds 1
@@ -1013,7 +1013,7 @@ function Start-WindowsTerminalLiveBots {
         . ./run-bot.ps1;
         $command = 'Run-Teammate -sleepMax 1 -left -roomID teammate -nolog' 
         try {
-            Invoke-Expression $command
+            # Invoke-Expression $command
         } finally {
             Write-Host $command
             Start-Sleep -Seconds 1
@@ -1087,20 +1087,20 @@ function Start-WindowsTerminalLiveBots {
         }
     }
 
-    <#
-    Human in custom lobby with alt tiles
-    #>
-    wt -w $windowName new-tab pwsh -NoExit -c { 
-        cd "D:/2019_reformat_Backup/generals-bot/"; 
-        . ./run-bot.ps1;
-        $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeAltTiles1 -nolog'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    # <#
+    # Human in custom lobby with alt tiles
+    # #>
+    # wt -w $windowName new-tab pwsh -NoExit -c { 
+    #     cd "D:/2019_reformat_Backup/generals-bot/"; 
+    #     . ./run-bot.ps1;
+    #     $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeAltTiles1 -nolog'
+    #     try {
+    #         Invoke-Expression $command
+    #     } finally {
+    #         Write-Host $command
+    #         Start-Sleep -Seconds 1
+    #     }
+    # }
 
     <#
     Human in custom lobby with normal setup

@@ -1,15 +1,14 @@
 import logbook
 import time
 import typing
-
 import cppimport
 
-KnapsackUtilsCpp = cppimport.imp('KnapsackUtilsCpp')   # Gets WAY further than anything else, I think? But ends up creating a second nested cpp/cpp/ folder and then dies
-# kuc = cppimport.imp_from_filepath('cpp/KnapsackUtilsCpp.cpp')  # fails to load in cppimport\templating.py
-# kuc = cppimport.imp_from_filepath('KnapsackUtilsCpp.cpp')  # ditto
-# kuc = cppimport.imp_from_filepath('./cpp/KnapsackUtilsCpp.cpp')  # ditto
-# kuc = cppimport.imp_from_filepath('D:\\2019_reformat_Backup\\generals-bot\\cpp\\KnapsackUtilsCpp.cpp')  # loads and compiles KnapsackUtilsCpp.cp311-win_amd64.pyd in same cpp folder before dying at ModuleNotFoundError: No module named 'KnapsackUtilsCpp'
-# from KnapsackUtilsCpp import multiple_choice_knapsack_loop
+
+# This does not prevent the pyd locking, apparently the pyd is a python module itself and is then locked by the python runtime, I guess.
+# cppimport.settings['use_filelock'] = False
+
+KnapsackUtilsCpp = cppimport.imp('KnapsackUtilsCpp')
+
 
 def solve_multiple_choice_knapsack(
         items: typing.List[typing.Any],

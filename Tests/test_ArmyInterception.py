@@ -17,6 +17,17 @@ class ArmyInterceptionTests(TestBase):
     def __init__(self, methodName: str = ...):
         super().__init__(methodName)
 
+    # test_should_recognize_to_either_split_or_delay
+    # test_should_recognize_multi_threat_and_intercept_at_choke__prevent_right_and_up
+    # test_should_not_wastefully_intercept_early_in_the_round
+    # test_should_split_to_deal_with_incoming_army_dance
+    # test_should_split_or_delay_when_appropriate
+    # test_should_split_when_necessary_to_defend_multiple_targets
+    # test_should_wait_a_move_to_guarantee_no_bypass
+    # test_should_complete_intercept_one_tile_away
+    # test_should_intercept__not_defend_when_at_right_angles_to_inbound_threat
+    # test_should_intercept_army_that_is_one_tile_kill_and_city_threat_lol__unit_test
+
     def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2, clearCurPath: bool = True) -> EklipZBot:
         bot = super().get_debug_render_bot(simHost, player)
 
@@ -60,6 +71,8 @@ class ArmyInterceptionTests(TestBase):
         enTile = map.GetTile(7, 14)
 
         plan = self.get_interception_plan(map, general, enemyGeneral, enTile=enTile)
+        self.assertIsNotNone(plan)
+        self.assertIsNotNone(plan.common_intercept_chokes)
 
         if debugMode:
             self.render_intercept_plan(map, plan)
@@ -95,7 +108,8 @@ class ArmyInterceptionTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
         self.assertIsNone(winner)
-        self.assertTileDifferentialGreaterThan(0, simHost)
+        # sometimes we're winning, sometimes we're equal because depending how the threat risk is calculated the best move may be to delay to prevent enemy army crossing back up
+        self.assertTileDifferentialGreaterThan(-1, simHost)
 
     def test_should_just_cap_tiles_when_inbound_army_isnt_kill_threat(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -506,8 +520,8 @@ class ArmyInterceptionTests(TestBase):
 
         interception = self.get_interception_plan(map, general, enemyGeneral)
 
-        if debugMode:
-            self.render_intercept_plan(map, interception)
+        # if debugMode:
+        #     self.render_intercept_plan(map, interception)
 
         value, turns, bestPath = self.get_best_intercept_option_path_values(interception)
         self.assertEqual(6, bestPath.start.tile.x)
@@ -516,8 +530,7 @@ class ArmyInterceptionTests(TestBase):
         path, val, turns = self.get_interceptor_path_by_coords(interception, 6, 6, 7, 6)
         self.assertIsNotNone(path)
 
-        path, val, turns = self.get_interceptor_path_by_coords(interception, 5, 6, 7, 6)
-        self.assertIsNone(path)
+        self.assert_no_intercept_option_by_coords(interception, 5, 6, 7, 6)
 
         self.assertNotInterceptChoke(interception, map, 6, 6)
         self.assertNotInterceptChoke(interception, map, 7, 7)
@@ -1515,6 +1528,8 @@ class ArmyInterceptionTests(TestBase):
                     self.begin_capturing_logging()
                     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
                     self.assertIsNone(winner)
+                    firstMove = simHost.sim.moves_history[-2][general.player]
+                    self.assertEqual(not split, firstMove is None or firstMove.source.coords != (8,8))
 
                     self.assertOwned(general.player, playerMap.GetTile(9, 9))
                     self.assertOwned(general.player, playerMap.GetTile(7, 7))
@@ -1532,7 +1547,7 @@ class ArmyInterceptionTests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '10,6->11,6->11,7->12,7  11,9->12,9->12,10->18,10->18,12')
         # proof
-        simHost.queue_player_moves_str(general.player, '14,7->14,8z->13,8->13,9->11,9')
+        # simHost.queue_player_moves_str(general.player, '14,7->14,8z->13,8->13,9->11,9')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
@@ -1690,9 +1705,14 @@ class ArmyInterceptionTests(TestBase):
         bot.timings = bot.get_timings()
         playerMap = simHost.get_player_map(general.player)
 
+        initCityCount = playerMap.players[playerMap.player_index].cityCount
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=28)
         self.assertIsNone(winner)
+
+        if playerMap.players[playerMap.player_index].cityCount > initCityCount:
+            # success, we took a city instead of intercepting or recapping, which is also fine
+            return
 
         self.assertGreater(playerMap.GetTile(2, 10).army, 20)
         self.assertGreater(playerMap.GetTile(2, 9).army, 1)
@@ -2248,4 +2268,171 @@ class ArmyInterceptionTests(TestBase):
 # 87f 69p 4s, after adding a bunch of new tests and NOT fixing splitting above (lol).
 # 83f 75p 4s, after VERY FIRST attempt at pruning intercept points based on distance to average tile position...? No way that stuff is even right
 # 100f 77p 3s, after hacking some stuff? In 3min 4sec. With limit 3 dist common tile search
-# 101f 76p 3s, 3 min 7s, in 3 min 7 s (with greater limit common tile search space
+# 101f 76p 3s, 3 min 7s, in 3 min 7 s (with greater limit common tile search space    
+    def test_should_not_continually_dance_away_from_sitting_army(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_continually_dance_away_from_sitting_army___MZHNOW6MN---1--85.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 85, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=85)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+
+        """
+        @ 7,7
+        
+Checking tile 7,7 with depth 3  -  threatDistFromCommon 4 / min(maxDepth=10, turnsToIntercept=3)
+skipping 7,8 to 7,7 because toEuclidDist 1.581 > euclidIntDist 0.707 (approxX 7.50, approxY 8.50)
+ALLOWING 8,7 to 7,7 because toEuclidDist 1.581 < euclidIntDist 1.581 (approxX 7.50, approxY 8.50)
+ALLOWING 8,8 to 8,7 because toEuclidDist 1.061 < euclidIntDist 0.791 (approxX 7.25, approxY 7.75)
+ALLOWING 6,8 to 6,7 because toEuclidDist 1.458 < euclidIntDist 1.275 (approxX 7.25, approxY 7.75)
++Tile 8,8 from 8,7 at dist 2 is new max value: (30, 0, 30)
+ALLOWING 8,9 to 8,8 because toEuclidDist 1.414 < euclidIntDist 2.236 (approxX 7.00, approxY 7.00)
+ALLOWING 6,9 to 6,8 because toEuclidDist 1.414 < euclidIntDist 2.236 (approxX 7.00, approxY 7.00)
+ALLOWING 7,8 to 6,8 because toEuclidDist 1.414 < euclidIntDist 1.000 (approxX 7.00, approxY 7.00)
+@7,7 depth3 returned 1 paths.
+  path len 2 -- [30a 2t] 8,8 -> 8,7 -> 7,7
+We expect to intercept int7,7 29a -> enIntP7,8 16a after 3 turns with 12 left in cycle.
+     bestCaseInterceptTurn 2, worstCaseInterceptTurn 2
+_get_result_of_executing_paths_to_intercept_point [30a 2t] 8,8 -> 8,7 -> 7,7:
+turnsLeft: 12
+armyAccumulatedByInterceptPath: 29
+bestCaseInterceptTurn: 2
+------- wrong, worst case is 4. If 8,9 goes left, left, then we've wasted 2 turns and still need 2 more to cap. 
+worstCaseInterceptTurn: 2
+------- wrong, you aren't actually intercepting here.
+enInterceptPointPathNode: (prev:[7,9] me:[7,8] next:[7,7])
+enPhysicalArmyAtTile: 16
+    node 10,4  turnsLeft 15  enArmy -25  econValueBlocked 2.21  enLen 9
+    node 9,4  turnsLeft 14  enArmy -23  econValueBlocked 4.42  enLen 8
+    node 9,5  turnsLeft 13  enArmy -21  econValueBlocked 6.63  enLen 7
+    node 9,6  turnsLeft 12  enArmy -19  econValueBlocked 8.84  enLen 6
+    node 8,6  turnsLeft 11  enArmy -17  econValueBlocked 11.05  enLen 5
+    node 8,7  turnsLeft 10  enArmy -15  econValueBlocked 13.260000000000002  enLen 4
+------- clue
+wtf broke somewhere other than the expected intercept spot? node.tile 7,7 vs enInterceptPointTile 7,8. enemyArmyLeftAtInterceptPointBeforeRemainingCapture -14
+blocked 13.260000000000002 econ dmg, (29 army), at interceptDist 3, enemy army left at intercept -14. bestCaseInterceptTurn 2, worstCaseInterceptTurn 2: path [30a 2t] 8,8 -> 8,7 -> 7,7
+interceptPointDist:3, addlTurns:1, effectiveDist:4, turnsUsed:11, blockedAmount:13.260000000000002, maxExtraMoves:1
+setting bestInterceptTable[dist 2]:
+  new  int 8,8@8,9->7,7: 11.05v/2t (5.53vt), re 8, dBlk 13.26, eRem -14, bct 2, wct 2, del0
+setting bestInterceptTable[dist 3]:
+  new  int 8,8@8,9->7,7: 13.26v/3t (4.42vt), re 7, dBlk 13.26, eRem -14, bct 2, wct 2, del0
+setting bestInterceptTable[dist 4]:
+  new  int 8,8@8,9->7,7: 15.47v/4t (3.87vt), re 6, dBlk 13.26, eRem -14, bct 2, wct 2, del0
+setting bestInterceptTable[dist 5]:
+  new  int 8,8@8,9->7,7: 17.68v/5t (3.54vt), re 5, dBlk 13.26, eRem -14, bct 2, wct 2, del0
+setting bestInterceptTable[dist 6]:
+  new  int 8,8@8,9->7,7: 19.89v/6t (3.31vt), re 4, dBlk 13.26, eRem -14, bct 2, wct 2, del0
+setting bestInterceptTable[dist 7]:
+  new  int 8,8@8,9->7,7: 22.10v/7t (3.16vt), re 3, dBlk 13.26, eRem -14, bct 2, wct 2, del0
+setting bestInterceptTable[dist 8]:
+  new  int 8,8@8,9->7,7: 24.31v/8t (3.04vt), re 2, dBlk 13.26, eRem -14, bct 2, wct 2, del0
+setting bestInterceptTable[dist 9]:
+  new  int 8,8@8,9->7,7: 26.52v/9t (2.95vt), re 1, dBlk 13.26, eRem -14, bct 2, wct 2, del0
+setting bestInterceptTable[dist 10]:
+  new  int 8,8@8,9->7,7: 28.73v/10t (2.87vt), re 0, dBlk 13.26, eRem -14, bct 2, wct 2, del0
+setting bestInterceptTable[dist 11]:
+  new  int 8,8@8,9->7,7: 30.94v/11t (2.81vt), re -1, dBlk 13.26, eRem -14, bct 2, wct 2, del0
+          
+          
+        @ 8,9
+        
+Checking tile 8,9 with depth 1  -  threatDistFromCommon 4 / min(maxDepth=10, turnsToIntercept=1)
++Tile 8,8 from 8,9 at dist 1 is new max value: (29, 0, 29)
+@8,9 depth1 returned 1 paths.
+  path len 1 -- [10a 1t] 8,8 -> 8,9
+We expect to intercept int8,9 29a -> enIntP8,9 18a after 1 turns with 14 left in cycle.
+     bestCaseInterceptTurn 1, worstCaseInterceptTurn 0
+_get_result_of_executing_paths_to_intercept_point [10a 1t] 8,8 -> 8,9:
+turnsLeft: 14
+armyAccumulatedByInterceptPath: 29
+bestCaseInterceptTurn: 1
+worstCaseInterceptTurn: 0
+enInterceptPointPathNode: (prev:[] me:[8,9] next:[7,9])
+enPhysicalArmyAtTile: 18
+    node 10,4  turnsLeft 15  enArmy -25  econValueBlocked 2.21  enLen 9
+    node 9,4  turnsLeft 14  enArmy -23  econValueBlocked 4.42  enLen 8
+    node 9,5  turnsLeft 13  enArmy -21  econValueBlocked 6.63  enLen 7
+    node 9,6  turnsLeft 12  enArmy -19  econValueBlocked 8.84  enLen 6
+    node 8,6  turnsLeft 11  enArmy -17  econValueBlocked 11.05  enLen 5
+    node 8,7  turnsLeft 10  enArmy -15  econValueBlocked 13.260000000000002  enLen 4
+    node 7,7  turnsLeft 9  enArmy -13  econValueBlocked 15.470000000000002  enLen 3
+    node 7,8  turnsLeft 8  enArmy -12  econValueBlocked 15.970000000000002  enLen 2
+    node 7,9  turnsLeft 7  enArmy -11  econValueBlocked 16.470000000000002  enLen 1
+broke at tile being the one the army was at when our intercept path ended...? 8,9
+blocked 16.470000000000002 econ dmg, (29 army), at interceptDist 0, enemy army left at intercept -10. bestCaseInterceptTurn 1, worstCaseInterceptTurn 0: path [10a 1t] 8,8 -> 8,9
+interceptPointDist:0, addlTurns:0, effectiveDist:1, turnsUsed:1, blockedAmount:16.470000000000002, maxExtraMoves:0
+setting bestInterceptTable[dist 1]:
+  new  int 8,8@8,9->8,9: 18.68v/1t (18.68vt), re 0, dBlk 16.47, eRem -10, bct 1, wct 0, del0
+
+        """
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertNoRepetition(simHost)
+
+        self.skipTest("TODO add asserts for should_not_continually_dance_away_from_sitting_army")
+    
+    def test_should_intercept_one_move_away_always(self):
+        for (path, enPath) in [('3,11->4,11', '5,10->5,12'), ('3,11->4,11', '5,10->5,11->5,10'), ('3,11->3,10', '5,10->4,10->5,10'), ('3,11->3,10', '5,10->4,10->4,9')]:
+            with self.subTest(path=path, enPath=enPath):
+                debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+                mapFile = 'GameContinuationEntries/should_intercept_one_move_away_always___MuoPTXDJf---0--85.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 85, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=85)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(general.player, path)
+                simHost.queue_player_moves_str(enemyGeneral.player, enPath)
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+                self.assertNoFriendliesKilled(map, general)
+
+                self.assertLess(playerMap.players[enemyGeneral.player].score, 55, 'should have killed the army no matter where it went')
+    
+    def test_should_not_intercept_away_from_general_kill_path(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_intercept_away_from_general_kill_path___Vpha1d5nD---0--535.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 535, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=535)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '15,8->16,8->16,9->18,9->18,10->19,10')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+        self.assertNoFriendliesKilled(map, general)
+
+    
+    def test_should_never_intercept_away_from_threat(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_never_intercept_away_from_threat___La5ntvo2P---0--128.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 128, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=128)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_never_intercept_away_from_threat")

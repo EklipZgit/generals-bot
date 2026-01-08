@@ -1402,8 +1402,8 @@ def _check_should_delay(
             break
 
         if manhatDist < 3:
-            # if logStuff:
-            logEntries.append(f'    due to distanceToLargeIslands, bypass {tile} dist {tileDist} due to {otherTile} dist {otherDist} at manhattan {manhatDist}')
+            if logStuff:
+                logEntries.append(f'    due to distanceToLargeIslands, bypass {tile} dist {tileDist} due to {otherTile} dist {otherDist} at manhattan {manhatDist}')
             skip = True
             break
 
@@ -2088,7 +2088,7 @@ def knapsack_multi_paths(
                         floatVal, dist = tpl
                 logbook.info(f'    INPUT {val:.2f} dist {dist}: {str(p)}')
 
-    with perfTimer.begin_move_event(f'MCKP multi-path run'):
+    with perfTimer.begin_move_event(f'extract_paths_from_knapsack_groups multi-path run'):
         enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed, visited = extract_paths_from_knapsack_groups(
             map,
             searchingPlayer,
@@ -2104,31 +2104,12 @@ def knapsack_multi_paths(
             perfTimer,
             leafMoves)
 
-    with perfTimer.begin_move_event(f'post-MCKP path conversion / postPathEvalFunction'):
+    with perfTimer.begin_move_event(f'post path conversion / postPathEvalFunction'):
         logbook.info(
             f'MEXPX en{enemyCapped} neut{neutralCapped} {turnsUsed}/{remainingTurns}t {totalValue}v num paths {len(maxPaths)} (used {time.perf_counter() - startTime:.4f}s)')
         otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, negativeTiles) / pa.length, reverse=True)]
 
     return path, otherPaths, turnsUsed, neutralCapped, enemyCapped, totalValue
-
-
-def get_multiple_choice_expansion_knapsack_val_converter(valueOverrides, postPathEvalFunction, negativeTiles):
-    def multiple_choice_knapsack_expansion_path_value_converter(p: TilePlanInterface) -> typing.Tuple[int, int]:
-        floatVal = -10000
-        dist = p.length
-        if valueOverrides is not None:
-            tpl = valueOverrides.get(p, None)
-            if tpl is not None:
-                floatVal, dist = tpl
-
-        if floatVal == -10000:
-            floatVal = postPathEvalFunction(p, negativeTiles)
-
-        intVal = int(floatVal * 10000.0)
-        return intVal, dist
-
-    valFunc = multiple_choice_knapsack_expansion_path_value_converter
-    return valFunc
 
 
 def knapsack_multi_paths_no_crossover(
@@ -2220,7 +2201,7 @@ def knapsack_multi_paths_no_crossover(
             for val, p in allPaths:
                 logbook.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
 
-    with perfTimer.begin_move_event(f'extract_paths_from_knapsack_groups'):
+    with perfTimer.begin_move_event(f'extract_paths_from_knapsack_groups no cross'):
         enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed, visited = extract_paths_from_knapsack_groups(
             map,
             searchingPlayer,
@@ -2236,12 +2217,32 @@ def knapsack_multi_paths_no_crossover(
             perfTimer,
             leafMoves)
 
+    with perfTimer.begin_move_event(f'postPathEvalFunction'):
         logbook.info(
             f'MEXPNX en{enemyCapped} neut{neutralCapped} {turnsUsed}/{remainingTurns}t {totalValue}v num paths {len(maxPaths)} (used {time.perf_counter() - startTime:.4f}s)')
 
         otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, negativeTiles) / pa.length, reverse=True)]
 
     return path, otherPaths, turnsUsed, neutralCapped, enemyCapped, totalValue
+
+
+def get_multiple_choice_expansion_knapsack_val_converter(valueOverrides, postPathEvalFunction, negativeTiles):
+    def multiple_choice_knapsack_expansion_path_value_converter(p: TilePlanInterface) -> typing.Tuple[int, int]:
+        floatVal = -10000
+        dist = p.length
+        if valueOverrides is not None:
+            tpl = valueOverrides.get(p, None)
+            if tpl is not None:
+                floatVal, dist = tpl
+
+        if floatVal == -10000:
+            floatVal = postPathEvalFunction(p, negativeTiles)
+
+        intVal = int(floatVal * 10000.0)
+        return intVal, dist
+
+    valFunc = multiple_choice_knapsack_expansion_path_value_converter
+    return valFunc
 
 
 def extract_paths_from_knapsack_groups(
@@ -2262,13 +2263,13 @@ def extract_paths_from_knapsack_groups(
     with perfTimer.begin_move_event('get_multiple_choice_expansion_knapsack_val_converter'):
         valFunc = get_multiple_choice_expansion_knapsack_val_converter(valueOverrides, postPathEvalFunction, negativeTiles)
 
-    with perfTimer.begin_move_event('expansion_knapsack_gather_iteration'):
-        totalValue, maxPaths = expansion_knapsack_gather_iteration(
-            remainingTurns,
-            groups,
-            shouldLog=DebugHelper.IS_DEBUGGING,
-            valueFunc=valFunc
-        )
+    totalValue, maxPaths = expansion_knapsack_gather_iteration(
+        remainingTurns,
+        groups,
+        perfTimer,
+        shouldLog=DebugHelper.IS_DEBUGGING,
+        valueFunc=valFunc
+    )
 
     with perfTimer.begin_move_event('find_optimal_expansion_path_to_move_first'):
         path = find_optimal_expansion_path_to_move_first(
@@ -2793,60 +2794,78 @@ def _prune_worst_paths__two_thirds_median(
 def expansion_knapsack_gather_iteration(
         turns: int,
         valuePerTurnPathPerTile: typing.Dict[typing.Any, typing.List[TilePlanInterface]],
+        perfTimer: PerformanceTimer,
         # logEntries: typing.List[str],
         shouldLog: bool = False,
         valueFunc: typing.Callable[[TilePlanInterface], typing.Tuple[int, int]] | None = None,
 ) -> typing.Tuple[int, typing.List[TilePlanInterface]]:
     totalValue = 0
+
     maxKnapsackedPaths = []
     pathValLookup = {}
+
+    # build knapsack weights and values
+    groupedPaths = [val for item, val in valuePerTurnPathPerTile.items() if len(val) > 0]
+    groups = []
+    paths = []
+    values = []
+    weights = []
+    groupIdx = 0
+    for pathGroup in groupedPaths:
+        for path in pathGroup:
+            groups.append(groupIdx)
+            paths.append(path)
+            pathVal, pathDist = valueFunc(path)
+            values.append(pathVal)
+            weights.append(pathDist)
+            pathValLookup[path] = pathVal, pathDist
+        groupIdx += 1
+    if len(paths) == 0:
+        return 0, []
 
     error = True
     attempts = 0
     while error and attempts < 5:
         attempts += 1
         try:
-            # build knapsack weights and values
-            groupedPaths = [val for item, val in valuePerTurnPathPerTile.items()]
-            groups = []
-            paths = []
-            values = []
-            weights = []
-            groupIdx = 0
-            for pathGroup in groupedPaths:
-                if len(pathGroup) > 0:
-                    for path in pathGroup:
-                        groups.append(groupIdx)
-                        paths.append(path)
-                        pathVal, pathDist = valueFunc(path)
-                        values.append(pathVal)
-                        weights.append(pathDist)
-                        pathValLookup[path] = pathVal
-                    groupIdx += 1
-            if len(paths) == 0:
-                return 0, []
-
-            # if shouldLog:
-            logbook.info(f"Feeding solve_multiple_choice_knapsack {len(paths)} paths turns {turns}:")
             if shouldLog:
                 for i, path in enumerate(paths):
-                    logbook.info(
-                        f"{i}:  group[{groups[i]}] value {values[i]} length {weights[i]} path {str(path)}")
+                    logbook.info(f"{i}:  group[{groups[i]}] value {values[i]} length {weights[i]} path {str(path)}")
 
-            totalValue, maxKnapsackedPaths = KnapsackUtils.solve_multiple_choice_knapsack(
-                paths,
-                turns,
-                weights,
-                values,
-                groups,
-                longRuntimeThreshold=0.01)
+            with perfTimer.begin_move_event(f'MCKP {len(paths)} paths, {turns}t, {groupIdx} groups.'):
+                totalValue, maxKnapsackedPaths = KnapsackUtils.solve_multiple_choice_knapsack(
+                    paths,
+                    turns,
+                    weights,
+                    values,
+                    groups,
+                    longRuntimeThreshold=0.005)
             logbook.info(f"maxKnapsackedPaths value {totalValue} length {len(maxKnapsackedPaths)},")
             error = False
         except AssertionError as ex:
-            logbook.error(f'OVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE. v\r\n{str(ex)}\r\nOVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE. ^ ')
-            valuePerTurnPathPerTile = _prune_worst_paths__two_thirds_median(valuePerTurnPathPerTile, valueFunc, attempts)
+            with perfTimer.begin_move_event(f'KNAPSACK RUNTIME PRUNE {attempts}'):
+                logbook.error(f'OVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE. v\r\n{str(ex)}\r\nOVER-KNAPSACKED, PRUNING ALL PATHS UNDER AVERAGE. ^ ')
+                valuePerTurnPathPerTile = _prune_worst_paths__two_thirds_median(valuePerTurnPathPerTile, valueFunc, attempts)
 
-    return totalValue, sorted(maxKnapsackedPaths, key=lambda p: pathValLookup[p] / max(1, p.length), reverse=True)
+                # build knapsack weights and values
+                groupedPaths = [val for item, val in valuePerTurnPathPerTile.items() if len(val) > 0]
+                groups = []
+                paths = []
+                values = []
+                weights = []
+                groupIdx = 0
+                for pathGroup in groupedPaths:
+                    for path in pathGroup:
+                        groups.append(groupIdx)
+                        paths.append(path)
+                        pathVal, pathDist = pathValLookup[path]
+                        values.append(pathVal)
+                        weights.append(pathDist)
+                    groupIdx += 1
+                if len(paths) == 0:
+                    return 0, []
+
+    return totalValue, sorted(maxKnapsackedPaths, key=lambda p: pathValLookup[p][0] / max(1, p.length), reverse=True)
 
 
 def should_consider_path_move_half(

@@ -1392,3 +1392,35 @@ class GeneralPredictionTests(TestBase):
 # 10f, 87p, 1s  AFTER MOVED DIVE RELATED TESTS TO OTHER TEST FILE
 # 22f, 868p after adding the million blah blah blah
 # 8f, 880p (49s) after fixing stuff up and moving the gen position limiting to after the emergence pathing.
+    
+    def test_should_not_predict_en_gen_in_random_location(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_predict_en_gen_in_random_location___SuogENMBi---1--138.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 138, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=138)
+        rawMap.reset_wrong_undiscovered_fog_guess(rawMap.GetTile(0, 10))
+        rawMap.reset_wrong_undiscovered_fog_guess(rawMap.GetTile(8, 13))
+        rawMap.reset_wrong_undiscovered_fog_guess(rawMap.GetTile(10, 10))
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.info_render_general_undiscovered_prediction_values = True
+        playerMap = simHost.get_player_map(general.player)
+
+        simHost.queue_player_moves_str(enemyGeneral.player, '8,13->8,10')
+        simHost.queue_player_moves_str(general.player, '10,8->10,9  1,8->1,9')
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTileNearOtherTile(map, map.GetTile(10, 13), bot.targetPlayerExpectedGeneralLocation, 15)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+
+        self.assertTileNearOtherTile(map, map.GetTile(8, 14), bot.targetPlayerExpectedGeneralLocation, 8)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+
+        self.assertEmergenceGreaterThanXY(bot, 8, 14, 5)

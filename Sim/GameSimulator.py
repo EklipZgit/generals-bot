@@ -11,6 +11,7 @@ from Path import Path
 from PerformanceTimer import NS_CONVERTER
 from SearchUtils import count, where
 from Sim.TextMapLoader import TextMapLoader
+from Sim.MoveResolver import MoveResolver
 from base.bot_base import create_thread
 from base.client.generals import ChatUpdate
 from base.client.map import MapBase, Tile, TILE_EMPTY, TILE_OBSTACLE, Score, TILE_FOG, TILE_MOUNTAIN, TileDelta
@@ -200,6 +201,9 @@ class GameSimulator(object):
         """moves_history[-1] is the most recent set of moves, and moves_history[-1][0] would be player 0's selected move."""
         self.tiles_updated_this_cycle: typing.Set[Tile] = set()
         self.ignore_illegal_moves = ignore_illegal_moves
+        
+        # Initialize move resolver with the map
+        self.move_resolver = MoveResolver(map_raw)
 
     def set_next_move(self, player_index: int, move: Move | None, force: bool = False) -> bool:
         if self.moves[player_index] is not None:
@@ -209,7 +213,8 @@ class GameSimulator(object):
         return True
 
     def execute_turn(self, dont_require_all_players_to_move=False):
-        moveOrder = [pair for pair in enumerate(self.moves)]
+        # Create initial move list with player indices
+        move_list = [pair for pair in enumerate(self.moves)]
 
         logbook.info(f'SIM MAP TURN {self.turn + 1}')
         self.sim_map.update_turn(self.turn + 1)
@@ -218,15 +223,19 @@ class GameSimulator(object):
             tile.delta.oldOwner = tile.player
             tile.delta.newOwner = tile.player
 
-        if self.turn & 1 == 1:
-            moveOrder = reversed(moveOrder)
+        # Determine move order using the resolver instead of simple turn-based alternating priority
+        valid_moves = []
+        for player, move in move_list:
+            if move is not None:
+                valid_moves.append((player, move))
+            elif not dont_require_all_players_to_move:
+                raise AssertionError(f'player {player} does not have a move queued yet for turn {self.turn}')
+        
+        # Use the move resolver to determine the order of moves
+        move_order = self.move_resolver.determine_move_order(valid_moves)
 
-        for player, move in moveOrder:
-            if move is None:
-                if not dont_require_all_players_to_move:
-                    raise AssertionError(f'player {player} does not have a move queued yet for turn {self.turn}')
-                continue
-
+        # Execute moves in the determined order
+        for player, move in move_order:
             self._execute_move(player, move)
 
         self.turn = self.turn + 1

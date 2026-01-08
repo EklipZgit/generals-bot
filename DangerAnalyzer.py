@@ -49,7 +49,7 @@ class ThreatObj(object):
         hasPriority = False
         if mapForPriority is not None:
             includePriority = True
-            hasPriority = mapForPriority.player_has_priority_over_other(mapForPriority.player_index, self.threatPlayer, mapForPriority.turn)
+            hasPriority = False
 
         distDict = self.path.get_reversed().convert_to_dist_dict(offset=offset)
 
@@ -340,7 +340,7 @@ class DangerAnalyzer(object):
                     logbook.info(f'LOOKING FOR ADDL PATHS FOR {army} BECAUSE NO ATTACKS ON CITY OR GEN')
                     p = ArmyTracker.get_expected_enemy_expansion_path(self.map, army.tile, self.map.generals[self.map.player_index])
                     if p is not None and (p.tail.tile.isCity or p.tail.tile.isGeneral):
-                        army.expectedPaths.append(p)
+                        army.include_path(p)
                 for path in army.expectedPaths:
                     if path.length <= 0:
                         continue
@@ -593,7 +593,7 @@ class DangerAnalyzer(object):
                     if path.value > 0 and (
                             curThreat is None or path.length < curThreat.length or (path.value > curThreat.value and path.length == curThreat.length)):
                         curThreat = path
-                    army.expectedPaths.append(path)
+                    army.include_path(path)
 
         if curThreat is not None:
             army = curThreat.start.tile

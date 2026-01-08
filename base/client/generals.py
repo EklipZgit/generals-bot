@@ -33,9 +33,9 @@ _ENDPOINT_LOCAL = "://localhost:8080/socket.io/?EIO=4"
 _ENDPOINT_PUBLIC = "://ws.generals.io/socket.io/?EIO=4"
 
 # force bot server bots to local:
-_ENDPOINT_BOT = _ENDPOINT_LOCAL
-BOTWSPREFIX = "ws"
-BOTHTTPPREFIX = "http"
+#_ENDPOINT_BOT = _ENDPOINT_LOCAL
+#BOTWSPREFIX = "ws"
+#BOTHTTPPREFIX = "http"
 
 # # force public bots to local:
 # _ENDPOINT_PUBLIC = _ENDPOINT_LOCAL

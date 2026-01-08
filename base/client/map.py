@@ -27,7 +27,9 @@ MODIFIER_SILENT_WAR = 4
 MODIFIER_DEFENSELESS = 5
 MODIFIER_WATCHTOWER = 6
 MODIFIER_TORUS = 7
-MODIFIER_CREEPING_FOG = 8
+MODIFIER_FADING_SMOG = 8
+MODIFIER_DEFECTION = 9
+MODIFIER_SLIPPERY = 10
 
 OBSERVATORY_RANGE = 7
 LOOKOUT_RANGE = 2
@@ -164,7 +166,7 @@ class Player(object):
 
         self.fighting_with_player: int = -1
         """
-        If player score deltas show players fighting with each other on this turn, then this will be set. 
+        If player score deltas show players fighting with each other on this turn, then this will be set.
         If multiple players are found that all match deltas, then tiebreaks are performed based on recent historical
         fights. If the player is clearly fighting with someone but the deltas dont line up because a third party is
         involved, then this value will be unmodified from previous turn, usually continuing to indicate the last player
@@ -284,14 +286,16 @@ class MapBase(object):
                 self.modifiers_by_id[m] = True
 
         self.has_leapfrog = self.modifiers_by_id[MODIFIER_LEAPFROG]
-        # self.has_city_state = self.modifiers_by_id[MODIFIER_CITY_STATE]
+        self.has_city_state = self.modifiers_by_id[MODIFIER_CITY_STATE]
         self.has_misty_veil = self.modifiers_by_id[MODIFIER_MISTY_VEIL]
         self.has_crystal_clear = self.modifiers_by_id[MODIFIER_CRYSTAL_CLEAR]
         self.has_silent_war = self.modifiers_by_id[MODIFIER_SILENT_WAR]
         self.has_defenseless = self.modifiers_by_id[MODIFIER_DEFENSELESS]
         self.has_watchtower = self.modifiers_by_id[MODIFIER_WATCHTOWER]
         self.has_torus = self.modifiers_by_id[MODIFIER_TORUS]
-        self.has_creeping_fog = self.modifiers_by_id[MODIFIER_CREEPING_FOG]
+        self.has_fading_smog = self.modifiers_by_id[MODIFIER_FADING_SMOG]
+        self.has_defection = self.modifiers_by_id[MODIFIER_DEFECTION]
+        self.has_slippery = self.modifiers_by_id[MODIFIER_SLIPPERY]
 
         self.is_low_cost_city_game: bool = False
         self.is_walled_city_game: bool = False
@@ -320,7 +324,7 @@ class MapBase(object):
 
         self.reachable_tiles: typing.Set[Tile] = set()
         """
-        Tiles REACHABLE from the general spawn on the map, this includes EVERYTHING from pathableTiles but ALSO 
+        Tiles REACHABLE from the general spawn on the map, this includes EVERYTHING from pathableTiles but ALSO
         includes mountains and undiscovered obstacles that are left/right/up/down adjacent to anything in pathableTiles
         """
 
@@ -475,7 +479,7 @@ AttributeError: 'Map' object has no attribute 'grid'
 [2024-09-01 17:46:08.952167] INFO: Generic: DEST BFS FOUND KILLPATH OF LENGTH 1 VALUE 112
 [112a 1t] 20,18 -> 21,18
 [2024-09-01 17:46:08.952167] INFO: Generic: saveTile blocks path to our king: 20,18
-[2024-09-01 17:46:08.953167] INFO: Generic: dest BFS found KILL against 
+[2024-09-01 17:46:08.953167] INFO: Generic: dest BFS found KILL against
     """
     def get_all_tiles(self) -> typing.Generator[Tile, None, None]:
         for t in self.tiles_by_index:
@@ -496,7 +500,7 @@ AttributeError: 'Map' object has no attribute 'grid'
                 yield tile
 
     def manhattan_dist(self, tileA: Tile, tileB: Tile) -> int:
-        if self.modifiers_by_id[MODIFIER_TORUS]:
+        if self.has_torus:
             xMin = min(abs(tileA.x - tileB.x), abs(tileA.x - tileB.x + self.cols), abs(tileB.x - tileA.x + self.cols))
             yMin = min(abs(tileA.y - tileB.y), abs(tileA.y - tileB.y + self.rows), abs(tileB.y - tileA.y + self.rows))
 
@@ -507,7 +511,7 @@ AttributeError: 'Map' object has no attribute 'grid'
         bestX = x
         bestY = y
 
-        if self.modifiers_by_id[MODIFIER_TORUS]:
+        if self.has_torus:
             stdX = abs(x - x2)
             best = stdX
             xPlus = abs(x - x2 + self.cols)
@@ -542,7 +546,7 @@ AttributeError: 'Map' object has no attribute 'grid'
         bestX = x
         bestY = y
 
-        if self.modifiers_by_id[MODIFIER_TORUS]:
+        if self.has_torus:
             stdX = abs(x - x2)
             best = stdX
             xPlus = abs(x - x2 + self.cols)
@@ -581,7 +585,7 @@ AttributeError: 'Map' object has no attribute 'grid'
         return self.grid[y][x]
 
     def GetTileModifierSafe(self, x, y) -> Tile | None:
-        if self.modifiers_by_id[MODIFIER_TORUS]:
+        if self.has_torus:
             return self.GetTileTorus(x, y)
 
         return self.GetTile(x, y)
@@ -938,7 +942,7 @@ AttributeError: 'Map' object has no attribute 'grid'
 
         # does the ACTUAL tile update
         maybeMoved = curTile.update(self, tile_type, tile_army, is_city, is_general)
-        
+
         if tile_type == TILE_OBSERVATORY:
             self.observatories.add(curTile)
         if tile_type == TILE_LOOKOUT:
@@ -1222,7 +1226,7 @@ AttributeError: 'Map' object has no attribute 'grid'
             if tile.visible:
                 visibleTiles.add(tile)
             if tile.isNeutral and tile.isCity:
-                if not tile.delta.gainedSight and tile.delta.armyDelta == 0 or self.turn < 2 and not self.modifiers_by_id[MODIFIER_CITY_STATE]:
+                if (not tile.delta.gainedSight and tile.delta.armyDelta == 0) or (self.turn < 2 and not self.has_city_state):
                     trueMinCityArmy = min(tile.army, minCityArmy)
                     if maxMinCityArmy is None or tile.army > maxMinCityArmy:
                         minCityArmy = min(tile.army, minCityArmy)
@@ -1242,8 +1246,8 @@ AttributeError: 'Map' object has no attribute 'grid'
                     queue.append(movable)
                     reachableTiles.add(movable)
 
-        if self.is_custom_map and trueMinCityArmy < 20 and self.turn < 20 and not self.modifiers_by_id[MODIFIER_CITY_STATE]:
-            logbook.info(f'Setting low cost city game...? is cityState {self.modifiers_by_id[MODIFIER_CITY_STATE]}, modifiers {[i for i, m in enumerate(self.modifiers_by_id) if m]}')
+        if self.is_custom_map and trueMinCityArmy < 20 and self.turn < 20 and not self.has_city_state:
+            logbook.info(f'Setting low cost city game...? is cityState {self.has_city_state}, modifiers {[i for i, m in enumerate(self.modifiers_by_id) if m]}')
             self.is_low_cost_city_game = True
 
         if len(pathableTiles) != len(self.pathable_tiles):
@@ -1269,7 +1273,7 @@ AttributeError: 'Map' object has no attribute 'grid'
                         break
 
             if changeWall:
-                logbook.info(f'Setting set_walled_cities... is cityState {self.modifiers_by_id[MODIFIER_CITY_STATE]}, modifiers {[i for i, m in enumerate(self.modifiers_by_id) if m]}')
+                logbook.info(f'Setting set_walled_cities... is cityState {self.has_city_state}, modifiers {[i for i, m in enumerate(self.modifiers_by_id) if m]}')
                 self.set_walled_cities(minCityArmy)
 
     def clear_deltas_and_score_history(self):
@@ -1978,7 +1982,7 @@ AttributeError: 'Map' object has no attribute 'grid'
             # then the move DEFINITELY didn't happen / was captured
             self.last_player_index_submitted_move = None
             return None
-        
+
         self.last_player_index_submitted_move = last_player_index_submitted_move
         return source, dest, move_half
 

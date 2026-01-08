@@ -914,6 +914,9 @@ class WinConditionAnalyzer(object):
             enScore = self.opponent_tracker.get_last_cycle_score_by_player(self.target_player, cyclesToGoBack=cyclesAgo - 1)
             frScore = self.opponent_tracker.get_last_cycle_score_by_player(self.map.player_index, cyclesToGoBack=cyclesAgo - 1)
 
+        if frStats is None or enStats is None:
+            return 0
+
         frEcon = frScore.tileCount + (frScore.cityCount - frStats.cities_gained) * 25
         enEcon = enScore.tileCount + (enScore.cityCount - enStats.cities_gained) * 25
 

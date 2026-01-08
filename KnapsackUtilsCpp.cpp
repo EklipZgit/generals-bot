@@ -5,11 +5,13 @@
 import sys
 compiler_args = {
     'linux': ['-std=c++20', '-ggdb3'],
-    'win32': ['/std:c++17']
+    'win32': ['/std:c++20', '/O2']
 }
 cfg['extra_compile_args'] = compiler_args.get(sys.platform, [])
 setup_pybind11(cfg)
 %>
+
+'/O1',
 */
 
 #define PYBIND11_DETAILED_ERROR_MESSAGES
@@ -41,8 +43,9 @@ static double estimateRuntime(
     int maxGroupSize)
 {
     double maxGrSq = std::sqrt(maxGroupSize);
-    double estTime = n * capacity * std::sqrt(maxGroupSize) * 0.00000022;
-    if (maxGroupSize == n) estTime = n * capacity * 0.00000022;
+    double estTime = n * capacity * std::sqrt(maxGroupSize) * 0.00000004;
+    if (maxGroupSize == n)
+        estTime = n * capacity * 0.00000004;
     return estTime;
 }
 
@@ -115,15 +118,15 @@ std::tuple<int, std::vector<py::object>> solve_multiple_choice_knapsack(
     }
 
     for (int curCapacity = 1; curCapacity < capacity + 1; ++curCapacity) {
-        for (int i = 1; i < n+1; ++i) {
+        for (int i = 0; i < n; ++i) {
             /// K is zero-initialized.
             // if (i == 0 || curCapacity == 0) {
             //     K[i][curCapacity] = 0;
             // } else
-            if (weights[i - 1] <= curCapacity) {
+            if (weights[i] <= curCapacity) {
                 int sub_max = 0;
-                int prev_group = groups[i-1] - 1;
-                int subKRow = curCapacity - weights[i - 1];
+                int prev_group = groups[i] - 1;
+                int subKRow = curCapacity - weights[i];
                 if (prev_group >= 0) {
                     auto [prevGroupStart, prevGroupEnd] = groupStartEnds[prev_group];
                     for (int j = prevGroupStart + 1; j < prevGroupEnd + 1; ++j) {
@@ -132,9 +135,9 @@ std::tuple<int, std::vector<py::object>> solve_multiple_choice_knapsack(
                         }
                     }
                 }
-                K[i][curCapacity] = std::max(sub_max + values[i - 1], K[i - 1][curCapacity]);
+                K[i + 1][curCapacity] = std::max(sub_max + values[i], K[i][curCapacity]);
             } else {
-                K[i][curCapacity] = K[i - 1][curCapacity];
+                K[i + 1][curCapacity] = K[i][curCapacity];
             }
         }
     }

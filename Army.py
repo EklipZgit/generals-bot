@@ -113,8 +113,12 @@ class Army(object):
 
         foundMatch = False
         for existingPath in self.expectedPaths:
+            if existingPath is None:
+                self.expectedPaths.remove(existingPath)
+                continue
             pathNode = path.start
             existingPathNode = existingPath.start
+
 
             isPathMatch = True
             while pathNode is not None and existingPathNode is not None:

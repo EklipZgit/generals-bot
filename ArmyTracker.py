@@ -454,14 +454,14 @@ class ArmyTracker(object):
                     if nextTile == origTile:
                         for path in paths:
                             logbook.info(f'for army {str(nextArmy)} ignoring SPLIT fog path move into visible: {str(path)}')
-                            nextArmy.expectedPaths.append(path)
+                            nextArmy.include_path(path)
 
                         if not nextArmy.scrapped:
                             self.armies[nextArmy.tile] = nextArmy
 
                         continue
                     for path in paths:
-                        nextArmy.expectedPaths.append(path)
+                        nextArmy.include_path(path)
 
                         logbook.info(f'respecting army {str(nextArmy)} SPLIT fog path: {str(path)}')
 

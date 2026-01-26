@@ -431,7 +431,7 @@ class ArmyInterceptor(object):
                     return
 
                 delayTurns = intTurnsMat.raw[tile.tile_index]
-                if delayTurns > 800 or delayTurns > threat.turns + 1:
+                if delayTurns is not None and (delayTurns > 800 or delayTurns > threat.turns + 1):
                     return
 
                 worstCaseExtraMoves = intDistMat.raw[tile.tile_index]
@@ -1319,6 +1319,12 @@ class ArmyInterceptor(object):
                 #         # we're moving away from the intercept... we were closer last move.
                 #         return None
             else:
+                if distA > distB:
+                    # we're moving away from the intercept... we were closer last move.
+                    if self.log_debug:
+                        logbook.info(
+                            f'(no pos) skipping {nextTile}->{toTile} because distA {distA} > distB {distB}')
+                    return None
                 # happens when we intercept further than the threat length eg defending a city (?)
                 pass
                 #euclidIntDistRecalcFromLast = 100
@@ -1334,11 +1340,11 @@ class ArmyInterceptor(object):
 
         # TODO can we just combine searches into one big search...? this is already per tile per distance...
         startDist = threatDistMap.raw[interceptAtTile.tile_index]
-        rawPos = positionsByTurn[startDist] if startDist < numPositions else (-10, -10)
-        if rawPos is None:
-            rawPos = (-10, -10)
-        (startPosX, startPosY) = rawPos
-        startEuclid = self.map.euclidDist(startPosX, startPosY, interceptAtTile.x, interceptAtTile.y)
+        startEuclid = startDist
+        rawPos = positionsByTurn[startDist] if startDist < numPositions else None
+        if rawPos is not None:
+            (startPosX, startPosY) = rawPos
+            startEuclid = self.map.euclidDist(startPosX, startPosY, interceptAtTile.x, interceptAtTile.y)
         startTiles = {interceptAtTile: ((0, startEuclid, 0, startArmy, interceptAtTile), 0)}
         results = SearchUtils.breadth_first_dynamic_max_per_tile_per_distance(
             self.map,
@@ -1557,11 +1563,11 @@ class ArmyInterceptor(object):
             enInterceptPointPathNode = enPathNode
 
             turnsLeft -= 1
-            if tile not in best_enemy_threat.path.tileSet:
-                if self.map.is_tile_friendly(tile):
-                    armyAccumulatedByInterceptPath += tile.army - 1
-                else:
-                    armyAccumulatedByInterceptPath -= tile.army + 1
+            # if tile not in best_enemy_threat.path.tileSet:  # TODO why was this here? This is preventing intercepts from valuing meeting a tile in front of them
+            if self.map.is_tile_friendly(tile):
+                armyAccumulatedByInterceptPath += tile.army - 1
+            else:
+                armyAccumulatedByInterceptPath -= tile.army + 1
 
             tilesAtDist = best_enemy_threat.armyAnalysis.tileDistancesLookup.get(i, None)
             directIntercept = False
@@ -1603,14 +1609,14 @@ class ArmyInterceptor(object):
                     # if not hasPrio:
                     #     offs += 1
                     worstCaseInterceptTurn = min(i + offs, worstCaseInterceptTurn)
-                else:
-                    intDist = best_enemy_threat.armyAnalysis.interceptDistances.raw[tile.tile_index]
-                    # if intDist is not None:
-                    #     worstCaseInterceptTurn = min(intDist + i, worstCaseInterceptTurn)
-                    intInf = interception.common_intercept_chokes.get(tile, None)
-                    if intInf is not None and intDist is not None:
-                        # this is correct, (at least in current unit test) however we just need to incorporate the fact that we may need to delay a turn, and then chase a turn (?)
-                        worstCaseInterceptTurn = min(max(intDist, intInf.max_extra_moves_to_capture) + i, worstCaseInterceptTurn)
+                # else:
+                #     intDist = best_enemy_threat.armyAnalysis.interceptDistances.raw[tile.tile_index]
+                #     # if intDist is not None:
+                #     #     worstCaseInterceptTurn = min(intDist + i, worstCaseInterceptTurn)
+                #     intInf = interception.common_intercept_chokes.get(tile, None)
+                #     if intInf is not None and intDist is not None:
+                #         # this is correct, (at least in current unit test) however we just need to incorporate the fact that we may need to delay a turn, and then chase a turn (?)
+                #         worstCaseInterceptTurn = min(max(intDist, intInf.max_extra_moves_to_capture) + i, worstCaseInterceptTurn)
 
             if directIntercept:
                 if tile != interceptPath.tail.tile and (node.next is None or node.next.tile != interceptPath.tail.tile):

@@ -3934,7 +3934,7 @@ class EklipZBot(object):
                     negativeTiles.add(tile)
 
         self.explored_this_turn = True
-        turns = self.timings.cycleTurns - turnInCycle
+        turns = self.timings.cycleTurns - turnInCycle - 7
         minArmy = max(12, int(genPlayer.standingArmy ** 0.75) - 10)
         self.info(f"Forcing explore to t{turns} and minArmy to {minArmy}")
         if self.is_all_in() and not self.is_all_in_army_advantage and not self.all_in_city_behind:
@@ -5006,7 +5006,7 @@ class EklipZBot(object):
         frStats = self._map.get_team_stats(self.general.player)
         enStats = self._map.get_team_stats(self.targetPlayer)
         turnsLeft = self.timings.get_turns_left_in_cycle(self._map.turn)
-        offset = 5
+        offset = 10
         if self.is_weird_custom:
             offset = 25
         if self._map.is_walled_city_game:
@@ -5015,7 +5015,7 @@ class EklipZBot(object):
             offset += 40
 
         if self.is_all_in_losing:
-            offset = -7
+            offset = -6
 
         losingEnoughForCounter = enStats.tileCount + 35 * enStats.cityCount > frStats.tileCount * 1.05 * customRatioMult + (35 * frStats.cityCount) * customRatioMult + offset
         if self.all_in_losing_counter == 0 and turnsLeft >= 30:
@@ -12034,6 +12034,11 @@ class EklipZBot(object):
         #
         #         return None
 
+        if not self._map.is_low_cost_city_game and not self.is_ffa_situation() and self.player.tileCount < 45:
+            if len([t for t in self.player.tiles if t.army > 1 and t not in self.target_player_gather_targets]) > 0:
+                self.info(f'Skipping launch because unused tiles')
+                return None
+
         path = self.get_value_per_turn_subsegment(self.target_player_gather_path, 1.0, 0.25)
         origPathLength = path.length
         # reduce the length of the path to allow for other use of the army
@@ -14679,21 +14684,26 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                 return True
 
             anyMovable = False
+            bestMv = None
+            bestMvDist = 1000
             for t in tile.movable:
-                if not t.isObstacle and self._map.team_ids_by_player_index[t.player] != self._map.team_ids_by_player_index[self.general.player]:
+                if not t.isObstacle and self._map.team_ids_by_player_index[t.player] != self._map.team_ids_by_player_index[self.general.player] and enDists.raw[t.tile_index] <= enDists.raw[tile.tile_index]:
+                    if bestMvDist > enDists.raw[t.tile_index]:
+                        bestMvDist = enDists.raw[t.tile_index]
+                        bestMv = t
                     anyMovable = True
                     break
 
             if anyMovable and tile.player == self.general.player:
-                mustGatherTo.add(tile)
-                mustGather.discard(tile)
-                logbook.info(f'INCL {tile}')
+                mustGatherTo.add(bestMv)
+                # mustGather.discard(tile)
+                logbook.info(f'INCL {tile}->{bestMv}')
                 def foreachSkipNearby(nearbyTile: Tile) -> bool:
                     if nearbyTile.player != self.general.player:
                         return True
                     bypass.add(nearbyTile.tile_index)
 
-                SearchUtils.breadth_first_foreach_fast_no_neut_cities(self._map, [tile], 6, foreachSkipNearby)
+                SearchUtils.breadth_first_foreach_fast_no_neut_cities(self._map, [tile], 5, foreachSkipNearby)
 
         SearchUtils.breadth_first_foreach_fast_no_neut_cities(
             self._map,

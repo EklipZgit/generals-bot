@@ -391,8 +391,8 @@ if __name__ == '__main__':
     parser.add_argument('-userID', metavar='str', type=str, default='--',
                         help='User ID to use')
     parser.add_argument('-g', '--gameType', metavar='str', type=str,
-                        choices=["private", "custom", "1v1", "ffa", "team"],
-                        default="private", help='Game Type: private, custom, 1v1, ffa, or team')
+                        choices=["private", "custom", "1v1", "ffa", "team", "bigteam"],
+                        default="private", help='Game Type: private, custom, 1v1, ffa, team, or bigteam')
     parser.add_argument('-roomID', metavar='str', type=str, default="testing", help='Private Room ID (optional)')
     # parser.add_argument('--roomID', metavar='str', type=str, help='Private Room ID (optional)')
     parser.add_argument('--right', action='store_true')

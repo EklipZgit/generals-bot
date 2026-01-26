@@ -217,6 +217,8 @@ class GeneralsClient(object):
             self._send(["join_team", self._gameid, userid, self.bot_key, supporterColorSelection])
         elif mode == "ffa":
             self._send(["play", userid, self.bot_key, supporterColorSelection])
+        elif mode == "bigteam":
+            self._send(["play_big_team", userid, self.bot_key, supporterColorSelection])
         else:
             raise ValueError("Invalid mode")
 

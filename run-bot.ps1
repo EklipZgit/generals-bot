@@ -120,15 +120,23 @@ This allows you to have different bots running on different monitors, etc.
     `$logFile = "`$logName.txt"
     `$logPath = "$logFolder/`$logFile"
 
+    `$startProcSplat = @{}
     if (-not `$$($nolog.ToString()))
     {
-        Start-Transcript -path "`$logPath"
+        #Start-Transcript -path "`$logPath"
+        `$startProcSplat['RedirectStandardError'] = "`$logPath"
     }
 
     try
     {
         #Write-Verbose `"python $path -name $name -g $game $argString`" -verbose
-        python "$path" -name '$name' -g '$game' @arguments 2>&1
+        #python "$path" -name '$name' -g '$game' @arguments
+
+        `$procArguments = @("$path", '-name', '$name', '-g', '$game')
+        `$procArguments += `$arguments
+        `$Process = Start-Process -FilePath "python.exe" -ArgumentList `$procArguments -PassThru -NoNewWindow @startProcSplat
+        `$Process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+        `$Process | Wait-Process 2>&1
     }
     catch
     {
@@ -138,7 +146,7 @@ This allows you to have different bots running on different monitors, etc.
     {
         if (-not `$$($nolog.ToString()))
         {
-            stop-transcript
+            #stop-transcript
             `$content = Get-Content `$logPath
             `$prevLine = [string]::Empty
             `$repId = `$null
@@ -924,6 +932,7 @@ function Start-WindowsTerminalBigTeamBots {
 
     $windowName = 'BigTeam'
 
+
     <#
     original timings and bugs from 2019, with connection code fixed
     #>
@@ -1085,6 +1094,183 @@ function Start-WindowsTerminalBigTeamBots {
         cd "D:/2019_reformat_Backup/generals-bot/";
         . ./run-bot.ps1;
         $command = 'run-bot -game bigteam -name "EklipZ_ai_06" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-10-23/BotHost.py'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    <#
+    bigteam only 2
+    #>
+    wt -w $windowName new-tab pwsh -NoExit -c {
+        cd "D:/2019_reformat_Backup/generals-bot/";
+        . ./run-bot.ps1;
+        $command = 'run-bot -game bigteam -name "EklipZ_ai_i2" -right -noui -nolog'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    <#
+    bigteam only 3
+    #>
+    wt -w $windowName new-tab pwsh -NoExit -c {
+        cd "D:/2019_reformat_Backup/generals-bot/";
+        . ./run-bot.ps1;
+        $command = 'run-bot -game bigteam -name "EklipZ_ai_i3" -right -noui -nolog'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    <#
+    bigteam only 4
+    #>
+    wt -w $windowName new-tab pwsh -NoExit -c {
+        cd "D:/2019_reformat_Backup/generals-bot/";
+        . ./run-bot.ps1;
+        $command = 'run-bot -game bigteam -name "EklipZ_ai_i4" -right -noui -nolog'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    <#
+    bigteam only 2
+    #>
+    wt -w $windowName new-tab pwsh -NoExit -c {
+        cd "D:\2019_reformat_Backup\generals-bot\";
+        . .\run-bot.ps1;
+        $command = 'run-bot -game bigteam -name "EklipZ_ai_i2" -right -noui -nolog'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    <#
+    bigteam only 3
+    #>
+    wt -w $windowName new-tab pwsh -NoExit -c {
+        cd "D:\2019_reformat_Backup\generals-bot\";
+        . .\run-bot.ps1;
+        $command = 'run-bot -game bigteam -name "EklipZ_ai_i3" -right -noui -nolog'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    <#
+    bigteam only 4
+    #>
+    wt -w $windowName new-tab pwsh -NoExit -c {
+        cd "D:\2019_reformat_Backup\generals-bot\";
+        . .\run-bot.ps1;
+        $command = 'run-bot -game bigteam -name "EklipZ_ai_i4" -right -noui -nolog'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    <#
+    bigteam only
+    #>
+    wt -w $windowName new-tab pwsh -NoExit -c {
+        cd "D:/2019_reformat_Backup/generals-bot/";
+        . ./run-bot.ps1;
+        $command = 'run-bot -game bigteam -name "EklipZ_ai" -right -nolog'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    wt -w $windowName new-tab pwsh -NoExit -c {
+        cd "D:/2019_reformat_Backup/generals-bot/";
+        . ./run-bot.ps1;
+        $command = 'Run-Blob -game bigteam'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    wt -w $windowName new-tab pwsh -NoExit -c {
+        cd "D:/2019_reformat_Backup/generals-bot/";
+        . ./run-bot.ps1;
+        $command = 'Run-Blob -game bigteam'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    wt -w $windowName new-tab pwsh -NoExit -c {
+        cd "D:/2019_reformat_Backup/generals-bot/";
+        . ./run-bot.ps1;
+        $command = 'Run-Path -game bigteam'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    wt -w $windowName new-tab pwsh -NoExit -c {
+        cd "D:/2019_reformat_Backup/generals-bot/";
+        . ./run-bot.ps1;
+        $command = 'Run-Path -game bigteam'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    wt -w $windowName new-tab pwsh -NoExit -c {
+        cd "D:/2019_reformat_Backup/generals-bot/";
+        . ./run-bot.ps1;
+        $command = 'Run-SoraAI -game bigteam'
+        try {
+            Invoke-Expression $command
+        } finally {
+            Write-Host $command
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    wt -w $windowName new-tab pwsh -NoExit -c {
+        cd "D:/2019_reformat_Backup/generals-bot/";
+        . ./run-bot.ps1;
+        $command = 'Run-SoraAI -game bigteam'
         try {
             Invoke-Expression $command
         } finally {

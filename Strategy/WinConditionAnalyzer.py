@@ -500,7 +500,7 @@ class WinConditionAnalyzer(object):
             tiles: typing.List[Tile],
             maxTurns: int,
             asPlayer: int,
-            timeLimit: float = 0.05,
+            timeLimit: float = 0.07,
             minArmy: int = 1,
             negativeTiles: typing.Set[Tile] | None = None
     ) -> typing.Tuple[int, int]:

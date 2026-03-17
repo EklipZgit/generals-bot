@@ -31,21 +31,27 @@ BOTHTTPPREFIX = "https"
 _ENDPOINT_BOT = "://botws.generals.io/socket.io/?EIO=4"
 _ENDPOINT_LOCAL = "://localhost:8080/socket.io/?EIO=4"
 _ENDPOINT_PUBLIC = "://ws.generals.io/socket.io/?EIO=4"
+_ENDPOINT_LAN = "://192.168.1.17:8080/socket.io/?EIO=4"
 
 # force bot server bots to local:
 #_ENDPOINT_BOT = _ENDPOINT_LOCAL
 #BOTWSPREFIX = "ws"
 #BOTHTTPPREFIX = "http"
 
-# # force public bots to local:
-# _ENDPOINT_PUBLIC = _ENDPOINT_LOCAL
-# WSPREFIX = "ws"
-# HTTPPREFIX = "http"
+# force bot server bots to lan:
+_ENDPOINT_BOT = _ENDPOINT_LAN
+BOTWSPREFIX = "ws"
+BOTHTTPPREFIX = "http"
+
+# force public bots to lan:
+_ENDPOINT_PUBLIC = _ENDPOINT_LAN
+WSPREFIX = "ws"
+HTTPPREFIX = "http"
 
 # # force public bots to bot
 # _ENDPOINT_PUBLIC = _ENDPOINT_BOT
 
-_LOG_WS = False
+_LOG_WS = True
 
 
 class ChatUpdate(object):

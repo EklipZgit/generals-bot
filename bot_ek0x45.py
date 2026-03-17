@@ -1388,8 +1388,7 @@ class EklipZBot(object):
                 self.viewInfo.add_info_line(
                     f'timingsBase: g{gatherSplit} <- min(launch {launchTiming}, max(15, min({minExpWeighted}, 50-timeAv {timeOutsideLaunchAndGath} ({50 - timeOutsideLaunchAndGath}))), en{countEnOnPath}, fr{countFrOnPath}, nt{countNeutOnPath}, expW {xPweight}')
 
-        randomVal = random.randint(-3, 1)
-        randomVal = -3
+        randomVal = random.randint(-2, 2)
         # what size cycle to use, normally the 50 turn cycle
 
         # at what point in the cycle to gatherSplit from gather to utility moves. TODO dynamically determine this based on available utility moves?
@@ -10976,6 +10975,7 @@ class EklipZBot(object):
                     cityDefVal -= 15
                 searchNegs = set()
                 if self.city_capture_plan_last_updated > self._map.turn - 2 and targetCity in self.city_capture_plan_tiles:
+                    self.viewInfo.add_stats_line(f'updating existing city capture plan tiles. cityDefVal {cityDefVal}')
                     searchNegs.update(self.city_capture_plan_tiles)
                 else:
                     cityDefVal -= cityCost
@@ -10986,8 +10986,9 @@ class EklipZBot(object):
                         for t in playerTilesNearCity:
                             cityDefVal += t.army - 1
                         searchNegs.update(playerTilesNearCity)
+                        self.viewInfo.add_stats_line(f'new city capture plan tiles? cityDefVal {cityDefVal}')
                     else:
-                        self.viewInfo.add_stats_line(f'bypassing neut cities, 0 neut cities available :(')
+                        self.viewInfo.add_stats_line(f'bypassing neut cities, 0 neut cities available :( cityDefVal {cityDefVal}')
                         return False
 
                 defTile = self.general
@@ -11003,14 +11004,14 @@ class EklipZBot(object):
                     negativeTiles=attackNegs)
 
                 requiredDefenseArmy = risk + cityCost - cityDefVal
-                turns, value = self.win_condition_analyzer.get_dynamic_turns_visible_defense_against([defTile], defTurns, asPlayer=self.general.player, minArmy=requiredDefenseArmy, negativeTiles=searchNegs)
-
+                turns, defValue = self.win_condition_analyzer.get_dynamic_turns_visible_defense_against([defTile], defTurns, asPlayer=self.general.player, minArmy=requiredDefenseArmy, negativeTiles=searchNegs)
+            
             armyBonusDefense = 2 * max(0, defTurns - cycleLeft)
-            defAfterCity = value + cityDefVal + armyBonusDefense
+            defAfterCity = defValue + cityDefVal + armyBonusDefense
             if self.opponent_tracker.even_or_up_on_cities(self.targetPlayer):
                 if risk > defAfterCity and risk > 5:
                     self.is_blocking_neutral_city_captures = True
-                    self.viewInfo.add_stats_line(f'bypassing neut cities, danger {risk} in {threatTurns} > {defAfterCity} ({value} + cityDefVal {cityDefVal}) and risk > 5')
+                    self.viewInfo.add_stats_line(f'bypassing neut cities, danger {risk} in {threatTurns} > {defAfterCity} ({defValue} + cityDefVal {cityDefVal}) and risk > 5')
                     return False
 
                 if self.is_blocking_neutral_city_captures:
@@ -11022,9 +11023,9 @@ class EklipZBot(object):
                 return False
 
             if risk <= defAfterCity:
-                self.viewInfo.add_stats_line(f'ALLOW neut cities, danger {risk} in {threatTurns} <= {defAfterCity} ({value} + cityDefVal {cityDefVal})')
+                self.viewInfo.add_stats_line(f'ALLOW neut cities, danger {risk} in {threatTurns} <= {defAfterCity} ({defValue} + cityDefVal {cityDefVal})')
             else:
-                self.viewInfo.add_stats_line(f'ALLOW neut cities DESPITE danger {risk} in {threatTurns} > {defAfterCity} ({value} + cityDefVal {cityDefVal})')
+                self.viewInfo.add_stats_line(f'ALLOW neut cities DESPITE danger {risk} in {threatTurns} > {defAfterCity} ({defValue} + cityDefVal {cityDefVal})')
 
         # we now take cities proactively?
         proactivelyTakeCity = self.should_proactively_take_cities() or forceNeutralCapture
@@ -14655,16 +14656,21 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         #
         # genOptionDistances = SearchUtils.build_distance_map_matrix(self._map, possibleGenTargets)
         expMap = self.get_expansion_weight_matrix()
-        #
-        # leafMoves = [m for m in self.leafMoves if m.source.army > 1]
-        # enDists = self._alt_en_gen_position_distances[self.targetPlayer]
-        # leafMovesClosestToGen = list(sorted(leafMoves, key=lambda m: self.distance_from_general(m.dest)))
-        # # ignore the leafmoves closest to general
-        # leafMoves = leafMovesClosestToGen[6:]
+        
+        leafMoves = [m for m in self.leafMoves if m.source.army > 1]
+        enDists = self._alt_en_gen_position_distances[self.targetPlayer]
+        leafMovesClosestToGen = list(sorted(leafMoves, key=lambda m: self.distance_from_general(m.dest)))
+        # ignore the leafmoves closest to general
+        leafMoves = leafMovesClosestToGen[7:]
+        if len(leafMoves) > 0:
+            return leafMoves[-1]
+
 
         # prioritizedLeaves = self.prioritize_expansion_leaves(leafMoves, distPriorityMap=enDists)
 
         tilePathLookup = {}
+        for p in self.expansion_plan.all_paths:
+            tilePathLookup[p.tileList[0]] = p
         maxPath: Path | None = None
         possibleGenTargets = self.alt_en_gen_positions[self.targetPlayer]
         enDists = self._alt_en_gen_position_distances[self.targetPlayer]
@@ -14721,6 +14727,9 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             if not self._map.is_tile_friendly(tile):
                 mustGatherTo.discard(tile)
 
+        for move in leafMoves:
+            mustGather.discard(move.source)
+
         # mustGatherTo.add(self.general)
 
         for tile in mustGatherTo:
@@ -14731,7 +14740,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             gatherTieBreaks.raw[tile.tile_index] += 0.5
             self.viewInfo.add_targeted_tile(tile, TargetStyle.YELLOW, radiusReduction=8)
 
-        gathTurns = 25
+        gathTurns = len(mustGather)
 
         gathTargets = {}
         for tile in mustGatherTo:

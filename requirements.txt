@@ -1,13 +1,13 @@
 websocket-client
-pygame
+pygame-ce>=2.5.6
 certifi
 requests
 nashpy
 numpy==2.2 # after numba update let this upgrade? Numba being stupid.
-numba
+numba>=0.64.0
 scipy
 Logbook
-pyzmq
+pyzmq>=27.1.0
 pcst_fast
 networkx
 matplotlib
@@ -21,8 +21,8 @@ unionfind
 logbook
 certifi
 
-cppimport
 cython
+pybind11>=3.0.0
 pandas
 tqdm
 setuptools

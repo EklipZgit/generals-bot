@@ -43,10 +43,10 @@ _ENDPOINT_BOT = _ENDPOINT_LAN
 BOTWSPREFIX = "ws"
 BOTHTTPPREFIX = "http"
 
-# force public bots to lan:
-_ENDPOINT_PUBLIC = _ENDPOINT_LAN
-WSPREFIX = "ws"
-HTTPPREFIX = "http"
+# # force public bots to lan:
+# _ENDPOINT_PUBLIC = _ENDPOINT_LAN
+# WSPREFIX = "ws"
+# HTTPPREFIX = "http"
 
 # # force public bots to bot
 # _ENDPOINT_PUBLIC = _ENDPOINT_BOT

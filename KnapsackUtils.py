@@ -1,13 +1,47 @@
 import logbook
+import importlib
+import pathlib
+import subprocess
+import sys
 import time
 import typing
-import cppimport
 
 
 # This does not prevent the pyd locking, apparently the pyd is a python module itself and is then locked by the python runtime, I guess.
-# cppimport.settings['use_filelock'] = False
+# importlib import does not prevent the pyd locking, apparently the pyd is a python module itself and is then locked by the python runtime, I guess.
 
-KnapsackUtilsCpp = cppimport.imp('KnapsackUtilsCpp')
+_MODULE_NAME = 'KnapsackUtilsCpp'
+_MODULE_DIR = pathlib.Path(__file__).resolve().parent
+
+
+def _import_knapsack_utils_cpp():
+    return importlib.import_module(_MODULE_NAME)
+
+
+def _build_knapsack_utils_cpp_inplace():
+    subprocess.run(
+        [sys.executable, 'setup.py', 'build_ext', '--inplace', '--verbose'],
+        cwd=_MODULE_DIR,
+        check=True,
+    )
+
+
+try:
+    KnapsackUtilsCpp = _import_knapsack_utils_cpp()
+except ModuleNotFoundError as original_ex:
+    try:
+        _build_knapsack_utils_cpp_inplace()
+        importlib.invalidate_caches()
+        KnapsackUtilsCpp = _import_knapsack_utils_cpp()
+    except Exception as build_ex:
+        stale_artifacts = sorted(path.name for path in _MODULE_DIR.glob(f'{_MODULE_NAME}*.pyd'))
+        stale_artifacts_msg = ''
+        if stale_artifacts:
+            stale_artifacts_msg = f" Found existing compiled artifacts: {', '.join(stale_artifacts)}."
+        raise ModuleNotFoundError(
+            f"Could not import compiled extension '{_MODULE_NAME}' for Python {sys.version_info.major}.{sys.version_info.minor}. "
+            f"Attempted to build it in-place with `{sys.executable} setup.py build_ext --inplace`, but that did not produce an importable module.{stale_artifacts_msg}"
+        ) from build_ex
 
 
 def solve_multiple_choice_knapsack(

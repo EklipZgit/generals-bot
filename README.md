@@ -4,7 +4,7 @@
 
 ## Synopsis
 
-[Generals.io](http://generals.io) is a multiplayer web game where the goal is to protect your general and capture the enemy generals.  
+[Generals.io](http://generals.io) is a multiplayer web game where the goal is to protect your general and capture the enemy generals.
 
 This is EklipZ_ai on the bot server, and Human.exe on the human server.
 EklipZ_ai / Human.exe is a generals bot that I wrote. It does not use machine learning; it is a purely algorithmic AI.
@@ -35,11 +35,12 @@ Places where it is lacking as a Generals player:
 - I never really figured out the math on time spent gathering vs attacking. It does adjust the timings based on theories I came up with that improve it somewhat, but top players have better instincts for how long to spend expanding and attacking, often.
 - It is 1v1 optimized. It doesn't play FFAs particularly intelligently; while it does have some specific strategy differences in FFA (does not prioritize the middle of the map until down to 3 players, instead prioritizes map edges and city taking) but largely, the bot is optimized for 1v1 and while it can easily do well in an FFA, it is not a consistently good FFA player and does not try to be.
 
-
 ## Setup
 
-- [ ] Python3.11 (https://www.python.org/downloads/) or on windows with Chocolatey, as admin, run choco install python311. Python 312 has setuptools issues and will not install packages, didn't bother to figure out why. If you can sort it out, feel free to run with 3.12+ and let me know how you fixed it on windows.
+- [ ] Python 3.14.3 (https://www.python.org/downloads/) or on Windows with Chocolatey, as admin, run `choco install python --version=3.14.3`
 - [ ] Install Dependencies: `pip3 install -r requirements.txt`
+- [ ] The dependency list is set up for Python 3.14 using `pygame-ce` (imported in code as `pygame`) and newer native-extension package versions such as `numba>=0.64.0`, `pyzmq>=27.1.0`, and `pybind11>=3.0.0`
+- [ ] Build the compiled extensions in-place: `python setup.py build_ext --inplace`
 - [ ] Update all the hardcoded paths to whatever you want them to be on your system, see https://github.com/EklipZgit/generals-bot/commit/76b114c4d6bd551dd273fe9192e82a5690ea260e
 
 ## Usage

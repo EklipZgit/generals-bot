@@ -663,7 +663,7 @@ class PivotIterativeWRP(PivotWRP):
         if not cutoffTime:
             cutoffTime = time.perf_counter() + 1000
 
-        cutoffThresh = 1000
+        cutoffThresh = 100
         w = 2.0
         start = time.perf_counter()
         lastStart = start
@@ -679,7 +679,7 @@ class PivotIterativeWRP(PivotWRP):
             closedSet = set()
             iteration = 0
             lenThreshs = [i + (cutoffThresh - i) * w for i in range(cutoffThresh + 2)]
-            logbook.info(f'lenThreshs {[e for e in enumerate(lenThreshs)]}')
+            # logbook.info(f'lenThreshs {[e for e in enumerate(lenThreshs)]}')
 
             while openList:
                 iteration += 1

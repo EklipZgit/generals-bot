@@ -101,6 +101,10 @@ This allows you to have different bots running on different monitors, etc.
     $argString = $([string]::Join(" ", $arguments))
     Write-Verbose $argString -Verbose
     $host.ui.RawUI.WindowTitle = "$game - $($name.Replace('[Bot]', '').Trim())"
+    $pythonVer = "python3.14"
+    if ($path -notlike '*/generals-bot/*' -and $path -notlike '*\generals-bot\*') {
+        $pythonVer = "python"
+    }
 
     # this exeString is a hack due to the powershell memory leak, need to keep opening new PS processes
     # or we fill up memory to 1GB per powershell window overnight :(
@@ -129,12 +133,12 @@ This allows you to have different bots running on different monitors, etc.
 
     try
     {
-        #Write-Verbose `"python $path -name $name -g $game $argString`" -verbose
-        #python "$path" -name '$name' -g '$game' @arguments
+        #Write-Verbose `"$pythonVer $path -name $name -g $game $argString`" -verbose
+        #$pythonVer "$path" -name '$name' -g '$game' @arguments
 
         `$procArguments = @("$path", '-name', '$name', '-g', '$game')
         `$procArguments += `$arguments
-        `$Process = Start-Process -FilePath "python.exe" -ArgumentList `$procArguments -PassThru -NoNewWindow @startProcSplat
+        `$Process = Start-Process -FilePath "$pythonVer.exe" -ArgumentList `$procArguments -PassThru -NoNewWindow @startProcSplat
         `$Process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
         `$Process | Wait-Process 2>&1
     }

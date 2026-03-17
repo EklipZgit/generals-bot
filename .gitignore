@@ -2,6 +2,7 @@
 
 .rendered.*.cpp
 *.pyd
+KnapsackUtilsCython.c
 
 
 # Mac DS Store

@@ -664,7 +664,7 @@ class PivotIterativeWRP(PivotWRP):
             cutoffTime = time.perf_counter() + 1000
 
         cutoffThresh = 100
-        w = 2.0
+        w = 3.0
         start = time.perf_counter()
         lastStart = start
         fullCount = len(self.to_discover)

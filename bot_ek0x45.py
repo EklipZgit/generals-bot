@@ -1087,7 +1087,7 @@ class EklipZBot(object):
 
         self.armyTracker.verify_player_tile_and_army_counts_valid()
 
-        if not self.is_lag_massive_map or self._map.turn < 3 or (self._map.turn + 5) % 5 == 0:
+        if not self.is_all_in() and (not self.is_lag_massive_map or self._map.turn < 3 or (self._map.turn + 5) % 5 == 0):
             with self.perf_timer.begin_move_event('WinConditionAnalyzer Analyze'):
                 self.win_condition_analyzer.analyze(self.targetPlayer, self.targetPlayerExpectedGeneralLocation)
 
@@ -1997,7 +1997,7 @@ class EklipZBot(object):
         # if not self.isAllIn() and (threat.turns > -1 and self.dangerAnalyzer.anyThreat):
         #    armyAmount = (self.general_min_army_allowable() + enemyNearGen) * 1.1 if threat is None else threat.threatValue + general.army + 1
 
-        if not is_lag_move and not self.is_lag_massive_map or self._map.turn < 3 or (self._map.turn + 2) % 5 == 0:
+        if not self.is_all_in() and (not is_lag_move and not self.is_lag_massive_map or self._map.turn < 3 or (self._map.turn + 2) % 5 == 0):
             with self.perf_timer.begin_move_event('ENEMY Expansion quick check'):
                 self.enemy_expansion_plan = self.build_enemy_expansion_plan(timeLimit=0.007, pathColor=(255, 150, 130))
 
@@ -2005,7 +2005,7 @@ class EklipZBot(object):
         for i, interceptPlan in enumerate(self.intercept_plans.values()):
             self.render_intercept_plan(interceptPlan, colorIndex=i)
 
-        if not is_lag_move:
+        if not self.is_all_in() and not is_lag_move:
             with self.perf_timer.begin_move_event('Expansion quick check'):
                 redoTimings = False
                 if self.expansion_plan is None or self.timings is None or self._map.turn >= self.timings.nextRecalcTurn:
@@ -10972,7 +10972,7 @@ class EklipZBot(object):
                 cityContribution = (defTurns - len(self.city_capture_plan_tiles)) // 2
                 cityDefVal = generalContribution + cityContribution
                 if not self.was_allowing_neutral_cities_last_turn:
-                    cityDefVal -= 15
+                    cityDefVal -= 10
                 searchNegs = set()
                 if self.city_capture_plan_last_updated > self._map.turn - 2 and targetCity in self.city_capture_plan_tiles:
                     self.viewInfo.add_stats_line(f'updating existing city capture plan tiles. cityDefVal {cityDefVal}')
@@ -11005,11 +11005,12 @@ class EklipZBot(object):
 
                 requiredDefenseArmy = risk + cityCost - cityDefVal
                 turns, defValue = self.win_condition_analyzer.get_dynamic_turns_visible_defense_against([defTile], defTurns, asPlayer=self.general.player, minArmy=requiredDefenseArmy, negativeTiles=searchNegs)
-            
+
             armyBonusDefense = 2 * max(0, defTurns - cycleLeft)
+            hackToEnsureCity = 30 if self.was_allowing_neutral_cities_last_turn else 0
             defAfterCity = defValue + cityDefVal + armyBonusDefense
             if self.opponent_tracker.even_or_up_on_cities(self.targetPlayer):
-                if risk > defAfterCity and risk > 5:
+                if risk > defAfterCity + hackToEnsureCity and risk > 5:
                     self.is_blocking_neutral_city_captures = True
                     self.viewInfo.add_stats_line(f'bypassing neut cities, danger {risk} in {threatTurns} > {defAfterCity} ({defValue} + cityDefVal {cityDefVal}) and risk > 5')
                     return False
@@ -14656,7 +14657,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         #
         # genOptionDistances = SearchUtils.build_distance_map_matrix(self._map, possibleGenTargets)
         expMap = self.get_expansion_weight_matrix()
-        
+
         leafMoves = [m for m in self.leafMoves if m.source.army > 1]
         enDists = self._alt_en_gen_position_distances[self.targetPlayer]
         leafMovesClosestToGen = list(sorted(leafMoves, key=lambda m: self.distance_from_general(m.dest)))

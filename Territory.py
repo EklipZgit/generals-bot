@@ -64,7 +64,7 @@ class TerritoryClassifier(object):
         undiscoveredCounterDepth = 5
         # count the number of tiles for each player within range 3 to determine whose territory this is
         neutralNewIndex = len(self.map.players)
-        
+
         # do a BFS foreach within a BFS foreach. Normal everyday stuff nbd
         def foreach_near_updated_tiles(evaluatingTile: Tile):
             if evaluatingTile.player != -1 and evaluatingTile.player != self.map.player_index:  # and not evaluatingTile.discoveredAsNeutral (territories track live territory, not general prediction)
@@ -77,7 +77,7 @@ class TerritoryClassifier(object):
             def countFunc(tile):
                 if tile.isObstacle:
                     return tile.player == -1 and tile.discovered
-                
+
                 currentTerritory = self.territoryMap[tile]
                 if not evaluatingTile.discovered:
                     # weight based on territory already owned, making it harder to flip a territory (and hopefully better encapsulate who owns what)
@@ -99,7 +99,7 @@ class TerritoryClassifier(object):
                         pIndex = tile.player
                         if pIndex != -1 and pIndex != self.map.player_index:
                             counts[evaluatingTile.x][evaluatingTile.y][pIndex] += 1
-                        elif pIndex != -1: 
+                        elif pIndex != -1:
                             # weight our tiles less because we see more of them.
                             counts[evaluatingTile.x][evaluatingTile.y][pIndex] += 0.8
 
@@ -113,7 +113,7 @@ class TerritoryClassifier(object):
                     maxPlayer = pIndex
                     maxValue = value
             userName = "Neutral"
-                
+
             # convert back to -1 index for neutral
             if maxPlayer == neutralNewIndex:
                 maxPlayer = -1
@@ -130,11 +130,10 @@ class TerritoryClassifier(object):
         startTiles = list(self.needToUpdateAroundTiles)
         logbook.info("  Scanning territory around {}".format(" - ".join([tile.toString() for tile in startTiles])))
         breadth_first_foreach(self.map, startTiles, undiscoveredCounterDepth, foreach_near_updated_tiles)
-        duration = time.perf_counter() - startTime
-            
-        logbook.info("Completed scanning territories in {:.3f}".format(duration))
+        classificationDuration = time.perf_counter() - startTime
         self.needToUpdateAroundTiles = set()
 
+        distanceRebuildStart = time.perf_counter()
         for player in self.map.players:
             if player.dead:
                 continue
@@ -153,6 +152,10 @@ class TerritoryClassifier(object):
                     startTiles.append(tile)
 
             self.territoryTeamDistances[team] = SearchUtils.build_distance_map_matrix(self.map, startTiles)
+
+        distanceRebuildDuration = time.perf_counter() - distanceRebuildStart
+        totalDuration = time.perf_counter() - startTime
+        logbook.info("Completed scanning territories in {:.3f} (classify {:.3f}, distance rebuild {:.3f})".format(totalDuration, classificationDuration, distanceRebuildDuration))
 
     def is_tile_in_friendly_territory(self, tile: Tile) -> bool:
         """Returns False if tile is in neutral or enemy territory. True only for player territory."""

@@ -10,6 +10,7 @@ from enum import Enum
 import logbook
 
 import Algorithms
+import DebugHelper
 import SearchUtils
 from Algorithms import FastDisjointSet
 from Interfaces import MapMatrixInterface
@@ -235,7 +236,7 @@ class TileIslandBuilder(object):
                 continue
 
             newIsland = self._build_island_from_tile(tile, tile.player)
-            brokenUp = self._break_up_initial_island_if_necessary(newIsland)
+            brokenUp = self._break_up_initial_island_if_necessary(newIsland, mode)
             newIslands.extend(brokenUp)
 
         logbook.info(f'initial islands built ({time.perf_counter() - start:.5f}s in)')
@@ -247,7 +248,11 @@ class TileIslandBuilder(object):
             if mode == IslandBuildMode.GroupByArmy and island.team == ourTeam:
                 # we only break our own friendly islands up by player
                 newIslands = self._break_apart_island_by_army(island, primaryPlayer=self.map.player_index)
-            else:  # if mode == IslandBuildMode.BuildByDistance
+            elif mode == IslandBuildMode.GroupByArmy and island.team == -1:
+                newIslands = [island]
+            elif mode == IslandBuildMode.BuildByDistance:
+                newIslands = self._break_apart_island_if_too_large(island)
+            else:
                 newIslands = self._break_apart_island_if_too_large(island)
 
             for newIsland in newIslands:
@@ -265,74 +270,362 @@ class TileIslandBuilder(object):
         logbook.info(f'building large island distances and sets ({time.perf_counter() - start:.5f}s in)')
         for team in self.teams:
             self._build_large_island_distances_for_team(team)
-        # self._build_large_island_distances_for_team(-1)
 
         complete = time.perf_counter() - start
         logbook.info(f'islands all built in {complete:.5f}s')
 
     def update_tile_islands(self, enemyGeneralExpectedLocation: Tile | None, mode: IslandBuildMode = IslandBuildMode.GroupByArmy):
-        # TODO do a partial recalc instead of full rebuild..
-        self.recalculate_tile_islands(enemyGeneralExpectedLocation, mode)
-        return
         logbook.info('update_tile_islands starting')
         start = time.perf_counter()
 
-        for idx, tile in enumerate(self.map.tiles_by_index):
-            if tile.army != tile.delta.oldArmy or self.map.team_ids_by_player_index[tile.player] != self.map.team_ids_by_player_index[tile.delta.oldOwner]:
-                self._split_tile_to_isolated_island_if_necessary(tile)
+        self._team_stats_by_team_id = self.map.get_team_stats_lookup_by_team_id()
+        self._team_stats_by_player = [self._team_stats_by_team_id[p.team] for p in self.map.players]
+        self._team_stats_by_player.append(self._team_stats_by_team_id[-1])
 
-        # self.log_debug
+        changedTiles: typing.List[Tile] = []
+        changedArmyTiles: typing.Set[Tile] = set()
+        changedOwnerTiles: typing.Set[Tile] = set()
+        impactedLeafIslands: typing.Set[TileIsland] = set()
+        affectedTeams: typing.Set[int] = set()
+
+        for tile in self.map.tiles_by_index:
+            ownerChanged = tile.delta.oldOwner != tile.player
+            armyChanged = tile.delta.oldArmy != tile.army
+            if not ownerChanged and not armyChanged:
+                continue
+
+            changedTiles.append(tile)
+            if ownerChanged:
+                changedOwnerTiles.add(tile)
+                affectedTeams.add(self.teams[tile.delta.oldOwner])
+            if armyChanged:
+                changedArmyTiles.add(tile)
+            affectedTeams.add(self.teams[tile.player])
+
+            existingIsland = self.tile_island_lookup.raw[tile.tile_index]
+            if existingIsland is not None:
+                impactedLeafIslands.update(self._get_leaf_islands_for_island(existingIsland))
+
+        if len(changedTiles) == 0:
+            complete = time.perf_counter() - start
+            logbook.info(f'islands updated in {complete:.5f}s')
+            return
+
+        for tile in changedTiles:
+            if tile in changedOwnerTiles:
+                continue
+            mustBeSolo = tile.isCity or tile.isGeneral
+            if mode != IslandBuildMode.GroupByArmy and self.force_territory_borders_to_single_tile_islands and not mustBeSolo:
+                mustBeSolo = self.must_tile_be_solo(tile, self.teams[tile.player])
+            if mustBeSolo:
+                continue
+            for adj in tile.movable:
+                if adj.isObstacle:
+                    continue
+                if adj.player == tile.player and adj.army == tile.army:
+                    adjIsland = self.tile_island_lookup.raw[adj.tile_index]
+                    if adjIsland is not None:
+                        impactedLeafIslands.update(self._get_leaf_islands_for_island(adjIsland))
+                        affectedTeams.add(adjIsland.team)
+
+        impactedTiles: typing.Set[Tile] = set()
+        for island in impactedLeafIslands:
+            impactedTiles.update(island.tile_set)
+
+        if len(impactedTiles) == 0:
+            complete = time.perf_counter() - start
+            logbook.info(f'islands updated in {complete:.5f}s')
+            return
+
+        refreshTiles = impactedTiles.copy()
+        for tile in changedTiles:
+            refreshTiles.add(tile)
+            for adj in tile.movable:
+                if not adj.isObstacle:
+                    refreshTiles.add(adj)
+
+        refreshIslands: typing.Set[TileIsland] = set()
+        for tile in refreshTiles:
+            island = self.tile_island_lookup.raw[tile.tile_index]
+            if island is not None:
+                refreshIslands.add(island)
+
+        priorLeafIslandByTile: typing.Dict[Tile, TileIsland] = {}
+        for island in impactedLeafIslands:
+            for tile in island.tile_set:
+                priorLeafIslandByTile[tile] = island
+
+        for island in impactedLeafIslands:
+            self._remove_leaf_island(island)
+            self.borders_by_island.pop(island.unique_id, None)
+
+        refreshIslands.difference_update(impactedLeafIslands)
+
+        visited: typing.Set[Tile] = set()
+        rebuiltIslands: typing.List[TileIsland] = []
+        for tile in impactedTiles:
+            if tile in visited:
+                continue
+            if tile.isObstacle:
+                visited.add(tile)
+                self.tile_island_lookup.raw[tile.tile_index] = None
+                continue
+
+            team = self.teams[tile.player]
+            componentTiles = self._collect_contiguous_tiles(
+                tile,
+                impactedTiles,
+                visited,
+                lambda cur, nxt: not nxt.isObstacle and self.teams[nxt.player] == team
+            )
+            componentPriorLeafIslands = {priorLeafIslandByTile[t] for t in componentTiles if t in priorLeafIslandByTile}
+            rebuiltIslands.extend(self._rebuild_leaf_islands_from_component(componentTiles, team, changedArmyTiles, changedOwnerTiles, componentPriorLeafIslands, mode))
+
+        refreshIslands.update(rebuiltIslands)
+        for tile in refreshTiles:
+            island = self.tile_island_lookup.raw[tile.tile_index]
+            if island is not None:
+                refreshIslands.add(island)
+
+        for island in refreshIslands:
+            self.borders_by_island.pop(island.unique_id, None)
+
+        for island in refreshIslands:
+            self._build_island_borders(island)
+            self.tile_islands_by_unique_id[island.unique_id] = island
+
+        for team in affectedTeams:
+            if team >= 0:
+                self._build_large_island_distances_for_team(team)
+
         complete = time.perf_counter() - start
         logbook.info(f'islands updated in {complete:.5f}s')
 
-    def _split_tile_to_isolated_island_if_necessary(self, tile: Tile):
-        existingIsland = self.tile_island_lookup.raw[tile.tile_index]
-        tileTeam = self.map.team_ids_by_player_index[tile.player]
-        changedTeam = existingIsland.team != tileTeam
-        if existingIsland.tile_count > 1 or changedTeam:
-            # then split it to its own island
-            newIsland = TileIsland([tile], tileTeam, 1, tile.army)
-            toUpdateIsland = existingIsland
-            dropTile = True
-            breakAfter = False
-            while toUpdateIsland is not None:
-                if dropTile:
-                    toUpdateIsland.tile_count -= 1
-                    toUpdateIsland.sum_army -= tile.delta.oldArmy
-                    toUpdateIsland.tiles_by_army.remove(tile)
-                else:
-                    toUpdateIsland.sum_army -= tile.delta.oldArmy
-                    toUpdateIsland.sum_army += tile.army
-                    if breakAfter:
-                        break
+    def _get_leaf_islands_for_island(self, island: TileIsland) -> typing.List[TileIsland]:
+        if island.full_island is not None:
+            island = island.full_island
+        if island.child_islands is not None:
+            return island.child_islands.copy()
+        return [island]
 
-                toUpdateIsland = toUpdateIsland.full_island
-                if not changedTeam:
-                    dropTile = False
-                    breakAfter = True
+    def _remove_leaf_island(self, island: TileIsland):
+        if island in self.all_tile_islands:
+            self.all_tile_islands.remove(island)
 
-        else:
-            if changedTeam:
-                pass
+        teamIslands = self.tile_islands_by_team_id[island.team]
+
+        if island in teamIslands:
+            teamIslands.remove(island)
+
+        stats = self._team_stats_by_team_id[island.team]
+        for teammate in stats.teamPlayers:
+            playerIslands = self.tile_islands_by_player[teammate]
+            if island in playerIslands:
+                playerIslands.remove(island)
+
+        self.tile_islands_by_unique_id.pop(island.unique_id, None)
+        island.border_islands.clear()
+
+    def _register_leaf_island(self, island: TileIsland):
+        if island.name is None or island.name == '':
+            island.name = IslandNamer.get_letter()
+        self.all_tile_islands.append(island)
+        self.tile_islands_by_team_id[island.team].append(island)
+        stats = self._team_stats_by_team_id[island.team]
+        for teammate in stats.teamPlayers:
+            self.tile_islands_by_player[teammate].append(island)
+        self.tile_islands_by_unique_id[island.unique_id] = island
+        for tile in island.tile_set:
+            self.tile_island_lookup.raw[tile.tile_index] = island
+
+    def _update_island_state(self, island: TileIsland, tiles: typing.Iterable[Tile], team: int, tileCount: int | None = None, armySum: int | None = None) -> TileIsland:
+        tileSet = tiles if isinstance(tiles, set) else set(tiles)
+        if tileCount is None:
+            tileCount = len(tileSet)
+        if armySum is None:
+            armySum = sum(tile.army for tile in tileSet)
+
+        island.tile_set = tileSet
+        island.team = team
+        island.tile_count = tileCount
+        island.sum_army = armySum
+        island.border_islands.clear()
+        island.tile_count_all_adjacent_friendly = tileCount
+        island.sum_army_all_adjacent_friendly = armySum
+        island.tiles_by_army = [t for t in sorted(tileSet, key=lambda tile: tile.army, reverse=True)]
+        island.cities = [t for t in island.tiles_by_army if t.isCity]
+        island.child_islands = None
+        island.full_island = None
+
+        return island
+
+    def _link_leaf_islands_to_full_island(self, fullIsland: TileIsland, leafIslands: typing.List[TileIsland], aggregateTileCount: int, aggregateArmy: int):
+        normalizedLeafIslands = [island for island in leafIslands if island is not fullIsland]
+        fullIsland.child_islands = normalizedLeafIslands.copy()
+        fullIsland.full_island = None
+
+        for island in normalizedLeafIslands:
+            island.full_island = fullIsland
+            island.tile_count_all_adjacent_friendly = aggregateTileCount
+            island.sum_army_all_adjacent_friendly = aggregateArmy
+            self._register_leaf_island(island)
+
+        if len(normalizedLeafIslands) != len(leafIslands):
+            fullIsland.tile_count_all_adjacent_friendly = aggregateTileCount
+            fullIsland.sum_army_all_adjacent_friendly = aggregateArmy
+            self._register_leaf_island(fullIsland)
+
+    def _take_best_matching_prior_island(self, candidateTiles: typing.Set[Tile], priorIslands: typing.Set[TileIsland]) -> TileIsland | None:
+        bestIsland: TileIsland | None = None
+        bestOverlap = 0
+        for island in priorIslands:
+            overlap = len(candidateTiles.intersection(island.tile_set))
+            if overlap > bestOverlap:
+                bestOverlap = overlap
+                bestIsland = island
+
+        if bestIsland is not None:
+            priorIslands.remove(bestIsland)
+
+        return bestIsland
+
+    def _collect_contiguous_tiles(self, startTile: Tile, allowedTiles: typing.Set[Tile], visited: typing.Set[Tile], canTraverse: typing.Callable[[Tile, Tile], bool]) -> typing.Set[Tile]:
+        found: typing.Set[Tile] = set()
+        queue = deque([startTile])
+        while queue:
+            cur = queue.popleft()
+
+            if cur in visited or cur not in allowedTiles:
+                continue
+
+            visited.add(cur)
+            found.add(cur)
+            for nxt in cur.movable:
+                if nxt in visited or nxt not in allowedTiles:
+                    continue
+                if canTraverse(cur, nxt):
+                    queue.append(nxt)
+
+        return found
+
+    def _rebuild_leaf_islands_from_component(self, componentTiles: typing.Set[Tile], team: int, changedArmyTiles: typing.Set[Tile], changedOwnerTiles: typing.Set[Tile], priorLeafIslands: typing.Set[TileIsland], mode: IslandBuildMode) -> typing.List[TileIsland]:
+        if len(componentTiles) == 0:
+            return []
+
+        aggregateTileCount = len(componentTiles)
+        aggregateArmy = sum(tile.army for tile in componentTiles)
+        priorLeafIslands = set(priorLeafIslands)
+        priorFullIslands = {island.full_island for island in priorLeafIslands if island.full_island is not None and island.full_island is not island}
+
+        forcedSoloTiles: typing.Set[Tile] = set()
+        pendingArmyTiles: typing.Set[Tile] = set()
+        shouldForceBorderSolo = mode != IslandBuildMode.GroupByArmy
+        for tile in componentTiles:
+            mustBeSolo = tile.isCity or tile.isGeneral
+            if shouldForceBorderSolo and self.force_territory_borders_to_single_tile_islands and not mustBeSolo:
+                mustBeSolo = self.must_tile_be_solo(tile, team)
+
+            if tile in changedOwnerTiles:
+                forcedSoloTiles.add(tile)
+                continue
+            if mustBeSolo:
+                forcedSoloTiles.add(tile)
+                continue
+            if tile in changedArmyTiles:
+                pendingArmyTiles.add(tile)
+                continue
+
+        baseTiles = componentTiles.difference(forcedSoloTiles).difference(pendingArmyTiles)
+        leafIslands: typing.List[TileIsland] = []
+        leafIslandByTile: typing.Dict[Tile, TileIsland] = {}
+        groupByArmyWithinComponent = mode == IslandBuildMode.GroupByArmy and team == self.friendly_team
+
+        for tile in forcedSoloTiles:
+            candidateTiles = {tile}
+            island = self._take_best_matching_prior_island(candidateTiles, priorLeafIslands)
+            if island is None:
+                island = TileIsland(candidateTiles, team, 1, tile.army)
             else:
-                # update its army in place
-                armyDiff = tile.army - tile.delta.oldArmy
-                existingIsland.sum_army += armyDiff
-        # self.tile_island_lookup
-        # self.all_tile_islands
-        """Does not include unreachable islands"""
+                self._update_island_state(island, candidateTiles, team, 1, tile.army)
+            leafIslands.append(island)
+            leafIslandByTile[tile] = island
 
-        # self.tile_islands_by_player
-        # self.tile_islands_by_team_id
-        # self.tile_islands_by_unique_id
-        # self.large_tile_islands_by_team_id
-        # self.large_tile_island_distances_by_team_id
-        # self._team_stats_by_player
-        # self._team_stats_by_team_id
-        # self.break_apart_neutral_islands
-        # self.borders_by_island
-        """If True, any tile that borders a different teams territory will be a single-tile-island. Useful for algorithms that dont safely deal with skews along borders between islands."""
+        visited: typing.Set[Tile] = set()
+        for tile in baseTiles:
+            if tile in visited:
+                continue
+            tileSet = self._collect_contiguous_tiles(
+                tile,
+                baseTiles,
+                visited,
+                lambda cur, nxt: self.teams[nxt.player] == team and (not groupByArmyWithinComponent or nxt.army == cur.army)
+            )
+            island = self._take_best_matching_prior_island(tileSet, priorLeafIslands)
+            if island is None:
+                island = TileIsland(tileSet, team, len(tileSet), sum(t.army for t in tileSet))
+            else:
+                self._update_island_state(island, tileSet, team, len(tileSet), sum(t.army for t in tileSet))
+            leafIslands.append(island)
+            for islandTile in island.tile_set:
+                leafIslandByTile[islandTile] = island
 
+        for tile in pendingArmyTiles:
+            matchingIslands: typing.List[TileIsland] = []
+            seenIslands: typing.Set[int] = set()
+            for adj in tile.movable:
+                if adj.player != tile.player or adj.army != tile.army:
+                    continue
+                adjIsland = leafIslandByTile.get(adj)
+                if adjIsland is None or adjIsland.tile_count >= 4 or adjIsland.unique_id in seenIslands:
+                    continue
+                seenIslands.add(adjIsland.unique_id)
+                matchingIslands.append(adjIsland)
+
+            if len(matchingIslands) == 0:
+                candidateTiles = {tile}
+                island = self._take_best_matching_prior_island(candidateTiles, priorLeafIslands)
+                if island is None:
+                    island = TileIsland(candidateTiles, team, 1, tile.army)
+                else:
+                    self._update_island_state(island, candidateTiles, team, 1, tile.army)
+                leafIslands.append(island)
+                leafIslandByTile[tile] = island
+                continue
+
+            targetIsland = matchingIslands[0]
+            targetIsland.tile_set.add(tile)
+            leafIslandByTile[tile] = targetIsland
+            for extraIsland in matchingIslands[1:]:
+                if extraIsland is targetIsland:
+                    continue
+                targetIsland.tile_set.update(extraIsland.tile_set)
+                leafIslands.remove(extraIsland)
+                for mergedTile in extraIsland.tile_set:
+                    leafIslandByTile[mergedTile] = targetIsland
+
+            targetIsland.tile_count = len(targetIsland.tile_set)
+            targetIsland.sum_army = sum(t.army for t in targetIsland.tile_set)
+            targetIsland.tiles_by_army = [t for t in sorted(targetIsland.tile_set, key=lambda islandTile: islandTile.army, reverse=True)]
+            targetIsland.cities = [t for t in targetIsland.tiles_by_army if t.isCity]
+
+        if len(leafIslands) == 1 and leafIslands[0].tile_count == aggregateTileCount:
+            island = leafIslands[0]
+            island.full_island = None
+            island.child_islands = None
+            island.tile_count_all_adjacent_friendly = aggregateTileCount
+            island.sum_army_all_adjacent_friendly = aggregateArmy
+            self._register_leaf_island(island)
+            return [island]
+
+        priorFullIslands.difference_update(leafIslands)
+        fullIsland = self._take_best_matching_prior_island(componentTiles, priorFullIslands)
+        if fullIsland is None:
+            fullIsland = TileIsland(componentTiles, team, aggregateTileCount, aggregateArmy)
+        else:
+            self._update_island_state(fullIsland, componentTiles, team, aggregateTileCount, aggregateArmy)
+        self._link_leaf_islands_to_full_island(fullIsland, leafIslands, aggregateTileCount, aggregateArmy)
+
+        return leafIslands
 
     def _build_island_from_tile(self, startTile: Tile, player: int) -> TileIsland:
         teamId = self.teams[player]
@@ -415,6 +708,7 @@ class TileIslandBuilder(object):
         # stats = self._team_stats_by_team_id[island.team]
         tile_island_split_cutoff: int = int(self.desired_tile_island_size * 1.5)
         if island.tile_count > tile_island_split_cutoff and (island.team != -1 or self.break_apart_neutral_islands):
+
             # Ok, break the island up.
             breakIntoSubCount = round(island.tile_count / self.desired_tile_island_size)
             if breakIntoSubCount <= 1:
@@ -425,23 +719,22 @@ class TileIslandBuilder(object):
             largestEnemyBorder: TileIsland | None = None
             self._build_island_borders(island)
             # find largest enemy border
-            for border in island.border_islands:
+            for border in sorted(island.border_islands, key=lambda borderIsland: (borderIsland.team, borderIsland.tile_count, min((t.x, t.y) for t in borderIsland.tile_set))):
                 if border.team == island.team or border.team == -1:
                     continue
 
                 if border.full_island:
                     border = border.full_island
 
-                if largestEnemyBorder is None or largestEnemyBorder.tile_count < border.tile_count:
+                if largestEnemyBorder is None or (largestEnemyBorder.tile_count, min((t.x, t.y) for t in largestEnemyBorder.tile_set)) < (border.tile_count, min((t.x, t.y) for t in border.tile_set)):
                     largestEnemyBorder = border
 
             if largestEnemyBorder is None and island.border_islands:
-                largestEnemyBorder = next(iter(island.border_islands))
+                largestEnemyBorder = min(island.border_islands, key=lambda borderIsland: (borderIsland.team, borderIsland.tile_count, min((t.x, t.y) for t in borderIsland.tile_set)))
             if largestEnemyBorder is None:
                 largestEnemyBorder = island
 
             sets = bifurcate_set_into_n_contiguous(self.map, largestEnemyBorder.tile_set, island.tile_set, breakIntoSubCount, self.log_debug)
-            # logbook.info(f'bifurcated {len(island.tile_set)} tiles  into {len(sets)} sets (desired {breakIntoSubCount}, totalTiles {sum(itertools.chain(len(s.set) for s in sets))})')
             for namedTileSet in sets:
                 tileSet = namedTileSet.set
                 newIsland = TileIsland(tileSet, island.team)
@@ -460,12 +753,13 @@ class TileIslandBuilder(object):
         else:
             return [island]
 
-    def _break_up_initial_island_if_necessary(self, island: TileIsland) -> typing.List[TileIsland]:
+    def _break_up_initial_island_if_necessary(self, island: TileIsland, mode: IslandBuildMode) -> typing.List[TileIsland]:
         brokenUp = []
         leftoverTiles = island.tile_set.copy()
+        shouldForceBorderSolo = mode != IslandBuildMode.GroupByArmy
         for tile in island.tile_set:
             mustBeSolo = tile.isCity or tile.isGeneral
-            if self.force_territory_borders_to_single_tile_islands and not mustBeSolo:
+            if shouldForceBorderSolo and self.force_territory_borders_to_single_tile_islands and not mustBeSolo:
                 mustBeSolo = self.must_tile_be_solo(tile, island.team)
 
             if mustBeSolo:
@@ -485,11 +779,9 @@ class TileIslandBuilder(object):
         if len(brokenUp) == 0:
             return [island]
 
-        island.child_islands = brokenUp.copy()
         if len(leftoverTiles) > 0:
             forest = Algorithms.FastDisjointSet()
             for t in leftoverTiles:
-                # forest.add(t.tile_index)
                 for mv in t.movable:
                     if mv in leftoverTiles:
                         forest.merge(t.tile_index, mv.tile_index)
@@ -509,48 +801,36 @@ class TileIslandBuilder(object):
                 for i in subset:
                     self.tile_island_lookup.raw[i] = newIsland
 
+        island.child_islands = brokenUp.copy()
         return brokenUp
-
 
     def _break_apart_island_by_army(self, island: TileIsland, primaryPlayer: int) -> typing.List[TileIsland]:
         if island.team != -1:
-            # Ok, break the island up.
-            breakIntoSubCount = round(island.tile_count / self.desired_tile_island_size)
-            if breakIntoSubCount <= 1:
-                # setting this to 2 forces small islands to be broken up into smaller pieces. 1 at minimum.
-                breakIntoSubCount = 1
+            visited: typing.Set[Tile] = set()
+            contiguousArmyGroups: typing.List[typing.Set[Tile]] = []
+            for tile in sorted(island.tile_set, key=lambda islandTile: (islandTile.army, islandTile.x, islandTile.y)):
+                if tile in visited:
+                    continue
+
+                tileSet = self._collect_contiguous_tiles(
+                    tile,
+                    island.tile_set,
+                    visited,
+                    lambda cur, nxt: nxt.army == cur.army
+                )
+                contiguousArmyGroups.append(tileSet)
+
+            if len(contiguousArmyGroups) <= 1:
+                return [island]
 
             brokenByBorders = []
 
-            largestEnemyBorder: TileIsland | None = None
-            self._build_island_borders(island)
-            for border in island.border_islands:
-                if border.team == island.team or border.team == -1:
-                    continue
-                if border.full_island:
-                    border = border.full_island
-
-                if largestEnemyBorder is None or largestEnemyBorder.tile_count < border.tile_count:
-                    largestEnemyBorder = border
-
-            if largestEnemyBorder is None and island.border_islands:
-                try:
-                    largestEnemyBorder = next(iter(island.border_islands))
-                except:
-                    pass
-                    largestEnemyBorder = island
-            else:
-                largestEnemyBorder = island
-
-            sets = bifurcate_set_into_n_contiguous_by_army(self.map, largestEnemyBorder.tile_set, island.tile_set, breakIntoSubCount)
-            # logbook.info(f'bifurcated {len(island.tile_set)} tiles into {len(sets)} sets (desired {breakIntoSubCount}, totalTiles {sum(itertools.chain(len(s.set) for s in sets))})')
-            for namedTileSet in sets:
-                tileSet = namedTileSet.set
+            for tileSet in contiguousArmyGroups:
                 newIsland = TileIsland(tileSet, island.team)
                 newIsland.full_island = island
                 newIsland.sum_army_all_adjacent_friendly = island.sum_army_all_adjacent_friendly
                 newIsland.tile_count_all_adjacent_friendly = island.tile_count_all_adjacent_friendly
-                newIsland.name = namedTileSet.name
+                newIsland.name = IslandNamer.get_letter()
 
                 brokenByBorders.append(newIsland)
                 for tile in tileSet:
@@ -592,10 +872,6 @@ class TileIslandBuilder(object):
             largeIslands = [i for i in islandsByTeam if i.tile_count_all_adjacent_friendly > 7]
         if len(largeIslands) == 0:
             largeIslands = islandsByTeam
-            # self.large_tile_island_distances_by_team[team] = None
-            # self.large_tile_islands_by_team[team] = set()
-            # logbook.info(f'--NO LARGE TILE ISLANDS (targetTeam {targetTeam})')
-            # return
 
         islandTiles = [t for t in itertools.chain.from_iterable(i.tiles_by_army for i in largeIslands)]
 
@@ -682,7 +958,7 @@ class TileIslandBuilder(object):
     def must_tile_be_solo(self, tile: Tile, teamId: int) -> bool:
         mustBeSolo = False
         bordersUs = teamId == self.friendly_team
-        for adj in tile.movableNoObstacles:
+        for adj in tile.movable:
             adjTeam = self.teams[adj.player]
             if adjTeam != teamId:
                 mustBeSolo = True
@@ -692,8 +968,6 @@ class TileIslandBuilder(object):
                     break
 
         return mustBeSolo and bordersUs
-
-
 class SetHolder(object):
     def __init__(self):
         self.sets: typing.List[typing.Set] = [set()]
@@ -701,17 +975,22 @@ class SetHolder(object):
         self.complete: bool = False
         self.name = IslandNamer.get_letter()
         self.joined_to: SetHolder | None = None
+        self.sample_tile: Tile | None = None
 
     def join_with(self, other: SetHolder):
         """Other set must be disjoint from this set."""
         self.length += other.length
         self.sets.extend(other.sets)
         other.joined_to = self
+        if other.sample_tile is not None and (self.sample_tile is None or _tile_sort_key(other.sample_tile) < _tile_sort_key(self.sample_tile)):
+            self.sample_tile = other.sample_tile
 
     def add(self, item):
         """DOES NOT CHECK FOR DUPLICATES, A DUPLICATE COULD BE IN ANOTHER ENTRY"""
         self.sets[0].add(item)
         self.length += 1
+        if self.sample_tile is None or _tile_sort_key(item) < _tile_sort_key(self.sample_tile):
+            self.sample_tile = item
 
     def __str__(self):
         iterStr = '[]'
@@ -785,6 +1064,22 @@ class NamedSet(object):
         self.set: typing.Set[Tile] = tileSet
 
 
+def _tile_sort_key(tile: Tile) -> typing.Tuple[int, int]:
+    return tile.x, tile.y
+
+
+def _island_stable_sort_key(island: TileIsland) -> typing.Tuple[int, int, int, int, int]:
+    sampleTile = min(island.tile_set, key=_tile_sort_key)
+    return island.team, island.tile_count, island.sum_army, sampleTile.x, sampleTile.y
+
+
+def _set_holder_stable_sort_key(setHolder: SetHolder) -> typing.Tuple[int, int, int]:
+    if setHolder.sample_tile is None:
+        return setHolder.length, -1, -1
+    sampleTile = setHolder.sample_tile
+    return setHolder.length, sampleTile.x, sampleTile.y
+
+
 def bifurcate_set_into_n_contiguous(
         map: MapBase,
         startPoints: typing.Set[Tile],
@@ -793,7 +1088,7 @@ def bifurcate_set_into_n_contiguous(
         logDebug: bool = False
 ) -> typing.List[NamedSet]:
     if len(setToBifurcate) <= numBreaks:
-        return [NamedSet({t}, IslandNamer.get_letter()) for t in setToBifurcate]
+        return [NamedSet({t}, IslandNamer.get_letter()) for t in sorted(setToBifurcate, key=_tile_sort_key)]
 
     fullStart = time.perf_counter()
 
@@ -805,7 +1100,6 @@ def bifurcate_set_into_n_contiguous(
     buildingNoOptionsTime = 0.0
     fullIterTime = 0.0
     timeInUpdateIfWrongCheck = 0.0
-    # tilesWithNoOtherOptions = _get_tiles_with_no_other_options(bifurcationMatrix, setToBifurcate, breakThreshold)
 
     buildingNoOptionsTime += time.perf_counter() - fullStart
     start = time.perf_counter()
@@ -816,9 +1110,10 @@ def bifurcate_set_into_n_contiguous(
 
     frontier = deque()
     allSets = set()
-    for tile in startPoints:
+    for tile in sorted(startPoints, key=_tile_sort_key):
         anyInc = False
-        for movable in tile.movable:
+        for movable in sorted(tile.movable, key=_tile_sort_key):
+
             if movable not in bifurcationMatrix:
                 continue
             anyInc = True
@@ -850,14 +1145,8 @@ def bifurcate_set_into_n_contiguous(
         # if not respectComplete:
         #     logbook.info(f'   tilesWithNoOtherOptions contained {current} ({fromTile}->{current}) (deque {len(frontier)})')
 
-        fromIsland = visitedSetLookup[fromTile]
-        # if not fromIsland or (fromIsland.complete and respectComplete):
-        #     for t in fromTile.movable:
-        #         fromIsland = globalVisited[t]
-        #         if fromIsland and not (fromIsland.complete and respectComplete):
-        #             break
-
-        if not fromIsland or (fromIsland.complete and respectComplete):
+        fromIsland = None
+        if fromIsland is None or (fromIsland.complete and respectComplete):
             fromIsland = SetHolder()
             # logbook.info(f'new island {fromIsland.name} at {current} ({fromTile}->{current}) (deque {len(frontier)})')
             allSets.add(fromIsland)
@@ -875,7 +1164,8 @@ def bifurcate_set_into_n_contiguous(
                 # logbook.info(f'marking island {fromIsland.name} complete at length {fromIsland.length}/{breakThreshold}: {fromIsland.name} (deque {len(frontier)})')
 
         newDist = dist + 1
-        for nextTile in current.movable:  # new spots to try
+        for nextTile in sorted(current.movable, key=_tile_sort_key):  # new spots to try
+
             # TODO TODO TODO
             # TODO TODO TODO
             # TODO TODO TODO
@@ -897,7 +1187,8 @@ def bifurcate_set_into_n_contiguous(
     start = time.perf_counter()
 
     completedSets = []
-    for setHolder in allSets:
+    for setHolder in sorted(allSets, key=_set_holder_stable_sort_key):
+
         if setHolder.joined_to or setHolder.length == 0:
             continue
         completedSets.append(setHolder)
@@ -905,25 +1196,25 @@ def bifurcate_set_into_n_contiguous(
         setHolder.complete = False
 
     if logDebug:
-        logbook.info(
+        DebugHelper.log_in_debug_or_unit_tests(
             f'split {len(setToBifurcate)} tiles into {len(completedSets)} sets of rough size {breakThreshold} in {time.perf_counter() - fullStart:.5f}\r\nRECOMBINING SMALLEST:')
 
     # join small sets to larger
 
     finalSets = []
     while len(finalSets) + len(completedSets) > numBreaks and len(completedSets) > 0:
-        smallest = min(completedSets, key=lambda s: s.length)
+        smallest = min(completedSets, key=_set_holder_stable_sort_key)
 
         nextSmallestAdj = None
         smallestTile = None
         nextSmallestAdjTile = None
-        for tile in itertools.chain.from_iterable(smallest.sets):
-            for t in tile.movable:
+        for tile in sorted(itertools.chain.from_iterable(smallest.sets), key=_tile_sort_key):
+            for t in sorted(tile.movable, key=_tile_sort_key):
                 adjSet = visitedSetLookup[t]
                 if adjSet is None or adjSet == smallest or adjSet == nextSmallestAdj or adjSet.length == 0:
                     continue
 
-                if nextSmallestAdj is None or nextSmallestAdj.length > adjSet.length:
+                if nextSmallestAdj is None or _set_holder_stable_sort_key(adjSet) < _set_holder_stable_sort_key(nextSmallestAdj) or (_set_holder_stable_sort_key(adjSet) == _set_holder_stable_sort_key(nextSmallestAdj) and _tile_sort_key(t) < _tile_sort_key(nextSmallestAdjTile)):
                     nextSmallestAdj = adjSet
                     smallestTile = tile
                     nextSmallestAdjTile = t
@@ -937,13 +1228,14 @@ def bifurcate_set_into_n_contiguous(
 
         completedSets.remove(smallest)
 
-    finalSets.extend(completedSets)
+    finalSets.extend(sorted(completedSets, key=_set_holder_stable_sort_key))
 
     timeSpentJoiningResultingSets = time.perf_counter() - start
     start = time.perf_counter()
 
     reMergedSets = []
-    for setHolder in finalSets:
+    for setHolder in sorted(finalSets, key=_set_holder_stable_sort_key):
+
         if setHolder.joined_to:
             continue
 
@@ -952,7 +1244,8 @@ def bifurcate_set_into_n_contiguous(
     finalConvertTime = time.perf_counter() - start
 
     if logDebug:
-        logbook.info(f'bifurcated {len(setToBifurcate)} tiles into {len(reMergedSets)} sets of rough size {breakThreshold} in {time.perf_counter() - fullStart:.5f} (iterations:{iter}, fullIterTime:{fullIterTime:.5f}, timeSpentJoiningResultingSets:{timeSpentJoiningResultingSets:.5f}, timeInUpdateIfWrongCheck:{timeInUpdateIfWrongCheck:.5f}, finalConvertTime:{finalConvertTime:.5f}, buildingNoOptionsTime:{buildingNoOptionsTime:.5f})')
+        DebugHelper.log_in_debug_or_unit_tests(
+            f'bifurcated {len(setToBifurcate)} tiles into {len(reMergedSets)} sets of rough size {breakThreshold} in {time.perf_counter() - fullStart:.5f} (iterations:{iter}, fullIterTime:{fullIterTime:.5f}, timeSpentJoiningResultingSets:{timeSpentJoiningResultingSets:.5f}, timeInUpdateIfWrongCheck:{timeInUpdateIfWrongCheck:.5f}, finalConvertTime:{finalConvertTime:.5f}, buildingNoOptionsTime:{buildingNoOptionsTime:.5f})')
 
     return reMergedSets
 
@@ -972,7 +1265,7 @@ def bifurcate_set_into_n_contiguous_by_army(
     @return:
     """
     if len(setToBifurcate) <= numBreaks:
-        return [NamedSet({t}, IslandNamer.get_letter()) for t in setToBifurcate]
+        return [NamedSet({t}, IslandNamer.get_letter()) for t in sorted(setToBifurcate, key=_tile_sort_key)]
 
     fullStart = time.perf_counter()
 
@@ -988,13 +1281,6 @@ def bifurcate_set_into_n_contiguous_by_army(
     fullIterTime = 0.0
     timeInUpdateIfWrongCheck = 0.0
 
-    # bucketized = {}
-    # for tile in setToBifurcate:
-    #     bucket = bucketized.get(tile.army, [])
-    #     if not bucket:
-    #         bucketized
-    # tilesWithNoOtherOptions = _get_tiles_with_no_other_options(bifurcationMatrix, setToBifurcate, breakThreshold)
-
     buildingNoOptionsTime += time.perf_counter() - fullStart
     start = time.perf_counter()
 
@@ -1004,9 +1290,9 @@ def bifurcate_set_into_n_contiguous_by_army(
 
     frontier = SearchUtils.HeapQueue()
     allSets = set()
-    for tile in startPoints:
+    for tile in sorted(startPoints, key=_tile_sort_key):
         anyInc = False
-        for movable in tile.movable:
+        for movable in sorted(tile.movable, key=_tile_sort_key):
             if movable not in bifurcationMatrix:
                 continue
             anyInc = True
@@ -1065,7 +1351,7 @@ def bifurcate_set_into_n_contiguous_by_army(
                 # logbook.info(f'marking island {fromIsland.name} complete at length {fromIsland.length}/{breakThreshold}: {fromIsland.name} (deque {len(frontier)})')
 
         newDist = dist + 1
-        for nextTile in current.movable:  # new spots to try
+        for nextTile in sorted(current.movable, key=_tile_sort_key):  # new spots to try
             if nextTile is fromTile:
                 continue
             if nextTile in bifurcationMatrix:
@@ -1079,14 +1365,14 @@ def bifurcate_set_into_n_contiguous_by_army(
     start = time.perf_counter()
 
     completedSets = []
-    for setHolder in allSets:
+    for setHolder in sorted(allSets, key=_set_holder_stable_sort_key):
         if setHolder.joined_to or setHolder.length == 0:
             continue
         completedSets.append(setHolder)
         # these need to be marked back to incomplete or else we can't join them back up again.
         setHolder.complete = False
 
-    logbook.info(
+    DebugHelper.log_in_debug_or_unit_tests(
         f'split {len(setToBifurcate)} tiles into {len(completedSets)} sets by army in {time.perf_counter() - fullStart:.5f}\r\nRECOMBINING SMALLEST:')
 
     # join small sets to larger
@@ -1099,7 +1385,7 @@ def bifurcate_set_into_n_contiguous_by_army(
     start = time.perf_counter()
 
     reMergedSets = []
-    for setHolder in finalSets:
+    for setHolder in sorted(finalSets, key=_set_holder_stable_sort_key):
         if setHolder.joined_to:
             continue
 
@@ -1107,7 +1393,8 @@ def bifurcate_set_into_n_contiguous_by_army(
         reMergedSets.append(NamedSet(actualSet, setHolder.name))
     finalConvertTime = time.perf_counter() - start
 
-    logbook.info(f'bifurcated {len(setToBifurcate)} tiles by army into {len(reMergedSets)} sets of rough size {breakThreshold} in {time.perf_counter() - fullStart:.5f} (iterations:{iter}, fullIterTime:{fullIterTime:.5f}, timeSpentJoiningResultingSets:{timeSpentJoiningResultingSets:.5f}, timeInUpdateIfWrongCheck:{timeInUpdateIfWrongCheck:.5f}, finalConvertTime:{finalConvertTime:.5f}, buildingNoOptionsTime:{buildingNoOptionsTime:.5f})')
+    DebugHelper.log_in_debug_or_unit_tests(
+        f'bifurcated {len(setToBifurcate)} tiles by army into {len(reMergedSets)} sets of rough size {breakThreshold} in {time.perf_counter() - fullStart:.5f} (iterations:{iter}, fullIterTime:{fullIterTime:.5f}, timeSpentJoiningResultingSets:{timeSpentJoiningResultingSets:.5f}, timeInUpdateIfWrongCheck:{timeInUpdateIfWrongCheck:.5f}, finalConvertTime:{finalConvertTime:.5f}, buildingNoOptionsTime:{buildingNoOptionsTime:.5f})')
 
     return reMergedSets
 
@@ -1115,18 +1402,18 @@ def bifurcate_set_into_n_contiguous_by_army(
 def _recombine_sets_by_army(numBreaks: int, completedSets: typing.List[SetHolder], visitedSetLookup: MapMatrixInterface[SetHolder | None]) -> typing.List[SetHolder]:
     finalSets = []
     while len(finalSets) + len(completedSets) > numBreaks and len(completedSets) > 0:
-        smallest = min(completedSets, key=lambda s: s.length)
+        smallest = min(completedSets, key=_set_holder_stable_sort_key)
 
         nextSmallestAdj = None
         smallestTile = None
         nextSmallestAdjTile = None
-        for tile in itertools.chain.from_iterable(smallest.sets):
-            for t in tile.movable:
+        for tile in sorted(itertools.chain.from_iterable(smallest.sets), key=_tile_sort_key):
+            for t in sorted(tile.movable, key=_tile_sort_key):
                 adjSet = visitedSetLookup[t]
                 if adjSet is None or adjSet == smallest or adjSet == nextSmallestAdj or adjSet.length == 0:
                     continue
 
-                if nextSmallestAdj is None or nextSmallestAdj.length > adjSet.length:
+                if nextSmallestAdj is None or _set_holder_stable_sort_key(adjSet) < _set_holder_stable_sort_key(nextSmallestAdj) or (_set_holder_stable_sort_key(adjSet) == _set_holder_stable_sort_key(nextSmallestAdj) and _tile_sort_key(t) < _tile_sort_key(nextSmallestAdjTile)):
                     nextSmallestAdj = adjSet
                     smallestTile = tile
                     nextSmallestAdjTile = t
@@ -1140,7 +1427,7 @@ def _recombine_sets_by_army(numBreaks: int, completedSets: typing.List[SetHolder
 
         completedSets.remove(smallest)
 
-    finalSets.extend(completedSets)
+    finalSets.extend(sorted(completedSets, key=_set_holder_stable_sort_key))
 
     return finalSets
 

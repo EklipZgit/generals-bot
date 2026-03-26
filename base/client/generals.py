@@ -217,10 +217,15 @@ class GeneralsClient(object):
         elif mode == "1v1":
             self._send(["join_1v1", userid, self.bot_key, supporterColorSelection])
         elif mode == "team":
+            time.sleep(0.5)
+
             self._gameid = gameid  # Set Game ID
             if self._gameid is None:
                 self._gameid = 'getRekt'
-            self._send(["join_team", self._gameid, userid, self.bot_key, supporterColorSelection])
+            self._send(["join_party", self._gameid, userid])
+
+            time.sleep(0.5)
+            self._send(["join_team", None, userid, self.bot_key, supporterColorSelection])
         elif mode == "ffa":
             self._send(["play", userid, self.bot_key, supporterColorSelection])
         elif mode == "bigteam":

@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import itertools
 
+import DebugHelper
 import SearchUtils
 from Algorithms import MapSpanningUtils
 from Army import Army
 from BoardAnalyzer import BoardAnalyzer
+from Interfaces import MetaTileSet
 from Models import Move
 from MapMatrix import MapMatrixSet, TileSet
 from PerformanceTimer import PerformanceTimer
@@ -28,6 +30,7 @@ class PlayerAggressionTracker(object):
 
 class ArmyTracker(object):
     def __init__(self, map: MapBase, perfTimer: PerformanceTimer | None = None):
+        self.connectedByPlayer: typing.List[MetaTileSet] = [set() for p in map.players]
         self.perf_timer: PerformanceTimer = perfTimer
         if self.perf_timer is None:
             self.perf_timer = PerformanceTimer()
@@ -44,7 +47,7 @@ class ArmyTracker(object):
 
         self.unaccounted_tile_diffs: typing.Dict[Tile, int] = {}
         """
-        Used to keep track of messy army interaction diffs discovered when determining an army didn't 
+        Used to keep track of messy army interaction diffs discovered when determining an army didn't
         do exactly what was expected to use to infer what armies on adjacent tiles did.
         Negative numbers mean attacked by opp, (or opp tile attacked by friendly army).
         Positive would mean ally merged with our army (or enemy ally merged with enemy army...?)
@@ -453,7 +456,7 @@ class ArmyTracker(object):
 
                     if nextTile == origTile:
                         for path in paths:
-                            logbook.info(f'for army {str(nextArmy)} ignoring SPLIT fog path move into visible: {str(path)}')
+                            DebugHelper.log_in_debug_or_unit_tests(f'for army {str(nextArmy)} ignoring SPLIT fog path move into visible: {str(path)}')
                             nextArmy.include_path(path)
 
                         if not nextArmy.scrapped:
@@ -463,25 +466,25 @@ class ArmyTracker(object):
                     for path in paths:
                         nextArmy.include_path(path)
 
-                        logbook.info(f'respecting army {str(nextArmy)} SPLIT fog path: {str(path)}')
+                        DebugHelper.log_in_debug_or_unit_tests(f'respecting army {str(nextArmy)} SPLIT fog path: {str(path)}')
 
                         self._move_fogged_army_along_path(nextArmy, path, armyAlreadyPopped=True)
 
-                        logbook.info(f'AFTER: army {str(nextArmy)}: {str(nextArmy.expectedPaths)}')
+                        DebugHelper.log_in_debug_or_unit_tests(f'AFTER: army {str(nextArmy)}: {str(nextArmy.expectedPaths)}')
                     if not nextArmy.scrapped:
                         self.armies[nextArmy.tile] = nextArmy
 
             elif len(fogPathNexts) == 1:
                 for path in army.expectedPaths:
                     if path is not None and path.start.next is not None and path.start.next.tile.visible:
-                        logbook.info(f'for army {str(army)} ignoring fog path move into visible: {str(path)}')
+                        DebugHelper.log_in_debug_or_unit_tests(f'for army {str(army)} ignoring fog path move into visible: {str(path)}')
                         continue
 
-                    logbook.info(f'respecting army {str(army)} fog path: {str(path)}')
+                    DebugHelper.log_in_debug_or_unit_tests(f'respecting army {str(army)} fog path: {str(path)}')
 
                     self._move_fogged_army_along_path(army, path)
 
-                    logbook.info(f'AFTER: army {str(army)}: {str(army.expectedPaths)}')
+                    DebugHelper.log_in_debug_or_unit_tests(f'AFTER: army {str(army)}: {str(army.expectedPaths)}')
 
             if anyNextVisible:
                 origTile.army = origTileArmy
@@ -1366,8 +1369,8 @@ class ArmyTracker(object):
 
             dist += 1
             if nextTile.isUndiscoveredObstacle:
-                # try to path around obstacles over going through them..? Takes 2 extra moves to 
-                # go around an obstacle to the other side so at minimum make it cost that 
+                # try to path around obstacles over going through them..? Takes 2 extra moves to
+                # go around an obstacle to the other side so at minimum make it cost that
                 # much extra so going around is otherwise equal to through
                 dist += 2
                 for t in nextTile.movable:
@@ -2872,7 +2875,7 @@ class ArmyTracker(object):
     def re_limit_gen_locations(self):
         for p, playerElims in enumerate(self.uneliminated_emergence_events):
             self.re_limit_player_gen_locations(p, playerElims)
-    
+
     def re_limit_player_gen_locations(self, player: int, playerElimEvents: typing.Dict[Tile, int]):
         for prevElimTile, prevElimDist in playerElimEvents.items():
             cityPerfectInfo = prevElimTile in self.uneliminated_emergence_event_city_perfect_info[player]
@@ -2952,7 +2955,7 @@ class ArmyTracker(object):
             logbook.info(f'including new elim p{player} {str(tile)} at dist {maxDist} which eliminated {elims}')
             playerUnelim[tile] = maxDist
             cityPerfectInfo = overrideCityPerfectInfo
-            if cityPerfectInfo is None: 
+            if cityPerfectInfo is None:
                 cityPerfectInfo = self.has_perfect_information_of_player_cities(player)
             if cityPerfectInfo:
                 self.uneliminated_emergence_event_city_perfect_info[player].add(tile)
@@ -3240,7 +3243,7 @@ class ArmyTracker(object):
         cityCount = overrideCities
         if cityCount is None:
             cityCount = mapPlayer.cityCount
-            
+
         return len(realCities) >= cityCount - 1
 
     def try_split_fogged_army_back_into_fog(self, army: Army, trackingArmies: typing.Dict[Tile, Army]):
@@ -3499,6 +3502,7 @@ class ArmyTracker(object):
 
         ourGen = self.map.generals[self.map.player_index]
         bannedTiles, connectedTiles, pathToUnelim = self.get_fog_connected_based_on_emergences(player, predictedGeneralLocation)
+        self.connectedByPlayer[player] = connectedTiles
 
         keep = []
         for tile in playerObj.tiles:
@@ -3815,7 +3819,7 @@ class ArmyTracker(object):
         genPos = self.map.pathable_tiles
         if self.map.valid_spawns:
             genPos = self.map.valid_spawns
-        
+
         for tile in genPos:
             if validGenPos.raw[tile.tile_index]:
                 numValid += 1

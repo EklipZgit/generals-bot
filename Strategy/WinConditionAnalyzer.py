@@ -47,6 +47,7 @@ class WinConditionAnalyzer(object):
         self.recommended_offense_plan_turns: int = 0
         self.recommended_city_defense_plan_turns: int = 0
         self.our_best_attack_plan: GatherCapturePlan | None = None
+        self._verbose_logging_enabled: bool = DebugHelper.is_debug_or_unit_test_mode()
 
         self.contestable_city_offense_plans: typing.Dict[Tile, GatherCapturePlan | None] = {}
 
@@ -56,7 +57,15 @@ class WinConditionAnalyzer(object):
         self.defend_cities: typing.Set[Tile] = set()
         """Cities we own who are very likely to be attacked and should be defended."""
 
+    def _refresh_verbose_logging_enabled(self):
+        self._verbose_logging_enabled = DebugHelper.is_debug_or_unit_test_mode()
+
+    def _log_verbose(self, message: str):
+        if self._verbose_logging_enabled:
+            logbook.info(message)
+
     def analyze(self, targetPlayer: int, targetPlayerExpectedGeneralLocation: Tile):
+        self._refresh_verbose_logging_enabled()
         self.last_viable_win_conditions = self.viable_win_conditions
         self.viable_win_conditions = set()
 
@@ -143,7 +152,7 @@ class WinConditionAnalyzer(object):
 
         self.contestable_cities.update(currentlyOwnedContestedEnCities)
 
-        logbook.info(f'baseFrCities {baseFrCities}, baseEnCities {baseEnCities}, cityCapsRequiredToReachWinningStatus {cityCapsRequiredToReachWinningStatus:.2f}. Cities already contested: {len(currentlyOwnedContestedEnCities)}  {str(currentlyOwnedContestedEnCities)}')
+        self._log_verbose(f'baseFrCities {baseFrCities}, baseEnCities {baseEnCities}, cityCapsRequiredToReachWinningStatus {cityCapsRequiredToReachWinningStatus:.2f}. Cities already contested: {len(currentlyOwnedContestedEnCities)}  {str(currentlyOwnedContestedEnCities)}')
 
         self.contestable_city_offense_plans = {}
         # self.contestable_city_defense_plans = {}
@@ -163,19 +172,19 @@ class WinConditionAnalyzer(object):
 
                     if visibleVt > fogVt:
                         remainingFogDefense = self.opponent_tracker.get_approximate_fog_army_risk(self.target_player, cityLimit=2, inTurns=attackTime - bestVisibleDefenseTurns)
-                        logbook.info(
+                        self._log_verbose(
                             f'assuming visible defense of {str(city)} with value {bestVisibleDefenseValue} in {bestVisibleDefenseTurns} ({visibleVt:.2f}v/t), resulting in remainingFogDefense {remainingFogDefense}')
                         enDefense = bestVisibleDefenseValue + remainingFogDefense
 
                 if ourOffense > enDefense:
-                    logbook.info(f'able to contest {str(city)} with expected enDefense {enDefense} vs our offense {ourOffense}')
+                    self._log_verbose(f'able to contest {str(city)} with expected enDefense {enDefense} vs our offense {ourOffense}')
                     # TODO expected control turns?
                     self.contestable_cities.add(city)
                     cityCaps += 1
                     if cityCaps >= cityCapsRequiredToReachWinningStatus:
                         ableToContest = True
                 else:
-                    logbook.info(f'NOT able to contest {str(city)} with expected enDefense {enDefense} vs our offense {ourOffense}')
+                    self._log_verbose(f'NOT able to contest {str(city)} with expected enDefense {enDefense} vs our offense {ourOffense}')
                     self.contestable_city_offense_plans.pop(city, None)
             #
             # if len(contestableCities) > 3:
@@ -213,19 +222,20 @@ class WinConditionAnalyzer(object):
 
                 if visibleVt > fogVt:
                     remainingFogDefense = self.opponent_tracker.get_approximate_fog_army_risk(self.target_player, cityLimit=2, inTurns=attackTime - bestVisibleDefenseTurns)
-                    logbook.info(f'assuming visible defense of {str(self.target_player_location)} with value {bestVisibleDefenseValue} in {bestVisibleDefenseTurns} ({visibleVt:.2f}v/t), resulting in remainingFogDefense {remainingFogDefense}')
+                    self._log_verbose(f'assuming visible defense of {str(self.target_player_location)} with value {bestVisibleDefenseValue} in {bestVisibleDefenseTurns} ({visibleVt:.2f}v/t), resulting in remainingFogDefense {remainingFogDefense}')
                     enDefense = bestVisibleDefenseValue + remainingFogDefense
 
             if ourOffense > enDefense:
-                logbook.info(f'able to contest {str(self.target_player_location)} with expected enDefense {enDefense} vs our offense {ourOffense}')
+                self._log_verbose(f'able to contest {str(self.target_player_location)} with expected enDefense {enDefense} vs our offense {ourOffense}')
                 self.contestable_cities.add(self.target_player_location)
                 cityCaps += 1
                 if cityCaps >= cityCapsRequiredToReachWinningStatus:
                     ableToContest = True
             else:
-                logbook.info(f'NOT able to contest {str(self.target_player_location)} with expected enDefense {enDefense} vs our offense {ourOffense}')
+                self._log_verbose(f'NOT able to contest {str(self.target_player_location)} with expected enDefense {enDefense} vs our offense {ourOffense}')
 
         self.is_contesting_cities = ableToContest
+        logbook.info(f'city contest analysis: {len(self.contestable_cities)} contestable, ableToContest={ableToContest}, attackTime={attackTime}')
         return ableToContest
 
     def is_able_to_win_or_recover_economically(self) -> bool:
@@ -250,7 +260,7 @@ class WinConditionAnalyzer(object):
 
         # losingByNow = self.get_economic_diff_against_target_player(cyclesAgo=0)
 
-        logbook.info(f'losingByTwoCyclesAgo {losingByTwoCyclesAgo}, losingByOneCyclesAgo {losingByOneCyclesAgo}')
+        self._log_verbose(f'losingByTwoCyclesAgo {losingByTwoCyclesAgo}, losingByOneCyclesAgo {losingByOneCyclesAgo}')
 
         if -1 > losingByTwoCyclesAgo > losingByOneCyclesAgo + 1:
             logbook.info(f'We appear to be losing more and more on economy.')
@@ -282,6 +292,17 @@ class WinConditionAnalyzer(object):
                 self.defend_cities.add(city)
 
         self.most_forward_defense_city = mostForwardCity
+
+        if not weAreSlightlyAhead:
+            return False
+
+        sumArmyOnDefCities = 0
+        for city in self.defend_cities:
+            sumArmyOnDefCities += city.army
+
+        fogRisk = self.opponent_tracker.get_approximate_fog_army_risk(self.target_player, cityLimit=5, inTurns=10)
+        if fogRisk < sumArmyOnDefCities:
+            return False
 
         maxThreat = 0
         maxThreatTurns = 0
@@ -315,17 +336,6 @@ class WinConditionAnalyzer(object):
         sortOfWinningEconCurrently = self.opponent_tracker.winning_on_economy(byRatio=0.9)
 
         wouldStillBeWinningIfLostRiskies = self.opponent_tracker.winning_on_economy(byRatio=1.0, offset=-50 * numRiskyCities)
-
-        sumArmyOnDefCities = 0
-        for city in self.defend_cities:
-            sumArmyOnDefCities += city.army
-
-        fogRisk = self.opponent_tracker.get_approximate_fog_army_risk(self.target_player, cityLimit=5, inTurns=10)
-        if fogRisk < sumArmyOnDefCities:
-            return False
-
-        if not weAreSlightlyAhead:
-            return False
 
         self.recommended_city_defense_plan_turns = maxThreatTurns
 
@@ -396,6 +406,7 @@ class WinConditionAnalyzer(object):
         if negativeTiles is None:
             negativeTiles = set(tiles)
         else:
+            negativeTiles = set(negativeTiles)
             negativeTiles.update(tiles)
 
         bestPlan = []
@@ -406,7 +417,7 @@ class WinConditionAnalyzer(object):
             self.map,
             tiles,
             inTurns - 1,
-            negativeTiles=set(tiles),
+            negativeTiles=negativeTiles,
             searchingPlayer=asPlayer,
             # skipFunc=lambda t, o: not t.visible,
             # viewInfo=self.viewInfo if self.info_render_gather_values else None,
@@ -493,6 +504,8 @@ class WinConditionAnalyzer(object):
         if fogTurns > 0:
             plan.include_additional_fog_gather(fogTurns, bestFogRisk)
 
+        plan.gathered_army = bestValue
+
         return plan
 
     def get_dynamic_turns_visible_defense_against(
@@ -562,7 +575,7 @@ class WinConditionAnalyzer(object):
             # priorityMatrix=priorityMatrix
         )
 
-        logbook.info(f'concluded get_dynamic_visible_defense_against gather, value {value}')
+        self._log_verbose(f'concluded get_dynamic_visible_defense_against gather, value {value}')
 
         if value > 0:
             prunedTurns, prunedValue, prunedNodes = Gather.prune_mst_to_max_army_per_turn_with_values(
@@ -578,7 +591,7 @@ class WinConditionAnalyzer(object):
                 if self.map.is_tile_on_team_with(tile, asPlayer):
                     value += tile.army - 1
 
-            logbook.info(f'concluded get_dynamic_visible_defense_against prune, value {prunedValue}')
+            self._log_verbose(f'concluded get_dynamic_visible_defense_against prune, value {prunedValue}')
 
             plan = Gather.GatherCapturePlan.build_from_root_nodes(
                 self.map,
@@ -686,7 +699,7 @@ class WinConditionAnalyzer(object):
         attackVal = value
         playerHasFog = not self.map.is_player_on_team_with(self.map.player_index, asPlayer)
 
-        logbook.info(f'get_dynamic_attack_against {tile} gather for total {attackVal}, raw gather {value}')
+        self._log_verbose(f'get_dynamic_attack_against {tile} gather for total {attackVal}, raw gather {value}')
 
         finalTurns: int = 0
         finalAttack: int = 0
@@ -711,16 +724,17 @@ class WinConditionAnalyzer(object):
                 pruneFogRisk = self.get_additional_fog_gather_risk(prunedNodes, asPlayer, prunedTurns)
                 prunedValue += pruneFogRisk
             attackPruned = prunedValue + pruneFogRisk
-            logbook.info(f'concluded get_dynamic_attack_against prune {tile} gather turns {prunedTurns} for total {attackPruned}, pruned gather {prunedValue}, pruneFogRisk {pruneFogRisk}')
+            self._log_verbose(f'concluded get_dynamic_attack_against prune {tile} gather turns {prunedTurns} for total {attackPruned}, pruned gather {prunedValue}, pruneFogRisk {pruneFogRisk}')
 
             if prunedTurns > 0 and attackPruned / prunedTurns > attackVal / maxTurns:
                 finalTurns, finalAttack, finalNodes = prunedTurns, max(0, attackPruned), prunedNodes
                 finalFogRisk = pruneFogRisk
             else:
-                logbook.error(f'Prune wasnt the max value per turn...?')
+                if self._verbose_logging_enabled:
+                    logbook.error(f'Prune wasnt the max value per turn...?')
                 finalTurns, finalAttack, finalNodes = maxTurns, max(0, attackVal), gatherNodes
         else:
-            logbook.info(f'concluded get_dynamic_attack_against, zeros')
+            self._log_verbose(f'concluded get_dynamic_attack_against, zeros')
 
         plan = Gather.GatherCapturePlan.build_from_root_nodes(
             self.map,
@@ -925,6 +939,8 @@ class WinConditionAnalyzer(object):
     def get_best_attack_path_from_fog_by_army_per_turn(self, tiles: typing.List[Tile], asPlayer: int, inTurns: int, negativeTiles: typing.Set[Tile] | None) -> Path | None:
         if negativeTiles is None:
             negativeTiles = set()
+        else:
+            negativeTiles = negativeTiles.copy()
         negativeTiles.update(tiles)
 
         def valueFunc(tile: Tile, prioVals) -> typing.Tuple | None:

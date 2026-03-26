@@ -1,7 +1,8 @@
 import inspect
 import unittest
 
-from Path import Path
+from Path import Path, WaitPath
+from Models import Move
 from Tests.TestBase import TestBase
 from base.client.tile import Tile, TILE_EMPTY
 from base.client.map import MapBase
@@ -252,6 +253,65 @@ class PathTests(TestBase):
             prev = subsegment
 
         self.assertEqual(subsegmentList[5].tail.tile, path.tail.tile)
+
+    def test_wait_path_tracks_wait_until_army_and_behaves_like_path(self):
+        board = [[Tile(x, y, tile=TILE_EMPTY, army=0, player=-1) for x in range(1)] for y in range(3)]
+        board[2][0].player = 0
+        board[2][0].army = 7
+        board[1][0].player = 0
+        board[1][0].army = 1
+        board[0][0].player = 1
+        board[0][0].army = 4
+
+        path = WaitPath(wait_until_army=6)
+        path.add_next(board[2][0])
+        path.add_next(board[1][0])
+        path.add_next(board[0][0])
+
+        self.assertEqual(6, path.wait_until_army)
+        self.assertEqual(2, path.length)
+        self.assertEqual('0,2->0,1->0,0', path.to_move_string())
+
+        val = path.calculate_value(forPlayer=0, teams=[0, 1])
+        self.assertEqual(2, val)
+        self.assertEqual(2, path.value)
+
+    def test_wait_path_clone_and_subsegment_preserve_wait_until_army_and_type(self):
+        board = [[Tile(x, y, tile=TILE_EMPTY, army=0, player=-1) for x in range(1)] for y in range(4)]
+        path = WaitPath(wait_until_army=9)
+        for i in range(4):
+            path.add_next(board[3 - i][0])
+
+        clone = path.clone()
+        subsegment = path.get_subsegment(2)
+        reversed_path = path.get_reversed()
+
+        self.assertIsInstance(clone, WaitPath)
+        self.assertEqual(9, clone.wait_until_army)
+        self.assertIsInstance(subsegment, WaitPath)
+        self.assertEqual(9, subsegment.wait_until_army)
+        self.assertIsInstance(reversed_path, Path)
+        self.assertNotIsInstance(reversed_path, WaitPath)
+        self.assertEqual(path.to_move_string(), clone.to_move_string())
+        self.assertEqual('0,3->0,2->0,1', subsegment.to_move_string())
+        self.assertEqual('0,0->0,1->0,2->0,3', reversed_path.to_move_string())
+
+    def test_wait_path_factory_methods_return_wait_path_instances(self):
+        board = [[Tile(x, y, tile=TILE_EMPTY, army=0, player=-1, tileIndex=y * 2 + x) for x in range(2)] for y in range(1)]
+        board[0][0].player = 0
+        board[0][1].player = 0
+
+        map = self.get_test_map(board, turn=1)
+
+        from_move = WaitPath.from_move(Move(board[0][0], board[0][1]))
+        from_string = WaitPath.from_string(map, '0,0->1,0')
+
+        self.assertIsInstance(from_move, WaitPath)
+        self.assertIsInstance(from_string, WaitPath)
+        self.assertEqual(0, from_move.wait_until_army)
+        self.assertEqual(0, from_string.wait_until_army)
+        self.assertEqual('0,0->1,0', from_move.to_move_string())
+        self.assertEqual('0,0->1,0', from_string.to_move_string())
 
     def test_calculates_longer_path_values_correctly__targeting_empty_tile_length_1(self):
         # test both odd and even turns

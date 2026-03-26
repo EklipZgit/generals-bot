@@ -473,7 +473,7 @@ class Path(TilePlanInterface):
     def from_string(cls, map: MapBase, pathStr: str) -> Path:
         moves = pathStr.split('->')
         prevTile: Tile | None = None
-        path = Path()
+        path = cls()
         for move_str in moves:
             xStr, yStr = move_str.strip().split(',')
             moveHalf = False
@@ -530,10 +530,30 @@ class Path(TilePlanInterface):
 
     @classmethod
     def from_move(cls, move: Move) -> Path:
-        path = Path()
+        path = cls()
         path.add_next(move.source)
         path.add_next(move.dest, move.move_half)
         return path
+
+
+class WaitPath(Path):
+    __slots__ = ('wait_until_army',)
+
+    def __init__(self, armyRemaining: float = 0, wait_until_army: int = 0):
+        super().__init__(armyRemaining)
+        self.wait_until_army: int = wait_until_army
+
+    def clone(self) -> WaitPath:
+        newPath = WaitPath(self.value, self.wait_until_army)
+        node = self.start
+        while node is not None:
+            newPath.add_next(node.tile)
+            node = node.next
+
+        newPath._requiredDelay = self._requiredDelay
+        newPath._econ_value = self._econ_value
+
+        return newPath
 
 
 class MoveListPath(Path):

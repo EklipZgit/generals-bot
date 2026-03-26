@@ -93,7 +93,10 @@ class Army(object):
         newDude.last_moved_turn = self.last_moved_turn
         newDude.last_seen_turn = self.last_seen_turn
         for path in self.expectedPaths:
-            newDude.expectedPaths.append(path.clone())
+            clone = path.clone()
+            if clone is None:
+                raise "What the fuck?"
+            newDude.expectedPaths.append(clone)
         newDude.entangledArmies = list(self.entangledArmies)
         newDude.scrapped = self.scrapped
         return newDude
@@ -137,5 +140,5 @@ class Army(object):
                 foundMatch = True
                 break
 
-        if not foundMatch:
+        if not foundMatch and path is not None:
             self.expectedPaths.append(path)

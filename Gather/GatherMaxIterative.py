@@ -1628,6 +1628,7 @@ def knapsack_max_gather_with_values(
     for g in rootNodes:
         totalTurns += g.gatherTurns
 
-    logbook.info(
-        f"Concluded knapsack_max_gather_with_values with {itr.value} iterations. Gather turns {totalTurns}, value {totalValue}. Duration: {time.perf_counter() - startTime:.4f}")
+    if shouldLog or DebugHelper.IS_DEBUGGING or DebugHelper.IS_RUNNING_UNIT_TESTS:
+        logbook.info(
+            f"Concluded knapsack_max_gather_with_values with {itr.value} iterations. Gather turns {totalTurns}, value {totalValue}. Duration: {time.perf_counter() - startTime:.4f}")
     return totalValue, totalTurns, rootNodes

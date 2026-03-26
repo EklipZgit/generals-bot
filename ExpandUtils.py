@@ -6,7 +6,7 @@ import DebugHelper
 import KnapsackUtils
 import SearchUtils
 from Algorithms import TileIslandBuilder, TileIsland
-from Behavior.ArmyInterceptor import InterceptionOptionInfo, ThreatBlockInfo
+from Behavior.ArmyInterceptor import NEUTRAL_CAP_VALUE, TARGET_CAP_VALUE, InterceptionOptionInfo, ThreatBlockInfo
 from BoardAnalyzer import BoardAnalyzer
 from MapMatrix import MapMatrix
 from Models import Move
@@ -245,9 +245,9 @@ def get_round_plan_with_expansion(
                     bonusCapturePointMatrix = bonusCapturePointMatrix.copy()
                     negativeTiles = realNegs.copy()
                     for lm in leafMoves:
-                        cost = 0.3
+                        cost = 0.1
                         if lm.dest.player != -1:
-                            cost = 0.6
+                            cost = 0.2
                         bonusCapturePointMatrix.raw[lm.source.tile_index] -= cost
                         bonusCapturePointMatrix.raw[lm.dest.tile_index] -= cost
                         # negativeTiles.add(lm.source)
@@ -367,7 +367,7 @@ def get_round_plan_with_expansion(
                     leafMoves=leafMoves,
                     map=map,
                     multiPathDict=multiPathDict,
-                    negativeTiles=originalNegativeTiles,
+                    negativeTiles=negativeTiles,
                     paths=paths,
                     pathsCrossingTiles=pathsCrossingTiles,
                     postPathEvalFunction=postPathEvalFunction,
@@ -442,7 +442,7 @@ def get_round_plan_with_expansion(
                 multiPathDict,
                 territoryMap,
                 postPathEvalFunction,
-                originalNegativeTiles,
+                originalNegativeTiles.copy(),
                 tryAvoidSet,
                 perfTimer,
                 viewInfo,
@@ -460,7 +460,7 @@ def get_round_plan_with_expansion(
                 multiPathDict,
                 territoryMap,
                 postPathEvalFunction,
-                originalNegativeTiles,
+                originalNegativeTiles.copy(),
                 tryAvoidSet,
                 perfTimer,
                 viewInfo,
@@ -1308,7 +1308,12 @@ def _process_new_expansion_paths(
                 if reachedIsland:
                     tilesInIsland = reachedIsland.tiles_by_army
                     fullIsland = reachedIsland
+                    seenIslandIds = set()
                     while fullIsland.full_island:
+                        if fullIsland.unique_id in seenIslandIds or fullIsland.full_island is fullIsland:
+                            logEntries.append(f'breaking full_island cycle while processing reachedIsland {fullIsland}')
+                            break
+                        seenIslandIds.add(fullIsland.unique_id)
                         fullIsland = fullIsland.full_island
                 # skip the 2 largest tiles, idk
                 tilesInIslandIdx = 2
@@ -1342,10 +1347,17 @@ def _process_new_expansion_paths(
                     if tilesInIslandIdx >= len(tilesInIsland):
                         tilesInIslandIdx = 0
                         if reachedIsland and reachedIsland.full_island:
-                            reachedIsland = reachedIsland.full_island
+                            if reachedIsland.full_island is reachedIsland:
+                                logEntries.append(f'breaking self-referential full_island chain on {reachedIsland}')
+                                reachedIsland = None
+                            else:
+                                reachedIsland = reachedIsland.full_island
                             # skip the 4 largest tiles, idk
-                            tilesInIsland = reachedIsland.tiles_by_army[4:]
-                            if len(tilesInIsland) == 0:
+                            if reachedIsland is not None:
+                                tilesInIsland = reachedIsland.tiles_by_army[4:]
+                                if len(tilesInIsland) == 0:
+                                    break
+                            else:
                                 break
                         else:
                             break
@@ -2297,7 +2309,46 @@ def extract_paths_from_knapsack_groups(
             valueOverrides,
             leafMoves)
 
-    return enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed, visited
+    effectiveTotalValue = 0
+    effectiveNegativeTiles = negativeTiles.copy()
+    selectedPaths = []
+    if path is not None:
+        selectedPaths.append(path)
+    selectedPaths.extend(otherPaths)
+
+    for selectedPath in selectedPaths:
+        if issubclass(type(selectedPath), Path):
+            # force a recalculation... We are caching the postPathEvalFunction output internally per path LOL.
+            selectedPath.econValue = 0.0
+        pathValue = None
+        if valueOverrides is not None:
+            overrides = valueOverrides.get(selectedPath, None)
+            if overrides is not None:
+                pathValue, _ = overrides
+
+        if pathValue is None:
+            pathValue = postPathEvalFunction(selectedPath, effectiveNegativeTiles)
+            # logbook.info(f'val {pathValue:.2f} for path {selectedPath}')
+            effectiveNegativeTiles.update(selectedPath.tileSet)
+        else:
+            for t in selectedPath.tileList:
+                if t not in effectiveNegativeTiles:
+                    effectiveNegativeTiles.add(t)
+                else:
+                    if t.player in targetPlayers:
+                        pathValue -= TARGET_CAP_VALUE
+                    elif t.player == -1:
+                        pathValue -= NEUTRAL_CAP_VALUE
+                    else:
+                        # friendly tile, don't subtract anything
+                        pass
+
+        effectiveTotalValue += int(pathValue * 10000.0)
+
+    if effectiveTotalValue != totalValue:
+        logbook.info(f'Decreased totalValue from {totalValue:.2f} to {effectiveTotalValue:.2f} for {len(selectedPaths)} paths.')
+
+    return enemyCapped, maxPaths, neutralCapped, otherPaths, path, effectiveTotalValue, turnsUsed, visited
 
 
 def _add_expansion_to_view_info(path: TilePlanInterface, otherPaths: typing.List[TilePlanInterface], viewInfo: ViewInfo, colors: typing.Tuple[int, int, int]):
@@ -2556,23 +2607,21 @@ def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: Til
     #   stuff closer to us first?
 
     rating = 0
-    if isinstance(path, Path):
-        if path.value >= 0:
-            rating = (path.value ** 0.5) / 5
-    first = path.get_first_move().source
-    for t in path.tileSet:
-        if t == first:
+    # # if isinstance(path, Path):
+    # if path.value >= 0:
+    #     rating = (path.value ** 0.5) / 5
+    for t in path.tileList[1:]:
+        if t.visible:
             continue
 
-        if not t.visible:
-            if t.player == -1:
-                rating += 0.3
-                if not t.discovered:
-                    rating += 0.2
-            elif t.player not in friendlyPlayers:
-                rating -= 0.2
-                if not t.discovered:
-                    rating -= 0.3
+        if t.player == -1:
+            rating += 0.3
+            if not t.discovered:
+                rating += 0.2
+        elif t.player not in friendlyPlayers:
+            rating -= 0.2
+            if not t.discovered:
+                rating -= 0.3
 
         # if t.player not in friendlyPlayers:
         #     rating += 0.5
@@ -2608,7 +2657,25 @@ def find_optimal_expansion_path_to_move_first(
     #     playerCities.append(map.players[searchingPlayer].general)
 
     waitingPaths = set()
+    pathVals: typing.Dict[TilePlanInterface, float] = {}
+    pathTurns: typing.Dict[TilePlanInterface, int] = {}
+    pathUncertaintyRatings: typing.Dict[TilePlanInterface, float] = {}
     for p in maxPaths:
+        thisVal = postPathEvalFunction(p, originalNegativeTiles)
+        thisTurns = p.length
+        if valueOverrides is not None:
+            overrides = valueOverrides.get(p, None)
+            if overrides is not None:
+                thisVal, thisTurns = overrides
+
+        thisVt = thisVal / thisTurns
+        thisUncertainty = _get_uncertainty_capture_rating(friendlyPlayers, p, originalNegativeTiles, thisVt)
+        thisUncertainty = thisUncertainty / (thisTurns + 1)
+
+        pathVals[p] = thisVal
+        pathTurns[p] = thisTurns
+        pathUncertaintyRatings[p] = thisUncertainty
+
         if valueOverrides is not None and p in valueOverrides:
             continue
         shouldWait = p.requiredDelay > 0 or path_has_cities_and_should_wait(
@@ -2636,18 +2703,10 @@ def find_optimal_expansion_path_to_move_first(
     maxUncertainty = -10000
     path: TilePlanInterface | None = None
     for p in maxPaths:
-        thisVal = postPathEvalFunction(p, originalNegativeTiles)
-
-        thisTurns = p.length
-        if valueOverrides is not None:
-            overrides = valueOverrides.get(p, None)
-            if overrides is not None:
-                thisVal, thisTurns = overrides
-
+        thisVal = pathVals[p]
+        thisTurns = pathTurns[p]
         thisVt = thisVal / thisTurns
-        thisUncertainty = _get_uncertainty_capture_rating(friendlyPlayers, p, originalNegativeTiles, thisVt)
-
-        thisUncertainty = thisUncertainty / (thisTurns + 1)
+        thisUncertainty = pathUncertaintyRatings[p]
 
         if thisUncertainty > maxUncertainty or (thisUncertainty == maxUncertainty and thisVt > maxVt):
             if p not in waitingPaths:

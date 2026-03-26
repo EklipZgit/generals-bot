@@ -4,12 +4,15 @@ from collections import deque
 
 import logbook
 
+import DebugHelper
 import SearchUtils
 from Interfaces import MapMatrixInterface
 from Models import GatherTreeNode, Move
 from . import GatherDebug
 from ViewInfo import ViewInfo
 from base.client.tile import Tile
+
+VERBOSE_DEBUG_LOGGING_ENABLED = DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE
 
 
 def get_tree_moves(
@@ -448,6 +451,10 @@ def prune_mst_to_army_with_values(
     """
     start = time.perf_counter()
 
+    def log_verbose(message: str):
+        if not noLog:
+            DebugHelper.log_in_debug_or_unit_tests(message)
+
     turnIncFactor = (1 + turn) & 1
 
     cityCounter = SearchUtils.Counter(0 - additionalIncrement)
@@ -464,11 +471,11 @@ def prune_mst_to_army_with_values(
                 cityCounter.add(1)
                 # each time we add one of these we must gather all the other cities in the tree first too so we lose that many increment turns + that
                 cityGatherDepthCounter.add(node.trunkDistance)
-                logbook.info(f'cityCounter adding {node.tile}, now {cityCounter.value}, cityGatherDepthCounter {cityGatherDepthCounter.value}')
+                log_verbose(f'cityCounter adding {node.tile}, now {cityCounter.value}, cityGatherDepthCounter {cityGatherDepthCounter.value}')
             else:
                 cityCounter.add(-1)
                 cityGatherDepthCounter.add(node.trunkDistance)
-                logbook.info(f'cityCounter adding neg {node.tile}, now {cityCounter.value}, cityGatherDepthCounter {cityGatherDepthCounter.value}')
+                log_verbose(f'cityCounter adding neg {node.tile}, now {cityCounter.value}, cityGatherDepthCounter {cityGatherDepthCounter.value}')
 
         for child in node.children:
             cityCounterAddFunc(child)
@@ -484,11 +491,11 @@ def prune_mst_to_army_with_values(
             if teams[node.tile.player] == teams[searchingPlayer]:
                 cityGatherDepthCounter.add(0 - node.trunkDistance)
                 cityCounter.add(-1)
-                logbook.info(f'cityCounter removing {node.tile}, now {cityCounter.value}, cityGatherDepthCounter {cityGatherDepthCounter.value}')
+                log_verbose(f'cityCounter removing {node.tile}, now {cityCounter.value}, cityGatherDepthCounter {cityGatherDepthCounter.value}')
             else:
                 cityGatherDepthCounter.add(node.trunkDistance)
                 cityCounter.add(1)
-                logbook.info(f'cityCounter removing neg {node.tile}, now {cityCounter.value}, cityGatherDepthCounter {cityGatherDepthCounter.value}')
+                log_verbose(f'cityCounter removing neg {node.tile}, now {cityCounter.value}, cityGatherDepthCounter {cityGatherDepthCounter.value}')
 
     if invalidMoveFunc is None:
         def invalid_move_func(node: GatherTreeNode):
@@ -513,10 +520,10 @@ def prune_mst_to_army_with_values(
         cityIncrementAmount = getCurrentCityIncAmount(turnsLeftIfPruned)
         armyLeftIfPruned = curValue - node.value + cityIncrementAmount
 
-        logbook.info(f'{node.tile}: value {node.value}, armyLeftIfPruned = {armyLeftIfPruned} (curValue {curValue}, cityIncrementAmount {cityIncrementAmount}, cityCounter {cityCounter.value}, turnsLeftIfPruned {turnsLeftIfPruned})')
+        log_verbose(f'{node.tile}: value {node.value}, armyLeftIfPruned = {armyLeftIfPruned} (curValue {curValue}, cityIncrementAmount {cityIncrementAmount}, cityCounter {cityCounter.value}, turnsLeftIfPruned {turnsLeftIfPruned})')
         if armyLeftIfPruned < army:
             # not pruning here, put the city increments back
-            logbook.info(f'{node.tile} cant prune, calling cityCounterFunc() to add pruned back')
+            log_verbose(f'{node.tile} cant prune, calling cityCounterFunc() to add pruned back')
             cityCounterAddFunc(node)
             return True
 
@@ -859,7 +866,7 @@ def prune_mst_until(
                     logEntries.append(
                         f"tile {current.tile.toString()} will be eliminated due to invalid move, army {current.tile.army}")
                 validMove = False
-            if not noLog:
+            if not noLog and VERBOSE_DEBUG_LOGGING_ENABLED:
                 logEntries.append(
                     f"  tile {current.tile.toString()} had value {value:.1f}, trunkDistance {current.trunkDistance}")
             pruneHeap.put((validMove, preferPrune is None or current.tile not in preferPrune, pruneOrderFunc(current, None), current))
@@ -871,7 +878,7 @@ def prune_mst_until(
         curValue += node.value
 
     count = len(nodeMap) - len(rootNodes)
-    if not noLog:
+    if not noLog and VERBOSE_DEBUG_LOGGING_ENABLED:
         logEntries.append(f'MST prune beginning with {count} nodes ({len(pruneHeap.queue)} nodes)')
 
     childRecurseQueue: typing.Deque[GatherTreeNode] = deque()
@@ -1014,7 +1021,7 @@ def prune_mst_until(
                             f"parent {str(realParent.tile)} will be eliminated due to invalid move, army {realParent.tile.army}")
                     parentValidMove = False
 
-                if not noLog:
+                if not noLog and VERBOSE_DEBUG_LOGGING_ENABLED:
                     logEntries.append(
                         f"  Appending parent {str(realParent.tile)} (valid {parentValidMove}) had value {value:.1f}, trunkDistance {realParent.trunkDistance}")
 
@@ -1045,8 +1052,9 @@ def prune_mst_until(
         # node.value += 1
         totalValue += node.value
     if not noLog:
-        logEntries.append(
-            f"  Pruned MST to turns {count} with value {totalValue} in duration {time.perf_counter() - start:.4f}")
+        if VERBOSE_DEBUG_LOGGING_ENABLED:
+            logEntries.append(
+                f"  Pruned MST to turns {count} with value {totalValue} in duration {time.perf_counter() - start:.4f}")
 
         if logEnd:
             logbook.info('\r\n' + '\r\n'.join(logEntries))

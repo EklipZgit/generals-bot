@@ -408,15 +408,19 @@ class EklipZBot(object):
         self.info_render_tile_islands: bool = True
         self.info_render_defense_spanning_tree: bool = True
 
+    # STEP2: Stay in EklipZBotV2.py. Tiny object-display helper with no domain logic; keep on the outer bot shell unchanged.
     def __repr__(self):
         return str(self)
 
+    # STEP2: Stay in EklipZBotV2.py. Tiny object-display helper with no domain logic; keep on the outer bot shell unchanged.
     def __str__(self):
         return f'[eklipz_bot {str(self._map)}]'
 
+    # STEP2: Stay in EklipZBotV2.py. Lifecycle stub with no body today; preserve on the shell for compatibility with existing callers.
     def spawnWorkerThreads(self):
         return
 
+    # STEP2: Move to BotModules/BotRepetition.py as BotRepetition.detect_repetition_at_all. Pure move-history repetition scan against bot history/map state; delegate from shell.
     def detect_repetition_at_all(self, turns=4, numReps=2) -> bool:
         curTurn = self._map.turn
         reps = 0
@@ -442,6 +446,7 @@ class EklipZBot(object):
 
         return False
 
+    # STEP2: Move to BotModules/BotRepetition.py as BotRepetition.detect_repetition. Pure repetition check on a candidate move using bot history only; keep shell pass-through for call-site stability.
     def detect_repetition(self, move, turns=4, numReps=2):
         """
 
@@ -467,6 +472,7 @@ class EklipZBot(object):
                             return True
         return False
 
+    # STEP2: Move to BotModules/BotRepetition.py as BotRepetition.detect_repetition_tile. History-based tile repetition query; belongs with other repetition heuristics.
     def detect_repetition_tile(self, tile: Tile, turns=6, numReps=2):
         """
 
@@ -490,11 +496,13 @@ class EklipZBot(object):
                             return True
         return False
 
+    # STEP2: Move to BotModules/BotRepetition.py as BotRepetition.move_half_on_repetition. Thin policy wrapper over repetition detection; migrate with the repetition cluster unchanged.
     def move_half_on_repetition(self, move, repetitionTurns, repCount=3):
         if self.detect_repetition(move, repetitionTurns, repCount):
             move.move_half = True
         return move
 
+    # STEP2: Stay in EklipZBotV2.py. Top-level move orchestration/error handling/history/render prep spanning many modules; keep on shell and have it call extracted helpers.
     def find_move(self, is_lag_move=False) -> Move | None:
         move: Move | None = None
         try:
@@ -586,6 +594,7 @@ class EklipZBot(object):
 
         return move
 
+    # STEP2: Move to BotModules/BotPathingUtils.py as BotPathingUtils.clean_up_path_before_evaluating. CurPath maintenance / dedupe logic tied to path semantics, not top-level orchestration.
     def clean_up_path_before_evaluating(self):
         if not self.curPath:
             return
@@ -627,6 +636,7 @@ class EklipZBot(object):
         else:
             logbook.info("         --         missed move?")
 
+    # STEP2: Move to BotModules/BotRepetition.py as BotRepetition.dropped_move. Last-move/drop inference based on move history and map deltas; keep a thin bot alias because it is referenced from path maintenance.
     def droppedMove(self, fromTile=None, toTile=None, movedHalf=None):
         log = True
         lastMove = None
@@ -687,6 +697,7 @@ class EklipZBot(object):
             self.history.droppedHistory[self._map.turn - 1] = True
         return dropped
 
+    # STEP2: Move to BotModules/BotEventHandlers.py as BotEventHandlers.handle_city_found. Small city discovery side-effect handler updating trackers/classifiers only.
     def handle_city_found(self, tile):
         logbook.info(f"EH: City found handler! City {str(tile)}")
         self.armyTracker.add_need_to_track_city(tile)
@@ -695,6 +706,7 @@ class EklipZBot(object):
             self.board_analysis.should_rescan = True
         return None
 
+    # STEP2: Move to BotModules/BotEventHandlers.py as BotEventHandlers.handle_tile_captures. Capture-event bookkeeping that updates territory/army tracking and aggression state; migrate with event handlers.
     def handle_tile_captures(self, tile: Tile):
         """This triggers before we know the new owner of fog tiles. tile.delta.newOwner might currently be -1, when in reality it is the opponent."""
         logbook.info(
@@ -734,6 +746,7 @@ class EklipZBot(object):
 
         return None
 
+    # STEP2: Move to BotModules/BotEventHandlers.py as BotEventHandlers.handle_player_captures. Player-death event processing that scrubs tracker state and triggers re-evaluation; belongs in the event cluster.
     def handle_player_captures(self, capturee: int, capturer: int):
         """
         NOTE: This currently gets called BEFORE the map update is received that updates the visible tiles.
@@ -761,10 +774,12 @@ class EklipZBot(object):
 
         return None
 
+    # STEP2: Move to BotModules/BotEventHandlers.py as BotEventHandlers.handle_tile_deltas. Logging-only tile delta hook; keep with event handlers for completeness even though behavior is minimal.
     def handle_tile_deltas(self, tile):
         logbook.info(f"EH: Tile delta handler! Tile {repr(tile)} delta {tile.delta.armyDelta}")
         return None
 
+    # STEP2: Move to BotModules/BotEventHandlers.py as BotEventHandlers.handle_tile_discovered. Discovery event bookkeeping touching rescans, paths, and territory updates; keep grouped with map update handlers.
     def handle_tile_discovered(self, tile):
         logbook.info(f"EH: Tile discovered handler! Tile {repr(tile)}")
         self.territories.needToUpdateAroundTiles.add(tile)
@@ -805,6 +820,7 @@ class EklipZBot(object):
 
         return None
 
+    # STEP2: Move to BotModules/BotEventHandlers.py as BotEventHandlers.handle_tile_vision_change. Vision-change event handler with tracker/path invalidation side effects; migrate intact with the other event hooks.
     def handle_tile_vision_change(self, tile: Tile):
         """
         Called whenever we gain or lose vision of a tile.
@@ -871,6 +887,7 @@ class EklipZBot(object):
 
         return None
 
+    # STEP2: Move to BotModules/BotEventHandlers.py as BotEventHandlers.handle_army_moved. Army movement event bookkeeping updating trackers/opponent data; belongs in the event-handler module.
     def handle_army_moved(self, army: Army):
         tile = army.tile
         logbook.info(f"EH: Army Moved handler! Tile {repr(tile)}")
@@ -888,9 +905,11 @@ class EklipZBot(object):
         self.territories.revealed_tile(tile)
         return None
 
+    # STEP2: Stay in EklipZBotV2.py. Tiny shell utility used broadly for perf/log timing display; keep local on the bot.
     def get_elapsed(self):
         return round(self.perf_timer.get_elapsed_since_update(self._map.turn), 3)
 
+    # STEP2: Stay in EklipZBotV2.py. Core turn initialization/orchestration entrypoint spanning trackers, analyzers, communications, targeting, and caches; keep on shell and delegate sub-steps later.
     def init_turn(self, secondAttempt=False):
         if self.last_init_turn == self._map.turn:
             return
@@ -1106,6 +1125,7 @@ class EklipZBot(object):
 
         self.cached_scrims = {}
 
+    # STEP2: Move to BotModules/BotTimings.py as BotTimings.is_player_aggressive. Small timing/policy query over aggression_factor; belongs with timing heuristics.
     def is_player_aggressive(self, player: int, turnPeriod: int = 50) -> bool:
         if player in self._map.teammates:
             return False
@@ -1122,6 +1142,7 @@ class EklipZBot(object):
 
         return False
 
+    # STEP2: Move to BotModules/BotTimings.py as BotTimings.get_timings_old. Legacy timing policy retained for reference/compatibility; move intact with timing logic and keep a shell pass-through if still referenced.
     def get_timings_old(self) -> Timings:
         with self.perf_timer.begin_move_event('GatherAnalyzer scan'):
             self.gatherAnalyzer.scan()
@@ -1325,6 +1346,7 @@ class EklipZBot(object):
         logbook.info(f"Recalculated timings. longSpawns {longSpawns}, Timings {str(timings)}")
         return timings
 
+    # STEP2: Move to BotModules/BotTimings.py as BotTimings.get_timings. Primary timing/cycle policy calculator; strongly cohesive with other timing heuristics and should migrate as one unit.
     def get_timings(self) -> Timings:
         with self.perf_timer.begin_move_event('GatherAnalyzer scan'):
             self.gatherAnalyzer.scan()
@@ -1499,6 +1521,7 @@ class EklipZBot(object):
         logbook.info(f"Recalculated timings. longSpawns {longSpawns}, Timings {str(timings)}")
         return timings
 
+    # STEP2: Move to BotModules/BotPathingUtils.py as BotPathingUtils.get_undiscovered_count_on_path. Tiny path-content utility used by timing/targeting logic; belongs with path helpers.
     def get_undiscovered_count_on_path(self, path: Path) -> int:
         numFog = 0
         for t in path.tileList:
@@ -1506,6 +1529,7 @@ class EklipZBot(object):
                 numFog += 1
         return numFog
 
+    # STEP2: Move to BotModules/BotPathingUtils.py as BotPathingUtils.get_enemy_count_on_path. Tiny path-content utility used by timing/path evaluation; keep with path helper cluster.
     def get_enemy_count_on_path(self, path: Path) -> int:
         numEn = 0
         for t in path.tileList:
@@ -1513,6 +1537,7 @@ class EklipZBot(object):
                 numEn += 1
         return numEn
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.timing_expand. Expansion timing stub/policy helper; keep with expansion even though it currently returns None.
     def timing_expand(self):
         turnOffset = self._map.turn + self.timings.offsetTurns
         turnCycleOffset = turnOffset % self.timings.cycleTurns
@@ -1520,6 +1545,7 @@ class EklipZBot(object):
             return None
         return None
 
+    # STEP2: Move to BotModules/BotGatherOps.py as BotGatherOps.timing_gather. Main timing-window gather executor with gather planning/pruning and path conversion; migrate intact with gather helpers.
     def timing_gather(
             self,
             startTiles: typing.List[Tile],
@@ -1681,6 +1707,7 @@ class EklipZBot(object):
             logbook.info(f"No timing move because outside gather timing window. Timings: {str(self.timings)}")
         return None
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.make_first_25_move. Early-game opening/expansion move chooser tied to city expansion plans and expansion search policy.
     def make_first_25_move(self) -> Move | None:
         # if self._map.remainingPlayers < 4 or self._map.is_2v2:
 
@@ -1780,6 +1807,7 @@ class EklipZBot(object):
         #             move = self.get_first_path_move(path)
         #         return move
 
+    # STEP2: Stay in EklipZBotV2.py. High-level pre-move orchestration that coordinates timings, path recalculation, out-of-play mode, all-in state, and dropped-move recovery across many domains.
     def perform_move_prep(self, is_lag_move: bool = False):
         with self.perf_timer.begin_move_event('scan_map_for_large_tiles_and_leaf_moves()'):
             self.scan_map_for_large_tiles_and_leaf_moves()
@@ -1880,6 +1908,7 @@ class EklipZBot(object):
                 else:
                     self.force_far_gathers_sleep_turns -= 1
 
+    # STEP2: Stay in EklipZBotV2.py. Primary turn move-selection entrypoint that sequences prep, lag handling, path recalculation, and final pick; keep as shell orchestration.
     def select_move(self, is_lag_move=False) -> Move | None:
         self.init_turn()
 
@@ -1936,6 +1965,7 @@ class EklipZBot(object):
 
         return move
 
+    # STEP2: Stay in EklipZBotV2.py. Central post-prep decision tree coordinating combat, defense, city capture, expansion, and continuation logic; keep on shell and delegate subroutines out.
     def pick_move_after_prep(self, is_lag_move=False):
         with self.perf_timer.begin_move_event('calculating general danger / threats'):
             self.calculate_general_danger()
@@ -2550,9 +2580,11 @@ class EklipZBot(object):
 
         return None
 
+    # STEP2: Move to BotModules/BotStateQueries.py late in the migration, or leave as a thin shell helper. Tiny derived-state query used everywhere; defer moving until larger modules stabilize.
     def is_all_in(self):
         return self.is_all_in_losing or self.is_all_in_army_advantage or self.all_in_city_behind
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.should_kill. Small combat predicate for whether a visible enemy/city should be treated as a kill target.
     def should_kill(self, tile):
         # bypass bugs around city increment for kill_path.
         # If its a city and they aren't moving the army, no sense trying to treat it like an army intercept anyway.
@@ -2560,12 +2592,14 @@ class EklipZBot(object):
             return False
         return True
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.just_moved. Small combat/targeting delta predicate used by tactical kill logic.
     def just_moved(self, tile):
         if abs(tile.delta.armyDelta) > 2:
             return True
         else:
             return False
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.should_kill_path_move_half. Tactical combat heuristic for partial-path kill execution; migrate with kill-path logic.
     def should_kill_path_move_half(self, threatKill, additionalArmy=0):
         start = threatKill.start.tile
         next = threatKill.start.next.tile
@@ -2580,6 +2614,7 @@ class EklipZBot(object):
             f"should_kill_path_move_half: movingAwayFromEnemy {movingAwayFromEnemy}\n                 threatKill.value = {threatKill.value}\n                 threatKill.tail.tile.army = {threatKill.tail.tile.army}\n                 (threatKill.value + threatKill.tail.tile.army) // 2 = {(threatKill.econValue + threatKill.tail.tile.army) // 2}\n                 : {move_half}")
         return move_half
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.find_key_enemy_vision_tiles. Tactical target selection for enemy vision/retake pressure; belongs with combat utility heuristics.
     def find_key_enemy_vision_tiles(self):
         keyTiles = set()
         genPlayer = self._map.players[self.general.player]
@@ -2616,6 +2651,7 @@ class EklipZBot(object):
 
         return keyTiles
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.worth_path_kill. Core tactical evaluator deciding whether a computed kill path is strategically worth taking.
     def worth_path_kill(self, pathKill: Path, threatPath: Path, analysis=None, cutoffDistance=5):
         if pathKill.start is None or pathKill.tail is None:
             return False
@@ -2694,6 +2730,7 @@ class EklipZBot(object):
         logbook.info(f"  path kill worth it because not eliminated ({pathKill.toString()})")
         return True
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.kill_army. Army-targeted tactical kill wrapper that builds/filters kill paths for tracked armies.
     def kill_army(
             self,
             army: Army,
@@ -2736,6 +2773,7 @@ class EklipZBot(object):
 
         return None
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.kill_enemy_path. Thin wrapper into multi-path kill logic; migrate with the rest of the kill-path combat helpers.
     def kill_enemy_path(self, threatPath: Path, allowGeneral=False) -> Path | None:
         """
         This is some wild shit that needs to be redone.
@@ -2745,6 +2783,7 @@ class EklipZBot(object):
         """
         return self.kill_enemy_paths([threatPath], allowGeneral)
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.kill_enemy_paths. Main tactical kill-path construction logic over one or more threat paths; keep as a single intact combat cluster.
     def kill_enemy_paths(self, threatPaths: typing.List[Path], allowGeneral=False) -> Path | None:
         """
         This is some wild shit that needs to be redone.
@@ -2924,9 +2963,11 @@ class EklipZBot(object):
         #         f"kill_enemy_path {threatPath.start.tile.toString()} completed in {endTime:.4f}, No path found :(")
         # return gatherToThreatPath
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.kill_threat. Tiny threat wrapper over kill_enemy_path; migrate with combat kill helpers.
     def kill_threat(self, threat: ThreatObj, allowGeneral=False):
         return self.kill_enemy_path(threat.path.get_subsegment(threat.path.length // 2), allowGeneral)
 
+    # STEP2: Move to BotModules/BotGatherOps.py as BotGatherOps.get_gather_to_target_tile. Thin single-target adapter over the generic gather helper; keep with gather helper cluster.
     def get_gather_to_target_tile(
             self,
             target: Tile,
@@ -2973,6 +3014,7 @@ class EklipZBot(object):
 
     # set useTrueValueGathered to True for things like defense gathers,
     # where you want to take into account army lost gathering over enemy or neutral tiles etc.
+    # STEP2: Move to BotModules/BotGatherOps.py as BotGatherOps.get_defensive_gather_to_target_tiles. Defensive gather planner using targetArmy/priority adjustments; belongs in the gather module.
     def get_defensive_gather_to_target_tiles(
             self,
             targets,
@@ -3076,6 +3118,7 @@ class EklipZBot(object):
 
     # set useTrueValueGathered to True for things like defense gathers,
     # where you want to take into account army lost gathering over enemy or neutral tiles etc.
+    # STEP2: Move to BotModules/BotGatherOps.py as BotGatherOps.get_gather_to_target_tiles. Main generic gather planner with PCST/old-MST/max-set/knapsack branches; migrate intact to avoid behavior drift.
     def get_gather_to_target_tiles(
             self,
             targets,
@@ -3302,6 +3345,7 @@ class EklipZBot(object):
 
     # set useTrueValueGathered to True for things like defense gathers,
     # where you want to take into account army lost gathering over enemy or neutral tiles etc.
+    # STEP2: Move to BotModules/BotGatherOps.py as BotGatherOps.get_gather_to_target_tiles_greedy. Greedy fallback gather variant; keep with the rest of the gather planning surface.
     def get_gather_to_target_tiles_greedy(
             self,
             targets,
@@ -3381,6 +3425,7 @@ class EklipZBot(object):
             logbook.info(f"Value {totalValue} was too small to return... (needed {targetArmy}) :(")
         return None, -1, -1, None
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.sum_enemy_army_near_tile. Local tactical enemy-pressure query used by combat/city logic.
     def sum_enemy_army_near_tile(self, startTile: Tile, distance: int = 2) -> int:
         """does NOT include the value of the tile itself."""
         enemyNear = SearchUtils.Counter(0)
@@ -3398,6 +3443,7 @@ class EklipZBot(object):
         # logbook.info("enemy_army_near for tile {},{} returned {}".format(tile.x, tile.y, value))
         return value
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.count_enemy_territory_near_tile. Tactical territory-pressure query used by combat/city heuristics.
     def count_enemy_territory_near_tile(self, startTile: Tile, distance: int = 2) -> int:
         enemyNear = SearchUtils.Counter(0)
 
@@ -3411,6 +3457,7 @@ class EklipZBot(object):
         value = enemyNear.value
         return value
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.count_enemy_tiles_near_tile. Small tactical proximity count helper used by combat heuristics.
     def count_enemy_tiles_near_tile(self, startTile: Tile, distance: int = 2) -> int:
         enemyNear = SearchUtils.Counter(0)
 
@@ -3424,6 +3471,7 @@ class EklipZBot(object):
         value = enemyNear.value
         return value
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.sum_player_army_near_tile. Local army-pressure helper for arbitrary player proximity calculations.
     def sum_player_army_near_tile(self, tile: Tile, distance: int = 2, player: int | None = None) -> int:
         """
         does not include the army value ON the tile itself.
@@ -3441,6 +3489,7 @@ class EklipZBot(object):
             armyNear = armyNear - (tile.army - 1)
         return armyNear
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.sum_player_standing_army_near_or_on_tiles. Shared low-level army aggregation helper used by defense/combat heuristics.
     def sum_player_standing_army_near_or_on_tiles(self, tiles: typing.List[Tile], distance: int = 2, player: int | None = None) -> int:
         """
         DOES include the army value ON the tile itself.
@@ -3462,6 +3511,7 @@ class EklipZBot(object):
         value = armyNear.value
         return value
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.sum_friendly_army_near_tile. Friendly-team variant of the local army proximity helper.
     def sum_friendly_army_near_tile(self, tile: Tile, distance: int = 2, player: int | None = None) -> int:
         """
         does not include the army value ON the tile itself.
@@ -3479,6 +3529,7 @@ class EklipZBot(object):
             armyNear = armyNear - (tile.army - 1)
         return armyNear
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.sum_friendly_army_near_or_on_tiles. Shared team-aware army aggregation helper used in economy-defense and tactical checks.
     def sum_friendly_army_near_or_on_tiles(self, tiles: typing.List[Tile], distance: int = 2, player: int | None = None) -> int:
         """
         DOES include the army value ON the tile itself.
@@ -3500,9 +3551,11 @@ class EklipZBot(object):
         value = armyNear.value
         return value
 
+    # STEP2: Stay in EklipZBotV2.py or move very late to BotPathingUtils as a tiny shell alias. Extremely small convenience wrapper that is broadly referenced.
     def get_first_path_move(self, path: TilePlanInterface):
         return path.get_first_move()
 
+    # STEP2: Move to BotModules/BotTargeting.py as BotTargeting.get_afk_players. Cached opponent-state classification helper used for targeting/behavior decisions.
     def get_afk_players(self) -> typing.List[Player]:
         if self._afk_players is None:
             self._afk_players = []
@@ -3517,6 +3570,7 @@ class EklipZBot(object):
 
         return self._afk_players
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.get_optimal_exploration. Main exploration path planner using watchman routing and target reveal heuristics; keep intact with exploration logic.
     def get_optimal_exploration(
             self,
             turns,
@@ -3883,6 +3937,7 @@ class EklipZBot(object):
         #
         # return path
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.explore_target_player_undiscovered. Higher-level exploration decision logic around whether/when to run exploration and accept a reveal path.
     def explore_target_player_undiscovered(self, negativeTiles: typing.Set[Tile] | None, onlyHuntGeneral: bool | None = None, maxTime: float | None = None) -> Path | None:
         # if self._map.turn < 100 or self.player == -1 or self._map.generals[self.player] is not None:
         if negativeTiles:
@@ -4004,6 +4059,7 @@ class EklipZBot(object):
         #    path = path.get_reversed()
         #    self.info("UD SMALL: depth {} bfd kill (pre-prune) \n{}".format(path.length, path.toString()))
 
+    # STEP2: Move to BotModules/BotTargeting.py as BotTargeting.get_median_tile_value. Small targeting/heuristic utility over player tile-army distribution.
     def get_median_tile_value(self, percentagePoint=50, player: int = -1):
         if player == -1:
             player = self.general.player
@@ -4018,6 +4074,7 @@ class EklipZBot(object):
             logbook.info("hit that weird tileIdx bug.")
             return 0
 
+    # STEP2: Move to BotModules/BotGatherOps.py as BotGatherOps.build_mst. Core legacy MST gather/path builder used by multiple gather routines; migrate intact to the gather module.
     def build_mst(self, startTiles, maxTime=0.1, maxDepth=150, negativeTiles: typing.Set[Tile] = None, avoidTiles=None, priorityFunc=None):
         LOG_TIME = False
         searchingPlayer = self._map.player_index
@@ -4085,6 +4142,7 @@ class EklipZBot(object):
 
         return result
 
+    # STEP2: Move to BotModules/BotGatherOps.py as BotGatherOps.build_mst_rebuild. Rebuild phase for the legacy MST gather structure; keep adjacent to build_mst.
     def build_mst_rebuild(self, startTiles, fromMap, searchingPlayer):
         results = []
         for tile in startTiles:
@@ -4097,6 +4155,7 @@ class EklipZBot(object):
             results.append(gather)
         return results
 
+    # STEP2: Move to BotModules/BotGatherOps.py as BotGatherOps.get_gather_mst. Recursive gather-tree reconstruction helper used only by the MST gather pipeline.
     def get_gather_mst(self, tile, fromTile, fromMap, turn, searchingPlayer):
         gatherTotal = tile.army
         turnTotal = 1
@@ -4128,6 +4187,7 @@ class EklipZBot(object):
         # logbook.info("{},{} ({}  {})".format(thisNode.tile.x, thisNode.tile.y, thisNode.value, thisNode.gatherTurns))
         return thisNode
 
+    # STEP2: Move to BotModules/BotGatherOps.py as BotGatherOps.get_tree_move_non_city_leaf_count. Gather-tree scoring helper used to evaluate leaf/city composition.
     def get_tree_move_non_city_leaf_count(self, gathers):
         # fuck it, do it recursively i'm too tired for this
         count = 0
@@ -4136,6 +4196,7 @@ class EklipZBot(object):
             count += countNonCityLeaves
         return count
 
+    # STEP2: Move to BotModules/BotGatherOps.py as BotGatherOps._get_tree_move_non_city_leaf_count_recurse. Internal recursive helper for gather-tree leaf counting; keep adjacent to its caller.
     def _get_tree_move_non_city_leaf_count_recurse(self, gather):
         count = 0
         thisNodeFoundCity = False
@@ -4151,6 +4212,7 @@ class EklipZBot(object):
             count += 1
         return thisNodeFoundCity, count
 
+    # STEP2: Move to BotModules/BotGatherOps.py as BotGatherOps._get_tree_move_default_value_func. Default gather-tree move valuation factory; core gather module helper.
     def _get_tree_move_default_value_func(self) -> typing.Callable[[Tile, typing.Tuple], typing.Tuple | None]:
         # emptyVal value func, gathers based on cityCount then distance from general
         def default_value_func(currentTile, currentPriorityObject):
@@ -4183,6 +4245,7 @@ class EklipZBot(object):
 
         return default_value_func
 
+    # STEP2: Move to BotModules/BotGatherOps.py as BotGatherOps.get_tree_move_default. Central gather-tree-to-move selector used throughout gather/city/defense flows.
     def get_tree_move_default(
             self,
             gathers: typing.List[GatherTreeNode],
@@ -4222,6 +4285,7 @@ class EklipZBot(object):
             return None
         return move
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.get_threat_killer_move. Threat-specific defensive kill attempt helper; belongs with threat response logic.
     def get_threat_killer_move(self, threat: ThreatObj, searchTurns, negativeTiles) -> Move | None:
         """
         Attempt to find a threat kill path / move that kills a specific threat. TODO can this largely be replaced by defense backpack gather...?
@@ -4297,6 +4361,7 @@ class EklipZBot(object):
             return Move(saveTile, source)
         return None
 
+    # STEP2: Move to BotModules/BotCityOps.py as BotCityOps.should_proactively_take_cities. City-capture policy gate deciding when proactive neutral-city taking is strategically allowed.
     def should_proactively_take_cities(self):
         # never take cities proactively in FFA when we're engaging a player
         # if self.player != -1 and self._map.remainingPlayers > 2:
@@ -4341,6 +4406,7 @@ class EklipZBot(object):
         logbook.info(f"No proactive cities :(     dist {dist}, safe {safeOnStandingArmy}, player.standingArmy {player.standingArmy}, cityLeadWeight {cityLeadWeight}")
         return False
 
+    # STEP2: Move to BotModules/BotCityOps.py as BotCityOps.capture_cities. Main city-capture orchestrator covering neutral/enemy city selection, contestation, gather planning, and all-in-on-cities behavior.
     def capture_cities(
             self,
             negativeTiles: typing.Set[Tile],
@@ -4584,9 +4650,11 @@ class EklipZBot(object):
 
         return capturePath, move
 
+    # STEP2: Move to BotModules/BotRendering.py as BotRendering.mark_tile. Pure view-info annotation helper; presentation-only.
     def mark_tile(self, tile, alpha=100):
         self.viewInfo.evaluatedGrid[tile.x][tile.y] = alpha
 
+    # STEP2: Move to BotModules/BotCityOps.py as BotCityOps.find_neutral_city_path. Neutral-city candidate ranking and path selection logic; belongs in city operations.
     def find_neutral_city_path(self) -> Path | None:
         """
         Prioritizes a neutral city and returns a path to it, if one is found. Will refuse to return one if it doesn't make sense to take a city right now.
@@ -4700,6 +4768,7 @@ class EklipZBot(object):
 
         return path
 
+    # STEP2: Move to BotModules/BotTargeting.py as BotTargeting.find_enemy_city_path. Enemy-city candidate ranking and path selection logic; belongs in targeting.
     def find_enemy_city_path(self, negativeTiles: TileSet, force: bool = False) -> typing.Tuple[int, Path | None]:
         """
         Returns bestGatherTurnsApprox, pathToCity if a good city contest option is found. If not, returns turns -1 and None path.
@@ -4771,6 +4840,7 @@ class EklipZBot(object):
         bestTurns = -1
         return bestTurns, self.get_path_to_target(tgTile)
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.get_approximate_attack_defense_sweet_spot. Attack-vs-defense timing sweep helper for target evaluation over future turn windows.
     def get_approximate_attack_defense_sweet_spot(
             self,
             tile: Tile,
@@ -4861,6 +4931,7 @@ class EklipZBot(object):
 
         return bestTurns, bestAttack, bestDef
 
+    # STEP2: Move to BotModules/BotPathingUtils.py as BotPathingUtils.get_value_per_turn_subsegment. Path-trimming helper that keeps the best value-per-turn suffix for launch/attack paths.
     def get_value_per_turn_subsegment(
             self,
             path: Path,
@@ -4948,6 +5019,7 @@ class EklipZBot(object):
 
         return newPath
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.calculate_general_danger. Main danger-analyzer refresh for general/city/ally threats and threat rendering.
     def calculate_general_danger(self):
         depth = self.distance_from_general(self.targetPlayerExpectedGeneralLocation)
         if depth < 9:
@@ -4982,6 +5054,7 @@ class EklipZBot(object):
         if self.should_abandon_king_defense():
             self.viewInfo.add_stats_line(f'skipping defense because losing on econ')
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.check_should_be_all_in_losing. Main posture heuristic for switching into losing all-in mode or surrender trajectory.
     def check_should_be_all_in_losing(self) -> bool:
         general = self.general
         if general is None:
@@ -5074,6 +5147,7 @@ class EklipZBot(object):
         self._minAllowableArmy = 1
         return self.is_all_in_losing
 
+    # STEP2: Stay in EklipZBotV2.py or move late to BotPathingUtils as a tiny move-validity predicate. Basic move sanity/safety wrapper used widely.
     def is_move_safe_valid(self, move, allowNonKill=True):
         if move is None:
             return False
@@ -5085,10 +5159,12 @@ class EklipZBot(object):
             return False
         return True
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.general_move_safe. Thin wrapper for checking whether a general move is blocked by danger tiles.
     def general_move_safe(self, target, move_half=False):
         dangerTiles = self.get_general_move_blocking_tiles(target, move_half)
         return len(dangerTiles) == 0
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.get_general_move_blocking_tiles. Computes enemy danger tiles that make a general move unsafe.
     def get_general_move_blocking_tiles(self, target: Tile, move_half=False):
         blockingTiles = []
 
@@ -5126,6 +5202,7 @@ class EklipZBot(object):
 
         return blockingTiles
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.check_should_defend_economy_based_on_large_tiles. Large-enemy-army heuristic that can trigger econ defense and city-blocking.
     def check_should_defend_economy_based_on_large_tiles(self) -> bool:
         largeEnemyTiles = self.find_large_tiles_near(
             [t for t in self.board_analysis.intergeneral_analysis.shortestPathWay.tiles],
@@ -5182,6 +5259,7 @@ class EklipZBot(object):
 
         return False
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.should_defend_economy. Main defend-economy policy entrypoint combining large-tile, cycle, and army-near-general heuristics.
     def should_defend_economy(self, defenseTiles: typing.Set[Tile]):
         """
         defenseTiles will be added to, if we choose to say we're safe but that certain tiles can't be used.
@@ -5290,6 +5368,7 @@ class EklipZBot(object):
 
         return self.defend_economy
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.get_danger_tiles. Small helper returning the enemy tiles participating in current danger paths.
     def get_danger_tiles(self, move_half=False) -> typing.Set[Tile]:
         dangerPaths = self.get_danger_paths(move_half)
 
@@ -5300,6 +5379,7 @@ class EklipZBot(object):
 
         return dangerTiles
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.get_danger_paths. Builds short danger paths that threaten the general for current-move safety checks.
     def get_danger_paths(self, move_half=False) -> typing.List[Path]:
         thresh = 3
         if move_half:
@@ -5335,6 +5415,7 @@ class EklipZBot(object):
 
         return dangerPaths
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.worth_attacking_target. Main attack-window heuristic deciding whether gather-path value justifies launching at the target.
     def worth_attacking_target(self) -> bool:
         timingFactor = 1.0
         if self._map.turn < 50:
@@ -5461,6 +5542,7 @@ class EklipZBot(object):
                 f"    --                                      rawNeeded: {'%.1f' % rawNeeded},  rawNeededScaled: {'%.1f' % rawNeededScaled},  lengthRatio: {'%.1f' % lengthRatio}, targetPlayerArmyThreshold: {'%.1f' % targetPlayerArmyThreshold}")
             return value >= neededVal
 
+    # STEP2: Move to BotModules/BotStateQueries.py as BotStateQueries.get_player_army_amount_on_path. Small path-aggregation helper for counting a player's army along a path.
     def get_player_army_amount_on_path(self, path, player, startIdx=0, endIdx=1000):
         value = 0
         idx = 0
@@ -5472,6 +5554,7 @@ class EklipZBot(object):
             idx += 1
         return value
 
+    # STEP2: Move to BotModules/BotCombatOps.py or BotStateQueries late. Small adjacent-enemy-army helper used for target sizing heuristics.
     def get_target_army_inc_adjacent_enemy(self, tile):
         sumAdj = 0
         for adj in tile.adjacents:
@@ -5482,6 +5565,7 @@ class EklipZBot(object):
         #     armyToSearch += tile.army / 2
         return armyToSearch
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.find_leaf_move. Chooses the best prioritized leaf capture/expand move with general-safety fallback.
     def find_leaf_move(self, allLeaves):
         leafMoves = self.prioritize_expansion_leaves(allLeaves)
         if self.target_player_gather_path is not None:
@@ -5509,6 +5593,7 @@ class EklipZBot(object):
                 return move
         return None
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.prioritize_expansion_leaves. Scores and orders leaf moves for greedy expansion/capture use.
     def prioritize_expansion_leaves(
             self,
             allLeaves=None,
@@ -5591,6 +5676,7 @@ class EklipZBot(object):
             vals.append(move)
         return vals
 
+    # STEP2: Stay in EklipZBotV2.py or move very late to BotTargeting as a tiny legacy distance helper. Euclidean nearest-enemy-general approximation utility.
     def getDistToEnemy(self, tile):
         dist = 1000
         for i in range(len(self._map.generals)):
@@ -5605,6 +5691,7 @@ class EklipZBot(object):
                 dist = genDist
         return dist
 
+    # STEP2: Move to BotModules/BotTargeting.py as BotTargeting.get_path_to_target_player. Main launch-path builder toward the current target player/general approximation.
     def get_path_to_target_player(self, isAllIn=False, cutLength: int | None = None) -> Path | None:
         # TODO on long distances or higher city counts or FFA-post-kills don't use general path, just find max path to target player and gather to that
 
@@ -5695,6 +5782,7 @@ class EklipZBot(object):
 
         return path
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.get_best_defense. Search-based best-defense path finder for saving a tile/general against a threat.
     def get_best_defense(self, defendingTile: Tile, turns: int, negativeTileList: typing.List[Tile]) -> Path | None:
         searchingPlayer = defendingTile.player
         logbook.info(f"Trying to get_best_defense. Turns {turns}. Searching player {searchingPlayer}")
@@ -5771,10 +5859,12 @@ class EklipZBot(object):
             logbook.info("Best defense: NONE")
         return None
 
+    # STEP2: Stay in EklipZBotV2.py. Tiny shell logging/view-info convenience helper used broadly across modules.
     def info(self, text):
         self.viewInfo.infoText = text
         self.viewInfo.add_info_line(text)
 
+    # STEP2: Move to BotModules/BotPathingUtils.py as BotPathingUtils.get_path_to_target. Thin single-target wrapper around get_path_to_targets.
     def get_path_to_target(
             self,
             target,
@@ -5800,6 +5890,7 @@ class EklipZBot(object):
             preferEnemy=preferEnemy,
             maxObstacleCost=maxObstacleCost)
 
+    # STEP2: Move to BotModules/BotPathingUtils.py as BotPathingUtils.get_path_to_targets. Core bot path search wrapper with neutral/enemy/city preference logic.
     def get_path_to_targets(
             self,
             targets,
@@ -5885,6 +5976,7 @@ class EklipZBot(object):
 
         return path
 
+    # STEP2: Stay in EklipZBotV2.py or move very late to BotPathingUtils as a tiny cached-distance query. Small convenience wrapper over precomputed general distances.
     def distance_from_general(self, sourceTile):
         if sourceTile == self.general:
             return 0
@@ -5894,6 +5986,7 @@ class EklipZBot(object):
             val = self._gen_distances[sourceTile]
         return val
 
+    # STEP2: Stay in EklipZBotV2.py or move very late to BotPathingUtils as a tiny cached-distance query. Small convenience wrapper over precomputed ally distances.
     def distance_from_teammate(self, sourceTile):
         if sourceTile == self.teammate_general:
             return 0
@@ -5903,6 +5996,7 @@ class EklipZBot(object):
             val = self._ally_distances[sourceTile]
         return val
 
+    # STEP2: Move to BotModules/BotPathingUtils.py as BotPathingUtils.distance_from_opp. Small wrapper over intergeneral distance matrix used by many heuristics.
     def distance_from_opp(self, sourceTile):
         if sourceTile == self.targetPlayerExpectedGeneralLocation:
             return 0
@@ -5911,6 +6005,7 @@ class EklipZBot(object):
             val = self.board_analysis.intergeneral_analysis.bMap[sourceTile]
         return val
 
+    # STEP2: Move to BotModules/BotPathingUtils.py as BotPathingUtils.distance_from_target_path. Small wrapper over shortest-path distance cache.
     def distance_from_target_path(self, sourceTile):
         if sourceTile in self.shortest_path_to_target_player.tileSet:
             return 0
@@ -5920,6 +6015,7 @@ class EklipZBot(object):
             val = self.board_analysis.shortest_path_distances[sourceTile]
         return val
 
+    # STEP2: Stay in EklipZBotV2.py initially, then potentially split later between BotTargeting/BotExpansionOps/BotCombatOps. This scan seeds shared per-turn collections and target-player selection used everywhere.
     def scan_map_for_large_tiles_and_leaf_moves(self):
         self.general_safe_func_set[self.general] = self.general_move_safe
         self.leafMoves = []
@@ -6035,6 +6131,7 @@ class EklipZBot(object):
             if self.targetPlayer >= 0:
                 self._lastTargetPlayerCityCount = self.opponent_tracker.get_current_team_scores_by_player(self.targetPlayer).cityCount
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.determine_should_winning_all_in. High-level combat aggression gate based on army advantage and path distance.
     def determine_should_winning_all_in(self):
         if self.targetPlayer < 0:
             return False
@@ -6071,6 +6168,7 @@ class EklipZBot(object):
 
         return False
 
+    # STEP2: Move to BotModules/BotTargeting.py as BotTargeting.find_expected_1v1_general_location_on_undiscovered_map. General-location prediction matrix builder for unseen-spawn targeting.
     def find_expected_1v1_general_location_on_undiscovered_map(
             self,
             undiscoveredCounterDepth: int,
@@ -6141,6 +6239,7 @@ class EklipZBot(object):
 
         return grid
 
+    # STEP2: Move to BotModules/BotTimings.py as BotTimings.prune_timing_split_if_necessary. Timing-adjustment helper that tightens launch/split once gatherable tiles are exhausted.
     def prune_timing_split_if_necessary(self):
         if self.target_player_gather_path is None:
             return
@@ -6166,6 +6265,7 @@ class EklipZBot(object):
                 self.timings.launchTiming = timingAdjusted
                 self.timings.splitTurns = timingAdjusted
 
+    # STEP2: Move to BotModules/BotPathingUtils.py as BotPathingUtils.get_distance_from_board_center. Generic board-geometry helper used by exploration/targeting heuristics.
     def get_distance_from_board_center(self, tile, center_ratio=0.25) -> float:
         """
         bigger center_ratio means more of the center of the board counts as 0.
@@ -6187,6 +6287,7 @@ class EklipZBot(object):
             distFromCenterY = 0
         return distFromCenterX + distFromCenterY
 
+    # STEP2: Move to BotModules/BotTargeting.py as BotTargeting.get_predicted_target_player_general_location. Main enemy-general prediction entrypoint combining emergence, valid spawn masks, hacky fallback search, and exploration fallback.
     def get_predicted_target_player_general_location(self, skipDiscoveredAsNeutralFilter: bool = False) -> Tile:
         minSpawnDist = self.armyTracker.min_spawn_distance
 
@@ -6294,6 +6395,7 @@ class EklipZBot(object):
         self.info(f"target path fallback failed, returning {gMov} tile next to general.")
         return gMov
 
+    # STEP2: Move to BotModules/BotTargeting.py as BotTargeting.is_player_spawn_cramped. Spawn-space heuristic used by target/expansion policy decisions.
     def is_player_spawn_cramped(self, spawnDist=-1) -> bool:
         if self._spawn_cramped is not None:
             return self._spawn_cramped
@@ -6382,6 +6484,7 @@ class EklipZBot(object):
 
         return cramped
 
+    # STEP2: Move to BotModules/BotTimings.py as BotTimings.timing_cycle_ended. Per-cycle state reset and timing-boundary bookkeeping; belongs in timing/cycle logic.
     def timing_cycle_ended(self):
         self.is_winning_gather_cyclic = False
         self.viewInfo.add_info_line(f'Timing cycle ended, turn {self._map.turn}')
@@ -6406,6 +6509,7 @@ class EklipZBot(object):
         self.locked_launch_point = None
         self.flanking = False
 
+    # STEP2: Move to BotModules/BotRendering.py as BotRendering.dump_turn_data_to_string. Debug/export serialization for current turn state; presentation/debug concern.
     def dump_turn_data_to_string(self):
         charMap = PLAYER_CHAR_BY_INDEX
 
@@ -6501,13 +6605,16 @@ class EklipZBot(object):
 
         return '\n'.join(data)
 
+    # STEP2: Move to BotModules/BotStateQueries.py or BotRendering late in the migration. Tiny string-to-tile parser used mainly by resume/debug serialization helpers.
     def parse_tile_str(self, tileStr: str) -> Tile:
         xStr, yStr = tileStr.split(',')
         return self._map.GetTile(int(xStr), int(yStr))
 
+    # STEP2: Move to BotModules/BotStateQueries.py late in the migration. Tiny parsing helper used by resume/debug restoration code.
     def parse_bool(self, boolStr: str) -> bool:
         return boolStr.lower().strip() == "true"
 
+    # STEP2: Stay in EklipZBotV2.py or move to a dedicated resume/debug module late. This restores broad bot/runtime state across trackers, timings, paths, and debug serialization.
     def load_resume_data(self, resume_data: typing.Dict[str, str]):
         if f'bot_target_player' in resume_data:  # ={self.player}')
             self.targetPlayer = int(resume_data[f'bot_target_player'])
@@ -6675,6 +6782,7 @@ class EklipZBot(object):
         #     #         if f'{char}_bot_general_approx' in resume_data:  # ={str(self.generalApproximations[player.index][3])}')
         #     #             self.something = int(resume_data[f'{char}_bot_general_approx'])
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.is_move_safe_against_threats. Small defensive validation helper against current kill threats.
     def is_move_safe_against_threats(self, move: Move):
         threat = self.threat
         if not threat:
@@ -6701,6 +6809,7 @@ class EklipZBot(object):
 
         return True
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.get_gather_to_threat_path. Thin single-threat adapter into the multi-threat defensive gather planner.
     def get_gather_to_threat_path(
             self,
             threat: ThreatObj,
@@ -6737,6 +6846,7 @@ class EklipZBot(object):
             timeLimit=timeLimit
         )
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.get_gather_to_threat_paths. Main defensive gather entrypoint for one or more threat paths; keep with defense/interception logic.
     def get_gather_to_threat_paths(
             self,
             threats: typing.List[ThreatObj],
@@ -6785,6 +6895,7 @@ class EklipZBot(object):
 
         return move, value, turnsUsed, gatherNodes
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.try_threat_gather. Core defensive gather implementation for intercept/survival contribution planning.
     def try_threat_gather(
             self,
             threats: typing.List[ThreatObj],
@@ -6886,6 +6997,7 @@ class EklipZBot(object):
         logbook.info(f'get_gather_to_threat_path for depth {gatherDepth} force_turns_up_threat_path {force_turns_up_threat_path} returned {move}, val {value} turns {turnsUsed}')
         return move, value, turnsUsed, gatherNodes
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.get_gather_to_threat_path_greedy. Greedy/faster defensive gather fallback for threat interception.
     def get_gather_to_threat_path_greedy(
             self,
             threat: ThreatObj,
@@ -6934,6 +7046,7 @@ class EklipZBot(object):
 
         return move, value, turnsUsed, gatherNodes
 
+    # STEP2: Stay in EklipZBotV2.py initially, then potentially split across BotTargeting/BotTimings/BotComms later. This recalculates shared target/gather/flank state used by many modules.
     def recalculate_player_paths(self, force: bool = False):
         self.ensure_reachability_matrix_built()
         reevaluate = force
@@ -7020,6 +7133,7 @@ class EklipZBot(object):
     #
     #     return None
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.check_for_king_kills_and_races. Major combat/race evaluation routine that decides enemy-general kill and race actions.
     def check_for_king_kills_and_races(self, threat: ThreatObj | None, force: bool = False) -> typing.Tuple[Move | None, Path | None, float]:
         """
 
@@ -7438,6 +7552,7 @@ class EklipZBot(object):
 
         return None, kingKillPath, kingKillChance
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.determine_fog_defense_amount_available_for_tiles. Estimates how much fog defense can actually reach a tile set after excluding unreachable hidden armies.
     def determine_fog_defense_amount_available_for_tiles(self, targetTiles, enPlayer, fogDefenseTurns: int = 0, fogReachTurns: int = 8) -> int:
         """Does NOT include the army that is on the targetTiles."""
         targetArmy = self.opponent_tracker.get_approximate_fog_army_risk(enPlayer, cityLimit=None, inTurns=fogDefenseTurns)
@@ -7470,6 +7585,7 @@ class EklipZBot(object):
 
         return targetArmy
 
+    # STEP2: Move to BotModules/BotTargeting.py as BotTargeting.calculate_target_player. Main opponent-selection heuristic across visibility, aggression, economy, and distance.
     def calculate_target_player(self) -> int:
         targetPlayer = -1
         playerScore = 0
@@ -7622,6 +7738,7 @@ class EklipZBot(object):
 
         return targetPlayer
 
+    # STEP2: Move to BotModules/BotGatherOps.py as BotGatherOps.get_gather_tiebreak_matrix. Core gather tie-break matrix builder based on terrain, expansion plan, and play-area posture.
     def get_gather_tiebreak_matrix(self) -> MapMatrixInterface[float]:
         """
         Returns a MapMatrix that includes an int value that indicates how to tiebreak gather values.
@@ -7719,6 +7836,7 @@ class EklipZBot(object):
 
         return matrix
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.check_defense_intercept_move. Primary defense-intercept chooser that selects or rejects interception plans against a threat.
     def check_defense_intercept_move(self, threat: ThreatObj) -> typing.Tuple[Move | None, Path | None, InterceptionOptionInfo | None, bool]:
         threatInterceptionPlan = self.intercept_plans.get(threat.path.start.tile, None)
         isDelayed = False
@@ -7782,6 +7900,7 @@ class EklipZBot(object):
             self.info(f'    notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, {interceptPath}')
         return mv, interceptPath, interceptingOption, isDelayed
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.check_kill_threat_only_defense_interception. Fallback solo interception search for direct general-kill threats.
     def check_kill_threat_only_defense_interception(self, threat: ThreatObj) -> typing.Tuple[Move | None, Path | None, InterceptionOptionInfo | None, bool]:
         if not threat.path.tail.tile.isGeneral:
             return None, None, None, False
@@ -7853,6 +7972,7 @@ class EklipZBot(object):
 
         return bestMove, bestInterceptPath, bestInterceptingOption, bestIsDelayed
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.check_defense_hybrid_intercept_moves. Hybrid planner that combines interception value with a pruned defense gather tree.
     def check_defense_hybrid_intercept_moves(self, threat: ThreatObj, defensePlan: typing.List[GatherTreeNode], missingDefense: int, defenseNegatives: typing.Set[Tile]) -> typing.Tuple[Move | None, Path | None, bool, typing.List[GatherTreeNode]]:
         """
         Returns [replacementMove, replacementPath, isDelayed, updatedDefenseNodes]
@@ -7942,6 +8062,7 @@ class EklipZBot(object):
 
         return None, None, False, bestRemainingDefense
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense._is_invalid_defense_intercept_for_threat. Tiny validator preventing intercepts that originate from the threatened path itself.
     def _is_invalid_defense_intercept_for_threat(self, interceptPath: TilePlanInterface | Path | None, threat: ThreatObj) -> bool:
         if interceptPath is None:
             return False
@@ -7955,6 +8076,7 @@ class EklipZBot(object):
 
         return pathStart.tile in threat.path.tileSet
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.get_defense_path_option_from_options_if_available. Selects a usable intercept option from expansion/intercept plan state for a given threat.
     def get_defense_path_option_from_options_if_available(self, threatInterceptionPlan: ArmyInterception, threat: ThreatObj) -> typing.Tuple[InterceptionOptionInfo | None, TilePlanInterface | None]:
         # if not self.expansion_plan.includes_intercept:  # or self.expansion_plan.intercept_waiting
         #     return None, None
@@ -8025,6 +8147,7 @@ class EklipZBot(object):
 
         return interceptPath, interceptingOption
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.get_defense_moves. Main defense orchestrator combining threat gathers, intercepts, pruning, fallback races, and ally coordination.
     def get_defense_moves(
             self,
             defenseCriticalTileSet: typing.Set[Tile],
@@ -8477,6 +8600,7 @@ class EklipZBot(object):
 
         return None, None
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.attempt_first_25_collision_reroute. Early-game expansion replanning helper for collision/no-op rerouting.
     def attempt_first_25_collision_reroute(
             self,
             curPath: Path,
@@ -8539,13 +8663,16 @@ class EklipZBot(object):
         else:
             return None
 
+    # STEP2: Stay in EklipZBotV2.py or move very late to BotStateQueries as a tiny tracker accessor. Frequently used convenience wrapper over ArmyTracker.
     def get_army_at(self, tile: Tile, no_expected_path: bool = False):
         return self.armyTracker.get_or_create_army_at(tile, skip_expected_path=no_expected_path)
 
+    # STEP2: Stay in EklipZBotV2.py or move very late to BotStateQueries as a tiny tracker accessor. Convenience coordinate wrapper over get_army_at.
     def get_army_at_x_y(self, x: int, y: int):
         tile = self._map.GetTile(x, y)
         return self.get_army_at(tile)
 
+    # STEP2: Stay in EklipZBotV2.py. Core one-time lifecycle/bootstrap wiring for all analyzers, trackers, callbacks, and bot state; keep on outer shell.
     def initialize_from_map_for_first_time(self, map: MapBase):
         self._map = map
         self._map.distance_mapper = DistanceMapperImpl(map)
@@ -8623,12 +8750,15 @@ class EklipZBot(object):
         #     self.is_weird_custom = True
         #     self._map.set_walled_cities(minCity.army)
 
+    # STEP2: Stay in EklipZBotV2.py. Serialization guard on the shell object; keep unchanged with bot lifecycle methods.
     def __getstate__(self):
         raise AssertionError("EklipZBot Should never be serialized")
 
+    # STEP2: Stay in EklipZBotV2.py. Serialization guard on the shell object; keep unchanged with bot lifecycle methods.
     def __setstate__(self, state):
         raise AssertionError("EklipZBot Should never be deserialized")
 
+    # STEP2: Move to BotModules/BotRendering.py as BotRendering.add_city_score_to_view_info or keep as a static rendering utility. Pure view-info formatting helper.
     @staticmethod
     def add_city_score_to_view_info(score: CityScoreData, viewInfo: ViewInfo):
         tile = score.tile
@@ -8644,6 +8774,7 @@ class EklipZBot(object):
             scoreVal = score.get_weighted_neutral_value()
             viewInfo.bottomLeftGridText[tile] = f'n{f"{scoreVal:.2f}".strip("0")}'
 
+    # STEP2: Move to BotModules/BotCityOps.py as BotCityOps.get_quick_kill_on_enemy_cities. Quick tactical city-kill and opportunistic city-capture planner.
     def get_quick_kill_on_enemy_cities(self, defenseCriticalTileSet: typing.Set[Tile]) -> Path | None:
         """
 
@@ -8923,6 +9054,7 @@ class EklipZBot(object):
 
         return None
 
+    # STEP2: Move to BotModules/BotRendering.py as BotRendering.prep_view_info_for_render. Large render-prep routine that populates view/debug overlays only.
     def prep_view_info_for_render(self, move: Move | None = None):
         self.viewInfo.board_analysis = self.board_analysis
         self.viewInfo.targetingArmy = self.targetingArmy
@@ -9075,6 +9207,7 @@ class EklipZBot(object):
                         else:
                             self.viewInfo.topRightGridText[tile] = island.name
 
+    # STEP2: Move to BotModules/BotTargeting.py as BotTargeting.get_move_if_afk_player_situation. Special-case AFK-opponent targeting/exploration behavior.
     def get_move_if_afk_player_situation(self) -> Move | None:
         afkPlayers = self.get_afk_players()
         allOtherPlayersAfk = len(afkPlayers) + 1 == self._map.remainingPlayers
@@ -9149,6 +9282,7 @@ class EklipZBot(object):
 
         return None
 
+    # STEP2: Move to BotModules/BotEventHandlers.py as BotEventHandlers.clear_fog_armies_around or BotTargeting late. Tracker cleanup helper around known enemy-general locations.
     def clear_fog_armies_around(self, enemyGeneral: Tile):
 
         def fog_army_clear_func(tile: Tile):
@@ -9159,6 +9293,7 @@ class EklipZBot(object):
 
         SearchUtils.breadth_first_foreach(self._map, [enemyGeneral], maxDepth=7, foreachFunc=fog_army_clear_func)
 
+    # STEP2: Stay in EklipZBotV2.py or move to BotRendering/BotLifecycle late. Small logging bootstrap helper tied to replay/user context.
     def initialize_logging(self):
         self.logDirectory = BotLogging.get_file_logging_directory(self._map.usernames[self._map.player_index], self._map.replay_id)
         fileSafeUserName = BotLogging.get_file_safe_username(self._map.usernames[self._map.player_index])
@@ -9169,6 +9304,7 @@ class EklipZBot(object):
 
         BotLogging.add_file_log_output(fileSafeUserName, gameMode, self._map.replay_id, self.logDirectory)
 
+    # STEP2: Move to BotModules/BotTargeting.py as BotTargeting.get_max_explorable_undiscovered_tile. Selects the best cached undiscovered tile candidate for exploration/targeting.
     def get_max_explorable_undiscovered_tile(self, minSpawnDist: int):
         # 4 and larger gets dicey
         depth = self.get_safe_per_tile_bfs_depth()
@@ -9194,6 +9330,7 @@ class EklipZBot(object):
         self.viewInfo.add_targeted_tile(maxTile, TargetStyle.PURPLE)
         return maxTile
 
+    # STEP2: Stay in EklipZBotV2.py or move late to BotTargeting as a tiny perf heuristic. Small map-size-based BFS depth policy helper.
     def get_safe_per_tile_bfs_depth(self):
         depth = 9
         if self._map.rows * self._map.cols > 4000:
@@ -9210,6 +9347,7 @@ class EklipZBot(object):
             depth = 7
         return depth
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.try_gather_tendrils_towards_enemy. Experimental/fallback expansion-gather helper toward enemy territory.
     def try_gather_tendrils_towards_enemy(self, turns: int | None = None) -> Move | None:
         # # TODO hack for now because this doesn't perform well
         return None
@@ -9303,6 +9441,7 @@ class EklipZBot(object):
         #     return move
         return None
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.get_army_scrim_move. Thin wrapper converting scrim simulation output into a move decision.
     def get_army_scrim_move(
             self,
             friendlyArmyTile: Tile,
@@ -9327,6 +9466,7 @@ class EklipZBot(object):
 
         return None
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.get_army_scrim_paths. Scrim simulation wrapper returning rendered friendly/enemy path projections.
     def get_army_scrim_paths(
             self,
             friendlyArmyTile: Tile,
@@ -9362,6 +9502,7 @@ class EklipZBot(object):
 
         return friendlyPath, enemyPath, result
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.get_army_scrim_result. Builds army lists and invokes the scrim engine for one primary friendly/enemy pairing.
     def get_army_scrim_result(
             self,
             friendlyArmyTile: Tile,
@@ -9419,6 +9560,7 @@ class EklipZBot(object):
         )
         return result
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.get_armies_scrim_result. Main ArmyEngine/MCTS scrim evaluation entrypoint; keep intact as a combat-engine cluster.
     def get_armies_scrim_result(
             self,
             friendlyArmies: typing.List[Army],
@@ -9538,6 +9680,7 @@ class EklipZBot(object):
             result.best_result_state.tile_differential = -50
         return result
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.extend_interspersed_path_moves. Small scrim-render helper for reconstructing per-side paths from interleaved move sequences.
     def extend_interspersed_path_moves(self, paths: typing.List[Path], move: Move | None):
         if move is not None:
             if move.dest is None:
@@ -9555,6 +9698,7 @@ class EklipZBot(object):
                 paths.append(curPath)
             curPath.add_next(move.dest, move.move_half)
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.extract_engine_result_paths_and_render_sim_moves. Converts scrim engine output into representative paths and view rendering.
     def extract_engine_result_paths_and_render_sim_moves(self, result: ArmySimResult) -> typing.Tuple[Path | None, Path | None]:
         friendlyPaths: typing.List[Path] = []
         enemyPaths: typing.List[Path] = []
@@ -9599,6 +9743,7 @@ class EklipZBot(object):
 
         return friendlyPath, enemyPath
 
+    # STEP2: Move to BotModules/BotPathingUtils.py as BotPathingUtils.is_tile_in_range_from. Generic distance/range utility with cached-general fast paths.
     def is_tile_in_range_from(self, source: Tile, target: Tile, maxDist: int, minDist: int = 0) -> bool:
         """
         Whether the dist between source and target is within the range of minDist and maxDist, inclusive.
@@ -9624,6 +9769,7 @@ class EklipZBot(object):
 
         return minDist <= dist <= maxDist
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.continue_killing_target_army. Ongoing targeted-army pursuit/intercept continuation logic.
     def continue_killing_target_army(self) -> Move | None:
         # check if still same army
         if self.targetingArmy.tile in self.armyTracker.armies:
@@ -9729,6 +9875,7 @@ class EklipZBot(object):
 
         return None
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.build_intercept_plans. Main interception-plan builder over current danger analyzer threats and army-interceptor outputs.
     def build_intercept_plans(self, negTiles: typing.Set[Tile] | None = None) -> typing.Dict[Tile, ArmyInterception]:
         """
 
@@ -9875,6 +10022,7 @@ class EklipZBot(object):
 
         return interceptions
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.should_bypass_army_danger_due_to_last_move_turn. Small stale-threat filtering helper for intercept planning.
     def should_bypass_army_danger_due_to_last_move_turn(self, tile: Tile) -> bool:
         army = self.get_army_at(tile)
         shouldBypass = army.last_seen_turn < self._map.turn - 6 and not army.tile.visible
@@ -9882,6 +10030,7 @@ class EklipZBot(object):
 
         return shouldBypass
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.try_find_counter_army_scrim_path_killpath. Thin wrapper around scrim-based counter-army kill evaluation.
     def try_find_counter_army_scrim_path_killpath(
             self,
             threatPath: Path,
@@ -9891,6 +10040,7 @@ class EklipZBot(object):
         path, simResult = self.try_find_counter_army_scrim_path_kill(threatPath, allowGeneral=allowGeneral, forceEnemyTowardsGeneral=forceEnemyTowardsGeneral)
         return path
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.try_find_counter_army_scrim_path_kill. Scrim-based counter-army kill evaluator that may retarget targetingArmy.
     def try_find_counter_army_scrim_path_kill(
             self,
             threatPath: Path,
@@ -9916,6 +10066,7 @@ class EklipZBot(object):
 
         return None, None
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.try_find_counter_army_scrim_path. Core scrim-based counterplay planner against an incoming threat path.
     def try_find_counter_army_scrim_path(
             self,
             threatPath: Path,
@@ -9996,6 +10147,7 @@ class EklipZBot(object):
 
         return bestPath, bestSimRes
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.find_large_tiles_near. Shared tile-selection utility for nearby large armies used by combat/defense/scrim logic.
     def find_large_tiles_near(
             self,
             fromTiles: typing.List[Tile],
@@ -10042,6 +10194,7 @@ class EklipZBot(object):
 
         return largeTilesNearTargets[0:limit]
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.check_for_army_movement_scrims. Tactical scrim continuation/search over armies observed moving this turn.
     def check_for_army_movement_scrims(self, econCutoff=2.0) -> Move | None:
         curScrim = 0
         cutoff = 3
@@ -10149,6 +10302,7 @@ class EklipZBot(object):
             self.next_scrimming_army_tile = bestScrimPath.start.next.tile
             return self.get_first_path_move(bestScrimPath)
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.should_force_gather_to_enemy_tiles. Small policy helper deciding whether local enemy territory pressure near general requires forced cleanup.
     def should_force_gather_to_enemy_tiles(self) -> bool:
         """
         Determine whether we've let too much enemy tiles accumulate near our general,
@@ -10169,6 +10323,7 @@ class EklipZBot(object):
             f'forceEn={forceGatherToEnemy} (near {numEnemyTerritoryNearGen}, dist {scaryDistance}, rat {enemyTileNearGenRatio:.2f} vs thresh {thresh:.2f})')
         return forceGatherToEnemy
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.check_for_danger_tile_moves. Short-range tactical cleanup of immediate danger tiles near the general/path.
     def check_for_danger_tile_moves(self) -> Move | None:
         dangerTiles = self.get_danger_tiles()
         if len(dangerTiles) == 0 or self.all_in_losing_counter > 15:
@@ -10257,6 +10412,7 @@ class EklipZBot(object):
     #
     #     return None
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.get_optimal_city_or_general_plan_move. Early expansion/city-plan optimization entrypoint for start-game planning.
     def get_optimal_city_or_general_plan_move(self, timeLimit: float = 4.0) -> Move | None:
         calcedThisTurn = False
         if self._map.turn < 50 and self._map.is_2v2:
@@ -10458,6 +10614,7 @@ class EklipZBot(object):
             return move
         return None
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.look_for_ffa_turtle_move. Narrow FFA-specific turtle/city-take opportunistic behavior.
     def look_for_ffa_turtle_move(self) -> Move | None:
         """
 
@@ -10487,6 +10644,7 @@ class EklipZBot(object):
 
         return None
 
+    # STEP2: Move to BotModules/BotCityOps.py as BotCityOps.plan_city_capture. Main city capture planner covering direct kills, gathers, pruning, and follow-up path generation.
     def plan_city_capture(
             self,
             targetCity: Tile,
@@ -10775,6 +10933,7 @@ class EklipZBot(object):
 
         return None, None
 
+    # STEP2: Move to BotModules/BotGatherOps.py as BotGatherOps.get_timing_gather_negatives_unioned. Policy helper that builds the negative-tile set for timing gathers.
     def get_timing_gather_negatives_unioned(
             self,
             gatherNegatives: typing.Set[Tile],
@@ -10854,6 +11013,7 @@ class EklipZBot(object):
 
         return gatherNegatives
 
+    # STEP2: Move to BotModules/BotPathingUtils.py as BotPathingUtils.is_path_moving_mostly_away. Small path-direction heuristic used to reject bad gathers/paths.
     def is_path_moving_mostly_away(self, path: Path, bMap: MapMatrixInterface[int]):
         distSum = 0
         for tile in path.tileList:
@@ -10872,6 +11032,7 @@ class EklipZBot(object):
 
         return False
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.check_army_out_of_play_ratio. Core heuristic for detecting and reacting to army being too far out of the main play area.
     def check_army_out_of_play_ratio(self) -> bool:
         """
         0.0 means all army is in the core play area
@@ -10968,6 +11129,7 @@ class EklipZBot(object):
 
         return aboveOutOfPlay
 
+    # STEP2: Move to BotModules/BotCityOps.py as BotCityOps.should_allow_neutral_city_capture. Main neutral-city policy gate combining defense risk, economy posture, and forced-city logic.
     def should_allow_neutral_city_capture(
             self,
             genPlayer: Player,
@@ -11111,9 +11273,10 @@ class EklipZBot(object):
                         f"We shouldn't be taking more neutral cities, we're too defenseless right now.")
             else:
                 logbook.info(
-                    f"Skipped neut cities. in_gather_split(self._map.turn) {self.timings.in_gather_split(self._map.turn)} and (player.cityCount < targetPlayer.cityCount {genPlayer.cityCount < targetPlayer.cityCount} or proactivelyTakeCity {proactivelyTakeCity})")
+                        f"Skipped neut cities. in_gather_split(self._map.turn) {self.timings.in_gather_split(self._map.turn)} and (player.cityCount < targetPlayer.cityCount {genPlayer.cityCount < targetPlayer.cityCount} or proactivelyTakeCity {proactivelyTakeCity})")
         return False
 
+    # STEP2: Move to BotModules/BotTargeting.py as BotTargeting.find_hacky_path_to_find_target_player_spawn_approx. Fallback spawn-approximation search through undiscovered space.
     def find_hacky_path_to_find_target_player_spawn_approx(self, minSpawnDist: int):
         if self.targetPlayerObj is None or len(self.targetPlayerObj.tiles) == 0:
             return None
@@ -11188,6 +11351,7 @@ class EklipZBot(object):
 
         return None
 
+    # STEP2: Move to BotModules/BotCityOps.py as BotCityOps.should_rapid_capture_neutral_cities. Policy heuristic for switching into rapid city-capture mode.
     def should_rapid_capture_neutral_cities(self) -> bool:
         if self.targetPlayer == -1:
             return True
@@ -11268,6 +11432,7 @@ class EklipZBot(object):
         self.is_rapid_capturing_neut_cities = False
         return False
 
+    # STEP2: Move to BotModules/BotCityOps.py as BotCityOps.find_rapid_city_path. Fast opportunistic city path finder used when rapid city-capture mode is active.
     def find_rapid_city_path(self) -> Path | None:
         if not self.should_rapid_capture_neutral_cities():
             return None
@@ -11302,6 +11467,7 @@ class EklipZBot(object):
 
         return None
 
+    # STEP2: Stay in EklipZBotV2.py or move late to BotTimings as a tiny perf-budget helper. Computes remaining safe time budget for the move.
     def get_remaining_move_time(self) -> float:
         used = self.perf_timer.get_elapsed_since_update(self._map.turn)
         moveCycleTime = 0.5
@@ -11312,9 +11478,11 @@ class EklipZBot(object):
             return max(remaining, 0.1)
         return remaining
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.should_abandon_king_defense. Tiny defense-policy predicate for when defense can be relaxed.
     def should_abandon_king_defense(self) -> bool:
         return self._map.remainingPlayers == 2 and not self.opponent_tracker.winning_on_economy(byRatio=self.behavior_losing_on_economy_skip_defense_threshold)
 
+    # STEP2: Move to BotModules/BotCityOps.py as BotCityOps.block_neutral_captures. Small stateful helper that cancels/blocks ongoing neutral-city plans.
     def block_neutral_captures(self, reason: str = ''):
         if self.curPath and self.curPath.tail.tile.isCity and self.curPath.tail.tile.isNeutral:
             targetNeutCity = self.curPath.tail.tile
@@ -11325,6 +11493,7 @@ class EklipZBot(object):
         logbook.info(f'Preventing neutral city captures for now {reason}')
         self.is_blocking_neutral_city_captures = True
 
+    # STEP2: Move to BotModules/BotPathingUtils.py as BotPathingUtils.continue_cur_path or keep late on shell. Stateful curPath execution/cleanup with safety checks across domains.
     def continue_cur_path(self, threat: ThreatObj | None, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         if self.expansion_plan.includes_intercept:
             self.curPath = None
@@ -11451,6 +11620,7 @@ class EklipZBot(object):
         self.curPath = None
         return None
 
+    # STEP2: Move to BotModules/BotGatherOps.py as BotGatherOps.try_find_gather_move. High-level gather policy selector for all-in, enemy-gather, and neutral-gather cases.
     def try_find_gather_move(
             self,
             threat: ThreatObj | None,
@@ -11520,6 +11690,7 @@ class EklipZBot(object):
 
         return self.get_main_gather_move(defenseCriticalTileSet, leafMoves, enemyGather, neutralGather, needToKillTiles)
 
+    # STEP2: Move to BotModules/BotGatherOps.py as BotGatherOps.get_main_gather_move. Main gather planner/policy routine coordinating gather targets, negatives, and timing logic.
     def get_main_gather_move(
             self,
             defenseCriticalTileSet: typing.Set[Tile],
@@ -11784,6 +11955,7 @@ class EklipZBot(object):
 
         return None
 
+    # STEP2: Move to BotModules/BotRendering.py as BotRendering.render_tile_deltas_in_view_info. Static debug-render helper for per-tile delta overlays.
     @staticmethod
     def render_tile_deltas_in_view_info(viewInfo: ViewInfo, map: MapBase):
         for tile in map.tiles_by_index:
@@ -11832,6 +12004,7 @@ class EklipZBot(object):
                 if tile.delta.oldOwner != tile.delta.newOwner:
                     viewInfo.bottomMidRightGridText.raw[tile.tile_index] = f'{tile.delta.oldOwner}-{tile.delta.newOwner}'
 
+    # STEP2: Move to BotModules/BotRendering.py as BotRendering.render_tile_state_in_view_info. Static debug-render helper for tile/pathability state overlays.
     @staticmethod
     def render_tile_state_in_view_info(viewInfo: ViewInfo, map: MapBase):
         for tile in map.tiles_by_index:
@@ -11920,17 +12093,20 @@ class EklipZBot(object):
     #         self.viewInfo.add_info_line(f'CCAP GATH, d25 {d25}, offset {offset} winningEcon 1.2 {str(winningEcon)[0]} heavilyWinning {str(heavilyWinning)[0]}')
     #         self.timings.launchTiming = max(self.timings.splitTurns, self.timings.launchTiming)
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.get_scrim_cached. Tiny cache accessor for previously computed scrim results.
     def get_scrim_cached(self, friendlyArmies: typing.List[Army], enemyArmies: typing.List[Army]) -> ArmySimResult | None:
         key = self.get_scrim_cache_key(friendlyArmies, enemyArmies)
         cachedSimResult: ArmySimResult | None = self.cached_scrims.get(key, None)
         return cachedSimResult
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.get_scrim_cache_key. Small stable cache-key builder for scrim army sets.
     def get_scrim_cache_key(self, friendlyArmies: typing.List[Army], enemyArmies: typing.List[Army]) -> str:
         sortedArmies = list(sorted(friendlyArmies, key=lambda a: a.tile))
         sortedArmies.extend(list(sorted(enemyArmies, key=lambda a: a.tile)))
         key = ''.join([str(a.tile) for a in sortedArmies])
         return key
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.find_sketchy_fog_flank_from_enemy_in_play_area. Defensive flank-risk probe constrained to the in-play area.
     def find_sketchy_fog_flank_from_enemy_in_play_area(self) -> Path | None:
         """
         Hunts for a sketchy flank attack point the enemy might be inclined to abuse from a city/general,
@@ -11961,6 +12137,7 @@ class EklipZBot(object):
 
         return sketchyPath
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.find_sketchiest_fog_flank_from_enemy. Main sketchy flank discovery routine over fog launch points and flankable territory.
     def find_sketchiest_fog_flank_from_enemy(self) -> Path | None:
         """
         Hunts for a sketchy flank attack point the enemy might be inclined to abuse from a city/general,
@@ -12053,6 +12230,7 @@ class EklipZBot(object):
 
         return path
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.check_for_attack_launch_move. Attack-launch decision gate that turns gather path value into an actual launch move.
     def check_for_attack_launch_move(self, outLaunchPlanNegatives: typing.Set[Tile]) -> Move | None:
         if self.target_player_gather_path is None and not self.flanking:
             return None
@@ -12151,6 +12329,7 @@ class EklipZBot(object):
 
         return None
 
+    # STEP2: Move to BotModules/BotTimings.py as BotTimings.set_all_in_cycle_to_hit_with_current_timings. Small timing helper for extending all-in through a chosen cycle.
     def set_all_in_cycle_to_hit_with_current_timings(self, cycle: int, bufferTurnsEndOfCycle: int = 5):
         """
         @param cycle: The amount of turns to keep cycling the all in after the initial timing hit.
@@ -12163,10 +12342,12 @@ class EklipZBot(object):
         self.all_in_army_advantage_counter = cycle - turnsLeftInCurrentCycle + bufferTurnsEndOfCycle
         self.all_in_army_advantage_cycle = cycle
 
+    # STEP2: Move to BotModules/BotCombatOps.py or BotExpansionOps late. Currently a stub for flank all-in launch behavior; keep grouped with all-in combat logic.
     def try_find_flank_all_in(self, hitGeneralAtTurn: int) -> Move | None:
         launchPoint: Move | None = None
         return None
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.find_flank_opportunity. Generic flank-opportunity search used by defensive flank risk analysis.
     def find_flank_opportunity(
             self,
             targetPlayer: int,
@@ -12244,6 +12425,7 @@ class EklipZBot(object):
 
         return flankPath
 
+    # STEP2: Move to BotModules/BotTimings.py or BotTargeting late. Small hook that drops/rebuilds timings when the current target team gains a city.
     def check_target_player_just_took_city(self):
         if self.targetPlayerObj is not None and self.targetPlayer != -1:
             teamData = self.opponent_tracker.get_current_team_scores_by_player(self.targetPlayer)
@@ -12267,6 +12449,7 @@ class EklipZBot(object):
 
             self._lastTargetPlayerCityCount = teamData.cityCount
 
+    # STEP2: Move to BotModules/BotTargeting.py as BotTargeting.get_2v2_launch_point. Chooses the 2v2 launch/rally point between self, ally, and contested tiles.
     def get_2v2_launch_point(self) -> Tile:
         fromTile = self.general
         usDist = self.distance_from_general(self.targetPlayerExpectedGeneralLocation)
@@ -12314,6 +12497,7 @@ class EklipZBot(object):
 
         return fromTile
 
+    # STEP2: Move to BotModules/BotTargeting.py or BotCityOps late. Small contested-target bookkeeping helper that increments per-tile attack counts.
     def increment_attack_counts(self, tile: Tile):
         contestData = self.contest_data.get(tile, None)
         if contestData is None:
@@ -12325,6 +12509,7 @@ class EklipZBot(object):
 
         contestData.last_attacked_turn = self._map.turn
 
+    # STEP2: Move to BotModules/BotTargeting.py as BotTargeting.get_contested_targets. Returns recently contested tiles for target selection and launch heuristics.
     def get_contested_targets(
             self,
             shortTermContestCutoff: int = 25,
@@ -12352,6 +12537,7 @@ class EklipZBot(object):
 
         return mostRecentTargets
 
+    # STEP2: Move to BotModules/BotComms.py as BotComms.send_teammate_communication. Main team-chat send helper with cooldown and optional tile ping support.
     def send_teammate_communication(self, message: str, pingTile: Tile | None = None, cooldown: int = 10, detectOnMessageAlone: bool = False, detectionKey: str | None = None):
         """
         Use this to send a chat message to team-chat only, as well as an optional tile ping.
@@ -12389,6 +12575,7 @@ class EklipZBot(object):
             if pingTile is not None:
                 self.send_teammate_tile_ping(pingTile)
 
+    # STEP2: Move to BotModules/BotComms.py as BotComms.send_all_chat_communication. Thin global-chat send helper.
     def send_all_chat_communication(self, message: str):
         """
         Use this to send a chat message to team-chat only, as well as an optional tile ping.
@@ -12398,11 +12585,13 @@ class EklipZBot(object):
         """
         self._outbound_all_chat.put(message)
 
+    # STEP2: Move to BotModules/BotComms.py as BotComms.send_teammate_path_ping. Thin helper that pings every tile in a path for teammate coordination.
     def send_teammate_path_ping(self, path: Path, cooldown: int = 0, cooldownKey: str | None = None):
         """Pings all the tiles in a path"""
         for tile in path.tileList:
             self.send_teammate_tile_ping(tile, cooldown, cooldownKey)
 
+    # STEP2: Move to BotModules/BotComms.py as BotComms.send_teammate_tile_ping. Core teammate tile-ping sender with cooldown handling and render side effects.
     def send_teammate_tile_ping(self, pingTile: Tile, cooldown: int = 0, cooldownKey: str | None = None):
         """
         Use this to send a tile ping.
@@ -12480,6 +12669,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         self.viewInfo.add_targeted_tile(pingTile, targetStyle=TargetStyle.GOLD)
         self._tile_ping_queue.put(pingTile)
 
+    # STEP2: Move to BotModules/BotComms.py as BotComms.get_queued_tile_pings. Queue-drain helper for outbound teammate tile pings.
     def get_queued_tile_pings(self) -> typing.List[Tile]:
         outbound = []
         while self._tile_ping_queue.qsize() > 0:
@@ -12487,6 +12677,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return outbound
 
+    # STEP2: Stay in EklipZBotV2.py only as an inert/debug backdoor. Non-domain randomizer/debug stub; do not migrate with normal gameplay logic.
     def do_thing(self):
         time.sleep(8)
         lastSwapped = []
@@ -12502,6 +12693,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                 tile.player = -1
                 tile.army = 0
 
+    # STEP2: Move to BotModules/BotComms.py as BotComms.get_queued_teammate_messages. Queue-drain helper for outbound team chat messages.
     def get_queued_teammate_messages(self) -> typing.List[str]:
         outbound = []
         while self._outbound_team_chat.qsize() > 0:
@@ -12509,6 +12701,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return outbound
 
+    # STEP2: Move to BotModules/BotComms.py as BotComms.get_queued_all_chat_messages. Queue-drain helper for outbound all-chat messages.
     def get_queued_all_chat_messages(self) -> typing.List[str]:
         outbound = []
         while self._outbound_all_chat.qsize() > 0:
@@ -12516,6 +12709,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return outbound
 
+    # STEP2: Move to BotModules/BotComms.py as BotComms.notify_chat_message. Inbound chat queue hook plus legacy easter-egg/debug trigger handling.
     def notify_chat_message(self, chatUpdate: ChatUpdate):
         self._chat_messages_received.put(chatUpdate)
 
@@ -12526,9 +12720,11 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         if self._map and st in self._map.usernames[self._map.player_index] and a in chatUpdate.message.lower():
             _spawn(self.do_thing)
 
+    # STEP2: Move to BotModules/BotComms.py as BotComms.notify_tile_ping. Inbound teammate tile-ping queue hook.
     def notify_tile_ping(self, pingedTile: Tile):
         self._tiles_pinged_by_teammate.put(pingedTile)
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.determine_should_defend_ally. 2v2 ally-defense decision helper coordinating comms and self-save estimation.
     def determine_should_defend_ally(self) -> bool:
         # then this is a threat against ally, check if they defend:
         threat = self.dangerAnalyzer.fastestAllyThreat
@@ -12603,6 +12799,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             self.send_teammate_tile_ping(threat.path.tail.tile, cooldown=10, cooldownKey='allyDefensePing')
         return True
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.find_end_of_turn_sim_result. End-of-turn scrim setup/orchestration across largest armies and engine parameters.
     def find_end_of_turn_sim_result(self, threat: ThreatObj | None, kingKillPath: Path | None, time_limit: float | None = None) -> ArmySimResult | None:
         # frArmies = [a for a in self.armyTracker.armies.values() if a.player == self.general.player]
         # if len(frArmies) <= self.behavior_end_of_turn_scrim_army_count:
@@ -12649,6 +12846,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return simResult
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.find_end_of_turn_scrim_move. Thin wrapper converting the end-of-turn scrim result into an actual move.
     def find_end_of_turn_scrim_move(self, threat: ThreatObj | None, kingKillPath: Path | None, time_limit: float | None = None) -> Move | None:
         simResult = self.find_end_of_turn_sim_result(threat, kingKillPath, time_limit)
 
@@ -12659,6 +12857,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return None
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.get_largest_tiles_as_armies. Helper that materializes the top army tiles for scrim simulation.
     def get_largest_tiles_as_armies(self, player: int, limit: int) -> typing.List[Army]:
         player = self._map.players[player]
 
@@ -12680,6 +12879,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return armies
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.get_defense_tree_move_prio_func_old. Legacy defense tree move-priority heuristic kept for comparison/debugging.
     def get_defense_tree_move_prio_func_old(
             self,
             threat: ThreatObj,
@@ -12742,6 +12942,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return move_closest_negative_value_func
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.get_defense_tree_move_prio_func. Active defense tree move-priority heuristic for selecting gather moves under threat.
     def get_defense_tree_move_prio_func(
             self,
             threat: ThreatObj,
@@ -12816,6 +13017,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return move_closest_negative_value_func
 
+    # STEP2: Move to BotModules/BotGatherOps.py as BotGatherOps.get_capture_first_tree_move_prio_func. Capture-first gather tree tie-break heuristic used by defense/vision planners.
     def get_capture_first_tree_move_prio_func(
         self
     ) -> typing.Callable[[Tile, typing.Any], typing.Any]:
@@ -12903,6 +13105,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return None, None
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.try_find_exploration_move. High-level exploration/hunt move selector for unfinished enemy discovery.
     def try_find_exploration_move(self, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         # if losing on economy, finishing exp false
         genPlayer = self._map.players[self.general.player]
@@ -12990,6 +13193,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return None
 
+    # STEP2: Move to BotModules/BotComms.py as BotComms.handle_chat_message. Chat-routing entrypoint delegating to teammate bot/human handlers.
     def handle_chat_message(self, chatUpdate: ChatUpdate):
         if chatUpdate.from_user == self._map.usernames[self._map.player_index]:
             # ignore our own messages?
@@ -13005,6 +13209,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             # chat in other modes, FFA teaming...?
             pass
 
+    # STEP2: Stay in EklipZBotV2.py or move late to BotComms as a tiny teammate-state predicate. Small shell/team-mode helper.
     def is_2v2_teammate_still_alive(self) -> bool:
         if not self._map.is_2v2:
             return False
@@ -13012,13 +13217,16 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             return False
         return True
 
+    # STEP2: Move to BotModules/BotComms.py as BotComms.handle_bot_chat. Thin teammate-bot coordination message handler.
     def handle_bot_chat(self, chatUpdate: ChatUpdate):
         if chatUpdate.message.startswith("!"):
             self.teammate_communicator.handle_coordination_update(chatUpdate)
 
+    # STEP2: Move to BotModules/BotComms.py as BotComms.handle_human_chat. Placeholder human teammate chat handler.
     def handle_human_chat(self, chatUpdate: ChatUpdate):
         pass
 
+    # STEP2: Move to BotModules/BotComms.py as BotComms.communicate_threat_to_ally. Ally-defense communication helper for threat/gather-plan coordination.
     def communicate_threat_to_ally(self, threat: ThreatObj, valueGathered: int, defensePlan: typing.List[GatherTreeNode]):
         if threat.path.tail.tile.isCity:
             return
@@ -13029,6 +13237,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             self.send_teammate_communication(f"HELP! NEED {threat.threatValue - valueGathered} in {threat.turns - 1}", detectionKey='needHelp', cooldown=10)
             self.send_teammate_path_ping(threat.path, cooldown=5, cooldownKey="HELP ME")
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.try_find_main_timing_expansion_move_if_applicable. Main expansion-or-launch chooser during the timing window.
     def try_find_main_timing_expansion_move_if_applicable(self, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         if self.is_all_in_losing:
             return None
@@ -13076,6 +13285,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return None
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.try_find_expansion_move. Primary expansion move planner with launch gating, first-25 reuse, and safety checks.
     def try_find_expansion_move(self, defenseCriticalTileSet: typing.Set[Tile], timeLimit: float, forceBypassLaunch: bool = False, overrideTurns: int = -1) -> Move | None:
         skipForAllIn = self.is_all_in_losing or self.all_in_city_behind
 
@@ -13204,6 +13414,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                 f"Exp move not found...? neg {expansionNegStr}")
         return None
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps._add_expansion_threat_negs. Helper that augments expansion negatives using the current threat path.
     def _add_expansion_threat_negs(self, negs: typing.Set[Tile]):
         logbook.info(f'starting expansion threat negs: {[t for t in negs]}')
         if self.threat is None:
@@ -13240,6 +13451,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         self.army_interceptor.ensure_threat_army_analysis(self.threat)
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.try_find_army_out_of_position_move. Scrim-based correction for large armies stranded out of position.
     def try_find_army_out_of_position_move(self, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         thresh = self.targetPlayerObj.standingArmy ** 0.6
         logbook.info(f'Checking for out of position tiles with army greater than threshold {thresh:.0f}')
@@ -13279,6 +13491,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return None
 
+    # STEP2: Move to BotModules/BotTargeting.py as BotTargeting.are_more_teams_alive_than. Small game-mode/team-count helper used by FFA/targeting logic.
     def are_more_teams_alive_than(self, numTeams: int) -> bool:
         aliveTeams = set()
         afkPlayers = self.get_afk_players()
@@ -13293,6 +13506,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return False
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.get_potential_threat_movement_negatives. Computes tiles that should be treated as negative due to a potential threat path.
     def get_potential_threat_movement_negatives(self, targetTile: Tile | None = None) -> typing.Set[Tile]:
         """
         Based on an available potential threat path, determine if any tiles are not allowed to move because they would increase risk.
@@ -13331,6 +13545,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return potNegs
 
+    # STEP2: Move to BotModules/BotTargeting.py as BotTargeting.get_target_player_possible_general_location_tiles_sorted. Core ranked candidate-generator for possible enemy general locations.
     def get_target_player_possible_general_location_tiles_sorted(
             self,
             elimNearbyRange: int = 2,
@@ -13413,6 +13628,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return finalTiles
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.get_first_25_expansion_distance_priority_map. Early-game expansion priority matrix and teammate skip-tile builder.
     def get_first_25_expansion_distance_priority_map(self) -> typing.Tuple[MapMatrixInterface[int], typing.Set[Tile]]:
         """
         Returns a matrix of big-number=bad expansion priorities, and skip tiles (if teams).
@@ -13526,6 +13742,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return distMap, skipTiles
 
+    # STEP2: Move to BotModules/BotTargeting.py as BotTargeting.is_still_ffa_and_non_dominant. Small strategic classification helper for non-dominant FFA posture.
     def is_still_ffa_and_non_dominant(self) -> bool:
         isFfa = False
         if self._map.remainingPlayers > 2 and not self._map.is_2v2:
@@ -13553,6 +13770,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return True
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.get_expansion_weight_matrix. Cached expansion-value matrix entrypoint switching between standard and FFA-safe variants.
     def get_expansion_weight_matrix(self, copy: bool = False, mult: int = 1) -> MapMatrixInterface[float]:
         if self._expansion_value_matrix is None:
             logbook.info(f'rebuilding expansion weight matrix for turn {self._map.turn}')
@@ -13573,6 +13791,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return self._expansion_value_matrix
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps._get_avoid_other_players_expansion_matrix. FFA-oriented expansion weighting matrix that avoids overcommitting into other players.
     def _get_avoid_other_players_expansion_matrix(self) -> MapMatrixInterface[float]:
         matrix = MapMatrix(self._map, 0.0)
         for tile in self._map.get_all_tiles():
@@ -13596,6 +13815,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return matrix
 
+    # STEP2: Move to BotModules/BotTargeting.py as BotTargeting._get_furthest_apart_3_enemy_general_locations. Helper for selecting spaced enemy-general candidates and their combined distance map.
     def _get_furthest_apart_3_enemy_general_locations(self, player) -> typing.Tuple[typing.List[Tile], MapMatrixInterface[int]]:
         valids = self.armyTracker.valid_general_positions_by_player[player].raw
 
@@ -13638,6 +13858,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         # return furthests, iterMm
         return furthests, SearchUtils.build_distance_map_matrix(self._map, furthests)
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps._get_standard_expansion_capture_weight_matrix. Main expansion scoring heuristic matrix for standard games.
     def _get_standard_expansion_capture_weight_matrix(self) -> MapMatrixInterface[float]:
         matrix = MapMatrix(self._map, 0.0)
 
@@ -13888,12 +14109,14 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return matrix
 
+    # STEP2: Move to BotModules/BotTargeting.py as BotTargeting.is_ffa_situation. Small cached game-mode classifier used by many policy branches.
     def is_ffa_situation(self) -> bool:
         if self._is_ffa_situation is None:
             self._is_ffa_situation = not self._map.is_walled_city_game and self.are_more_teams_alive_than(2)
 
         return self._is_ffa_situation
 
+    # STEP2: Stay in EklipZBotV2.py or move late to BotEventHandlers/BotTimings. Small post-capture reevaluation hook that can flip all-in posture.
     def reevaluate_after_player_capture(self):
         if self._map.remainingPlayers <= 3:
             if not self.opponent_tracker.winning_on_economy(byRatio=0.8):
@@ -13901,6 +14124,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                 self.is_all_in_losing = True
                 self.all_in_losing_counter = 300
 
+    # STEP2: Move to BotModules/BotTargeting.py as BotTargeting.find_fog_bisection_targets. Finds fog bisection targets that cut through enemy territory growth.
     def find_fog_bisection_targets(self) -> typing.Set[Tile]:
         bisects = set()
         if self.targetPlayer == -1:
@@ -13931,6 +14155,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return bisects
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.get_enemy_probable_attack_path. Predictive fog-path reconstruction for likely enemy attack lanes.
     def get_enemy_probable_attack_path(self, enemyPlayer: int) -> Path | None:
         def valFunc(curTile: Tile, prioObj):
             (dist, negArmySum, sumX, sumY, goalIncrement) = prioObj
@@ -14010,6 +14235,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return enPath
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.build_expansion_plan. Main expansion-plan builder integrating intercept options, flow expansion, and launch competition.
     def build_expansion_plan(
             self,
             timeLimit: float,
@@ -14234,6 +14460,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return plan
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.build_enemy_expansion_plan. Mirrors expansion planning from the opponent perspective for heuristics/rendering.
     def build_enemy_expansion_plan(
             self,
             timeLimit: float,
@@ -14327,12 +14554,14 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return plan
 
+    # STEP2: Move to BotModules/BotTimings.py as BotTimings.get_opponent_cycle_stats. Thin accessor for cached opponent cycle statistics.
     def get_opponent_cycle_stats(self) -> CycleStatsData | None:
         if self.targetPlayer == -1:
             return None
 
         return self.opponent_tracker.get_current_cycle_stats_by_player(self.targetPlayer)
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.check_should_defend_economy_based_on_cycle_behavior. Main defend-economy trigger based on cycle behavior, threat paths, and fog risk.
     def check_should_defend_economy_based_on_cycle_behavior(self, defenseCriticalTileSet: typing.Set[Tile]) -> bool:
         self.likely_kill_push = False
 
@@ -14432,6 +14661,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return False
 
+    # STEP2: Move to BotModules/BotPathingUtils.py as BotPathingUtils.is_move_towards_enemy. Tiny directional helper comparing move progress toward enemy territory.
     def is_move_towards_enemy(self, move: Move | None) -> bool:
         if move is None:
             return False
@@ -14447,9 +14677,11 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return False
 
+    # STEP2: Move to BotModules/BotStateQueries.py late or keep as a tiny utility. Small tile-list string formatter used for logs/debugging.
     def str_tiles(self, tiles) -> str:
         return '|'.join([str(t) for t in tiles])
 
+    # STEP2: Move to BotModules/BotPathingUtils.py as BotPathingUtils.get_path_subsegment_to_closest_enemy_team_territory. Utility for trimming a path to its closest point to enemy team territory.
     def get_path_subsegment_to_closest_enemy_team_territory(self, path: Path) -> Path | None:
         idx = 0
         team = self.targetPlayerObj.team
@@ -14471,6 +14703,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         logbook.info(f'closest to enemy team territory was {str(subsegment.tail.tile)} at dist {minIdx}/{path.length}')
         return subsegment
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.check_launch_against_expansion_plan. Compares direct launch value against the current expansion plan and may replace it.
     def check_launch_against_expansion_plan(self, existingPlan: ExpansionPotential, expansionNegatives: typing.Set[Tile]) -> ExpansionPotential:
         if self.target_player_gather_path is None:
             return existingPlan
@@ -14581,6 +14814,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return existingPlan
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.calculate_path_capture_econ_values. Shared path-evaluation helper for launch/expansion econ and capture counts.
     def calculate_path_capture_econ_values(self, launchPath, turnsLeftInCycle, negativeTiles: typing.Set[Tile] | None = None) -> typing.Tuple[int, int, int, int, int, int, int]:
         """
 
@@ -14643,6 +14877,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return distToFirstFogTile, enCaps, neutCaps, turns, econVal, army, friendlyArmy
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.make_second_25_move. Specialized second-25-turn expansion/gather transition logic for early 1v1 openings.
     def make_second_25_move(self) -> Move | None:
         if self._map.turn >= 100 or self.is_ffa_situation() or self.completed_first_100 or self._map.is_2v2 or self.targetPlayer == -1:
             return None
@@ -14861,6 +15096,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return None
 
+    # STEP2: Move to BotModules/BotCityOps.py as BotCityOps.get_enemy_cities_by_priority. Priority ordering helper for enemy-city targets based on active threat context and city scores.
     def get_enemy_cities_by_priority(self, cutoffDistanceRatio=100.0) -> typing.List[Tile]:
         prioTiles = []
         if self.dangerAnalyzer.fastestThreat is not None:
@@ -14884,6 +15120,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         prioTiles.extend(tiles)
         return prioTiles
 
+    # STEP2: Move to BotModules/BotCityOps.py as BotCityOps.did_player_just_take_fog_city. Small fog-city inference helper using unexplained score deltas.
     def did_player_just_take_fog_city(self, player: int) -> bool:
         playerObj = self._map.players[player]
         if playerObj.unexplainedTileDelta == 0:
@@ -14896,6 +15133,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return False
 
+    # STEP2: Move to BotModules/BotCityOps.py as BotCityOps.get_city_contestation_all_in_move. Offensive city-contestation gather planner for all-in style pressure.
     def get_city_contestation_all_in_move(self, defenseCriticalTileSet: typing.Set[Tile]) -> typing.Tuple[Move | None, int, int, typing.List[GatherTreeNode]]:
         targets = list(self.win_condition_analyzer.contestable_cities)
 
@@ -14947,6 +15185,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return None, 0, 0, []
 
+    # STEP2: Move to BotModules/BotGatherOps.py as BotGatherOps.get_number_of_captures_in_gather_tree. Small gather-tree statistic helper counting capture nodes.
     def get_number_of_captures_in_gather_tree(self, gatherNodes: typing.List[GatherTreeNode], asPlayer: int = -2) -> int:
         if asPlayer == -2:
             asPlayer = self._map.player_index
@@ -14964,6 +15203,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return sumCaps.value
 
+    # STEP2: Move to BotModules/BotCityOps.py as BotCityOps.get_city_preemptive_defense_move. Preemptive city-defense gather/flank-vision logic for protecting vulnerable cities.
     def get_city_preemptive_defense_move(self, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         if self.is_still_ffa_and_non_dominant():
             return None
@@ -15090,6 +15330,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return move
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.find_flank_defense_move. Main proactive flank-defense selector combining leaf vision and gather-based responses.
     def find_flank_defense_move(self, defenseCriticalTileSet: typing.Set[Tile], highPriority: bool = False) -> Move | None:
         checkPath = self.sketchiest_potential_inbound_flank_path
 
@@ -15195,6 +15436,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return None
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense._get_flank_defense_leafmove. Leaf-move heuristic for cheaply expanding vision along a risky flank.
     def _get_flank_defense_leafmove(self, flankPath: Path, coreNegs: typing.Set[Tile]) -> Move | None:
         # destLookup = {}
         # for leafMove in leafMoves:
@@ -15231,6 +15473,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return bestMove
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense._get_vision_expanding_available_move. Searches for low-cost vision-expanding moves along risky hidden paths.
     def _get_vision_expanding_available_move(self, coreNegs: typing.Set[Tile], pathToCheckForVisionOf: Path | None = None) -> Move | None:
         """
 
@@ -15325,6 +15568,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return bestMove
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense._get_flank_vision_defense_move_internal. Gather-based internal helper for revealing risky flank paths.
     def _get_flank_vision_defense_move_internal(self, flankThreatPath: Path, negativeTiles: typing.Set[Tile], atDist: int) -> Move | None:
         included = set()
         for tile in flankThreatPath.tileList[:(flankThreatPath.length * 5) // 6]:
@@ -15408,6 +15652,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         if move is not None:
             return move
 
+    # STEP2: Move to BotModules/BotStateQueries.py as BotStateQueries.get_n_closest_team_tiles_near. Small BFS helper for nearby team/neutral tile collection.
     def get_n_closest_team_tiles_near(self, nearTiles: typing.List[Tile], player: int, distance: int, limit: int, includeNeutral: bool = False) -> typing.List[Tile]:
         tiles = set(nearTiles)
 
@@ -15424,27 +15669,35 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return [t for t in tiles]
 
+    # STEP2: Stay in EklipZBotV2.py or move late to a serialization/debug utility module. Tiny matrix/string serialization helper for int grids.
     def convert_int_tile_2d_array_to_string(self, rows: typing.List[typing.List[int]]) -> str:
         return ','.join([str(rows[tile.x][tile.y]) for tile in self._map.get_all_tiles()])
 
+    # STEP2: Stay in EklipZBotV2.py or move late to a serialization/debug utility module. Tiny matrix/string serialization helper for float grids.
     def convert_float_tile_2d_array_to_string(self, rows: typing.List[typing.List[float]]) -> str:
         return ','.join([f'{rows[tile.x][tile.y]:.2f}' for tile in self._map.get_all_tiles()])
 
+    # STEP2: Stay in EklipZBotV2.py or move late to a serialization/debug utility module. Tiny matrix/string serialization helper for int map matrices.
     def convert_int_map_matrix_to_string(self, mapMatrix: MapMatrixInterface[int]) -> str:
         return ','.join([str(mapMatrix[tile]) for tile in self._map.get_all_tiles()])
 
+    # STEP2: Stay in EklipZBotV2.py or move late to a serialization/debug utility module. Tiny matrix/string serialization helper for float map matrices.
     def convert_float_map_matrix_to_string(self, mapMatrix: MapMatrixInterface[float]) -> str:
         return ','.join([f'{mapMatrix[tile]:.2f}' for tile in self._map.get_all_tiles()])
 
+    # STEP2: Stay in EklipZBotV2.py or move late to a serialization/debug utility module. Tiny matrix/string serialization helper for boolean map matrices/sets.
     def convert_bool_map_matrix_to_string(self, mapMatrix: MapMatrixInterface[bool] | MapMatrixSet) -> str:
         return ''.join(["1" if mapMatrix[tile] else "0" for tile in self._map.get_all_tiles()])
 
+    # STEP2: Stay in EklipZBotV2.py or move late to a serialization/debug utility module. Tiny tile-set serializer.
     def convert_tile_set_to_string(self, tiles: typing.Set[Tile]) -> str:
         return ''.join(["1" if tile in tiles else "0" for tile in self._map.get_all_tiles()])
 
+    # STEP2: Stay in EklipZBotV2.py or move late to a serialization/debug utility module. Tiny tile->int dict serializer.
     def convert_tile_int_dict_to_string(self, tiles: typing.Dict[Tile, int]) -> str:
         return ','.join([str(tiles.get(tile, '')) for tile in self._map.get_all_tiles()])
 
+    # STEP2: Stay in EklipZBotV2.py or move late to a serialization/debug utility module. Tiny int-grid deserializer.
     def convert_string_to_int_tile_2d_array(self, data: str) -> typing.List[typing.List[int]]:
         arr = new_value_grid(self._map, -1)
 
@@ -15460,6 +15713,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return arr
 
+    # STEP2: Stay in EklipZBotV2.py or move late to a serialization/debug utility module. Tiny float-grid deserializer.
     def convert_string_to_float_tile_2d_array(self, data: str) -> typing.List[typing.List[float]]:
         arr = new_value_grid(self._map, 0.0)
 
@@ -15473,6 +15727,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return arr
 
+    # STEP2: Stay in EklipZBotV2.py or move late to a serialization/debug utility module. Tiny boolean-map deserializer.
     def convert_string_to_bool_map_matrix(self, data: str) -> MapMatrixInterface[bool]:
         matrix = MapMatrix(self._map, False)
         i = 0
@@ -15484,6 +15739,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return matrix
 
+    # STEP2: Stay in EklipZBotV2.py or move late to a serialization/debug utility module. Tiny boolean-map-set deserializer.
     def convert_string_to_bool_map_matrix_set(self, data: str) -> MapMatrixSet:
         matrix = MapMatrixSet(self._map)
         i = 0
@@ -15495,6 +15751,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return matrix
 
+    # STEP2: Stay in EklipZBotV2.py or move late to a serialization/debug utility module. Tiny int-map deserializer.
     def convert_string_to_int_map_matrix(self, data: str) -> MapMatrixInterface[int]:
         matrix = MapMatrix(self._map, -1)
         values = data.split(',')
@@ -15506,6 +15763,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return matrix
 
+    # STEP2: Stay in EklipZBotV2.py or move late to a serialization/debug utility module. Tiny float-map deserializer.
     def convert_string_to_float_map_matrix(self, data: str) -> MapMatrixInterface[float]:
         matrix = MapMatrix(self._map, -1.0)
         values = data.split(',')
@@ -15517,6 +15775,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return matrix
 
+    # STEP2: Stay in EklipZBotV2.py or move late to a serialization/debug utility module. Tiny tile-set deserializer.
     def convert_string_to_tile_set(self, data: str) -> typing.Set[Tile]:
         outputSet = set()
         i = 0
@@ -15528,6 +15787,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return outputSet
 
+    # STEP2: Stay in EklipZBotV2.py or move late to a serialization/debug utility module. Tiny tile->int dict deserializer.
     def convert_string_to_tile_int_dict(self, data: str) -> typing.Dict[Tile, int]:
         outputSet = {}
         i = 0
@@ -15539,15 +15799,18 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return outputSet
 
+    # STEP2: Stay in EklipZBotV2.py. Fundamental tile-index lookup helper used across the shell and many helper modules.
     def get_tile_by_tile_index(self, tileIndex: int) -> Tile:
         x, y = self.convert_tile_server_index_to_friendly_x_y(tileIndex)
         return self._map.GetTile(x, y)
 
+    # STEP2: Stay in EklipZBotV2.py. Fundamental server-index conversion helper used broadly by serialization/debug utilities.
     def convert_tile_server_index_to_friendly_x_y(self, tileIndex: int) -> typing.Tuple[int, int]:
         y = tileIndex // self._map.cols
         x = tileIndex % self._map.cols
         return x, y
 
+    # STEP2: Move to BotModules/BotTimings.py as BotTimings._get_approximate_greedy_turns_available. Main heuristic for how many greedy expansion turns remain before pressure arrives.
     def _get_approximate_greedy_turns_available(self) -> int:
         if self.targetPlayer == -1 or self.target_player_gather_path is None:
             return 5
@@ -15592,6 +15855,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return finalGreedTurnsAvail
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.get_approximate_fog_risk_deficit. Small fog-risk minus path-worth heuristic used by defensive decisions.
     def get_approximate_fog_risk_deficit(self) -> int:
         cycleTurnsLeft = self.timings.get_turns_left_in_cycle(self._map.turn)
 
@@ -15607,6 +15871,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return 0
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.try_get_cyclic_all_in_move. Cyclic all-in gather planner for winning or desperation attack cycles.
     def try_get_cyclic_all_in_move(self, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         winningEc = self.opponent_tracker.winning_on_economy(byRatio=1.15)
         winningTile = self.opponent_tracker.winning_on_tiles(byRatio=1.1)
@@ -15717,6 +15982,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return None
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.try_get_enemy_territory_exploration_continuation_move. Continues expansion paths that also reveal enemy territory/city/general information.
     def try_get_enemy_territory_exploration_continuation_move(self, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         if self.targetPlayer == -1:
             return None
@@ -15749,6 +16015,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                 self.info(f'EN TERRITORY CONT EXP! {move} - armyCutoff {armyCutoff}')
                 return move
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps._get_expansion_plan_exploration_move. Filters expansion-plan paths for exploration-worthy fog-revealing continuations.
     def _get_expansion_plan_exploration_move(self, armyCutoff: int, negativeTiles: typing.Set[Tile]) -> Move | None:
         move = None
         maxPath: TilePlanInterface | None = None
@@ -15786,6 +16053,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return move
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps._get_expansion_plan_quick_capture_move. Opportunistic greedy pre-gather capture selection from the expansion plan.
     def _get_expansion_plan_quick_capture_move(self, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         if not self.behavior_allow_pre_gather_greedy_leaves:
             return None
@@ -15864,6 +16132,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return move
 
+    # STEP2: Move to BotModules/BotPathingUtils.py as BotPathingUtils.get_euclid_shortest_from_tile_towards_target. Tiny geometric fallback helper for stepping toward a target.
     def get_euclid_shortest_from_tile_towards_target(self, sourceTile: Tile, towardsTile: Tile) -> Move:
         shortest = 100
         shortestTile = None
@@ -15877,6 +16146,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return Move(sourceTile, shortestTile)
 
+    # STEP2: Move to BotModules/BotRendering.py as BotRendering.render_intercept_plan. Debug/render helper for displaying intercept-plan choke data and options.
     def render_intercept_plan(self, plan: ArmyInterception, colorIndex: int = 0):
         targetStyle = TargetStyle(((colorIndex + 1) % 9) + 1)
         for tile, interceptInfo in plan.common_intercept_chokes.items():
@@ -15895,6 +16165,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         for dist, opt in plan.intercept_options.items():
             logbook.info(f'intercept plan opt {plan.target_tile} dist {dist}: {str(opt)}')
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.check_fog_risk. Main fog-risk evaluator over target gather path and opponent cycle stats.
     def check_fog_risk(self):
         self.high_fog_risk = False
         if self.targetPlayer == -1:
@@ -15928,6 +16199,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
             self.viewInfo.add_info_line(f'NOT fog risk, fog_risk_amount {self.fog_risk_amount} in {pushRiskTurns} (gath {enGathAmt}) vs {pathWorth} - {cycleTurnsLeft} vs len {self.target_player_gather_path.length}')
 
+    # STEP2: Move to BotModules/BotPathingUtils.py as BotPathingUtils.get_path_subsegment_starting_from_last_move. CurPath/launch helper trimming a path to continue after the last observed move.
     def get_path_subsegment_starting_from_last_move(self, launchPath: Path) -> Path:
         lastMoved = -1
         if self.armyTracker.lastMove is not None:
@@ -15955,6 +16227,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return launchPath
 
+    # STEP2: Move to BotModules/BotPathingUtils.py as BotPathingUtils.check_cur_path or keep late on shell. Defensive validation/scrubbing of stateful curPath objects.
     def check_cur_path(self):
         if self.curPath is None:
             return
@@ -16003,6 +16276,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                 self.curPath = None
                 return
 
+    # STEP2: Move to BotModules/BotComms.py as BotComms.send_2v2_tip_to_ally. Small teammate-tip broadcaster for 2v2 openings.
     def send_2v2_tip_to_ally(self):
         tips = [
             "Bot tip: Ping your start expand tiles that you want me to avoid, and I will try to reroute my start.",
@@ -16017,6 +16291,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         comm = random.choice(tips)
         self.send_teammate_communication(comm, cooldown=50, detectionKey='2v2GameStartTips')
 
+    # STEP2: Move to BotModules/BotComms.py as BotComms.cooldown_allows. Generic communication cooldown gate for chat and pings.
     def cooldown_allows(self, detectionKey: str, cooldown: int, doNotUpdate: bool = False) -> bool:
         lastSentTurn = self._communications_sent_cooldown_cache.get(detectionKey, -50)
         if lastSentTurn < self._map.turn - cooldown:
@@ -16025,6 +16300,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
             return True
         return False
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.get_all_in_move. Primary all-in gather/launch planner against enemy general and city targets.
     def get_all_in_move(self, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         if self.is_all_in():
             hitGeneralInTurns = self.all_in_army_advantage_cycle - self.all_in_army_advantage_counter % self.all_in_army_advantage_cycle
@@ -16119,6 +16395,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return None
 
+    # STEP2: Move to BotModules/BotGatherOps.py as BotGatherOps.convert_gather_to_move_list_path. Converts gather root nodes into a replayable MoveListPath.
     def convert_gather_to_move_list_path(self, gatherNodes, turnsUsed, value, moveOrderPriorityMinFunc) -> MoveListPath:
         # gcp = Gather.GatherCapturePlan(gatherNodes, self._map, 0, turnsUsed, value, 0.0, turnsUsed, 0, moveOrderPriorityMinFunc)
         gcp = Gather.GatherCapturePlan.build_from_root_nodes(self._map, gatherNodes, negativeTiles=set(), searchingPlayer=self._map.player_index, onlyCalculateFriendlyArmy=False, priorityMatrix=None, viewInfo=self.viewInfo)
@@ -16131,6 +16408,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
         self.info(f'gath {len(gatherNodes)} root, moves {" - ".join([str(m) for m in moveListThing])}')
         return MoveListPath(moveListThing)
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense._get_defensive_spanning_tree. Core defensive spanning-tree builder around general, teammate, and city anchors.
     def _get_defensive_spanning_tree(self, negativeTiles: TileSet, gatherPrioMatrix: MapMatrixInterface[float] | None = None) -> typing.Set[Tile]:
         includes = [self.general]
         if self.is_2v2_teammate_still_alive():
@@ -16175,6 +16453,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return spanningTreeTiles
 
+    # STEP2: Move to BotModules/BotCombatOps.py as BotCombatOps.get_kill_race_chance. Computes probability of winning a general hunt race across candidate enemy spawn locations.
     def get_kill_race_chance(self, generalHuntPath: Path, enGenProbabilityCutoff: float = 0.4, turnsToDeath: int | None = None, cutoffKillArmy: int = 0, againstPlayer: int = None) -> float:
         if generalHuntPath is None:
             return 0.0
@@ -16239,6 +16518,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return killInTurnsChance
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps.get_unexpandable_ratio. Heuristic for how boxed-in the current army is by bad expansion terrain.
     def get_unexpandable_ratio(self) -> float:
         # nearby = self.find_large_tiles_near(self._map.players[self.general.player].tiles, 4, minArmy=-100, limit=100)
         fromTiles = self._map.players[self.general.player].tiles
@@ -16279,10 +16559,12 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return ratioBad
 
+    # STEP2: Move to BotModules/BotCityOps.py or BotExpansionOps late. Thin wrapper ensuring city reachability matrices are built before downstream planning.
     def ensure_reachability_matrix_built(self):
         with self.perf_timer.begin_move_event(f'rebuild_reachability_costs_matrix'):
             self.cityAnalyzer.ensure_reachability_matrix_built(force=False)
 
+    # STEP2: Move to BotModules/BotCityOps.py as BotCityOps._check_should_wait_city_capture. Small early city-wait heuristic returning either a quick path or defer signal.
     def _check_should_wait_city_capture(self) -> typing.Tuple[Path | None, bool]:
         generalArmy = self.general.army
         for city, score in sorted(self.cityAnalyzer.city_scores.items(), key=lambda tup: self.distance_from_general(tup[0]))[:10]:
@@ -16294,6 +16576,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
 
         return None, False
 
+    # STEP2: Move to BotModules/BotDefense.py as BotDefense.set_defensive_blocks_against. Marks tiles and destinations that must stay reserved to block a threat path.
     def set_defensive_blocks_against(self, threat: ThreatObj):
         for gatherTreeNode in self.best_defense_leaves:
             defensiveTile = gatherTreeNode.tile
@@ -16326,6 +16609,7 @@ Unknown message type: ['ping_tile', 125, 0]        @param pingTile:
                     block.add_blocked_destination(t)
             self.info(f'blocking {defensiveTile} from moving to {block.blocked_destinations}')
 
+    # STEP2: Move to BotModules/BotExpansionOps.py as BotExpansionOps._should_use_iterative_negative_expand. Tiny expansion-policy toggle for iterative negative-tile usage.
     def _should_use_iterative_negative_expand(self) -> bool:
         if self._map.turn < 150:
             return False

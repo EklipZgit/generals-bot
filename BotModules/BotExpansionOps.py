@@ -7,17 +7,18 @@ import typing
 
 import SearchUtils
 import logbook
+from BotModules.BotStateQueries import BotStateQueries
 from Behavior.ArmyInterceptor import InterceptionOptionInfo
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander
 from Interfaces import TilePlanInterface
 from MapMatrix import MapMatrix, MapMatrixInterface
-from MoveListPath import MoveListPath
-from Path import Path
+from Path import Path, MoveListPath
 from StrategyModels import ExpansionPotential
 from Strategy.WinConditionAnalyzer import WinCondition
 from Algorithms import WatchmanRouteUtils
 from ViewInfo import TargetStyle, PathColorer
-from base.client.map import Move, Tile
+from Models.Move import Move
+from base.client.map import Tile
 
 
 class BotExpansionOps:
@@ -268,7 +269,7 @@ class BotExpansionOps:
         if not forceBypassLaunch and not bot.timings.in_expand_split(bot._map.turn) and overrideTurns < 0:
             return None
 
-        if bot.targetPlayer != -1 and bot.is_still_ffa_and_non_dominant():
+        if bot.targetPlayer != -1 and BotStateQueries.is_still_ffa_and_non_dominant(bot):
             if bot.opponent_tracker.winning_on_army(byRatio=1.1) and bot.opponent_tracker.winning_on_economy(byRatio=1.1) and bot.targetPlayerObj.aggression_factor > 30:
                 bot.info("beating FFA player exp bypass")
                 return None
@@ -313,7 +314,7 @@ class BotExpansionOps:
                         )
                 )
                 and (bot.expansion_plan is None or bot.expansion_plan.turns_used < bot.timings.get_turns_left_in_cycle(bot._map.turn))
-                and not bot.is_still_ffa_and_non_dominant()
+                and not BotStateQueries.is_still_ffa_and_non_dominant(bot)
         ):
             remainingTime = bot.get_remaining_move_time()
             with bot.perf_timer.begin_move_event(f'EXP - first25 reuse - {remainingTime:.4f}'):
@@ -1682,7 +1683,7 @@ class BotExpansionOps:
     def get_expansion_weight_matrix(bot, copy: bool = False, mult: int = 1) -> MapMatrixInterface[float]:
         if bot._expansion_value_matrix is None:
             logbook.info(f'rebuilding expansion weight matrix for turn {bot._map.turn}')
-            if bot.is_still_ffa_and_non_dominant():
+            if BotStateQueries.is_still_ffa_and_non_dominant(bot):
                 bot._expansion_value_matrix = bot._get_avoid_other_players_expansion_matrix()
             else:
                 bot._expansion_value_matrix = bot._get_standard_expansion_capture_weight_matrix()

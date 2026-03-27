@@ -5,15 +5,16 @@ import logbook
 
 import Gather
 import SearchUtils
+from BotModules.BotStateQueries import BotStateQueries
 from ArmyAnalyzer import ArmyAnalyzer
 from DangerAnalyzer import ThreatObj, ThreatType
 from Gather import GatherTreeNode
-from MoveListPath import MoveListPath
+from Path import Path, MoveListPath
 from ViewInfo import TargetStyle
 from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrix, TileSet
 from base.client.map import MapBase, Tile
-from base.client.map import Move
+from Models.Move import Move
 
 
 GATHER_SWITCH_POINT = 150
@@ -69,7 +70,7 @@ class BotGatherOps:
             logbook.info("Forced enemyGather to true due to NOT winning_on_economy(by tiles only) and winning_on_army")
             enemyGather = True
 
-        if bot.is_all_in():
+        if BotStateQueries.is_all_in(bot):
             move = bot.try_find_flank_all_in(bot.timings.get_turns_left_in_cycle(bot._map.turn))
             if move is not None:
                 bot.info(f'flank all in {move}')
@@ -88,7 +89,7 @@ class BotGatherOps:
                 not bot.defend_economy
                 and bot.distance_from_general(bot.targetPlayerExpectedGeneralLocation) > 2
                 and player.tileCount < tileDeficitThreshold
-                and not (bot.is_all_in() or bot.all_in_losing_counter > 50)
+                and not (BotStateQueries.is_all_in(bot) or bot.all_in_losing_counter > 50)
         ):
             logbook.info("ayyyyyyyyyyyyyyyyyyyyyyyyy set enemyGather to True because we're behind on tiles")
             enemyGather = True
@@ -104,7 +105,7 @@ class BotGatherOps:
         if not tryGather:
             return None
 
-        return bot.get_main_gather_move(defenseCriticalTileSet, leafMoves, enemyGather, neutralGather, needToKillTiles)
+        return BotGatherOps.get_main_gather_move(bot, defenseCriticalTileSet, leafMoves, enemyGather, neutralGather, needToKillTiles)
 
     @staticmethod
     def get_main_gather_move(
@@ -142,7 +143,7 @@ class BotGatherOps:
                 if bot._map.is_player_on_team_with(bot.territories.territoryMap[tile], bot.targetPlayer):
                     inEnTerrSet.add(tile)
                     sumEnTerrArmy += tile.army - 1
-        isNonDominantFfa = bot.is_still_ffa_and_non_dominant()
+        isNonDominantFfa = BotStateQueries.is_still_ffa_and_non_dominant(bot)
         if (len(inEnTerrSet) < bot.player.tileCount // 6
                 or (bot.targetPlayer != -1
                     and bot.opponent_tracker.get_current_team_scores_by_player(bot.player.index).standingArmy - sumEnTerrArmy < bot.opponent_tracker.get_current_team_scores_by_player(bot.targetPlayer).standingArmy * 0.9)):
@@ -436,7 +437,7 @@ class BotGatherOps:
                     return bot.move_half_on_repetition(gatherMove, 6)
             else:
                 skipFunc = None
-                if bot.is_still_ffa_and_non_dominant():
+                if BotStateQueries.is_still_ffa_and_non_dominant(bot):
                     skipFunc = lambda tile, tilePriorityObject: not tile.discovered
 
                 startTileStr = 'no start tiles'
@@ -628,7 +629,7 @@ class BotGatherOps:
                 for tile in path.tileSet:
                     matrix.raw[tile.tile_index] -= 0.05
 
-        isNonDomFfa = bot.is_still_ffa_and_non_dominant()
+        isNonDomFfa = BotStateQueries.is_still_ffa_and_non_dominant(bot)
 
         for p in bot._map.get_teammates(bot._map.player_index):
             for tile in bot._map.players[p].tiles:

@@ -5,14 +5,15 @@ import logbook
 
 import SearchUtils
 from BotModules.BotRendering import BotRendering
+from BotModules.BotStateQueries import BotStateQueries
 from DangerAnalyzer import ThreatType
 from Gather import GatherTreeNode
-from MoveListPath import MoveListPath
-from Path import Path
+from Path import Path, MoveListPath
 from Strategy.WinConditionAnalyzer import WinCondition
 from StrategyModels import ExpansionPotential
 from ViewInfo import TargetStyle, PathColorer
-from base.client.map import Move, Player, Tile, MapBase
+from Models.Move import Move
+from base.client.map import Player, Tile, MapBase
 
 
 class BotCityOps:
@@ -288,7 +289,7 @@ class BotCityOps:
             if is1v1 and wayAheadOnEcon and isNotLateGame or len(bot.win_condition_analyzer.contestable_cities) > 0:
                 return None
 
-            if bot.is_still_ffa_and_non_dominant() and bot.targetPlayer != -1 and bot.targetPlayerObj.aggression_factor > 30:
+            if BotStateQueries.is_still_ffa_and_non_dominant(bot) and bot.targetPlayer != -1 and bot.targetPlayerObj.aggression_factor > 30:
                 return None
 
             if bot.defend_economy and (bot.targetPlayer == -1 or bot.opponent_tracker.even_or_up_on_cities(bot.targetPlayer)):
@@ -1243,7 +1244,7 @@ class BotCityOps:
 
     @staticmethod
     def get_city_preemptive_defense_move(bot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
-        if bot.is_still_ffa_and_non_dominant():
+        if BotStateQueries.is_still_ffa_and_non_dominant(bot):
             return None
 
         sketchyOutOfPlayThresh = bot.player.standingArmy // 6

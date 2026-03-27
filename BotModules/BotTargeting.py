@@ -7,11 +7,13 @@ import ExpandUtils
 import logbook
 
 import SearchUtils
+from BotModules.BotStateQueries import BotStateQueries
 from Models import ContestData
 from MapMatrix import TileSet, MapMatrix, MapMatrixInterface
 from Path import Path
 from ViewInfo import PathColorer, TargetStyle
-from base.client.map import MapBase, Move, Tile
+from base.client.map import Tile
+from Models.Move import Move
 
 
 class BotTargeting:
@@ -56,12 +58,14 @@ class BotTargeting:
     @staticmethod
     def get_2v2_launch_point(bot) -> Tile:
         fromTile = bot.general
-        usDist = bot.distance_from_general(bot.targetPlayerExpectedGeneralLocation)
-        allyAttackPath = bot.get_path_to_target(
+        usDist = BotPathingUtils.distance_from_general(bot, bot.targetPlayerExpectedGeneralLocation)
+        allyAttackPath = BotPathingUtils.get_path_to_target(
+            bot,
             bot.targetPlayerExpectedGeneralLocation,
             preferEnemy=True,
             preferNeutral=True,
-            fromTile=bot.teammate_general)
+            fromTile=bot.teammate_general
+        )
         if allyAttackPath is None:
             return bot.general
         allyDist = allyAttackPath.length
@@ -101,7 +105,7 @@ class BotTargeting:
     @staticmethod
     def are_more_teams_alive_than(bot, numTeams: int) -> bool:
         aliveTeams = set()
-        afkPlayers = bot.get_afk_players()
+        afkPlayers = BotTargeting.get_afk_players(bot)
         teams = MapBase.get_teams_array(bot._map)
 
         for player in bot._map.players:
@@ -196,7 +200,7 @@ class BotTargeting:
             for tile in bot._map.get_all_tiles():
                 if not tile.discovered and not tile.isObstacle and bot.armyTracker.valid_general_positions_by_player[player][tile]:
                     emergenceAmt = bot.undiscovered_priorities.raw[tile.tile_index]
-                    emergenceAmt -= bot.get_distance_from_board_center(tile, center_ratio=0.35) * 0.1
+                    emergenceAmt -= BotTargeting.get_distance_from_board_center(bot, tile, center_ratio=0.35) * 0.1
                     if connectedDistances is not None:
                         emergenceAmt += 30.0 / (connectedDistances.raw[tile.tile_index] + 3)
                     emergenceVals.append((emergenceAmt, tile))
@@ -227,34 +231,6 @@ class BotTargeting:
         return finalTiles
 
     @staticmethod
-    def is_still_ffa_and_non_dominant(bot) -> bool:
-        isFfa = False
-        if bot._map.remainingPlayers > 2 and not bot._map.is_2v2:
-            isFfa = True
-
-        if not isFfa:
-            return False
-
-        dominating = 0
-        nearEven = bot._map.remainingPlayers - 1
-        dominatedBy = 0
-        for player in bot._map.players:
-            if player == bot.general.player:
-                continue
-
-            if bot.opponent_tracker.winning_on_army(byRatio=1.2, againstPlayer=player.index, offset=-10, useFullArmy=True):
-                dominating += 1
-                nearEven -= 1
-            elif not bot.opponent_tracker.winning_on_army(byRatio=0.9, againstPlayer=player.index, useFullArmy=True):
-                dominatedBy += 1
-                nearEven -= 1
-
-        if dominating > dominatedBy:
-            return False
-
-        return True
-
-    @staticmethod
     def _get_furthest_apart_3_enemy_general_locations(bot, player) -> typing.Tuple[typing.List[Tile], MapMatrixInterface[int]]:
         valids = bot.armyTracker.valid_general_positions_by_player[player].raw
 
@@ -282,14 +258,14 @@ class BotTargeting:
 
         if len(furthests) == 0:
             bot.info(f'No furthests...?')
-            return furthests, bot.board_analysis.intergeneral_analysis.bMap.copy()
+            return furthests, BotStateQueries.get_intergeneral_analysis(bot).bMap.copy()
 
         return furthests, SearchUtils.build_distance_map_matrix(bot._map, furthests)
 
     @staticmethod
     def is_ffa_situation(bot) -> bool:
         if bot._is_ffa_situation is None:
-            bot._is_ffa_situation = not bot._map.is_walled_city_game and bot.are_more_teams_alive_than(2)
+            bot._is_ffa_situation = not bot._map.is_walled_city_game and BotTargeting.are_more_teams_alive_than(bot, 2)
 
         return bot._is_ffa_situation
 
@@ -375,7 +351,7 @@ class BotTargeting:
 
     @staticmethod
     def find_enemy_city_path(bot, negativeTiles: TileSet, force: bool = False) -> typing.Tuple[int, Path | None]:
-        scores = [c for c in bot.get_enemy_cities_by_priority()]
+        scores = [c for c in BotTargeting.get_enemy_cities_by_priority(bot)]
         foundScores = [c for c in scores if not c.isTempFogPrediction or c.discovered]
         if len(foundScores) > 0:
             scores = foundScores
@@ -433,7 +409,7 @@ class BotTargeting:
             return bestTurns, None
 
         bestTurns = -1
-        return bestTurns, bot.get_path_to_target(tgTile)
+        return bestTurns, BotPathingUtils.get_path_to_target(bot, tgTile)
 
     @staticmethod
     def get_path_to_target_player(bot, isAllIn=False, cutLength: int | None = None) -> Path | None:
@@ -458,7 +434,7 @@ class BotTargeting:
 
         enemyDistMap = None
         if bot.board_analysis is not None and bot.board_analysis.intergeneral_analysis is not None and bot.board_analysis.intergeneral_analysis.bMap is not None:
-            enemyDistMap = bot.board_analysis.intergeneral_analysis.bMap
+            enemyDistMap = BotStateQueries.get_intergeneral_analysis(bot).bMap.copy()
         else:
             logbook.info('building distmap after rebuilding intergen analysis')
             enemyDistMap = bot._map.distance_mapper.get_tile_dist_matrix(bot.targetPlayerExpectedGeneralLocation)
@@ -466,7 +442,7 @@ class BotTargeting:
 
         fromTile = bot.general
         if bot.locked_launch_point is None and bot._map.is_2v2 and bot.teammate_general is not None and bot.targetPlayerObj is not None:
-            fromTile = bot.get_2v2_launch_point()
+            fromTile = BotTargeting.get_2v2_launch_point(bot)
             bot.locked_launch_point = fromTile
 
         if bot.locked_launch_point is not None:
@@ -486,17 +462,17 @@ class BotTargeting:
 
             bot.locked_launch_point = fromTile
 
-        preferNeut = not isAllIn and not bot.is_ffa_situation()
+        preferNeut = not isAllIn and not BotTargeting.is_ffa_situation(bot)
         preferEn = not isAllIn
 
-        if bot.is_still_ffa_and_non_dominant():
+        if BotStateQueries.is_still_ffa_and_non_dominant(bot):
             preferEn = False
             preferNeut = False
 
         with bot.perf_timer.begin_move_event(f'getting path to target {maxTile}'):
-            path = bot.get_path_to_target(maxTile, skipEnemyCities=isAllIn, preferNeutral=preferNeut, fromTile=fromTile, preferEnemy=preferEn)
+            path = BotPathingUtils.get_path_to_target(bot, maxTile, skipEnemyCities=isAllIn, preferNeutral=preferNeut, fromTile=fromTile, preferEnemy=preferEn)
             if path is None:
-                path = bot.get_path_to_target(maxTile, skipNeutralCities=False, skipEnemyCities=isAllIn, preferNeutral=preferNeut, fromTile=fromTile, preferEnemy=preferEn)
+                path = BotPathingUtils.get_path_to_target(bot, maxTile, skipNeutralCities=False, skipEnemyCities=isAllIn, preferNeutral=preferNeut, fromTile=fromTile, preferEnemy=preferEn)
 
             bot.info(f'DEBUG: cutLen {cutLength} at {maxTile}: path {path}')
             if path is not None and cutLength is not None and path.length > cutLength:
@@ -512,10 +488,11 @@ class BotTargeting:
     @staticmethod
     def get_max_explorable_undiscovered_tile(bot, minSpawnDist: int):
         # 4 and larger gets dicey
-        depth = bot.get_safe_per_tile_bfs_depth()
+        depth = BotTargeting.get_safe_per_tile_bfs_depth(bot)
 
         if bot.undiscovered_priorities is None or bot._undisc_prio_turn != bot._map.turn:
-            bot.undiscovered_priorities = bot.find_expected_1v1_general_location_on_undiscovered_map(
+            bot.undiscovered_priorities = BotExpansionOps.find_expected_1v1_general_location_on_undiscovered_map(
+                bot,
                 undiscoveredCounterDepth=depth,
                 minSpawnDistance=minSpawnDist)
         bot._undisc_prio_turn = bot._map.turn
@@ -525,7 +502,7 @@ class BotTargeting:
         for tile in bot._map.tiles_by_index:
             if bot.targetPlayer != -1 and not bot.armyTracker.valid_general_positions_by_player[bot.targetPlayer].raw[tile.tile_index]:
                 continue
-            if tile and maxAmount < bot.undiscovered_priorities.raw[tile.tile_index] and bot.distance_from_general(tile) > minSpawnDist and (bot.teammate_general is None or bot.distance_from_teammate(tile) > minSpawnDist):
+            if tile and maxAmount < bot.undiscovered_priorities.raw[tile.tile_index] and BotPathingUtils.distance_from_general(bot, tile) > minSpawnDist and (bot.teammate_general is None or BotPathingUtils.distance_from_teammate(bot, tile) > minSpawnDist):
                 maxAmount = bot.undiscovered_priorities.raw[tile.tile_index]
                 maxTile = tile
             if bot.targetPlayer == -1:
@@ -537,7 +514,7 @@ class BotTargeting:
 
     @staticmethod
     def get_move_if_afk_player_situation(bot) -> Move | None:
-        afkPlayers = bot.get_afk_players()
+        afkPlayers = BotTargeting.get_afk_players(bot)
         allOtherPlayersAfk = len(afkPlayers) + 1 == bot._map.remainingPlayers
         numTilesVisible = 0
         if bot.targetPlayer != -1:
@@ -545,13 +522,13 @@ class BotTargeting:
 
         if allOtherPlayersAfk and numTilesVisible == 0:
             with bot.perf_timer.begin_move_event('AFK Player optimal EXPLORATION'):
-                path = bot.get_optimal_exploration(30, None, minArmy=0, maxTime=0.04)
+                path = BotExpansionOps.get_optimal_exploration(bot, 30, None, minArmy=0, maxTime=0.04)
             if path is not None:
                 bot.info(f"Rapid EXPLORE due to AFK player {bot.targetPlayer}:  {str(path)}")
 
                 bot.finishing_exploration = True
                 bot.viewInfo.add_info_line("Setting finishingExploration to True because allOtherPlayersAfk and found an explore path")
-                return bot.get_first_path_move(path)
+                return BotPathingUtils.get_first_path_move(bot, path)
 
             expansionNegatives = set()
             territoryMap = bot.territories.territoryMap
@@ -578,7 +555,7 @@ class BotTargeting:
             if path is not None:
                 bot.finishing_exploration = True
                 bot.info(f"Rapid EXPAND due to AFK player {bot.targetPlayer}:  {str(path)}")
-                return bot.get_first_path_move(path)
+                return BotPathingUtils.get_first_path_move(bot, path)
 
         if bot.targetPlayer != -1:
             tp = bot.targetPlayerObj
@@ -587,7 +564,8 @@ class BotTargeting:
                 if tp.tileCount > 10 or tp.cityCount > 1 or (tp.general is not None and tp.general.army + remainingTurns // 2 < 42):
                     turns = max(8, remainingTurns - 15)
                     with bot.perf_timer.begin_move_event(f'Quick kill gather to player who left, {remainingTurns} until they arent capturable'):
-                        move = bot.timing_gather(
+                        move = BotGatherOps.timing_gather(
+                            bot,
                             [bot.targetPlayerExpectedGeneralLocation],
                             force=True,
                             targetTurns=turns,
@@ -598,7 +576,8 @@ class BotTargeting:
 
             if allOtherPlayersAfk and bot.targetPlayerExpectedGeneralLocation is not None and bot.targetPlayerExpectedGeneralLocation.isGeneral:
                 with bot.perf_timer.begin_move_event(f'quick-kill gather to opposing player!'):
-                    move = bot.timing_gather(
+                    move = BotGatherOps.timing_gather(
+                        bot,
                         [bot.targetPlayerExpectedGeneralLocation],
                         force=True,
                         pruneToValuePerTurn=True)
@@ -618,7 +597,7 @@ class BotTargeting:
                 if player.index != bot.general.player and not player.dead and player.index not in bot._map.teammates:
                     return player.index
 
-        allAfk = len(bot.get_afk_players()) >= bot._map.remainingPlayers - 1 - len(bot._map.teammates)
+        allAfk = len(BotTargeting.get_afk_players(bot)) >= bot._map.remainingPlayers - 1 - len(bot._map.teammates)
         if allAfk or bot._map.is_2v2:
             playerScore = -10000000
 
@@ -705,7 +684,7 @@ class BotTargeting:
 
             if bot.generalApproximations[player.index][3] is not None:
                 enApprox = bot.generalApproximations[player.index][3]
-                genDist = bot.distance_from_general(enApprox)
+                genDist = BotPathingUtils.distance_from_general(bot, enApprox)
                 if bot.teammate_general is not None:
                     genDist += bot._map.euclidDist(bot.teammate_general.x, bot.teammate_general.y, enApprox.x, enApprox.y)
                     genDist = genDist // 2
@@ -768,7 +747,8 @@ class BotTargeting:
             if len(bot._map.tiles_by_index) > 4000:
                 depth = 4
 
-            bot.undiscovered_priorities = bot.find_expected_1v1_general_location_on_undiscovered_map(
+            bot.undiscovered_priorities = BotExpansionOps.find_expected_1v1_general_location_on_undiscovered_map(
+                bot,
                 undiscoveredCounterDepth=depth,
                 minSpawnDistance=minSpawnDist)
 
@@ -794,7 +774,7 @@ class BotTargeting:
                 negScore += 10000
             undiscScore = bot.undiscovered_priorities.raw[tile.tile_index]
             negScore -= undiscScore
-            realDist = bot.distance_from_general(tile)
+            realDist = BotPathingUtils.distance_from_general(bot, tile)
             return realDist, negScore, dist + 1, tile
 
         def skip_func(tile: Tile, prioObj):
@@ -802,7 +782,7 @@ class BotTargeting:
 
         startDict = {}
         for targetTile in bot.targetPlayerObj.tiles:
-            startDict[targetTile] = ((bot.distance_from_general(targetTile), 0, 0, None), 0)
+            startDict[targetTile] = ((BotPathingUtils.distance_from_general(bot, targetTile), 0, 0, None), 0)
 
         path = SearchUtils.breadth_first_dynamic_max(
             bot._map,
@@ -845,12 +825,12 @@ class BotTargeting:
             )
 
         def tile_meets_criteria_for_general(t: Tile) -> bool:
-            return tile_meets_criteria_for_value_around_general(t) and genDists.raw[t.tile_index] >= minSpawnDistance and (bot.teammate_general is None or bot.distance_from_teammate(t) >= minSpawnDistance)
+            return tile_meets_criteria_for_value_around_general(t) and genDists.raw[t.tile_index] >= minSpawnDistance and (bot.teammate_general is None or BotPathingUtils.distance_from_teammate(bot, t) >= minSpawnDistance)
 
         for tile in bot._map.pathable_tiles:
             if tile_meets_criteria_for_general(tile):
                 genDist = genDists.raw[tile.tile_index] / 2
-                distFromCenter = bot.get_distance_from_board_center(tile, center_ratio=0.25)
+                distFromCenter = BotTargeting.get_distance_from_board_center(bot, tile, center_ratio=0.25)
 
                 initScore = genDist - distFromCenter
                 counter = SearchUtils.Counter(0)
@@ -893,14 +873,14 @@ class BotTargeting:
     def get_predicted_target_player_general_location(bot, skipDiscoveredAsNeutralFilter: bool = False) -> Tile:
         minSpawnDist = bot.armyTracker.min_spawn_distance
 
-        if bot.targetPlayer == -1 and bot.is_still_ffa_and_non_dominant():
+        if bot.targetPlayer == -1 and BotStateQueries.is_still_ffa_and_non_dominant(bot):
             bot.info(f'bypassed get_predicted_target_player_general_location because no target player and ffa')
             return bot.general
 
         if bot.targetPlayer == -1 or (len(bot._map.players) == 2 and len([t for t in filter(lambda tile: tile.visible, bot._map.players[bot.targetPlayer].tiles)])):
             with bot.perf_timer.begin_move_event('get_max_explorable_undiscovered_tile'):
                 bot.info(f'DEBUG get_max_explorable_undiscovered_tile')
-                return bot.get_max_explorable_undiscovered_tile(minSpawnDist)
+                return BotTargeting.get_max_explorable_undiscovered_tile(bot, minSpawnDist)
 
         if bot._map.generals[bot.targetPlayer] is not None:
             bot.info(f'DEBUG enemyGeneral')
@@ -949,7 +929,7 @@ class BotTargeting:
         if bot.targetPlayer != -1 and len(bot.targetPlayerObj.tiles) > 0:
             bot.viewInfo.add_info_line("target path failed, hacky gen approx attempt:")
             with bot.perf_timer.begin_move_event('find_hacky_path_to_find_target_player_spawn_approx'):
-                maxTile = bot.find_hacky_path_to_find_target_player_spawn_approx(minSpawnDist)
+                maxTile = BotTargeting.find_hacky_path_to_find_target_player_spawn_approx(bot, minSpawnDist)
                 if maxTile is not None and maxTile != bot.general and not maxTile.isObstacle and not maxTile.isCity:
                     bot.info(
                         f"Highest density undiscovered tile {str(maxTile)}")
@@ -963,7 +943,7 @@ class BotTargeting:
 
         bot.viewInfo.add_info_line(f"target path failed, falling back to undiscovered path. minSpawnDist {minSpawnDist}")
         with bot.perf_timer.begin_move_event(f'fb{bot.targetPlayer} get_max_explorable_undiscovered_tile'):
-            fallbackTile = bot.get_max_explorable_undiscovered_tile(minSpawnDist)
+            fallbackTile = BotTargeting.get_max_explorable_undiscovered_tile(bot, minSpawnDist)
             if fallbackTile is not None and fallbackTile != bot.general:
                 bot.info(f"target path failed, falling back to {fallbackTile} - get_max_explorable_undiscovered_tile")
                 return fallbackTile
@@ -976,7 +956,7 @@ class BotTargeting:
             if tile.isCity:
                 continue
 
-            d = bot.distance_from_general(tile)
+            d = BotPathingUtils.distance_from_general(bot, tile)
             if furthestDist < d < 999:
                 furthestDist = d
                 furthestTile = tile

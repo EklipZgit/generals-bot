@@ -8,7 +8,7 @@ from ArmyAnalyzer import ArmyAnalyzer
 from Behavior.ArmyInterceptor import ArmyInterceptor, TARGET_CAP_VALUE
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
-from TestBase import TestBase
+from Tests.TestBase import TestBase
 from base.client.map import MapBase
 from bot_ek0x45 import EklipZBot
 

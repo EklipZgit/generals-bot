@@ -3,9 +3,10 @@ import time
 
 import logbook
 
-import MapSpanningUtils
+from Algorithms import MapSpanningUtils
 import SearchUtils
-import WatchmanRouteUtils
+from Algorithms import WatchmanRouteUtils
+from BotModules.BotStateQueries import BotStateQueries
 from Army import Army
 from ArmyEngine import ArmyEngine
 from ArmyEngine import ArmySimResult
@@ -15,7 +16,8 @@ from Gather import Gather
 from Path import Path
 from StrategyModels import ExpansionPotential
 from ViewInfo import PathColorer, TargetStyle
-from base.client.map import Move, Tile
+from Models.Move import Move
+from base.client.map import Tile
 from DangerAnalyzer import ThreatType, ThreatObj
 
 
@@ -545,7 +547,7 @@ class BotCombatOps:
                 for t in targets:
                     bot.viewInfo.add_targeted_tile(t, TargetStyle.WHITE)
 
-            if (bot.is_all_in_army_advantage or bot.all_in_city_behind) and not bot.is_still_ffa_and_non_dominant():
+            if (bot.is_all_in_army_advantage or bot.all_in_city_behind) and not BotStateQueries.is_still_ffa_and_non_dominant(bot):
                 andTargs = ' (and cities)'
                 if bot.all_in_city_behind or bot._map.remainingPlayers == 2:
                     targets.extend(bot.targetPlayerObj.cities)

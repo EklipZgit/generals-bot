@@ -2,12 +2,14 @@ import logbook
 import typing
 
 import SearchUtils
+from BotModules.BotStateQueries import BotStateQueries
 from DangerAnalyzer import ThreatObj
 from Interfaces import MapMatrixInterface, TilePlanInterface
 from Path import Path
 from Gather import GatherCapturePlan
 from ViewInfo import PathColorer
-from base.client.map import Move, Tile
+from Models.Move import Move
+from base.client.map import Tile
 
 
 class BotPathingUtils:
@@ -28,7 +30,7 @@ class BotPathingUtils:
         if move is None:
             return False
         if move.source == bot.general:
-            return bot.general_move_safe(move.dest)
+            return BotStateQueries.general_move_safe(bot, move.dest)
         if move.source.player != move.dest.player and move.source.army - 2 < move.dest.army and not allowNonKill:
             logbook.info(
                 f"{move.source.x},{move.source.y} -> {move.dest.x},{move.dest.y} was not a move that killed the dest tile")
@@ -91,10 +93,10 @@ class BotPathingUtils:
         if nextMove.dest is not None:
             dest = nextMove.dest
             source = nextMove.source
-            if source.isGeneral and not bot.general_move_safe(dest):
+            if source.isGeneral and not BotStateQueries.general_move_safe(bot, dest):
                 logbook.info(
                     f"Attempting to execute path move from self.curPath?")
-                if bot.general_move_safe(dest, move_half=True):
+                if BotStateQueries.general_move_safe(bot, dest, move_half=True):
                     logbook.info("General move in path would have violated general min army allowable. Moving half.")
                     move = Move(source, dest, True)
                     return move
@@ -112,13 +114,13 @@ class BotPathingUtils:
                         bot.curPath = None
                         bot.curPathPrio = -1
                         if threat is not None:
-                            killThreatPath = bot.kill_threat(bot.threat)
+                            isNonDominantFfa = BotStateQueries.is_still_ffa_and_non_dominant(bot)
                             if killThreatPath is not None:
                                 bot.info(f"REPLACED CURPATH WITH Final path to kill threat! {killThreatPath.toString()}")
                                 bot.viewInfo.color_path(PathColorer(killThreatPath, 0, 255, 204, 255, 10, 200))
                                 logbook.info(f'setting targetingArmy to {str(threat.path.start.tile)} in continue_cur_path when move wasnt safe for general')
                                 bot.targetingArmy = bot.armyTracker.armies[threat.path.start.tile]
-                                return bot.get_first_path_move(killThreatPath)
+                                return BotPathingUtils.get_first_path_move(bot, killThreatPath)
                         else:
                             logbook.warn("Negative tiles prevented a move but there was no threat???")
 
@@ -133,8 +135,7 @@ class BotPathingUtils:
                     else:
                         break
                 if bot.curPath is not None and nextMove.dest is not None:
-                    if nextMove.source == bot.general and not bot.general_move_safe(
-                            bot.curPath.start.next.tile, bot.curPath.start.move_half):
+                    if nextMove.source == bot.general and not BotStateQueries.general_move_safe(bot, bot.curPath.start.next.tile, bot.curPath.start.move_half):
                         bot.curPath = None
                         bot.curPathPrio = -1
                     else:
@@ -149,7 +150,7 @@ class BotPathingUtils:
                             move = bot.curPath.get_first_move()
 
                         bot.info(f"CurPath cont {move}")
-                        return bot.move_half_on_repetition(move, 6, 3)
+                        return BotPathingUtils.move_half_on_repetition(bot, move, 6, 3)
 
         bot.info("path move failed...? setting curPath to none...")
         bot.info(f'path move WAS {bot.curPath}')
@@ -180,7 +181,7 @@ class BotPathingUtils:
             return 0
         val = 0
 
-        if bot._ally_distances:
+        if BotStateQueries.is_all_in(bot):
             val = bot._ally_distances[sourceTile]
         return val
 
@@ -298,7 +299,7 @@ class BotPathingUtils:
         if not isinstance(bot.curPath, Path):
             return
 
-        if bot.curPath.start.next is not None and not bot.droppedMove(bot.curPath.start.tile, bot.curPath.start.next.tile):
+        if bot.curPath.start.next is not None and not BotPathingUtils.dropped_move(bot, bot.curPath.start.tile, bot.curPath.start.next.tile):
             bot.curPath.pop_first_move()
             if bot.curPath.length <= 0:
                 logbook.info("TERMINATING CURPATH BECAUSE <= 0 ???? Path better be over")
@@ -497,7 +498,7 @@ class BotPathingUtils:
             for enemyCity in bot.enemyCities:
                 negativeTiles.add(enemyCity)
 
-        if maxObstacleCost is None and bot.is_weird_custom:
+        if maxObstacleCost is None and BotStateQueries.is_weird_custom(bot):
             maxObstacleCost = bot._map.walled_city_base_value
 
         def path_to_targets_priority_func(
@@ -513,13 +514,13 @@ class BotPathingUtils:
                 if nextTile.player == -1 and maxObstacleCost is not None and nextTile.army >= maxObstacleCost:
                     return None
 
-            if preferEnemy and not bot.is_all_in():
+            if preferEnemy and not BotStateQueries.is_all_in(bot):
                 if bot._map.is_tile_on_team_with(nextTile, bot.targetPlayer):
                     negEnemyTiles -= 1
                     if nextTile.isCity:
                         negCityCount -= 1
 
-                if not bot.is_ffa_situation():
+                if not BotTargeting.is_ffa_situation(bot):
                     if not nextTile.visible:
                         negEnemyTiles -= 1
                     if not nextTile.discovered:

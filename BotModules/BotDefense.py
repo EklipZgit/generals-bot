@@ -5,19 +5,21 @@ import logbook
 
 import Gather
 import SearchUtils
-import MapSpanningUtils
+from Algorithms import MapSpanningUtils
+from BotModules.BotStateQueries import BotStateQueries
 from Behavior.ArmyInterceptor import InterceptionOptionInfo
 from DangerAnalyzer import ThreatType
 from Gather import GatherTreeNode
 from DangerAnalyzer import ThreatObj
 from Interfaces import TilePlanInterface, MapMatrixInterface
 from MapMatrix import MapMatrix, MapMatrixSet, TileSet
-from Models import ThreatBlockInfo
-from DebugHelper import DebugHelper
+from Behavior.ArmyInterceptor import ThreatBlockInfo
+import DebugHelper
 from Path import Path
-from ViewInfo import Colors
+from base import Colors
 from ViewInfo import TargetStyle, PathColorer
-from base.client.map import Tile, Move, MapBase
+from Models.Move import Move
+from base.client.map import Tile, MapBase
 
 
 class BotDefense:
@@ -2381,7 +2383,7 @@ class BotDefense:
 
             return None
 
-        if bot.is_still_ffa_and_non_dominant():
+        if BotStateQueries.is_still_ffa_and_non_dominant(bot):
             return None
 
         leafMove = bot._get_vision_expanding_available_move(coreNegs, checkPath)

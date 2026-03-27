@@ -10,6 +10,38 @@ class BotStateQueries:
         return bot.is_all_in_losing or bot.is_all_in_army_advantage or bot.all_in_city_behind
 
     @staticmethod
+    def is_still_ffa_and_non_dominant(bot) -> bool:
+        isFfa = False
+        if bot._map.remainingPlayers > 2 and not bot._map.is_2v2:
+            isFfa = True
+
+        if not isFfa:
+            return False
+
+        dominating = 0
+        nearEven = bot._map.remainingPlayers - 1
+        dominatedBy = 0
+        for player in bot._map.players:
+            if player == bot.general.player:
+                continue
+
+            if bot.opponent_tracker.winning_on_army(byRatio=1.2, againstPlayer=player.index, offset=-10, useFullArmy=True):
+                dominating += 1
+                nearEven -= 1
+            elif not bot.opponent_tracker.winning_on_army(byRatio=0.9, againstPlayer=player.index, useFullArmy=True):
+                dominatedBy += 1
+                nearEven -= 1
+
+        if dominating > dominatedBy:
+            return False
+
+        return True
+
+    @staticmethod
+    def get_intergeneral_analysis(bot):
+        return bot.board_analysis.intergeneral_analysis
+
+    @staticmethod
     def get_player_army_amount_on_path(bot, path, player, startIdx=0, endIdx=1000):
         value = 0
         idx = 0
@@ -25,7 +57,7 @@ class BotStateQueries:
     def get_target_army_inc_adjacent_enemy(bot, tile):
         sumAdj = 0
         for adj in tile.adjacents:
-            if bot._map.is_tile_enemy(adj):
+            if BotStateQueries.is_tile_enemy(bot, adj):
                 sumAdj += adj.army - 1
         armyToSearch = sumAdj
         return armyToSearch

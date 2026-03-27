@@ -1618,7 +1618,8 @@ bot_target_player=1
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
-        self.assertPlayerTileCountGreater(simHost, general.player, 119, 'shouldnt fail to find a move and that move ought to be expansion or capture near end of round')    
+        self.assertPlayerTileCountGreater(simHost, general.player, 119, 'shouldnt fail to find a move and that move ought to be expansion or capture near end of round')
+
     def test_should_not_stop_chain_capping_enemy_tiles_when_can_still_expand_from_genafter_dumping_fully_into_enemy_land(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_stop_chain-capping_enemy_tiles_when_can_still_expand_from_genafter_dumping_fully_into_enemy_land___-j0ttnGi0---1--96.txtmap'

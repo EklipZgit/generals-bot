@@ -1,10 +1,11 @@
 from StrategyModels import CycleStatsData
 from Directives import Timings
-from DebugHelper import DebugHelper
+import DebugHelper
 from Path import Path
 import SearchUtils
 import logbook
 import random
+from BotModules.BotStateQueries import BotStateQueries
 
 
 class BotTimings:
@@ -42,17 +43,17 @@ class BotTimings:
         if bot.targetPlayer == -1 or bot.target_player_gather_path is None:
             return 5
 
-        if bot.is_player_spawn_cramped(spawnDist=bot.shortest_path_to_target_player.length):
+        if BotTargeting.is_player_spawn_cramped(bot, spawnDist=bot.shortest_path_to_target_player.length):
             return 0
 
         defensiveTiles = list(bot.target_player_gather_path.tileList)
         defensiveTiles.extend([c for c in bot.player.cities if bot.board_analysis.intergeneral_analysis.pathWayLookupMatrix[c] is not None and bot.board_analysis.intergeneral_analysis.pathWayLookupMatrix[
             c].distance < bot.board_analysis.intergeneral_analysis.shortestPathWay.distance + 3])
 
-        frArmy = bot.sum_friendly_army_near_or_on_tiles(defensiveTiles, distance=0, player=bot.general.player)
+        frArmy = BotCombatOps.sum_friendly_army_near_or_on_tiles(bot, defensiveTiles, distance=0, player=bot.general.player)
         enArmyOffset = 0
         if bot.enemy_attack_path:
-            enArmyOffset = bot.sum_friendly_army_near_or_on_tiles([t for t in bot.enemy_attack_path.tileList if t.visible], distance=0, player=bot.targetPlayer)
+            enArmyOffset = BotCombatOps.sum_friendly_army_near_or_on_tiles(bot, [t for t in bot.enemy_attack_path.tileList if t.visible], distance=0, player=bot.targetPlayer)
 
         approxGreedyTurnsAvail = bot.opponent_tracker.get_approximate_greedy_turns_available(
             bot.targetPlayer,
@@ -83,7 +84,7 @@ class BotTimings:
         if bot.target_player_gather_path is None:
             return
 
-        if bot.is_ffa_situation() and bot._map.turn < 150:
+        if BotTargeting.is_ffa_situation(bot) and bot._map.turn < 150:
             return
 
         splitTurn = bot.timings.get_turn_in_cycle(bot._map.turn)
@@ -151,7 +152,7 @@ class BotTimings:
         randomVal = random.randint(-1, 2)
         cycleDuration = 50
         gatherSplit = 0
-        realDist = bot.distance_from_general(bot.targetPlayerExpectedGeneralLocation)
+        realDist = BotPathingUtils.distance_from_general(bot, bot.targetPlayerExpectedGeneralLocation)
         longSpawns = bot.target_player_gather_path is not None and realDist > 22
         genPlayer = bot._map.players[bot.general.player]
         targPlayer = None
@@ -165,7 +166,7 @@ class BotTimings:
             frTileCount += teamPlayer.tileCount
 
         if False and longSpawns and genPlayer.tileCount > 80:
-            if bot.is_all_in():
+            if BotStateQueries.is_all_in(bot):
                 if genPlayer.tileCount > 80:
                     cycleDuration = 100
                     gatherSplit = 70
@@ -178,7 +179,7 @@ class BotTimings:
                 cycleDuration = 100
                 gatherSplit = 55
         else:
-            if bot.is_all_in():
+            if BotStateQueries.is_all_in(bot):
                 if genPlayer.tileCount > 95:
                     cycleDuration = 100
                     gatherSplit = 76
@@ -234,7 +235,7 @@ class BotTimings:
             gatherSplit += 3
             quickExpandSplit = 0
 
-        if bot.is_still_ffa_and_non_dominant():
+        if BotStateQueries.is_still_ffa_and_non_dominant(bot):
             quickExpandSplit = 0
             gatherSplit += 4
             if bot.targetPlayer != -1 and bot.targetPlayerObj.aggression_factor > 150:
@@ -274,8 +275,8 @@ class BotTimings:
 
         isOurPathAMostlyFogAltPath = False
         if bot.target_player_gather_path is not None:
-            numFog = bot.get_undiscovered_count_on_path(bot.target_player_gather_path)
-            numEn = bot.get_enemy_count_on_path(bot.target_player_gather_path)
+            numFog = BotPathingUtils.get_undiscovered_count_on_path(bot, bot.target_player_gather_path)
+            numEn = BotPathingUtils.get_enemy_count_on_path(bot, bot.target_player_gather_path)
 
             overage = 2 * numFog - 1 * bot.target_player_gather_path.length // 2 - numEn
             if overage > 0 and bot._map.turn > 85 and numEn < bot.target_player_gather_path.length // 3:
@@ -321,7 +322,7 @@ class BotTimings:
 
         launchTiming = 20
         gatherSplit = 20
-        if bot.is_still_ffa_and_non_dominant() and bot.targetPlayer != -1:
+        if BotStateQueries.is_still_ffa_and_non_dominant(bot) and bot.targetPlayer != -1:
             gatherSplit = 32
 
         timeOutsideLaunchAndGath = 0
@@ -363,7 +364,7 @@ class BotTimings:
                     f'timingsBase: g{gatherSplit} <- min(launch {launchTiming}, max(15, min({minExpWeighted}, 50-timeAv {timeOutsideLaunchAndGath} ({50 - timeOutsideLaunchAndGath}))), en{countEnOnPath}, fr{countFrOnPath}, nt{countNeutOnPath}, expW {xPweight}')
 
         randomVal = random.randint(-2, 2)
-        spawnDist = bot.distance_from_general(bot.targetPlayerExpectedGeneralLocation)
+        spawnDist = BotPathingUtils.distance_from_general(bot, bot.targetPlayerExpectedGeneralLocation)
         longSpawns = bot.target_player_gather_path is not None and spawnDist > 22
         genPlayer = bot._map.players[bot.general.player]
 
@@ -379,7 +380,7 @@ class BotTimings:
         if bot.currently_forcing_out_of_play_gathers:
             gatherSplit += 2
 
-        if bot.is_still_ffa_and_non_dominant():
+        if BotStateQueries.is_still_ffa_and_non_dominant(bot):
             oldGath = gatherSplit
             gatherSplit = 38
 
@@ -415,8 +416,8 @@ class BotTimings:
             pathCheck = bot.target_player_gather_path
             if pathCheck.length > 25:
                 pathCheck = pathCheck.get_subsegment(25)
-            numFog = bot.get_undiscovered_count_on_path(pathCheck)
-            numEn = bot.get_enemy_count_on_path(pathCheck)
+            numFog = BotPathingUtils.get_undiscovered_count_on_path(bot, pathCheck)
+            numEn = BotPathingUtils.get_enemy_count_on_path(bot, pathCheck)
             if numEn > 0 or bot.target_player_gather_path.length < 20:
                 overage = 2 * numFog - 1 * pathCheck.length // 2 - numEn
                 if overage > 0 and bot._map.turn > 85 and numEn < pathCheck.length // 3:

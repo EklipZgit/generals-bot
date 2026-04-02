@@ -8,13 +8,16 @@ import logbook
 
 import SearchUtils
 from BotModules.BotStateQueries import BotStateQueries
+from BotModules.BotExpansionOps import BotExpansionOps
+from BotModules.BotPathingUtils import BotPathingUtils
+from BotModules.BotComms import BotComms
+
 from Models import ContestData
 from MapMatrix import TileSet, MapMatrix, MapMatrixInterface
 from Path import Path
 from ViewInfo import PathColorer, TargetStyle
-from base.client.map import Tile
+from base.client.map import Tile, MapBase
 from Models.Move import Move
-
 
 class BotTargeting:
     @staticmethod
@@ -49,7 +52,7 @@ class BotTargeting:
                     if mostRecentCity is None:
                         mostRecentCity = bot.targetPlayerExpectedGeneralLocation
 
-                    bot.send_teammate_communication(f'Opps have {teamData.cityCount - numLivingPlayers} cities. New city might be around here:', mostRecentCity)
+                    BotComms.send_teammate_communication(bot, f'Opps have {teamData.cityCount - numLivingPlayers} cities. New city might be around here:', mostRecentCity)
 
                 bot.timings = None
 
@@ -200,7 +203,7 @@ class BotTargeting:
             for tile in bot._map.get_all_tiles():
                 if not tile.discovered and not tile.isObstacle and bot.armyTracker.valid_general_positions_by_player[player][tile]:
                     emergenceAmt = bot.undiscovered_priorities.raw[tile.tile_index]
-                    emergenceAmt -= BotTargeting.get_distance_from_board_center(bot, tile, center_ratio=0.35) * 0.1
+                    emergenceAmt -= BotPathingUtils.get_distance_from_board_center(bot, tile, center_ratio=0.35) * 0.1
                     if connectedDistances is not None:
                         emergenceAmt += 30.0 / (connectedDistances.raw[tile.tile_index] + 3)
                     emergenceVals.append((emergenceAmt, tile))
@@ -351,7 +354,8 @@ class BotTargeting:
 
     @staticmethod
     def find_enemy_city_path(bot, negativeTiles: TileSet, force: bool = False) -> typing.Tuple[int, Path | None]:
-        scores = [c for c in BotTargeting.get_enemy_cities_by_priority(bot)]
+        from BotModules.BotCityOps import BotCityOps
+        scores = [c for c in BotCityOps.get_enemy_cities_by_priority(bot)]
         foundScores = [c for c in scores if not c.isTempFogPrediction or c.discovered]
         if len(foundScores) > 0:
             scores = foundScores
@@ -418,7 +422,7 @@ class BotTargeting:
             return None
 
         if bot.targetPlayerExpectedGeneralLocation != maxTile and bot._map.turn > 50:
-            bot.send_teammate_communication(f"I will be targeting {bot._map.usernames[bot.targetPlayer]} over here.", maxTile, cooldown=50, detectOnMessageAlone=True)
+            BotComms.send_teammate_communication(bot, f"I will be targeting {bot._map.usernames[bot.targetPlayer]} over here.", maxTile, cooldown=50, detectOnMessageAlone=True)
 
         with bot.perf_timer.begin_move_event('rebuilding intergeneral_analysis'):
             bot.board_analysis.rebuild_intergeneral_analysis(bot.targetPlayerExpectedGeneralLocation, bot.armyTracker.valid_general_positions_by_player)
@@ -491,7 +495,7 @@ class BotTargeting:
         depth = BotTargeting.get_safe_per_tile_bfs_depth(bot)
 
         if bot.undiscovered_priorities is None or bot._undisc_prio_turn != bot._map.turn:
-            bot.undiscovered_priorities = BotExpansionOps.find_expected_1v1_general_location_on_undiscovered_map(
+            bot.undiscovered_priorities = BotTargeting.find_expected_1v1_general_location_on_undiscovered_map(
                 bot,
                 undiscoveredCounterDepth=depth,
                 minSpawnDistance=minSpawnDist)
@@ -747,7 +751,7 @@ class BotTargeting:
             if len(bot._map.tiles_by_index) > 4000:
                 depth = 4
 
-            bot.undiscovered_priorities = BotExpansionOps.find_expected_1v1_general_location_on_undiscovered_map(
+            bot.undiscovered_priorities = BotTargeting.find_expected_1v1_general_location_on_undiscovered_map(
                 bot,
                 undiscoveredCounterDepth=depth,
                 minSpawnDistance=minSpawnDist)
@@ -830,7 +834,7 @@ class BotTargeting:
         for tile in bot._map.pathable_tiles:
             if tile_meets_criteria_for_general(tile):
                 genDist = genDists.raw[tile.tile_index] / 2
-                distFromCenter = BotTargeting.get_distance_from_board_center(bot, tile, center_ratio=0.25)
+                distFromCenter = BotPathingUtils.get_distance_from_board_center(bot, tile, center_ratio=0.25)
 
                 initScore = genDist - distFromCenter
                 counter = SearchUtils.Counter(0)

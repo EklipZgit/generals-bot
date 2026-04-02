@@ -20,6 +20,8 @@ from base import bot_base
 from base.client.generals import ChatUpdate
 from base.client.map import MapBase, Tile
 from bot_ek0x45 import EklipZBot
+from BotModules.BotComms import BotComms
+from BotModules.BotRendering import BotRendering
 
 from Viewer.ViewerProcessHost import ViewerHost
 
@@ -127,15 +129,15 @@ class BotHostBase(object):
                     with moveTimer.begin_event(f'Sending move {str(move)} to server'):
                         self.place_move_func(move.source, move.dest, move.move_half)
 
-            tilePings = self.eklipz_bot.get_queued_tile_pings()
+            tilePings = BotComms.get_queued_tile_pings(self.eklipz_bot)
             for tilePing in tilePings:
                 self.ping_tile_func(tilePing)
 
-            teamChatMessages = self.eklipz_bot.get_queued_teammate_messages()
+            teamChatMessages = BotComms.get_queued_teammate_messages(self.eklipz_bot)
             for teamChatMessage in teamChatMessages:
                 self.send_chat_func(teamChatMessage, True)
 
-            allChatMessages = self.eklipz_bot.get_queued_all_chat_messages()
+            allChatMessages = BotComms.get_queued_all_chat_messages(self.eklipz_bot)
             for allChatMessage in allChatMessages:
                 self.send_chat_func(allChatMessage, False)
 
@@ -199,7 +201,7 @@ class BotHostBase(object):
                 # with moveTimer.begin_event(f'Prep vi for render {currentMap.turn}'):
                 #     self.eklipz_bot.prep_view_info_for_render(None)
                 with moveTimer.begin_event(f'Sending turn {currentMap.turn} update to Viewer (no move)'):
-                    self.eklipz_bot.prep_view_info_for_render(None)
+                    BotRendering.prep_view_info_for_render(self.eklipz_bot, None)
                     self.eklipz_bot.viewInfo.perfEvents.extend(moveTimer.get_events_organized_longest_to_shortest(limit=30, indentSize=2))
                     self._viewer.send_update_to_viewer(self.eklipz_bot.viewInfo, currentMap, currentMap.complete)
 
@@ -224,7 +226,7 @@ class BotHostBase(object):
                 logbook.info(f'failed to dump map, {lines}')
                 mapStr = f'failed to dump map, {lines}'
 
-            ekBotData = self.eklipz_bot.dump_turn_data_to_string()
+            ekBotData = BotRendering.dump_turn_data_to_string(self.eklipz_bot)
 
             mapStr = f'{mapStr}\n{ekBotData}'
 
@@ -263,7 +265,7 @@ class BotHostBase(object):
             self._viewer.kill()
 
     def handle_chat_message(self, chatUpdate: ChatUpdate):
-        self.eklipz_bot.notify_chat_message(chatUpdate)
+        BotComms.notify_chat_message(self.eklipz_bot, chatUpdate)
 
     def handle_tile_ping(self, pingedTile: Tile):
         self.eklipz_bot.notify_tile_ping(pingedTile)

@@ -689,6 +689,9 @@ class ArmyInterceptor(object):
             if threat.path.length <= 0:
                 ignoredThreats.append(threat)
                 continue
+            if threat.path.start.tile.lastMovedTurn < self.map.turn - 2:
+                ignoredThreats.append(threat)
+                continue
             # Why was this here?
             # if threat.turns > 30:
             #     logbook.info(f'skipping long threat len {threat.turns} from {str(threat.path.start.tile)} to {str(threat.path.tail.tile)}')
@@ -717,6 +720,9 @@ class ArmyInterceptor(object):
             if threat.path.start.tile != threatTile:
                 raise AssertionError(f'Can only get an interception plan for threats from one tile at a time. {str(threat.path.start.tile)} vs {str(threatTile)}')
             outThreats.append(threat)
+
+        if len(outThreats) == 0:
+            return [], ignoredThreats
 
         threatValues = self._determine_threat_values(outThreats, turnsLeftInCycle)
         maxLen = 0
@@ -751,6 +757,19 @@ class ArmyInterceptor(object):
             finalThreats.append(threat)
 
         return finalThreats, ignoredThreats
+
+    def _is_intercept_from_threatened_friendly_city(self, interception: ArmyInterception, path: Path) -> bool:
+        startTile = path.start.tile
+        if not startTile.isCity:
+            return False
+        if not self.map.is_tile_friendly(startTile):
+            return False
+
+        for threat in interception.threats:
+            if threat.path.tail.tile == startTile:
+                return True
+
+        return False
 
     def ensure_threat_army_analysis(self, threat: ThreatObj) -> bool:
         """returns True if the army analysis was built"""
@@ -980,6 +999,11 @@ class ArmyInterceptor(object):
             for dist, path in interceptPaths.items():
                 interceptPointDist = interception.threats[0].armyAnalysis.bMap[path.tail.tile]
                 """The distance from the threat to the intercept point"""
+
+                if self._is_intercept_from_threatened_friendly_city(interception, path):
+                    if self.log_debug:
+                        logbook.info(f'bypassed city-source intercept plan {str(path)}')
+                    continue
 
                 if DEBUG_BYPASS_BAD_INTERCEPTIONS and path.start.tile.army <= debugBadCutoff:
                     logbook.error(f'bypassed bad intercept plan {str(path)}')

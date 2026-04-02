@@ -301,8 +301,6 @@ class CityContestationTests(TestBase):
 
                 self.assertEqual(general.player, playerMap.GetTile(8, 11).player, 'should probe the fog while contesting the cities')
 
-
-    
     def test_should_not_keep_trying_to_take_more_cities__just_defend_the_ones_you_have(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_keep_trying_to_take_more_cities__just_defend_the_ones_you_have___XDtLwOsSk---0--1062.txtmap'

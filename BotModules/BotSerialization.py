@@ -4,7 +4,6 @@ from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrix, MapMatrixSet
 from base.client.map import Tile, new_value_grid
 
-
 class BotSerialization:
     @staticmethod
     def convert_int_tile_2d_array_to_string(bot, rows: typing.List[typing.List[int]]) -> str:

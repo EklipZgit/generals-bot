@@ -7,7 +7,6 @@ from Models import GatherTreeNode
 from Path import Path
 from ViewInfo import TargetStyle
 
-
 class BotComms:
     @staticmethod
     def send_teammate_communication(bot, message: str, pingTile: Tile | None = None, cooldown: int = 10, detectOnMessageAlone: bool = False, detectionKey: str | None = None):
@@ -109,7 +108,7 @@ class BotComms:
             return
 
         bot.viewInfo.add_info_line(str(chatUpdate))
-        if bot.is_2v2_teammate_still_alive() and chatUpdate.is_team_chat:
+        if BotComms.is_2v2_teammate_still_alive(bot, ) and chatUpdate.is_team_chat:
             if bot.teamed_with_bot:
                 BotComms.handle_bot_chat(bot, chatUpdate)
             else:

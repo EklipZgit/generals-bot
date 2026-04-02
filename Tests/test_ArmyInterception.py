@@ -6,6 +6,8 @@ import logbook
 import SearchUtils
 from ArmyAnalyzer import ArmyAnalyzer
 from Behavior.ArmyInterceptor import ArmyInterceptor, TARGET_CAP_VALUE
+from BotModules.BotDefense import BotDefense
+from BotModules.BotTimings import BotTimings
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from Tests.TestBase import TestBase
@@ -1465,7 +1467,7 @@ class ArmyInterceptionTests(TestBase):
         start = time.perf_counter()
         ArmyAnalyzer.reset_times()
         with bot.perf_timer.begin_move(map.turn):
-            bot.build_intercept_plans()
+            BotDefense.build_intercept_plans(bot)
             done = time.perf_counter() - start
         timings = '\r\n'.join(bot.perf_timer.current_move.get_events_organized_longest_to_shortest(25))
         ArmyAnalyzer.dump_times()
@@ -1702,7 +1704,7 @@ class ArmyInterceptionTests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '0,4->0,6->3,6')
         bot = self.get_debug_render_bot(simHost, general.player)
-        bot.timings = bot.get_timings()
+        bot.timings = BotTimings.get_timings(bot)
         playerMap = simHost.get_player_map(general.player)
 
         initCityCount = playerMap.players[playerMap.player_index].cityCount

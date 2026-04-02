@@ -1,12 +1,13 @@
+import random
+
 from StrategyModels import CycleStatsData
 from Directives import Timings
 import DebugHelper
 from Path import Path
 import SearchUtils
 import logbook
-import random
 from BotModules.BotStateQueries import BotStateQueries
-
+from BotModules.BotPathingUtils import BotPathingUtils
 
 class BotTimings:
     @staticmethod
@@ -40,6 +41,9 @@ class BotTimings:
 
     @staticmethod
     def _get_approximate_greedy_turns_available(bot) -> int:
+        from BotModules.BotTargeting import BotTargeting
+        from BotModules.BotCombatOps import BotCombatOps
+
         if bot.targetPlayer == -1 or bot.target_player_gather_path is None:
             return 5
 
@@ -81,6 +85,9 @@ class BotTimings:
 
     @staticmethod
     def prune_timing_split_if_necessary(bot):
+        from BotModules.BotTargeting import BotTargeting
+        from BotModules.BotComms import BotComms
+
         if bot.target_player_gather_path is None:
             return
 
@@ -299,7 +306,7 @@ class BotTimings:
         timings.is_early_flank_launch = isOurPathAMostlyFogAltPath
 
         if bot.teammate_general is not None and bot.teammate_communicator.is_team_lead and bot.target_player_gather_path is not None and correction < timings.launchTiming and bot._map.turn >= 50:
-            bot.send_teammate_communication(
+            BotComms.send_teammate_communication(bot,
                 f'Launch turn {(bot._map.turn + timings.launchTiming - correction) // 2} from here:',
                 pingTile=bot.target_player_gather_path.start.tile,
                 cooldown=5,
@@ -350,7 +357,7 @@ class BotTimings:
             cycle = 50
             if bot.timings is not None:
                 cycle = bot.timings.cycleTurns
-            launchTiming = cycle - bot.shortest_path_to_target_player.length - 5
+            launchTiming = cycle - bot.shortest_path_to_target_player.length - 1
             launchTiming += countEnOnPath // 2
             launchTiming += countNeutOnPath // 2
             launchTiming -= countFrOnPath // 2
@@ -442,6 +449,8 @@ class BotTimings:
                 bot.viewInfo.add_info_line(f'launchTiming {launchTiming}, targetLen {bot.shortest_path_to_target_player.length}')
 
         correction = bot._map.turn % 50
+        if launchTiming % 2 == 1:
+            launchTiming += 1
         timings = Timings(cycle, quickExpandSplit, gatherSplit, launchTiming, 0, bot._map.turn + cycle - correction, disallowEnemyGather)
         timings.is_early_flank_launch = isOurPathAMostlyFogAltPath
 

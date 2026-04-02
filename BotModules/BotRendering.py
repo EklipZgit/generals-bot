@@ -9,6 +9,7 @@ from base import Colors
 from base.client.map import MapBase, PLAYER_CHAR_BY_INDEX
 from ViewInfo import ViewInfo
 
+from BotModules.BotSerialization import BotSerialization
 
 class BotRendering:
     @staticmethod
@@ -312,12 +313,12 @@ class BotRendering:
             data.append(f'{char}CityGainedTurn={player.cityGainedTurn}')
             data.append(f'{char}CityLostTurn={player.cityLostTurn}')
             data.append(f'{char}LastSeenMoveTurn={player.last_seen_move_turn}')
-            data.append(f'{char}Emergences={bot.convert_float_map_matrix_to_string(bot.armyTracker.emergenceLocationMap[player.index])}')
-            data.append(f'{char}ValidGeneralPos={bot.convert_bool_map_matrix_to_string(bot.armyTracker.valid_general_positions_by_player[player.index])}')
-            data.append(f'{char}TilesEverOwned={bot.convert_tile_set_to_string(bot.armyTracker.tiles_ever_owned_by_player[player.index])}')
-            data.append(f'{char}UneliminatedEmergences={bot.convert_tile_int_dict_to_string(bot.armyTracker.uneliminated_emergence_events[player.index])}')
-            data.append(f'{char}UneliminatedEmergenceCityPerfectInfo={bot.convert_tile_set_to_string(bot.armyTracker.uneliminated_emergence_event_city_perfect_info[player.index])}')
-            data.append(f'{char}UnrecapturedEmergences={bot.convert_tile_set_to_string(bot.armyTracker.unrecaptured_emergence_events[player.index])}')
+            data.append(f'{char}Emergences={BotSerialization.convert_float_map_matrix_to_string(bot, bot.armyTracker.emergenceLocationMap[player.index])}')
+            data.append(f'{char}ValidGeneralPos={BotSerialization.convert_bool_map_matrix_to_string(bot, bot.armyTracker.valid_general_positions_by_player[player.index])}')
+            data.append(f'{char}TilesEverOwned={BotSerialization.convert_tile_set_to_string(bot, bot.armyTracker.tiles_ever_owned_by_player[player.index])}')
+            data.append(f'{char}UneliminatedEmergences={BotSerialization.convert_tile_int_dict_to_string(bot, bot.armyTracker.uneliminated_emergence_events[player.index])}')
+            data.append(f'{char}UneliminatedEmergenceCityPerfectInfo={BotSerialization.convert_tile_set_to_string(bot, bot.armyTracker.uneliminated_emergence_event_city_perfect_info[player.index])}')
+            data.append(f'{char}UnrecapturedEmergences={BotSerialization.convert_tile_set_to_string(bot, bot.armyTracker.unrecaptured_emergence_events[player.index])}')
             if len(bot.generalApproximations) > player.index:
                 if bot.generalApproximations[player.index][3] is not None:
                     data.append(f'{char}_bot_general_approx={str(bot.generalApproximations[player.index][3])}')
@@ -329,8 +330,8 @@ class BotRendering:
                 tempSet.add(tile)
             if tile.discoveredAsNeutral:
                 neutDiscSet.add(tile)
-        data.append(f'TempFogTiles={bot.convert_tile_set_to_string(tempSet)}')
-        data.append(f'DiscoveredNeutral={bot.convert_tile_set_to_string(neutDiscSet)}')
+        data.append(f'TempFogTiles={BotSerialization.convert_tile_set_to_string(bot, tempSet)}')
+        data.append(f'DiscoveredNeutral={BotSerialization.convert_tile_set_to_string(bot, neutDiscSet)}')
 
         data.append(f'Armies={TextMapLoader.dump_armies(bot._map, bot.armyTracker.armies)}')
 

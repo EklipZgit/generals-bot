@@ -41,6 +41,7 @@ from Viewer.ViewerProcessHost import ViewerHost
 from base import Colors
 from base.client.map import MapBase, Tile, Score, Player, TILE_FOG, TILE_OBSTACLE, MODIFIER_DEFENSELESS
 from bot_ek0x45 import EklipZBot
+from BotModules.BotTimings import BotTimings
 
 
 __unittest = True
@@ -394,7 +395,7 @@ class TestBase(unittest.TestCase):
         SearchUtils.breadth_first_foreach_dist(bot._map, [botTile], distance, emergenceMarker)
 
         bot.armyTracker.emergenceLocationMap[emergencePlayer][bot._map.GetTile(x, y)] += emergenceAmt
-        bot.timing_cycle_ended()
+        BotTimings.timing_cycle_ended(bot)
         bot.target_player_gather_path = None
 
     def mark_armies_as_entangled(self, bot: EklipZBot, realLocation: Tile, entangledLocations: typing.List[Tile]):

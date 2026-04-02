@@ -7,6 +7,11 @@ import Gather
 import SearchUtils
 from Algorithms import MapSpanningUtils
 from BotModules.BotStateQueries import BotStateQueries
+from BotModules.BotComms import BotComms
+from BotModules.BotGatherOps import BotGatherOps
+from BotModules.BotPathingUtils import BotPathingUtils
+from BotModules.BotRepetition import BotRepetition
+from ArmyAnalyzer import ArmyAnalyzer
 from Behavior.ArmyInterceptor import InterceptionOptionInfo
 from DangerAnalyzer import ThreatType
 from Gather import GatherTreeNode
@@ -20,7 +25,6 @@ from base import Colors
 from ViewInfo import TargetStyle, PathColorer
 from Models.Move import Move
 from base.client.map import Tile, MapBase
-
 
 class BotDefense:
     @staticmethod
@@ -63,6 +67,8 @@ class BotDefense:
             raceEnemyKingKillPath: Path | None,
             raceChance: float
     ) -> typing.Tuple[Move | None, Path | None]:
+        from BotModules.BotExpansionOps import BotExpansionOps
+
         move: Move | None = None
 
         outputDefenseCriticalTileSet = defenseCriticalTileSet
@@ -91,7 +97,7 @@ class BotDefense:
         realThreats = []
         anyRealThreat = False
         for threat in threats:
-            interceptMove, interceptPath, intOption, interceptDelayed = bot.check_defense_intercept_move(threat)
+            interceptMove, interceptPath, intOption, interceptDelayed = BotDefense.check_defense_intercept_move(bot, threat)
             if interceptDelayed:
                 bot.viewInfo.add_info_line(f'DEFENSE INTERCEPT SAID DELAYED AGAINST THREAT, NO OPPING DEFENSE')
                 negativeTilesIncludingThreat.update(interceptPath.tileList)
@@ -140,7 +146,7 @@ class BotDefense:
 
                 if threat.turns > 2 * bot.shortest_path_to_target_player.length // 3:
                     distOffsetNOWUNUSED = 0
-                shouldBypass = bot.should_bypass_army_danger_due_to_last_move_turn(threat.path.start.tile)
+                shouldBypass = BotDefense.should_bypass_army_danger_due_to_last_move_turn(bot, threat.path.start.tile)
                 if shouldBypass:
                     bot.viewInfo.add_info_line(f'skip def dngr from{str(army.tile)} last_seen {army.last_seen_turn}, last_moved {army.last_moved_turn}')
                     distOffsetNOWUNUSED -= 1
@@ -156,7 +162,8 @@ class BotDefense:
                     timeLimit = 0.05
                     if not threat.path.tail.tile.isGeneral:
                         timeLimit = 0.015
-                    move, valueGathered, turnsUsed, gatherNodes = bot.get_gather_to_threat_path(
+                    move, valueGathered, turnsUsed, gatherNodes = BotDefense.get_gather_to_threat_path(
+                        bot,
                         threat,
                         requiredContribution=survivalThreshold,
                         additionalNegatives=additionalNegatives,
@@ -168,8 +175,8 @@ class BotDefense:
                         anyLeafIsSameDistAsThreat = len(leavesGreaterThanDistance) > 0
                         if anyLeafIsSameDistAsThreat:
                             bot.info(f'defense anyLeafIsSameDistAsThreat {anyLeafIsSameDistAsThreat}')
-                        move_closest_value_func = bot.get_defense_tree_move_prio_func(threat, anyLeafIsSameDistAsThreat, printDebug=DebugHelper.IS_DEBUGGING)
-                        move = bot.get_tree_move_default(gatherNodes, move_closest_value_func)
+                        move_closest_value_func = BotDefense.get_defense_tree_move_prio_func(bot, threat, anyLeafIsSameDistAsThreat, printDebug=DebugHelper.IS_DEBUGGING)
+                        move = BotGatherOps.get_tree_move_default(bot, gatherNodes, move_closest_value_func)
                 if move:
                     with bot.perf_timer.begin_move_event(f'Def prun @ {str(threat.path.start.tile)}->{str(threat.path.tail.tile)}'):
                         if valueGathered > survivalThreshold:
@@ -185,7 +192,9 @@ class BotDefense:
                                 noLog=False)
 
                             if (bot.is_blocking_neutral_city_captures or valueGathered - sumPruned < 45) and not isEconThreat:
-                                bot.block_neutral_captures('due to pruned defense being less than safe if we take the city.')
+                                from BotModules.BotCityOps import BotCityOps
+
+                                BotCityOps.block_neutral_captures(bot, 'due to pruned defense being less than safe if we take the city.')
 
                             citiesInPruned = SearchUtils.Counter(0)
                             GatherTreeNode.foreach_tree_node(pruned, lambda n: citiesInPruned.add(1 * ((n.tile.isGeneral or n.tile.isCity) and bot._map.is_tile_friendly(n.tile))))
@@ -220,21 +229,21 @@ class BotDefense:
                                     preferPrune=bot.expansion_plan.preferred_tiles if bot.expansion_plan is not None else None,
                                     viewInfo=bot.viewInfo)
 
-                                move_closest_value_func = bot.get_defense_tree_move_prio_func(threat, anyLeafIsSameDistAsThreat, printDebug=DebugHelper.IS_DEBUGGING)
+                                move_closest_value_func = BotDefense.get_defense_tree_move_prio_func(bot, threat, anyLeafIsSameDistAsThreat, printDebug=DebugHelper.IS_DEBUGGING)
                                 bot.redGatherTreeNodes = gatherNodes
 
                                 bot.gatherNodes = pruned
-                                move = bot.get_tree_move_default(pruned, move_closest_value_func)
-                                bot.communicate_threat_to_ally(threat, sumPruned, pruned)
+                                move = BotGatherOps.get_tree_move_default(bot, pruned, move_closest_value_func)
+                                BotComms.communicate_threat_to_ally(bot, threat, sumPruned, pruned)
                                 bot.info(
                                     f'{flags}GathDefRaw-{str(threat.path.start.tile)}@{str(threat.path.tail.tile)}:  {move} val {valueGathered:.1f}/p{sumPruned:.1f}/{survivalThreshold} turns {turnsUsed}/p{sumPrunedTurns}/{threat.turns} offs{distOffsetNOWUNUSED}')
                                 return move, savePath
                             else:
-                                bot.communicate_threat_to_ally(threat, sumPruned, pruned)
+                                BotComms.communicate_threat_to_ally(bot, threat, sumPruned, pruned)
                                 isRealThreat = False
                                 if not bot.best_defense_leaves:
                                     bot.best_defense_leaves = GatherTreeNode.get_tree_leaves(pruned)
-                                    bot.set_defensive_blocks_against(threat)
+                                    BotDefense.set_defensive_blocks_against(bot, threat)
 
                                 if sumPrunedTurns >= threat.turns - 2:
                                     if interceptMove is not None:
@@ -265,7 +274,7 @@ class BotDefense:
                     abandonDefenseThreshold = survivalThreshold
 
                 if valueGathered < survivalThreshold - 1:
-                    bot.communicate_threat_to_ally(threat, valueGathered, gatherNodes)
+                    BotComms.communicate_threat_to_ally(bot, threat, valueGathered, gatherNodes)
                     extraTurns = 1
                     pruneToValuePerTurn = False
                     if threat.path.tail.tile.isGeneral:
@@ -280,7 +289,8 @@ class BotDefense:
                         survivalThreshold += extraTurns // 2
 
                     with bot.perf_timer.begin_move_event(f'+{extraTurns} Def Threat Gather {threat.path.start.tile}@{threat.path.tail.tile}'):
-                        altMove, altValueGathered, altTurnsUsed, altGatherNodes = bot.get_gather_to_threat_path(
+                        altMove, altValueGathered, altTurnsUsed, altGatherNodes = BotDefense.get_gather_to_threat_path(
+                            bot,
                             threat,
                             requiredContribution=survivalThreshold,
                             additionalNegatives=additionalNegatives,
@@ -296,11 +306,11 @@ class BotDefense:
                                 viewInfo=bot.viewInfo,
                                 preferPrune=bot.expansion_plan.preferred_tiles if bot.expansion_plan is not None else None,
                                 noLog=not DebugHelper.IS_DEBUGGING)
-                            valFunc = bot.get_defense_tree_move_prio_func(threat, anyLeafIsSameDistAsThreat=False, printDebug=DebugHelper.IS_DEBUGGING)
-                            altMove = bot.get_tree_move_default(altGatherNodes, valFunc)
+                            valFunc = BotDefense.get_defense_tree_move_prio_func(bot, threat, anyLeafIsSameDistAsThreat=False, printDebug=DebugHelper.IS_DEBUGGING)
+                            altMove = BotGatherOps.get_tree_move_default(bot, altGatherNodes, valFunc)
                     if altMove is not None:
                         directlyAttacksDest = altMove.dest == threat.path.start.tile
-                        if directlyAttacksDest or gatherNodes is None or not bot.is_2v2_teammate_still_alive():
+                        if directlyAttacksDest or gatherNodes is None or not BotComms.is_2v2_teammate_still_alive(bot):
                             if altValueGathered >= survivalThreshold:
                                 bot.redGatherTreeNodes = gatherNodes
                                 move = altMove
@@ -308,12 +318,12 @@ class BotDefense:
                                 turnsUsed = altTurnsUsed
                                 gatherNodes = altGatherNodes
 
-                isGatherMoveFromBackwards = bot.is_move_towards_enemy(move)
+                isGatherMoveFromBackwards = BotPathingUtils.is_move_towards_enemy(bot, move)
                 isGatherMoveFromBackwards = False
-                if not isRealThreat and (not isGatherMoveFromBackwards or move is None or bot.detect_repetition_tile(move.source)):
+                if not isRealThreat and (not isGatherMoveFromBackwards or move is None or BotRepetition.detect_repetition_tile(bot, move.source)):
                     if move is None:
                         flags = f'waitNONE {flags}'
-                    elif move is not None and bot.detect_repetition_tile(move.source):
+                    elif move is not None and BotRepetition.detect_repetition_tile(bot, move.source):
                         flags = f'rep {flags}'
                     else:
                         flags = f'wait {flags}'
@@ -322,18 +332,19 @@ class BotDefense:
 
                 bot.info(
                     f'{flags}GathDef-{str(threat.path.start.tile)}@{str(threat.path.tail.tile)}:  {move} val {valueGathered:.1f}/{survivalThreshold} turns {turnsUsed}/{threat.turns} (abandThresh {abandonDefenseThreshold:.0f} offs{distOffsetNOWUNUSED}')
-                if isRealThreat or bot.detect_repetition_tile(move.source, turns=8, numReps=3):
+                if isRealThreat or BotRepetition.detect_repetition_tile(bot, move.source, turns=8, numReps=3):
                     realThreats.append(threat)
                     if threat.turns < 7:
-                        bot.increment_attack_counts(threat.path.tail.tile)
+                        from BotModules.BotTargeting import BotTargeting
+                        BotTargeting.increment_attack_counts(bot, threat.path.tail.tile)
 
-                if valueGathered > abandonDefenseThreshold or (bot.is_2v2_teammate_still_alive() and len(additionalNegatives) == 0):
+                if valueGathered > abandonDefenseThreshold or (BotComms.is_2v2_teammate_still_alive(bot) and len(additionalNegatives) == 0):
                     if isRealThreat:
                         bot.curPath = None
                         bot.gatherNodes = gatherNodes
                         return move, savePath
 
-                    if isGatherMoveFromBackwards and not bot.detect_repetition_tile(move.source):
+                    if isGatherMoveFromBackwards and not BotRepetition.detect_repetition_tile(bot, move.source):
                         movesToMakeAnyway.append(move)
                 else:
                     bot.info(f'aband def bcuz ? valueGathered {valueGathered:.1f} <= abandonDefenseThreshold {abandonDefenseThreshold:.1f}')
@@ -362,7 +373,7 @@ class BotDefense:
                         f"   Did find a killpath on enemy gen / undiscovered {str(altKingKillPath)}")
                     wrpPath = None
                     if not altKingKillPath.tail.tile.isGeneral:
-                        wrpPath = bot.get_optimal_exploration(threat.turns, outputDefenseCriticalTileSet, maxTime=0.020, includeCities=False)
+                        wrpPath = BotExpansionOps.get_optimal_exploration(bot, threat.turns, outputDefenseCriticalTileSet, maxTime=0.020, includeCities=False)
                         if wrpPath is not None:
                             for t in wrpPath.tileList:
                                 if t in bot.targetPlayerExpectedGeneralLocation.adjacents:
@@ -381,30 +392,30 @@ class BotDefense:
                     if (raceEnemyKingKillPath is None or (raceEnemyKingKillPath.length >= threat.turns and wrpPath is None)) and altKingKillPath.length + altKillOffset < threat.turns:
                         bot.info(f"{flags} altKingKillPath {str(altKingKillPath)} altKillOffset {altKillOffset}")
                         bot.viewInfo.color_path(PathColorer(altKingKillPath, 122, 97, 97, 255, 10, 200))
-                        return bot.get_first_path_move(altKingKillPath), savePath
+                        return BotPathingUtils.get_first_path_move(bot, altKingKillPath), savePath
                     elif wrpPath is not None:
                         logbook.info("   wrpPath already existing, will not use the above.")
                         bot.info(f"{flags} wrpPath {str(wrpPath)} altKillOffset {altKillOffset}")
                         bot.viewInfo.color_path(PathColorer(wrpPath, 152, 97, 97, 255, 10, 200))
-                        return bot.get_first_path_move(wrpPath), savePath
+                        return BotPathingUtils.get_first_path_move(bot, wrpPath), savePath
                     elif raceEnemyKingKillPath is not None:
                         logbook.info("   raceEnemyKingKillPath already existing, will not use the above.")
                         bot.info(f"{flags} raceEnemyKingKillPath {str(raceEnemyKingKillPath)} altKillOffset {altKillOffset}")
                         bot.viewInfo.color_path(PathColorer(raceEnemyKingKillPath, 152, 97, 97, 255, 10, 200))
-                        return bot.get_first_path_move(raceEnemyKingKillPath), savePath
+                        return BotPathingUtils.get_first_path_move(bot, raceEnemyKingKillPath), savePath
 
             if altKingKillPath is not None:
                 if raceEnemyKingKillPath is None or raceEnemyKingKillPath.length > threat.turns:
                     bot.info(
                         f"{flags} altKingKillPath (long {altKingKillPath.length} vs threat {threat.turns}) {str(altKingKillPath)}")
                     bot.viewInfo.color_path(PathColorer(altKingKillPath, 122, 97, 97, 255, 10, 200))
-                    return bot.get_first_path_move(altKingKillPath), savePath
+                    return BotPathingUtils.get_first_path_move(bot, altKingKillPath), savePath
                 elif raceEnemyKingKillPath is not None:
                     logbook.info("   raceEnemyKingKillPath already existing, will not use the above.")
                     bot.info(
                         f"{flags} raceEnemyKingKillPath (long {altKingKillPath.length} vs threat {threat.turns}) {str(raceEnemyKingKillPath)}")
                     bot.viewInfo.color_path(PathColorer(raceEnemyKingKillPath, 152, 97, 97, 255, 10, 200))
-                    return bot.get_first_path_move(raceEnemyKingKillPath), savePath
+                    return BotPathingUtils.get_first_path_move(bot, raceEnemyKingKillPath), savePath
 
         if len(movesToMakeAnyway) > 0:
             return movesToMakeAnyway[-1], None
@@ -415,12 +426,13 @@ class BotDefense:
         for threat in realThreats:
             if threat.path.tail.tile.isGeneral:
                 if not bot.targetPlayerExpectedGeneralLocation.isGeneral:
-                    explorePath = bot.get_optimal_exploration(max(5, threat.turns))
+                    from BotModules.BotExpansionOps import BotExpansionOps
+                    explorePath = BotExpansionOps.get_optimal_exploration(bot, max(5, threat.turns))
                     if explorePath is not None:
                         bot.info(f'DEAD EXPLORE {str(explorePath)}')
-                        return bot.get_first_path_move(explorePath), explorePath
+                        return BotPathingUtils.get_first_path_move(bot, explorePath), explorePath
                 else:
-                    bot.get_gather_to_target_tile(bot.targetPlayerExpectedGeneralLocation, 1.0, threat.turns)
+                    BotGatherOps.get_gather_to_target_tile(bot, bot.targetPlayerExpectedGeneralLocation, 1.0, threat.turns)
 
         return None, None
 
@@ -458,7 +470,8 @@ class BotDefense:
 
             skippedIntercepts = []
             start = time.perf_counter()
-            isFfa = bot.is_ffa_situation()
+            from BotModules.BotTargeting import BotTargeting
+            isFfa = BotTargeting.is_ffa_situation(bot)
 
             with bot.perf_timer.begin_move_event(f'INT Ensure analysis\''):
                 for tile, threats in threatsSorted:
@@ -547,8 +560,8 @@ class BotDefense:
                                     existing.add_blocked_destination(blockedDest)
 
                 with bot.perf_timer.begin_move_event(f'INT @{str(tile)} Calc'):
-                    shouldBypass = bot.should_bypass_army_danger_due_to_last_move_turn(tile)
-                    if shouldBypass and len(interceptions) > 0:
+                    shouldBypass = BotDefense.should_bypass_army_danger_due_to_last_move_turn(bot, tile)
+                    if shouldBypass:
                         army = bot.armyTracker.get_or_create_army_at(tile)
                         bot.viewInfo.add_info_line(f'skip int dngr from{str(tile)} last_seen {army.last_seen_turn}, last_moved {army.last_moved_turn}')
                         continue
@@ -626,7 +639,8 @@ class BotDefense:
             interceptArmy: bool = False,
             timeLimit: float | None = None
     ) -> typing.Tuple[None | Move, int, int, None | typing.List[GatherTreeNode]]:
-        return bot.get_gather_to_threat_paths(
+        return BotDefense.get_gather_to_threat_paths(
+            bot,
             [threat],
             force_turns_up_threat_path,
             gatherMax,
@@ -677,7 +691,7 @@ class BotDefense:
 
         move_closest_value_func = None
         if force_turns_up_threat_path == 0:
-            move_closest_value_func = bot.get_defense_tree_move_prio_func(threats[0])
+            move_closest_value_func = BotDefense.get_defense_tree_move_prio_func(bot, threats[0])
 
         survivalThreshold = requiredContribution
 
@@ -696,7 +710,7 @@ class BotDefense:
                 negatives.discard(bot.general)
                 targetArmy += 1
             elif threat.path.tail.tile != bot.general:
-                if len(bot.get_danger_tiles()) > 0:
+                if len(BotDefense.get_danger_tiles(bot)) > 0:
                     negatives.add(bot.general)
 
         if additionalNegatives is not None:
@@ -712,7 +726,8 @@ class BotDefense:
             else:
                 timeLimit = 0.05
 
-        move, value, turnsUsed, gatherNodes = bot.get_defensive_gather_to_target_tiles(
+        move, value, turnsUsed, gatherNodes = BotGatherOps.get_defensive_gather_to_target_tiles(
+            bot,
             distDict,
             maxTime=timeLimit,
             gatherTurns=gatherDepth,
@@ -735,7 +750,7 @@ class BotDefense:
                 viewInfo=bot.viewInfo if bot.info_render_gather_values else None
             )
 
-            move = bot.get_tree_move_default(gatherNodes)
+            move = BotGatherOps.get_tree_move_default(bot, gatherNodes)
 
         logbook.info(f'get_gather_to_threat_path for depth {gatherDepth} force_turns_up_threat_path {force_turns_up_threat_path} returned {move}, val {value} turns {turnsUsed}')
         return move, value, turnsUsed, gatherNodes
@@ -775,7 +790,8 @@ class BotDefense:
         if gatherMax:
             targetArmy = -1
 
-        move, value, turnsUsed, gatherNodes = bot.get_gather_to_target_tiles_greedy(
+        move, value, turnsUsed, gatherNodes = BotGatherOps.get_gather_to_target_tiles_greedy(
+            bot,
             distDict,
             maxTime=0.05,
             gatherTurns=gatherDepth,
@@ -926,7 +942,7 @@ class BotDefense:
             if interceptingOption:
                 intOptInfo = f' {interceptingOption}'
 
-            if bot.detect_repetition(interceptingOption.path.get_first_move()):
+            if BotRepetition.detect_repetition(bot, interceptingOption.path.get_first_move()):
                 bot.info(f'DEF SOLO int BYP REP {i} incl{intOptInfo}')
                 continue
 
@@ -957,7 +973,7 @@ class BotDefense:
             bot.viewInfo.color_path(PathColorer(
                 interceptPath, 1, 1, 1,
             ))
-            bestMove = bot.get_first_path_move(interceptPath)
+            bestMove = BotPathingUtils.get_first_path_move(bot, interceptPath)
             bestInterceptingOption = interceptingOption
             bestInterceptPath = interceptPath
             bestIsDelayed = isDelayed
@@ -975,6 +991,8 @@ class BotDefense:
         army = bot.get_army_at(tile)
         shouldBypass = army.last_seen_turn < bot._map.turn - 6 and not army.tile.visible
         shouldBypass = shouldBypass or (army.tile.isCity and army.last_moved_turn < bot._map.turn - 3)
+        # NEW: Prevent interception against tiles that haven't moved in 2 turns
+        shouldBypass = shouldBypass or (army.last_moved_turn < bot._map.turn - 2)
 
         return shouldBypass
 
@@ -984,13 +1002,15 @@ class BotDefense:
         Determine whether we've let too much enemy tiles accumulate near our general,
          and it is getting out of hand and we should spend a cycle just gathering to kill them.
         """
+        from BotModules.BotCombatOps import BotCombatOps
+
         forceGatherToEnemy = False
         scaryDistance = 3
         if bot.shortest_path_to_target_player is not None:
             scaryDistance = bot.shortest_path_to_target_player.length // 3 + 2
 
         thresh = 1.3
-        numEnemyTerritoryNearGen = bot.count_enemy_territory_near_tile(bot.general, distance=scaryDistance)
+        numEnemyTerritoryNearGen = BotCombatOps.count_enemy_territory_near_tile(bot, bot.general, distance=scaryDistance)
         enemyTileNearGenRatio = numEnemyTerritoryNearGen / max(1.0, scaryDistance)
         if enemyTileNearGenRatio > thresh:
             forceGatherToEnemy = True
@@ -1001,7 +1021,7 @@ class BotDefense:
 
     @staticmethod
     def check_for_danger_tile_moves(bot) -> Move | None:
-        dangerTiles = bot.get_danger_tiles()
+        dangerTiles = BotDefense.get_danger_tiles(bot)
         if len(dangerTiles) == 0 or bot.all_in_losing_counter > 15:
             return None
 
@@ -1010,7 +1030,7 @@ class BotDefense:
             negTiles = []
             if bot.curPath is not None:
                 negTiles = [tile for tile in bot.curPath.tileSet]
-            armyToSearch = bot.get_target_army_inc_adjacent_enemy(tile)
+            armyToSearch = BotStateQueries.get_target_army_inc_adjacent_enemy(bot, tile)
             killPath = SearchUtils.dest_breadth_first_target(
                 bot._map,
                 [tile],
@@ -1024,9 +1044,9 @@ class BotDefense:
             if killPath is None:
                 continue
 
-            move = bot.get_first_path_move(killPath)
-            if bot.is_move_safe_valid(move):
-                if bot.detect_repetition(move, 4, 2):
+            move = BotPathingUtils.get_first_path_move(bot, killPath)
+            if BotPathingUtils.is_move_safe_valid(bot, move):
+                if BotRepetition.detect_repetition(bot, move, 4, 2):
                     bot.info(
                         f"Danger tile kill resulted in repetitions, fuck it. {str(tile)} {str(killPath)}")
                     return None
@@ -1075,7 +1095,8 @@ class BotDefense:
         """
         territoryDists = bot.territories.territoryDistances[bot.general.player]
 
-        enemyLaunchPoints = bot.get_target_player_possible_general_location_tiles_sorted(elimNearbyRange=5, cutoffEmergenceRatio=0.25)
+        from BotModules.BotTargeting import BotTargeting
+        enemyLaunchPoints = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=5, cutoffEmergenceRatio=0.25)
         for c in bot.targetPlayerObj.cities:
             if c.visible:
                 continue
@@ -1186,7 +1207,7 @@ class BotDefense:
                 totalNonFog += 1
                 minDistFogEmergence = min(dist, minDistFogEmergence)
 
-            zoningPenalty = 1 / (1 + bot.get_distance_from_board_center(curTile, center_ratio=0.0))
+            zoningPenalty = 1 / (1 + BotPathingUtils.get_distance_from_board_center(bot, curTile, center_ratio=0.0))
 
             dist += 1
 
@@ -1376,7 +1397,7 @@ class BotDefense:
 
         shortestSet = set()
         if targetTile is not None:
-            targetAnalysis = bot.get_army_analyzer(bot.general, targetTile)
+            targetAnalysis = ArmyAnalyzer(bot._map, bot.general, targetTile)
             shortestSet = targetAnalysis.shortestPathWay.tiles
 
         for tile in potThreat.path.tileList:
@@ -1399,14 +1420,14 @@ class BotDefense:
 
         if threatInterceptionPlan is None or len(threatInterceptionPlan.intercept_options) == 0:
             with bot.perf_timer.begin_move_event(f'def solo interception @ {threat.path.start.tile}'):
-                return bot.check_kill_threat_only_defense_interception(threat)
+                return BotDefense.check_kill_threat_only_defense_interception(bot, threat)
 
         interceptingOption: InterceptionOptionInfo | None = None
         interceptPath: TilePlanInterface | Path | None = None
-        interceptPath, interceptingOption = bot.get_defense_path_option_from_options_if_available(threatInterceptionPlan, threat)
+        interceptPath, interceptingOption = BotDefense.get_defense_path_option_from_options_if_available(bot, threatInterceptionPlan, threat)
         if interceptPath is None:
             with bot.perf_timer.begin_move_event(f'def solo interception @ {threat.path.start.tile}'):
-                return bot.check_kill_threat_only_defense_interception(threat)
+                return BotDefense.check_kill_threat_only_defense_interception(bot, threat)
 
         tookTooLong = interceptPath.length > threat.turns
         notEnoughDamageBlocked = False
@@ -1421,7 +1442,7 @@ class BotDefense:
                         f'DEF int BYP: rem ar {interceptingOption.intercepting_army_remaining}, long {"T" if tookTooLong else "F"}, notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, {interceptPath}')
                     if SearchUtils.any_where(threatInterceptionPlan.threats, lambda t: not t.path.tail.tile.isGeneral):
                         with bot.perf_timer.begin_move_event(f'def solo interception @ {threat.path.start.tile}'):
-                            return bot.check_kill_threat_only_defense_interception(threat)
+                            return BotDefense.check_kill_threat_only_defense_interception(bot, threat)
                     return None, None, None, False
 
         bot.viewInfo.color_path(PathColorer(
@@ -1430,12 +1451,12 @@ class BotDefense:
         intOptInfo = ''
         if interceptingOption:
             intOptInfo = f' {interceptingOption}'
-        mv = bot.get_first_path_move(interceptPath)
-        if bot.detect_repetition(mv, 6, 3):
+        mv = BotPathingUtils.get_first_path_move(bot, interceptPath)
+        if BotRepetition.detect_repetition(bot, mv, 6, 3):
             bot.info(f'DEF int REP SKIP... incl{intOptInfo}: long {"T" if tookTooLong else "F"}')
             bot.info(f'    notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, {interceptPath}')
             mv = None
-        elif bot.detect_repetition(mv, 4, 2):
+        elif BotRepetition.detect_repetition(bot, mv, 4, 2):
             bot.curPath = interceptPath.get_subsegment(3)
             bot.info(f'DEF int REP incl{intOptInfo}: long {"T" if tookTooLong else "F"}')
             bot.info(f'    notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, {interceptPath}')
@@ -1520,7 +1541,7 @@ class BotDefense:
             intOptInfo = f' {bestOpt}'
             bot.info(f'DEF HYBR int incl{intOptInfo}: {bestAchievedDefense:.1f}a in {bestTurns}t')
 
-            return bot.get_first_path_move(bestOpt.path), bestOpt.path, isDelayed, bestRemainingDefense
+            return BotPathingUtils.get_first_path_move(bot, bestOpt.path), bestOpt.path, isDelayed, bestRemainingDefense
 
         return None, None, False, bestRemainingDefense
 
@@ -1601,7 +1622,7 @@ class BotDefense:
     @staticmethod
     def _get_defensive_spanning_tree(bot, negativeTiles: TileSet, gatherPrioMatrix: MapMatrixInterface[float] | None = None) -> typing.Set[Tile]:
         includes = [bot.general]
-        if bot.is_2v2_teammate_still_alive():
+        if BotComms.is_2v2_teammate_still_alive(bot):
             includes.append(bot.teammate_general)
             includes.extend(bot._map.players[bot.teammate].cities)
 
@@ -1655,7 +1676,7 @@ class BotDefense:
         cycleTurn = bot.timings.get_turn_in_cycle(bot._map.turn)
         cycleTurnsLeft = bot.timings.get_turns_left_in_cycle(bot._map.turn)
 
-        pathWorth = bot.get_player_army_amount_on_path(bot.target_player_gather_path, bot.general.player)
+        pathWorth = BotStateQueries.get_player_army_amount_on_path(bot, bot.target_player_gather_path, bot.general.player)
         pushRiskTurns = max(1, cycleTurnsLeft - bot.target_player_gather_path.length)
         bot.fog_risk_amount = 0
 
@@ -1666,7 +1687,7 @@ class BotDefense:
             enGathAmt = oppStats.approximate_army_gathered_this_cycle
             bot.fog_risk_amount = fogRisk
 
-        numFog = bot.get_undiscovered_count_on_path(bot.target_player_gather_path)
+        numFog = BotPathingUtils.get_undiscovered_count_on_path(bot, bot.target_player_gather_path)
         if numFog > bot.target_player_gather_path.length // 2:
             bot.viewInfo.add_info_line(f'bypassing fog risk due to unknown path')
             return
@@ -1774,7 +1795,7 @@ class BotDefense:
 
         allowComms = threat.path.start.tile.visible
 
-        teammateSelfSavePathShort = bot.get_best_defense(
+        teammateSelfSavePathShort = BotDefense.get_best_defense(bot,
             threat.path.tail.tile,
             threat.turns - 3,
             threat.path.tileList)
@@ -1783,16 +1804,16 @@ class BotDefense:
                 f"  threatVal {threat.threatValue}, teammateSelfSavePathShort {str(teammateSelfSavePathShort)}")
             if threat.threatValue < teammateSelfSavePathShort.value:
                 if allowComms:
-                    bot.send_teammate_communication(
+                    BotComms.send_teammate_communication(bot,
                         f"|  Need {threat.threatValue} @ you in {threat.turns} moves. Expecting you to block by yourself with pinged tile.",
                         threat.path.start.tile,
                         detectionKey='allyDefense',
                         cooldown=10)
-                    bot.send_teammate_tile_ping(threat.path.tail.tile, cooldown=10)
-                    bot.send_teammate_tile_ping(teammateSelfSavePathShort.start.next.tile, cooldown=10)
+                    BotComms.send_teammate_tile_ping(bot, threat.path.tail.tile, cooldown=10)
+                    BotComms.send_teammate_tile_ping(bot, teammateSelfSavePathShort.start.next.tile, cooldown=10)
                 return False
 
-        teammateSelfSavePath = bot.get_best_defense(
+        teammateSelfSavePath = BotDefense.get_best_defense(bot,
             threat.path.tail.tile,
             threat.turns - 1,
             threat.path.tileList)
@@ -1801,38 +1822,38 @@ class BotDefense:
                 f"  threatVal {threat.threatValue}, teammateSelfSavePath {str(teammateSelfSavePath)}")
             if threat.threatValue < teammateSelfSavePath.value:
                 if allowComms:
-                    bot.send_teammate_communication(
+                    BotComms.send_teammate_communication(bot,
                         f"-- Need {threat.threatValue} @ you in {threat.turns} moves. You may barely manage. Protecting you just in case.",
                         detectionKey='allyDefenseBarely',
                         cooldown=10)
-                    bot.send_teammate_tile_ping(threat.path.tail.tile, cooldown=10)
-                    bot.send_teammate_tile_ping(teammateSelfSavePath.start.next.tile, cooldown=10)
+                    BotComms.send_teammate_tile_ping(bot, threat.path.tail.tile, cooldown=10)
+                    BotComms.send_teammate_tile_ping(bot, teammateSelfSavePath.start.next.tile, cooldown=10)
                 return True
             else:
                 if allowComms:
-                    bot.send_teammate_communication(
+                    BotComms.send_teammate_communication(bot,
                         f"---Need {threat.threatValue} @ you in {threat.turns} moves. You may be unable to save yourself by {threat.threatValue - teammateSelfSavePath.value} army, trying to help.",
                         threat.path.start.tile,
                         detectionKey='allyDefense',
                         cooldown=10)
                     if teammateSelfSavePath.start.tile.lastMovedTurn < bot._map.turn - 1:
-                        bot.send_teammate_tile_ping(teammateSelfSavePath.start.tile, cooldown=10, cooldownKey='allyDefensePing')
+                        BotComms.send_teammate_tile_ping(bot, teammateSelfSavePath.start.tile, cooldown=10, cooldownKey='allyDefensePing')
                 return True
 
         if allowComms:
-            bot.send_teammate_communication(
+            BotComms.send_teammate_communication(bot,
                 f"---Need {threat.threatValue} @ you in {threat.turns} moves. You have no defense, trying to defend you.",
                 threat.path.start.next.tile,
                 detectionKey='allyDefense',
                 cooldown=10)
-            bot.send_teammate_tile_ping(threat.path.tail.tile, cooldown=10, cooldownKey='allyDefensePing')
+            BotComms.send_teammate_tile_ping(bot, threat.path.tail.tile, cooldown=10, cooldownKey='allyDefensePing')
         return True
 
     @staticmethod
     def get_approximate_fog_risk_deficit(bot) -> int:
         cycleTurnsLeft = bot.timings.get_turns_left_in_cycle(bot._map.turn)
 
-        pathWorth = bot.get_player_army_amount_on_path(bot.target_player_gather_path, bot.general.player)
+        pathWorth = BotStateQueries.get_player_army_amount_on_path(bot, bot.target_player_gather_path, bot.general.player)
         pushRiskTurns = cycleTurnsLeft - bot.target_player_gather_path.length
         pushRiskTurns = 0
 
@@ -1850,6 +1871,9 @@ class BotDefense:
 
     @staticmethod
     def should_defend_economy(bot, defenseTiles: typing.Set[Tile]):
+        from BotModules.BotCombatOps import BotCombatOps
+        from BotModules.BotTimings import BotTimings
+
         if bot._map.remainingPlayers > 2:
             return False
         if bot.targetPlayer == -1:
@@ -1864,16 +1888,16 @@ class BotDefense:
         wasDefending = bot.defend_economy
 
         bot.defend_economy = False
-        if bot.check_should_defend_economy_based_on_large_tiles():
+        if BotDefense.check_should_defend_economy_based_on_large_tiles(bot, ):
             bot.defend_economy = True
             return True
 
-        if bot.check_should_defend_economy_based_on_cycle_behavior(defenseCriticalTileSet=defenseTiles):
+        if BotDefense.check_should_defend_economy_based_on_cycle_behavior(bot, defenseCriticalTileSet=defenseTiles):
             bot.viewInfo.add_info_line(f'DEF ECON BASED ON CYCLE BEHAVIOR')
             bot.defend_economy = True
             if not wasDefending:
                 bot.currently_forcing_out_of_play_gathers = True
-                bot.timings = bot.get_timings()
+                bot.timings = BotTimings.get_timings(bot, )
             return True
 
         if bot.timings.get_turn_in_cycle(bot._map.turn) < bot.timings.launchTiming:
@@ -1909,7 +1933,7 @@ class BotDefense:
 
                 if not bot.currently_forcing_out_of_play_gathers:
                     bot.currently_forcing_out_of_play_gathers = True
-                    bot.timings = bot.get_timings()
+                    bot.timings = BotTimings.get_timings(bot, )
 
                 return True
             else:
@@ -1927,7 +1951,7 @@ class BotDefense:
             if bot.shortest_path_to_target_player is not None:
                 pathLen = bot.shortest_path_to_target_player.length
 
-            playerArmyNearGeneral = bot.sum_friendly_army_near_or_on_tiles(bot.shortest_path_to_target_player.tileList, distance=pathLen // 4 + 1)
+            playerArmyNearGeneral = BotCombatOps.sum_friendly_army_near_or_on_tiles(bot, bot.shortest_path_to_target_player.tileList, distance=pathLen // 4 + 1)
             armyThresh = int(bot.targetPlayerObj.standingArmy ** 0.93)
             hasEnoughArmyNearGeneral = playerArmyNearGeneral > armyThresh
 
@@ -1950,9 +1974,11 @@ class BotDefense:
 
     @staticmethod
     def check_should_defend_economy_based_on_cycle_behavior(bot, defenseCriticalTileSet: typing.Set[Tile]) -> bool:
+        from BotModules.BotTargeting import BotTargeting
+
         bot.likely_kill_push = False
 
-        if bot.is_ffa_situation():
+        if BotTargeting.is_ffa_situation(bot):
             return False
 
         halfDist = bot.shortest_path_to_target_player.length - bot.shortest_path_to_target_player.length // 2
@@ -2022,7 +2048,8 @@ class BotDefense:
 
         if oppArmy + 10 - halfDist <= playerArmy:
             if oppArmy + 10 - halfDist >= playerArmy - 40 and bot.likely_kill_push:
-                bot.block_neutral_captures("likely_kill_push says capping a city would put us under safe army for the push")
+                from BotModules.BotCityOps import BotCityOps
+                BotCityOps.block_neutral_captures(bot, "likely_kill_push says capping a city would put us under safe army for the push")
             if cycleDifferential < -halfDist:
                 bot.viewInfo.add_info_line(f'OT oppArmy {oppArmy} vs {playerArmy} - gathMoveDiff {cycleDifferential}, but gathered enough that we dont care?')
             return False
@@ -2100,7 +2127,7 @@ class BotDefense:
         depth = bot.distance_from_general(bot.targetPlayerExpectedGeneralLocation)
         if depth < 9:
             depth = 9
-        if bot.is_2v2_teammate_still_alive():
+        if BotComms.is_2v2_teammate_still_alive(bot):
             depth += 5
 
         bot.oldThreat = bot.dangerAnalyzer.fastestThreat
@@ -2127,7 +2154,7 @@ class BotDefense:
         if bot.dangerAnalyzer.fastestPotentialThreat:
             bot.viewInfo.add_stats_line(f'PotThreat@{str(bot.dangerAnalyzer.fastestPotentialThreat.path.tail.tile)}: {str(bot.dangerAnalyzer.fastestPotentialThreat.path)}')
 
-        if bot.should_abandon_king_defense():
+        if BotDefense.should_abandon_king_defense(bot):
             bot.viewInfo.add_stats_line(f'skipping defense because losing on econ')
 
     @staticmethod
@@ -2185,7 +2212,8 @@ class BotDefense:
             midDist = fullDist // 2
             closestToMid = None
             closestToMidDist = 100000
-            cutoff = bot.get_median_tile_value(85) + 2
+            from BotModules.BotTargeting import BotTargeting
+            cutoff = BotTargeting.get_median_tile_value(bot, 85) + 2
             for p in bot.expansion_plan.all_paths:
                 if not isinstance(p, Path):
                     continue
@@ -2246,6 +2274,8 @@ class BotDefense:
 
     @staticmethod
     def _get_flank_vision_defense_move_internal(bot, flankThreatPath: Path, negativeTiles: typing.Set[Tile], atDist: int) -> Move | None:
+        from BotModules.BotGatherOps import BotGatherOps
+
         included = set()
         for tile in flankThreatPath.tileList[:(flankThreatPath.length * 5) // 6]:
             if tile in bot.board_analysis.flank_danger_play_area_matrix and not tile.visible and not tile.isSwamp:
@@ -2260,7 +2290,7 @@ class BotDefense:
         if len(flankThreatTiles) < flankThreatPath.length // 5 + 1:
             return None
 
-        capture_first_value_func = bot.get_capture_first_tree_move_prio_func()
+        capture_first_value_func = BotGatherOps.get_capture_first_tree_move_prio_func(bot, )
 
         move = None
         offset = 0
@@ -2268,7 +2298,8 @@ class BotDefense:
 
         while move is None and offset < maxOffs:
             gathTurns = offset + (50 - bot._map.turn) % 4
-            move, valGathered, gatherTurns, gatherNodes = bot.get_gather_to_target_tiles(
+            move, valGathered, gatherTurns, gatherNodes = BotGatherOps.get_gather_to_target_tiles(
+                bot,
                 [t for t in included],
                 maxTime=0.002,
                 gatherTurns=gathTurns,
@@ -2325,12 +2356,14 @@ class BotDefense:
 
     @staticmethod
     def find_flank_defense_move(bot, defenseCriticalTileSet: typing.Set[Tile], highPriority: bool = False) -> Move | None:
+        from BotModules.BotTargeting import BotTargeting
+
         checkPath = bot.sketchiest_potential_inbound_flank_path
 
         if bot.enemy_attack_path is not None and bot.likely_kill_push:
             bot.info(f'~~risk threat - replacing flank with risk threat BC likely_kill_push')
             checkPath = bot.enemy_attack_path.get_subsegment_excluding_trailing_visible()
-        elif bot.is_ffa_situation():
+        elif BotTargeting.is_ffa_situation(bot):
             return None
 
         checkFlank = checkPath is not None and (
@@ -2358,7 +2391,9 @@ class BotDefense:
                             startTiles.pop(t)
                     move = None
                     if len(startTiles) > 0:
-                        move, valGathered, turnsUsed, nodes = bot.get_gather_to_target_tiles(
+                        from BotModules.BotExpansionOps import BotExpansionOps
+                        move, valGathered, turnsUsed, nodes = BotGatherOps.get_gather_to_target_tiles(
+                            bot,
                             startTiles,
                             maxTime=0.002,
                             gatherTurns=turns,
@@ -2367,17 +2402,17 @@ class BotDefense:
                             useTrueValueGathered=True,
                             includeGatherTreeNodesThatGatherNegative=False,
                             maximizeArmyGatheredPerTurn=True,
-                            priorityMatrix=bot.get_expansion_weight_matrix(mult=10))
+                            priorityMatrix=BotExpansionOps.get_expansion_weight_matrix(bot, mult=10))
 
                     if move:
                         forcedHalf = False
-                        if 4 < valGathered <= move.source.army // 2 and not bot.is_move_towards_enemy(move):
+                        if 4 < valGathered <= move.source.army // 2 and not BotPathingUtils.is_move_towards_enemy(bot, move):
                             move.move_half = True
                             forcedHalf = True
                         bot.info(f'superCareful flank gath for {turns}t: {move} ({valGathered} in {turnsUsed}t). Half {forcedHalf}')
                         return move
 
-                leafMove = bot._get_vision_expanding_available_move(coreNegs, checkPath)
+                leafMove = BotDefense._get_vision_expanding_available_move(bot, coreNegs, checkPath)
                 if leafMove is not None:
                     return leafMove
 
@@ -2386,7 +2421,7 @@ class BotDefense:
         if BotStateQueries.is_still_ffa_and_non_dominant(bot):
             return None
 
-        leafMove = bot._get_vision_expanding_available_move(coreNegs, checkPath)
+        leafMove = BotDefense._get_vision_expanding_available_move(bot, coreNegs, checkPath)
         if leafMove is not None:
             return leafMove
 
@@ -2394,7 +2429,7 @@ class BotDefense:
             return None
 
         if checkFlank:
-            leafMove = bot._get_flank_defense_leafmove(checkPath, coreNegs)
+            leafMove = BotDefense._get_flank_defense_leafmove(bot, checkPath, coreNegs)
             if leafMove is not None:
                 bot.info(f'LEAF proactive flank vision defense {str(leafMove)}')
                 return leafMove
@@ -2406,7 +2441,7 @@ class BotDefense:
             for firstMove in [p.get_first_move()]
             if firstMove is not None and firstMove.source.delta.armyDelta == 0
         ])
-        flankDefMove = bot._get_flank_vision_defense_move_internal(
+        flankDefMove = BotDefense._get_flank_vision_defense_move_internal(bot,
             checkPath,
             negs,
             atDist=bot.board_analysis.within_flank_danger_play_area_threshold)
@@ -2414,7 +2449,7 @@ class BotDefense:
             bot.info(f'proactive flank vision defense {str(flankDefMove)}')
             return flankDefMove
 
-        flankDefMove = bot._get_flank_vision_defense_move_internal(
+        flankDefMove = BotDefense._get_flank_vision_defense_move_internal(bot,
             checkPath,
             coreNegs,
             atDist=bot.board_analysis.within_flank_danger_play_area_threshold)
@@ -2426,7 +2461,9 @@ class BotDefense:
 
     @staticmethod
     def check_should_defend_economy_based_on_large_tiles(bot) -> bool:
-        largeEnemyTiles = bot.find_large_tiles_near(
+        from BotModules.BotCombatOps import BotCombatOps
+        largeEnemyTiles = BotCombatOps.find_large_tiles_near(
+            bot,
             [t for t in bot.board_analysis.intergeneral_analysis.shortestPathWay.tiles],
             distance=4,
             forPlayer=bot.targetPlayer,
@@ -2435,7 +2472,8 @@ class BotDefense:
             allowGeneral=False
         )
 
-        largeFriendlyTiles = bot.find_large_tiles_near(
+        largeFriendlyTiles = BotCombatOps.find_large_tiles_near(
+            bot,
             [t for t in bot.board_analysis.intergeneral_analysis.shortestPathWay.tiles],
             distance=5,
             forPlayer=bot.general.player,

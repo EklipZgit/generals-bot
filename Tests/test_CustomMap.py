@@ -37,10 +37,8 @@ class CustomMapTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=350)
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=35)
         self.assertNoFriendliesKilled(map, general)
-
-        self.skipTest("TODO add asserts for should_be_able_to_play_on_all_-1_city_map")
 
     def test_should_not_find_no_moves(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True

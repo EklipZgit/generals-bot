@@ -324,9 +324,10 @@ class DangerAnalyzer(object):
                         include = True
                 elif includeArmiesWithThreats and army.last_seen_turn > self.map.turn - 10:
                     for path in army.expectedPaths:
-                        posPath = Path.get_positive_subsegment(path, army.player, self.map.team_ids_by_player_index)
-                        if sum(map(lambda t: 1 if self.map.is_tile_friendly(t) else 0, posPath.tileList)) > 3:
-                            include = True
+                        if path is not None:
+                            posPath = Path.get_positive_subsegment(path, army.player, self.map.team_ids_by_player_index)
+                            if sum(map(lambda t: 1 if self.map.is_tile_friendly(t) else 0, posPath.tileList)) > 3:
+                                include = True
                             break
 
                 if not include:
@@ -336,13 +337,13 @@ class DangerAnalyzer(object):
                 added = set()
                 threatList = []
                 threatLookup[threatStart] = threatList
-                if army.value > 4 and not SearchUtils.any_where(army.expectedPaths, lambda p: not p.tail.tile.isCity and not p.tail.tile.isGeneral):
+                if army.value > 4 and not SearchUtils.any_where(army.expectedPaths, lambda p: p is not None and (not p.tail.tile.isCity and not p.tail.tile.isGeneral)):
                     logbook.info(f'LOOKING FOR ADDL PATHS FOR {army} BECAUSE NO ATTACKS ON CITY OR GEN')
                     p = ArmyTracker.get_expected_enemy_expansion_path(self.map, army.tile, self.map.generals[self.map.player_index])
                     if p is not None and (p.tail.tile.isCity or p.tail.tile.isGeneral):
                         army.include_path(p)
                 for path in army.expectedPaths:
-                    if path.length <= 0:
+                    if path is None or path.length <= 0:
                         continue
                     if path.start.tile == threatStart:
                         if path.tail.tile not in added:

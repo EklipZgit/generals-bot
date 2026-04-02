@@ -394,15 +394,27 @@ class ArmyTracker(object):
         if not self.map.is_army_bonus_turn:
             return
 
+        if DebugHelper.IS_DEBUGGING:
+            logbook.info(f'FOG DEBUG: Incrementing fogged armies for army bonus turn')
+            fogArmies = [a for a in self.armies.values() if not a.tile.visible]
+            logbook.info(f'FOG DEBUG: Found {len(fogArmies)} fog armies to increment')
+
         for army in list(self.armies.values()):
             if army.tile.visible:
                 continue
 
             if army.tile.army > army.value + 1 > army.tile.army - 2:
+                if DebugHelper.IS_DEBUGGING:
+                    logbook.info(f'FOG DEBUG: Incrementing army {str(army)} from {army.value} to {army.value + 1}')
                 army.value += 1
+            else:
+                if DebugHelper.IS_DEBUGGING:
+                    logbook.info(f'FOG DEBUG: NOT incrementing army {str(army)} - army.tile.army={army.tile.army}, army.value={army.value}')
 
     def move_fogged_army_paths(self):
         armyVals = list(a for a in self.armies.values() if not a.tile.visible)
+        if DebugHelper.IS_DEBUGGING:
+            logbook.info(f"FOG DEBUG: Starting move_fogged_army_paths with {len(armyVals)} fog armies")
         for army in armyVals:
             if army.player == self.map.player_index or army.player in self.map.teammates:
                 self.scrap_army(army, scrapEntangled=False)
@@ -418,7 +430,9 @@ class ArmyTracker(object):
                 logbook.info(f'skipping army {army} as it hasnt moved and is on a city/gen')
                 continue
 
-            logbook.info(f'moving fogged army paths for {str(army)}')
+            if DebugHelper.IS_DEBUGGING:
+                logbook.info(f'FOG DEBUG: Processing fog army {str(army)} at {army.tile} with value {army.value}')
+                logbook.info(f'FOG DEBUG: Army {str(army)} has {len(army.expectedPaths)} expected paths')
 
             origTile = army.tile
             origTileArmy = army.tile.army
@@ -445,7 +459,12 @@ class ArmyTracker(object):
                     fogPathNexts[nextTile] = nextPaths
                 nextPaths.append(path)
 
+            if DebugHelper.IS_DEBUGGING:
+                logbook.info(f'FOG DEBUG: Army {str(army)} fogPathNexts: {[(str(tile), len(paths)) for tile, paths in fogPathNexts.items()]}')
+
             if len(fogPathNexts) > 1:
+                if DebugHelper.IS_DEBUGGING:
+                    logbook.info(f'FOG DEBUG: SPLITTING army {str(army)} into {len(fogPathNexts)} paths')
                 self.armies.pop(army.tile, None)
 
                 nextArmies = army.get_split_for_fog(list(fogPathNexts.keys()))
@@ -475,6 +494,8 @@ class ArmyTracker(object):
                         self.armies[nextArmy.tile] = nextArmy
 
             elif len(fogPathNexts) == 1:
+                if DebugHelper.IS_DEBUGGING:
+                    logbook.info(f'FOG DEBUG: Army {str(army)} has single path, moving normally')
                 for path in army.expectedPaths:
                     if path is not None and path.start.next is not None and path.start.next.tile.visible:
                         DebugHelper.log_in_debug_or_unit_tests(f'for army {str(army)} ignoring fog path move into visible: {str(path)}')
@@ -1564,6 +1585,8 @@ class ArmyTracker(object):
         return maxArmy
 
     def merge_armies(self, largerArmy: Army, smallerArmy: Army, finalTile: Tile, armyDict: typing.Dict[Tile, Army] | None = None):
+        if DebugHelper.IS_DEBUGGING:
+            logbook.info(f'FOG DEBUG: Merging armies - larger: {str(largerArmy)} (value {largerArmy.value}), smaller: {str(smallerArmy)} (value {smallerArmy.value}) at {finalTile}')
         self.armies.pop(largerArmy.tile, None)
         self.armies.pop(smallerArmy.tile, None)
         self.scrap_army(smallerArmy, scrapEntangled=False)
@@ -1583,6 +1606,8 @@ class ArmyTracker(object):
 
         armyDict[finalTile] = largerArmy
         largerArmy.update()
+        if DebugHelper.IS_DEBUGGING:
+            logbook.info(f'FOG DEBUG: Merge completed - final army: {str(largerArmy)} with value {largerArmy.value} at {finalTile}')
 
     def collide_armies(self, movingArmy: Army, targetArmy: Army, finalTile: Tile, armyDict: typing.Dict[Tile, Army] | None = None):
         self.armies.pop(movingArmy.tile, None)
@@ -3278,6 +3303,8 @@ class ArmyTracker(object):
             self.track_threshold = newTrackThreshold
 
     def _move_fogged_army_along_path(self, army: Army, path: Path | None, armyAlreadyPopped: bool = False):
+        if DebugHelper.IS_DEBUGGING:
+            logbook.info(f'FOG DEBUG: _move_fogged_army_along_path called for army {str(army)} path {str(path)}')
 
         isCompletePath = (
             path is None
@@ -3299,12 +3326,25 @@ class ArmyTracker(object):
 
         nextTile = path.start.next.tile
         if not nextTile.visible:
+            if DebugHelper.IS_DEBUGGING:
+                logbook.info(f'FOG DEBUG: Moving army {str(army)} from {army.tile} to fog tile {nextTile}')
+                logbook.info(f'FOG DEBUG: Before move - army.value={army.value}, army.tile.army={army.tile.army}, nextTile.army={nextTile.army}, nextTile.player={nextTile.player}')
+
+            # CRITICAL FIX: Prevent army from moving into its own tile, which causes duplication
+            if nextTile == army.tile:
+                if DebugHelper.IS_DEBUGGING:
+                    logbook.info(f'FOG DEBUG: Army {str(army)} trying to move into its own tile {nextTile}, SKIPPING to prevent duplication')
+                return
+
             try:
                 existingArmy = self.armies[nextTile]
             except KeyError:
                 existingArmy = None
             if existingArmy is not None and existingArmy == army:
                 existingArmy = None
+
+            if existingArmy is not None and DebugHelper.IS_DEBUGGING:
+                logbook.info(f'FOG DEBUG: Found existing army at destination: {str(existingArmy)}')
             # if existingArmy is not None and army in existingArmy.entangledArmies:
             #     logbook.info(
             #         f"Refusing to move army {str(army)} into entangled brother {str(existingArmy)}")
@@ -3324,6 +3364,9 @@ class ArmyTracker(object):
             if self.map.is_army_bonus_turn:
                 oldTile.army += 1
 
+            if DebugHelper.IS_DEBUGGING:
+                logbook.info(f'FOG DEBUG: Updated old tile {oldTile} army to {oldTile.army}')
+
             if existingArmy is not None:
                 if existingArmy in army.entangledArmies:
                     logbook.info(f'entangled army collided with itself, scrapping the collision-mover {str(army)} in favor of {str(existingArmy)}')
@@ -3334,8 +3377,12 @@ class ArmyTracker(object):
             #     oldTile.player = -1
             #     oldTile.army = 0
             if nextTile.player == army.player:
+                if DebugHelper.IS_DEBUGGING:
+                    logbook.info(f'FOG DEBUG: nextTile {nextTile} belongs to same player, adding {army.value} to existing {nextTile.army}')
                 nextTile.army = nextTile.army + army.value
             else:
+                if DebugHelper.IS_DEBUGGING:
+                    logbook.info(f'FOG DEBUG: nextTile {nextTile} belongs to enemy {nextTile.player}, subtracting {army.value} from existing {nextTile.army}')
                 if nextTile.player != army.player and not nextTile.discovered:
                     nextTile.isTempFogPrediction = True
                 nextTile.army = nextTile.army - army.value
@@ -3343,6 +3390,9 @@ class ArmyTracker(object):
                     nextTile.army = 0 - nextTile.army
                 if not nextTile.isGeneral:
                     nextTile.player = army.player
+
+            if DebugHelper.IS_DEBUGGING:
+                logbook.info(f'FOG DEBUG: Updated next tile {nextTile} army to {nextTile.army}, player to {nextTile.player}')
 
             if existingArmy is not None:
                 if existingArmy.player == army.player:
@@ -3354,8 +3404,12 @@ class ArmyTracker(object):
 
             army.update_tile(nextTile)
             army.value = nextTile.army - 1
+            if DebugHelper.IS_DEBUGGING:
+                logbook.info(f'FOG DEBUG: Final army update - army {str(army)} now at {army.tile} with value {army.value}')
             self.armies[nextTile] = army
             path.remove_start()
+            if DebugHelper.IS_DEBUGGING:
+                logbook.info(f'FOG DEBUG: Completed fog army movement for {str(army)}')
 
     def try_find_army_sink(
             self,

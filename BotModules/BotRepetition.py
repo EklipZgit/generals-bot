@@ -2,7 +2,6 @@ import logbook
 
 from base.client.map import Tile
 
-
 class BotRepetition:
     @staticmethod
     def detect_repetition_at_all(bot, turns=4, numReps=2) -> bool:

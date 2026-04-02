@@ -6,6 +6,10 @@ import logbook
 import Gather
 import SearchUtils
 from BotModules.BotStateQueries import BotStateQueries
+from BotModules.BotRepetition import BotRepetition
+
+from BotModules.BotPathingUtils import BotPathingUtils
+from BotModules.BotRendering import BotRendering
 from ArmyAnalyzer import ArmyAnalyzer
 from DangerAnalyzer import ThreatObj, ThreatType
 from Gather import GatherTreeNode
@@ -16,9 +20,7 @@ from MapMatrix import MapMatrix, TileSet
 from base.client.map import MapBase, Tile
 from Models.Move import Move
 
-
 GATHER_SWITCH_POINT = 150
-
 
 class BotGatherOps:
     @staticmethod
@@ -62,8 +64,9 @@ class BotGatherOps:
         tryGather = True
         player = bot._map.players[bot.general.player]
         enemyGather = False
+        from BotModules.BotDefense import BotDefense
         if (
-                bot.get_approximate_fog_risk_deficit() < 10
+                BotDefense.get_approximate_fog_risk_deficit(bot, ) < 10
                 and not bot._map.remainingPlayers > 2
                 and not bot.opponent_tracker.winning_on_economy(byRatio=1.1, cityValue=0)
         ):
@@ -71,7 +74,8 @@ class BotGatherOps:
             enemyGather = True
 
         if BotStateQueries.is_all_in(bot):
-            move = bot.try_find_flank_all_in(bot.timings.get_turns_left_in_cycle(bot._map.turn))
+            from BotModules.BotCombatOps import BotCombatOps
+            move = BotCombatOps.try_find_flank_all_in(bot, bot.timings.get_turns_left_in_cycle(bot._map.turn))
             if move is not None:
                 bot.info(f'flank all in {move}')
                 return move
@@ -164,18 +168,18 @@ class BotGatherOps:
             enemyGather = False
             neutralGather = False
 
-        if (enemyGather or neutralGather) and not bot.is_all_in() and bot._map.turn >= 150:
+        if (enemyGather or neutralGather) and not BotStateQueries.is_all_in(bot, ) and bot._map.turn >= 150:
             gathString += f" +leaf(enemy {enemyGather})"
             leafPruneStartTime = time.perf_counter()
 
             shortestLength = bot.shortest_path_to_target_player.length
-            if not bot.is_all_in() and not bot.defend_economy and enemyGather and bot._map.turn >= 150 and leafMoves and not isNonDominantFfa:
+            if not BotStateQueries.is_all_in(bot, ) and not bot.defend_economy and enemyGather and bot._map.turn >= 150 and leafMoves and not isNonDominantFfa:
                 goodLeaves = bot.board_analysis.find_flank_leaves(
                     leafMoves,
                     minAltPathCount=2,
                     maxAltLength=shortestLength + shortestLength // 3)
                 for goodLeaf in goodLeaves:
-                    bot.mark_tile(goodLeaf.dest, 255)
+                    BotRendering.mark_tile(bot, goodLeaf.dest, 255)
                     gatherNegatives.add(goodLeaf.dest)
 
             if not isNonDominantFfa:
@@ -201,8 +205,8 @@ class BotGatherOps:
                             bot.territories.territoryMap[useTile] != bot.general.player
                             and bot.territories.territoryMap[useTile] not in bot._map.teammates
                             and (
-                                bot.distance_from_target_path(leaf.source) <= bot.distance_from_target_path(leaf.dest)
-                                or bot.distance_from_target_path(leaf.source) > bot.shortest_path_to_target_player.length / 3
+                                BotPathingUtils.distance_from_target_path(bot, leaf.source) <= BotPathingUtils.distance_from_target_path(bot, leaf.dest)
+                                or BotPathingUtils.distance_from_target_path(bot, leaf.source) > bot.shortest_path_to_target_player.length / 3
                             )
                         ):
                             continue
@@ -211,9 +215,10 @@ class BotGatherOps:
 
             logbook.info(f"pruning leaves and stuff took {time.perf_counter() - leafPruneStartTime:.4f}")
 
-        forceGatherToEnemy = bot.should_force_gather_to_enemy_tiles()
+        from BotModules.BotDefense import BotDefense
+        forceGatherToEnemy = BotDefense.should_force_gather_to_enemy_tiles(bot, )
 
-        gatherPriorities = bot.get_gather_tiebreak_matrix()
+        gatherPriorities = BotGatherOps.get_gather_tiebreak_matrix(bot, )
 
         usingNeedToKill = len(needToKillTiles) > 0 and not bot.flanking and not bot.defend_economy
 
@@ -224,7 +229,7 @@ class BotGatherOps:
                     continue
 
                 if not forceGatherToEnemy:
-                    bot.mark_tile(tile, 100)
+                    BotRendering.mark_tile(bot, tile, 100)
 
                 if forceGatherToEnemy:
                     def tile_remover(curTile: Tile):
@@ -242,7 +247,8 @@ class BotGatherOps:
 
                 targetTurns = 4
                 with bot.perf_timer.begin_move_event(f'Timing Gather QE to enemy needToKill tiles depth {targetTurns}'):
-                    move = bot.timing_gather(
+                    move = BotGatherOps.timing_gather(
+                        bot,
                         needToKillTiles,
                         negCopy,
                         skipTiles=set(genPlayer.cities),
@@ -258,14 +264,14 @@ class BotGatherOps:
                         f"GATHER QE needToKill{gathString}! Gather move: {move} Duration {time.perf_counter() - gathStartTime:.4f}")
                     if not bot._map.is_player_on_team_with(move.dest.player, bot.general.player) and move.dest.player != -1:
                         bot.curPath = None
-                    return bot.move_half_on_repetition(move, 6, 4)
+                    return BotRepetition.move_half_on_repetition(bot, move, 6, 4)
                 else:
                     logbook.info("No QE needToKill gather move found")
         else:
             needToKillTiles = None
 
         with bot.perf_timer.begin_move_event(f'Timing Gather (normal / defensive)'):
-            gatherNegatives = bot.get_timing_gather_negatives_unioned(gatherNegatives)
+            gatherNegatives = BotGatherOps.get_timing_gather_negatives_unioned(bot, gatherNegatives)
 
             if bot.currently_forcing_out_of_play_gathers or bot.defend_economy:
                 if bot.currently_forcing_out_of_play_gathers:
@@ -306,7 +312,8 @@ class BotGatherOps:
                 for t in gatherTargets:
                     bot.viewInfo.add_targeted_tile(t, TargetStyle.WHITE, radiusReduction=11)
 
-            move = bot.timing_gather(
+            move = BotGatherOps.timing_gather(
+                bot,
                 [t for t in gatherTargets],
                 gatherNegatives,
                 skipTiles=None,
@@ -334,7 +341,7 @@ class BotGatherOps:
                 bot.curPath = None
             bot.info(
                 f"GATHER {gathString}! Gather move: {move} Duration {time.perf_counter() - gathStartTime:.4f}")
-            return bot.move_half_on_repetition(move, 6, 4)
+            return BotRepetition.move_half_on_repetition(bot, move, 6, 4)
         else:
             logbook.info("No gather move found")
 
@@ -367,7 +374,8 @@ class BotGatherOps:
             maximizeArmyGatheredPerTurn: bool = False
     ) -> typing.Tuple[Move | None, int, int, typing.Union[None, typing.List[GatherTreeNode]]]:
         targets = [target]
-        gatherTuple = bot.get_gather_to_target_tiles(
+        gatherTuple = BotGatherOps.get_gather_to_target_tiles(
+            bot,
             targets,
             maxTime,
             gatherTurns,
@@ -397,14 +405,15 @@ class BotGatherOps:
         turnOffset = bot._map.turn + bot.timings.offsetTurns
         turnCycleOffset = turnOffset % bot.timings.cycleTurns
 
-        gatherNodeMoveSelectorFunc = bot._get_tree_move_default_value_func()
+        gatherNodeMoveSelectorFunc = BotGatherOps._get_tree_move_default_value_func(bot, )
         if bot.likely_kill_push:
             potThreat = bot.dangerAnalyzer.fastestPotentialThreat
             if potThreat is None and bot.enemy_attack_path is not None:
                 aa = ArmyAnalyzer(bot._map, bot.enemy_attack_path.start.tile, bot.enemy_attack_path.tail.tile)
                 potThreat = ThreatObj(bot.enemy_attack_path.length, bot.enemy_attack_path.value, bot.enemy_attack_path, ThreatType.Vision, armyAnalysis=aa)
             if potThreat is not None:
-                gatherNodeMoveSelectorFunc = bot.get_defense_tree_move_prio_func(potThreat)
+                from BotModules.BotDefense import BotDefense
+                gatherNodeMoveSelectorFunc = BotDefense.get_defense_tree_move_prio_func(bot, potThreat)
 
         if force or (bot._map.turn >= 50 and turnCycleOffset < bot.timings.splitTurns and startTiles is not None and len(startTiles) > 0):
             bot.finishing_exploration = False
@@ -421,7 +430,7 @@ class BotGatherOps:
 
             if depth > GATHER_SWITCH_POINT:
                 with bot.perf_timer.begin_move_event(f"USING OLD MST GATH depth {depth}"):
-                    gatherNodes = bot.build_mst(startTiles, 1.0, depth - 1, negativeTiles)
+                    gatherNodes = BotGatherOps.build_mst(bot, startTiles, 1.0, depth - 1, negativeTiles)
                     gatherNodes = Gather.prune_mst_to_turns(
                         gatherNodes,
                         depth - 1,
@@ -429,12 +438,12 @@ class BotGatherOps:
                         preferPrune=bot.expansion_plan.preferred_tiles if bot.expansion_plan is not None else None,
                         viewInfo=bot.viewInfo if bot.info_render_gather_values else None,
                         noLog=not logStuff)
-                gatherMove = bot.get_tree_move_default(gatherNodes)
+                gatherMove = BotGatherOps.get_tree_move_default(bot, gatherNodes)
                 if gatherMove is not None:
                     bot.viewInfo.add_info_line(
                         f"OLD LEAF MST GATHER MOVE! {gatherMove.source.x},{gatherMove.source.y} -> {gatherMove.dest.x},{gatherMove.dest.y}  leafGatherDepth: {depth}")
                     bot.gatherNodes = gatherNodes
-                    return bot.move_half_on_repetition(gatherMove, 6)
+                    return BotRepetition.move_half_on_repetition(bot, gatherMove, 6)
             else:
                 skipFunc = None
                 if BotStateQueries.is_still_ffa_and_non_dominant(bot):
@@ -448,7 +457,8 @@ class BotGatherOps:
 
                 if distancePriorities is None:
                     distancePriorities = bot.board_analysis.intergeneral_analysis.bMap
-                move, value, turnsUsed, gatherNodes = bot.get_gather_to_target_tiles(
+                move, value, turnsUsed, gatherNodes = BotGatherOps.get_gather_to_target_tiles(
+                    bot,
                     startTiles,
                     0.05,
                     depth,
@@ -519,11 +529,11 @@ class BotGatherOps:
                         val = priorityMatrix[t]
                         if val:
                             bot.viewInfo.topRightGridText[t] = f'g{str(round(val, 3)).lstrip("0").replace("-0", "-")}'
-                move = bot.get_tree_move_default(bot.gatherNodes, gatherNodeMoveSelectorFunc)
+                move = BotGatherOps.get_tree_move_default(bot, bot.gatherNodes, gatherNodeMoveSelectorFunc)
                 if move is not None:
                     bot.curPath = None
-                    bot.curPath = bot.convert_gather_to_move_list_path(gatherNodes, turnsUsed, value, gatherNodeMoveSelectorFunc)
-                    return bot.move_half_on_repetition(move, 6, 4)
+                    bot.curPath = BotGatherOps.convert_gather_to_move_list_path(bot, gatherNodes, turnsUsed, value, gatherNodeMoveSelectorFunc)
+                    return BotRepetition.move_half_on_repetition(bot, move, 6, 4)
                 else:
                     logbook.info("NO MOVE WAS RETURNED FOR timing_gather?????????????????????")
         else:
@@ -594,10 +604,10 @@ class BotGatherOps:
         logbook.info(
             f"gather_to_target_tiles totalValue was {totalValue}. Setting gatherNodes for visual debugging regardless of using them")
         if totalValue > targetArmy - gatherTurns // 2:
-            move = bot.get_tree_move_default(gatherNodes, valueFunc=leafMoveSelectionValueFunc)
+            move = BotGatherOps.get_tree_move_default(bot, gatherNodes, valueFunc=leafMoveSelectionValueFunc)
             if move is not None:
                 bot.gatherNodes = gatherNodes
-                return bot.move_half_on_repetition(move, 4), totalValue, turns, gatherNodes
+                return BotRepetition.move_half_on_repetition(bot, move, 4), totalValue, turns, gatherNodes
             else:
                 logbook.info("Gather returned no moves :(")
         else:
@@ -730,7 +740,7 @@ class BotGatherOps:
         if LOG_TIME:
             logbook.info(f"BUILD-MST DURATION: {time.perf_counter() - start:.3f}")
 
-        result = bot.build_mst_rebuild(startTiles, visitedBack, bot._map.player_index)
+        result = BotGatherOps.build_mst_rebuild(bot, startTiles, visitedBack, bot._map.player_index)
 
         return result
 
@@ -738,7 +748,7 @@ class BotGatherOps:
     def build_mst_rebuild(bot, startTiles, fromMap, searchingPlayer):
         results = []
         for tile in startTiles:
-            gather = bot.get_gather_mst(tile, None, fromMap, 0, searchingPlayer)
+            gather = BotGatherOps.get_gather_mst(bot, tile, None, fromMap, 0, searchingPlayer)
             if gather.tile.player == searchingPlayer:
                 gather.value -= gather.tile.army
             else:
@@ -762,7 +772,7 @@ class BotGatherOps:
                 continue
             if fromMap.raw[move.tile_index] != tile:
                 continue
-            gather = bot.get_gather_mst(move, tile, fromMap, turn + 1, searchingPlayer)
+            gather = BotGatherOps.get_gather_mst(bot, move, tile, fromMap, turn + 1, searchingPlayer)
             if gather.value > 0:
                 gatherTotal += gather.value
                 turnTotal += gather.gatherTurns
@@ -776,7 +786,7 @@ class BotGatherOps:
     def get_tree_move_non_city_leaf_count(bot, gathers):
         count = 0
         for gather in gathers:
-            foundCity, countNonCityLeaves = bot._get_tree_move_non_city_leaf_count_recurse(gather)
+            foundCity, countNonCityLeaves = BotGatherOps._get_tree_move_non_city_leaf_count_recurse(bot, gather)
             count += countNonCityLeaves
         return count
 
@@ -785,7 +795,7 @@ class BotGatherOps:
         count = 0
         thisNodeFoundCity = False
         for child in gather.children:
-            foundCity, countNonCityLeaves = bot._get_tree_move_non_city_leaf_count_recurse(child)
+            foundCity, countNonCityLeaves = BotGatherOps._get_tree_move_non_city_leaf_count_recurse(bot, child)
             logbook.info(f"child {child.tile.toString()} foundCity {foundCity} countNonCityLeaves {countNonCityLeaves}")
             count += countNonCityLeaves
             if foundCity:
@@ -832,7 +842,7 @@ class BotGatherOps:
             pop: bool = False
     ) -> Move | None:
         if valueFunc is None:
-            valueFunc = bot._get_tree_move_default_value_func()
+            valueFunc = BotGatherOps._get_tree_move_default_value_func(bot, )
 
         move = Gather.get_tree_move(gathers, valueFunc, pop=pop)
         if move is not None and move.source.player != bot.general.player:
@@ -916,17 +926,17 @@ class BotGatherOps:
                 bot.info(
                     f"pcst gath achieved {totalValue} turns {gathCapPlan.gather_turns} (target turns {gatherTurns})")
                 if totalValue > targetArmy - gatherTurns // 2:
-                    move = bot.get_tree_move_default(gatherNodes, valueFunc=leafMoveSelectionValueFunc)
+                    move = BotGatherOps.get_tree_move_default(bot, gatherNodes, valueFunc=leafMoveSelectionValueFunc)
                     if move is not None:
                         bot.gatherNodes = gatherNodes
-                        return bot.move_half_on_repetition(move, 4), totalValue, turns, gatherNodes
+                        return BotRepetition.move_half_on_repetition(bot, move, 4), totalValue, turns, gatherNodes
                     else:
                         logbook.info("Gather returned no moves :(")
                 else:
                     logbook.info(f"Value {totalValue} was too small to return... (needed {targetArmy}) :(")
         elif gatherTurns > GATHER_SWITCH_POINT:
             logbook.info(f"    gather_to_target_tiles  USING OLD GATHER DUE TO gatherTurns {gatherTurns}")
-            gatherNodes = bot.build_mst(targets, maxTime, gatherTurns - 1, negativeSet)
+            gatherNodes = BotGatherOps.build_mst(bot, targets, maxTime, gatherTurns - 1, negativeSet)
             gatherNodes = Gather.prune_mst_to_turns(
                 gatherNodes,
                 gatherTurns - 1,
@@ -944,7 +954,7 @@ class BotGatherOps:
                     preferPrune=bot.expansion_plan.preferred_tiles if bot.expansion_plan is not None else None,
                     viewInfo=bot.viewInfo if bot.info_render_gather_values else None)
 
-            gatherMove = bot.get_tree_move_default(gatherNodes, valueFunc=leafMoveSelectionValueFunc)
+            gatherMove = BotGatherOps.get_tree_move_default(bot, gatherNodes, valueFunc=leafMoveSelectionValueFunc)
             value = 0
             turns = 0
             for node in gatherNodes:
@@ -954,14 +964,15 @@ class BotGatherOps:
                 bot.info(
                     f"gather_to_target_tiles OLD GATHER {gatherMove.source.toString()} -> {gatherMove.dest.toString()}  gatherTurns: {gatherTurns}")
                 bot.gatherNodes = gatherNodes
-                return bot.move_half_on_repetition(gatherMove, 6), value, turns, gatherNodes
+                return BotRepetition.move_half_on_repetition(bot, gatherMove, 6), value, turns, gatherNodes
         else:
             if additionalIncrement != 0 and targetArmy > 0:
                 targetArmy = targetArmy + additionalIncrement * gatherTurns // 2
             if bot.gather_use_max_set and not isinstance(targets, dict):
                 with bot.perf_timer.begin_move_event(f'gath_max_set {gatherTurns}t'):
-                    gatherMatrix = bot.get_gather_tiebreak_matrix()
-                    captureMatrix = bot.get_expansion_weight_matrix()
+                    gatherMatrix = BotGatherOps.get_gather_tiebreak_matrix(bot, )
+                    from BotModules.BotExpansionOps import BotExpansionOps
+                    captureMatrix = BotExpansionOps.get_expansion_weight_matrix(bot, )
                     valueMatrix = Gather.build_gather_capture_pure_value_matrix(
                         bot._map,
                         bot.general.player,
@@ -1032,10 +1043,10 @@ class BotGatherOps:
             logbook.info(
                 f"gather_to_target_tiles totalValue was {totalValue}. Setting gatherNodes for visual debugging regardless of using them")
             if totalValue > targetArmy - gatherTurns // 2:
-                move = bot.get_tree_move_default(gatherNodes, valueFunc=leafMoveSelectionValueFunc)
+                move = BotGatherOps.get_tree_move_default(bot, gatherNodes, valueFunc=leafMoveSelectionValueFunc)
                 if move is not None:
                     bot.gatherNodes = gatherNodes
-                    return bot.move_half_on_repetition(move, 4), totalValue, turns, gatherNodes
+                    return BotRepetition.move_half_on_repetition(bot, move, 4), totalValue, turns, gatherNodes
                 else:
                     logbook.info("Gather returned no moves :(")
             else:
@@ -1088,12 +1099,94 @@ class BotGatherOps:
         logbook.info(
             f"gather_to_target_tiles totalValue was {totalValue}. Setting gatherNodes for visual debugging regardless of using them")
         if totalValue > targetArmy:
-            move = bot.get_tree_move_default(gatherNodes, valueFunc=valueFunc)
+            move = BotGatherOps.get_tree_move_default(bot, gatherNodes, valueFunc=valueFunc)
             if move is not None:
                 bot.gatherNodes = gatherNodes
-                return bot.move_half_on_repetition(move, 4), totalValue, turns, gatherNodes
+                return BotRepetition.move_half_on_repetition(bot, move, 4), totalValue, turns, gatherNodes
             else:
                 logbook.info("Gather returned no moves :(")
         else:
             logbook.info(f"Value {totalValue} was too small to return... (needed {targetArmy}) :(")
         return None, -1, -1, None
+
+    @staticmethod
+    def get_timing_gather_negatives_unioned(
+            bot,
+            gatherNegatives: typing.Set[Tile],
+            additional_offset: int = 0,
+            forceAllowCities: bool = False,
+    ) -> typing.Set[Tile]:
+        from BotModules.BotTargeting import BotTargeting
+
+        if not forceAllowCities:
+            gatherNegatives = gatherNegatives.union(bot.cities_gathered_this_cycle)
+
+        if BotStateQueries.is_all_in(bot):
+            return gatherNegatives
+
+        if BotTargeting.is_ffa_situation(bot) and bot.player.tileCount < 65:
+            return gatherNegatives
+
+        gatherNegatives.update(bot.win_condition_analyzer.defend_cities)
+
+        if bot.currently_forcing_out_of_play_gathers or bot.defend_economy:
+            return gatherNegatives
+
+        if bot.gather_include_shortest_pathway_as_negatives:
+            gatherNegatives = gatherNegatives.union(bot.board_analysis.intergeneral_analysis.shortestPathWay.tiles)
+
+        armyCutoff = int(bot._map.players[bot.general.player].standingArmy ** 0.5)
+
+        def foreach_func(tile: Tile):
+            if tile in bot.tiles_gathered_to_this_cycle:
+                return
+
+            if not bot._map.is_tile_friendly(tile):
+                return
+
+            if tile.army > armyCutoff:
+                return
+
+            gatherNegatives.add(tile)
+
+        if bot.gather_include_distance_from_enemy_general_as_negatives > 0:
+            ratio = bot.gather_include_distance_from_enemy_general_large_map_as_negatives
+            if bot.targetPlayerObj.tileCount < 150:
+                ratio = bot.gather_include_distance_from_enemy_general_as_negatives
+            excludeDist = int(bot.shortest_path_to_target_player.length * ratio)
+
+            excludeDist += additional_offset
+
+            SearchUtils.breadth_first_foreach(
+                bot._map,
+                [bot.targetPlayerExpectedGeneralLocation],
+                maxDepth=excludeDist,
+                foreachFunc=foreach_func,
+            )
+
+        if bot.gather_include_distance_from_enemy_TERRITORY_as_negatives > 0 and bot.targetPlayer != -1:
+            excludeDist = bot.gather_include_distance_from_enemy_TERRITORY_as_negatives + additional_offset
+
+            startTiles = [t for t in bot._map.get_all_tiles() if bot.territories.territoryMap[t] == bot.targetPlayer]
+
+            SearchUtils.breadth_first_foreach(
+                bot._map,
+                startTiles,
+                maxDepth=excludeDist,
+                foreachFunc=foreach_func,
+            )
+
+        if bot.gather_include_distance_from_enemy_TILES_as_negatives > 0 and bot.targetPlayer != -1:
+            excludeDist = bot.gather_include_distance_from_enemy_TILES_as_negatives
+
+            startTiles = [t for t in bot._map.get_all_tiles() if t.player == bot.targetPlayer and not bot._map.is_player_on_team_with(bot.territories.territoryMap[t], bot.general.player)]
+
+            if len(startTiles) > 0:
+                SearchUtils.breadth_first_foreach(
+                    bot._map,
+                    startTiles,
+                    maxDepth=excludeDist,
+                    foreachFunc=foreach_func,
+                )
+
+        return gatherNegatives

@@ -7,6 +7,7 @@ import logbook
 import Gather
 import SearchUtils
 from Algorithms import MapSpanningUtils
+from Gather import GatherDebug
 from Models import Move
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost, GameSimulator
@@ -2525,4 +2526,26 @@ a1   b1   b1   bG1
         self.assertEqual(frTo, frFrom.delta.toTile)
         self.assertEqual(frFrom, frTo.delta.fromTile)
         self.assertEqual(enTo, frTo.delta.toTile)
-        self.assertEqual(frTo, enTo.delta.fromTile)
+        self.assertEqual(frTo, enTo.delta.fromTile)    
+    def test_should_not_invent_fog_armies_and_start_duplicating_them_against_each_other(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_invent_fog_armies_and_start_duplicating_them_against_each_other___ScnFBq__v---1--299.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 299, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=299)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '18,10->18,9  None  None  None  19,9->19,8')
+        simHost.queue_player_moves_str(general.player, '7,4->6,4  None  None  13,10->15,10')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertLess(playerMap.GetTile(17, 10).army, 11)
+        self.assertLess(playerMap.GetTile(17, 11).army, 11)
+        self.assertLess(playerMap.GetTile(18, 10).army, 11)
+        self.assertLess(playerMap.GetTile(18, 11).army, 11)

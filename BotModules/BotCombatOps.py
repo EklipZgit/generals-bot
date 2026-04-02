@@ -2,11 +2,22 @@ import typing
 import time
 
 import logbook
+import DebugHelper
+
 
 from Algorithms import MapSpanningUtils
 import SearchUtils
 from Algorithms import WatchmanRouteUtils
 from BotModules.BotStateQueries import BotStateQueries
+from BotModules.BotTargeting import BotTargeting
+from BotModules.BotDefense import BotDefense
+
+from BotModules.BotComms import BotComms
+from BotModules.BotGatherOps import BotGatherOps
+from BotModules.BotPathingUtils import BotPathingUtils
+from BotModules.BotRendering import BotRendering
+from BotModules.BotRepetition import BotRepetition
+from BotModules.BotTimings import BotTimings
 from Army import Army
 from ArmyEngine import ArmyEngine
 from ArmyEngine import ArmySimResult
@@ -20,17 +31,18 @@ from Models.Move import Move
 from base.client.map import Tile
 from DangerAnalyzer import ThreatType, ThreatObj
 
-
 class BotCombatOps:
     @staticmethod
     def check_for_king_kills_and_races(bot, threat: ThreatObj | None, force: bool = False) -> typing.Tuple[Move | None, Path | None, float]:
+        from BotModules.BotTargeting import BotTargeting
+
         kingKillPath = None
         kingKillChance = 0.0
         alwaysCheckKingKillWithinRange = 5
         if bot.is_all_in_losing and not bot.all_in_city_behind:
             alwaysCheckKingKillWithinRange = 7
 
-        if bot.is_ffa_situation():
+        if BotTargeting.is_ffa_situation(bot):
             alwaysCheckKingKillWithinRange += 3
 
         extraTurnOnPriority = 0
@@ -104,7 +116,7 @@ class BotCombatOps:
 
             if not enemyGeneral.visible:
                 defTurns = 0
-                optTargetArmy = bot.determine_fog_defense_amount_available_for_tiles(altEnGenPositions, enPlayer, fogDefenseTurns=defTurns, fogReachTurns=5)
+                optTargetArmy = BotDefense.determine_fog_defense_amount_available_for_tiles(bot, altEnGenPositions, enPlayer, fogDefenseTurns=defTurns, fogReachTurns=5)
                 newTargetArmyOption = optTargetArmy
 
                 if enemyGeneral.isGeneral:
@@ -121,7 +133,7 @@ class BotCombatOps:
 
             if not enemyGeneral.isGeneral:
                 addlIncrement += 0.5
-                if not bot.is_ffa_situation():
+                if not BotTargeting.is_ffa_situation(bot):
                     thisPlayerDepth = max(3, thisPlayerDepth - 5)
 
             qkDist = 8
@@ -181,7 +193,7 @@ class BotCombatOps:
                             with bot.perf_timer.begin_move_event(f'QK WRP {startTile} tgA {cutoffKillArmy}'):
                                 maxTime = 0.020
 
-                                toReveal = bot.get_target_player_possible_general_location_tiles_sorted(elimNearbyRange=0, player=bot.targetPlayer, cutoffEmergenceRatio=cutoffEmergence, includeCities=False)
+                                toReveal = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=0, player=bot.targetPlayer, cutoffEmergenceRatio=cutoffEmergence, includeCities=False)
 
                                 wrpPath = WatchmanRouteUtils.get_watchman_path(
                                     bot._map,
@@ -211,12 +223,12 @@ class BotCombatOps:
                                 if quickKill != wrpPath:
                                     bot.viewInfo.add_info_line(f'skipped QK wrpPath (addl {additionalKillDist}) was {wrpPath}')
 
-                        killRaceChance = bot.get_kill_race_chance(quickKill, enGenProbabilityCutoff=cutoffEmergence + 0.1, turnsToDeath=turnsToDeath, cutoffKillArmy=cutoffKillArmy)
+                        killRaceChance = BotCombatOps.get_kill_race_chance(bot, quickKill, enGenProbabilityCutoff=cutoffEmergence + 0.1, turnsToDeath=turnsToDeath, cutoffKillArmy=cutoffKillArmy)
                         if threat is None or not threatIsGeneralKill or killRaceChance >= killRaceCutoff:
                             bot.info(f"QK {quickKill.value} {quickKill.length}t kill race chance {killRaceChance:.3f} > {killRaceCutoff:.2f} with cutoffKillArmy {cutoffKillArmy} in {maxEnDefTurns}t +{additionalKillDist} (turns to death {turnsToDeath}) :^)")
                             bot.viewInfo.color_path(PathColorer(quickKill, 255, 240, 79, 244, 5, 200))
                             move = Move(quickKill.start.tile, quickKill.start.next.tile)
-                            if bot.is_move_safe_valid(move):
+                            if BotPathingUtils.is_move_safe_valid(bot, move):
                                 bot.curPath = None
                                 if quickKill.start.next.tile.isCity:
                                     bot.curPath = quickKill
@@ -238,7 +250,7 @@ class BotCombatOps:
                     else:
                         logbook.info(f" ---quick-kill path val {quickKill.value} < {cutoffKillArmy} in {maxEnDefTurns}t {quickKill.length}t+{additionalKillDist}t @enemy king. Low val. {str(quickKill)}")
 
-            if not enemyGeneral.isGeneral and not bot.is_ffa_situation() and len(altEnGenPositions) > 2:
+            if not enemyGeneral.isGeneral and not BotTargeting.is_ffa_situation(bot) and len(altEnGenPositions) > 2:
                 continue
 
             logbook.info(
@@ -249,25 +261,25 @@ class BotCombatOps:
                     enemyNegTiles = []
                     if threat is not None:
                         enemyNegTiles.append(threat.path.start.tile)
-                    enemySavePath = bot.get_best_defense(enemyGeneral, depth - 1, enemyNegTiles)
+                    enemySavePath = BotDefense.get_best_defense(bot, enemyGeneral, depth - 1, enemyNegTiles)
                     defTurnsLeft = depth - 1
                     depthTargetArmy = targetArmy
                     if enemySavePath is not None:
                         defTurnsLeft -= enemySavePath.length
                         depthTargetArmy = max(enemySavePath.value + nonGenArmy, depthTargetArmy)
                         if not enemyGeneral.visible:
-                            depthTargetArmy = max(depthTargetArmy, enemySavePath.value + nonGenArmy + bot.determine_fog_defense_amount_available_for_tiles(altEnGenPositions, enPlayer, fogDefenseTurns=defTurnsLeft))
+                            depthTargetArmy = max(depthTargetArmy, enemySavePath.value + nonGenArmy + BotDefense.determine_fog_defense_amount_available_for_tiles(bot, altEnGenPositions, enPlayer, fogDefenseTurns=defTurnsLeft))
                         logbook.info(f"  targetArmy {targetArmy}, enemySavePath {enemySavePath.toString()}")
                         attackNegTiles = enemySavePath.tileSet.copy()
                         attackNegTiles.remove(enemyGeneral)
 
                     if not enemyGeneral.visible:
-                        depthTargetArmy = max(depthTargetArmy, bot.determine_fog_defense_amount_available_for_tiles(altEnGenPositions, enPlayer, fogDefenseTurns=depth - 1))
+                        depthTargetArmy = max(depthTargetArmy, BotDefense.determine_fog_defense_amount_available_for_tiles(bot, altEnGenPositions, enPlayer, fogDefenseTurns=depth - 1))
 
                     logbook.info(f"  targetArmy to add to enemyGeneral kill = {depthTargetArmy}")
                     shouldPrioritizeTileCaps = (
-                            not bot.is_all_in()
-                            and not bot.is_ffa_situation()
+                            not BotStateQueries.is_all_in(bot)
+                            and not BotTargeting.is_ffa_situation(bot)
                             and (threat is None or threat.threatType != ThreatType.Kill)
                     )
                     killPath = SearchUtils.dest_breadth_first_target(
@@ -286,7 +298,7 @@ class BotCombatOps:
                     if killPath is not None and killPath.length > 0:
                         killChance = 0.0
                         if killPath and threatIsGeneralKill:
-                            killChance = bot.get_kill_race_chance(killPath, enGenProbabilityCutoff=0.3, turnsToDeath=turnsToDeath)
+                            killChance = BotCombatOps.get_kill_race_chance(bot, killPath, enGenProbabilityCutoff=0.3, turnsToDeath=turnsToDeath)
                         logbook.info(f"    depth {depth} path found to kill enemy king? {str(killPath)}")
                         if threat is None or threat.threatType != ThreatType.Kill or (threatDistCutoff >= killPath.length and killChance > killRaceCutoff):
                             logbook.info(f"    DEST BFS K found kill path length {killPath.length} :^)")
@@ -295,7 +307,7 @@ class BotCombatOps:
                             bot.curPath = None
                             if killPath.start.next.tile.isCity:
                                 bot.curPath = killPath
-                            if bot.is_move_safe_valid(move):
+                            if BotPathingUtils.is_move_safe_valid(bot, move):
                                 bot.viewInfo.infoText = f"Depth increasing Killpath against general length {killPath.length}"
                                 return move, killPath, killChance
                         elif killChance > kingKillChance:
@@ -309,7 +321,7 @@ class BotCombatOps:
                                 logbook.info("      saving above kingKillPath as backup in case we can't defend threat")
                                 kingKillPath = killPath
 
-                rangeBasedOnDistance = int(bot.distance_from_general(bot.targetPlayerExpectedGeneralLocation) // 3 - 1)
+                rangeBasedOnDistance = int(BotPathingUtils.distance_from_general(bot, bot.targetPlayerExpectedGeneralLocation) // 3 - 1)
                 additionalKillArmyRequirement = 0
                 if not enemyGeneral.isGeneral:
                     additionalKillArmyRequirement = bot.opponent_tracker.get_approximate_fog_army_risk(enPlayer, cityLimit=None, inTurns=0)
@@ -317,16 +329,16 @@ class BotCombatOps:
 
                 if not force and (not bot.opponent_tracker.winning_on_army(byRatio=1.3)
                                   and not bot.opponent_tracker.winning_on_army(byRatio=1.3, againstPlayer=bot.targetPlayer)
-                                  and not bot.is_all_in()
+                                  and not BotStateQueries.is_all_in(bot)
                                   and not enemyGeneral.visible):
-                    rangeBasedOnDistance = int(bot.distance_from_general(bot.targetPlayerExpectedGeneralLocation) // 4 - 1)
+                    rangeBasedOnDistance = int(BotPathingUtils.distance_from_general(bot, bot.targetPlayerExpectedGeneralLocation) // 4 - 1)
 
                     additionalKillArmyRequirement = bot.opponent_tracker.get_approximate_fog_army_risk(enPlayer, cityLimit=None, inTurns=3)
                     logbook.info(f'additional kill army requirement is currently {additionalKillArmyRequirement}')
 
                 depth = max(alwaysCheckKingKillWithinRange, rangeBasedOnDistance)
 
-                if bot.is_all_in_losing or bot.is_ffa_situation():
+                if bot.is_all_in_losing or BotTargeting.is_ffa_situation(bot):
                     depth += 5
 
                 logbook.info(f"Performing depth {depth} BFS kill search on enemy kings")
@@ -334,14 +346,14 @@ class BotCombatOps:
                 killPath = SearchUtils.dest_breadth_first_target(bot._map, altEnGenPositions, fullKillReq, 0.05, depth, attackNegTiles, bot.general.player, False, 3)
                 killChance = 0.0
                 if killPath:
-                    killChance = bot.get_kill_race_chance(killPath, enGenProbabilityCutoff=0.3, turnsToDeath=turnsToDeath)
+                    killChance = BotCombatOps.get_kill_race_chance(bot, killPath, enGenProbabilityCutoff=0.3, turnsToDeath=turnsToDeath)
                 if (killPath is not None and killPath.length >= 0) and (threat is None or threat.threatType != ThreatType.Kill or (threatDistCutoff >= killPath.length and killChance > killRaceCutoff)):
                     logbook.info(f"DBFT d{depth} for {fullKillReq}a found kill path length {killPath.length} :^)")
                     bot.curPath = None
                     bot.viewInfo.color_path(PathColorer(killPath, 200, 100, 0))
                     move = Move(killPath.start.tile, killPath.start.next.tile)
 
-                    if bot.is_move_safe_valid(move):
+                    if BotPathingUtils.is_move_safe_valid(bot, move):
                         bot.info(f"DBFT d{depth} K for {fullKillReq}a: {killPath.length}t {killPath.value}v  (a = tg{targetArmy} + addl{additionalKillArmyRequirement}) force {str(force)[0]}")
                         return move, killPath, killChance
 
@@ -357,7 +369,7 @@ class BotCombatOps:
 
                         kingKillPath = killPath
 
-            if bot.is_ffa_situation():
+            if BotTargeting.is_ffa_situation(bot):
                 tiles = bot.largeTilesNearEnemyKings[enemyGeneral]
                 if len(tiles) > 0:
                     logbook.info(f"Attempting to find A_STAR kill path against general {enemyGeneral.player} ({enemyGeneral})")
@@ -369,15 +381,15 @@ class BotCombatOps:
                         tiles,
                         targets,
                         0.03,
-                        bot.distance_from_general(bot.targetPlayerExpectedGeneralLocation) // 4,
+                        BotPathingUtils.distance_from_general(bot, bot.targetPlayerExpectedGeneralLocation) // 4,
                         requireExtraArmy=targetArmy + additionalKillArmyRequirement,
                         negativeTiles=attackNegTiles)
 
                     killChance = 0.0
                     if killPath:
-                        killChance = bot.get_kill_race_chance(killPath, enGenProbabilityCutoff=0.3, turnsToDeath=turnsToDeath)
+                        killChance = BotCombatOps.get_kill_race_chance(bot, killPath, enGenProbabilityCutoff=0.3, turnsToDeath=turnsToDeath)
 
-                    if (path is not None and path.length >= 0) and (threat is None or threat.threatType != ThreatType.Kill or ((threatDistCutoff >= path.length or bot.is_all_in()) and threat.threatPlayer == enemyGeneral.player and killChance > killRaceCutoff)):
+                    if (path is not None and path.length >= 0) and (threat is None or threat.threatType != ThreatType.Kill or ((threatDistCutoff >= path.length or BotStateQueries.is_all_in(bot)) and threat.threatPlayer == enemyGeneral.player and killChance > killRaceCutoff)):
                         logbook.info(f"  A_STAR found kill path length {path.length} :^)")
                         bot.viewInfo.color_path(PathColorer(path, 174, 4, 214, 255, 10, 200))
                         bot.curPath = path.get_subsegment(2)
@@ -412,7 +424,7 @@ class BotCombatOps:
             enemyArmyTile,
             friendlyHasKillThreat=friendlyHasKillThreat)
         if friendlyPath is not None and friendlyPath.length > 0:
-            firstPathMove = bot.get_first_path_move(friendlyPath)
+            firstPathMove = BotPathingUtils.get_first_path_move(bot, friendlyPath)
             if (
                     firstPathMove
                     and not result.best_result_state.captured_by_enemy
@@ -432,11 +444,11 @@ class BotCombatOps:
         if againstPlayer is None:
             againstPlayer = bot.targetPlayer
 
-        toReveal = bot.get_target_player_possible_general_location_tiles_sorted(elimNearbyRange=0, player=againstPlayer, cutoffEmergenceRatio=enGenProbabilityCutoff, includeCities=False)
+        toReveal = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=0, player=againstPlayer, cutoffEmergenceRatio=enGenProbabilityCutoff, includeCities=False)
         if not toReveal:
             return 0.0
         for t in toReveal:
-            bot.mark_tile(t, alpha=50)
+            BotRendering.mark_tile(bot, t, alpha=50)
 
         isOnlyOneSpot = toReveal[0].isGeneral
 
@@ -526,11 +538,11 @@ class BotCombatOps:
 
     @staticmethod
     def get_all_in_move(bot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
-        if bot.is_all_in():
+        if BotStateQueries.is_all_in(bot, ):
             hitGeneralInTurns = bot.all_in_army_advantage_cycle - bot.all_in_army_advantage_counter % bot.all_in_army_advantage_cycle
             if bot.is_all_in_army_advantage and bot.targetPlayerObj.tileCount < 90:
                 hitGeneralInTurns = hitGeneralInTurns % 25 + 5
-            flankAllInMove = bot.try_find_flank_all_in(hitGeneralInTurns)
+            flankAllInMove = BotCombatOps.try_find_flank_all_in(bot, hitGeneralInTurns)
 
             if flankAllInMove:
                 bot.all_in_army_advantage_counter += 1
@@ -542,7 +554,7 @@ class BotCombatOps:
 
             if not bot.targetPlayerExpectedGeneralLocation.isGeneral:
                 andTargs = f' (and undisc)'
-                emergenceTiles = bot.get_target_player_possible_general_location_tiles_sorted(elimNearbyRange=5, cutoffEmergenceRatio=0.6)[0:3]
+                emergenceTiles = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=5, cutoffEmergenceRatio=0.6)[0:3]
                 targets = emergenceTiles[0:5]
                 for t in targets:
                     bot.viewInfo.add_targeted_tile(t, TargetStyle.WHITE)
@@ -577,7 +589,7 @@ class BotCombatOps:
                     useTrueValueGathered=True,
                     includeGatherPriorityAsEconValues=True,
                     includeCapturePriorityAsEconValues=True,
-                    timeLimit=min(0.075, bot.get_remaining_move_time()),
+                    timeLimit=min(0.075, BotTimings.get_remaining_move_time(bot, )),
                     logDebug=False,
                     viewInfo=bot.viewInfo if bot.info_render_gather_values else None)
                 if gathCapPlan is None:
@@ -590,10 +602,10 @@ class BotCombatOps:
             if move is not None:
                 bot.info(msg)
                 if hitGeneralInTurns > 15 and not bot.is_winning_gather_cyclic and not bot.is_all_in_army_advantage:
-                    bot.send_teammate_communication(f'All in here, hit in {hitGeneralInTurns} moves', detectionKey='allInAtGenTargets', cooldown=10)
+                    BotComms.send_teammate_communication(bot, f'All in here, hit in {hitGeneralInTurns} moves', detectionKey='allInAtGenTargets', cooldown=10)
 
                 for target in targets:
-                    bot.send_teammate_tile_ping(target, cooldown=25, cooldownKey=f'allIn{str(target)}')
+                    BotComms.send_teammate_tile_ping(bot, target, cooldown=25, cooldownKey=f'allIn{str(target)}')
 
                 bot.all_in_army_advantage_counter += 1
                 bot.gatherNodes = gathCapPlan.root_nodes
@@ -611,41 +623,43 @@ class BotCombatOps:
             friendlyHasKillThreat: bool | None = None,
             friendlyPrecomputePaths: typing.List[Move | None] | None = None
     ) -> ArmySimResult:
-        frArmies = [bot.get_army_at(friendlyArmyTile)]
-        enArmies = [bot.get_army_at(enemyArmyTile)]
+        frArmies = [BotStateQueries.get_army_at(bot, friendlyArmyTile)]
+        enArmies = [BotStateQueries.get_army_at(bot, enemyArmyTile)]
 
         if bot.engine_use_mcts and bot.engine_force_multi_tile_mcts:
-            frTiles = bot.find_large_tiles_near(
-                fromTiles=[friendlyArmyTile, enemyArmyTile],
-                distance=bot.engine_army_nearby_tiles_range,
-                forPlayer=bot.general.player,
-                allowGeneral=True,
-                limit=bot.engine_mcts_scrim_armies_per_player_limit,
-                minArmy=6,
-            )
-            enTiles = bot.find_large_tiles_near(
-                fromTiles=[friendlyArmyTile, enemyArmyTile],
-                distance=bot.engine_army_nearby_tiles_range,
-                forPlayer=enemyArmyTile.player,
-                allowGeneral=True,
-                limit=bot.engine_mcts_scrim_armies_per_player_limit - 1,
-                minArmy=6,
-            )
+            # frTiles = bot.find_large_tiles_near(
+            #     fromTiles=[friendlyArmyTile, enemyArmyTile],
+            #     distance=bot.engine_army_nearby_tiles_range,
+            #     forPlayer=bot.general.player,
+            #     allowGeneral=True,
+            #     limit=bot.engine_mcts_scrim_armies_per_player_limit,
+            #     minArmy=6,
+            # )
+            frTiles = []
+            # enTiles = bot.find_large_tiles_near(
+            #     fromTiles=[friendlyArmyTile, enemyArmyTile],
+            #     distance=bot.engine_army_nearby_tiles_range,
+            #     forPlayer=enemyArmyTile.player,
+            #     allowGeneral=True,
+            #     limit=bot.engine_mcts_scrim_armies_per_player_limit - 1,
+            #     minArmy=6,
+            # )
+            enTiles = []
 
             for frTile in frTiles:
                 if frTile != friendlyArmyTile:
-                    frArmies.append(bot.get_army_at(frTile))
+                    frArmies.append(BotStateQueries.get_army_at(bot, frTile))
                     bot.viewInfo.add_targeted_tile(frTile, TargetStyle.TEAL)
 
             for enTile in enTiles:
                 if enTile != enemyArmyTile:
-                    enArmies.append(bot.get_army_at(enTile))
+                    enArmies.append(BotStateQueries.get_army_at(bot, enTile))
                     bot.viewInfo.add_targeted_tile(enTile, TargetStyle.PURPLE)
 
             lastMove: Move | None = bot.armyTracker.lastMove
             if bot.engine_always_include_last_move_tile_in_scrims and lastMove is not None:
                 if lastMove.dest.player == bot.general.player and lastMove.dest.army > 1:
-                    lastMoveArmy = bot.get_army_at(lastMove.dest)
+                    lastMoveArmy = BotStateQueries.get_army_at(bot, lastMove.dest)
                     if lastMoveArmy not in frArmies:
                         frArmies.append(lastMoveArmy)
 
@@ -671,8 +685,10 @@ class BotCombatOps:
             time_limit: float = 0.05,
             friendlyPrecomputePaths: typing.List[Move | None] | None = None
     ) -> ArmySimResult:
+        if len(friendlyArmies) == 0 or len(enemyArmies) == 0:
+            return ArmySimResult()
 
-        result = bot.get_scrim_cached(friendlyArmies, enemyArmies)
+        result = BotCombatOps.get_scrim_cached(bot, friendlyArmies, enemyArmies)
         if result is not None:
             bot.info(
                 f'  ScC {"+".join([str(a.tile) for a in friendlyArmies])}@{"+".join([str(a.tile) for a in enemyArmies])}: {str(result)} {repr(result.expected_best_moves)}')
@@ -689,7 +705,7 @@ class BotCombatOps:
                     [friendlyArmyTile],
                     targets,
                     0.03,
-                    bot.distance_from_general(bot.targetPlayerExpectedGeneralLocation) // 3,
+                    BotPathingUtils.distance_from_general(bot, bot.targetPlayerExpectedGeneralLocation) // 3,
                     # self.general_safe_func_set,
                     requireExtraArmy=5 if bot.targetPlayerExpectedGeneralLocation.isGeneral else 20,
                     negativeTiles=set([a.tile for a in enemyArmies]))
@@ -759,14 +775,14 @@ class BotCombatOps:
                 engine.time_limit = 0.02
 
         engine.friendly_has_kill_threat = friendlyHasKillThreat
-        engine.enemy_has_kill_threat = enemyHasKillThreat and not bot.should_abandon_king_defense()
+        engine.enemy_has_kill_threat = enemyHasKillThreat and not BotDefense.should_abandon_king_defense(bot, )
         if bot.disable_engine:
             depth = 0
             engine.time_limit = 0.00001
 
         result = engine.scan(depth, noThrow=True, mcts=bot.engine_use_mcts)
         bot.info(f' Scr {"+".join([str(a.tile) for a in friendlyArmies])}@{"+".join([str(a.tile) for a in enemyArmies])}: {str(result)} {repr(result.expected_best_moves)}')
-        scrimCacheKey = bot.get_scrim_cache_key(friendlyArmies, enemyArmies)
+        scrimCacheKey = BotCombatOps.get_scrim_cache_key(bot, friendlyArmies, enemyArmies)
         bot.cached_scrims[scrimCacheKey] = result
         if bot.disable_engine:
             result.net_economy_differential = -50.0
@@ -888,20 +904,21 @@ class BotCombatOps:
         @return:
         """
         threatTile = threatPath.start.tile
-        threatDist = bot.distance_from_general(threatTile)
-        threatArmy = bot.get_army_at(threatTile)
+        threatDist = BotPathingUtils.distance_from_general(bot, threatTile)
+        threatArmy = BotStateQueries.get_army_at(bot, threatTile)
         threatArmy.include_path(threatPath)
 
-        largeTilesNearTarget = SearchUtils.where(BotCombatOps.find_large_tiles_near(
-            bot,
-            fromTiles=threatPath.tileList[0:3],
-            distance=bot.engine_army_nearby_tiles_range,
-            limit=bot.engine_mcts_scrim_armies_per_player_limit,
-            forPlayer=bot.general.player,
-            allowGeneral=allowGeneral,
-            addlFilterFunc=lambda t, dist: bot.distance_from_general(t) <= threatDist + 1,
-            minArmy=max(3, min(15, threatPath.value // 2))
-        ), lambda t: bot.territories.is_tile_in_enemy_territory(t))
+        # largeTilesNearTarget = SearchUtils.where(BotCombatOps.find_large_tiles_near(
+        #     bot,
+        #     fromTiles=threatPath.tileList[0:3],
+        #     distance=bot.engine_army_nearby_tiles_range,
+        #     limit=bot.engine_mcts_scrim_armies_per_player_limit,
+        #     forPlayer=bot.general.player,
+        #     allowGeneral=allowGeneral,
+        #     addlFilterFunc=lambda t, dist: BotPathingUtils.distance_from_general(bot, t) <= threatDist + 1,
+        #     minArmy=max(3, min(15, threatPath.value // 2))
+        # ), lambda t: bot.territories.is_tile_in_enemy_territory(t))
+        largeTilesNearTarget = []
 
         bestPath: Path | None = None
         bestSimRes: ArmySimResult | None = None
@@ -1041,10 +1058,10 @@ class BotCombatOps:
                                     bestOptAmtPerTurn = valPerTurn
 
                             if bestOpt is not None:
-                                move = bot.get_first_path_move(bestOpt)
+                                move = BotPathingUtils.get_first_path_move(bot, bestOpt)
                                 bot.info(f'INTERCEPT {bestOptAmt}v/{bestTurn}t @ {str(bot.targetingArmy)}: {move} -- {str(bestOpt)}')
                                 if bot.info_render_intercept_data:
-                                    bot.render_intercept_plan(plan)
+                                    BotRendering.render_intercept_plan(bot, plan)
                                     bot.viewInfo.color_path(PathColorer(bestOpt, 80, 200, 0, alpha=150))
                                 return move
 
@@ -1052,7 +1069,7 @@ class BotCombatOps:
                 bot.targetingArmy = None
                 return None
             else:
-                move = bot.get_euclid_shortest_from_tile_towards_target(expPath.get_first_move().source, bot.targetingArmy.tile)
+                move = BotPathingUtils.get_euclid_shortest_from_tile_towards_target(bot, expPath.get_first_move().source, bot.targetingArmy.tile)
                 bot.info(f'continue killing target in exp plan, move {move}, plan was {str(expPath)}')
                 return move
         else:
@@ -1064,17 +1081,17 @@ class BotCombatOps:
             return None
 
         enArmyDist = bot.distance_from_general(bot.targetingArmy.tile)
-        armyStillInRange = enArmyDist < bot.distance_from_opp(bot.targetingArmy.tile) + 2 or bot.territories.is_tile_in_friendly_territory(bot.targetingArmy.tile)
-        if armyStillInRange and bot.should_kill(bot.targetingArmy.tile):
+        armyStillInRange = enArmyDist < BotPathingUtils.distance_from_opp(bot, bot.targetingArmy.tile) + 2 or bot.territories.is_tile_in_friendly_territory(bot.targetingArmy.tile)
+        if armyStillInRange and BotCombatOps.should_kill(bot, bot.targetingArmy.tile):
             forceKill = enArmyDist <= 4
-            path = bot.kill_army(bot.targetingArmy, allowGeneral=True, allowWorthPathKillCheck=not forceKill)
+            path = BotCombatOps.kill_army(bot, bot.targetingArmy, allowGeneral=True, allowWorthPathKillCheck=not forceKill)
             if path:
-                move = bot.get_first_path_move(path)
+                move = BotPathingUtils.get_first_path_move(bot, path)
                 if bot.targetingArmy is not None and bot.targetingArmy.tile.army / path.length < 1:
                     bot.info(f"Attacking army and ceasing to target army {str(bot.targetingArmy)}")
                     return move
 
-                if not bot.detect_repetition(move, 6, 3) and bot.general_move_safe(move.dest):
+                if not BotRepetition.detect_repetition(bot, move, 6, 3) and BotDefense.general_move_safe(bot, move.dest):
                     bot.info(
                         f"Cont kill army {str(bot.targetingArmy)} {'z' if move.move_half else ''}: {str(path)}")
                     bot.viewInfo.color_path(PathColorer(path, 0, 112, 133, 255, 10, 200))
@@ -1236,14 +1253,14 @@ class BotCombatOps:
                     bot.targetingArmy = None
                 return None
 
-            killPath = bot.kill_enemy_path(path, allowGeneral)
+            killPath = BotCombatOps.kill_enemy_path(bot, path, allowGeneral)
 
             if killPath is not None:
                 if not allowWorthPathKillCheck:
                     return killPath
                 with bot.perf_timer.begin_move_event(f'build army analyzer for army kill of {repr(army)}'):
                     analyzer = ArmyAnalyzer(bot._map, bot.general, army.tile)
-                worthPathKill = bot.worth_path_kill(killPath, path, analyzer)
+                worthPathKill = BotCombatOps.worth_path_kill(bot, killPath, path, analyzer)
                 if worthPathKill:
                     return killPath
 
@@ -1260,7 +1277,7 @@ class BotCombatOps:
 
     @staticmethod
     def kill_enemy_path(bot, threatPath: Path, allowGeneral=False) -> Path | None:
-        return bot.kill_enemy_paths([threatPath], allowGeneral)
+        return BotCombatOps.kill_enemy_paths(bot, [threatPath], allowGeneral)
 
     @staticmethod
     def kill_enemy_paths(bot, threatPaths: typing.List[Path], allowGeneral=False) -> Path | None:
@@ -1342,7 +1359,7 @@ class BotCombatOps:
 
         threatCutoff = max(1, max(threats, key=lambda t: t.threatValue).threatValue - 10)
 
-        killMove, gatherVal, gathTurns, gatherNodes = bot.get_gather_to_threat_paths(threats, gatherMax=True, addlTurns=-1, force_turns_up_threat_path=1, requiredContribution=threatCutoff, interceptArmy=True)
+        killMove, gatherVal, gathTurns, gatherNodes = BotDefense.get_gather_to_threat_paths(bot, threats, gatherMax=True, addlTurns=-1, force_turns_up_threat_path=1, requiredContribution=threatCutoff, interceptArmy=True)
 
         if killMove is not None and gatherVal > threatCutoff:
             bot.info(f'kill_path gath @ {str(threatPath.start.tile)} {str(killMove)}')
@@ -1353,7 +1370,7 @@ class BotCombatOps:
 
     @staticmethod
     def kill_threat(bot, threat: ThreatObj, allowGeneral=False):
-        return bot.kill_enemy_path(threat.path.get_subsegment(threat.path.length // 2), allowGeneral)
+        return BotCombatOps.kill_enemy_path(bot, threat.path.get_subsegment(threat.path.length // 2), allowGeneral)
 
     @staticmethod
     def sum_enemy_army_near_tile(bot, startTile: Tile, distance: int = 2) -> int:
@@ -1372,7 +1389,7 @@ class BotCombatOps:
 
     @staticmethod
     def sum_player_army_near_tile(bot, tile: Tile, distance: int = 2, player: int | None = None) -> int:
-        armyNear = bot.sum_player_standing_army_near_or_on_tiles([tile], distance, player)
+        armyNear = BotCombatOps.sum_player_standing_army_near_or_on_tiles(bot, [tile], distance, player)
         logbook.info(f"player_army_near for tile {tile.x},{tile.y} player {player} returned {armyNear}")
         if tile.player == player:
             armyNear = armyNear - (tile.army - 1)
@@ -1405,7 +1422,7 @@ class BotCombatOps:
         friendlyHasKillThreat = kingKillPath is not None
 
         if time_limit is None:
-            time_limit = bot.get_remaining_move_time()
+            time_limit = BotTimings.get_remaining_move_time(bot, )
 
         if time_limit < 0.06:
             logbook.info(f'not enough time left ({time_limit:.3f}) for end of turn scrim. Returning none.')
@@ -1419,7 +1436,8 @@ class BotCombatOps:
         bot.mcts_engine.eval_params.friendly_move_no_op_scale_10_fraction = 0
         bot.mcts_engine.eval_params.enemy_move_no_op_scale_10_fraction = 0
 
-        simResult = bot.get_armies_scrim_result(
+        simResult = BotCombatOps.get_armies_scrim_result(
+            bot,
             frArmies,
             enArmies,
             enemyHasKillThreat=enemyHasKillThreat,
@@ -1439,9 +1457,9 @@ class BotCombatOps:
         simResult = BotCombatOps.find_end_of_turn_sim_result(bot, threat, kingKillPath, time_limit)
 
         if simResult is not None:
-            friendlyPath, enemyPath = bot.extract_engine_result_paths_and_render_sim_moves(simResult)
+            friendlyPath, enemyPath = BotCombatOps.extract_engine_result_paths_and_render_sim_moves(bot, simResult)
             if friendlyPath is not None:
-                return bot.get_first_path_move(friendlyPath)
+                return BotPathingUtils.get_first_path_move(bot, friendlyPath)
 
         return None
 
@@ -1511,7 +1529,7 @@ class BotCombatOps:
 
     @staticmethod
     def sum_friendly_army_near_tile(bot, tile: Tile, distance: int = 2, player: int | None = None) -> int:
-        armyNear = bot.sum_friendly_army_near_or_on_tiles([tile], distance, player)
+        armyNear = BotCombatOps.sum_friendly_army_near_or_on_tiles(bot, [tile], distance, player)
         logbook.info(f"friendly_army_near for tile {tile.x},{tile.y} player {player} returned {armyNear}")
         if bot._map.is_tile_on_team_with(tile, player):
             armyNear = armyNear - (tile.army - 1)
@@ -1600,7 +1618,7 @@ class BotCombatOps:
             bot.is_all_in_losing = False
             return False
 
-        if not bot.is_all_in() and bot.force_far_gathers:
+        if not BotStateQueries.is_all_in(bot) and bot.force_far_gathers:
             return False
 
         customRatioOffset = 0.0
@@ -1639,7 +1657,7 @@ class BotCombatOps:
 
         bot.is_all_in_losing = False
 
-        if bot._map.remainingPlayers - len(bot.get_afk_players()) <= 2 or bot._map.is_2v2:
+        if bot._map.remainingPlayers - len(BotTargeting.get_afk_players(bot)) <= 2 or bot._map.is_2v2:
             should2v2PartnerDeadAllIn = (bot._map.is_2v2 and bot.teammate_general is None and bot._map.remainingPlayers > 2)
             enJustContested = len(bot.cityAnalyzer.enemy_contested_cities)
             if should2v2PartnerDeadAllIn:
@@ -1660,7 +1678,7 @@ class BotCombatOps:
                 bot.giving_up_counter += 1
                 logbook.info(
                     f"It looks like we're getting wrecked. givingUpCounter {bot.giving_up_counter}")
-                bot.send_all_chat_communication("gg")
+                BotComms.send_all_chat_communication(bot, "gg")
                 time.sleep(1)
                 if bot.surrender_func:
                     bot.surrender_func()
@@ -1708,7 +1726,7 @@ class BotCombatOps:
         if bot.target_player_gather_path is None:
             logbook.info("ELIM due to no path")
             return False
-        value = bot.get_player_army_amount_on_path(bot.target_player_gather_path, bot._map.player_index, 0, bot.target_player_gather_path.length)
+        value = BotStateQueries.get_player_army_amount_on_path(bot, bot.target_player_gather_path, bot._map.player_index, 0, bot.target_player_gather_path.length)
         logbook.info(
             f"Player army amount on path: {value}   TARGET PLAYER PATH IS REVERSED ? {bot.target_player_gather_path.toString()}")
         subsegment = bot.get_value_per_turn_subsegment(bot.target_player_gather_path)
@@ -1877,7 +1895,7 @@ class BotCombatOps:
                     bot.next_scrimming_army_tile = None
 
                 curScrim += 1
-                army = bot.get_army_at(tile)
+                army = BotStateQueries.get_army_at(bot, tile)
                 with bot.perf_timer.begin_move_event(f'try scrim @{army.name} {str(tile)}'):
                     if len(army.expectedPaths) == 0:
                         targets = bot._map.players[bot.general.player].cities.copy()
@@ -1885,7 +1903,8 @@ class BotCombatOps:
                         if bot.teammate_general is not None:
                             targets.append(bot.teammate_general)
                             targets.extend(bot._map.players[bot.teammate].cities)
-                        targetPath = bot.get_path_to_targets(
+                        targetPath = BotPathingUtils.get_path_to_targets(
+                            bot,
                             targets,
                             0.1,
                             preferNeutral=False,
@@ -1915,13 +1934,13 @@ class BotCombatOps:
             bot.info(f'Scrim cont ({str(bestScrim)}) {str(bestScrimPath)}')
 
             bot.next_scrimming_army_tile = bestScrimPath.start.next.tile
-            return bot.get_first_path_move(bestScrimPath)
+            return BotPathingUtils.get_first_path_move(bot, bestScrimPath)
 
         return None
 
     @staticmethod
     def get_scrim_cached(bot, friendlyArmies: typing.List[Army], enemyArmies: typing.List[Army]) -> ArmySimResult | None:
-        key = bot.get_scrim_cache_key(friendlyArmies, enemyArmies)
+        key = BotCombatOps.get_scrim_cache_key(bot, friendlyArmies, enemyArmies)
         cachedSimResult: ArmySimResult | None = bot.cached_scrims.get(key, None)
         return cachedSimResult
 
@@ -1940,12 +1959,13 @@ class BotCombatOps:
         cycleTurn = bot.timings.get_turn_in_cycle(bot._map.turn)
         cycleTurnsLeft = bot.timings.get_turns_left_in_cycle(bot._map.turn)
 
-        if not bot._map.is_low_cost_city_game and not bot.is_ffa_situation() and bot.player.tileCount < 45:
+        if not bot._map.is_low_cost_city_game and not BotTargeting.is_ffa_situation(bot) and bot.player.tileCount < 45:
             if len([t for t in bot.player.tiles if t.army > 1 and t not in bot.target_player_gather_targets]) > 0:
                 bot.info(f'Skipping launch because unused tiles')
                 return None
 
-        path = bot.get_value_per_turn_subsegment(bot.target_player_gather_path, 1.0, 0.25)
+        from BotModules.BotPathingUtils import BotPathingUtils
+        path = BotPathingUtils.get_value_per_turn_subsegment(bot, bot.target_player_gather_path, 1.0, 0.25)
         origPathLength = path.length
 
         targetPathLength = path.length * 3 // 9 + 1
@@ -1973,7 +1993,7 @@ class BotCombatOps:
                 bot.viewInfo.add_targeted_tile(generalAdj)
                 enemyGenAdj.append(generalAdj)
 
-        pathWorth = bot.get_player_army_amount_on_path(bot.target_player_gather_path, bot.general.player)
+        pathWorth = BotStateQueries.get_player_army_amount_on_path(bot, bot.target_player_gather_path, bot.general.player)
 
         if bot._map.turn >= 50 and bot.timings.in_launch_timing(bot._map.turn) and (
                 bot.targetPlayer != -1 or bot._map.remainingPlayers <= 2):
@@ -1986,8 +2006,8 @@ class BotCombatOps:
                 f"  T Launch window {inAttackWindow} - minArmy {minArmy}, pathVal {path.value}, timingTurn {timingTurn} < launchTiming + origPathLength {origPathLength} / 3 {bot.timings.launchTiming + origPathLength / 2:.1f}")
 
             if path is not None and path.length > 0 and pathWorth > minArmy and inAttackWindow and path.start.tile.player == bot.general.player:
-                move = bot.get_first_path_move(path)
-                if bot.is_move_safe_against_threats(move):
+                move = BotPathingUtils.get_first_path_move(bot, path)
+                if BotDefense.is_move_safe_against_threats(bot, move):
                     logbook.info(
                         f"  attacking because NEW worth_attacking_target(), pathWorth {pathWorth}, minArmy {minArmy}: {str(path)}")
                     bot.lastTargetAttackTurn = bot._map.turn
@@ -2036,12 +2056,12 @@ class BotCombatOps:
         if len(outOfPositionArmies) == 0:
             return None
 
-        result = bot.get_armies_scrim_result(friendlyArmies=outOfPositionArmies, enemyArmies=bot.get_largest_tiles_as_armies(bot.targetPlayer, 7), enemyCannotMoveAway=False)
+        result = BotCombatOps.get_armies_scrim_result(bot, friendlyArmies=outOfPositionArmies, enemyArmies=BotCombatOps.get_largest_tiles_as_armies(bot, bot.targetPlayer, 7), enemyCannotMoveAway=False)
 
         if result is not None:
-            friendlyPath, enemyPath = bot.extract_engine_result_paths_and_render_sim_moves(result)
+            friendlyPath, enemyPath = BotCombatOps.extract_engine_result_paths_and_render_sim_moves(bot, result)
             if friendlyPath is not None:
-                move = bot.get_first_path_move(friendlyPath)
+                move = BotPathingUtils.get_first_path_move(bot, friendlyPath)
                 bot.info(f'Army out of position scrim {move}')
                 return move
 
@@ -2058,7 +2078,7 @@ class BotCombatOps:
         winningTile = bot.opponent_tracker.winning_on_tiles(byRatio=1.1)
         winningArmy = bot.opponent_tracker.winning_on_army(byRatio=1.45)
         staySafe = True
-        if bot.is_ffa_situation() and not bot.is_player_aggressive(bot.targetPlayer, turnPeriod=75):
+        if BotTargeting.is_ffa_situation(bot) and not BotTimings.is_player_aggressive(bot, bot.targetPlayer, turnPeriod=75):
             staySafe = False
 
         reason = ''
@@ -2076,7 +2096,7 @@ class BotCombatOps:
                 cycleTurns = bot.timings.get_turns_left_in_cycle(bot._map.turn)
                 if cycleTurns > 30:
                     bot.is_winning_gather_cyclic = True
-                negatives.update(cd.tile for cd in bot.get_contested_targets(shortTermContestCutoff=50, longTermContestCutoff=100, numToInclude=5, excludeGeneral=True))
+                negatives.update(cd.tile for cd in BotTargeting.get_contested_targets(bot, shortTermContestCutoff=50, longTermContestCutoff=100, numToInclude=5, excludeGeneral=True))
 
                 for city in bot.player.cities:
                     if not bot.territories.is_tile_in_friendly_territory(city):
@@ -2084,7 +2104,7 @@ class BotCombatOps:
 
             enAttackPath: Path | None = None
             if remainingTurns > 0:
-                targets = bot.get_target_player_possible_general_location_tiles_sorted(elimNearbyRange=4)[0:4]
+                targets = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=4)[0:4]
                 for target in targets:
                     bot.viewInfo.add_targeted_tile(target, TargetStyle.RED)
 
@@ -2114,19 +2134,19 @@ class BotCombatOps:
                     if enAttackPath is not None:
                         analysis = ArmyAnalyzer.build_from_path(bot._map, enAttackPath)
                         fakeThreat = ThreatObj(enAttackPath.length, 1, enAttackPath, ThreatType.Vision, armyAnalysis=analysis)
-                        move_closest_value_func = bot.get_defense_tree_move_prio_func(fakeThreat)
+                        move_closest_value_func = BotDefense.get_defense_tree_move_prio_func(bot, fakeThreat)
 
                     gcp = Gather.gather_approximate_turns_to_tiles(
                         bot._map,
                         targets,
                         remainingTurns,
                         bot.player.index,
-                        gatherMatrix=bot.get_gather_tiebreak_matrix(),
+                        gatherMatrix=BotGatherOps.get_gather_tiebreak_matrix(bot, ),
                         negativeTiles=negatives,
                         prioritizeCaptureHighArmyTiles=not bot.is_all_in_losing,
                         useTrueValueGathered=True,
                         includeGatherPriorityAsEconValues=False,
-                        timeLimit=min(0.05, bot.get_remaining_move_time())
+                        timeLimit=min(0.05, BotTimings.get_remaining_move_time(bot, ))
                     )
 
                     if gcp is not None:
@@ -2134,7 +2154,7 @@ class BotCombatOps:
                             gcp.value_func = move_closest_value_func
                         move = gcp.get_first_move()
                         bot.gatherNodes = gcp.root_nodes
-                        bot.info(f'pcst {reason}gath cyc {remainingTurns} {move} @ {bot.str_tiles(targets)} neg {bot.str_tiles(negatives)}')
+                        bot.info(f'pcst {reason}gath cyc {remainingTurns} {move} @ {BotStateQueries.str_tiles(bot, targets)} neg {BotStateQueries.str_tiles(bot, negatives)}')
                         return move
 
         return None

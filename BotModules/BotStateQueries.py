@@ -3,11 +3,15 @@ import typing
 import SearchUtils
 from base.client.map import Tile
 
-
 class BotStateQueries:
     @staticmethod
     def is_all_in(bot):
         return bot.is_all_in_losing or bot.is_all_in_army_advantage or bot.all_in_city_behind
+
+    @staticmethod
+    def is_tile_enemy(bot, tile: Tile) -> bool:
+        """Check if a tile belongs to an enemy player."""
+        return tile is not None and tile.player != -1 and tile.player != bot.general.player and bot._map.is_tile_enemy(tile)
 
     @staticmethod
     def is_still_ffa_and_non_dominant(bot) -> bool:

@@ -1,6 +1,5 @@
 import BotLogging
 
-
 class BotLifecycle:
     @staticmethod
     def initialize_logging(bot):

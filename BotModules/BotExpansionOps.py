@@ -8,6 +8,15 @@ import typing
 import SearchUtils
 import logbook
 from BotModules.BotStateQueries import BotStateQueries
+from BotModules.BotTimings import BotTimings
+from BotModules.BotPathingUtils import BotPathingUtils
+from BotModules.BotRendering import BotRendering
+from BotModules.BotDefense import BotDefense
+from BotModules.BotComms import BotComms
+
+from BotModules.BotGatherOps import BotGatherOps
+from BotModules.BotRepetition import BotRepetition
+from DangerAnalyzer import ThreatType
 from Behavior.ArmyInterceptor import InterceptionOptionInfo
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander
 from Interfaces import TilePlanInterface
@@ -20,13 +29,14 @@ from ViewInfo import TargetStyle, PathColorer
 from Models.Move import Move
 from base.client.map import Tile
 
-
 class BotExpansionOps:
     @staticmethod
     def get_optimal_city_or_general_plan_move(bot, timeLimit: float = 4.0) -> Move | None:
+        from BotModules.BotTargeting import BotTargeting
+
         calcedThisTurn = False
         if bot._map.turn < 50 and bot._map.is_2v2:
-            bot.send_2v2_tip_to_ally()
+            BotComms.send_2v2_tip_to_ally(bot, )
 
         source = bot.general
         if len(bot.player.cities) > 0:
@@ -35,10 +45,10 @@ class BotExpansionOps:
             source = random.choice(sources)
 
         if bot._map.turn > 50:
-            distMap = bot.get_expansion_weight_matrix(mult=10)
+            distMap = BotExpansionOps.get_expansion_weight_matrix(bot, mult=10)
             skipTiles = set()
         else:
-            distMap, skipTiles = bot.get_first_25_expansion_distance_priority_map()
+            distMap, skipTiles = BotExpansionOps.get_first_25_expansion_distance_priority_map(bot, )
 
         if bot.city_expand_plan is None or len(bot.city_expand_plan.plan_paths) == 0:
             with bot.perf_timer.begin_move_event('optimize_first_25'):
@@ -55,7 +65,7 @@ class BotExpansionOps:
                 while bot.city_expand_plan.plan_paths and bot.city_expand_plan.plan_paths[0] is None:
                     bot.city_expand_plan.plan_paths.pop(0)
                 if bot._map.turn < 50:
-                    bot.send_teammate_communication("I'm planning my start expand here, try to avoid these pinged tiles.", cooldown=50)
+                    BotComms.send_teammate_communication(bot, "I'm planning my start expand here, try to avoid these pinged tiles.", cooldown=50)
 
         if (
                 (
@@ -79,7 +89,7 @@ class BotExpansionOps:
                 launchTurn=bot.city_expand_plan.launch_turn,
                 noLog=False)
 
-            distToGenMap = SearchUtils.build_distance_map_matrix(bot._map, bot.get_target_player_possible_general_location_tiles_sorted(elimNearbyRange=7)[0:3])
+            distToGenMap = SearchUtils.build_distance_map_matrix(bot._map, BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=7)[0:3])
 
             with bot.perf_timer.begin_move_event(f're-check f25 (limit {timeLimit:.3f}'):
                 cutoff = time.perf_counter() + timeLimit
@@ -120,11 +130,11 @@ class BotExpansionOps:
         pingCooldown = 3
         if not bot.teamed_with_bot:
             pingCooldown = 8
-        if bot.cooldown_allows("F25 PING COOLDOWN", pingCooldown):
+        if BotComms.cooldown_allows(bot, "F25 PING COOLDOWN", pingCooldown):
             for plan in bot.city_expand_plan.plan_paths:
                 if plan is None:
                     continue
-                bot.send_teammate_path_ping(plan)
+                BotComms.send_teammate_path_ping(bot, plan)
 
         if bot.city_expand_plan.launch_turn > bot._map.turn:
             bot.info(
@@ -149,7 +159,7 @@ class BotExpansionOps:
                 bot.city_expand_plan.plan_paths.pop(0)
                 return None
 
-            move = bot.get_first_path_move(curPath)
+            move = BotPathingUtils.get_first_path_move(bot, curPath)
             bot.info(f'Expand plan {bot.city_expand_plan.tile_captures} path move {move}')
 
             collidedWithEnemyAndWastingArmy = move.source.player != move.dest.player and (move.dest.player != -1 or move.dest.isCity) and move.source.army - 1 <= move.dest.army or move.dest.player in bot._map.teammates
@@ -161,7 +171,7 @@ class BotExpansionOps:
             if collidedWithEnemyAndWastingArmy and move.source.player == bot.general.player:
                 collisionCapsOrPreventsEnemy = move.source.army == move.dest.army and move.source.army > 2 and move.dest.player not in bot._map.teammates
                 if not collisionCapsOrPreventsEnemy:
-                    newPath = bot.attempt_first_25_collision_reroute(curPath, move, distMap)
+                    newPath = BotExpansionOps.attempt_first_25_collision_reroute(bot, curPath, move, distMap)
                     if newPath is None:
                         bMap = bot.board_analysis.intergeneral_analysis.bMap
                         bot.board_analysis.intergeneral_analysis.bMap = distMap
@@ -193,7 +203,7 @@ class BotExpansionOps:
                             if curPath.length == 0:
                                 bot.city_expand_plan.plan_paths.pop(0)
 
-                            return bot.get_first_path_move(path)
+                            return BotPathingUtils.get_first_path_move(bot, path)
 
                         bot.info(f'F25 Exp collided at {str(move.dest)}, no alternative found. No-opping')
 
@@ -205,7 +215,7 @@ class BotExpansionOps:
 
                     bot.viewInfo.add_info_line(
                         f'F25 Exp collided at {str(move.dest)}, capping {str(newPath)} instead.')
-                    move = bot.get_first_path_move(newPath)
+                    move = BotPathingUtils.get_first_path_move(bot, newPath)
                     curPath = newPath
                 else:
                     bot.info(
@@ -232,7 +242,7 @@ class BotExpansionOps:
                 and bot.expansion_plan.en_tiles_captured > bot.expansion_plan.neut_tiles_captured // 3
                 and bot.expansion_plan.en_tiles_captured * 2 + bot.expansion_plan.neut_tiles_captured > turnsLeft - 2
                 and value > utilizationCutoff
-                and bot._get_approximate_greedy_turns_available() > 0
+                and BotTimings._get_approximate_greedy_turns_available(bot, ) > 0
         ):
             haveFullExpPlanAlready = True
 
@@ -242,15 +252,16 @@ class BotExpansionOps:
 
         if haveFullExpPlanAlready or havePotentialIntercept or ((bot.curPath is None or bot.curPath.start is None or bot.curPath.start.next is None) and not bot.defend_economy or bot._map.turn < 100):
             expNegs = set(defenseCriticalTileSet)
-            if not haveFullExpPlanAlready or bot.is_all_in():
+            if not haveFullExpPlanAlready or BotStateQueries.is_all_in(bot, ):
                 with bot.perf_timer.begin_move_event('checking launch move'):
-                    attackLaunchMove = bot.check_for_attack_launch_move(expNegs)
+                    from BotModules.BotCombatOps import BotCombatOps
+                    attackLaunchMove = BotCombatOps.check_for_attack_launch_move(bot, expNegs)
                 if attackLaunchMove is not None and not haveFullExpPlanAlready:
                     return attackLaunchMove
 
             with bot.perf_timer.begin_move_event("try_find_expansion_move main timing"):
-                timeLimit = min(bot.get_remaining_move_time(), bot.expansion_full_time_limit)
-                move = bot.try_find_expansion_move(expNegs, timeLimit, forceBypassLaunch=haveFullExpPlanAlready or havePotentialIntercept)
+                timeLimit = min(BotTimings.get_remaining_move_time(bot), bot.expansion_full_time_limit)
+                move = BotExpansionOps.try_find_expansion_move(bot, expNegs, timeLimit, forceBypassLaunch=haveFullExpPlanAlready or havePotentialIntercept)
 
             if move is not None:
                 if not bot.timings.in_expand_split(bot._map.turn) and haveFullExpPlanAlready:
@@ -316,9 +327,9 @@ class BotExpansionOps:
                 and (bot.expansion_plan is None or bot.expansion_plan.turns_used < bot.timings.get_turns_left_in_cycle(bot._map.turn))
                 and not BotStateQueries.is_still_ffa_and_non_dominant(bot)
         ):
-            remainingTime = bot.get_remaining_move_time()
+            remainingTime = BotTimings.get_remaining_move_time(bot)
             with bot.perf_timer.begin_move_event(f'EXP - first25 reuse - {remainingTime:.4f}'):
-                move = bot.get_optimal_city_or_general_plan_move(timeLimit=remainingTime)
+                move = BotExpansionOps.get_optimal_city_or_general_plan_move(bot, timeLimit=remainingTime)
                 if move is not None and (move.source.army == 1 or move.source.player != bot.general.player):
                     bot.city_expand_plan = None
                     bot.info(f'Aborting bad city_expand_plan reuse move {move}')
@@ -342,8 +353,8 @@ class BotExpansionOps:
                     bot.city_expand_plan = None
                     return move
 
-        bot._add_expansion_threat_negs(expansionNegatives)
-        bot.expansion_plan = bot.build_expansion_plan(timeLimit, expansionNegatives, pathColor=(50, 30, 255), overrideTurns=overrideTurns)
+        BotExpansionOps._add_expansion_threat_negs(bot, expansionNegatives)
+        bot.expansion_plan = BotExpansionOps.build_expansion_plan(bot, timeLimit, expansionNegatives, pathColor=(50, 30, 255), overrideTurns=overrideTurns)
 
         path = bot.expansion_plan.selected_option
         allPaths = bot.expansion_plan.all_paths
@@ -356,10 +367,10 @@ class BotExpansionOps:
                 path = allPaths[1]
 
             move = path.get_first_move()
-            if bot.is_all_in() and move.move_half:
+            if BotStateQueries.is_all_in(bot, ) and move.move_half:
                 bot.viewInfo.add_info_line(f'because we\'re all in, will NOT move-half...')
                 move.move_half = False
-            if bot.is_move_safe_valid(move):
+            if BotPathingUtils.is_move_safe_valid(bot, move):
                 bot.info(
                     f"EXP {path.econValue:.2f}/{path.length}t {move} neg ({expansionNegStr})")
                 return move
@@ -405,9 +416,9 @@ class BotExpansionOps:
             bot.city_expand_plan = None
 
         with bot.perf_timer.begin_move_event(f'optimal_expansion'):
-            bonusCapturePointMatrix = bot.get_expansion_weight_matrix()
+            bonusCapturePointMatrix = BotExpansionOps.get_expansion_weight_matrix(bot)
 
-            remainingMoveTime = bot.get_remaining_move_time()
+            remainingMoveTime = BotTimings.get_remaining_move_time(bot)
             if remainingMoveTime < timeLimit and not DebugHelper.IS_DEBUGGING:
                 timeLimit = remainingMoveTime
                 if remainingMoveTime < 0.05:
@@ -481,7 +492,7 @@ class BotExpansionOps:
                 singleIterationPathTimeCap=min(bot.expansion_single_iteration_time_cap, timeLimit / 3),
                 forceNoGlobalVisited=bot.expansion_force_no_global_visited,
                 forceGlobalVisitedStage1=bot.expansion_force_global_visited_stage_1,
-                useIterativeNegTiles=bot._should_use_iterative_negative_expand(),
+                useIterativeNegTiles=BotExpansionOps._should_use_iterative_negative_expand(bot),
                 allowLeafMoves=bot.expansion_allow_leaf_moves,
                 allowGatherPlanExtension=bot.expansion_allow_gather_plan_extension,
                 alwaysIncludeNonTerminatingLeavesInIteration=bot.expansion_always_include_non_terminating_leafmoves_in_iteration,
@@ -583,7 +594,7 @@ class BotExpansionOps:
                 bot.viewInfo.add_info_line(f'no exp intercept.. despite {len(addlOptions)} opts?')
 
         if not anyIntercept:
-            plan = bot.check_launch_against_expansion_plan(plan, expansionNegatives)
+            plan = BotExpansionOps.check_launch_against_expansion_plan(bot, plan, expansionNegatives)
 
         for path in plan.all_paths:
             plan.preferred_tiles.update(path.tileSet)
@@ -604,7 +615,7 @@ class BotExpansionOps:
         remainingCycleTurns = bot.timings.cycleTurns - bot.timings.get_turn_in_cycle(bot._map.turn)
 
         with bot.perf_timer.begin_move_event(f'enemy optimal_expansion'):
-            remainingMoveTime = bot.get_remaining_move_time()
+            remainingMoveTime = BotTimings.get_remaining_move_time(bot)
             if remainingMoveTime < timeLimit and not DebugHelper.IS_DEBUGGING:
                 timeLimit = remainingMoveTime
                 if remainingMoveTime < 0.02:
@@ -639,7 +650,7 @@ class BotExpansionOps:
                     singleIterationPathTimeCap=min(bot.expansion_single_iteration_time_cap, timeLimit / 3),
                     forceNoGlobalVisited=bot.expansion_force_no_global_visited,
                     forceGlobalVisitedStage1=bot.expansion_force_global_visited_stage_1,
-                    useIterativeNegTiles=bot._should_use_iterative_negative_expand(),
+                    useIterativeNegTiles=BotExpansionOps._should_use_iterative_negative_expand(bot),
                     allowLeafMoves=bot.expansion_allow_leaf_moves,
                     allowGatherPlanExtension=bot.expansion_allow_gather_plan_extension,
                     alwaysIncludeNonTerminatingLeavesInIteration=bot.expansion_always_include_non_terminating_leafmoves_in_iteration,
@@ -708,7 +719,7 @@ class BotExpansionOps:
                 rePlanLength,
                 bot.board_analysis,
                 bot.territories.territoryMap,
-                bonusCapturePointMatrix=bot.get_expansion_weight_matrix(),
+                bonusCapturePointMatrix=BotExpansionOps.get_expansion_weight_matrix(bot, ),
                 tileIslands=bot.tileIslandBuilder,
                 negativeTiles=negExpandTiles,
                 viewInfo=bot.viewInfo
@@ -716,10 +727,10 @@ class BotExpansionOps:
         newPath = expUtilPlan.selected_option
         otherPaths = expUtilPlan.all_paths
 
-        _, _, _, pathTurns, econVal, remainingArmy, _ = bot.calculate_path_capture_econ_values(curPath, 50)
+        _, _, _, pathTurns, econVal, remainingArmy, _ = BotExpansionOps.calculate_path_capture_econ_values(bot, curPath, 50)
 
         if newPath is not None and isinstance(newPath, Path):
-            _, _, _, newTurns, newEconVal, newRemainingArmy, _ = bot.calculate_path_capture_econ_values(newPath, 50)
+            _, _, _, newTurns, newEconVal, newRemainingArmy, _ = BotExpansionOps.calculate_path_capture_econ_values(bot, newPath, 50)
             if newEconVal <= econVal:
                 bot.info(f'recalc attempt found {newPath} with econ {newEconVal:.2f} (vs collisions {econVal:.2f}), will not reroute...')
                 return None
@@ -745,15 +756,15 @@ class BotExpansionOps:
 
     @staticmethod
     def find_leaf_move(bot, allLeaves):
-        leafMoves = bot.prioritize_expansion_leaves(allLeaves)
+        leafMoves = BotExpansionOps.prioritize_expansion_leaves(bot, allLeaves)
         if bot.target_player_gather_path is not None:
             leafMoves = list(SearchUtils.where(leafMoves, lambda move: move.source not in bot.target_player_gather_path.tileSet))
         if len(leafMoves) > 0:
             move = leafMoves[0]
             i = 0
             valid = True
-            while move.source.isGeneral and not bot.general_move_safe(move.dest):
-                if bot.general_move_safe(move.dest, True):
+            while move.source.isGeneral and not BotDefense.general_move_safe(bot, move.dest):
+                if BotDefense.general_move_safe(bot, move.dest, True):
                     move.move_half = True
                     break
                 else:
@@ -779,7 +790,7 @@ class BotExpansionOps:
         queue = SearchUtils.HeapQueue()
         analysis = bot.board_analysis.intergeneral_analysis
 
-        expansionMap = bot.get_expansion_weight_matrix()
+        expansionMap = BotExpansionOps.get_expansion_weight_matrix(bot, )
 
         if distPriorityMap is None:
             distPriorityMap = analysis.bMap
@@ -851,11 +862,11 @@ class BotExpansionOps:
 
     @staticmethod
     def make_first_25_move(bot) -> Move | None:
-        timeLimit = bot.get_remaining_move_time()
+        timeLimit = BotTimings.get_remaining_move_time(bot)
 
         for city in bot.cityAnalyzer.city_scores.keys():
             if city.army < 30:
-                return bot.try_find_expansion_move(set(), 0.15)
+                return BotExpansionOps.try_find_expansion_move(bot, set(), 0.15)
 
         if bot.city_expand_plan is not None and timeLimit > 0:
             used = bot.perf_timer.get_elapsed_since_update(bot._map.turn)
@@ -884,7 +895,7 @@ class BotExpansionOps:
 
             if bot._map.cols * bot._map.rows > 1000 or len(bot._map.players) > 8:
                 timeLimit = 0.75
-        move = bot.get_optimal_city_or_general_plan_move(timeLimit=timeLimit)
+        move = BotExpansionOps.get_optimal_city_or_general_plan_move(bot, timeLimit=timeLimit)
         if move is not None:
             if move.source.player == bot.general.player:
                 return move
@@ -904,19 +915,22 @@ class BotExpansionOps:
             emergenceRatio: float = 0.15,
             includeCities: bool | None = None,
     ) -> Path | None:
+        from BotModules.BotTargeting import BotTargeting
+
         if includeCities is None:
             includeCities = not bot.armyTracker.has_perfect_information_of_player_cities(bot.targetPlayer) and WinCondition.ContestEnemyCity in bot.win_condition_analyzer.viable_win_conditions
 
-        toReveal = bot.get_target_player_possible_general_location_tiles_sorted(elimNearbyRange=0, player=bot.targetPlayer, cutoffEmergenceRatio=emergenceRatio, includeCities=includeCities)
-        targetArmyLevel = bot.determine_fog_defense_amount_available_for_tiles(toReveal, bot.targetPlayer)
+        toReveal = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=0, player=bot.targetPlayer, cutoffEmergenceRatio=emergenceRatio, includeCities=includeCities)
+        targetArmyLevel = BotDefense.determine_fog_defense_amount_available_for_tiles(bot, toReveal, bot.targetPlayer)
 
         for t in toReveal:
-            bot.mark_tile(t, alpha=50)
+            BotRendering.mark_tile(bot, t, alpha=50)
 
         if len(toReveal) == 0:
             return None
 
-        startArmies = sorted(bot.get_largest_tiles_as_armies(bot.general.player, limit=3), key=lambda t: bot._map.get_distance_between(bot.targetPlayerExpectedGeneralLocation, t.tile))
+        from BotModules.BotCombatOps import BotCombatOps
+        startArmies = sorted(BotCombatOps.get_largest_tiles_as_armies(bot, bot.general.player, limit=3), key=lambda t: bot._map.get_distance_between(bot.targetPlayerExpectedGeneralLocation, t.tile))
 
         bestArmy = None
         bestThresh = None
@@ -943,7 +957,7 @@ class BotExpansionOps:
 
         with bot.perf_timer.begin_move_event(f'Watch {startTile} c{str(includeCities)[0]} tgA {targetArmyLevel}'):
             if maxTime is None:
-                maxTime = bot.get_remaining_move_time() / 2
+                maxTime = BotTimings.get_remaining_move_time(bot) / 2
 
             path = WatchmanRouteUtils.get_watchman_path(
                 bot._map,
@@ -977,7 +991,7 @@ class BotExpansionOps:
         genPlayer = bot._map.players[bot.general.player]
         behindOnCities = genPlayer.cityCount < bot._map.players[bot.targetPlayer].cityCount
 
-        if not bot.is_all_in():
+        if not BotStateQueries.is_all_in(bot, ):
             if bot.explored_this_turn:
                 logbook.info("(skipping new exploration because already explored this turn)")
                 return None
@@ -1005,10 +1019,10 @@ class BotExpansionOps:
         turns = bot.timings.cycleTurns - turnInCycle - 7
         minArmy = max(12, int(genPlayer.standingArmy ** 0.75) - 10)
         bot.info(f"Forcing explore to t{turns} and minArmy to {minArmy}")
-        if bot.is_all_in() and not bot.is_all_in_army_advantage and not bot.all_in_city_behind:
+        if BotStateQueries.is_all_in(bot, ) and not bot.is_all_in_army_advantage and not bot.all_in_city_behind:
             turns = 15
             minArmy = int(genPlayer.standingArmy ** 0.83) - 10
-            bot.info(f"Forcing explore to t{turns} and minArmy to {minArmy} because self.is_all_in()")
+            bot.info(f"Forcing explore to t{turns} and minArmy to {minArmy} because BotStateQueries.is_all_in(self, )")
         elif turns < 6:
             logbook.info(f"Forcing explore turns to minimum of 5, was {turns}")
             turns = 5
@@ -1019,7 +1033,7 @@ class BotExpansionOps:
         if bot._map.turn < 100:
             return None
 
-        path = bot.get_optimal_exploration(turns, negativeTiles, minArmy=minArmy, maxTime=maxTime)
+        path = BotExpansionOps.get_optimal_exploration(bot, turns, negativeTiles, minArmy=minArmy, maxTime=maxTime)
         if path:
             logbook.info(f"Oh no way, explore found a path lol? {str(path)}")
             tilesRevealed = set()
@@ -1053,7 +1067,7 @@ class BotExpansionOps:
         if bot.target_player_gather_path is None:
             return existingPlan
 
-        launchPath = bot.get_path_subsegment_starting_from_last_move(bot.target_player_gather_path)
+        launchPath = BotPathingUtils.get_path_subsegment_starting_from_last_move(bot, bot.target_player_gather_path)
 
         if launchPath is None or launchPath.start is None:
             return existingPlan
@@ -1067,7 +1081,7 @@ class BotExpansionOps:
         if launchPath.length > turnsLeftInCycle:
             launchPath = launchPath.get_subsegment(turnsLeftInCycle)
 
-        distToFirstFogTile, enCaps, neutCaps, turns, econVal, remainingArmy, fullFriendlyArmy = bot.calculate_path_capture_econ_values(launchPath, turnsLeftInCycle)
+        distToFirstFogTile, enCaps, neutCaps, turns, econVal, remainingArmy, fullFriendlyArmy = BotExpansionOps.calculate_path_capture_econ_values(bot, launchPath, turnsLeftInCycle)
 
         if turns == 0:
             bot.viewInfo.add_info_line(f'---EXP Launch (t0 {str(launchPath.start.tile)}) (en{enCaps} neut{neutCaps}) vs existing (en{existingPlan.en_tiles_captured} neut{existingPlan.neut_tiles_captured})')
@@ -1120,7 +1134,7 @@ class BotExpansionOps:
         if launchValPerTurn > existingValPerTurn and (launchTurnsTotal > turnsLeftInCycle - 5 or distToFirstFogTile < bot.target_player_gather_path.length // 2 - 1):
             launchSubsegment = launchPath.get_subsegment(distToFirstFogTile)
 
-            launchSubsegmentToEn = bot.get_path_subsegment_to_closest_enemy_team_territory(launchSubsegment)
+            launchSubsegmentToEn = BotPathingUtils.get_path_subsegment_to_closest_enemy_team_territory(bot, launchSubsegment)
             if launchSubsegmentToEn is None:
                 launchSubsegmentToEn = launchSubsegment
 
@@ -1155,7 +1169,7 @@ class BotExpansionOps:
 
     @staticmethod
     def calculate_path_capture_econ_values(bot, launchPath, turnsLeftInCycle, negativeTiles: typing.Set[Tile] | None = None) -> typing.Tuple[int, int, int, int, int, int, int]:
-        econMatrix = bot.get_expansion_weight_matrix()
+        econMatrix = BotExpansionOps.get_expansion_weight_matrix(bot)
 
         army = 0
         turns = -1
@@ -1210,7 +1224,9 @@ class BotExpansionOps:
 
     @staticmethod
     def make_second_25_move(bot) -> Move | None:
-        if bot._map.turn >= 100 or bot.is_ffa_situation() or bot.completed_first_100 or bot._map.is_2v2 or bot.targetPlayer == -1:
+        from BotModules.BotTargeting import BotTargeting
+
+        if bot._map.turn >= 100 or BotTargeting.is_ffa_situation(bot, ) or bot.completed_first_100 or bot._map.is_2v2 or bot.targetPlayer == -1:
             return None
 
         foundEnemy = SearchUtils.any_where(bot.targetPlayerObj.tiles, lambda t: t.visible)
@@ -1224,15 +1240,15 @@ class BotExpansionOps:
 
         if bot.curPath is not None:
             if bot.curPath.start.tile.army - 1 > bot.curPath.start.next.tile.army:
-                return bot.continue_cur_path(threat=None, defenseCriticalTileSet=set())
+                return BotPathingUtils.continue_cur_path(bot, threat=None, defenseCriticalTileSet=set())
 
             bot.curPath = None
 
-        expMap = bot.get_expansion_weight_matrix()
+        expMap = BotExpansionOps.get_expansion_weight_matrix(bot, )
 
         leafMoves = [m for m in bot.leafMoves if m.source.army > 1]
         enDists = bot._alt_en_gen_position_distances[bot.targetPlayer]
-        leafMovesClosestToGen = list(sorted(leafMoves, key=lambda m: bot.distance_from_general(m.dest)))
+        leafMovesClosestToGen = list(sorted(leafMoves, key=lambda m: BotPathingUtils.distance_from_general(bot, m.dest)))
         leafMoves = leafMovesClosestToGen[7:]
         if len(leafMoves) > 0:
             return leafMoves[-1]
@@ -1300,7 +1316,7 @@ class BotExpansionOps:
         for tile in mustGatherTo:
             bot.viewInfo.add_targeted_tile(tile, TargetStyle.GREEN, radiusReduction=8)
 
-        gatherTieBreaks = bot.get_gather_tiebreak_matrix()
+        gatherTieBreaks = BotGatherOps.get_gather_tiebreak_matrix(bot, )
         for tile in mustGather:
             gatherTieBreaks.raw[tile.tile_index] += 0.5
             bot.viewInfo.add_targeted_tile(tile, TargetStyle.YELLOW, radiusReduction=8)
@@ -1320,7 +1336,8 @@ class BotExpansionOps:
             logbook.info(f'setting {str(tile)} to depth {depth} / {gathTurns} (army {tile.army}, path len {path.length}, allowedAddlArmy {allowedAddlArmy})')
             gathTargets[tile] = depth
 
-        move, valGathered, gathTurns, gatherNodes = bot.get_gather_to_target_tiles(
+        move, valGathered, gathTurns, gatherNodes = BotGatherOps.get_gather_to_target_tiles(
+            bot,
             gathTargets,
             0.1,
             gatherTurns=gathTurns,
@@ -1351,7 +1368,7 @@ class BotExpansionOps:
                     if path:
                         bot.curPath = path
                         bot.info(f'f50 0 node path {str(path)}')
-                        return bot.get_first_path_move(path)
+                        return BotPathingUtils.get_first_path_move(bot, path)
 
         for tile in possibleGenTargets:
             bot.viewInfo.add_targeted_tile(tile, TargetStyle.RED, radiusReduction=8)
@@ -1367,11 +1384,11 @@ class BotExpansionOps:
             if useMaxPath:
                 bot.curPath = maxPath
                 bot.info(f'f50 maxpath {str(maxPath)}')
-                return bot.get_first_path_move(maxPath)
+                return BotPathingUtils.get_first_path_move(bot, maxPath)
 
         if gatherNodes:
             bot.gatherNodes = gatherNodes
-            move = bot.get_tree_move_default(gatherNodes)
+            move = BotGatherOps.get_tree_move_default(bot, gatherNodes)
             if move is not None:
                 bot.info(f'f50 Expansion gather {move}')
                 return move
@@ -1501,7 +1518,7 @@ class BotExpansionOps:
         targetPlayer = bot._map.players[bot.targetPlayer]
         stillDontKnowAboutEnemyCityPosition = len(targetPlayer.cities) + 1 < targetPlayer.cityCount
         stillHaveSomethingToSearchFor = (
-                (bot.is_all_in() or bot.finishing_exploration or demolishingTargetPlayer)
+                (BotStateQueries.is_all_in(bot, ) or bot.finishing_exploration or demolishingTargetPlayer)
                 and (not bot.targetPlayerExpectedGeneralLocation.isGeneral or stillDontKnowAboutEnemyCityPosition)
         )
 
@@ -1517,10 +1534,11 @@ class BotExpansionOps:
                     and bot.opponent_tracker.winning_on_economy(byRatio=0.8, cityValue=50)
             )
             ):
-                path = bot.get_quick_kill_on_enemy_cities(defenseCriticalTileSet)
+                from BotModules.BotCityOps import BotCityOps
+                path = BotCityOps.get_quick_kill_on_enemy_cities(bot, defenseCriticalTileSet)
                 if path is not None:
                     bot.info(f'ALL IN ARMY ADVANTAGE CITY CONTEST {str(path)}')
-                    return bot.get_first_path_move(path)
+                    return BotPathingUtils.get_first_path_move(bot, path)
 
                 for contestedCity in bot.cityAnalyzer.owned_contested_cities:
                     undiscNeg.add(contestedCity)
@@ -1541,18 +1559,18 @@ class BotExpansionOps:
                     undiscNeg.add(bot.general)
                     for tile in halfTargetPath.tileList:
                         undiscNeg.add(tile)
-                path = bot.explore_target_player_undiscovered(undiscNeg, maxTime=timeCap)
+                path = BotExpansionOps.explore_target_player_undiscovered(bot, undiscNeg, maxTime=timeCap)
                 if path is not None:
                     bot.viewInfo.color_path(PathColorer(path, 120, 150, 127, 200, 12, 100))
-                    if not bot.is_path_moving_mostly_away(path, bot.board_analysis.intergeneral_analysis.bMap):
-                        valueSubsegment = bot.get_value_per_turn_subsegment(path, minLengthFactor=0)
+                    if not BotPathingUtils.is_path_moving_mostly_away(bot, path, bot.board_analysis.intergeneral_analysis.bMap):
+                        valueSubsegment = BotPathingUtils.get_value_per_turn_subsegment(bot, path, minLengthFactor=0)
                         if valueSubsegment.length != path.length:
                             logbook.info(f"BAD explore_target_player_undiscovered")
                             bot.info(
                                 f"WHOAH, tried to make a bad exploration path...? Fixed with {str(valueSubsegment)}")
                             path = valueSubsegment
-                        move = bot.get_first_path_move(path)
-                        if not bot.detect_repetition(move, 7, 2):
+                        move = BotPathingUtils.get_first_path_move(bot, path)
+                        if not BotRepetition.detect_repetition(bot, move, 7, 2):
                             if bot.is_all_in_army_advantage:
                                 bot.all_in_army_advantage_counter -= 2
                             return move
@@ -1590,19 +1608,20 @@ class BotExpansionOps:
 
         @return:
         """
+        from BotModules.BotTargeting import BotTargeting
 
-        if bot.is_ffa_situation():
-            return bot._get_avoid_other_players_expansion_matrix(), set()
+        if BotTargeting.is_ffa_situation(bot, ):
+            return BotExpansionOps._get_avoid_other_players_expansion_matrix(bot, ), set()
 
         numberStartTargets = 2
 
         if bot.targetPlayer != -1:
-            tgs, enDistMap = bot._get_furthest_apart_3_enemy_general_locations(bot.targetPlayer)
+            tgs, enDistMap = BotTargeting._get_furthest_apart_3_enemy_general_locations(bot, bot.targetPlayer)
         else:
-            tgs = bot.get_target_player_possible_general_location_tiles_sorted(elimNearbyRange=12)[0:numberStartTargets]
+            tgs = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=12)[0:numberStartTargets]
 
             if len(tgs) < numberStartTargets:
-                tgs = bot.get_target_player_possible_general_location_tiles_sorted(elimNearbyRange=8)[0:numberStartTargets]
+                tgs = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=8)[0:numberStartTargets]
 
             for tg in tgs:
                 bot.viewInfo.add_targeted_tile(tg, TargetStyle.TEAL)
@@ -1632,7 +1651,7 @@ class BotExpansionOps:
             for tile in bot._map.get_all_tiles():
                 distMap[tile] += enDistMap[tile]
                 distMap[tile] -= usDist[tile] // 2
-                distMap[tile] += bot.get_distance_from_board_center(tile, center_ratio=0.75)
+                distMap[tile] += BotPathingUtils.get_distance_from_board_center(bot, tile, center_ratio=0.75)
 
             teammateDistanceDropoffPoint = 9
             for teammate in bot._map.teammates:
@@ -1659,13 +1678,13 @@ class BotExpansionOps:
             for tile in bot._map.get_all_tiles():
                 distMap[tile] = 0 - distMap[tile]
                 distMap[tile] += enDistMap[tile]
-                distMap[tile] += bot.get_distance_from_board_center(tile, center_ratio=0.85)
+                distMap[tile] += BotPathingUtils.get_distance_from_board_center(bot, tile, center_ratio=0.85)
         elif bot._map.remainingPlayers > 2:
             distSource.append(bot.general)
             distMap = SearchUtils.build_distance_map_matrix(bot._map, distSource)
 
             for tile in bot._map.get_all_tiles():
-                distMap[tile] -= bot.get_distance_from_board_center(tile, center_ratio=0.15)
+                distMap[tile] -= BotPathingUtils.get_distance_from_board_center(bot, tile, center_ratio=0.15)
         else:
             raise AssertionError("The fuck?")
 
@@ -1684,9 +1703,9 @@ class BotExpansionOps:
         if bot._expansion_value_matrix is None:
             logbook.info(f'rebuilding expansion weight matrix for turn {bot._map.turn}')
             if BotStateQueries.is_still_ffa_and_non_dominant(bot):
-                bot._expansion_value_matrix = bot._get_avoid_other_players_expansion_matrix()
+                bot._expansion_value_matrix = BotExpansionOps._get_avoid_other_players_expansion_matrix(bot, )
             else:
-                bot._expansion_value_matrix = bot._get_standard_expansion_capture_weight_matrix()
+                bot._expansion_value_matrix = BotExpansionOps._get_standard_expansion_capture_weight_matrix(bot)
 
         if mult != 1:
             copyMat = bot._expansion_value_matrix.copy()
@@ -1706,24 +1725,27 @@ class BotExpansionOps:
 
         @return:
         """
+        from BotModules.BotCityOps import BotCityOps
+
         haveSeenOtherPlayer: bool = False
         neutCity: Tile | None = None
-        nearEdgeOfMap: bool = bot.get_distance_from_board_center(bot.general, center_ratio=0.25) > 5
+        nearEdgeOfMap: bool = BotPathingUtils.get_distance_from_board_center(bot, bot.general, center_ratio=0.25) > 5
 
         if not neutCity or haveSeenOtherPlayer:
             return None
 
         remainingCycleTurns = 50 - bot._map.turn % 50
         potentialGenBonus = remainingCycleTurns // 2
-        sumArmy = bot.sum_player_army_near_tile(neutCity, distance=100, player=bot.general.player)
+        from BotModules.BotCombatOps import BotCombatOps
+        sumArmy = BotCombatOps.sum_player_army_near_tile(bot, neutCity, distance=100, player=bot.general.player)
         if sumArmy + potentialGenBonus - 3 > neutCity.army:
-            path, move = bot.capture_cities(negativeTiles=set(), forceNeutralCapture=True)
+            path, move = BotCityOps.capture_cities(bot, negativeTiles=set(), forceNeutralCapture=True)
             if move is not None:
                 bot.info(f'AM I NOT TURTLEY ENOUGH FOR THE TURTLE CLUB? {move}')
                 return move
             if path is not None:
                 bot.info(f'AM I NOT TURTLEY ENOUGH FOR THE TURTLE CLUB? {str(path)}')
-                return bot.get_first_path_move(path)
+                return BotPathingUtils.get_first_path_move(bot, path)
 
         return None
 
@@ -1736,11 +1758,11 @@ class BotExpansionOps:
         if bot.targetPlayer == -1:
             return None
 
-        if bot.is_all_in():
-            path = bot.explore_target_player_undiscovered(defenseCriticalTileSet, onlyHuntGeneral=True)
+        if BotStateQueries.is_all_in(bot, ):
+            path = BotExpansionOps.explore_target_player_undiscovered(bot, defenseCriticalTileSet, onlyHuntGeneral=True)
             if path is not None:
                 bot.info(f'all-in exploration move...? {str(path)}')
-                return bot.get_first_path_move(path)
+                return BotPathingUtils.get_first_path_move(bot, path)
             return None
 
         if bot.timings.get_turns_left_in_cycle(bot._map.turn) < 15:
@@ -1755,11 +1777,11 @@ class BotExpansionOps:
             armyCutoff += 10
 
         logbook.info(f'EN TERRITORY CONT EXP, armyCutoff {armyCutoff}')
-        move = bot._get_expansion_plan_exploration_move(armyCutoff, defenseCriticalTileSet)
+        move = BotExpansionOps._get_expansion_plan_exploration_move(bot, armyCutoff, defenseCriticalTileSet)
 
         if move is not None:
-            bot.try_find_expansion_move(defenseCriticalTileSet, timeLimit=bot.get_remaining_move_time())
-            move = bot._get_expansion_plan_exploration_move(armyCutoff, defenseCriticalTileSet)
+            BotExpansionOps.try_find_expansion_move(bot, defenseCriticalTileSet, timeLimit=BotTimings.get_remaining_move_time(bot))
+            move = BotExpansionOps._get_expansion_plan_exploration_move(bot, armyCutoff, defenseCriticalTileSet)
             if move is not None:
                 bot.info(f'EN TERRITORY CONT EXP! {move} - armyCutoff {armyCutoff}')
                 return move

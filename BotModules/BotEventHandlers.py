@@ -4,7 +4,6 @@ import SearchUtils
 from Army import Army
 from base.client.map import Tile
 
-
 class BotEventHandlers:
     @staticmethod
     def handle_city_found(bot, tile):

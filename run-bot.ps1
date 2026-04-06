@@ -1393,7 +1393,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c {
         cd "D:/2019_reformat_Backup/generals-bot/";
         . ./run-bot.ps1;
-        $command = 'run-blob -game 1v1 -sleepMax 120 -name "QueueT" -public'
+        $command = 'run-blob -game 1v1 -sleepMax 240 -name "QueueT" -public'
         try {
             Invoke-Expression $command
         } finally {
@@ -1405,7 +1405,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c {
         cd "D:/2019_reformat_Backup/generals-bot/";
         . ./run-bot.ps1;
-        $command = 'run-path -game 1v1 -sleepMax 120 -name "a98i40pwpfah" -public'
+        $command = 'run-path -game 1v1 -sleepMax 240 -name "a98i40pwpfah" -public'
         try {
             Invoke-Expression $command
         } finally {
@@ -1417,37 +1417,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c {
         cd "D:/2019_reformat_Backup/generals-bot/";
         . ./run-bot.ps1;
-        $command = 'run-SoraAlt -public -sleepMax 180'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    <#
-    Human in custom lobby with custom maps
-    #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeCustMap1 -nolog'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    <#
-    Human in custom lobby with custom maps
-    #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeCustMap2 -nolog'
+        $command = 'run-SoraAlt -public -sleepMax 360'
         try {
             Invoke-Expression $command
         } finally {
@@ -1457,12 +1427,12 @@ function Start-WindowsTerminalLiveBots {
     }
 
     # <#
-    # Human in custom lobby with alt tiles
+    # Human in custom lobby with custom maps
     # #>
     # wt -w $windowName new-tab pwsh -NoExit -c {
     #     cd "D:/2019_reformat_Backup/generals-bot/";
     #     . ./run-bot.ps1;
-    #     $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeAltTiles1 -nolog'
+    #     $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeCustMap1 -nolog'
     #     try {
     #         Invoke-Expression $command
     #     } finally {
@@ -1471,20 +1441,50 @@ function Start-WindowsTerminalLiveBots {
     #     }
     # }
 
-    <#
-    Human in custom lobby with normal setup
-    #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeNormal1 -nolog'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    # <#
+    # Human in custom lobby with custom maps
+    # #>
+    # wt -w $windowName new-tab pwsh -NoExit -c {
+    #     cd "D:/2019_reformat_Backup/generals-bot/";
+    #     . ./run-bot.ps1;
+    #     $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeCustMap2 -nolog'
+    #     try {
+    #         Invoke-Expression $command
+    #     } finally {
+    #         Write-Host $command
+    #         Start-Sleep -Seconds 1
+    #     }
+    # }
+
+    # # <#
+    # # Human in custom lobby with alt tiles
+    # # #>
+    # # wt -w $windowName new-tab pwsh -NoExit -c {
+    # #     cd "D:/2019_reformat_Backup/generals-bot/";
+    # #     . ./run-bot.ps1;
+    # #     $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeAltTiles1 -nolog'
+    # #     try {
+    # #         Invoke-Expression $command
+    # #     } finally {
+    # #         Write-Host $command
+    # #         Start-Sleep -Seconds 1
+    # #     }
+    # # }
+
+    # <#
+    # Human in custom lobby with normal setup
+    # #>
+    # wt -w $windowName new-tab pwsh -NoExit -c {
+    #     cd "D:/2019_reformat_Backup/generals-bot/";
+    #     . ./run-bot.ps1;
+    #     $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeNormal1 -nolog'
+    #     try {
+    #         Invoke-Expression $command
+    #     } finally {
+    #         Write-Host $command
+    #         Start-Sleep -Seconds 1
+    #     }
+    # }
 
     # ALT TESTING
     # Run-Human -name 'HaltWhoGoesThere' -game custom -private -sleepMax 1 -roomID Human.exeNormal1

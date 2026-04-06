@@ -46,6 +46,7 @@ from BotModules.BotCombatOps import BotCombatOps
 from BotModules.BotComms import BotComms
 from BotModules.BotDefense import BotDefense
 from BotModules.BotEventHandlers import BotEventHandlers
+from BotModules.BotExplorationOps import BotExplorationOps
 from BotModules.BotExpansionOps import BotExpansionOps
 from BotModules.BotGatherOps import BotGatherOps
 from BotModules.BotLifecycle import BotLifecycle
@@ -1204,7 +1205,7 @@ class EklipZBot(object):
                         self.targetingArmy = self.get_army_at(annoyingTile)
                         return nukeMove
 
-        afkPlayerMove = BotTargeting.get_move_if_afk_player_situation(self)
+        afkPlayerMove = BotExplorationOps.get_move_if_afk_player_situation(self)
         if afkPlayerMove:
             return afkPlayerMove
 

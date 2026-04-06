@@ -1106,6 +1106,9 @@ class ArmyInterceptor(object):
                     # thisValue = max(rawValue, newValue - recaptureTurns * RECAPTURE_VALUE)
                     thisValue = newValue + recapTurns * RECAPTURE_VALUE
 
+                    # forces knapsack to prefer the shorter intercepts even when a longer intercept blocks the same amount of damage. Prevents running parallel to a threat for no real reason.
+                    thisValue -= 0.1 * baseLen
+
                     existing = bestInterceptTable.get(curDist, None)
                     opt = InterceptionOptionInfo(
                         path,

@@ -1,9 +1,12 @@
 import typing
 
+import BotModules as BM
 import Gather
 import logbook
 
 import SearchUtils
+from BotModules.BotCityCaptureControl import BotCityCaptureControl
+from BotModules.BotCombatQueries import BotCombatQueries
 from BotModules.BotCombatOps import BotCombatOps
 from BotModules.BotDefense import BotDefense
 from BotModules.BotPathingUtils import BotPathingUtils
@@ -167,7 +170,7 @@ class BotCityOps:
             tgPlayer = target.player
             if tgPlayer == -1:
                 tgPlayer = bot.targetPlayer
-            killNegs = BotCombatOps.find_large_tiles_near(bot, [target], enemyArmyNearDist, forPlayer=tgPlayer, limit=30, minArmy=1)
+            killNegs = BotCombatQueries.find_large_tiles_near(bot, [target], enemyArmyNearDist, forPlayer=tgPlayer, limit=30, minArmy=1)
             for t in killNegs:
                 if t != target:
                     captureNegs.add(t)
@@ -948,14 +951,7 @@ class BotCityOps:
 
     @staticmethod
     def block_neutral_captures(bot, reason: str = ''):
-        if bot.curPath and bot.curPath.tail.tile.isCity and bot.curPath.tail.tile.isNeutral:
-            targetNeutCity = bot.curPath.tail.tile
-            if bot.is_blocking_neutral_city_captures:
-                bot.info(
-                    f'forcibly stopped taking neutral city {str(targetNeutCity)} {reason}')
-                bot.curPath = None
-        logbook.info(f'Preventing neutral city captures for now {reason}')
-        bot.is_blocking_neutral_city_captures = True
+        BotCityCaptureControl.block_neutral_captures(bot, reason)
 
     @staticmethod
     def ensure_reachability_matrix_built(bot):
@@ -1045,7 +1041,7 @@ class BotCityOps:
         for neutCity in bot.cityAnalyzer.city_scores:
             if not neutCity.discovered:
                 continue
-            if BotCombatOps.sum_enemy_army_near_tile(bot, neutCity, 2) == 0 and BotCombatOps.count_enemy_territory_near_tile(bot, neutCity, 3) == 0:
+            if BotCombatOps.sum_enemy_army_near_tile(bot, neutCity, 2) == 0 and BotCombatQueries.count_enemy_territory_near_tile(bot, neutCity, 3) == 0:
                 longDistSearchCities.append(neutCity)
 
         shortDistSearchCities = []
@@ -1381,3 +1377,6 @@ class BotCityOps:
             bot.info(f'C preDef {move} - {valGathered} in turns {gatherTurns}/{bot.win_condition_analyzer.recommended_city_defense_plan_turns}')
 
         return move
+
+
+BM.BotCityOps = BotCityOps

@@ -5,8 +5,11 @@ import random
 import time
 import typing
 
+import BotModules as BM
 import SearchUtils
 import logbook
+from BotModules.BotDefenseQueries import BotDefenseQueries
+from BotModules.BotExplorationOps import BotExplorationOps
 from BotModules.BotStateQueries import BotStateQueries
 from BotModules.BotTimings import BotTimings
 from BotModules.BotPathingUtils import BotPathingUtils
@@ -16,6 +19,7 @@ from BotModules.BotComms import BotComms
 
 from BotModules.BotGatherOps import BotGatherOps
 from BotModules.BotRepetition import BotRepetition
+from BotModules.BotTargeting import BotTargeting
 from DangerAnalyzer import ThreatType
 from Behavior.ArmyInterceptor import InterceptionOptionInfo
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander
@@ -32,8 +36,6 @@ from base.client.map import Tile
 class BotExpansionOps:
     @staticmethod
     def get_optimal_city_or_general_plan_move(bot, timeLimit: float = 4.0) -> Move | None:
-        from BotModules.BotTargeting import BotTargeting
-
         calcedThisTurn = False
         if bot._map.turn < 50 and bot._map.is_2v2:
             BotComms.send_2v2_tip_to_ally(bot, )
@@ -254,8 +256,7 @@ class BotExpansionOps:
             expNegs = set(defenseCriticalTileSet)
             if not haveFullExpPlanAlready or BotStateQueries.is_all_in(bot, ):
                 with bot.perf_timer.begin_move_event('checking launch move'):
-                    from BotModules.BotCombatOps import BotCombatOps
-                    attackLaunchMove = BotCombatOps.check_for_attack_launch_move(bot, expNegs)
+                    attackLaunchMove = BM.BotCombatOps.BotCombatOps.check_for_attack_launch_move(bot, expNegs)
                 if attackLaunchMove is not None and not haveFullExpPlanAlready:
                     return attackLaunchMove
 
@@ -915,13 +916,11 @@ class BotExpansionOps:
             emergenceRatio: float = 0.15,
             includeCities: bool | None = None,
     ) -> Path | None:
-        from BotModules.BotTargeting import BotTargeting
-
         if includeCities is None:
             includeCities = not bot.armyTracker.has_perfect_information_of_player_cities(bot.targetPlayer) and WinCondition.ContestEnemyCity in bot.win_condition_analyzer.viable_win_conditions
 
-        toReveal = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=0, player=bot.targetPlayer, cutoffEmergenceRatio=emergenceRatio, includeCities=includeCities)
-        targetArmyLevel = BotDefense.determine_fog_defense_amount_available_for_tiles(bot, toReveal, bot.targetPlayer)
+        toReveal = BM.BotTargeting.BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=0, player=bot.targetPlayer, cutoffEmergenceRatio=emergenceRatio, includeCities=includeCities)
+        targetArmyLevel = BotDefenseQueries.determine_fog_defense_amount_available_for_tiles(bot, toReveal, bot.targetPlayer)
 
         for t in toReveal:
             BotRendering.mark_tile(bot, t, alpha=50)
@@ -929,8 +928,7 @@ class BotExpansionOps:
         if len(toReveal) == 0:
             return None
 
-        from BotModules.BotCombatOps import BotCombatOps
-        startArmies = sorted(BotCombatOps.get_largest_tiles_as_armies(bot, bot.general.player, limit=3), key=lambda t: bot._map.get_distance_between(bot.targetPlayerExpectedGeneralLocation, t.tile))
+        startArmies = sorted(BM.BotCombatOps.BotCombatOps.get_largest_tiles_as_armies(bot, bot.general.player, limit=3), key=lambda t: bot._map.get_distance_between(bot.targetPlayerExpectedGeneralLocation, t.tile))
 
         bestArmy = None
         bestThresh = None
@@ -1033,7 +1031,7 @@ class BotExpansionOps:
         if bot._map.turn < 100:
             return None
 
-        path = BotExpansionOps.get_optimal_exploration(bot, turns, negativeTiles, minArmy=minArmy, maxTime=maxTime)
+        path = BotExplorationOps.get_optimal_exploration(bot, turns, negativeTiles, minArmy=minArmy, maxTime=maxTime)
         if path:
             logbook.info(f"Oh no way, explore found a path lol? {str(path)}")
             tilesRevealed = set()
@@ -1224,9 +1222,7 @@ class BotExpansionOps:
 
     @staticmethod
     def make_second_25_move(bot) -> Move | None:
-        from BotModules.BotTargeting import BotTargeting
-
-        if bot._map.turn >= 100 or BotTargeting.is_ffa_situation(bot, ) or bot.completed_first_100 or bot._map.is_2v2 or bot.targetPlayer == -1:
+        if bot._map.turn >= 100 or BM.BotTargeting.BotTargeting.is_ffa_situation(bot, ) or bot.completed_first_100 or bot._map.is_2v2 or bot.targetPlayer == -1:
             return None
 
         foundEnemy = SearchUtils.any_where(bot.targetPlayerObj.tiles, lambda t: t.visible)
@@ -1534,8 +1530,7 @@ class BotExpansionOps:
                     and bot.opponent_tracker.winning_on_economy(byRatio=0.8, cityValue=50)
             )
             ):
-                from BotModules.BotCityOps import BotCityOps
-                path = BotCityOps.get_quick_kill_on_enemy_cities(bot, defenseCriticalTileSet)
+                path = BM.BotCityOps.BotCityOps.get_quick_kill_on_enemy_cities(bot, defenseCriticalTileSet)
                 if path is not None:
                     bot.info(f'ALL IN ARMY ADVANTAGE CITY CONTEST {str(path)}')
                     return BotPathingUtils.get_first_path_move(bot, path)
@@ -1608,20 +1603,18 @@ class BotExpansionOps:
 
         @return:
         """
-        from BotModules.BotTargeting import BotTargeting
-
-        if BotTargeting.is_ffa_situation(bot, ):
+        if BM.BotTargeting.BotTargeting.is_ffa_situation(bot, ):
             return BotExpansionOps._get_avoid_other_players_expansion_matrix(bot, ), set()
 
         numberStartTargets = 2
 
         if bot.targetPlayer != -1:
-            tgs, enDistMap = BotTargeting._get_furthest_apart_3_enemy_general_locations(bot, bot.targetPlayer)
+            tgs, enDistMap = BM.BotTargeting.BotTargeting._get_furthest_apart_3_enemy_general_locations(bot, bot.targetPlayer)
         else:
-            tgs = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=12)[0:numberStartTargets]
+            tgs = BM.BotTargeting.BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=12)[0:numberStartTargets]
 
             if len(tgs) < numberStartTargets:
-                tgs = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=8)[0:numberStartTargets]
+                tgs = BM.BotTargeting.BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=8)[0:numberStartTargets]
 
             for tg in tgs:
                 bot.viewInfo.add_targeted_tile(tg, TargetStyle.TEAL)
@@ -1725,8 +1718,6 @@ class BotExpansionOps:
 
         @return:
         """
-        from BotModules.BotCityOps import BotCityOps
-
         haveSeenOtherPlayer: bool = False
         neutCity: Tile | None = None
         nearEdgeOfMap: bool = BotPathingUtils.get_distance_from_board_center(bot, bot.general, center_ratio=0.25) > 5
@@ -1736,10 +1727,9 @@ class BotExpansionOps:
 
         remainingCycleTurns = 50 - bot._map.turn % 50
         potentialGenBonus = remainingCycleTurns // 2
-        from BotModules.BotCombatOps import BotCombatOps
-        sumArmy = BotCombatOps.sum_player_army_near_tile(bot, neutCity, distance=100, player=bot.general.player)
+        sumArmy = BM.BotCombatOps.BotCombatOps.sum_player_army_near_tile(bot, neutCity, distance=100, player=bot.general.player)
         if sumArmy + potentialGenBonus - 3 > neutCity.army:
-            path, move = BotCityOps.capture_cities(bot, negativeTiles=set(), forceNeutralCapture=True)
+            path, move = BM.BotCityOps.BotCityOps.capture_cities(bot, negativeTiles=set(), forceNeutralCapture=True)
             if move is not None:
                 bot.info(f'AM I NOT TURTLEY ENOUGH FOR THE TURTLE CLUB? {move}')
                 return move
@@ -1975,12 +1965,13 @@ class BotExpansionOps:
         if bot.targetPlayer != -1 and not bot.armyTracker.seen_player_lookup[bot.targetPlayer]:
             searchingForFirstContact = True
 
-        if numEnGenPos > 6:
+        if numEnGenPos > 5:
             bot.info(f'filtering down valid general set')
             avgDist = sum(bot.board_analysis.intergeneral_analysis.aMap.raw[t.tile_index] for t in genPosesToConsider) / len(genPosesToConsider)
             genPosesToConsider = [t for t in genPosesToConsider if bot.board_analysis.intergeneral_analysis.aMap.raw[t.tile_index] >= avgDist]
             for pos in genPosesToConsider:
-                bot.viewInfo.add_targeted_tile(pos, targetStyle=TargetStyle.GREEN, radiusReduction=8)
+                bot.viewInfo.add_targeted_tile(pos, targetStyle=TargetStyle.GREEN, radiusReduction=10)
+                bot.viewInfo.add_targeted_tile(pos, targetStyle=TargetStyle.ORANGE, radiusReduction=8)
             numEnGenPos = len(genPosesToConsider)
             enPotentialGenDistances = None
 
@@ -2121,8 +2112,8 @@ class BotExpansionOps:
                 if tile.army > 1:
                     bonus += 0.02 + min(50, tile.army) * 0.02
 
-            if not tile.discovered and bot.armyTracker.valid_general_positions_by_player[bot.targetPlayer].raw[tile.tile_index] and numEnGenPos < 10:
-                bonus -= 0.01
+            # if not tile.discovered and bot.armyTracker.valid_general_positions_by_player[bot.targetPlayer].raw[tile.tile_index] and numEnGenPos < 10:
+            #     bonus -= 0.01
 
             if bot._map.is_tile_on_team_with(tile, bot.targetPlayer) and bot.territories.is_tile_in_friendly_territory(tile):
                 bonus += 0.05
@@ -2165,7 +2156,7 @@ class BotExpansionOps:
 
             if bot._map.is_tile_friendly(tile):
                 if tile.army < 2:
-                    bonus -= -0.05
+                    bonus -= 0.05
                 matrix.raw[tile.tile_index] = min(bonus, 0.0)
             else:
                 matrix.raw[tile.tile_index] += bonus

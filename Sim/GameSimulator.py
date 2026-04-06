@@ -201,7 +201,7 @@ class GameSimulator(object):
         """moves_history[-1] is the most recent set of moves, and moves_history[-1][0] would be player 0's selected move."""
         self.tiles_updated_this_cycle: typing.Set[Tile] = set()
         self.ignore_illegal_moves = ignore_illegal_moves
-        
+
         # Initialize move resolver with the map
         self.move_resolver = MoveResolver(map_raw)
 
@@ -230,7 +230,7 @@ class GameSimulator(object):
                 valid_moves.append((player, move))
             elif not dont_require_all_players_to_move:
                 raise AssertionError(f'player {player} does not have a move queued yet for turn {self.turn}')
-        
+
         # Use the move resolver to determine the order of moves
         move_order = self.move_resolver.determine_move_order(valid_moves)
 
@@ -760,7 +760,7 @@ class GameSimulatorHost(object):
         x,y->x',y'->... to represent paths.
         double space to separate individual paths.
         double space 'none' double space to represent no-op moves.
-        
+
         @param player:
         @param moves_str:
         @return:
@@ -1075,7 +1075,8 @@ class GameSimulatorHost(object):
                     continue
                 if self.sim.sim_map.teams[player] == self.sim.sim_map.teams[p]:
                     logbook.info(f'SIM NOTIFYING TILE PING {str(tile)} FROM p{player} TO p{p}')
-                    bot.eklipz_bot.notify_tile_ping(tile)
+                    from BotModules.BotComms import BotComms
+                    BotComms.notify_tile_ping(bot.eklipz_bot, tile)
 
     def notify_chat_messages(self):
         bot: BotHostBase
@@ -1087,7 +1088,8 @@ class GameSimulatorHost(object):
                 if not teamChat or self.sim.sim_map.teams[player] == self.sim.sim_map.teams[p]:
                     chatUpdate = ChatUpdate(self.sim.sim_map.usernames[player], teamChat, message)
                     logbook.info(f'SIM NOTIFYING CHAT {str(chatUpdate)} FROM p{player} TO p{p}')
-                    bot.eklipz_bot.notify_chat_message(chatUpdate)
+                    from BotModules.BotComms import BotComms
+                    BotComms.notify_chat_message(bot.eklipz_bot, chatUpdate)
 
     def any_bot_has_viewer_running(self) -> bool:
         for bot in self.bot_hosts:

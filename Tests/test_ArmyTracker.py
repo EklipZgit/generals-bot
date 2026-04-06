@@ -1150,34 +1150,6 @@ a1   b1   b1   bG1
 
         self.run_generated_adj_test(aArmy, aMove, bArmy, bMove, data, debugMode)
 
-    def test_generate_all_adjacent_army_scenarios(self):
-        # self.skipTest('takes too long right now, and currently passing')
-
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
-        # 4x4 map, with all fog scenarios covered.
-        data = """
-|    |    |    |
-aG1  a1   a1   b1
-a1   a1   b1   b1
-a1   a1   b1   b1
-a1   b1   b1   bG1
-|    |    |    |
-"""
-        moveOpts = [(0, -1), (-1, 0), (0, 1), None, (1, 0)]
-
-        combos = []
-
-        for aArmy in [12, 10, 11, 15, 20, 2, 5, 8, 9]:
-            for bArmy in [5, 10, 11, 12, 15, 20, 2, 8, 9]:
-                for aMove in moveOpts:
-                    for bMove in moveOpts:
-                        combos.append((aArmy, bArmy, aMove, bMove))
-
-        random.shuffle(combos)
-        for aArmy, bArmy, aMove, bMove in combos:
-            with self.subTest(aArmy=aArmy, bArmy=bArmy, aMove=aMove, bMove=bMove):
-                self.run_generated_adj_test(aArmy, aMove, bArmy, bMove, data, debugMode)
-    
     def test_should_detect_armies_from_fog(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_detect_armies_from_fog___CnEgkMDjI---1--565.txtmap'

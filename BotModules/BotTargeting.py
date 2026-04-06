@@ -1,6 +1,7 @@
 import math
 import time
 
+import BotModules as BM
 import typing
 
 import ExpandUtils
@@ -8,7 +9,6 @@ import logbook
 
 import SearchUtils
 from BotModules.BotStateQueries import BotStateQueries
-from BotModules.BotExpansionOps import BotExpansionOps
 from BotModules.BotPathingUtils import BotPathingUtils
 from BotModules.BotComms import BotComms
 
@@ -354,8 +354,7 @@ class BotTargeting:
 
     @staticmethod
     def find_enemy_city_path(bot, negativeTiles: TileSet, force: bool = False) -> typing.Tuple[int, Path | None]:
-        from BotModules.BotCityOps import BotCityOps
-        scores = [c for c in BotCityOps.get_enemy_cities_by_priority(bot)]
+        scores = [c for c in BM.BotCityOps.BotCityOps.get_enemy_cities_by_priority(bot)]
         foundScores = [c for c in scores if not c.isTempFogPrediction or c.discovered]
         if len(foundScores) > 0:
             scores = foundScores
@@ -517,49 +516,9 @@ class BotTargeting:
         return maxTile
 
     @staticmethod
-    def get_move_if_afk_player_situation(bot) -> Move | None:
-        afkPlayers = BotTargeting.get_afk_players(bot)
-        allOtherPlayersAfk = len(afkPlayers) + 1 == bot._map.remainingPlayers
-        numTilesVisible = 0
-        if bot.targetPlayer != -1:
-            numTilesVisible = len(bot._map.players[bot.targetPlayer].tiles)
-
-        if allOtherPlayersAfk and numTilesVisible == 0:
-            with bot.perf_timer.begin_move_event('AFK Player optimal EXPLORATION'):
-                path = BotExpansionOps.get_optimal_exploration(bot, 30, None, minArmy=0, maxTime=0.04)
-            if path is not None:
-                bot.info(f"Rapid EXPLORE due to AFK player {bot.targetPlayer}:  {str(path)}")
-
-                bot.finishing_exploration = True
-                bot.viewInfo.add_info_line("Setting finishingExploration to True because allOtherPlayersAfk and found an explore path")
-                return BotPathingUtils.get_first_path_move(bot, path)
-
-            expansionNegatives = set()
-            territoryMap = bot.territories.territoryMap
-            with bot.perf_timer.begin_move_event('AFK Player optimal EXPANSION'):
-                if bot.teammate_general is not None:
-                    expansionNegatives.add(bot.teammate_general)
-                expUtilPlan = ExpandUtils.get_round_plan_with_expansion(
-                    bot._map,
-                    bot.general.player,
-                    bot.targetPlayer,
-                    15,
-                    bot.board_analysis,
-                    territoryMap,
-                    bot.tileIslandBuilder,
-                    expansionNegatives,
-                    bot.captureLeafMoves,
-                    allowLeafMoves=False,
-                    viewInfo=bot.viewInfo,
-                    time_limit=0.03)
-
-                path = expUtilPlan.selected_option
-                otherPaths = expUtilPlan.all_paths
-
-            if path is not None:
-                bot.finishing_exploration = True
-                bot.info(f"Rapid EXPAND due to AFK player {bot.targetPlayer}:  {str(path)}")
-                return BotPathingUtils.get_first_path_move(bot, path)
+    def target_player_flank_path(bot):
+        if bot.targetPlayer == -1:
+            return None
 
         if bot.targetPlayer != -1:
             tp = bot.targetPlayerObj
@@ -577,17 +536,6 @@ class BotTargeting:
                     if move is not None:
                         bot.info(f"quick-kill gather to opposing player who left! {move}")
                         return move
-
-            if allOtherPlayersAfk and bot.targetPlayerExpectedGeneralLocation is not None and bot.targetPlayerExpectedGeneralLocation.isGeneral:
-                with bot.perf_timer.begin_move_event(f'quick-kill gather to opposing player!'):
-                    move = BotGatherOps.timing_gather(
-                        bot,
-                        [bot.targetPlayerExpectedGeneralLocation],
-                        force=True,
-                        pruneToValuePerTurn=True)
-                if move is not None:
-                    bot.info(f"quick-kill gather to opposing player! {move}")
-                    return move
 
         return None
 
@@ -1060,3 +1008,6 @@ class BotTargeting:
         bot._spawn_cramped = cramped
 
         return cramped
+
+
+BM.BotTargeting = BotTargeting

@@ -2261,6 +2261,7 @@ class TestBase(unittest.TestCase):
             saveTile = path.tail.prev.tile
 
         threat = ThreatObj(path.length - 1, path.value, path, threatType, saveTile, analysis)
+        threat.path.start.tile.lastMovedTurn = map.turn - 1
 
         return threat
 

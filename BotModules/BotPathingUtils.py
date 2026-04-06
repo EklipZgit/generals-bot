@@ -1,6 +1,7 @@
 import logbook
 import typing
 
+import BotModules as BM
 import SearchUtils
 from BotModules.BotStateQueries import BotStateQueries
 from BotModules.BotRepetition import BotRepetition
@@ -27,12 +28,10 @@ class BotPathingUtils:
 
     @staticmethod
     def is_move_safe_valid(bot, move, allowNonKill=True):
-        from BotModules.BotDefense import BotDefense
-
         if move is None:
             return False
         if move.source == bot.general:
-            return BotDefense.general_move_safe(bot, move.dest)
+            return BM.BotDefense.BotDefense.general_move_safe(bot, move.dest)
         if move.source.player != move.dest.player and move.source.army - 2 < move.dest.army and not allowNonKill:
             logbook.info(
                 f"{move.source.x},{move.source.y} -> {move.dest.x},{move.dest.y} was not a move that killed the dest tile")
@@ -41,8 +40,6 @@ class BotPathingUtils:
 
     @staticmethod
     def continue_cur_path(bot, threat: ThreatObj | None, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
-        from BotModules.BotDefense import BotDefense
-
         if bot.expansion_plan.includes_intercept:
             bot.curPath = None
             bot.viewInfo.add_info_line(f'clearing curPath because expansion includes intercept')
@@ -97,10 +94,10 @@ class BotPathingUtils:
         if nextMove.dest is not None:
             dest = nextMove.dest
             source = nextMove.source
-            if source.isGeneral and not BotDefense.general_move_safe(bot, dest):
+            if source.isGeneral and not BM.BotDefense.BotDefense.general_move_safe(bot, dest):
                 logbook.info(
                     f"Attempting to execute path move from self.curPath?")
-                if BotDefense.general_move_safe(bot, dest, move_half=True):
+                if BM.BotDefense.BotDefense.general_move_safe(bot, dest, move_half=True):
                     logbook.info("General move in path would have violated general min army allowable. Moving half.")
                     move = Move(source, dest, True)
                     return move
@@ -119,8 +116,7 @@ class BotPathingUtils:
                         bot.curPathPrio = -1
                         if threat is not None:
                             isNonDominantFfa = BotStateQueries.is_still_ffa_and_non_dominant(bot)
-                            from BotModules.BotCombatOps import BotCombatOps
-                            killThreatPath = BotCombatOps.kill_threat(bot, threat)
+                            killThreatPath = BM.BotCombatOps.BotCombatOps.kill_threat(bot, threat)
                             if killThreatPath is not None:
                                 bot.info(f"REPLACED CURPATH WITH Final path to kill threat! {killThreatPath.toString()}")
                                 bot.viewInfo.color_path(PathColorer(killThreatPath, 0, 255, 204, 255, 10, 200))
@@ -141,7 +137,7 @@ class BotPathingUtils:
                     else:
                         break
                 if bot.curPath is not None and nextMove.dest is not None:
-                    if nextMove.source == bot.general and not BotDefense.general_move_safe(bot, bot.curPath.start.next.tile, bot.curPath.start.move_half):
+                    if nextMove.source == bot.general and not BM.BotDefense.BotDefense.general_move_safe(bot, bot.curPath.start.next.tile, bot.curPath.start.move_half):
                         bot.curPath = None
                         bot.curPathPrio = -1
                     else:
@@ -527,9 +523,7 @@ class BotPathingUtils:
                         negCityCount -= 1
 
                 # local import to avoid circular dependency
-                from BotModules.BotTargeting import BotTargeting
-
-                if not BotTargeting.is_ffa_situation(bot):
+                if not BM.BotTargeting.BotTargeting.is_ffa_situation(bot):
                     if not nextTile.visible:
                         negEnemyTiles -= 1
                     if not nextTile.discovered:

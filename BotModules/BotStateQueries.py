@@ -1,5 +1,6 @@
 import typing
 
+import BotModules as BM
 import SearchUtils
 from base.client.map import Tile
 
@@ -104,3 +105,6 @@ class BotStateQueries:
         SearchUtils.breadth_first_foreach(bot._map, nearTiles, distance, foreachFunc=nearbyTileAdder)
 
         return [t for t in tiles]
+
+
+BM.BotStateQueries = BotStateQueries

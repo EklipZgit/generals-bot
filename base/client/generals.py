@@ -614,8 +614,8 @@ class GeneralsClient(object):
 
                     time.sleep(0.1)
                     # logbook.info(f'and not self._customGameIsPublic {self._customGameIsPublic}')
-                    if not self.isPrivate and not self._customGameIsPublic:
-                        self._send(["make_custom_public", self._gameid])
+                    # if not self.isPrivate and not self._customGameIsPublic:
+                    #     self._send(["make_custom_public", self._gameid])
 
                 time.sleep(0.3)
                 self._send(["set_force_start", self._gameid, forcing])

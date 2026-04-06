@@ -1,6 +1,7 @@
 import time
 import typing
 
+import BotModules as BM
 import logbook
 
 import Gather
@@ -64,9 +65,8 @@ class BotGatherOps:
         tryGather = True
         player = bot._map.players[bot.general.player]
         enemyGather = False
-        from BotModules.BotDefense import BotDefense
         if (
-                BotDefense.get_approximate_fog_risk_deficit(bot, ) < 10
+                BM.BotDefense.BotDefense.get_approximate_fog_risk_deficit(bot, ) < 10
                 and not bot._map.remainingPlayers > 2
                 and not bot.opponent_tracker.winning_on_economy(byRatio=1.1, cityValue=0)
         ):
@@ -74,8 +74,7 @@ class BotGatherOps:
             enemyGather = True
 
         if BotStateQueries.is_all_in(bot):
-            from BotModules.BotCombatOps import BotCombatOps
-            move = BotCombatOps.try_find_flank_all_in(bot, bot.timings.get_turns_left_in_cycle(bot._map.turn))
+            move = BM.BotCombatOps.BotCombatOps.try_find_flank_all_in(bot, bot.timings.get_turns_left_in_cycle(bot._map.turn))
             if move is not None:
                 bot.info(f'flank all in {move}')
                 return move
@@ -215,8 +214,7 @@ class BotGatherOps:
 
             logbook.info(f"pruning leaves and stuff took {time.perf_counter() - leafPruneStartTime:.4f}")
 
-        from BotModules.BotDefense import BotDefense
-        forceGatherToEnemy = BotDefense.should_force_gather_to_enemy_tiles(bot, )
+        forceGatherToEnemy = BM.BotDefense.BotDefense.should_force_gather_to_enemy_tiles(bot, )
 
         gatherPriorities = BotGatherOps.get_gather_tiebreak_matrix(bot, )
 
@@ -412,8 +410,7 @@ class BotGatherOps:
                 aa = ArmyAnalyzer(bot._map, bot.enemy_attack_path.start.tile, bot.enemy_attack_path.tail.tile)
                 potThreat = ThreatObj(bot.enemy_attack_path.length, bot.enemy_attack_path.value, bot.enemy_attack_path, ThreatType.Vision, armyAnalysis=aa)
             if potThreat is not None:
-                from BotModules.BotDefense import BotDefense
-                gatherNodeMoveSelectorFunc = BotDefense.get_defense_tree_move_prio_func(bot, potThreat)
+                gatherNodeMoveSelectorFunc = BM.BotDefense.BotDefense.get_defense_tree_move_prio_func(bot, potThreat)
 
         if force or (bot._map.turn >= 50 and turnCycleOffset < bot.timings.splitTurns and startTiles is not None and len(startTiles) > 0):
             bot.finishing_exploration = False
@@ -971,8 +968,7 @@ class BotGatherOps:
             if bot.gather_use_max_set and not isinstance(targets, dict):
                 with bot.perf_timer.begin_move_event(f'gath_max_set {gatherTurns}t'):
                     gatherMatrix = BotGatherOps.get_gather_tiebreak_matrix(bot, )
-                    from BotModules.BotExpansionOps import BotExpansionOps
-                    captureMatrix = BotExpansionOps.get_expansion_weight_matrix(bot, )
+                    captureMatrix = BM.BotExpansionOps.BotExpansionOps.get_expansion_weight_matrix(bot, )
                     valueMatrix = Gather.build_gather_capture_pure_value_matrix(
                         bot._map,
                         bot.general.player,
@@ -1116,15 +1112,13 @@ class BotGatherOps:
             additional_offset: int = 0,
             forceAllowCities: bool = False,
     ) -> typing.Set[Tile]:
-        from BotModules.BotTargeting import BotTargeting
-
         if not forceAllowCities:
             gatherNegatives = gatherNegatives.union(bot.cities_gathered_this_cycle)
 
         if BotStateQueries.is_all_in(bot):
             return gatherNegatives
 
-        if BotTargeting.is_ffa_situation(bot) and bot.player.tileCount < 65:
+        if BM.BotTargeting.BotTargeting.is_ffa_situation(bot) and bot.player.tileCount < 65:
             return gatherNegatives
 
         gatherNegatives.update(bot.win_condition_analyzer.defend_cities)

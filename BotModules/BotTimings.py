@@ -6,8 +6,11 @@ import DebugHelper
 from Path import Path
 import SearchUtils
 import logbook
+from BotModules.BotCombatQueries import BotCombatQueries
+from BotModules.BotComms import BotComms
 from BotModules.BotStateQueries import BotStateQueries
 from BotModules.BotPathingUtils import BotPathingUtils
+from BotModules.BotTargeting import BotTargeting
 
 class BotTimings:
     @staticmethod
@@ -41,9 +44,6 @@ class BotTimings:
 
     @staticmethod
     def _get_approximate_greedy_turns_available(bot) -> int:
-        from BotModules.BotTargeting import BotTargeting
-        from BotModules.BotCombatOps import BotCombatOps
-
         if bot.targetPlayer == -1 or bot.target_player_gather_path is None:
             return 5
 
@@ -54,10 +54,10 @@ class BotTimings:
         defensiveTiles.extend([c for c in bot.player.cities if bot.board_analysis.intergeneral_analysis.pathWayLookupMatrix[c] is not None and bot.board_analysis.intergeneral_analysis.pathWayLookupMatrix[
             c].distance < bot.board_analysis.intergeneral_analysis.shortestPathWay.distance + 3])
 
-        frArmy = BotCombatOps.sum_friendly_army_near_or_on_tiles(bot, defensiveTiles, distance=0, player=bot.general.player)
+        frArmy = BotCombatQueries.sum_friendly_army_near_or_on_tiles(bot, defensiveTiles, distance=0, player=bot.general.player)
         enArmyOffset = 0
         if bot.enemy_attack_path:
-            enArmyOffset = BotCombatOps.sum_friendly_army_near_or_on_tiles(bot, [t for t in bot.enemy_attack_path.tileList if t.visible], distance=0, player=bot.targetPlayer)
+            enArmyOffset = BotCombatQueries.sum_friendly_army_near_or_on_tiles(bot, [t for t in bot.enemy_attack_path.tileList if t.visible], distance=0, player=bot.targetPlayer)
 
         approxGreedyTurnsAvail = bot.opponent_tracker.get_approximate_greedy_turns_available(
             bot.targetPlayer,
@@ -85,9 +85,6 @@ class BotTimings:
 
     @staticmethod
     def prune_timing_split_if_necessary(bot):
-        from BotModules.BotTargeting import BotTargeting
-        from BotModules.BotComms import BotComms
-
         if bot.target_player_gather_path is None:
             return
 

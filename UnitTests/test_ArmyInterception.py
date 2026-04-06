@@ -169,7 +169,7 @@ class ArmyInterceptionUnitTests(TestBase):
 
 # TODO still need an open-map wide choke example to test finding mid-choke-points on. 3 or wider choke required.
 # TODO what about threats where the chokes diverge super early from the threat? Need intercept chokes that are NOT on the shortest path, and find the lowest common denominator between them still?
-# TODO ^ also needs to detect when the path SPLITS vs lines on opposite sides of the same choke where an army could stage in the middle, vs being unable to stage in the middle due to blockage by mountains or pure split scenario.    
+# TODO ^ also needs to detect when the path SPLITS vs lines on opposite sides of the same choke where an army could stage in the middle, vs being unable to stage in the middle due to blockage by mountains or pure split scenario.
     def test_should_recognize_multi_threat_and_intercept_at_choke__unit_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_recognize_multi_threat_and_intercept_at_choke___Human.exe-TEST__efebcb16-d770-4d80-ac54-b9c37c8e7bea---0--289.txtmap'
@@ -321,14 +321,14 @@ class ArmyInterceptionUnitTests(TestBase):
         self.assertLess(bestVal/bestTurns, 0.5, 'should not think any of these have great value per turn.')
 
         self.assertEqual(map.GetTile(9, 8), bestPath.tail.tile)
-    
+
     def test_should_not_do_infinite_intercepts_costing_tons_of_time(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_do_infinite_intercepts_costing_tons_of_time___qg3nAW1cN---1--708.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 708, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=708)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -424,14 +424,14 @@ player_index=0
 
         value, turns, bestOpt = self.get_best_intercept_option_path_values(plan)
         self.assertIn(map.GetTile(2, 9), bestOpt.tileList)
-    
+
     def test_should_not_take_literal_lifetimes_to_load_intercepts(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_take_literal_lifetimes_to_load_intercepts___nyeEPub4n---7--1165.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 1165, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=1165)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -446,7 +446,7 @@ player_index=0
         timings = '\r\n'.join(bot.perf_timer.current_move.get_events_organized_longest_to_shortest(25))
         ArmyAnalyzer.dump_times()
         self.assertLess(done, 0.04, f'should spent no more than 40ms on intercepts, \r\n{timings}')
-    
+
     def test_should_kill_one_away_armies_that_can_do_real_damage_immediately(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_kill_one_away_armies_that_can_do_real_damage_immediately___Human.exe-TEST__665a5e30-6063-4675-bff6-61edf7423b72---1--386.txtmap'
@@ -461,7 +461,7 @@ player_index=0
         value, turns, bestOpt = self.get_best_intercept_option_path_values(plan)
         self.assertIn(map.GetTile(10, 11), bestOpt.tileList)
         self.assertIn(map.GetTile(10, 12), bestOpt.tileList)
-    
+
     def test_should_not_miss_intercept_because_of_enemy_expansion_plan_that_is_short_and_irrelevant(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_not_miss_intercept_for_unknown_reason___Human.exe-TEST__7eae0a59-1775-4864-a321-282de6ef2c4d---0--182.txtmap'
@@ -571,7 +571,7 @@ player_index=0
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 347, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=347)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -581,7 +581,7 @@ player_index=0
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
         self.assertIsNone(winner)
-    
+
     def test_should_find_interception_from_4_moves_away(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_find_interception_from_4_moves_away___Human.exe-TEST__7f68e044-60e0-4a38-9ae8-47af7df82c85---1--346.txtmap'
@@ -591,7 +591,7 @@ player_index=0
 
         if debugMode:
             self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
-    
+
     def test_should_delay_intercept_when_enemy_army_is_cornered__maybe_split_half(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_delay_intercept_when_enemy_army_is_cornered__maybe_split_half___13nFmhR-q---0--444.txtmap'
@@ -604,7 +604,7 @@ player_index=0
         bestOpt = self.get_best_intercept_option(plan)
 
         self.assertTrue(bestOpt.path.start.move_half or bestOpt.requiredDelay > 0, 'should EITHER delay or move half TODO figure out which is optimal?')
-    
+
     def test_should_intercept_with_further_large_tile_when_possible_not_closer_small_tile(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_intercept_with_further_large_tile_when_possible_not_closer_small_tile___Human.exe-TEST__713fc243-c4e6-4f75-8ec6-38e4b0887581---1--188.txtmap'
@@ -883,3 +883,27 @@ player_index=0
         #
         # self.assertOwnedXY(playerMap, 14, 17)
         # self.assertOwnedXY(playerMap, 13, 17)
+    def test_should_never_consider_intercepting_parallel_to_be_better_than_literally_hitting_the_tile(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_never_consider_intercepting_parallel_to_be_better_than_literally_hitting_the_tile___52vlrZ4Bz---1--136.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=136)
+
+        plan = self.get_interception_plan(map, general, enemyGeneral, enTile=map.GetTile(4, 9), fromTile=map.GetTile(4, 10), additionalPath='4,9->0,9->0,14')
+        #
+        # if debugMode:
+        #     self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
+
+        # Move 4,10->3,10 is parallel to the enemy army - should be substantially worse than directly hitting 4,10->4,9
+        parallel_path, parallel_val, parallel_turns = self.get_interceptor_path_by_coords(plan, 4, 10, 3, 10)
+        direct_path, direct_val, direct_turns = self.get_interceptor_path_by_coords(plan, 4, 10, 4, 9)
+
+        # Direct hit should exist and have positive value
+        self.assertIsNotNone(direct_path, "direct hit path 4,10->4,9 should exist")
+        self.assertGreater(direct_val, 0, "direct hit should have positive value")
+
+        # Parallel move should either not exist, or be substantially worse than direct hit
+        if parallel_path is not None:
+            self.assertLess(parallel_val / parallel_turns, direct_val / direct_turns, "parallel move 4,10->3,10 should not be better than direct hit 4,10->4,9")
+            self.assertLess(parallel_val / parallel_turns, direct_val * 0.49 / direct_turns, "parallel move should be substantially worse (less than half the value) than direct hit")

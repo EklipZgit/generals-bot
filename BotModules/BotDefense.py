@@ -1,13 +1,18 @@
 import time
 import typing
 
+import BotModules as BM
 import logbook
 
 import Gather
 import SearchUtils
 from Algorithms import MapSpanningUtils
+from BotModules.BotCityCaptureControl import BotCityCaptureControl
+from BotModules.BotCombatQueries import BotCombatQueries
 from BotModules.BotStateQueries import BotStateQueries
 from BotModules.BotComms import BotComms
+from BotModules.BotExpansionQueries import BotExpansionQueries
+from BotModules.BotExplorationOps import BotExplorationOps
 from BotModules.BotGatherOps import BotGatherOps
 from BotModules.BotPathingUtils import BotPathingUtils
 from BotModules.BotRepetition import BotRepetition
@@ -67,8 +72,6 @@ class BotDefense:
             raceEnemyKingKillPath: Path | None,
             raceChance: float
     ) -> typing.Tuple[Move | None, Path | None]:
-        from BotModules.BotExpansionOps import BotExpansionOps
-
         move: Move | None = None
 
         outputDefenseCriticalTileSet = defenseCriticalTileSet
@@ -192,9 +195,7 @@ class BotDefense:
                                 noLog=False)
 
                             if (bot.is_blocking_neutral_city_captures or valueGathered - sumPruned < 45) and not isEconThreat:
-                                from BotModules.BotCityOps import BotCityOps
-
-                                BotCityOps.block_neutral_captures(bot, 'due to pruned defense being less than safe if we take the city.')
+                                BotCityCaptureControl.block_neutral_captures(bot, 'due to pruned defense being less than safe if we take the city.')
 
                             citiesInPruned = SearchUtils.Counter(0)
                             GatherTreeNode.foreach_tree_node(pruned, lambda n: citiesInPruned.add(1 * ((n.tile.isGeneral or n.tile.isCity) and bot._map.is_tile_friendly(n.tile))))
@@ -373,7 +374,7 @@ class BotDefense:
                         f"   Did find a killpath on enemy gen / undiscovered {str(altKingKillPath)}")
                     wrpPath = None
                     if not altKingKillPath.tail.tile.isGeneral:
-                        wrpPath = BotExpansionOps.get_optimal_exploration(bot, threat.turns, outputDefenseCriticalTileSet, maxTime=0.020, includeCities=False)
+                        wrpPath = BotExplorationOps.get_optimal_exploration(bot, threat.turns, outputDefenseCriticalTileSet, maxTime=0.020, includeCities=False)
                         if wrpPath is not None:
                             for t in wrpPath.tileList:
                                 if t in bot.targetPlayerExpectedGeneralLocation.adjacents:
@@ -426,8 +427,7 @@ class BotDefense:
         for threat in realThreats:
             if threat.path.tail.tile.isGeneral:
                 if not bot.targetPlayerExpectedGeneralLocation.isGeneral:
-                    from BotModules.BotExpansionOps import BotExpansionOps
-                    explorePath = BotExpansionOps.get_optimal_exploration(bot, max(5, threat.turns))
+                    explorePath = BotExplorationOps.get_optimal_exploration(bot, max(5, threat.turns))
                     if explorePath is not None:
                         bot.info(f'DEAD EXPLORE {str(explorePath)}')
                         return BotPathingUtils.get_first_path_move(bot, explorePath), explorePath
@@ -1002,15 +1002,13 @@ class BotDefense:
         Determine whether we've let too much enemy tiles accumulate near our general,
          and it is getting out of hand and we should spend a cycle just gathering to kill them.
         """
-        from BotModules.BotCombatOps import BotCombatOps
-
         forceGatherToEnemy = False
         scaryDistance = 3
         if bot.shortest_path_to_target_player is not None:
             scaryDistance = bot.shortest_path_to_target_player.length // 3 + 2
 
         thresh = 1.3
-        numEnemyTerritoryNearGen = BotCombatOps.count_enemy_territory_near_tile(bot, bot.general, distance=scaryDistance)
+        numEnemyTerritoryNearGen = BotCombatQueries.count_enemy_territory_near_tile(bot, bot.general, distance=scaryDistance)
         enemyTileNearGenRatio = numEnemyTerritoryNearGen / max(1.0, scaryDistance)
         if enemyTileNearGenRatio > thresh:
             forceGatherToEnemy = True
@@ -1871,7 +1869,6 @@ class BotDefense:
 
     @staticmethod
     def should_defend_economy(bot, defenseTiles: typing.Set[Tile]):
-        from BotModules.BotCombatOps import BotCombatOps
         from BotModules.BotTimings import BotTimings
 
         if bot._map.remainingPlayers > 2:
@@ -1947,11 +1944,11 @@ class BotDefense:
 
             winningEcon = bot.opponent_tracker.winning_on_economy(econRatio, cityValue=20, againstPlayer=bot.targetPlayer, offset=enemyCatchUpOffset)
             winningArmy = bot.opponent_tracker.winning_on_army(armyRatio)
-            pathLen = 20
+            pathLen = bot.board_analysis.inter_general_distance
             if bot.shortest_path_to_target_player is not None:
                 pathLen = bot.shortest_path_to_target_player.length
 
-            playerArmyNearGeneral = BotCombatOps.sum_friendly_army_near_or_on_tiles(bot, bot.shortest_path_to_target_player.tileList, distance=pathLen // 4 + 1)
+            playerArmyNearGeneral = BotCombatQueries.sum_friendly_army_near_or_on_tiles(bot, bot.shortest_path_to_target_player.tileList, distance=pathLen // 4 + 1)
             armyThresh = int(bot.targetPlayerObj.standingArmy ** 0.93)
             hasEnoughArmyNearGeneral = playerArmyNearGeneral > armyThresh
 
@@ -2048,8 +2045,7 @@ class BotDefense:
 
         if oppArmy + 10 - halfDist <= playerArmy:
             if oppArmy + 10 - halfDist >= playerArmy - 40 and bot.likely_kill_push:
-                from BotModules.BotCityOps import BotCityOps
-                BotCityOps.block_neutral_captures(bot, "likely_kill_push says capping a city would put us under safe army for the push")
+                BotCityCaptureControl.block_neutral_captures(bot, "likely_kill_push says capping a city would put us under safe army for the push")
             if cycleDifferential < -halfDist:
                 bot.viewInfo.add_info_line(f'OT oppArmy {oppArmy} vs {playerArmy} - gathMoveDiff {cycleDifferential}, but gathered enough that we dont care?')
             return False
@@ -2391,7 +2387,6 @@ class BotDefense:
                             startTiles.pop(t)
                     move = None
                     if len(startTiles) > 0:
-                        from BotModules.BotExpansionOps import BotExpansionOps
                         move, valGathered, turnsUsed, nodes = BotGatherOps.get_gather_to_target_tiles(
                             bot,
                             startTiles,
@@ -2402,7 +2397,7 @@ class BotDefense:
                             useTrueValueGathered=True,
                             includeGatherTreeNodesThatGatherNegative=False,
                             maximizeArmyGatheredPerTurn=True,
-                            priorityMatrix=BotExpansionOps.get_expansion_weight_matrix(bot, mult=10))
+                            priorityMatrix=BotExpansionQueries.get_expansion_weight_matrix(bot, mult=10))
 
                     if move:
                         forcedHalf = False
@@ -2461,8 +2456,7 @@ class BotDefense:
 
     @staticmethod
     def check_should_defend_economy_based_on_large_tiles(bot) -> bool:
-        from BotModules.BotCombatOps import BotCombatOps
-        largeEnemyTiles = BotCombatOps.find_large_tiles_near(
+        largeEnemyTiles = BotCombatQueries.find_large_tiles_near(
             bot,
             [t for t in bot.board_analysis.intergeneral_analysis.shortestPathWay.tiles],
             distance=4,
@@ -2472,7 +2466,7 @@ class BotDefense:
             allowGeneral=False
         )
 
-        largeFriendlyTiles = BotCombatOps.find_large_tiles_near(
+        largeFriendlyTiles = BotCombatQueries.find_large_tiles_near(
             bot,
             [t for t in bot.board_analysis.intergeneral_analysis.shortestPathWay.tiles],
             distance=5,
@@ -2623,3 +2617,6 @@ class BotDefense:
                 if defDist < tDist:
                     block.add_blocked_destination(t)
             bot.info(f'blocking {defensiveTile} from moving to {block.blocked_destinations}')
+
+
+BM.BotDefense = BotDefense

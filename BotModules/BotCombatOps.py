@@ -1,6 +1,7 @@
 import typing
 import time
 
+import BotModules as BM
 import logbook
 import DebugHelper
 
@@ -2158,3 +2159,6 @@ class BotCombatOps:
                         return move
 
         return None
+
+
+BM.BotCombatOps = BotCombatOps

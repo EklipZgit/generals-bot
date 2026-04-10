@@ -113,7 +113,7 @@ class BotTimings:
     def get_remaining_move_time(bot) -> float:
         used = bot.perf_timer.get_elapsed_since_update(bot._map.turn)
         moveCycleTime = 0.5
-        latencyBuffer = 0.26
+        latencyBuffer = 0.3
         allowedLatest = moveCycleTime - latencyBuffer
         remaining = allowedLatest - used
         if DebugHelper.IS_DEBUGGING:
@@ -153,7 +153,6 @@ class BotTimings:
         countOnPath = 0
         if bot.target_player_gather_targets is not None:
             countOnPath = SearchUtils.count(bot.target_player_gather_targets, lambda tile: bot._map.is_tile_friendly(tile))
-        randomVal = random.randint(-1, 2)
         cycleDuration = 50
         gatherSplit = 0
         realDist = BotPathingUtils.distance_from_general(bot, bot.targetPlayerExpectedGeneralLocation)
@@ -173,12 +172,12 @@ class BotTimings:
             if BotStateQueries.is_all_in(bot):
                 if genPlayer.tileCount > 80:
                     cycleDuration = 100
-                    gatherSplit = 70
+                    gatherSplit = 60
                 else:
                     gatherSplit = min(40, genPlayer.tileCount - 10)
             elif genPlayer.tileCount > 120:
                 cycleDuration = 100
-                gatherSplit = 60
+                gatherSplit = 50
             elif genPlayer.tileCount > 100:
                 cycleDuration = 100
                 gatherSplit = 55
@@ -194,19 +193,19 @@ class BotTimings:
                 cycleDuration = 100
                 gatherSplit = 65
             elif genPlayer.tileCount - countOnPath > 120 or realDist > 29:
-                gatherSplit = 26
-            elif genPlayer.tileCount - countOnPath > 100:
-                gatherSplit = 26
-            elif genPlayer.tileCount - countOnPath > 85:
-                gatherSplit = 26
-            elif genPlayer.tileCount - countOnPath > 65:
-                gatherSplit = 25
-            elif genPlayer.tileCount - countOnPath > 45:
                 gatherSplit = 24
-            elif genPlayer.tileCount - countOnPath > 30:
+            elif genPlayer.tileCount - countOnPath > 100:
+                gatherSplit = 24
+            elif genPlayer.tileCount - countOnPath > 85:
+                gatherSplit = 24
+            elif genPlayer.tileCount - countOnPath > 65:
                 gatherSplit = 23
-            elif genPlayer.tileCount - countOnPath > 21:
+            elif genPlayer.tileCount - countOnPath > 45:
+                gatherSplit = 22
+            elif genPlayer.tileCount - countOnPath > 30:
                 gatherSplit = 21
+            elif genPlayer.tileCount - countOnPath > 21:
+                gatherSplit = 20
             else:
                 gatherSplit = genPlayer.tileCount - countOnPath
                 randomVal = 0
@@ -219,9 +218,8 @@ class BotTimings:
 
         gatherSplit = min(gatherSplit, genPlayer.tileCount - countOnPath)
 
-        if bot.targetPlayer == -1 and bot._map.remainingPlayers == 2:
-            gatherSplit += 3
-        gatherSplit += randomVal
+        # if bot.targetPlayer == -1 and bot._map.remainingPlayers == 2:
+        #     gatherSplit += 3
 
         quickExpandSplit = 0
         if bot._map.turn > 50:
@@ -232,11 +230,11 @@ class BotTimings:
                 logbook.info(f"quickExpandSplit: {quickExpandSplit}")
 
         if bot.defend_economy:
-            gatherSplit += 3
+            gatherSplit += 2
             quickExpandSplit = 0
 
         if bot.currently_forcing_out_of_play_gathers:
-            gatherSplit += 3
+            gatherSplit += 2
             quickExpandSplit = 0
 
         if BotStateQueries.is_still_ffa_and_non_dominant(bot):

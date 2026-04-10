@@ -8,6 +8,8 @@ import typing
 import BotModules as BM
 import SearchUtils
 import logbook
+
+from ArmyAnalyzer import ArmyAnalyzer
 from BotModules.BotDefenseQueries import BotDefenseQueries
 from BotModules.BotExplorationOps import BotExplorationOps
 from BotModules.BotStateQueries import BotStateQueries
@@ -325,7 +327,10 @@ class BotExpansionOps:
                                 len(tilesWithArmy) == 0
                         )
                 )
-                and (bot.expansion_plan is None or bot.expansion_plan.turns_used < bot.timings.get_turns_left_in_cycle(bot._map.turn))
+                and (bot.expansion_plan.turns_used < bot.timings.get_turns_left_in_cycle(bot._map.turn)
+                    or (2 * bot.expansion_plan.en_tiles_captured) + bot.expansion_plan.neut_tiles_captured < bot.timings.get_turns_left_in_cycle(bot._map.turn) - 4
+                        # or bot.expansion_plan is None
+                    )
                 and not BotStateQueries.is_still_ffa_and_non_dominant(bot)
         ):
             remainingTime = BotTimings.get_remaining_move_time(bot)
@@ -352,10 +357,15 @@ class BotExpansionOps:
 
                     bot.curPath = moveListPath
                     bot.city_expand_plan = None
+
+                    bot.info(f'PBPLAN {moveListPath}')
                     return move
 
         BotExpansionOps._add_expansion_threat_negs(bot, expansionNegatives)
-        bot.expansion_plan = BotExpansionOps.build_expansion_plan(bot, timeLimit, expansionNegatives, pathColor=(50, 30, 255), overrideTurns=overrideTurns)
+        if timeLimit > 0.05 or bot.expansion_plan is None or bot.expansion_plan.calculated_turn != bot._map.turn:
+            bot.expansion_plan = BotExpansionOps.build_expansion_plan(bot, timeLimit, expansionNegatives, pathColor=(50, 30, 255), overrideTurns=overrideTurns)
+        else:
+            bot.info(f"Skipping expansion plan build because timeLimit is {timeLimit}, reusing quick expand plan")
 
         path = bot.expansion_plan.selected_option
         allPaths = bot.expansion_plan.all_paths
@@ -519,7 +529,8 @@ class BotExpansionOps:
             expUtilPlan.neut_tiles_captured,
             path,
             otherPaths,
-            expUtilPlan.cumulative_econ_value
+            expUtilPlan.cumulative_econ_value,
+            turn=bot._map.turn,
         )
 
         anyIntercept = isinstance(plan.selected_option, InterceptionOptionInfo)
@@ -609,7 +620,7 @@ class BotExpansionOps:
             pathColor: typing.Tuple[int, int, int]
     ) -> ExpansionPotential:
         if bot.targetPlayer == -1 or not bot.armyTracker.seen_player_lookup[bot.targetPlayer]:
-            return ExpansionPotential(0, 0, 0, None, [], 0.0)
+            return ExpansionPotential(0, 0, 0, None, [], 0.0, bot._map.turn)
 
         territoryMap = bot.territories.territoryMap
 
@@ -688,7 +699,8 @@ class BotExpansionOps:
             expUtilPlan.neut_tiles_captured,
             path,
             otherPaths,
-            expUtilPlan.cumulative_econ_value
+            expUtilPlan.cumulative_econ_value,
+            turn=bot._map.turn,
         )
 
         return plan
@@ -1130,11 +1142,13 @@ class BotExpansionOps:
             existingValPerTurn = tilePlanVt
 
         if launchValPerTurn > existingValPerTurn and (launchTurnsTotal > turnsLeftInCycle - 5 or distToFirstFogTile < bot.target_player_gather_path.length // 2 - 1):
-            launchSubsegment = launchPath.get_subsegment(distToFirstFogTile)
+            launchSubsegment = launchPath.get_subsegment(max(1, distToFirstFogTile - 2))
 
             launchSubsegmentToEn = BotPathingUtils.get_path_subsegment_to_closest_enemy_team_territory(bot, launchSubsegment)
             if launchSubsegmentToEn is None:
                 launchSubsegmentToEn = launchSubsegment
+            else:
+                launchSubsegmentToEn = launchSubsegmentToEn.get_subsegment(max(1, launchSubsegmentToEn.length - 2))
 
             paths = existingPlan.all_paths.copy()
             interceptFake = InterceptionOptionInfo(
@@ -1156,7 +1170,8 @@ class BotExpansionOps:
                 neutTilesCaptured=neutCaps,
                 selectedOption=interceptFake,
                 allOptions=paths,
-                cumulativeEconVal=existingPlan.cumulative_econ_value + launchVal
+                cumulativeEconVal=existingPlan.cumulative_econ_value + launchVal,
+                turn=bot._map.turn,
             )
 
             return newPlan
@@ -1236,7 +1251,9 @@ class BotExpansionOps:
 
         if bot.curPath is not None:
             if bot.curPath.start.tile.army - 1 > bot.curPath.start.next.tile.army:
-                return BotPathingUtils.continue_cur_path(bot, threat=None, defenseCriticalTileSet=set())
+                (foundMove, move) = BotPathingUtils.continue_cur_path(bot, threat=None, defenseCriticalTileSet=set())
+                if foundMove:
+                    return move
 
             bot.curPath = None
 
@@ -1422,7 +1439,7 @@ class BotExpansionOps:
         outOfPlayCount = 0
         nearOppSum = 0
         genPlayer = bot._map.players[bot.general.player]
-        pathLen = bot.shortest_path_to_target_player.length
+        pathLen = bot.board_analysis.intergeneral_analysis.shortestPathWay.distance
         inPlayCutoff = pathLen + pathLen * (bot.behavior_out_of_play_distance_over_shortest_ratio / 2)
         mediumRangeCutoff = pathLen + pathLen * bot.behavior_out_of_play_distance_over_shortest_ratio
 
@@ -1483,7 +1500,9 @@ class BotExpansionOps:
                     bot.force_far_gathers_turns = cap
 
         bot.viewInfo.add_stats_line(
-            f'out-of-play {outOfPlayRat:.2f} {aboveOutOfPlay} {total:.0f}@dist{mediumRangeCutoff:.1f}: OUT{outOfPlaySum}-OPP{nearOppSum}+MF{incMedium} ({outOfPlayRat:.2f}>{bot.behavior_out_of_play_defense_threshold:.2f}), IN{inPlaySum}({inPlayRat:.2f}), MED{medPlaySum}({medPlayRat:.2f}), Tot{total} ogTot{realTotal} (huge {hugeGameOffset}, inCut {inPlayCutoff:.1f}, medCut {mediumRangeCutoff:.1f})')
+            f'out-of-play {outOfPlayRat:.2f} {aboveOutOfPlay} {total:.0f}@dist{mediumRangeCutoff:.1f}: OUT{outOfPlaySum}-OPP{nearOppSum}+MF{incMedium}'
+            f' ({outOfPlayRat:.2f}>{bot.behavior_out_of_play_defense_threshold:.2f}), IN{inPlaySum}({inPlayRat:.2f}), MED{medPlaySum}({medPlayRat:.2f}),'
+            f' Tot{total} ogTot{realTotal} (huge {hugeGameOffset}, inCut {inPlayCutoff:.1f}, medCut {mediumRangeCutoff:.1f}), botShortestRat {bot.behavior_out_of_play_distance_over_shortest_ratio:.2f}, pathLen {pathLen}')
 
         return aboveOutOfPlay
 
@@ -1755,7 +1774,7 @@ class BotExpansionOps:
                 return BotPathingUtils.get_first_path_move(bot, path)
             return None
 
-        if bot.timings.get_turns_left_in_cycle(bot._map.turn) < 15:
+        if bot.timings.get_turns_left_in_cycle(bot._map.turn) < 42:
             return None
 
         if bot.armyTracker.has_perfect_information_of_player_cities_and_general(bot.targetPlayer):
@@ -2002,17 +2021,14 @@ class BotExpansionOps:
                     continue
 
                 if not tile.visible:
-                    matrix.raw[tile.tile_index] += 0.1
-                else:
                     matrix.raw[tile.tile_index] += 0.03
+                else:
+                    matrix.raw[tile.tile_index] += 0.015
 
             for tile in bot.sketchiest_potential_inbound_flank_path.tileSet:
                 if bot._map.get_distance_between(bot.targetPlayerExpectedGeneralLocation, tile) < cutoff:
                     continue
-                if not tile.visible:
-                    matrix.raw[tile.tile_index] += 0.15
-                else:
-                    matrix.raw[tile.tile_index] += 0.03
+                matrix.raw[tile.tile_index] += 0.05
 
         endOfCyclePenaltyRatio = 35 / (bot._map.cycleTurn + 5)
         if searchingForFirstContact:
@@ -2058,8 +2074,8 @@ class BotExpansionOps:
             enDist = enPotentialGenDistances.raw[tile.tile_index]
             genDist = bot._map.get_distance_between(bot.general, tile)
 
-            isCloserToEn = enDist < genDist * 0.9
-            enDistRatio = (genDist + 3) / max(1, (enDist + numEnGenPos // 3))
+            isCloserToEn = enDist < genDist * 0.8
+            enDistRatio = (genDist + 5) / max(1, (enDist + numEnGenPos // 3)) * 0.8
 
             enExpVal = bot.enemy_expansion_plan_tile_path_cap_values.get(tile, None)
             if enExpVal is not None:
@@ -2073,7 +2089,7 @@ class BotExpansionOps:
             isTarget = not isNeutral and bot._map.is_player_on_team_with(tile.player, bot.targetPlayer)
 
             if isFriendly and tile.army < 2:
-                bonus -= 0.2
+                bonus -= 0.02
 
             if tile.isSwamp:
                 if isTarget:
@@ -2094,10 +2110,10 @@ class BotExpansionOps:
                     break
 
             if anyFlankVis:
-                bonus += 0.05
+                bonus += 0.02
 
-            if tile.player == -1 and tgPlayerTerritoryDists.raw[tile.tile_index] < 3:
-                bonus += 0.03
+            if tile.player == -1 and tgPlayerTerritoryDists.raw[tile.tile_index] < 2:
+                bonus += 0.02
 
             if tile.isCity:
                 cityScore = bot.cityAnalyzer.city_scores.get(tile, None)
@@ -2115,17 +2131,18 @@ class BotExpansionOps:
             # if not tile.discovered and bot.armyTracker.valid_general_positions_by_player[bot.targetPlayer].raw[tile.tile_index] and numEnGenPos < 10:
             #     bonus -= 0.01
 
-            if bot._map.is_tile_on_team_with(tile, bot.targetPlayer) and bot.territories.is_tile_in_friendly_territory(tile):
+            if isTarget and bot.territories.is_tile_in_friendly_territory(tile):
                 bonus += 0.05
 
-            libertyCount = 0
-            for mv in tile.movable:
-                if not mv.isObstacle and not (mv.isNeutral and mv.army > 1):
-                    libertyCount += 1
-            if libertyCount == 1:
-                bonus += 0.1
-                if isTarget:
-                    bonus += 0.3
+            if isNeutral or isTarget:
+                libertyCount = 0
+                for mv in tile.movable:
+                    if not mv.isObstacle and not (mv.isNeutral and mv.army > 1):
+                        libertyCount += 1
+                if libertyCount == 1:
+                    bonus += 0.1
+                    if isTarget:
+                        bonus += 0.3
 
             pathway = bot.board_analysis.intergeneral_analysis.pathWayLookupMatrix.raw[tile.tile_index]
             if pathway is not None:
@@ -2143,7 +2160,7 @@ class BotExpansionOps:
             else:
                 bonus -= 10
 
-            if bot._map.remainingCycleTurns > 8 and not searchingForFirstContact:
+            if bot._map.remainingCycleTurns > 8 and not searchingForFirstContact and bot._map.turn > 150:
                 cappedRat = max(1.1, enDistRatio)
                 if tile.player == -1:
                     bonus += 0.1 - 0.05 * cappedRat

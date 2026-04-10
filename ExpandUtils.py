@@ -28,7 +28,8 @@ class RoundPlan(object):
             enTilesCaptured: int,
             neutTilesCaptured: int,
             selectedOption: TilePlanInterface | None,
-            allOptions: typing.List[TilePlanInterface]
+            allOptions: typing.List[TilePlanInterface],
+            turn: int,
     ):
         self.turns_used: int = 0
         self.en_tiles_captured: int = enTilesCaptured
@@ -36,6 +37,7 @@ class RoundPlan(object):
         self.selected_option: TilePlanInterface = selectedOption
         self.all_paths: typing.List[TilePlanInterface] = allOptions
         self.plan_tiles: typing.Set[Tile] = set()
+        self.calculated_turn: int = turn
         # self.preferred_tiles: typing.Set[Tile] = set()
         # self.blocking_tiles: typing.Set[Tile] = set()
         # self.intercept_waiting: typing.List[InterceptionOptionInfo] = []
@@ -254,15 +256,15 @@ def get_round_plan_with_expansion(
                         # negativeTiles.add(lm.dest)
 
             if allowGatherPlanExtension:
-                logEntries.append(f"Beginning gather extension.... elapsed {time.perf_counter() - startTime:.4f}")
-                addlPaths = _execute_expansion_gather_to_borders(
-                    map,
-                    [t.dest for t in includeForGath if t.source not in negativeTiles and t.dest not in negativeTiles],
-                    3,
-                    preferNeutral=True,
-                    negativeTiles=negativeTiles,
-                    searchingPlayer=searchingPlayer,
-                )
+                with perfTimer.begin_move_event(f"gather extension to borders"):
+                    addlPaths = _execute_expansion_gather_to_borders(
+                        map,
+                        [t.dest for t in includeForGath if t.source not in negativeTiles and t.dest not in negativeTiles],
+                        3,
+                        preferNeutral=True,
+                        negativeTiles=negativeTiles,
+                        searchingPlayer=searchingPlayer,
+                    )
 
                 counts = {}
                 for path in addlPaths:
@@ -484,7 +486,7 @@ def get_round_plan_with_expansion(
 
             if path is not None:
                 otherPaths.insert(0, path)
-            plan = RoundPlan(enCaps, neutCaps, path, otherPaths)
+            plan = RoundPlan(enCaps, neutCaps, path, otherPaths, map.turn)
 
             if path is None:
                 logEntries.append(
@@ -799,11 +801,8 @@ def _include_optimal_expansion_options(
                 #     # these are usually 1 or more army since usually after army bonus
                 #     armyRemaining -= 1
                 addedPriority += 8
-                if nextTile.player != -1:
-                    negTileCapturePoints -= 2.0
-                    distSoFar -= 0.99
-                else:
-                    negTileCapturePoints -= 1.5
+                negTileCapturePoints -= 2.0
+                distSoFar -= 0.99
             negEnemyTiles -= 1
 
             ## points for locking all nearby enemy tiles down
@@ -1951,15 +1950,13 @@ def _get_tile_path_value(
             if tile.isCity and tile.army < 10:
                 value += 15 - tile.army
         elif not tile.discovered and territoryMap.raw[tile.tile_index] in targetPlayers:
-            value += 0.45
+            value += 0.025
         elif not tile.visible and territoryMap.raw[tile.tile_index] in targetPlayers:
-            value += 0.2
+            value += 0.01
         if tile.player == -1:
             value += 1.0 - tile.army
             if tile.isCity and tile.army < 10:
                 value += 25 - tile.army
-        elif map.is_player_on_team_with(searchingPlayer, tile.player):
-            value -= 0.2 / max(0.5, tile.army)
 
         if tile.isSwamp:
             value -= 2.0
@@ -1986,17 +1983,18 @@ def _get_tile_path_value(
         if destDistSum >= enemyDistPenaltyPoint:
             if destDistSum < sourceDistSum:
                 # logbook.info(f"move {str(last)}->{str(tile)} was TOWARDS shortest path")
-                value += 0.01
+                value += 0.005
 
         if destDistSum == sourceDistSum:
             # logbook.info(f"move {str(last)}->{str(tile)} was flanking parallel to shortest path")
             value += 0.01
 
         if abs(destEnDist - destGenDist) <= abs(sourceEnDist - sourceGenDist):
-            valueAdd = abs(destEnDist - destGenDist) / 200
+            valueAdd = abs(destEnDist - destGenDist) / 400
             # logbook.info(
             #     f"move {last.toString()}->{tile.toString()} was moving towards the center, valuing it {valueAdd} higher")
             value += valueAdd
+
     return value
 
 
@@ -2100,7 +2098,7 @@ def knapsack_multi_paths(
                         floatVal, dist = tpl
                 logbook.info(f'    INPUT {val:.2f} dist {dist}: {str(p)}')
 
-    with perfTimer.begin_move_event(f'extract_paths_from_knapsack_groups multi-path run'):
+    with perfTimer.begin_move_event(f'extract knap multi-path run'):
         enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed, visited = extract_paths_from_knapsack_groups(
             map,
             searchingPlayer,
@@ -2213,7 +2211,7 @@ def knapsack_multi_paths_no_crossover(
             for val, p in allPaths:
                 logbook.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
 
-    with perfTimer.begin_move_event(f'extract_paths_from_knapsack_groups no cross'):
+    with perfTimer.begin_move_event(f'extract knap no cross'):
         enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed, visited = extract_paths_from_knapsack_groups(
             map,
             searchingPlayer,
@@ -2283,7 +2281,8 @@ def extract_paths_from_knapsack_groups(
         valueFunc=valFunc
     )
 
-    with perfTimer.begin_move_event('find_optimal_expansion_path_to_move_first'):
+    # 8ms
+    with perfTimer.begin_move_event('find opt exp first move'):
         path = find_optimal_expansion_path_to_move_first(
             map,
             maxPaths,

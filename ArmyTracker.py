@@ -848,13 +848,16 @@ class ArmyTracker(object):
     def resolve_entangled_armies(self, army):
         if len(army.entangledArmies) > 0:
             logbook.info(f"{str(army)} resolving {len(army.entangledArmies)} entangled armies")
+            # resolvedByTile: typing.Set[Tile] = set()
             for entangledArmy in army.entangledArmies:
-                logbook.info(f"    {entangledArmy.toString()} entangled")
-                if entangledArmy.tile in self.armies:
+                # if entangledArmy.tile in resolvedByTile:
+                #     continue
+                # resolvedByTile.add(entangledArmy.tile)
+                logbook.info(f"    {entangledArmy.toString()} entangled, entangledValue {entangledArmy.entangledValue}")
+                if entangledArmy.tile in self.armies and self.armies[entangledArmy.tile] == entangledArmy:
                     del self.armies[entangledArmy.tile]
                 entangledArmy.scrapped = True
                 if not entangledArmy.tile.visible and entangledArmy.tile.army > 0:
-                    # remove the army value from the tile?
                     newArmy = max(entangledArmy.tile.army - entangledArmy.entangledValue, 1)
                     logbook.info(
                         f"    updating entangled army tile {entangledArmy.toString()} from army {entangledArmy.tile.army} to {newArmy}")
@@ -1589,6 +1592,7 @@ class ArmyTracker(object):
             logbook.info(f'FOG DEBUG: Merging armies - larger: {str(largerArmy)} (value {largerArmy.value}), smaller: {str(smallerArmy)} (value {smallerArmy.value}) at {finalTile}')
         self.armies.pop(largerArmy.tile, None)
         self.armies.pop(smallerArmy.tile, None)
+        largerArmy.entangledArmies.extend(smallerArmy.entangledArmies)
         self.scrap_army(smallerArmy, scrapEntangled=False)
         for entangled in smallerArmy.entangledArmies:
             entangled.entangledArmies.append(largerArmy)
@@ -2291,7 +2295,7 @@ class ArmyTracker(object):
 
         depthLimit = self.get_emergence_max_depth_to_general_or_none(player, tile, unaccountedForDelta)
 
-        if tile not in self.skip_emergence_tile_pathings and len(self.uneliminated_emergence_events[player]) > 0:
+        if tile not in self.skip_emergence_tile_pathings:
             sourceFogArmyPath = self.find_fog_source(player, tile, unaccountedForDelta, depthLimit=depthLimit)
             if sourceFogArmyPath is not None:
                 self.unaccounted_tile_diffs.pop(tile, 0)

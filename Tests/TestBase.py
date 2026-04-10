@@ -338,6 +338,82 @@ class TestBase(unittest.TestCase):
                     tilePlayer.cities.append(tile)
                 tilePlayer.tiles.append(tile)
 
+        if fill_out_tiles:
+            chars = TextMapLoader.get_player_char_index_map()
+            entangledEnemyTilesByPlayer: typing.Dict[int, typing.Set[Tile]] = {}
+            if armies is not None:
+                for army in armies.values():
+                    if army.player not in entangledEnemyTilesByPlayer:
+                        entangledEnemyTilesByPlayer[army.player] = set()
+                    for ent in army.entangledArmies:
+                        entangledEnemyTilesByPlayer[army.player].add(ent.tile)
+
+            def recalc_player_stats():
+                for player in map.players:
+                    player.score = 0
+                    player.tileCount = 0
+                    player.cityCount = 0
+                    player.cities = []
+                    player.tiles = []
+                    player.general = None
+                for recalcTile in map.get_all_tiles():
+                    if recalcTile.player >= 0:
+                        recalcPlayer = map.players[recalcTile.player]
+                        recalcPlayer.score += recalcTile.army
+                        recalcPlayer.tileCount += 1
+                        if recalcTile.isGeneral:
+                            recalcPlayer.cityCount += 1
+                            recalcPlayer.general = recalcTile
+                        if recalcTile.isCity:
+                            recalcPlayer.cityCount += 1
+                            recalcPlayer.cities.append(recalcTile)
+                        recalcPlayer.tiles.append(recalcTile)
+
+            for player in map.players:
+                if player.dead or player.index == general.player or player.index in map.teammates:
+                    continue
+
+                enemyChar, _ = chars[player.index]
+                if f'{enemyChar}Tiles' not in gameData or f'{enemyChar}Score' not in gameData:
+                    continue
+
+                targetTiles = int(gameData[f'{enemyChar}Tiles'])
+                targetScore = int(gameData[f'{enemyChar}Score'])
+                entangledTiles = entangledEnemyTilesByPlayer.get(player.index, set())
+
+                while map.players[player.index].tileCount > targetTiles:
+                    dropCandidates = SearchUtils.where(
+                        map.pathable_tiles,
+                        lambda t: t.player == player.index and not t.isGeneral and not t.isCity and (t in entangledTiles or t.isTempFogPrediction or not t.discovered))
+                    if len(dropCandidates) == 0:
+                        break
+                    dropCandidates.sort(key=lambda t: (0 if t in entangledTiles else 1, 0 if t.isTempFogPrediction else 1, -t.army))
+                    map.reset_wrong_undiscovered_fog_guess(dropCandidates[0])
+                    recalc_player_stats()
+
+                scoreOverflow = map.players[player.index].score - targetScore
+                if scoreOverflow > 0:
+                    trimCandidates = SearchUtils.where(
+                        map.pathable_tiles,
+                        lambda t: t.player == player.index and t.army > 1 and not t.isGeneral and not t.isCity)
+                    trimCandidates.sort(key=lambda t: (0 if t in entangledTiles else 1, 0 if t.isTempFogPrediction else 1, -t.army))
+                    for tile in trimCandidates:
+                        if scoreOverflow <= 0:
+                            break
+                        reduceBy = min(tile.army - 1, scoreOverflow)
+                        tile.army -= reduceBy
+                        scoreOverflow -= reduceBy
+
+                    if scoreOverflow > 0 and player.general is not None and player.general.army > 1:
+                        reduceBy = min(player.general.army - 1, scoreOverflow)
+                        player.general.army -= reduceBy
+                        scoreOverflow -= reduceBy
+
+                    if scoreOverflow > 0:
+                        raise AssertionError(f'Unable to trim enemy player {player.index} score overflow {scoreOverflow} to match target score {targetScore}')
+
+                    recalc_player_stats()
+
         map.scores = [Score(p.index, p.score, p.tileCount, p.dead) for p in map.players]
 
         return map, general, enemyGen
@@ -1159,12 +1235,16 @@ class TestBase(unittest.TestCase):
 
         bannedEnemyTiles: typing.Set[Tile] = set()
         skipArmyTiles = set()
+        entangledEnemyTilesByPlayer: typing.Dict[int, typing.List[Tile]] = {}
         if armies:
             for army in armies.values():
                 if army.tile in skipArmyTiles:
                     continue
+                if army.player not in entangledEnemyTilesByPlayer:
+                    entangledEnemyTilesByPlayer[army.player] = []
                 for entangled in army.entangledArmies:
                     skipArmyTiles.add(entangled.tile)
+                    entangledEnemyTilesByPlayer[army.player].append(entangled.tile)
         if respectPlayerVision:
             for tile in map.get_all_tiles():
                 if tile.player == general.player:
@@ -1267,6 +1347,102 @@ class TestBase(unittest.TestCase):
             generateTilesFunc,
             bypassDefaultSkip=True)
 
+        if armies is not None and not respectPlayerVision:
+            # Collapse duplicate entangled fog army predictions: keep one army location with value,
+            # and reduce duplicate entangled positions to minimum army so they do not over-inflate score.
+            for tile in entangledEnemyTilesByPlayer.get(enemyGeneral.player, []):
+                if tile.player != enemyGeneral.player or tile.isGeneral:
+                    continue
+                if tile.army > 1:
+                    oldArmy = tile.army
+                    tile.army = 1
+                    if tile not in skipArmyTiles:
+                        countScoreEnemy.add(1 - oldArmy)
+
+        def can_reset_enemy_fog_tile(tile: Tile) -> bool:
+            if tile.player != enemyGeneral.player:
+                return False
+            if tile.isGeneral or tile.isCity:
+                return False
+            if tile in bannedEnemyTiles:
+                return False
+            if tile.discovered and not tile.isTempFogPrediction:
+                return False
+            return True
+
+        def reset_enemy_fog_tile(tile: Tile) -> bool:
+            if not can_reset_enemy_fog_tile(tile):
+                return False
+            oldArmy = tile.army
+            map.reset_wrong_undiscovered_fog_guess(tile)
+            countTilesEnemy.add(-1)
+            if tile not in skipArmyTiles:
+                countScoreEnemy.add(-oldArmy)
+            return True
+
+        if enemyGeneralTileCount is not None and enemyGeneralTileCount >= 0 and countTilesEnemy.value > enemyGeneralTileCount and not respectPlayerVision:
+            # Prefer dropping ambiguous entangled predictions first.
+            for tile in entangledEnemyTilesByPlayer.get(enemyGeneral.player, []):
+                if countTilesEnemy.value <= enemyGeneralTileCount:
+                    break
+                reset_enemy_fog_tile(tile)
+
+            # Then drop outskirt / temp fog guesses until target tile count is met.
+            if countTilesEnemy.value > enemyGeneralTileCount:
+                outskirtCandidates = SearchUtils.where(
+                    map.pathable_tiles,
+                    lambda t: can_reset_enemy_fog_tile(t))
+                outskirtCandidates.sort(key=lambda t: (0 if t.isTempFogPrediction else 1, -enemyMap[t], -t.army))
+                for tile in outskirtCandidates:
+                    if countTilesEnemy.value <= enemyGeneralTileCount:
+                        break
+                    reset_enemy_fog_tile(tile)
+
+        if enemyGeneralTargetScore is not None and enemyGeneralTargetScore >= 0 and not respectPlayerVision:
+            actualEnemyTiles = SearchUtils.where(map.pathable_tiles, lambda t: t.player == enemyGeneral.player)
+            actualEnemyScore = sum(t.army for t in actualEnemyTiles)
+            scoreOverflow = actualEnemyScore - enemyGeneralTargetScore
+            if scoreOverflow > 0:
+                entangledSet = set(entangledEnemyTilesByPlayer.get(enemyGeneral.player, []))
+                scoreTrimCandidates = SearchUtils.where(
+                    actualEnemyTiles,
+                    lambda t: t.army > 1 and not t.isGeneral and not t.isCity and (t in entangledSet or can_reset_enemy_fog_tile(t)))
+                scoreTrimCandidates.sort(key=lambda t: (0 if t in entangledSet else 1, 0 if t.isTempFogPrediction else 1, -enemyMap[t], -t.army))
+                for tile in scoreTrimCandidates:
+                    if scoreOverflow <= 0:
+                        break
+                    reducible = tile.army - 1
+                    if reducible <= 0:
+                        continue
+                    reduceBy = min(reducible, scoreOverflow)
+                    tile.army -= reduceBy
+                    scoreOverflow -= reduceBy
+
+                if scoreOverflow > 0:
+                    fallbackTrimCandidates = SearchUtils.where(
+                        actualEnemyTiles,
+                        lambda t: t.army > 1 and not t.isGeneral and not t.isCity)
+                    fallbackTrimCandidates.sort(key=lambda t: (0 if t in entangledSet else 1, -t.army))
+                    for tile in fallbackTrimCandidates:
+                        if scoreOverflow <= 0:
+                            break
+                        reducible = tile.army - 1
+                        if reducible <= 0:
+                            continue
+                        reduceBy = min(reducible, scoreOverflow)
+                        tile.army -= reduceBy
+                        scoreOverflow -= reduceBy
+
+                if scoreOverflow > 0 and enemyGeneral.army > 1:
+                    reduceBy = min(enemyGeneral.army - 1, scoreOverflow)
+                    enemyGeneral.army -= reduceBy
+                    scoreOverflow -= reduceBy
+
+                if scoreOverflow > 0:
+                    raise AssertionError(f"Enemy General {enemyGeneral.player} still has score overflow {scoreOverflow} while reconciling fog armies to target score {enemyGeneralTargetScore}")
+
+            countScoreEnemy.value = sum(t.army for t in map.pathable_tiles if t.player == enemyGeneral.player)
+
         if enemyGeneralTargetScore is not None and countScoreEnemy.value > enemyGeneralTargetScore:
             countScoreEnemy.value = countScoreEnemy.value - enemyGeneral.army + 1
             enemyGeneral.army = 1
@@ -1305,6 +1481,32 @@ class TestBase(unittest.TestCase):
                 if tile.player == general.player and countScoreGeneral.value < generalTargetScore:
                     countScoreGeneral.add(1)
                     tile.army += 1
+
+        if enemyGeneralTargetScore is not None and enemyGeneralTargetScore >= 0 and not respectPlayerVision:
+            actualEnemyTiles = SearchUtils.where(map.pathable_tiles, lambda t: t.player == enemyGeneral.player)
+            actualEnemyScore = sum(t.army for t in actualEnemyTiles)
+            scoreOverflow = actualEnemyScore - enemyGeneralTargetScore
+            if scoreOverflow > 0:
+                finalTrimCandidates = SearchUtils.where(
+                    actualEnemyTiles,
+                    lambda t: t.army > 1 and not t.isGeneral and not t.isCity)
+                finalTrimCandidates.sort(key=lambda t: (0 if t.isTempFogPrediction else 1, -t.army))
+                for tile in finalTrimCandidates:
+                    if scoreOverflow <= 0:
+                        break
+                    reduceBy = min(tile.army - 1, scoreOverflow)
+                    tile.army -= reduceBy
+                    scoreOverflow -= reduceBy
+
+                if scoreOverflow > 0 and enemyGeneral.army > 1:
+                    reduceBy = min(enemyGeneral.army - 1, scoreOverflow)
+                    enemyGeneral.army -= reduceBy
+                    scoreOverflow -= reduceBy
+
+                if scoreOverflow > 0:
+                    raise AssertionError(f"Enemy General {enemyGeneral.player} final score overflow {scoreOverflow} after full tile reconciliation to target score {enemyGeneralTargetScore}")
+
+            countScoreEnemy.value = sum(t.army for t in map.pathable_tiles if t.player == enemyGeneral.player)
 
         scores = map.scores
         scores[general.player] = Score(general.player, countScoreGeneral.value, countTilesGeneral.value, dead=False)

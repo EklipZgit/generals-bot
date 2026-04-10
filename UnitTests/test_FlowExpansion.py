@@ -11,6 +11,7 @@ from Algorithms.TileIslandBuilder import IslandBuildMode
 from BehaviorAlgorithms import IterativeExpansion
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander, IslandFlowNode
 from BoardAnalyzer import BoardAnalyzer
+from Gather import GatherDebug
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
 from ViewInfo import ViewInfo
@@ -35,12 +36,374 @@ class FlowExpansionUnitTests(TestBase):
 
         return bot
 
+
+    def test_build_flow_expand_plan__should_produce_valid_only__most_basic_move(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |     
+aG1  a3   b1   bG1 
+|    |    |    | 
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+
+        builder.recalculate_tile_islands(enemyGeneral)
+        flowExpander = ArmyFlowExpander(map)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
+
+        self.assertEqual(1, len(opts), 'Only one option')
+        longestOpt = self.get_longest_flow_expansion_option(opts)
+        # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
+        # opt = opts[0]
+        self.assertEqual(1, longestOpt.length, 'only one move')
+        self.assertEqual(IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
+        self.assertEqual(2, longestOpt.gathered_army, 'gathered a 3')
+
+
+    def test_build_flow_expand_plan__should_produce_valid_only__pull_through_friendly(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |     
+aG1  a3   a1   b1   bG1 
+|    |    |    |    | 
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+
+        builder.recalculate_tile_islands(enemyGeneral)
+        flowExpander = ArmyFlowExpander(map)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
+
+        self.assertEqual(1, len(opts), 'only one option')
+        longestOpt = self.get_longest_flow_expansion_option(opts)
+        # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
+        # opt = opts[0]
+        self.assertEqual(2, longestOpt.length, 'should be 5 turns to pull 3x 3s and capture 3x 1s')
+        self.assertEqual(IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
+        self.assertEqual(2, longestOpt.gathered_army, 'gathered a 3')
+
+
+    def test_build_flow_expand_plan__should_produce_valid_only__pull_through_neutral(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |     
+aG1  a4        b1   bG1 
+|    |    |    |    | 
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+
+        builder.recalculate_tile_islands(enemyGeneral)
+        flowExpander = ArmyFlowExpander(map)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
+
+        self.assertEqual(2, len(opts), 'taking the neut, and taking the neut + enemy 1')
+        longestOpt = self.get_longest_flow_expansion_option(opts)
+        # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
+        # opt = opts[0]
+        self.assertEqual(2, longestOpt.length, 'must make 2 moves')
+        self.assertEqual(IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL + 1, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
+        self.assertEqual(3, longestOpt.gathered_army, 'gathered a 4')
+
+
+    def test_build_flow_expand_plan__should_produce_valid_only__most_basic_move__excess_source(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |     
+aG1  a4   b1   bG1 
+|    |    |    | 
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+
+        builder.recalculate_tile_islands(enemyGeneral)
+        flowExpander = ArmyFlowExpander(map)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
+
+        self.assertEqual(1, len(opts), 'Only one option')
+        longestOpt = self.get_longest_flow_expansion_option(opts)
+        # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
+        # opt = opts[0]
+        self.assertEqual(1, longestOpt.length, 'only one move')
+        self.assertEqual(IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
+        self.assertEqual(3, longestOpt.gathered_army, 'gathered a 4')
+
+
+    def test_build_flow_expand_plan__should_produce_valid_only__pull_through_friendly__excess_source(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |     
+aG1  a4   a1   b1   bG1 
+|    |    |    |    | 
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+
+        builder.recalculate_tile_islands(enemyGeneral)
+        flowExpander = ArmyFlowExpander(map)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
+
+        self.assertEqual(1, len(opts), 'only one option')
+        longestOpt = self.get_longest_flow_expansion_option(opts)
+        # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
+        # opt = opts[0]
+        self.assertEqual(2, longestOpt.length, 'only valid should be pulling the 4 through the friendly 1')
+        self.assertEqual(IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
+        self.assertEqual(3, longestOpt.gathered_army, 'gathered a 4')
+
+
+    def test_build_flow_expand_plan__should_produce_valid_only__pull_through_neutral__excess_source(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |     
+aG1  a5        b1   bG1 
+|    |    |    |    | 
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+
+        builder.recalculate_tile_islands(enemyGeneral)
+        flowExpander = ArmyFlowExpander(map)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
+
+        self.assertEqual(2, len(opts), 'taking the neut, and taking the neut + enemy 1')
+        longestOpt = self.get_longest_flow_expansion_option(opts)
+        # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
+        # opt = opts[0]
+        self.assertEqual(2, longestOpt.length, 'must make 2 moves')
+        self.assertEqual(IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL + 1, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
+        self.assertEqual(4, longestOpt.gathered_army, 'gathered a 5')
+
+
+    def test_build_flow_expand_plan__should_produce_valid_only__most_basic_move__need_cumulative_gather(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |     
+aG2  a2   b1   bG1 
+|    |    |    | 
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+
+        builder.recalculate_tile_islands(enemyGeneral)
+        flowExpander = ArmyFlowExpander(map)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
+
+        self.assertEqual(1, len(opts), 'Only one option')
+        longestOpt = self.get_longest_flow_expansion_option(opts)
+        # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
+        # opt = opts[0]
+        self.assertEqual(2, longestOpt.length, 'two 2s needed')
+        self.assertEqual(IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
+        self.assertEqual(2, longestOpt.gathered_army, 'gathered two 2s')
+
+
+    def test_build_flow_expand_plan__should_produce_valid_only__pull_through_friendly__need_cumulative_gather(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |     
+aG2  a2   a1   b1   bG1 
+|    |    |    |    | 
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+
+        builder.recalculate_tile_islands(enemyGeneral)
+        flowExpander = ArmyFlowExpander(map)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
+
+        self.assertEqual(1, len(opts), 'only one option')
+        longestOpt = self.get_longest_flow_expansion_option(opts)
+        # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
+        # opt = opts[0]
+        self.assertEqual(3, longestOpt.length, 'only valid should be pulling the two 2s through the friendly 1')
+        self.assertEqual(IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
+        self.assertEqual(2, longestOpt.gathered_army, 'gathered two 2s')
+
+
+    def test_build_flow_expand_plan__should_produce_valid_only__pull_through_neutral__need_cumulative_gather(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |     
+aG2  a3        b1   bG1 
+|    |    |    |    | 
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+
+        builder.recalculate_tile_islands(enemyGeneral)
+        flowExpander = ArmyFlowExpander(map)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
+
+        self.assertEqual(2, len(opts), 'taking the neut, and taking the neut + enemy 1')
+        longestOpt = self.get_longest_flow_expansion_option(opts)
+        # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
+        # opt = opts[0]
+        self.assertEqual(3, longestOpt.length, 'must make 3 moves to pull the ')
+        self.assertEqual(IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL + 1, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
+        self.assertEqual(3, longestOpt.gathered_army, 'gathered a 2 and a 3')
+
+
+    def test_build_flow_expand_plan__should_produce_valid_only__most_basic_move__multi_enemy_tiles(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |     
+aG3  a3   b1   bG1 
+|    |    |    | 
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+
+        builder.recalculate_tile_islands(enemyGeneral)
+        flowExpander = ArmyFlowExpander(map)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
+
+        self.assertEqual(2, len(opts), 'Shorter and longer options')
+        longestOpt = self.get_longest_flow_expansion_option(opts)
+        # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
+        # opt = opts[0]
+        self.assertEqual(3, longestOpt.length, 'two 3s needed, two caps')
+        self.assertEqual(IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL * 2, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
+        self.assertEqual(4, longestOpt.gathered_army, 'gathered two 3s')
+
+
+    def test_build_flow_expand_plan__should_produce_valid_only__most_basic_move__multi_enemy_tiles__differing_army(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |     
+aG3  a5   b1   bG3 
+|    |    |    | 
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+
+        builder.recalculate_tile_islands(enemyGeneral)
+        flowExpander = ArmyFlowExpander(map)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
+
+        self.assertEqual(2, len(opts), 'Shorter and longer options')
+        longestOpt = self.get_longest_flow_expansion_option(opts)
+        # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
+        # opt = opts[0]
+        self.assertEqual(3, longestOpt.length, 'two 3s needed, two caps')
+        self.assertEqual(IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL * 2, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
+        self.assertEqual(6, longestOpt.gathered_army, 'gathered 3 and 5')
+
+
+    def test_build_flow_expand_plan__should_produce_valid_only__pull_through_friendly__multi_enemy_tiles(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |     
+aG3  a3   a1   b1   bG1 
+|    |    |    |    | 
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+
+        builder.recalculate_tile_islands(enemyGeneral)
+        flowExpander = ArmyFlowExpander(map)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
+
+        self.assertEqual(2, len(opts), 'shorter and longer option')
+        longestOpt = self.get_longest_flow_expansion_option(opts)
+        # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
+        # opt = opts[0]
+        self.assertEqual(4, longestOpt.length, 'only valid should be pulling the two 2s through the friendly 1')
+        self.assertEqual(IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL * 2, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
+        self.assertEqual(4, longestOpt.gathered_army, 'gathered two 2s')
+
+
+    def test_build_flow_expand_plan__should_produce_valid_only__pull_through_neutral__multi_enemy_tiles(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |     
+aG2  a5   b1        bG1 
+|    |    |    |    | 
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+
+        builder.recalculate_tile_islands(enemyGeneral)
+        flowExpander = ArmyFlowExpander(map)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
+
+        self.assertEqual(3, len(opts), 'taking the neut, and taking the neut + enemy 1, and + enemy 2')
+        longestOpt = self.get_longest_flow_expansion_option(opts)
+        # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
+        # opt = opts[0]
+        self.assertEqual(4, longestOpt.length, 'must make 4 moves to pull the ')
+        self.assertEqual(IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL * 2 + 1, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
+        self.assertEqual(6, longestOpt.gathered_army, 'gathered a 2 and a 6')
+
+
+    def test_build_flow_expand_plan__should_produce_valid_only(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |     
+a3   a2   a1   a1 
+aG1  M    a1   b1 
+M    M         b1 
+          M    bG1 
+|    |    |    | 
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+
+        start = time.perf_counter()
+        builder.recalculate_tile_islands(enemyGeneral)
+        flowExpander = ArmyFlowExpander(map)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
+
+        duration = time.perf_counter() - start
+
     def test_build_flow_expand_plan__should_be_fast(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         for mapSize, maxDuration in [
+            ('large', 0.050),
             ('small', 0.010),
-            ('large', 0.050)
         ]:
             with self.subTest(mapSize=mapSize):
                 if mapSize == 'large':
@@ -59,7 +422,10 @@ class FlowExpansionUnitTests(TestBase):
                 start = time.perf_counter()
                 builder.recalculate_tile_islands(enemyGeneral)
                 flowExpander = ArmyFlowExpander(map)
-                opts = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+                flowExpander.use_debug_asserts = False
+                flowExpander.log_debug = False
+                flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+                opts = flowResult.flow_plans
 
                 duration = time.perf_counter() - start
                 self.assertLess(duration, maxDuration, 'should not take ages to build flow plan')
@@ -78,20 +444,64 @@ a2
                               bG1
 |    |    |    |    | 
         """
-        map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
-        self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
-        builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
-        opts = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
-        self.assertEqual(3, len(opts), 'should have an option for each length gather/cap, 1, 3, 5 lengths.')
-        longestOpt = self.get_longest_flow_expansion_option(opts)
-        # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
-        # opt = opts[0]
-        self.assertEqual(5, longestOpt.length, 'should be 5 turns to pull 3x 3s and capture 3x 1s')
-        self.assertEqual(6, round(longestOpt.econValue), 'should be 6 econ roughly to capture 3 enemy tiles.')
-        self.assertEqual(0, longestOpt.armyRemaining, 'should have NO army remaining')
+        #optimal is taking the 3x 3's above and using them to capture the 3x 1's, which is 5 moves for 3 caps.
+
+
+        for turns in [5, 50]:
+            with self.subTest(limitTurns=turns):
+                map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
+
+                self.begin_capturing_logging()
+                builder = TileIslandBuilder(map)
+                # builder.break_apart_neutral_islands = True
+                builder.recalculate_tile_islands(enemyGeneral)
+                flowExpander = ArmyFlowExpander(map)
+                flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=turns, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+                opts = flowResult.flow_plans
+                self.assertEqual(3, len(opts), 'should have an option for each length gather/cap, 1, 3, 5 lengths.')
+                longestOpt = self.get_longest_flow_expansion_option(opts)
+                # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
+                # opt = opts[0]
+                self.assertEqual(5, longestOpt.length, 'should be 5 turns to pull 3x 3s and capture 3x 1s')
+                self.assertEqual(6, round(longestOpt.econValue), 'should be 6 econ roughly to capture 3 enemy tiles.')
+                self.assertEqual(0, longestOpt.armyRemaining, 'should have NO army remaining')
+
+    def test_builds_flow_plan_from_single_segment__exact_cap__only_option(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+
+        testData = """
+|    |    |    |    |    |    |
+aG1            M    M    M    M                    
+               N40  a3   a3   a3  
+a1             M    b1   M    M           
+               M    b1   M          
+               M    b1   M          
+a1                  N40              
+                              bG1
+|    |    |    |    | 
+        """
+
+        #optimal is taking the 3x 3's above and using them to capture the 3x 1's, which is 5 moves for 3 caps.
+
+        for turns in [5, 50]:
+            with self.subTest(limitTurns=turns):
+                map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
+
+                self.begin_capturing_logging()
+                builder = TileIslandBuilder(map)
+                # builder.break_apart_neutral_islands = True
+                builder.recalculate_tile_islands(enemyGeneral)
+                flowExpander = ArmyFlowExpander(map)
+                flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=turns, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+                opts = flowResult.flow_plans
+                self.assertEqual(3, len(opts), 'should have an option for each length gather/cap, 1, 3, 5 lengths.')
+                longestOpt = self.get_longest_flow_expansion_option(opts)
+                # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
+                # opt = opts[0]
+                self.assertEqual(5, longestOpt.length, 'should be 5 turns to pull 3x 3s and capture 3x 1s')
+                self.assertEqual(3 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
+                self.assertEqual(8, longestOpt.gathered_army, 'should have NO army remaining')
 
     def test_builds_flow_plan_from_single_segment__extra_army(self):
         # TODO recognize the 1/econ/t expansion into neutral as part of this? or nah?
@@ -114,7 +524,8 @@ a2
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpander(map)
-        opts = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
         self.assertEqual(3, len(opts), 'one for each length plan opt, 1 3 and 5')
         shortOpt = SearchUtils.where(opts, lambda o: o.length == 3)[0]
         self.assertEqual(3, shortOpt.length)
@@ -148,7 +559,8 @@ a2
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpander(map)
-        opts = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
         self.assertEqual(2, len(opts), 'pulling the extra 2 should not result in an option since it does not result in another capture')
         opt = self.get_longest_flow_expansion_option(opts)
         self.assertEqual(4, round(opt.econValue), 'should be 4 econ roughly to capture 2 enemy tiles.')
@@ -175,7 +587,8 @@ a2
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpander(map)
-        opts = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
         self.assertEqual(2, len(opts), 'should have 3 cap, and 3 + 2x2s cap options')
         longest = sorted(opts, key=lambda o: 0-o.length)[0]
         self.assertEqual(4, round(longest.econValue), 'should be 4 econ roughly to capture 2 enemy tiles.')
@@ -202,7 +615,8 @@ a2
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpander(map)
-        opts = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
         self.assertEqual(2, len(opts), 'should have just 3 opt, and 3 + 2 + 3opts.')
         longest = self.get_longest_flow_expansion_option(opts)
         self.assertEqual(4, round(longest.econValue), 'should be 4 econ roughly to capture 2 enemy tiles.')
@@ -229,7 +643,8 @@ a2
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpander(map)
-        opts = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
         self.assertEqual(3, len(opts), 'should have just 3 opt, and 3 + 2 + 3opts.')
         longest = self.get_longest_flow_expansion_option(opts)
         self.assertEqual(6, round(longest.econValue), 'should be 4 econ roughly to capture 2 enemy tiles.')
@@ -258,7 +673,8 @@ a2                  b1
         builder.recalculate_tile_islands(enemyGeneral)
         self.assertEqual(len(builder.tile_islands_by_player[enemyGeneral.player]), 5)
         flowExpander = ArmyFlowExpander(map)
-        opts = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
         self.assertEqual(3, len(opts), 'should have 3 options technically although dunno why youd not cap the zero tile')
         longest = self.get_longest_flow_expansion_option(opts)
         self.assertEqual(6, round(longest.econValue), 'should be 6 econ roughly to capture 3 enemy tiles.')
@@ -274,7 +690,8 @@ a2                  b1
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpander(map)
-        opts = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
         self.assertGreater(len(opts), 0)
         sortedOpts = sorted(opts, key=lambda o: o.econValue / o.length, reverse=True)
         maxOpt = sortedOpts[0]

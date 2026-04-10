@@ -1424,7 +1424,9 @@ def _reconnect_steiner_subprune(
     steinerGraph = NetworkXHelpers.build_networkX_graph_flat_weight_mod_scale(
         map, valueMatrix, bannedTiles=skipTiles
     )
-    reconnectedSubset = GatherSteiner.build_network_x_steiner_tree_from_arbitrary_nx_graph(map, steinerGraph, requiredTiles=toReconnect)
+    # Filter out any tiles that were skipped from the graph to avoid NodeNotFound error
+    toReconnectInGraph = [t for t in toReconnect if t not in skipTiles] if skipTiles else toReconnect
+    reconnectedSubset = GatherSteiner.build_network_x_steiner_tree_from_arbitrary_nx_graph(map, steinerGraph, requiredTiles=toReconnectInGraph)
     reconnectionTiles = []
     gathVal = 0
     rawArmy = 0

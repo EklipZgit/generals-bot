@@ -139,20 +139,11 @@ class BotDefense:
             flags = ''
             if threat is not None and threat.threatType == ThreatType.Kill:
                 survivalThreshold = threat.threatValue
-                distOffsetNOWUNUSED = 1
-                addlTurnsToAllowGatherForAlwaysZero = 0
                 saveTurns = threat.turns
-                if threat is not None and bot._map.player_has_priority_over_other(bot.player.index, threat.threatPlayer, bot._map.turn + threat.turns) and not bot.has_defenseless_modifier:
-                    distOffsetNOWUNUSED += 1
-                if threat.saveTile is not None or isEconThreat and addlTurnsToAllowGatherForAlwaysZero == 0:
-                    saveTurns += 1
 
-                if threat.turns > 2 * bot.shortest_path_to_target_player.length // 3:
-                    distOffsetNOWUNUSED = 0
                 shouldBypass = BotDefense.should_bypass_army_danger_due_to_last_move_turn(bot, threat.path.start.tile)
                 if shouldBypass:
                     bot.viewInfo.add_info_line(f'skip def dngr from{str(army.tile)} last_seen {army.last_seen_turn}, last_moved {army.last_moved_turn}')
-                    distOffsetNOWUNUSED -= 1
 
                 with bot.perf_timer.begin_move_event(f'Def Gath {saveTurns}t @ {str(threat.path.start.tile)}->{str(threat.path.tail.tile)}'):
                     additionalNegatives = set()
@@ -170,7 +161,7 @@ class BotDefense:
                         threat,
                         requiredContribution=survivalThreshold,
                         additionalNegatives=additionalNegatives,
-                        addlTurns=addlTurnsToAllowGatherForAlwaysZero,
+                        addlTurns=0,
                         timeLimit=timeLimit)
 
                     if gatherNodes is not None:
@@ -237,7 +228,7 @@ class BotDefense:
                                 move = BotGatherOps.get_tree_move_default(bot, pruned, move_closest_value_func)
                                 BotComms.communicate_threat_to_ally(bot, threat, sumPruned, pruned)
                                 bot.info(
-                                    f'{flags}GathDefRaw-{str(threat.path.start.tile)}@{str(threat.path.tail.tile)}:  {move} val {valueGathered:.1f}/p{sumPruned:.1f}/{survivalThreshold} turns {turnsUsed}/p{sumPrunedTurns}/{threat.turns} offs{distOffsetNOWUNUSED}')
+                                    f'{flags}GathDefRaw-{str(threat.path.start.tile)}@{str(threat.path.tail.tile)}:  {move} val {valueGathered:.1f}/p{sumPruned:.1f}/{survivalThreshold} turns {turnsUsed}/p{sumPrunedTurns}/{threat.turns}')
                                 return move, savePath
                             else:
                                 BotComms.communicate_threat_to_ally(bot, threat, sumPruned, pruned)
@@ -276,7 +267,7 @@ class BotDefense:
 
                 if valueGathered < survivalThreshold - 1:
                     BotComms.communicate_threat_to_ally(bot, threat, valueGathered, gatherNodes)
-                    extraTurns = 1
+                    extraTurns = 0
                     pruneToValuePerTurn = False
                     if threat.path.tail.tile.isGeneral:
                         flags = f'DEAD {flags}'
@@ -284,9 +275,9 @@ class BotDefense:
                             bot.info(f'DEAD: RACING BECAUSE WE ARE DEAD WITH A NON-ZERO RACE KILL CHANCE')
                             return raceEnemyKingKillPath.get_first_move(), raceEnemyKingKillPath
                     else:
-                        flags = f'CAP {flags}'
+                        flags = f'DEAD CITY {flags}'
                         pruneToValuePerTurn = True
-                        extraTurns = 12
+                        extraTurns = 5
                         survivalThreshold += extraTurns // 2
 
                     with bot.perf_timer.begin_move_event(f'+{extraTurns} Def Threat Gather {threat.path.start.tile}@{threat.path.tail.tile}'):
@@ -307,7 +298,7 @@ class BotDefense:
                                 viewInfo=bot.viewInfo,
                                 preferPrune=bot.expansion_plan.preferred_tiles if bot.expansion_plan is not None else None,
                                 noLog=not DebugHelper.IS_DEBUGGING)
-                            valFunc = BotDefense.get_defense_tree_move_prio_func(bot, threat, anyLeafIsSameDistAsThreat=False, printDebug=DebugHelper.IS_DEBUGGING)
+                            valFunc = BotDefense.get_defense_tree_move_prio_func(bot, threat, anyLeafIsSameDistAsThreat=True, printDebug=DebugHelper.IS_DEBUGGING)
                             altMove = BotGatherOps.get_tree_move_default(bot, altGatherNodes, valFunc)
                     if altMove is not None:
                         directlyAttacksDest = altMove.dest == threat.path.start.tile
@@ -332,7 +323,7 @@ class BotDefense:
                     bot.gatherNodes = None
 
                 bot.info(
-                    f'{flags}GathDef-{str(threat.path.start.tile)}@{str(threat.path.tail.tile)}:  {move} val {valueGathered:.1f}/{survivalThreshold} turns {turnsUsed}/{threat.turns} (abandThresh {abandonDefenseThreshold:.0f} offs{distOffsetNOWUNUSED}')
+                    f'{flags}GathDef-{str(threat.path.start.tile)}@{str(threat.path.tail.tile)}:  {move} val {valueGathered:.1f}/{survivalThreshold} turns {turnsUsed}/{threat.turns} (abandThresh {abandonDefenseThreshold:.0f})')
                 if isRealThreat or BotRepetition.detect_repetition_tile(bot, move.source, turns=8, numReps=3):
                     realThreats.append(threat)
                     if threat.turns < 7:
@@ -820,13 +811,14 @@ class BotDefense:
         if move.dest == threat.path.start.tile or (move.dest == threat.path.start.next.tile and len(threat.armyAnalysis.tileDistancesLookup[1]) == 1):
             return True
 
-        if threat.armyAnalysis.is_choke(move.source) and not threat.armyAnalysis.is_choke(move.dest):
-            bot.viewInfo.add_info_line(f'not allowing army move out of threat choke {str(move.source)}')
-            return False
+        if threat.armyAnalysis.bMap.raw[move.source.tile_index] < 6 and threat.armyAnalysis.aMap.raw[move.source.tile_index] != 0:
+            if threat.armyAnalysis.is_choke(move.source) and not threat.armyAnalysis.is_choke(move.dest):
+                bot.viewInfo.add_info_line(f'not allowing army move out of threat choke {str(move.source)}')
+                return False
 
-        if move.source in threat.path.tileSet and move.dest not in threat.path.tileSet:
-            bot.viewInfo.add_info_line(f'not allowing army move out of threat path {str(move.source)}')
-            return False
+            if move.source in threat.path.tileSet and move.dest not in threat.path.tileSet:
+                bot.viewInfo.add_info_line(f'not allowing army move out of threat path {str(move.source)}')
+                return False
 
         return True
 
@@ -1618,21 +1610,51 @@ class BotDefense:
         return enPath
 
     @staticmethod
-    def _get_defensive_spanning_tree(bot, negativeTiles: TileSet, gatherPrioMatrix: MapMatrixInterface[float] | None = None) -> typing.Set[Tile]:
+    def _get_defensive_spanning_tree(
+            bot,
+            negativeTiles: TileSet,
+            gatherPrioMatrix: MapMatrixInterface[float] | None = None,
+            use_cities_in_play_only: bool = True,
+            require_min_distance: bool = False
+    ) -> typing.Set[Tile]:
         includes = [bot.general]
         if BotComms.is_2v2_teammate_still_alive(bot):
             includes.append(bot.teammate_general)
-            includes.extend(bot._map.players[bot.teammate].cities)
 
-        includes.extend(bot._map.players[bot.general.player].cities)
+        distLimit = 50
+        if bot.sketchiest_potential_inbound_flank_path:
+            distLimit = bot.distance_from_general(bot.sketchiest_potential_inbound_flank_path.tail.tile)
+        else:
+            dists = [bot.distance_from_general(t) for t in bot.board_analysis.intergeneral_analysis.shortestPathWay.tiles if not t.visible]
+            if len(dists) > 0:
+                distLimit = min(dists)
+
+        if use_cities_in_play_only:
+            # Use cities_in_play from cityAnalyzer if available, which filters out cities
+            # that are further from the enemy general than our general is from the enemy general
+            if bot.cityAnalyzer is not None and bot.cityAnalyzer.cities_in_play:
+                for c in bot.cityAnalyzer.cities_in_play:
+                    gDist = bot.distance_from_general(c)
+                    spDist = bot.board_analysis.shortest_path_distances.raw[c.tile_index]
+                    bot.info(f'  DEBUC c{c}  g{gDist}  sp{spDist}  sum{gDist+spDist}  limit{distLimit}  from {bot.sketchiest_potential_inbound_flank_path.tail.tile if bot.sketchiest_potential_inbound_flank_path is not None else "None"}')
+                    if gDist + spDist < distLimit:
+                        includes.append(c)
+                # includes.extend([c for c in bot.cityAnalyzer.cities_in_play if bot.distance_from_general(c) + bot.board_analysis.shortest_path_distances.raw[c.tile_index] < distLimit])
+            else:
+                # Fall back to all cities if cityAnalyzer not available
+                if BotComms.is_2v2_teammate_still_alive(bot):
+                    includes.extend(bot._map.players[bot.teammate].cities)
+                includes.extend(bot._map.players[bot.general.player].cities)
+        else:
+            # Use ALL friendly cities (except contested enemy cities)
+            if BotComms.is_2v2_teammate_still_alive(bot):
+                includes.extend(bot._map.players[bot.teammate].cities)
+            includes.extend(bot._map.players[bot.general.player].cities)
 
         limit = 12
         if len(includes) > limit:
             includes = sorted(includes, key=lambda c: bot.territories.territoryDistances[bot.targetPlayer].raw[c.tile_index] if not c.isGeneral else 0)[:limit]
 
-        distLimit = 50
-        if bot.sketchiest_potential_inbound_flank_path:
-            distLimit = bot.distance_from_general(bot.sketchiest_potential_inbound_flank_path.tail.tile)
         distLimit = max(distLimit, int(max(bot.distance_from_general(t) for t in includes) * 1.5))
 
         if distLimit > 50:
@@ -1650,7 +1672,8 @@ class BotDefense:
             negativeTiles,
             maxTurns=distLimit,
             gatherPrioMatrix=gatherPrioMatrix,
-            searchingPlayer=bot.general.player
+            searchingPlayer=bot.general.player,
+            require_min_distance=require_min_distance,
         )
 
         if unconnectableTiles:
@@ -2233,6 +2256,7 @@ class BotDefense:
             if closestToMid is not None:
                 move = closestToMid.get_first_move()
                 bot.info(f'EXP plan included vision expansion {move}')
+                bot.curPath = closestToMid
                 return move
 
         if bot.timings.get_turn_in_cycle(bot._map.turn) >= 6:
@@ -2616,7 +2640,7 @@ class BotDefense:
                         tDist = 100
                 if defDist < tDist:
                     block.add_blocked_destination(t)
-            bot.info(f'blocking {defensiveTile} from moving to {block.blocked_destinations}')
+            bot.info(f'blocking {defensiveTile} from moving to {'|'.join([str(t) for t in block.blocked_destinations])}')
 
 
 BM.BotDefense = BotDefense

@@ -230,6 +230,7 @@ def get_max_gather_spanning_tree_set_from_tile_lists(
         maxTurns: int = 1000,
         gatherPrioMatrix: MapMatrixInterface[float] | None = None,
         searchingPlayer: int = -1,
+        require_min_distance: bool = False,
         # gatherMult: float = 1.0,
         # oneOfTiles: typing.Iterable[Tile] | None = None,
 ) -> typing.Tuple[typing.Set[Tile], typing.Set[Tile]]:
@@ -250,6 +251,8 @@ def get_max_gather_spanning_tree_set_from_tile_lists(
     minIncluded, unconnectable, costPer = get_spanning_tree_set_from_tile_lists_with_cost_per(map, requiredTiles, bannedSet)
 
     bareMinTurns = len(minIncluded)
+    if require_min_distance:
+        maxTurns = bareMinTurns
     excessTurns = maxTurns - bareMinTurns
 
     start = time.perf_counter()

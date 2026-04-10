@@ -29,7 +29,7 @@ class FogGatherQueue(object):
         # self._gather_amts: typing.Dict[int, int] = {}
         self._gather_amts: typing.List[int] = []
         self._gather_amt_max: int = 0
-        
+
     @property
     def cur_max_tile_size(self) -> int:
         return self._gather_amt_max
@@ -1917,3 +1917,35 @@ class OpponentTracker(object):
             currentCycleStats.approximate_fog_army_available_total -= annihilatedArmy - removed
             currentCycleStats.approximate_fog_army_available_total_true -= annihilatedArmy - removed
             currentCycleStats.approximate_army_gathered_this_cycle -= annihilatedArmy - removed
+
+    def get_immediate_fog_risk(self, player: int, our_city_spanning_tree_tile_count: int) -> typing.Tuple[int, int, int, int]:
+        """
+        Calculates the immediate fog risk from a player against our territory.
+
+        FogRisk = fog_army_suspected_gathered + total_fog_city_army - (numberOfCitiesTheyHave / 4 * our_city_spanning_tree_tile_count)
+
+        @param player: The enemy player to calculate fog risk for
+        @param our_city_spanning_tree_tile_count: Number of tiles in our city spanning tree (used to estimate their similar tree size)
+        @return: Tuple of (total_fog_risk, fog_army_component, city_component, expected_city_spanning_offset)
+        """
+        stats = self.get_current_cycle_stats_by_player(player)
+        if stats is None:
+            return 0, 0, 0
+
+        enScores = self.get_current_team_scores_by_player(player)
+        if enScores is None:
+            return 0, 0, 0
+
+        # Fog army component: approximate fog army available
+        fog_army_component = stats.approximate_fog_army_available_total
+
+        # City component: total fog city army (all their cities, not limited)
+        city_component = stats.approximate_fog_city_army
+
+        # Calculate the expected city-based army offset based on their cities vs our spanning tree
+        # This assumes their city spanning tree should be similar to ours in size
+        expected_city_spanning_offset = int(enScores.cityCount / 4 * our_city_spanning_tree_tile_count)
+
+        total_fog_risk = fog_army_component + city_component - expected_city_spanning_offset
+
+        return total_fog_risk, fog_army_component, city_component, expected_city_spanning_offset

@@ -13,7 +13,8 @@ class ExpansionPotential(object):
             neutTilesCaptured: int,
             selectedOption: TilePlanInterface | None,
             allOptions: typing.List[TilePlanInterface],
-            cumulativeEconVal: float
+            cumulativeEconVal: float,
+            turn: int,
     ):
         self.turns_used: int = turnsUsed
         self.en_tiles_captured: int = enTilesCaptured
@@ -31,3 +32,4 @@ class ExpansionPotential(object):
             self.plan_tiles.update(selectedOption.tileSet)
 
         self.cumulative_econ_value: float = cumulativeEconVal
+        self.calculated_turn = turn

@@ -1,5 +1,5 @@
 websocket-client
-pygame-ce>=2.5.6
+pygame-ce>=2.5.7
 certifi
 requests
 nashpy

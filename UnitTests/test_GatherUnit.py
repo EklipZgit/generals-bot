@@ -4,6 +4,7 @@ import typing
 
 import DebugHelper
 import Gather
+from Gather import GatherDebug
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase

@@ -793,11 +793,11 @@ class ArmyTrackerTests(TestBase):
         simHost.queue_player_moves_str(enemyGeneral.player, '4,9->5,9')
 
         bot = self.get_debug_render_bot(simHost, general.player)
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][4][3] = 11
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][5][3] = 11
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][5][4] = 11
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][5][5] = 5
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][4][5] = 3
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(4, 3, simHost.sim, general.player)] = 11
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(5, 3, simHost.sim, general.player)] = 11
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(5, 4, simHost.sim, general.player)] = 11
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(5, 5, simHost.sim, general.player)] = 5
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(4, 5, simHost.sim, general.player)] = 3
 
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
@@ -829,20 +829,20 @@ class ArmyTrackerTests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '8,3->7,3->6,3->6,2')
         bot = self.get_debug_render_bot(simHost, general.player)
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][16][1] = 4
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][16][3] = 23
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][16][4] = 23
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(16, 1, simHost.sim, general.player)] = 4
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(16, 3, simHost.sim, general.player)] = 23
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(16, 4, simHost.sim, general.player)] = 23
 
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][17][1] = 15
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][17][2] = 18
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][17][3] = 25
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][17][4] = 14
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][17][5] = 25
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(17, 1, simHost.sim, general.player)] = 15
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(17, 2, simHost.sim, general.player)] = 18
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(17, 3, simHost.sim, general.player)] = 25
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(17, 4, simHost.sim, general.player)] = 14
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(17, 5, simHost.sim, general.player)] = 25
 
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][18][1] = 12
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][18][2] = 15
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][18][3] = 18
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][18][4] = 25
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(18, 1, simHost.sim, general.player)] = 12
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(18, 2, simHost.sim, general.player)] = 15
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(18, 3, simHost.sim, general.player)] = 18
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(18, 4, simHost.sim, general.player)] = 25
 
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
@@ -959,7 +959,7 @@ class ArmyTrackerTests(TestBase):
                 stats.approximate_fog_army_available_total = 160
                 stats.approximate_fog_city_army = 150
                 bot.armyTracker.new_army_emerged(bot._map.GetTile(4, 13), 150)
-                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][8][19] = 20  # force the 'wrong' city to be the fog path so we can test that the fog city tracker marks it undiscovered again.
+                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(8, 19, simHost.sim, general.player)] = 20  # force the 'wrong' city to be the fog path so we can test that the fog city tracker marks it undiscovered again.
 
                 simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
@@ -998,18 +998,18 @@ class ArmyTrackerTests(TestBase):
         self.assertFalse(problemMountain.isMountain)
         self.assertTrue(problemMountain.isUndiscoveredObstacle)
 
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][10][3] = 36
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][11][3] = 44
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][11][4] = 36
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][11][5] = 3
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][12][3] = 51
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][12][4] = 44
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][12][5] = 70
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][13][3] = 65
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][14][3] = 70
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][14][2] = 65
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][14][1] = 51
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][15][1] = 50
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(10, 3, simHost.sim, general.player)] = 36
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(11, 3, simHost.sim, general.player)] = 44
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(11, 4, simHost.sim, general.player)] = 36
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(11, 5, simHost.sim, general.player)] = 3
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(12, 3, simHost.sim, general.player)] = 51
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(12, 4, simHost.sim, general.player)] = 44
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(12, 5, simHost.sim, general.player)] = 70
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(13, 3, simHost.sim, general.player)] = 65
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(14, 3, simHost.sim, general.player)] = 70
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(14, 2, simHost.sim, general.player)] = 65
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(14, 1, simHost.sim, general.player)] = 51
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(15, 1, simHost.sim, general.player)] = 50
 
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
@@ -1085,15 +1085,15 @@ class ArmyTrackerTests(TestBase):
                 bot = self.get_debug_render_bot(simHost, general.player)
                 simHost.queue_player_moves_str(general.player, '6,11->6,10->5,10')
 
-                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][4][10] = 8
-                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][5][8] = 8
-                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][5][7] = 2
-                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][6][7] = 2
-                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][7][7] = 2
-                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][6][8] = 2
-                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][7][8] = 2
-                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][4][11] = 2
-                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][4][12] = 5
+                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(4, 10, simHost.sim, general.player)] = 8
+                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(5, 8, simHost.sim, general.player)] = 8
+                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(5, 7, simHost.sim, general.player)] = 2
+                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(6, 7, simHost.sim, general.player)] = 2
+                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(7, 7, simHost.sim, general.player)] = 2
+                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(6, 8, simHost.sim, general.player)] = 2
+                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(7, 8, simHost.sim, general.player)] = 2
+                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(4, 11, simHost.sim, general.player)] = 2
+                bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(4, 12, simHost.sim, general.player)] = 5
 
                 # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
@@ -1302,10 +1302,17 @@ a1   b1   b1   bG1
         self.assertIsNone(winner)
 
         bot = self.get_debug_render_bot(simHost, general.player)
-        wrongTile = self.get_player_tile(5, 11, simHost.sim, general.player)
-        self.assertLess(wrongTile.army, 4)
-        army = bot.armyTracker.armies.get(wrongTile, None)
-        self.assertIsNone(army)  # or possibly scrapped...?
+        wrongTiles = [
+            self.get_player_tile(5, 11, simHost.sim, general.player),
+            self.get_player_tile(7, 11, simHost.sim, general.player),
+            self.get_player_tile(7, 12, simHost.sim, general.player),
+            self.get_player_tile(6, 12, simHost.sim, general.player),
+        ]
+        for wrongTile in wrongTiles:
+            with self.subTest(wrongTile=wrongTile):
+                self.assertLess(wrongTile.army, 4)
+                army = bot.armyTracker.armies.get(wrongTile, None)
+                self.assertIsNone(army)  # or possibly scrapped...?
 
     def test_should_not_invent_fog_neutral_cities_nor_gather_into_rediscovered_as_neutral_neutral_city(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1327,14 +1334,14 @@ a1   b1   b1   bG1
                                     allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         bot = self.get_debug_render_bot(simHost, general.player)
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][11][16] = 6
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][12][15] = 6
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][12][13] = 6
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(11, 16, simHost.sim, general.player)] = 6
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(12, 15, simHost.sim, general.player)] = 6
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(12, 13, simHost.sim, general.player)] = 6
         self.set_general_emergence_around(15, 16, simHost, general.player, enemyGeneral.player, emergenceAmt=2,
                                           doNotSetTargetLocation=True)
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][14][15] = 7
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][16][14] = 9
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][18][13] = 6
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(14, 15, simHost.sim, general.player)] = 7
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(16, 14, simHost.sim, general.player)] = 9
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(18, 13, simHost.sim, general.player)] = 6
 
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
@@ -1946,63 +1953,63 @@ a1   b1   b1   bG1
         simHost.queue_player_moves_str(general.player, '2,9->2,8')
         bot = self.get_debug_render_bot(simHost, general.player)
         self.set_general_emergence_around(0, 3, simHost, general.player, enemyGeneral.player, 20)
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][0][0] = 5
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][0][1] = 6
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][0][2] = 6
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][0][3] = 20
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][0][4] = 20
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][0][5] = 5
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][0][6] = 5
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][0][7] = 5
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(0, 0, simHost.sim, general.player)] = 5
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(0, 1, simHost.sim, general.player)] = 6
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(0, 2, simHost.sim, general.player)] = 6
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(0, 3, simHost.sim, general.player)] = 20
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(0, 4, simHost.sim, general.player)] = 20
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(0, 5, simHost.sim, general.player)] = 5
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(0, 6, simHost.sim, general.player)] = 5
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(0, 7, simHost.sim, general.player)] = 5
 
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][1][0] = 5
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][1][1] = 6
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][1][2] = 80
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][1][3] = 19
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][1][4] = 11
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(1, 0, simHost.sim, general.player)] = 5
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(1, 1, simHost.sim, general.player)] = 6
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(1, 2, simHost.sim, general.player)] = 80
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(1, 3, simHost.sim, general.player)] = 19
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(1, 4, simHost.sim, general.player)] = 11
 
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][2][0] = 5
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][2][1] = 7
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][2][2] = 9
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][2][3] = 19
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][2][4] = 10
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(2, 0, simHost.sim, general.player)] = 5
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(2, 1, simHost.sim, general.player)] = 7
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(2, 2, simHost.sim, general.player)] = 9
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(2, 3, simHost.sim, general.player)] = 19
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(2, 4, simHost.sim, general.player)] = 10
 
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][3][0] = 6
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][3][1] = 7
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][3][2] = 9
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][3][3] = 18
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][3][4] = 16
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][3][5] = 0
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][3][6] = 0
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][3][7] = 0
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(3, 0, simHost.sim, general.player)] = 6
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(3, 1, simHost.sim, general.player)] = 7
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(3, 2, simHost.sim, general.player)] = 9
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(3, 3, simHost.sim, general.player)] = 18
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(3, 4, simHost.sim, general.player)] = 16
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(3, 5, simHost.sim, general.player)] = 0
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(3, 6, simHost.sim, general.player)] = 0
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(3, 7, simHost.sim, general.player)] = 0
 
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][4][0] = 5
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][4][1] = 6
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][4][2] = 7
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][4][3] = 9
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][4][4] = 15
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(4, 0, simHost.sim, general.player)] = 5
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(4, 1, simHost.sim, general.player)] = 6
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(4, 2, simHost.sim, general.player)] = 7
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(4, 3, simHost.sim, general.player)] = 9
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(4, 4, simHost.sim, general.player)] = 15
 
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][5][0] = 6
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][5][1] = 7
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][5][2] = 8
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][5][3] = 9
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][5][4] = 14
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][5][5] = 9
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(5, 0, simHost.sim, general.player)] = 6
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(5, 1, simHost.sim, general.player)] = 7
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(5, 2, simHost.sim, general.player)] = 8
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(5, 3, simHost.sim, general.player)] = 9
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(5, 4, simHost.sim, general.player)] = 14
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(5, 5, simHost.sim, general.player)] = 9
 
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][6][0] = 5
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][6][1] = 6
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][6][2] = 8
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][6][3] = 9
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][6][4] = 13
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][6][5] = 9
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(6, 0, simHost.sim, general.player)] = 5
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(6, 1, simHost.sim, general.player)] = 6
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(6, 2, simHost.sim, general.player)] = 8
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(6, 3, simHost.sim, general.player)] = 9
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(6, 4, simHost.sim, general.player)] = 13
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(6, 5, simHost.sim, general.player)] = 9
 
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][7][0] = 5
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][7][1] = 4
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][7][2] = 7
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][7][3] = 8
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][7][4] = 12
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][7][5] = 10
-        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][7][6] = 7
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(7, 0, simHost.sim, general.player)] = 5
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(7, 1, simHost.sim, general.player)] = 4
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(7, 2, simHost.sim, general.player)] = 7
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(7, 3, simHost.sim, general.player)] = 8
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(7, 4, simHost.sim, general.player)] = 12
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(7, 5, simHost.sim, general.player)] = 10
+        bot.armyTracker.emergenceLocationMap[enemyGeneral.player][self.get_player_tile(7, 6, simHost.sim, general.player)] = 7
 
         army = bot.get_army_at_x_y(1, 4)  # this was an army in the game and might be related to the bug
         playerMap = simHost.get_player_map(general.player)
@@ -2521,3 +2528,24 @@ a1   b1   b1   bG1
         self.assertLess(playerMap.GetTile(17, 11).army, 11)
         self.assertLess(playerMap.GetTile(18, 10).army, 11)
         self.assertLess(playerMap.GetTile(18, 11).army, 11)
+    
+    def test_should_remove_both_entangled_armies_when_army_emerges_from_fog(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_remove_both_entangled_armies_when_army_emerges_from_fog___QoMfyZD0B---1--287.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 287, fill_out_tiles=True)
+        map.GetTile(12, 7).army = 113
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=287)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '12,7->12,6')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertNoArmyOn(map.GetTile(12, 7), bot)
+        self.assertNoArmyOn(map.GetTile(12, 8), bot)

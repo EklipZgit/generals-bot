@@ -500,6 +500,7 @@ def convert_contiguous_tile_tree_to_gather_capture_plan(
         useTrueValueGathered: bool = True,
         includeGatherPriorityAsEconValues: bool = False,
         includeCapturePriorityAsEconValues: bool = True,
+        tilesToHalf: TileSet | None = None,
         viewInfo=None,
 ) -> GatherCapturePlan:
     """
@@ -531,6 +532,7 @@ def convert_contiguous_tile_tree_to_gather_capture_plan(
         includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
         viewInfo=viewInfo,
         cloneNodes=False,
+        tilesToHalf=tilesToHalf,
     )
 
     return plan
@@ -1265,6 +1267,7 @@ def gather_approximate_turns_to_tiles(
         negativeTiles: TileSet | None = None,
         prioritizeCaptureHighArmyTiles: bool = False,
         skipTiles: TileSet | None = None,
+        tilesToHalf: TileSet | None = None,
         useTrueValueGathered: bool = True,
         includeGatherPriorityAsEconValues: bool = False,
         includeCapturePriorityAsEconValues: bool = True,
@@ -1337,6 +1340,7 @@ def gather_approximate_turns_to_tiles(
         timeLimit=timeLimit,
         skipTiles=skipTiles,
         negativeTiles=negativeTiles,
+        tilesToHalf=tilesToHalf,
         prioritizeCaptureHighArmyTiles=prioritizeCaptureHighArmyTiles)
 
     if not steinerNodes:
@@ -1352,6 +1356,7 @@ def gather_approximate_turns_to_tiles(
         searchingPlayer=asPlayer,
         priorityMatrix=weightMatrix,
         useTrueValueGathered=useTrueValueGathered,
+        tilesToHalf=tilesToHalf,
         includeGatherPriorityAsEconValues=includeGatherPriorityAsEconValues,
         includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
         viewInfo=viewInfo,

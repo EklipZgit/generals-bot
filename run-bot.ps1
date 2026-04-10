@@ -13,6 +13,7 @@ function Run-BotOnce {
         $path = "$PSScriptRoot/BotHost.py",
         $userID = $null,
         [switch]$nolog,
+        [switch]$noTextLog,
         [switch]$publicLobby
     )
 
@@ -93,6 +94,7 @@ This allows you to have different bots running on different monitors, etc.
     if ($right) { [void] $arguments.Add("--right") }
     if ($noui) { [void] $arguments.Add("--no-ui") }
     if ($nolog) { [void] $arguments.Add("--no-log") }
+    if ($noTextLog) { [void] $arguments.Add("--no-text-log") }
     if ($public) {
         [void] $arguments.Add("--public")
     }
@@ -101,10 +103,13 @@ This allows you to have different bots running on different monitors, etc.
     $argString = $([string]::Join(" ", $arguments))
     Write-Verbose $argString -Verbose
     $host.ui.RawUI.WindowTitle = "$game - $($name.Replace('[Bot]', '').Trim())"
+    $pythonVer = "python"
     $pythonVer = "python3.14"
-    if ($path -notlike '*/generals-bot/*' -and $path -notlike '*\generals-bot\*') {
+    if ($path -notlike '*[/\]generals-bot[\/]*') {
         $pythonVer = "python"
     }
+
+    Write-Host "Python ver $pythonVer for path $path"
 
     # this exeString is a hack due to the powershell memory leak, need to keep opening new PS processes
     # or we fill up memory to 1GB per powershell window overnight :(
@@ -241,6 +246,7 @@ function Run-SoraAI {
         $game = @('1v1', '1v1', 'ffa', 'ffa'),
         [switch]$public,
         [switch]$nolog,
+        [switch]$noTextLog,
         [int]$sleepMax = 3
     )
     while ($true)
@@ -253,7 +259,7 @@ function Run-SoraAI {
 
         foreach ($g in $game)
         {
-            run-botonce -game $g -name "Sora AI" -userID $userId -path "D:/2019_reformat_Backup/Sora_AI/run_bot.py" -public:$public -nolog:$nolog
+            run-botonce -game $g -name "Sora AI" -userID $userId -path "D:/2019_reformat_Backup/Sora_AI/run_bot.py" -public:$public -nolog:$nolog -noTextLog:$noTextLog
             SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
@@ -266,6 +272,7 @@ function Run-SoraAlt {
         $game = @('1v1', '1v1'),
         [switch]$public,
         [switch]$nolog,
+        [switch]$noTextLog,
         [int]$sleepMax = 3
     )
     while ($true)
@@ -295,7 +302,7 @@ function Run-SoraAlt {
 
         foreach ($g in $game)
         {
-            run-botonce -game $g -name $name -userID $userId -path "D:/2019_reformat_Backup/Sora_AI/run_bot.py" -public:$public -nolog:$nolog
+            run-botonce -game $g -name $name -userID $userId -path "D:/2019_reformat_Backup/Sora_AI/run_bot.py" -public:$public -nolog:$nolog -noTextLog:$noTextLog
             SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
@@ -526,7 +533,6 @@ function Start-WindowsTerminalHistoricalBots {
             Start-Sleep -Seconds 1
         }
     }
-
     <#
     loads of fog / engine bugfixes but still not MCTS working.
     Tweaked attack timings.
@@ -545,7 +551,6 @@ function Start-WindowsTerminalHistoricalBots {
             Start-Sleep -Seconds 1
         }
     }
-
     <#
     MCTS based army engine.
     2v2
@@ -566,11 +571,8 @@ function Start-WindowsTerminalHistoricalBots {
             Start-Sleep -Seconds 1
         }
     }
-
-    <#
-    fixing stuff?
-    #>
 }
+
 
 
 # starts a windows terminal that runs many historical versions of EklipZ_ai
@@ -708,7 +710,6 @@ function Start-WindowsTerminalBigFfaBots {
             Start-Sleep -Seconds 1
         }
     }
-
     <#
     loads of fog / engine bugfixes but still not MCTS working.
     Tweaked attack timings.
@@ -727,7 +728,6 @@ function Start-WindowsTerminalBigFfaBots {
             Start-Sleep -Seconds 1
         }
     }
-
     <#
     MCTS based army engine.
     2v2
@@ -1341,7 +1341,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c {
         cd "D:/2019_reformat_Backup/generals-bot/";
         . ./run-bot.ps1;
-        $command = 'Run-Human -game team -right -sleepMax 5 -nolog'
+        $command = 'Run-Human -game team -right -sleepMax 5 -nolog -botServer'
         try {
             Invoke-Expression $command
         } finally {
@@ -1660,13 +1660,15 @@ function Run-Path {
         $game = @('ffa'),
         $name = "PurdPath",
         [switch]$public,
+        [switch]$nolog,
+        [switch]$noTextLog,
         [int]$sleepMax = 3
     )
     while ($true)
     {
         foreach ($g in $game)
         {
-            run-botonce -game $g -name $name -path "D:/2019_reformat_Backup/generals-blob-and-path/bot_path_collect.py" -nolog -noui -public:$public
+            run-botonce -game $g -name $name -path "D:/2019_reformat_Backup/generals-blob-and-path/bot_path_collect.py" -nolog:$nolog -noTextLog:$noTextLog -public:$public
             SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
@@ -1679,13 +1681,15 @@ function Run-Blob {
         $game = @('ffa'),
         $name = "PurdBlob",
         [switch]$public,
+        [switch]$nolog,
+        [switch]$noTextLog,
         [int]$sleepMax = 3
     )
     while ($true)
     {
         foreach ($g in $game)
         {
-            run-botonce -game $g -name $name -path "D:/2019_reformat_Backup/generals-blob-and-path/bot_blob.py" -nolog -noui -public:$public
+            run-botonce -game $g -name $name -path "D:/2019_reformat_Backup/generals-blob-and-path/bot_blob.py" -nolog:$nolog -noTextLog:$noTextLog -public:$public
             SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
@@ -1704,6 +1708,7 @@ function Run-Bot {
         [switch]$noui,
         $path = "D:/2019_reformat_Backup/generals-bot/BotHost.py",
         [switch]$nolog,
+        [switch]$noTextLog,
         [switch]$publicLobby,
         $sleepMax = 30
     )
@@ -1734,6 +1739,7 @@ function Run-BotCheckpoint {
         [switch]$noui,
         [switch]$nocopy,
         [switch]$nolog,
+        [switch]$noTextLog,
         [switch]$publicLobby
     )
     $games = $game
@@ -1781,6 +1787,7 @@ function Run-Human {
         [switch] $private,
         [switch] $noui,
         [switch] $nolog,
+        [switch] $noTextLog,
         $name = 'Human.exe',
         [switch] $botServer
     )
@@ -1788,13 +1795,14 @@ function Run-Human {
         noui = $noui
         right = -not $left
         nolog = $nolog
+        noTextLog = $noTextLog
         public = -not $botServer
     }
     while ($true)
     {
         foreach ($g in $game)
         {
-            Run-BotOnce -game $g -name $name -roomID $roomID @splat -privateGame:$private
+            run-botonce -game $g -name $name -roomID $roomID @splat -privateGame:$private
             SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
@@ -1826,6 +1834,7 @@ function Run-HumanTeammate {
         $roomID = 'getRekt',
         [switch] $noui,
         [switch] $nolog,
+        [switch] $noTextLog,
         [switch] $botServer
     )
 
@@ -1834,6 +1843,7 @@ function Run-HumanTeammate {
         right = -not $left
         userID = 'efgHuman.py'
         nolog = $nolog
+        noTextLog = $noTextLog
         public = -not $botServer
     }
 
@@ -1851,6 +1861,7 @@ function Run-Teammate {
         $roomID = 'matchmaking',
         [switch] $noui,
         [switch] $nolog,
+        [switch] $noTextLog,
         $name = "Teammate.exe",
         [switch] $botServer
     )
@@ -1866,6 +1877,7 @@ function Run-Teammate {
         userID = $userId
         roomID = $roomID
         nolog = $nolog
+        noTextLog = $noTextLog
         public = -not $botServer
     }
 

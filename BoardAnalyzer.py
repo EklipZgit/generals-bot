@@ -95,7 +95,7 @@ class BoardAnalyzer:
         self.__dict__.update(state)
         self.map = None
 
-    def rescan_chokes(self):
+    def rescan_chokes(self, cities_in_play: typing.Set[Tile] | None = None):
         self.should_rescan = False
 
         oldInner = self.innerChokes
@@ -113,6 +113,12 @@ class BoardAnalyzer:
         else:
             self.friendly_general_distances = self.general_distances
 
+        # Use cities_in_play if provided, filtering to only include cities we own or teammate owns
+        if cities_in_play is not None:
+            friendlyCitiesInPlay = [c for c in cities_in_play if c.player == self.general.player or (self.teammate_general is not None and c.player == self.teammate_general.player)]
+            if friendlyCitiesInPlay:
+                cities = friendlyCitiesInPlay
+
         closestCities = cities
         if self.intergeneral_analysis is not None:
             # only consider the closest 3 cities to enemy...?
@@ -121,46 +127,47 @@ class BoardAnalyzer:
         self.friendly_city_distances = {}
         for city in closestCities:
             self.friendly_city_distances[city] = self.map.distance_mapper.get_tile_dist_matrix(city)
-        self.defense_centrality_sums = MapMatrix(self.map, 250)
+        self.defense_centrality_sums = MapMatrix(self.map, 1000000)
 
         lowestAvgDist = 10000000
         lowestAvgTile: Tile | None = None
 
         for tile in self.map.pathable_tiles:
-            tileDist = self.friendly_general_distances[tile]
+            tileDist = self.friendly_general_distances.raw[tile.tile_index]
 
-            distSum = tileDist
+            # general is 3x more important than cities
+            distSum = tileDist * 3
             for city, distances in self.friendly_city_distances.items():
-                distSum += distances[tile]
+                distSum += distances.raw[tile.tile_index]
 
-            if distSum < lowestAvgDist or (distSum == lowestAvgDist and self.intergeneral_analysis is not None and self.intergeneral_analysis.bMap[tile] < self.intergeneral_analysis.bMap[lowestAvgTile]):
+            if distSum < lowestAvgDist or (distSum == lowestAvgDist and self.intergeneral_analysis is not None and self.intergeneral_analysis.bMap.raw[tile.tile_index] < self.intergeneral_analysis.bMap.raw[lowestAvgTile.tile_index]):
                 lowestAvgTile = tile
                 lowestAvgDist = distSum
 
-            self.defense_centrality_sums[tile] = distSum
+            self.defense_centrality_sums.raw[tile.tile_index] = distSum
 
-            movableInnerCount = SearchUtils.count(tile.movable, lambda adj: tileDist == self.friendly_general_distances[adj] - 1)
-            movableOuterCount = SearchUtils.count(tile.movable, lambda adj: tileDist == self.friendly_general_distances[adj] + 1)
+            movableInnerCount = SearchUtils.count(tile.movable, lambda adj: tileDist == self.friendly_general_distances.raw[adj.tile_index] - 1)
+            movableOuterCount = SearchUtils.count(tile.movable, lambda adj: tileDist == self.friendly_general_distances.raw[adj.tile_index] + 1)
             if movableInnerCount == 1:
-                self.outerChokes.add(tile)
+                self.outerChokes.raw[tile.tile_index] = True
             # checking movableInner to avoid considering dead ends 'chokes'
             if (
                     movableOuterCount == 1
                     # and movableInnerCount >= 1
             ):
-                self.innerChokes.add(tile)
+                self.innerChokes.raw[tile.tile_index] = True
             if self.map.turn > 4:
-                if oldInner[tile] != self.innerChokes[tile]:
+                if oldInner.raw[tile.tile_index] != self.innerChokes.raw[tile.tile_index]:
                     logbook.info(
-                        f"  inner choke change: tile {str(tile)}, old {oldInner[tile]}, new {self.innerChokes[tile]}")
-                if oldOuter[tile] != self.outerChokes[tile]:
+                        f"  inner choke change: tile {str(tile)}, old {oldInner.raw[tile.tile_index]}, new {self.innerChokes.raw[tile.tile_index]}")
+                if oldOuter.raw[tile.tile_index] != self.outerChokes.raw[tile.tile_index]:
                     logbook.info(
-                        f"  outer choke change: tile {str(tile)}, old {oldOuter[tile]}, new {self.outerChokes[tile]}")
+                        f"  outer choke change: tile {str(tile)}, old {oldOuter.raw[tile.tile_index]}, new {self.outerChokes.raw[tile.tile_index]}")
 
         logbook.info(f'calculated central defense point to be {str(lowestAvgTile)} due to lowestAvgDist {lowestAvgDist}')
         self.central_defense_point = lowestAvgTile
 
-    def rebuild_intergeneral_analysis(self, opponentGeneral: Tile, possibleSpawns: typing.List[MapMatrixSet] | None = None):
+    def rebuild_intergeneral_analysis(self, opponentGeneral: Tile, possibleSpawns: typing.List[MapMatrixSet] | None = None, cities_in_play: typing.Set[Tile] | None = None):
         self.intergeneral_analysis = ArmyAnalyzer(self.map, self.general, opponentGeneral)
 
         self.enemy_wall_breach_scores = MapMatrix(self.map, None)
@@ -194,7 +201,7 @@ class BoardAnalyzer:
 
         self.build_play_area_matrices(enemyDistMap, generalDistMap)
 
-        self.rescan_chokes()
+        self.rescan_chokes(cities_in_play)
 
     def build_play_area_matrices(self, enemyDistMap: MapMatrixInterface[int], generalDistMap: MapMatrixInterface[int]):
         self.backwards_tiles: typing.Set[Tile] = set()
@@ -285,18 +292,18 @@ class BoardAnalyzer:
         for move in leafMoves:
             # sometimes these might be cut off by only being routed through the general
             neutralCity = (move.dest.isCity and move.dest.player == -1)
-            if not neutralCity and move.dest in self.intergeneral_analysis.pathWayLookupMatrix and move.source in self.intergeneral_analysis.pathWayLookupMatrix:
-                pathwaySource = self.intergeneral_analysis.pathWayLookupMatrix[move.source]
-                pathwayDest = self.intergeneral_analysis.pathWayLookupMatrix[move.dest]
+            if not neutralCity and self.intergeneral_analysis.pathWayLookupMatrix.raw[move.dest.tile_index] is not None and self.intergeneral_analysis.pathWayLookupMatrix.raw[move.source.tile_index] is not None:
+                pathwaySource = self.intergeneral_analysis.pathWayLookupMatrix.raw[move.source.tile_index]
+                pathwayDest = self.intergeneral_analysis.pathWayLookupMatrix.raw[move.dest.tile_index]
                 if pathwaySource.distance <= maxAltLength:
                     #if pathwaySource not in includedPathways:
                     if pathwaySource.distance > pathwayDest.distance or pathwaySource.distance == pathwayDest.distance:
                         # moving to a shorter path or moving along same distance path
                         # If getting further from our general (and by extension closer to opp since distance is equal)
-                        gettingFurtherFromOurGen = self.intergeneral_analysis.aMap[move.source] < self.intergeneral_analysis.aMap[move.dest]
+                        gettingFurtherFromOurGen = self.intergeneral_analysis.aMap.raw[move.source.tile_index] < self.intergeneral_analysis.aMap.raw[move.dest.tile_index]
                         # not more than cutoffDist tiles behind our general, effectively
 
-                        reasonablyCloseToTheirGeneral = self.intergeneral_analysis.bMap[move.dest] < cutoffDist + self.intergeneral_analysis.aMap[self.intergeneral_analysis.tileB]
+                        reasonablyCloseToTheirGeneral = self.intergeneral_analysis.bMap.raw[move.dest.tile_index] < cutoffDist + self.intergeneral_analysis.aMap.raw[self.intergeneral_analysis.tileB.tile_index]
 
                         if gettingFurtherFromOurGen and reasonablyCloseToTheirGeneral:
                             includedPathways.add(pathwaySource)
@@ -322,7 +329,7 @@ class BoardAnalyzer:
                 continue
 
             for player in indexes:
-                if t in possibleSpawns[player]:
+                if possibleSpawns[player].raw[t.tile_index]:
                     startTiles.add(t)
 
         self.all_possible_enemy_spawns = startTiles
@@ -339,7 +346,7 @@ class BoardAnalyzer:
             if tile.isMountain or (tile.isNeutral and tile.isCity and tile.visible):
                 return True
 
-            self.flankable_fog_area_matrix.add(tile)
+            self.flankable_fog_area_matrix.raw[tile.tile_index] = True
 
         SearchUtils.breadth_first_foreach_dist_fast_no_default_skip(self.map, [self.intergeneral_analysis.tileB], int(self.inter_general_distance * 1.4), foreachFunc)
 

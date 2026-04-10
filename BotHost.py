@@ -11,6 +11,7 @@ import sys
 import traceback
 import typing
 
+import DebugHelper
 from ArmyAnalyzer import ArmyAnalyzer
 from Models import Move
 from MapMatrix import MapMatrix
@@ -214,7 +215,7 @@ class BotHostBase(object):
         gc.collect()
 
     def save_txtmap(self, map: MapBase):
-        if self.noLog:
+        if self.noLog and DebugHelper.IS_RUNNING_UNIT_TESTS:
             return
         try:
             try:
@@ -283,8 +284,9 @@ class BotHostLiveServer(BotHostBase):
             alignBottom: bool,
             alignRight: bool,
             noLog: bool,
-            ctx: DefaultContext,
-            mgr: SyncManager
+            noTextLog: bool = False,
+            ctx: DefaultContext | None = None,
+            mgr: SyncManager | None = None
     ):
         super().__init__(name, self.place_move, self.ping_server_tile, self.send_server_chat, gameType, noUi, alignBottom, alignRight, noLog=noLog, ctx=ctx, mgr=mgr)
 
@@ -344,7 +346,7 @@ class BotHostLiveServer(BotHostBase):
             self.notify_game_over()
 
 
-def run_bothost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight, noLog: bool = False):
+def run_bothost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight, noLog: bool = False, noTextLog: bool = False):
     loggingProc = None
     mgr = None
     ctx: DefaultContext = multiprocessing.get_context('spawn')
@@ -353,7 +355,7 @@ def run_bothost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, ali
     mgr = ctx.Manager()
     queue = mgr.Queue(-1)
     level = logbook.INFO
-    if noLog:
+    if noLog or noTextLog:
         level = logbook.ERROR
 
     BotLogging.set_up_logger(level, queue=queue)
@@ -373,7 +375,7 @@ def run_bothost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, ali
 
     try:
         logbook.info("newing up bot host")
-        host = BotHostLiveServer(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight, noLog=noLog, ctx=ctx, mgr=mgr)
+        host = BotHostLiveServer(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight, noLog=noLog, noTextLog=noTextLog, ctx=ctx, mgr=mgr)
 
         logbook.info("running bot host")
         host.run()
@@ -401,6 +403,7 @@ if __name__ == '__main__':
     parser.add_argument('--bottom', action='store_true')
     parser.add_argument('--no-ui', action='store_true', help="Hide UI (no game viewer)")
     parser.add_argument('--no-log', action='store_true', help="Skip all logging")
+    parser.add_argument('--no-text-log', action='store_true', help="Skip bot text logging but keep txtmaps and PNGs")
     parser.add_argument('--public', action='store_true', help="Run on public (not bot) server")
     args = vars(parser.parse_args())
 
@@ -413,7 +416,8 @@ if __name__ == '__main__':
     isPublic: bool = args['public']
     noUi = args['no_ui']
     noLog = args['no_log']
+    noTextLog = args['no_text_log']
     alignBottom: bool = args['bottom']
     alignRight: bool = args['right']
 
-    run_bothost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight, noLog)
+    run_bothost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight, noLog, noTextLog)

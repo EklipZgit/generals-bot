@@ -39,7 +39,7 @@ class TileIsland(object):
 
         self.border_islands: typing.Set[TileIsland] = set()
         """
-        Tile islands that border this island.
+        Tile islands that border this island. This does not include parent islands - only leaf child islands are counted as borders.
         """
         #
         # self.border_tiles: typing.Set[Tile] = set()
@@ -172,7 +172,7 @@ class IslandBuildMode(Enum):
 class TileIslandBuilder(object):
     def __init__(self, map: MapBase, averageTileIslandSize: int | None = None):
         if averageTileIslandSize is None:
-            averageTileIslandSize = 4
+            averageTileIslandSize = 3
         self.map: MapBase = map
         self.teams: typing.List[int] = MapBase.get_teams_array(map)
         self.friendly_team: int = self.teams[map.player_index]
@@ -180,37 +180,47 @@ class TileIslandBuilder(object):
         # self.expandability_army_matrix: MapMatrixInterface[int] = MapMatrix(map, 0)
         self.desired_tile_island_size: int = averageTileIslandSize
 
+        # TODO examine networkX.algorithms.minors.blockmodel (aka quotient_graph with relabel=True and create_using=nx.MultiGraph()
+
+        " -------------------------- ANYTHING YOU ADD TO THIS SECTION NEEDS TO BE COVERED IN reset_for_rebuild ---------------"
         self.tile_island_lookup: MapMatrixInterface[TileIsland] = MapMatrix(self.map, None)
         self.all_tile_islands: typing.List[TileIsland] = []
         """Does not include unreachable islands"""
-
-        # TODO examine networkX.algorithms.minors.blockmodel (aka quotient_graph with relabel=True and create_using=nx.MultiGraph()
-
         self.tile_islands_by_player: typing.List[typing.List[TileIsland]] = [[] for _ in self.map.players]
         self.tile_islands_by_player.append([])  # for -1 player
         self.tile_islands_by_team_id: typing.List[typing.List[TileIsland]] = [[] for _ in range(max(self.teams) + 2)]
         self.tile_islands_by_unique_id: typing.Dict[int, TileIsland] = {}
         self.large_tile_islands_by_team_id: typing.List[typing.Set[TileIsland]] = [set() for _ in range(max(self.teams) + 2)]
         self.large_tile_island_distances_by_team_id: typing.List[MapMatrixInterface[int] | None] = [MapMatrix(map, 1000) for _ in range(max(self.teams) + 2)]
+        self.borders_by_island: typing.Dict[int, typing.Dict[int, typing.Set[Tile]]] = {}
         self._team_stats_by_player: typing.List[TeamStats] = []
         self._team_stats_by_team_id: typing.List[TeamStats] = []
+        self.reset_for_rebuild()
+        " -------------------------- ANYTHING YOU ADD TO THIS SECTION NEEDS TO BE COVERED IN reset_for_rebuild ---------------"
+
         self.break_apart_neutral_islands: bool = True
-        self.borders_by_island: typing.Dict[int, typing.Dict[int, typing.Set[Tile]]] = {}
         # TODO ideally we should be able to turn this off and efficiently convert border gathers to their crossover options. See the gather to neutral middle in test_should_recognize_gather_into_top_path_is_best as an example of something that mis-calculates non-single-tile-island-borders
         self.force_territory_borders_to_single_tile_islands: bool = True
         """If True, any tile that borders a different teams territory will be a single-tile-island. Useful for algorithms that dont safely deal with skews along borders between islands."""
 
         self.log_debug: bool = False
 
+    def reset_for_rebuild(self):
+        self.tile_island_lookup = MapMatrix(self.map, None)
+        self.all_tile_islands = []
+        self.tile_islands_by_player = [[] for _ in self.map.players]
+        self.tile_islands_by_player.append([])  # for -1 player
+        self.tile_islands_by_team_id = [[] for _ in range(max(self.teams) + 2)]
+        self.tile_islands_by_unique_id = {}
+        self.large_tile_islands_by_team_id = [set() for _ in range(max(self.teams) + 2)]
+        self.large_tile_island_distances_by_team_id = [MapMatrix(self.map, 1000) for _ in range(max(self.teams) + 2)]
+        self._team_stats_by_player = []
+        self._team_stats_by_team_id = []
+        self.borders_by_island = {}
+
     def recalculate_tile_islands(self, enemyGeneralExpectedLocation: Tile | None, mode: IslandBuildMode = IslandBuildMode.GroupByArmy):
         start = time.perf_counter()
-        self.borders_by_island = {}
-        self.tile_islands_by_unique_id = {}
-        self.tile_island_lookup = MapMatrix(self.map, None)
-        for teamArray in self.tile_islands_by_player:
-            teamArray.clear()
-        for teamArray in self.tile_islands_by_team_id:
-            teamArray.clear()
+        self.reset_for_rebuild()
 
         self._team_stats_by_team_id = self.map.get_team_stats_lookup_by_team_id()  # yeah, shut up
         self._team_stats_by_player = [self._team_stats_by_team_id[p.team] for p in self.map.players]
@@ -245,17 +255,21 @@ class TileIslandBuilder(object):
 
         ourTeam = self.map.get_team_stats(self.map.player_index).teamId
         for island in newIslands:
+            nextNewIslands = None
             if mode == IslandBuildMode.GroupByArmy and island.team == ourTeam:
                 # we only break our own friendly islands up by player
-                newIslands = self._break_apart_island_by_army(island, primaryPlayer=self.map.player_index)
+                nextNewIslands = self._break_apart_island_by_army(island, primaryPlayer=self.map.player_index)
             elif mode == IslandBuildMode.GroupByArmy and island.team == -1:
-                newIslands = [island]
+                if self.break_apart_neutral_islands:
+                    nextNewIslands = self._break_apart_island_if_too_large(island)
+                else:
+                    nextNewIslands = [island]
             elif mode == IslandBuildMode.BuildByDistance:
-                newIslands = self._break_apart_island_if_too_large(island)
+                nextNewIslands = self._break_apart_island_if_too_large(island)
             else:
-                newIslands = self._break_apart_island_if_too_large(island)
+                nextNewIslands = self._break_apart_island_if_too_large(island)
 
-            for newIsland in newIslands:
+            for newIsland in nextNewIslands:
                 self.all_tile_islands.append(newIsland)
                 for teammate in self._team_stats_by_team_id[island.team].teamPlayers:
                     self.tile_islands_by_player[teammate].append(newIsland)
@@ -684,7 +698,7 @@ class TileIslandBuilder(object):
         island.name = '_' + IslandNamer.get_letter()
 
         for tile in tilesInIsland:
-            self.tile_island_lookup[tile] = island
+            self.tile_island_lookup.raw[tile.tile_index] = island
 
         return island
 
@@ -756,7 +770,8 @@ class TileIslandBuilder(object):
     def _break_up_initial_island_if_necessary(self, island: TileIsland, mode: IslandBuildMode) -> typing.List[TileIsland]:
         brokenUp = []
         leftoverTiles = island.tile_set.copy()
-        shouldForceBorderSolo = mode != IslandBuildMode.GroupByArmy
+        # shouldForceBorderSolo = mode != IslandBuildMode.GroupByArmy
+        shouldForceBorderSolo = True
         for tile in island.tile_set:
             mustBeSolo = tile.isCity or tile.isGeneral
             if shouldForceBorderSolo and self.force_territory_borders_to_single_tile_islands and not mustBeSolo:
@@ -780,7 +795,7 @@ class TileIslandBuilder(object):
             return [island]
 
         if len(leftoverTiles) > 0:
-            forest = Algorithms.FastDisjointSet()
+            forest = Algorithms.FastDisjointSet(t.tile_index for t in leftoverTiles)
             for t in leftoverTiles:
                 for mv in t.movable:
                     if mv in leftoverTiles:
@@ -834,7 +849,7 @@ class TileIslandBuilder(object):
 
                 brokenByBorders.append(newIsland)
                 for tile in tileSet:
-                    self.tile_island_lookup[tile] = newIsland
+                    self.tile_island_lookup.raw[tile.tile_index] = newIsland
 
             island.child_islands = brokenByBorders.copy()
 
@@ -955,19 +970,29 @@ class TileIslandBuilder(object):
             if printIslandInfoLines:
                 viewInfo.add_info_line(f'{island.team}: island {island.unique_id}/{island.name} - {island.sum_army}a/{island.tile_count}t ({island.sum_army_all_adjacent_friendly}a/{island.tile_count_all_adjacent_friendly}t) {str(island.tile_set)}')
 
-    def must_tile_be_solo(self, tile: Tile, teamId: int) -> bool:
-        mustBeSolo = False
-        bordersUs = teamId == self.friendly_team
-        for adj in tile.movable:
-            adjTeam = self.teams[adj.player]
-            if adjTeam != teamId:
-                mustBeSolo = True
-                if not bordersUs and adjTeam == self.friendly_team:
-                    bordersUs = True
-                if bordersUs:
-                    break
+    # just us impl
+    # def must_tile_be_solo(self, tile: Tile, teamId: int) -> bool:
+    #     mustBeSolo = False
+    #     bordersUs = teamId == self.friendly_team
+    #     for adj in tile.movable:
+    #         adjTeam = self.teams[adj.player]
+    #         if adjTeam != teamId:
+    #             mustBeSolo = True
+    #             if not bordersUs and adjTeam == self.friendly_team:
+    #                 bordersUs = True
+    #             if bordersUs:
+    #                 break
+    #
+    #     return mustBeSolo and bordersUs
 
-        return mustBeSolo and bordersUs
+    # all borders impl
+    def must_tile_be_solo(self, tile: Tile, teamId: int) -> bool:
+        for adj in tile.movable:
+            if self.teams[adj.player] != teamId:
+                return True
+
+        return False
+
 class SetHolder(object):
     def __init__(self):
         self.sets: typing.List[typing.Set] = [set()]

@@ -379,17 +379,10 @@ class Path(TilePlanInterface):
         return newPath
 
     def __str__(self) -> str:
-        node = self.start
-        nodeStrs = []
-        half = False
-        while node is not None:
-            nodeStrs.append(f'{node.tile.x},{node.tile.y}{"" if not half else "z"}')
-            half = node.move_half
-            node = node.next
         valStr = ''
         if self._econ_value != 0.0:
             valStr = f' {self._econ_value:.2f}v'
-        return f"[{self.value}a{valStr} {self.length}t] {' -> '.join(nodeStrs)}"
+        return f"[{self.value}a{valStr} {self.length}t] {self.to_move_string()}"
 
     def toString(self) -> str:
         return str(self)
@@ -641,6 +634,25 @@ class MoveListPath(Path):
     def requiredDelay(self, val: int):
         self._requiredDelay = val
 
+    def __str__(self):
+        nodeStrs = []
+        last = None
+        for move in self._pathQueue:
+            if move is None:
+                nodeStrs.append(f'  None')
+                continue
+            if move.source != last:
+                nodeStrs.append(f'  {move.source.x},{move.source.y}->{move.dest.x},{move.dest.y}{"" if not move.move_half else "z"}')
+            else:
+                nodeStrs.append(f'->{move.dest.x},{move.dest.y}{"" if not move.move_half else "z"}')
+
+            last = move.dest
+
+        valStr = ''
+        if self._econ_value != 0.0:
+            valStr = f' {self._econ_value:.2f}v'
+        return f"[{self.value}a{valStr} {self.length}t]{''.join(nodeStrs)}"
+
     def get_move_list(self) -> typing.List[Move]:
         return list(self._pathQueue)
 
@@ -724,14 +736,24 @@ class MoveListPath(Path):
         self._tileSet = None
         self._tileList = None
         self._adjacentSet = None
-        self.start = self.start.next
         move = self._pathQueue.popleft()
-        if self.start and self._pathQueue and self._pathQueue[0] and self._pathQueue[0].source != self.start.tile:
-            self.start = self.start.next
-        # this wasn't / isn't here in main path impl
-        if self.start is not None:
-            self.start.prev = None
+        self._rebuild_start_tail()
         return move
+
+    def _rebuild_start_tail(self):
+        self.start = None
+        tail = None
+        for node in self._pathQueue:
+            if node is None:
+                continue
+            next = PathMove(node.source, None, tail, node.move_half)
+            if tail is not None:
+                tail.next = next
+            tail = next
+            if self.start is None:
+                self.start = next
+
+        self.tail = tail
 
     def get_first_move(self) -> Move | None:
         if len(self._pathQueue) <= 0:

@@ -14,6 +14,7 @@ import networkx as nx
 import DebugHelper
 import Gather
 import SearchUtils
+from Gather import GatherDebug, GatherCapturePlan
 from Interfaces.MapMatrixInterface import EmptyTileSet
 from MapMatrix import MapMatrix
 from Path import Path
@@ -151,6 +152,12 @@ class IslandFlowNode(object):
         if targets:
             flowStr = f' (-> {" | ".join(targets)})'
         return f'{self.base_str()}{flowStr}'
+
+    def __lt__(self, other: IslandFlowNode) -> bool:
+        return self.island.unique_id < other.island.unique_id
+
+    def __cmp__(self, other: IslandFlowNode) -> int:
+        return self.island.unique_id - other.island.unique_id
 
     def copy(self) -> IslandFlowNode:
         clone = IslandFlowNode(self.island, self.desired_army)
@@ -328,11 +335,11 @@ class ArmyFlowExpander(object):
         self.debug_render_capture_count_threshold: int = 10000
         """If there are more captures in any given plan option than this, then the option will be rendered inline as generated in a new debug viewer window."""
 
-        self.log_debug: bool = False
+        self.log_debug: bool = DebugHelper.is_debug_or_unit_test_mode()
         self.use_debug_asserts: bool = True
 
         # TODO determine if this should always be true when using use_min_cost_flow_edges_only=True
-        self.use_all_pairs_visited: bool = False
+        self.use_all_pairs_visited: bool = True
         """If True, a global visited set will be used to avoid finding overlapping gathers from multiple contact points. If false (much slower) we will build a visited set per border with enemy land."""
         #
         # self.include_neutral_flow: bool = True
@@ -341,10 +348,10 @@ class ArmyFlowExpander(object):
         self.use_min_cost_flow_edges_only: bool = True
         """If true, use the min-cost-max-flow flownodes to route army. Otherwise, brute force / AStar."""
 
-        self.use_backpressure_from_enemy_general: bool = False
+        self.use_backpressure_from_enemy_general: bool = True
         """If True, lets the enemy general push back."""
 
-        self.block_cross_gather_from_enemy_borders: bool = False
+        self.block_cross_gather_from_enemy_borders: bool = True
         """If true, tries to prevent criss-cross gathers that pull other border tiles to attack another border."""
 
         self._dynamic_heuristic_ratio: float = 1.0
@@ -785,8 +792,8 @@ class ArmyFlowExpander(object):
                 negativeTiles=negativeTiles,
                 # method=FlowGraphMethod.CapacityScaling  # 67ms on test_should_recognize_gather_into_top_path_is_best (with single-tile islands on borders)
                 # method=FlowGraphMethod.MinCostFlow    # 6.5ms on test_should_recognize_gather_into_top_path_is_best (with single-tile islands on borders)
-                # method=FlowGraphMethod.NetworkSimplex    # 9ms on test_should_recognize_gather_into_top_path_is_best (with single-tile islands on borders)
-                method=FlowGraphMethod.MinCostFlow
+                method=FlowGraphMethod.NetworkSimplex    # 9ms on test_should_recognize_gather_into_top_path_is_best (with single-tile islands on borders)
+                # method=FlowGraphMethod.MinCostFlow
             )
 
         turnsUsed: int
@@ -905,8 +912,8 @@ class ArmyFlowExpander(object):
 
                 self.enqueue(
                     q,
-                    self._get_a_star_priority_val(tgCapValue, 0.0, -1, 0, frLeftoverIdx, adjacentFriendlyIsland, targetIsland, searchTurns=turns, tgTiles=tgTiles),
-                    -1,
+                    self._get_a_star_priority_val(tgCapValue, 0.0, 0, 0, frLeftoverIdx, adjacentFriendlyIsland, targetIsland, searchTurns=turns, tgTiles=tgTiles),
+                    0,
                     turns + 1,  # turns + 1 (and turns left -1) because the very first tile doesn't count as a move, as only the dest counts.
                     targetIsland.sum_army + targetIsland.tile_count,
                     tieBreaker,
@@ -1136,9 +1143,9 @@ class ArmyFlowExpander(object):
                     turnsLeft)
 
                 if self.use_debug_asserts and remainingFrIslandArmy != 0:
-                    if targetTiles and targetTiles[0] < remainingFrIslandArmy and turnsLeft > 0:
+                    if uncappedTargetIslandArmy != 0 and uncappedTargetIslandArmy <= remainingFrIslandArmy and friendlyTileLeftoverIdx >= 0:
                         raise Exception(
-                            f'Expected armyToDump to be 0, was {remainingFrIslandArmy}, turnsLeft {turnsLeft} (fr leftover {frLeftoverArmy}, index {friendlyTileLeftoverIdx}, targetTiles {targetTiles}) to always have been reduced to 0 unless there are no target tiles left')
+                            f'Expected uncappedTargetIslandArmy {uncappedTargetIslandArmy} to be >= remainingFrIslandArmy {remainingFrIslandArmy}, turnsLeft {turnsLeft} (fr leftover {frLeftoverArmy}, index {friendlyTileLeftoverIdx}, targetTiles {targetTiles}) to always have been reduced to 0 unless there are no target tiles left')
 
                 # Necessary because when we terminate the loop early above due to running out of TARGET tiles, we need to keep track of the remaining army we have to gather for the second loop below.
                 # TODO ACTUALLY THIS IS COVERED BY frLeftoverArmy NOW, NO...?
@@ -1221,6 +1228,7 @@ class ArmyFlowExpander(object):
                     incompleteSource,
                     unusedSourceArmy,
                     gathedArmySum)
+                plan.gathered_army = gathedArmySum
 
                 if plan.length == 0:
                     msg = f'plan had length 0 for {turns} - econValue: {econValue:.2f} | armyRemainingInIncompleteSource: {armyRemainingInIncompleteSource} | unusedSourceArmy: {unusedSourceArmy} | gathedArmySum: {gathedArmySum} | rootNodes: {rootNodes} | incompleteTarget: {incompleteTarget} | incompleteSource: {incompleteSource}'
@@ -1273,7 +1281,7 @@ class ArmyFlowExpander(object):
         # friendlyIdx = 1
         # frTileArmy = friendlyUncalculated.tiles_by_army[0].army
         # friendlyIdx = 0
-        while remainingFrIslandArmy > 0 and targetTiles and turnsLeft > 0:
+        while friendlyTileLeftoverIdx >= 0 and targetTiles and turnsLeft > 0:
             tgTileArmyToCap = targetTiles.popleft() + 1
             # if validOpt:
             dumpIterCount += 1
@@ -1281,7 +1289,7 @@ class ArmyFlowExpander(object):
             # pull as many fr tiles as necessary to cap the en tile
             # while frTileArmy < tgTileArmyToCap and turnsLeft > 1 and friendlyIdx < len(friendlyUncalculated.tiles_by_army):
             # turns left > 1 because there is no point to gather one more tile if we dont have a turn left to capture another tile with that army.
-            while frLeftoverArmy < tgTileArmyToCap and turnsLeft > 0 and friendlyTileLeftoverIdx >= 0:
+            while frLeftoverArmy <= tgTileArmyToCap and turnsLeft > 0 and friendlyTileLeftoverIdx >= 0:
                 frTileArmy = friendlyUncalculated.tiles_by_army[friendlyTileLeftoverIdx].army - 1  # -1, we have to leave 1 army behind.
                 nextGathedSum += frTileArmy
                 frLeftoverArmy += frTileArmy
@@ -1593,31 +1601,32 @@ class ArmyFlowExpander(object):
         newNextTargets = {island: _deep_copy_flow_node(n, lookup) for island, n in nextTargets.items()}
         del newNextTargets[nextTargetIsland]
 
-        self._try_queue_next_gather(
-            myTeam,
-            nextFriendlyUncalculated.border_islands,
-            newNextFriendlies,
-            newNextTargets,
-            nextFrLeftoverArmy,
-            nextFriendlyUncalculated,
-            nextFriendlyUncalculatedNode,
-            nextGathedSum,
-            nextTargetCalculatedNode,
-            nextTargetIsland,
-            visited,
-            friendlyBorderingEnemy)
+        if not newTargetTiles:
+            self._try_include_nexts_by_flow(
+                myTeam,
+                nextFriendlyUncalculated.border_islands,
+                newNextFriendlies,
+                newNextTargets,
+                nextFrLeftoverArmy,
+                nextFriendlyUncalculated,
+                nextFriendlyUncalculatedNode,
+                nextGathedSum,
+                nextTargetCalculatedNode,
+                nextTargetIsland,
+                visited,
+                friendlyBorderingEnemy)
 
-        self._try_queue_next_capture(
-            myTeam,
-            nextTargetIsland.border_islands,
-            newNextFriendlies,
-            newNextTargets,
-            nextFrLeftoverArmy,
-            nextGathedSum,
-            nextTargetCalculatedNode,
-            nextTargetIsland,
-            visited,
-            friendlyBorderingEnemy)
+            self._try_queue_next_capture(
+                myTeam,
+                nextTargetIsland.border_islands,
+                newNextFriendlies,
+                newNextTargets,
+                nextFrLeftoverArmy,
+                nextGathedSum,
+                nextTargetCalculatedNode,
+                nextTargetIsland,
+                visited,
+                friendlyBorderingEnemy)
 
         tieBreaker += 1
         nextFrTileIdx = nextFriendlyUncalculated.tile_count - 1
@@ -1658,8 +1667,8 @@ class ArmyFlowExpander(object):
             nextGathedSum,
             nextFrLeftoverArmy,
             nextFrTileIdx,
-            nextTargetCalculatedNode,
-            nextFriendlyUncalculatedNode,
+            nextTargetCalculatedNode: IslandFlowNode,
+            nextFriendlyUncalculatedNode: IslandFlowNode,
             visited,
             newNextTargets,
             newNextFriendlies,
@@ -1699,7 +1708,7 @@ class ArmyFlowExpander(object):
             pairOptions
         ))
 
-    def _try_queue_next_gather(
+    def _try_include_nexts_by_flow(
             self,
             myTeam,
             borderIslands,
@@ -1809,17 +1818,18 @@ class ArmyFlowExpander(object):
         newNextTargets = {island: _deep_copy_flow_node(n, lookup) for island, n in nextTargets.items()}
         del newNextTargets[nextTargetIsland]
 
-        self._try_queue_next_capture(
-            myTeam,
-            nextTargetIsland.border_islands,
-            newNextFriendlies,
-            newNextTargets,
-            newFrLeftoverArmy,
-            nextGathedSum,
-            nextTargetCalculatedNode,
-            nextTargetIsland,
-            visited,
-            friendlyBorderingEnemy)
+        if not newTargetTiles:
+            self._try_queue_next_capture(
+                myTeam,
+                nextTargetIsland.border_islands,
+                newNextFriendlies,
+                newNextTargets,
+                newFrLeftoverArmy,
+                nextGathedSum,
+                nextTargetCalculatedNode,
+                nextTargetIsland,
+                visited,
+                friendlyBorderingEnemy)
 
         tieBreaker += 1
 
@@ -1948,7 +1958,7 @@ class ArmyFlowExpander(object):
             del newNextFriendlies[nextFriendlyUncalculated]
             newNextTargets = {island: _deep_copy_flow_node(n, lookup) for island, n in nextTargets.items()}
 
-            self._try_queue_next_gather(
+            self._try_include_nexts_by_flow(
                 myTeam,
                 nextFriendlyUncalculated.border_islands,
                 newNextFriendlies,
@@ -2104,6 +2114,8 @@ class ArmyFlowExpander(object):
                         gathing=gathing,
                         incompleteSource=incompleteSource,
                         incompleteTarget=incompleteTarget,
+                        incompleteSourceNode=incompleteSourceNode,
+                        incompleteTargetNode=incompleteTargetNode,
                         sourceUnused=unusedSourceArmy,
                         plan=None,
                         extraInfo=msg)
@@ -2140,6 +2152,8 @@ class ArmyFlowExpander(object):
                             gathing=gathing,
                             incompleteSource=incompleteSource,
                             incompleteTarget=incompleteTarget,
+                            incompleteSourceNode=incompleteSourceNode,
+                            incompleteTargetNode=incompleteTargetNode,
                             sourceUnused=unusedSourceArmy,
                             plan=None,
                             extraInfo=msg)
@@ -2182,7 +2196,7 @@ class ArmyFlowExpander(object):
         #             capping.update(fromIsland.tile_set)
 
         if len(capping) > self.debug_render_capture_count_threshold:
-            self.live_render_capture_stuff(islandBuilder, capping, gathing, incompleteSource, incompleteTarget, unusedSourceArmy)
+            self.live_render_capture_stuff(islandBuilder, capping, gathing, incompleteSource, incompleteTarget, incompleteSourceNode, incompleteTargetNode, unusedSourceArmy)
 
         # q = deque()
         # # border = set()
@@ -2213,24 +2227,37 @@ class ArmyFlowExpander(object):
             expectedVt = econValue / turns
             cutoffVt = econValue / max(1, turns - 1)
             violatesVtCutoff = planVt > cutoffVt * 1.10001
+            msg = ''
             if self.log_debug or violatesVtCutoff:
-                logbook.info(
-                    f'\r\n(expected {expectedVt:.3f} ({econValue:.2f}v/{turns}t) - built gcap plan {plan}'
+                msg = (f'\r\n(expected {expectedVt:.3f} ({econValue:.2f}v/{turns}t) - built gcap plan {plan}'
                     f'\r\n   FOR algo output econValue {econValue:.2f}, turns {turns}, incompleteTarget {incompleteTarget}, incompleteSource {incompleteSource}, unusedSourceArmy {unusedSourceArmy}, gathedArmySum {gathedArmySum}, armyRemainingInIncompleteSource {armyRemainingInIncompleteSource}'
                     f'\r\n   FOR raw rebuiltCumulativeTurns {rebuiltCumulativeTurns} (vs {plan.length}), rebuiltGathedSum {rebuiltGathedSum}, rebuiltCumulativeSum {rebuiltCumulativeSum} (vs plan.gathered_army {plan.gathered_army})')
+                if violatesVtCutoff:
+                    msg = '\r\nVIOLATION OF VT:' + msg
+                logbook.info(msg)
             if violatesVtCutoff and self.use_debug_asserts:
                 anyInvalid = [n for n in plan.root_nodes if n.value < 0]
-                if anyInvalid:
-                    err = f'Something went wrong. {expectedVt:.3f} ({econValue:.2f}v/{turns}t). The GCP is overvalued {planVt:.3f} ({plan.econValue:2f}v/{plan.length}t)'
+                if len(anyInvalid) > 0:
+                    err = (f'Something went wrong. {expectedVt:.3f} ({econValue:.2f}v/{turns}t). The GCP is overvalued {planVt:.3f} ({plan.econValue:2f}v/{plan.length}t)'
+                           f'\r\n{msg}')
+                    addlColorings = [
+                        (TargetStyle.GRAY, 16, 'rootTiles', allBorderTiles),
+                    ]
+                    if negativeTiles:
+                        addlColorings.append((TargetStyle.YELLOW, 14, 'negativeTiles', negativeTiles))
                     self.live_render_capture_stuff(
                         islandBuilder,
                         capping=plan.approximate_capture_tiles,
                         gathing=plan.tileSet.difference(plan.approximate_capture_tiles),
                         incompleteSource=incompleteSource,
                         incompleteTarget=incompleteTarget,
+                        incompleteSourceNode=incompleteSourceNode,
+                        incompleteTargetNode=incompleteTargetNode,
                         sourceUnused=unusedSourceArmy,
                         plan=plan,
-                        extraInfo=err)
+                        extraInfo=err,
+                        addlTileColorings=addlColorings,
+                    )
                     raise Exception(err)
 
         return plan
@@ -2240,18 +2267,21 @@ class ArmyFlowExpander(object):
             islandBuilder: TileIslandBuilder,
             capping: TileSet,
             gathing: TileSet,
-            incompleteSource: TileIsland,
-            incompleteTarget: TileIsland,
+            incompleteSource: TileIsland | None,
+            incompleteTarget: TileIsland | None,
+            incompleteSourceNode: IslandFlowNode | None,
+            incompleteTargetNode: IslandFlowNode | None,
             sourceUnused: int | None = None,
             extraInfo: str | None = None,
             plan: FlowExpansionPlanOption | None = None,
+            addlTileColorings: typing.List[typing.Tuple[TargetStyle, int, str, typing.Iterable[Tile]]] | None = None,
     ):
         from Viewer import ViewerProcessHost
         debugViewInfo = ViewerProcessHost.get_renderable_view_info(self.map)
         inf = f'capping {len(capping)}, gathing {len(gathing)}'
         if extraInfo:
             inf = extraInfo
-            debugViewInfo.add_info_line(inf)
+            debugViewInfo.add_info_multiline(inf)
 
         for tile in capping:
             debugViewInfo.add_targeted_tile(tile, TargetStyle.RED)
@@ -2260,13 +2290,23 @@ class ArmyFlowExpander(object):
         debugViewInfo.add_info_line_no_log(f'GREEN = gathing')
         debugViewInfo.add_info_line_no_log(f'RED = capping')
         if incompleteTarget:
-            debugViewInfo.add_info_line_no_log(f'ORANGE = incompleteTarget tileset')
+            debugViewInfo.add_info_line(f'ORANGE = incompleteTarget tileset: {incompleteTarget}')
+            if len(incompleteTargetNode.flow_to) > 0:
+                debugViewInfo.add_info_line(f'      to {' | '.join([str(t) for t in incompleteTargetNode.flow_to])}')
             for tile in incompleteTarget.tile_set:
-                debugViewInfo.add_targeted_tile(tile, TargetStyle.ORANGE, radiusReduction=10)
+                debugViewInfo.add_targeted_tile(tile, TargetStyle.ORANGE, radiusReduction=20)
         if incompleteSource:
-            debugViewInfo.add_info_line_no_log(f'BLUE = incompleteSource tileset ({sourceUnused} unused)')
+            debugViewInfo.add_info_line(f'BLUE = incompleteSource tileset: {incompleteSource} ({sourceUnused} unused)')
+            if len(incompleteSourceNode.flow_to) > 0:
+                debugViewInfo.add_info_line(f'      to {' | '.join([str(t) for t in incompleteSourceNode.flow_to])}')
             for tile in incompleteSource.tile_set:
-                debugViewInfo.add_targeted_tile(tile, TargetStyle.BLUE, radiusReduction=8)
+                debugViewInfo.add_targeted_tile(tile, TargetStyle.BLUE, radiusReduction=18)
+
+        if addlTileColorings:
+            for targetStyleColor, radiusReduction, name, tileSet in addlTileColorings:
+                debugViewInfo.add_info_line_no_log(f'{targetStyleColor} = {name}')
+                for tile in tileSet:
+                    debugViewInfo.add_targeted_tile(tile, targetStyleColor, radiusReduction=radiusReduction)
 
         if plan:
             ArmyFlowExpander.add_flow_expansion_option_to_view_info(
@@ -2274,11 +2314,12 @@ class ArmyFlowExpander(object):
                 plan,
                 plan.player,
                 tgPlayer=self.enemyGeneral.player,
-                viewInfo=debugViewInfo
+                viewInfo=debugViewInfo,
+                dontAddSourceTargetCircles=True
             )
 
         islandBuilder.add_tile_islands_to_view_info(debugViewInfo, printIslandInfoLines=True, printIslandNames=True)
-        ViewerProcessHost.render_view_info_debug(inf, inf, self.map, debugViewInfo)
+        ViewerProcessHost.render_view_info_debug(inf, inf if extraInfo is None else None, self.map, debugViewInfo)
 
     def live_render_invalid_flow_config(
             self,
@@ -2299,27 +2340,30 @@ class ArmyFlowExpander(object):
         ViewerProcessHost.render_view_info_debug(inf, inf, self.map, debugViewInfo)
 
     @staticmethod
-    def add_flow_expansion_option_to_view_info(map: MapBase, bestOpt: FlowExpansionPlanOption, sourcePlayer: int, tgPlayer: int, viewInfo: ViewInfo):
+    def add_flow_expansion_option_to_view_info(map: MapBase, bestOpt: FlowExpansionPlanOption, sourcePlayer: int, tgPlayer: int, viewInfo: ViewInfo, dontAddSourceTargetCircles=False):
         tgTeam = map.team_ids_by_player_index[tgPlayer]
         sourceTeam = map.team_ids_by_player_index[sourcePlayer]
 
+        i = 0
         for move in bestOpt.get_move_list():
             path = Path.from_move(move)
             viewInfo.color_path(PathColorer(
                 path,
-                100, 200, 100,
-                200,
+                min(255, 100 + 10 * i), max(0, 200 - 10 * i), 100,
+                255,
                 0, 0
             ))
+            i += 1
 
-        for tile in bestOpt.tileSet:
-            ts = TargetStyle.YELLOW
-            if map.is_tile_on_team(tile, tgTeam):
-                ts = TargetStyle.RED
-            elif map.is_tile_on_team(tile, sourceTeam):
-                ts = TargetStyle.GREEN
+        if not dontAddSourceTargetCircles:
+            for tile in bestOpt.tileSet:
+                ts = TargetStyle.YELLOW
+                if map.is_tile_on_team(tile, tgTeam):
+                    ts = TargetStyle.RED
+                elif map.is_tile_on_team(tile, sourceTeam):
+                    ts = TargetStyle.GREEN
 
-            viewInfo.add_targeted_tile(tile, ts, radiusReduction=10)
+                viewInfo.add_targeted_tile(tile, ts, radiusReduction=10)
 
     @staticmethod
     def add_flow_graph_to_view_info(flowGraph: IslandMaxFlowGraph, viewInfo: ViewInfo, noNeut: bool = True, withNeut: bool = True, showBackfillNeut: bool = False):
@@ -2867,12 +2911,31 @@ class ArmyFlowExpander(object):
             rootNodes,
             pairOptions,
     ):
+        if turnsUsed <= 0:
+            return
         mismatches = []
         safetyChecker = {}
         minTurnsUsed = -1  # first move doesn't cost anything
         maxTurnsUsed = -1
         expectedTurnsUsed = -1
-        for n in ArmyFlowExpander.iterate_flow_nodes(rootNodes.values()):
+        nodes = [n for n in ArmyFlowExpander.iterate_flow_nodes(rootNodes.values())]
+        if len(nodes) == 0:
+            self.live_render_capture_stuff(
+                self.island_builder,
+                capping=itertools.chain.from_iterable([i.tile_set for i in visited]),
+                gathing=friendlyUncalculatedNode.island.tile_set,
+                incompleteSource=friendlyUncalculatedNode.island,
+                incompleteTarget=targetCalculatedNode.island,
+                incompleteSourceNode=friendlyUncalculatedNode,
+                incompleteTargetNode=targetCalculatedNode,
+                sourceUnused=gathSum,
+                plan=None,
+                extraInfo=f"turnsUsed {turnsUsed}, turnsLeft {turnsLeft}, econValue {econValue:.2f},"
+                          f"\r\n  gathSum {gathSum}, frLeftoverArmy {frLeftoverArmy}, armyToCap {armyToCap},"
+                    f"\r\n  negVt {negVt},  randomTieBreak {randomTieBreak},"
+                    f"\r\n    {"\r\n    ".join(mismatches)}")
+            raise Exception('no nodes in flow')
+        for n in nodes:
             existing = safetyChecker.get(n.island.unique_id, None)
             if existing is not None:
                 if existing != n:
@@ -2952,6 +3015,20 @@ class ArmyFlowExpander(object):
             safetyChecker[friendlyUncalculatedNode.island.unique_id] = friendlyUncalculatedNode
 
         if mismatches:
+            self.live_render_capture_stuff(
+                self.island_builder,
+                capping=set(itertools.chain.from_iterable([i.tile_set for i in visited])),
+                gathing=friendlyUncalculatedNode.island.tile_set,
+                incompleteSource=friendlyUncalculatedNode.island,
+                incompleteTarget=targetCalculatedNode.island,
+                incompleteSourceNode=friendlyUncalculatedNode,
+                incompleteTargetNode=targetCalculatedNode,
+                sourceUnused=gathSum,
+                plan=None,
+                extraInfo=f"turnsUsed {turnsUsed}, turnsLeft {turnsLeft}, econValue {econValue:.2f},"
+                          f"\r\n  gathSum {gathSum}, frLeftoverArmy {frLeftoverArmy}, armyToCap {armyToCap},"
+                    f"\r\n  negVt {negVt},  randomTieBreak {randomTieBreak},"
+                    f"\r\n    {"\r\n    ".join(mismatches)}")
             msg = "Search is corrupted;\r\n" + "\r\n".join(mismatches)
             logbook.error(msg)
             raise Exception(msg)
@@ -3139,6 +3216,8 @@ class ArmyFlowExpander(object):
         #         return False
 
         allow = False
+        if toIsland.unique_id not in self.flow_graph.flow_node_lookup_by_island_no_neut:
+            pass
         fromNoNeut = self.flow_graph.flow_node_lookup_by_island_no_neut[fromIsland.unique_id]
         toNoNeut = self.flow_graph.flow_node_lookup_by_island_no_neut[toIsland.unique_id]
         for dest in fromNoNeut.flow_to:

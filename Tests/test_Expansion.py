@@ -5,6 +5,8 @@ import typing
 import SearchUtils
 from ExpandUtils import get_round_plan_with_expansion
 from Interfaces import TilePlanInterface
+from Models import Move
+from Path import MoveListPath
 from Sim.GameSimulator import GameSimulatorHost
 from Tests.TestBase import TestBase
 from base.client.map import MapBase
@@ -1639,3 +1641,123 @@ bot_target_player=1
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for should_not_stop_chain-capping_enemy_tiles_when_can_still_expand_from_genafter_dumping_fully_into_enemy_land")
+    
+    def test_should_cap_2_and_then_use_general_for_more_land_wtf(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_cap_2_and_then_use_general_for_more_land_wtf___fYtZ22tcM---0--96.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 96, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=96)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        # simHost.queue_player_moves_str(general.player, '9,11->10,11  12,5->15,5')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTileDifferentialGreaterThan(2, simHost, 'should cap 2 tiles and then use general for more land')
+
+
+    
+    def test_should_cap_2_and_then_use_general_for_more_land_wtf__2(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_cap_2_and_then_use_general_for_more_land_wtf__2___fYtZ22tcM---0--95.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 95, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=95)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        # simHost.queue_player_moves_str(general.player, '9,10->9,11->10,11  12,5->15,5')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTileDifferentialGreaterThan(3, simHost, 'should cap 2 tiles and then use general for more land')
+    
+    def test_should_not_glitch_out_on_general_and_waste_city_expansion_opportunities(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_glitch_out_on_general_and_waste_city_expansion_opportunities___nS6jQZ_lp---0--85.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 85, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=85)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        # proof 1, best
+        # simHost.queue_player_moves_str(general.player, '2,9->6,9->6,10->7,10  2,9->1,9->1,8->0,8->0,7  2,9->2,7->3,7  2,9->0,9')
+        # proof 2, worse, 13 tile diff instead of 15, but still much better than what bot did
+        # simHost.queue_player_moves_str(general.player, '2,9->1,9->1,13->0,13->0,15  2,9->1,9->1,8->0,8->0,6  2,9->0,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTileDifferentialGreaterThan(12, simHost, 'should at minimum do a proper city-expand plan')   # proof 2 minimum
+        self.assertTileDifferentialGreaterThan(14, simHost, 'should attack enemy first so city plan gets 2 more tiles after')  # proof 1
+
+    def test_should_respect_wait_moves_from_movelistpath__make_none_wait_move(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_glitch_out_on_general_and_waste_city_expansion_opportunities___nS6jQZ_lp---0--85.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 85, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=85)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        # proof 1, best
+        # simHost.queue_player_moves_str(general.player, '2,9->6,9->6,10->7,10  2,9->1,9->1,8->0,8->0,7  2,9->2,7->3,7  2,9->0,9')
+        # proof 2, worse, 13 tile diff instead of 15, but still much better than what bot did
+        # simHost.queue_player_moves_str(general.player, '2,9->1,9->1,13->0,13->0,15  2,9->1,9->1,8->0,8->0,6  2,9->0,9')
+        playerMap = simHost.get_player_map(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.curPath = MoveListPath([
+            Move(playerMap.GetTile(2,9), playerMap.GetTile(1,9)),
+            None,
+            Move(playerMap.GetTile(1,9), playerMap.GetTile(2,9)),
+        ])
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertEqual(playerMap.GetTile(2, 9).army, 2) # incremented the turn we left the general. Shouldn't have moved that 2 to follow.
+        self.assertEqual(playerMap.GetTile(1, 9).army, 6)
+
+    def test_should_respect_wait_moves_from_movelistpath__make_move_after_wait(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_glitch_out_on_general_and_waste_city_expansion_opportunities___nS6jQZ_lp---0--85.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 85, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=85)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        # proof 1, best
+        # simHost.queue_player_moves_str(general.player, '2,9->6,9->6,10->7,10  2,9->1,9->1,8->0,8->0,7  2,9->2,7->3,7  2,9->0,9')
+        # proof 2, worse, 13 tile diff instead of 15, but still much better than what bot did
+        # simHost.queue_player_moves_str(general.player, '2,9->1,9->1,13->0,13->0,15  2,9->1,9->1,8->0,8->0,6  2,9->0,9')
+        playerMap = simHost.get_player_map(general.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.curPath = MoveListPath([
+            Move(playerMap.GetTile(2,9), playerMap.GetTile(1,9)),
+            None,
+            Move(playerMap.GetTile(1,9), playerMap.GetTile(2,9)),
+        ])
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        self.assertEqual(playerMap.GetTile(1, 9).army, 1)
+        self.assertEqual(playerMap.GetTile(2, 9).army, 8)

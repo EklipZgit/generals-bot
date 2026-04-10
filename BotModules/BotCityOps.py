@@ -1,6 +1,7 @@
 import typing
 
 import BotModules as BM
+import DebugHelper
 import Gather
 import logbook
 
@@ -18,7 +19,7 @@ from BotModules.BotComms import BotComms
 from BotModules.BotGatherOps import BotGatherOps
 from BotModules.BotTimings import BotTimings
 from CityAnalyzer import CityAnalyzer
-from DangerAnalyzer import ThreatType
+from DangerAnalyzer import ThreatType, ThreatObj
 from Gather import GatherTreeNode
 from Path import Path, MoveListPath
 from Strategy.WinConditionAnalyzer import WinCondition
@@ -141,7 +142,7 @@ class BotCityOps:
                         bot.is_all_in_army_advantage = True
                         bot.is_all_in_losing = True
                         bot.all_in_city_behind = True
-                        bot.expansion_plan = ExpansionPotential(0, 0, 0, None, [], 0.0)
+                        bot.expansion_plan = ExpansionPotential(0, 0, 0, None, [], 0.0, bot._map.turn)
                         bot.city_expand_plan = None
                         bot.enemy_expansion_plan = None
 
@@ -269,7 +270,7 @@ class BotCityOps:
         if bot.targetPlayer != -1:
             opp = bot._map.players[bot.targetPlayer]
             me = bot._map.players[bot.general.player]
-            cityLeadWeight = (me.cityCount - opp.cityCount) * 70
+            cityLeadWeight = (me.cityCount - opp.cityCount) * 50
 
         knowsWhereEnemyGenIs = bot.targetPlayer != -1 and bot._map.generals[bot.targetPlayer] is not None
         if knowsWhereEnemyGenIs and dist < 18:
@@ -286,7 +287,7 @@ class BotCityOps:
                                     or (player.standingArmy > 40 + cityLeadWeight and (bot.target_player_gather_path is None or dist > 20))
                                     or (player.standingArmy > 60 + cityLeadWeight and (bot.target_player_gather_path is None or dist > 18))
                                     or (player.standingArmy > 70 + cityLeadWeight and (bot.target_player_gather_path is None or dist > 16))
-                                    or (player.standingArmy > 100 + cityLeadWeight))):
+                                    or (player.standingArmy > 85 + cityLeadWeight))):
             logbook.info(f"Proactively taking cities! dist {dist}, safe {safeOnStandingArmy}, player.standingArmy {player.standingArmy}, cityLeadWeight {cityLeadWeight}")
             return True
         logbook.info(f"No proactive cities :(     dist {dist}, safe {safeOnStandingArmy}, player.standingArmy {player.standingArmy}, cityLeadWeight {cityLeadWeight}")
@@ -296,12 +297,12 @@ class BotCityOps:
     def find_neutral_city_path(bot) -> Path | None:
         is1v1 = bot._map.remainingPlayers == 2 or bot._map.is_2v2
         wayAheadOnEcon = bot.opponent_tracker.winning_on_economy(byRatio=1.15, cityValue=40, offset=-5)
-        isNotLateGame = bot._map.turn < 500
+        isNotLateGame = bot._map.turn < 500 and bot.player.standingArmy < 220
 
         isWalledNoAggression = bot._map.is_walled_city_game and (bot.targetPlayer == -1 or bot._map.players[bot.targetPlayer].aggression_factor == 0.0)
 
         if not isWalledNoAggression:
-            if is1v1 and wayAheadOnEcon and isNotLateGame or len(bot.win_condition_analyzer.contestable_cities) > 0:
+            if isNotLateGame and is1v1 and (wayAheadOnEcon or SearchUtils.any_where(bot.win_condition_analyzer.contestable_cities, lambda t: t.player != bot.player.index)):
                 return None
 
             if BotStateQueries.is_still_ffa_and_non_dominant(bot) and bot.targetPlayer != -1 and bot.targetPlayerObj.aggression_factor > 30:
@@ -498,10 +499,13 @@ class BotCityOps:
                 return killPath
         possibleNeutralCities = []
         possibleNeutralCities.extend(c for c in bot.cityAnalyzer.city_scores.keys() if
-                                 not bot.territories.is_tile_in_enemy_territory(c) and (
-                                         (c.army < 4 and bot.territories.territoryDistances[bot.targetPlayer].raw[c.tile_index] > 3)
-                                         or (c.army < 20 and bot.territories.territoryDistances[bot.targetPlayer].raw[c.tile_index] > 9)
-                                         or (bot._map.is_walled_city_game and not bot.armyTracker.seen_player_lookup[bot.targetPlayer])))
+                not c.visible
+                and not bot.territories.is_tile_in_enemy_territory(c)
+                and (
+                        (c.army < 4 and bot.territories.territoryDistances[bot.targetPlayer].raw[c.tile_index] > 3)
+                        or (c.army < 20 and bot.territories.territoryDistances[bot.targetPlayer].raw[c.tile_index] > 9)
+                        or (bot._map.is_walled_city_game and not bot.armyTracker.seen_player_lookup[bot.targetPlayer])
+                ))
 
         if len(possibleNeutralCities) > 0:
             killPath = SearchUtils.dest_breadth_first_target(
@@ -570,7 +574,7 @@ class BotCityOps:
 
         shortestKill = None
 
-        for enemyCity in enemyCitiesOrderedByPriority[:12]:
+        for enemyCity in enemyCitiesOrderedByPriority[:8]:
             negTilesToUse = defenseCriticalTileSet.copy()
 
             if enemyCity in defenseCriticalTileSet:
@@ -1194,7 +1198,7 @@ class BotCityOps:
             )
             ):
                 logbook.info("Didn't skip neut cities.")
-                if forceNeutralCapture or targetPlayer is None or genPlayer.cityCount < cityTakeThreshold or bot.force_city_take:
+                if forceNeutralCapture or targetPlayer is None or genPlayer.cityCount < cityTakeThreshold or bot.force_city_take or proactivelyTakeCity:
                     return True
                 else:
                     logbook.info(
@@ -1314,17 +1318,19 @@ class BotCityOps:
             negs.add(t)
 
         newTargets = set()
-        for t in targets:
-            negs.add(t)
-            tiles = BotStateQueries.get_n_closest_team_tiles_near(bot, [t], bot.targetPlayer, distance=max(1, bot.board_analysis.inter_general_distance // 7), limit=7, includeNeutral=False)
-            if len(tiles) < 1:
-                tiles = BotStateQueries.get_n_closest_team_tiles_near(bot, [t], bot.targetPlayer, distance=max(2, bot.board_analysis.inter_general_distance // 5), limit=10, includeNeutral=True)
-            if len(tiles) < 1:
-                tiles = [t]
+        # for t in targets:
+        #     negs.add(t)
+        #     tiles = BotStateQueries.get_n_closest_team_tiles_near(bot, [t], bot.targetPlayer, distance=max(1, bot.board_analysis.inter_general_distance // 7), limit=5, includeNeutral=False)
+        #     if len(tiles) < 1:
+        #         tiles = BotStateQueries.get_n_closest_team_tiles_near(bot, [t], bot.targetPlayer, distance=max(2, bot.board_analysis.inter_general_distance // 5), limit=5, includeNeutral=True)
+        #     if len(tiles) < 1:
+        #         tiles = [t]
+        #
+        #     negs.update(BotStateQueries.get_n_closest_team_tiles_near(bot, [t], bot.general.player, distance=max(2, bot.board_analysis.inter_general_distance // 5), limit=5, includeNeutral=False))
+        #
+        #     newTargets.update(tiles)
 
-            negs.update(BotStateQueries.get_n_closest_team_tiles_near(bot, [t], bot.general.player, distance=max(2, bot.board_analysis.inter_general_distance // 5), limit=6, includeNeutral=False))
-
-            newTargets.update(tiles)
+        newTargets.update(bot.defensive_spanning_tree)
 
         for tg in newTargets:
             bot.viewInfo.add_targeted_tile(tg, TargetStyle.BLUE, radiusReduction=-3)
@@ -1335,7 +1341,7 @@ class BotCityOps:
             bot,
             [t for t in newTargets],
             maxTime=0.05,
-            gatherTurns=bot.win_condition_analyzer.recommended_city_defense_plan_turns,
+            gatherTurns=bot.timings.get_turns_left_in_cycle(bot._map.turn) % bot.win_condition_analyzer.recommended_city_defense_plan_turns,
             useTrueValueGathered=True,
             priorityMatrix=BotGatherOps.get_gather_tiebreak_matrix(bot, ),
             negativeSet=negs)
@@ -1343,8 +1349,8 @@ class BotCityOps:
         numCaptures = BotGatherOps.get_number_of_captures_in_gather_tree(bot, gatherNodes)
 
         if valGathered / max(1, gatherTurns - numCaptures) < bot.player.standingArmy / bot.player.tileCount:
-            cycleTurns = bot.timings.get_turns_left_in_cycle(bot._map.turn) % 25
-            cycleTurns = max(bot.win_condition_analyzer.recommended_city_defense_plan_turns + 15, cycleTurns)
+            cycleTurns = bot.timings.get_turns_left_in_cycle(bot._map.turn) % 10
+            # cycleTurns = max(bot.win_condition_analyzer.recommended_city_defense_plan_turns + 1, cycleTurns)
             bot.info(f'trying longer city preemptive defense turns {cycleTurns}')
             move, valGathered, gatherTurns, gatherNodes = BotGatherOps.get_gather_to_target_tiles(
                 bot,
@@ -1369,11 +1375,20 @@ class BotCityOps:
                     move = BotGatherOps.get_tree_move_default(bot, gatherNodes)
                     valGathered = sumPruned
                     gatherTurns = prunedGatherTurns
+                    gatherNodes = prunedGatherNodes
 
         for tile in bot.win_condition_analyzer.defend_cities:
             bot.viewInfo.add_targeted_tile(tile, TargetStyle.WHITE, radiusReduction=3)
 
         if move is not None:
+            if gatherNodes is not None:
+                def valFunc(tile, tuple):
+                    return 0 - tile.army
+
+                bot.curPath = MoveListPath(Gather.get_tree_moves(
+                    gatherNodes,
+                    valFunc,
+                    ))
             bot.info(f'C preDef {move} - {valGathered} in turns {gatherTurns}/{bot.win_condition_analyzer.recommended_city_defense_plan_turns}')
 
         return move

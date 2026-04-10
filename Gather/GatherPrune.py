@@ -57,7 +57,7 @@ def get_tree_moves(
         (curPrio, curGather) = moveQ.get()
         toGather = curGather.toGather
         if toGather is not None:
-            moves.append(Move(curGather.tile, curGather.toTile))
+            moves.append(Move(curGather.tile, curGather.toTile, curGather.half))
             toGather.children.remove(curGather)
             iter += 1
             if iter >= limit:

@@ -601,7 +601,7 @@ class DangerAnalyzer(object):
             if curThreat.start.tile in armies:
                 army = armies[army]
             analysis = ArmyAnalyzer(self.map, curThreat.tail.tile, army)
-            threatObj = ThreatObj(curThreat.length - 1, curThreat.value, curThreat, ThreatType.Kill, saveTile, analysis)
+            threatObj = ThreatObj(curThreat.length, curThreat.value, curThreat, ThreatType.Kill, saveTile, analysis)
             return threatObj
         else:
             logbook.info("no fastest threat found")

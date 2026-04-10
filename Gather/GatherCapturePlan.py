@@ -7,7 +7,7 @@ import logbook
 
 from Models import GatherTreeNode, Move
 from Gather import GatherDebug, GatherPrune
-from Interfaces import TilePlanInterface, MapMatrixInterface
+from Interfaces import TilePlanInterface, MapMatrixInterface, TileSet
 from base.client.map import MapBase
 from base.client.tile import Tile
 
@@ -280,7 +280,8 @@ class GatherCapturePlan(TilePlanInterface):
             includeCapturePriorityAsEconValues: bool = True,
             captures: typing.Set[Tile] | None = None,
             viewInfo=None,
-            cloneNodes: bool = False
+            cloneNodes: bool = False,
+            tilesToHalf: TileSet | None = None,
     ) -> GatherCapturePlan:
         """
         Returns the plan. The root nodes must be connected to all their children, but do not need the correct army / econ values (will be recalculated).
@@ -326,6 +327,7 @@ class GatherCapturePlan(TilePlanInterface):
                 priorityMatrix,
                 includeGatherPriorityAsEconValues=includeGatherPriorityAsEconValues,
                 includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
+                tilesToHalf=tilesToHalf,
             )
 
         #prunes invalid gather nodes.
@@ -404,6 +406,7 @@ class GatherCapturePlan(TilePlanInterface):
             priorityMatrix: MapMatrixInterface[float] | None = None,
             includeGatherPriorityAsEconValues: bool = False,
             includeCapturePriorityAsEconValues: bool = True,
+            tilesToHalf: TileSet | None = None,
     ):
         if GatherDebug.USE_DEBUG_LOGGING:
             logbook.info(f'RECALCING currentNode {currentNode}')
@@ -431,8 +434,12 @@ class GatherCapturePlan(TilePlanInterface):
         if not negativeTiles or currentTile not in negativeTiles:
             if isTileFriendly:
                 if not isStartNode:
-                    sumArmy += currentTile.army
-                    # sumPoints += currentTile.army
+                    if tilesToHalf is None or currentTile not in tilesToHalf:
+                        sumArmy += currentTile.army
+                    else:
+                        sumArmy += currentTile.army // 2
+                        currentNode.half = True
+                        # sumPoints += currentTile.army
                     if currentTile.isCity:
                         plan.friendly_city_count += 1
             else:

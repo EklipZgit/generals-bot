@@ -584,6 +584,9 @@ AttributeError: 'Map' object has no attribute 'grid'
             return None
         return self.grid[y][x]
 
+    def At(self, x, y) -> Tile:
+        return self.grid[y][x]
+
     def GetTileModifierSafe(self, x, y) -> Tile | None:
         if self.has_torus:
             return self.GetTileTorus(x, y)
@@ -1610,6 +1613,13 @@ AttributeError: 'Map' object has no attribute 'grid'
 
         deltaToDest = self._get_expected_delta_amount_toward(source, dest)
         if deltaToDest != dest.delta.unexplainedDelta:
+            if (
+                source.delta.unexplainedDelta < 0
+                and dest.delta.unexplainedDelta > 0
+                and abs(deltaToDest) == abs(dest.delta.unexplainedDelta)
+                and source.delta.oldOwner != dest.delta.oldOwner
+            ):
+                return True
             return False
 
         return True
@@ -2401,11 +2411,16 @@ AttributeError: 'Map' object has no attribute 'grid'
                     return True
 
                 elif self.remainingPlayers == 2 and sourceOwner.unexplainedTileDelta < 0:
-                    logbook.info(f'move {str(source)}->{str(dest)} by p{sourceOwner.index} can be discarded '
-                                 f'outright, as it would have captured a tile and instead they lost at '
-                                 f'least one net tile. This should be accurate unless the player is being '
-                                 f'attacked by more than two players at once.')
-                    return True
+                    if dest.delta.armyMovedHere or dest.delta.unexplainedDelta != 0:
+                        logbook.info(f'move {str(source)}->{str(dest)} by p{sourceOwner.index} not discarded despite net tile loss, '
+                                     f'because destination appears contested (armyMovedHere={dest.delta.armyMovedHere}, '
+                                     f'unexplainedDelta={dest.delta.unexplainedDelta}).')
+                    else:
+                        logbook.info(f'move {str(source)}->{str(dest)} by p{sourceOwner.index} can be discarded '
+                                    f'outright, as it would have captured a tile and instead they lost at '
+                                    f'least one net tile. This should be accurate unless the player is being '
+                                    f'attacked by more than two players at once.')
+                        return True
 
                 elif self.remainingPlayers == 2 and sourceOwner.unexplainedTileDelta == 0 and wouldCapture:
                     logbook.info(f'move {str(source)}->{str(dest)} by p{sourceOwner.index} is sketchy but allowed, '
@@ -2473,8 +2488,7 @@ AttributeError: 'Map' object has no attribute 'grid'
                 sourceWasAttackedNonLethalOrVacated = sourceTile.delta.armyDelta < 0 and sourceTile.delta.oldOwner == sourceTile.delta.newOwner
                 # sourceWasAttackedNonLethalOrVacated = sourceTile.delta.oldArmy + sourceTile.delta.armyDelta < sourceTile.delta.oldArmy
                 for potentialDest in sourceTile.movable:
-                    # if (potentialDest.visible or potentialDest.was_visible_last_turn()) and not potentialDest.delta.gainedSight:
-                    if potentialDest.visible and not potentialDest.delta.gainedSight:
+                    if potentialDest.visible:
                         continue
 
                     if sourceWasAttackedNonLethalOrVacated and self._is_exact_army_movement_delta_dest_match(sourceTile, potentialDest):
@@ -2646,7 +2660,18 @@ AttributeError: 'Map' object has no attribute 'grid'
                     #     continue
                     if potentialSource.delta.oldOwner in skipCapturedPlayers:
                         continue
-                    if potentialSource.was_visible_last_turn() and self.team_ids_by_player_index[potentialSource.delta.oldOwner] != self.team_ids_by_player_index[destTile.delta.oldOwner] and self.player_index != destTile.player:
+                    isCollisionSignature = (
+                        destTile.delta.armyMovedHere
+                        and destTile.delta.unexplainedDelta > 0
+                        and potentialSource.delta.unexplainedDelta < 0
+                        and abs(potentialSource.delta.unexplainedDelta) >= destTile.delta.unexplainedDelta
+                    )
+                    if (
+                        potentialSource.was_visible_last_turn()
+                        and self.team_ids_by_player_index[potentialSource.delta.oldOwner] != self.team_ids_by_player_index[destTile.delta.oldOwner]
+                        and self.player_index != destTile.player
+                        and not isCollisionSignature
+                    ):
                         # only the player who owns the resulting tile can move one of their own tiles into it. TODO 2v2...?
                         logbook.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} <- SRC {repr(potentialSource)} SKIPPED BECAUSE potentialSource.was_visible_last_turn() and potentialSource.delta.oldOwner != destTile.player')
                         continue

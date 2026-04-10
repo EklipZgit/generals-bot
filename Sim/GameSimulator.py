@@ -126,6 +126,8 @@ class GamePlayer(object):
                 playerTile.visible = False
                 playerTile.isCity = tile.isCity
                 playerTile.isMountain = tile.discovered and tile.isMountain
+                playerTile.isLookout = tile.discovered and tile.isLookout
+                playerTile.isObservatory = tile.discovered and tile.isObservatory
                 playerTile.player = tile.player
                 playerTile.discovered = tile.discovered
                 if playerTile.isGeneral != tile.isGeneral:
@@ -583,11 +585,11 @@ class GameSimulatorHost(object):
 
             self.bot_hosts[i] = botHost
 
-        if playerMapVision is not None:
-            self.apply_map_vision(playerMapVision.player_index, rawMap=playerMapVision)
-
         self.sim._update_scores()
         self.sim.send_update_to_player_maps(noDeltas=True)
+
+        if playerMapVision is not None:
+            self.apply_map_vision(playerMapVision.player_index, rawMap=playerMapVision)
         # # clear all the tile deltas and stuff.
         # for player in self.sim.players:
         #     player.map.update_turn(self.sim.sim_map.turn)

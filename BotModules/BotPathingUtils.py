@@ -7,7 +7,7 @@ from BotModules.BotStateQueries import BotStateQueries
 from BotModules.BotRepetition import BotRepetition
 from DangerAnalyzer import ThreatObj
 from Interfaces import MapMatrixInterface, TilePlanInterface
-from Path import Path
+from Path import Path, MoveListPath
 from Gather import GatherCapturePlan
 from ViewInfo import PathColorer
 from Models.Move import Move
@@ -39,29 +39,38 @@ class BotPathingUtils:
         return True
 
     @staticmethod
-    def continue_cur_path(bot, threat: ThreatObj | None, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
+    def continue_cur_path(bot, threat: ThreatObj | None, defenseCriticalTileSet: typing.Set[Tile]) -> typing.Tuple[bool, Move | None]:
+        '''
+        returns shouldUseMove, move. if move is None and shouldUseMove is true, that means the curPath actually wants you to play None as the move.
+        :param bot:
+        :param threat:
+        :param defenseCriticalTileSet:
+        :return:
+        '''
         if bot.expansion_plan.includes_intercept:
             bot.curPath = None
             bot.viewInfo.add_info_line(f'clearing curPath because expansion includes intercept')
-            return None
+            return (False, None)
 
         if bot.curPath is None:
-            return None
+            return (False, None)
 
         nextMove = bot.curPath.get_first_move()
 
         if nextMove is None:
+            if isinstance(bot.curPath, MoveListPath):
+                return True, None
             bot.info(f'curPath None move. curPath: {bot.curPath}')
             try:
                 bot.curPath.pop_first_move()
             except:
                 bot.curPath = None
-            return None
+            return (False, None)
 
         if nextMove.source not in nextMove.dest.movable:
             bot.info(f'!!!!!! curPath returned invalid move {nextMove}, nuking curPath and continuing...')
             bot.curPath = None
-            return None
+            return (False, None)
 
         inc = 0
         while (
@@ -86,10 +95,10 @@ class BotPathingUtils:
                 nextMove = bot.curPath.get_first_move()
             except:
                 bot.curPath = None
-                return None
+                return (False, None)
 
         if nextMove is None:
-            return None
+            return (False, None)
 
         if nextMove.dest is not None:
             dest = nextMove.dest
@@ -100,7 +109,7 @@ class BotPathingUtils:
                 if BM.BotDefense.BotDefense.general_move_safe(bot, dest, move_half=True):
                     logbook.info("General move in path would have violated general min army allowable. Moving half.")
                     move = Move(source, dest, True)
-                    return move
+                    return (True, move)
                 else:
                     bot.curPath = None
                     bot.curPathPrio = -1
@@ -122,7 +131,7 @@ class BotPathingUtils:
                                 bot.viewInfo.color_path(PathColorer(killThreatPath, 0, 255, 204, 255, 10, 200))
                                 logbook.info(f'setting targetingArmy to {str(threat.path.start.tile)} in continue_cur_path when move wasnt safe for general')
                                 bot.targetingArmy = bot.armyTracker.armies[threat.path.start.tile]
-                                return BotPathingUtils.get_first_path_move(bot, killThreatPath)
+                                return (True, BotPathingUtils.get_first_path_move(bot, killThreatPath))
                         else:
                             logbook.warn("Negative tiles prevented a move but there was no threat???")
 
@@ -133,11 +142,11 @@ class BotPathingUtils:
                             nextMove = bot.curPath.get_first_move()
                         except:
                             bot.curPath = None
-                            return None
+                            return (False, None)
                     else:
                         break
                 if bot.curPath is not None and nextMove.dest is not None:
-                    if nextMove.source == bot.general and not BM.BotDefense.BotDefense.general_move_safe(bot, bot.curPath.start.next.tile, bot.curPath.start.move_half):
+                    if nextMove.source == bot.general and not BM.BotDefense.BotDefense.general_move_safe(bot, nextMove.dest, nextMove.move_half):
                         bot.curPath = None
                         bot.curPathPrio = -1
                     else:
@@ -152,12 +161,12 @@ class BotPathingUtils:
                             move = bot.curPath.get_first_move()
 
                         bot.info(f"CurPath cont {move}")
-                        return BotRepetition.move_half_on_repetition(bot, move, 6, 3)
+                        return (True, BotRepetition.move_half_on_repetition(bot, move, 6, 3))
 
         bot.info("path move failed...? setting curPath to none...")
         bot.info(f'path move WAS {bot.curPath}')
         bot.curPath = None
-        return None
+        return (False, None)
 
     @staticmethod
     def get_enemy_count_on_path(bot, path: Path) -> int:
@@ -247,6 +256,10 @@ class BotPathingUtils:
             pass
 
         if move is None:
+            if isinstance(bot.curPath, MoveListPath):
+                # we intentionally return None regularly in MoveListPaths
+                return
+
             logbook.info(f'curpath had no first move, dropping. {bot.curPath}')
             bot.curPath = None
             return
@@ -256,7 +269,7 @@ class BotPathingUtils:
             bot.curPath = None
             return
 
-        if isinstance(bot.curPath, Path):
+        if isinstance(bot.curPath, Path) and not isinstance(bot.curPath, MoveListPath):
             if bot.curPath.start is None:
                 bot.curPath = None
                 return
@@ -301,8 +314,9 @@ class BotPathingUtils:
         if not isinstance(bot.curPath, Path):
             return
 
-        if bot.curPath.start.next is not None and not BotRepetition.dropped_move(bot, bot.curPath.start.tile, bot.curPath.start.next.tile):
-            bot.curPath.pop_first_move()
+        nextMove = bot.curPath.get_first_move()
+        if (bot.last_move is None and nextMove is None) or (bot.curPath.start.next is not None and not BotRepetition.dropped_move(bot, bot.curPath.start.tile, bot.curPath.start.next.tile)):
+            popped = bot.curPath.pop_first_move()
             if bot.curPath.length <= 0:
                 logbook.info("TERMINATING CURPATH BECAUSE <= 0 ???? Path better be over")
                 bot.curPath = None

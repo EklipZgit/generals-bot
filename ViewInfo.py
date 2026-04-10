@@ -37,6 +37,7 @@ class TargetStyle(Enum):
     ORANGE = 7
     WHITE = 8
     YELLOW = 9
+    GRAY = 10
 
 
 class PathColorer(object):
@@ -125,6 +126,8 @@ class ViewInfo(object):
             return P_TEAL
         if targetStyle == TargetStyle.YELLOW:
             return P_YELLOW
+        if targetStyle == TargetStyle.GRAY:
+            return GRAY
         if targetStyle == TargetStyle.WHITE:
             return 200, 200, 200
         if targetStyle == TargetStyle.ORANGE:
@@ -175,13 +178,24 @@ class ViewInfo(object):
     def add_info_line(self, additionalInfo: str):
         logbook.info(additionalInfo)
         self.infoLines.append(additionalInfo)
+    splitReg = r'\r?\n'
+    def add_info_multiline(self, additionalInfo: str):
+        logbook.info(additionalInfo)
+        self.infoLines.extend(additionalInfo.splitlines())
 
     def add_info_line_no_log(self, additionalInfo: str):
         self.infoLines.append(additionalInfo)
 
+    def add_info_multiline_no_log(self, additionalInfo: str):
+        self.infoLines.extend(additionalInfo.splitlines())
+
     def add_stats_line(self, statsLine: str):
         logbook.info(statsLine)
         self.statsLines.append(statsLine)
+
+    def add_stats_multiline(self, statsLines: str):
+        logbook.info(statsLines)
+        self.statsLines.extend(statsLines.splitlines())
 
     def add_map_division(self, divisionMatrix: typing.Container[Tile] | MapMatrixSet, color: typing.Tuple[int, int, int], alpha: int = 128):
         self._divisions.append((divisionMatrix, color, alpha))

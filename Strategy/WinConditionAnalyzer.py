@@ -57,6 +57,26 @@ class WinConditionAnalyzer(object):
         self.defend_cities: typing.Set[Tile] = set()
         """Cities we own who are very likely to be attacked and should be defended."""
 
+        # Basic defense against general stats
+        self.basic_defense_general_moves: int = 0
+        """Number of moves from our general to closest flank fog point (defense horizon)."""
+        self.basic_defense_general_turns: int = 0
+        """Number of turns used to gather that defense army."""
+        self.basic_defense_general_army: int = 0
+        """Amount of army we're able to gather on the main inbound defensive spanning tree in basic_defense_general_moves moves."""
+        self.basic_defense_general_tiles: typing.Set[Tile] = set()
+        """Tiles necessary for that defensive gather against general."""
+
+        # Basic defense against forward spanning tree stats
+        self.basic_defense_forward_moves: int = 0
+        """Number of moves for forward defense horizon."""
+        self.basic_defense_forward_turns: int = 0
+        """Number of turns used to gather forward defense army."""
+        self.basic_defense_forward_army: int = 0
+        """Amount of army we're able to gather on the forward defensive spanning tree."""
+        self.basic_defense_forward_tiles: typing.Set[Tile] = set()
+        """Tiles necessary for that defensive gather on forward spanning tree."""
+
     def _refresh_verbose_logging_enabled(self):
         self._verbose_logging_enabled = DebugHelper.is_debug_or_unit_test_mode()
 
@@ -138,7 +158,9 @@ class WinConditionAnalyzer(object):
 
         ableToContest = False
 
-        contestableCities = [c for c, score in enTargetCities if self.map.is_tile_on_team_with(c, self.target_player)][0:3]
+        rawADists = self.board_analysis.intergeneral_analysis.aMap.raw
+        rawBDists = self.board_analysis.intergeneral_analysis.bMap.raw
+        contestableCities = [c for c, score in enTargetCities if self.map.is_tile_on_team_with(c, self.target_player) and rawBDists[c.tile_index] > 0.5 * rawADists[c.tile_index]][0:2]
 
         baselineWinRequirement = 0.5   # 0.5 equates to 12.5 tile econ advantage by holding the city
         if self.is_contesting_cities:
@@ -305,7 +327,7 @@ class WinConditionAnalyzer(object):
             return False
 
         maxThreat = 0
-        maxThreatTurns = 0
+        maxThreatTurns = 9
         analyzedCount = 0
         for city in sorted(self.map.players[self.map.player_index].cities, key=lambda t: self.board_analysis.intergeneral_analysis.bMap.raw[t.tile_index]):
             isEnemySide = self.board_analysis.intergeneral_analysis.bMap.raw[city.tile_index] * 1.2 < self.board_analysis.intergeneral_analysis.aMap.raw[city.tile_index]
@@ -994,6 +1016,111 @@ class WinConditionAnalyzer(object):
         if path is not None:
             return path.get_reversed()
         return None
+
+    def calculate_basic_defense_against_general(
+            self,
+            defensive_spanning_tree: typing.Set[Tile],
+            general: Tile,
+            sketchiest_flank_path: Path | None,
+            timeLimit: float = 0.05
+    ):
+        """
+        Calculates basic defense against general threat.
+
+        Determines how much army we can gather on the defensive spanning tree in
+        (number of moves from our general to the closest flank fog point) moves.
+
+        @param defensive_spanning_tree: The main defensive spanning tree tiles
+        @param general: Our general tile
+        @param sketchiest_flank_path: The sketchiest potential inbound flank path (for fog point distance)
+        @param timeLimit: Time limit for the gather calculation
+        """
+        # Reset stats
+        self.basic_defense_general_moves = 0
+        self.basic_defense_general_turns = 0
+        self.basic_defense_general_army = 0
+        self.basic_defense_general_tiles = set()
+
+        if not defensive_spanning_tree:
+            return
+
+        # Calculate defense horizon: distance from general to closest flank fog point
+        if sketchiest_flank_path is not None:
+            # Use the tail of the flank path as the closest fog point
+            closest_flank_tile = sketchiest_flank_path.tail.tile
+            self.basic_defense_general_moves = self.board_analysis.intergeneral_analysis.aMap.raw[closest_flank_tile.tile_index]
+        else:
+            # Default to inter-general distance / 3 if no flank path
+            self.basic_defense_general_moves = max(5, self.board_analysis.inter_general_distance // 3)
+
+        # Cap at reasonable max to avoid excessive gather time
+        max_defense_moves = min(self.basic_defense_general_moves, 25)
+
+        if max_defense_moves <= 0:
+            return
+
+        # Calculate gather on defensive spanning tree to the general
+        # Use the spanning tree tiles as target sources
+        spanning_tree_list = list(defensive_spanning_tree)
+        if not spanning_tree_list:
+            return
+
+        # Get defense plan against general
+        defense_plan = self.get_dynamic_turns_visible_defense_plan_against(
+            tiles=[general],
+            maxTurns=max_defense_moves,
+            asPlayer=self.map.player_index,
+            timeLimit=timeLimit,
+            negativeTiles=None
+        )
+
+        self.basic_defense_general_turns = defense_plan.length
+        self.basic_defense_general_army = defense_plan.gathered_army
+        self.basic_defense_general_tiles = defense_plan.tileSet
+
+    def calculate_basic_defense_against_forward_spanning_tree(
+            self,
+            defensive_spanning_tree: typing.Set[Tile],
+            forward_point: Tile | None,
+            timeLimit: float = 0.05
+    ):
+        """
+        Calculates basic defense on the forward defensive spanning tree.
+
+        @param defensive_spanning_tree: The main defensive spanning tree tiles
+        @param forward_point: A point on the forward defensive spanning tree (e.g., most forward defense city or central defense point)
+        @param timeLimit: Time limit for the gather calculation
+        """
+        # Reset stats
+        self.basic_defense_forward_moves = 0
+        self.basic_defense_forward_turns = 0
+        self.basic_defense_forward_army = 0
+        self.basic_defense_forward_tiles = set()
+
+        if not defensive_spanning_tree or forward_point is None:
+            return
+
+        # Use distance from forward point to general as the moves horizon
+        self.basic_defense_forward_moves = self.board_analysis.intergeneral_analysis.aMap.raw[forward_point.tile_index]
+
+        # Cap at reasonable max
+        max_defense_moves = min(self.basic_defense_forward_moves, 25)
+
+        if max_defense_moves <= 0:
+            return
+
+        # Calculate gather on defensive spanning tree to the forward point
+        defense_plan = self.get_dynamic_turns_visible_defense_plan_against(
+            tiles=[forward_point],
+            maxTurns=max_defense_moves,
+            asPlayer=self.map.player_index,
+            timeLimit=timeLimit,
+            negativeTiles=None
+        )
+
+        self.basic_defense_forward_turns = defense_plan.length
+        self.basic_defense_forward_army = defense_plan.gathered_army
+        self.basic_defense_forward_tiles = defense_plan.tileSet
 
     def _get_rough_offense(self):
         attackTime = max(10, min(self.map.remainingCycleTurns, self.board_analysis.inter_general_distance + 5))

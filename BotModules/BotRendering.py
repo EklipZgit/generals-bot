@@ -97,6 +97,14 @@ class BotRendering:
             for tile in bot._map.get_all_tiles():
                 bot.viewInfo.bottomLeftGridText[tile] = f'cen{bot.board_analysis.defense_centrality_sums[tile]}'
 
+        if bot.info_render_pathway_distances:
+            for tile in bot._map.get_all_tiles():
+                pw = bot.board_analysis.intergeneral_analysis.pathWayLookupMatrix.raw[tile.tile_index]
+                if pw is None:
+                    bot.viewInfo.bottomLeftGridText[tile] = f'pwN'
+                else:
+                    bot.viewInfo.bottomLeftGridText[tile] = f'pw{pw.distance}'
+
         if bot.enemy_attack_path is not None:
             bot.viewInfo.color_path(PathColorer(
                 bot.enemy_attack_path,
@@ -134,7 +142,10 @@ class BotRendering:
             ))
 
         if bot.info_render_defense_spanning_tree and bot.defensive_spanning_tree:
-            bot.viewInfo.add_map_zone(bot.defensive_spanning_tree, Colors.WHITE_PURPLE, alpha=80)
+            bot.viewInfo.add_map_zone(bot.defensive_spanning_tree, Colors.WHITE_PURPLE, alpha=90)
+
+        if bot.info_render_friendly_city_spanning_tree and bot.friendly_city_spanning_tree:
+            bot.viewInfo.add_map_zone(bot.friendly_city_spanning_tree, Colors.GOLD, alpha=50)
 
         if bot.info_render_tile_islands:
             for island in sorted(bot.tileIslandBuilder.all_tile_islands, key=lambda i: (i.team, str(i.name))):

@@ -64,10 +64,13 @@ class Army(object):
     def update(self):
         if self.tile.visible:
             self.value = self.tile.army - 1
+            self.entangledValue = None
         self.visible = self.tile.visible
 
     def get_split_for_fog(self, fogTiles: typing.List[Tile]) -> typing.List[Army]:
         split = []
+        if self.entangledValue is None:
+            self.entangledValue = self.value
         for tile in fogTiles:
             splitArmy = self.clone()
             splitArmy.entangledValue = self.value

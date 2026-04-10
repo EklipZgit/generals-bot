@@ -23,6 +23,8 @@ class GatherTreeNode(typing.Generic[T]):
         self.toGather: GatherTreeNode | None = None
         """The singular gather node that this gather tile will move TO in this gather. For each child in xyzNode.children, each of the childrens .toGathers should be xyzNode."""
 
+        self.half: bool = False
+        """Whether to move-half from this tile (and whether that was calced into the gather tree)"""
         self.value: int = 0
         """The army value gathered by this point in the tree."""
         self.points: float = 0.0

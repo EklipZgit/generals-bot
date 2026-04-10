@@ -3,6 +3,8 @@
 .rendered.*.cpp
 *.pyd
 KnapsackUtilsCython.c
+*log.txt
+*.log
 
 
 # Mac DS Store

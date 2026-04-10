@@ -369,6 +369,7 @@ class BotTargeting:
         prevApproxed = bot.enemy_city_approxed_attacks
         bot.enemy_city_approxed_attacks = {}
 
+
         for tile in scores:
             preCalcedOffensePlan = bot.win_condition_analyzer.contestable_city_offense_plans.get(tile, None)
             if preCalcedOffensePlan is None:
@@ -376,7 +377,7 @@ class BotTargeting:
                 continue
 
             if bot.territories.is_tile_in_friendly_territory(tile) or bot._map.is_player_on_team_with(bot.targetPlayer, tile.player):
-                if approxed > 2:
+                if approxed >= 2:
                     bot.viewInfo.add_stats_line(f'en city @{tile} approxed > 2')
                     break
 

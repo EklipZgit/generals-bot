@@ -215,7 +215,7 @@ class InterceptionOptionInfo(TilePlanInterface):
         tgTile = 'NONE'
         if self.intercept is not None:
             tgTile = str(self.intercept.target_tile)
-        return f'int {self.path.start.tile}@{tgTile}->{self.path.tail.tile}: {self.econValue:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt), re {self.recapture_turns}, dBlk {self.damage_blocked:.2f}, eRem {self.intercepting_army_remaining}, bct {self.best_case_intercept_moves}, wct {self.worst_case_intercept_moves}, del{self.requiredDelay}'
+        return f'int {self.path.start.tile}->{self.path.start.next.tile}..{self.path.tail.tile}@{tgTile}..{self.path.tail.tile}: {self.econValue:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt), re {self.recapture_turns}, dBlk {self.damage_blocked:.2f}, eRem {self.intercepting_army_remaining}, bct {self.best_case_intercept_moves}, wct {self.worst_case_intercept_moves}, del{self.requiredDelay}'
         # else:
         #     return f'int ?@{self.intercept.target_tile}->?: {self.econValue:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt) dBlk {self.damage_blocked:.2f}, eRem {self.intercepting_army_remaining}, bct {self.best_case_intercept_moves}, del{self.requiredDelay}'
 

@@ -28,8 +28,10 @@ WSPREFIX = "wss"
 HTTPPREFIX = "https"
 BOTWSPREFIX = "wss"
 BOTHTTPPREFIX = "https"
+# _ENDPOINT_BOT = "://bot.generals.io/socket.io/?EIO=4"
 _ENDPOINT_BOT = "://botws.generals.io/socket.io/?EIO=4"
 _ENDPOINT_LOCAL = "://localhost:8080/socket.io/?EIO=4"
+# _ENDPOINT_PUBLIC = "://generals.io/socket.io/?EIO=4"
 _ENDPOINT_PUBLIC = "://ws.generals.io/socket.io/?EIO=4"
 _ENDPOINT_LAN = "://192.168.1.17:8080/socket.io/?EIO=4"
 
@@ -613,9 +615,9 @@ class GeneralsClient(object):
                     self._send(["set_custom_options", self._gameid, self.customOptions])
 
                     time.sleep(0.1)
-                    # logbook.info(f'and not self._customGameIsPublic {self._customGameIsPublic}')
-                    # if not self.isPrivate and not self._customGameIsPublic:
-                    #     self._send(["make_custom_public", self._gameid])
+                    logbook.info(f'and not self._customGameIsPublic {self._customGameIsPublic}')
+                    if not self.isPrivate and not self._customGameIsPublic:
+                        self._send(["make_custom_public", self._gameid])
 
                 time.sleep(0.3)
                 self._send(["set_force_start", self._gameid, forcing])

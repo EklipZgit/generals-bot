@@ -590,6 +590,7 @@ class BotCombatOps:
                     useTrueValueGathered=True,
                     includeGatherPriorityAsEconValues=True,
                     includeCapturePriorityAsEconValues=True,
+                    tilesToHalf=citiesToHalf,
                     timeLimit=min(0.075, BotTimings.get_remaining_move_time(bot, )),
                     logDebug=False,
                     viewInfo=bot.viewInfo if bot.info_render_gather_values else None)
@@ -1690,7 +1691,7 @@ class BotCombatOps:
                 bot.giving_up_counter = 0
 
         if bot.is_all_in_losing:
-            bot.expansion_plan = ExpansionPotential(0, 0, 0, None, [], 0.0)
+            bot.expansion_plan = ExpansionPotential(0, 0, 0, None, [], 0.0, bot._map.turn)
             bot.city_expand_plan = None
             bot.enemy_expansion_plan = None
 

@@ -78,6 +78,7 @@ def _build_pcst_tile_prize_matrix(
         enemyArmyLimit: int = 10,
         gatherMatrix: MapMatrixInterface[float] | None = None,
         captureMatrix: MapMatrixInterface[float] | None = None,
+        tilesToHalf: TileSet | None = None,
         hintIncludeTiles: TileSet | None = None,
 ) -> typing.Tuple[MapMatrix[float], float, float, MapMatrix[float], float, float]:
     """
@@ -148,6 +149,10 @@ def _build_pcst_tile_prize_matrix(
         tilePrizeMatrix.raw[tile.tile_index] = prize
         tileExtraCostMatrix.raw[tile.tile_index] = extraCost
 
+    if tilesToHalf is not None:
+        for tile in map.iterate_tile_set(tilesToHalf):
+            tilePrizeMatrix.raw[tile.tile_index] /= 2.0
+
     return tilePrizeMatrix, minPrize, maxPrize, tileExtraCostMatrix, minCost, maxCost
 
 
@@ -197,6 +202,7 @@ def get_prize_collecting_gather_mapmatrix(
         prioritizeCaptureHighArmyTiles: bool = False,
         skipTiles: TileSet | None = None,
         hintIncludeTiles: TileSet | None = None,
+        tilesToHalf: TileSet | None = None,
         sameResultCutoff = 5,
         enemyArmyCostFactor = 0.1,
         enemyArmyLimit: int = 10,
@@ -218,6 +224,7 @@ def get_prize_collecting_gather_mapmatrix(
         enemyArmyLimit=enemyArmyLimit,
         gatherMatrix=gatherMatrix,
         captureMatrix=captureMatrix,
+        tilesToHalf=tilesToHalf,
         hintIncludeTiles=hintIncludeTiles,
     )
 

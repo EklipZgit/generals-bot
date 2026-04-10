@@ -43,9 +43,9 @@ class CityScoreData(object):
 
         # other data, everything below is intermediate data used to calculate the scores above
         self.intergeneral_distance_differential: int = 0
-        """The difference between the path through the city between gens, and the current map shortest path. 
+        """The difference between the path through the city between gens, and the current map shortest path.
         If this value is positive, it decreased the shortest path by that much.
-        If the difference is negative, the amount negative indicates how 'out of the way' of the main path the city is. 
+        If the difference is negative, the amount negative indicates how 'out of the way' of the main path the city is.
         Measured in moves from both generals so 1 off the main path with be -2, then -4. Odd numbers cant exist.
         """
 
@@ -56,13 +56,13 @@ class CityScoreData(object):
         """Squared and 0.1 capped general_distances_ratio, to make it much more extreme weighting without over-prioritizing cities behind us"""
 
         self.friendly_city_nearby_score: int = 0
-        """how many friendly cities are nearby scored by distance to friendly cities(gen) in tiles weighted by intergen distance. 
+        """how many friendly cities are nearby scored by distance to friendly cities(gen) in tiles weighted by intergen distance.
         A single friendly city directly next to the city will score as 1/3 the distance between generals."""
         self.enemy_city_nearby_score: int = 0
-        """how many enemy cities are nearby scored by distance to friendly cities(gen) in tiles weighted by intergen distance. 
+        """how many enemy cities are nearby scored by distance to friendly cities(gen) in tiles weighted by intergen distance.
         A single enemy city directly next to the city will score as 1/3 the distance between generals."""
         self.neutral_city_nearby_score: int = 0
-        """how many enemy cities are nearby scored by distance to friendly cities(gen) in tiles weighted by intergen distance. 
+        """how many enemy cities are nearby scored by distance to friendly cities(gen) in tiles weighted by intergen distance.
         A single neutral city directly next to the city will score as 1/3 the distance between generals."""
 
         self.neighboring_city_relevance: float = 0
@@ -103,6 +103,10 @@ class CityAnalyzer(object):
         self.enemy_contested_cities: typing.Set[Tile] = set()
         """Contains all player owned cities that have been recently contested."""
 
+        self.cities_in_play: typing.Set[Tile] = set()
+        """Contains cities that are not further from the enemy general than our general is from the enemy general.
+        These are cities that are relevant for defensive spanning trees and central defense point calculations."""
+
         self.large_neutral_negatives: typing.Set[Tile] = set()
         """Contains large negative neutral tiles (value / distance to your land > 4; equivalent to 2 econ per turn for capturing them and returning.)"""
 
@@ -129,6 +133,7 @@ class CityAnalyzer(object):
         self.owned_contested_cities: typing.Set[Tile] = set()
         self.enemy_contested_cities: typing.Set[Tile] = set()
         self.large_neutral_negatives: typing.Set[Tile] = set()
+        self.cities_in_play: typing.Set[Tile] = set()
 
         if self.reachability_costs_matrix is None:
             self.ensure_reachability_matrix_built(force=True)
@@ -200,6 +205,9 @@ class CityAnalyzer(object):
                 self.player_city_scores[tile] = score
                 if self.is_contested(tile):
                     self.owned_contested_cities.add(tile)
+                # City is "in play" if it's not further from enemy general than our general is
+                if score.distance_from_enemy_general <= board_analysis.intergeneral_analysis.bMap.raw[board_analysis.general.tile_index]:
+                    self.cities_in_play.add(tile)
             else:
                 self.enemy_city_scores[tile] = score
                 if self.is_contested(tile):

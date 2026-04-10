@@ -1112,4 +1112,47 @@ class CityContestationTests(TestBase):
     #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
     #     self.assertNoFriendliesKilled(map, general)
     #     city = playerMap.GetTile(10, 10)
-    #     self.assertOwned(general.player, city, 'shouldnt just stand there watching this city tick up...')
+    #     self.assertOwned(general.player, city, 'shouldnt just stand there watching this city tick up...')    
+    def test_should_split_large_army_between_two_enemy_cities_rather_than_repeat_abandoning(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+
+        for (name, pathAdd, numTurns) in [('defense split', '', 3), ('contest split', 'None  None  ', 5)]:
+            with self.subTest(name):
+                mapFile = 'GameContinuationEntries/should_split_large_army_between_two_enemy_cities_rather_than_repeat_abandoning___tvKEijxAX---1--997.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 987, fill_out_tiles=True)
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=987)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, '5,15->8,15  10,13->8,13')
+                simHost.queue_player_moves_str(general.player, pathAdd + '8,14->8,13')
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=numTurns)
+                self.assertGreater(map.GetTile(8, 13).army, 48)
+                self.assertGreater(map.GetTile(8, 15).army, 48)
+                self.assertOwned(general.player, map.GetTile(8, 13), 'shoulda capped')
+                self.assertOwned(general.player, map.GetTile(8, 15), 'shoulda capped')
+    
+    def test_should_not_try_to_contest_city_infinity_far_away_throwing_away_econ(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_try_to_contest_city_infinity_far_away_throwing_away_econ___KJgYi9mKg---0--297.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 297, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=297)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTileDifferentialGreaterThan(10, simHost)
+
+

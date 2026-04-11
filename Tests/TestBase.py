@@ -49,7 +49,7 @@ __unittest = True
 
 
 class TestBase(unittest.TestCase):
-    GLOBAL_BYPASS_REAL_TIME_TEST = False
+    GLOBAL_BYPASS_REAL_TIME_TEST = True
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -1675,8 +1675,8 @@ class TestBase(unittest.TestCase):
         expander.debug_render_capture_count_threshold = renderThresh
         expander.log_debug = debugMode
         expander.use_debug_asserts = debugMode
-        expander.use_debug_asserts = False
-        expander.log_debug = False
+        # expander.use_debug_asserts = False
+        # expander.log_debug = False
         # expander.use_min_cost_flow_edges_only = False
 
         renderAll = False

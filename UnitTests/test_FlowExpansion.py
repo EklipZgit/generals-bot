@@ -194,7 +194,7 @@ aG1  a5        b1   bG1
 
 
     def test_build_flow_expand_plan__should_produce_valid_only__most_basic_move__need_cumulative_gather(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapData = """
 |    |    |    |     
 aG2  a2   b1   bG1 
@@ -712,7 +712,7 @@ a2                  b1
         self.enable_search_time_limits_and_disable_debug_asserts()
         self.begin_capturing_logging()
 
-        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=40, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=True)
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=40, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=debugMode)
         self.assertNotEqual(0, len(opts))
         self.assertGreater(opts[0].econValue / opts[0].length, 1.5, 'should find a plan with pretty high value per turn')
 
@@ -738,21 +738,24 @@ a2                  b1
                 self.assertNotEqual(0, len(opts))
                 self.assertGreater(opts[0].econValue / opts[0].length, 1.5, f'best vt low: {opts[0]}')
             except:
-                self.render_gather_capture_plan(map, opts[0], general.player, enemyGeneral.player, f'best vt low: {opts[0]}')
+                if debugMode:
+                    self.render_gather_capture_plan(map, opts[0], general.player, enemyGeneral.player, f'best vt low: {opts[0]}')
                 raise
 
             longestOpt = next(opt for opt in sorted(opts, key=lambda o: o.length, reverse=True))
             try:
                 self.assertGreater(longestOpt.length, 34, f'longest plan too short. {longestOpt}')
             except:
-                self.render_gather_capture_plan(map, longestOpt, general.player, enemyGeneral.player, f'longest plan too short. {longestOpt}')
+                if debugMode:
+                    self.render_gather_capture_plan(map, longestOpt, general.player, enemyGeneral.player, f'longest plan too short. {longestOpt}')
                 raise
 
             bestLongerOpt = next(opt for opt in sorted(opts, key=lambda o: (o.length > 15, o.econValue / o.length), reverse=True))
             try:
                 self.assertGreater(bestLongerOpt.econValue / bestLongerOpt.length, 1.1, f'longerOpt vt low: {bestLongerOpt}')
             except:
-                self.render_gather_capture_plan(map, bestLongerOpt, general.player, enemyGeneral.player, f'longerOpt vt low: {bestLongerOpt}')
+                if debugMode:
+                    self.render_gather_capture_plan(map, bestLongerOpt, general.player, enemyGeneral.player, f'longerOpt vt low: {bestLongerOpt}')
                 raise
 
     def test_should_not_produce_invalid_plan__enemy_cluster_crossing_neutral_tile(self):
@@ -976,7 +979,7 @@ a2                  b1
         self.enable_search_time_limits_and_disable_debug_asserts()
         self.begin_capturing_logging()
 
-        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=40, debugMode=debugMode, renderThresh=700, tileIslandSize=5)
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=40, debugMode=False, renderThresh=700, tileIslandSize=5)
         self.assertNotEqual(0, len(opts))
         self.assertGreater(opts[0].econValue / opts[0].length, 1.5, 'should find a plan with pretty high value per turn')
 
@@ -1048,7 +1051,7 @@ player_index=0
                 self.enable_search_time_limits_and_disable_debug_asserts()
                 self.begin_capturing_logging()
 
-                opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=True)
+                opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=debugMode)
 
                 # if debugMode:
                 #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
@@ -1091,7 +1094,7 @@ player_index=0
                 self.enable_search_time_limits_and_disable_debug_asserts()
                 self.begin_capturing_logging()
 
-                opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=True)
+                opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=debugMode)
 
                 # if debugMode:
                 #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)

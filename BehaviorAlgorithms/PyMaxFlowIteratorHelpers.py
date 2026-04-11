@@ -5,6 +5,7 @@ from enum import Enum
 from collections import defaultdict, deque
 
 import networkx
+import numpy as np
 
 import logbook
 import time
@@ -107,6 +108,25 @@ class PyMaxFlowComputer(object):
         with self.perf_timer.begin_move_event('compute g.maxflow()'):
             flow_value = g.maxflow()
 
+        if self.log_debug:
+            forward_flow_arrays = getattr(g, 'get_forward_edge_flows', None)
+            if forward_flow_arrays is not None:
+                raw_from_nodes, raw_to_nodes, raw_flow_amounts = forward_flow_arrays()
+                special_original_node_ids = {7, -7, 12, -12, 14, -14}
+                special_original_node_ids.update(graph_data.fake_nodes)
+                special_forward_edges = []
+                for idx in range(len(raw_from_nodes)):
+                    from_idx = int(raw_from_nodes[idx])
+                    to_idx = int(raw_to_nodes[idx])
+                    flow_amount = raw_flow_amounts[idx]
+                    if flow_amount <= 0:
+                        continue
+                    orig_from = graph_data.reverse_node_mapping.get(from_idx)
+                    orig_to = graph_data.reverse_node_mapping.get(to_idx)
+                    if orig_from in special_original_node_ids or orig_to in special_original_node_ids:
+                        special_forward_edges.append((orig_from, orig_to, flow_amount))
+                logbook.info(f'  PyMaxflow raw solved special edges={special_forward_edges}')
+
         # Extract flow assignment from segments
         # In PyMaxflow, after maxflow(), nodes are partitioned into source-side (0) and sink-side (1)
         # We need to reconstruct which flows actually occurred
@@ -159,109 +179,75 @@ class PyMaxFlowComputer(object):
         where node_ids are positive for output nodes and negative for input nodes.
         """
         flow_dict: typing.Dict[int, typing.Dict[int, int]] = defaultdict(lambda: defaultdict(int))
-        raw_flow_dict: typing.Dict[int, typing.Dict[int, int]] = defaultdict(lambda: defaultdict(int))
 
         fake_nodes = graph_data.fake_nodes
 
-        extract_start = time.perf_counter()
-        residual_arrays = getattr(g, 'get_edge_residuals', None)
-        get_residuals_elapsed = 0.0
-        residual_graph = None
-        residual_caps_by_edge: typing.Dict[typing.Tuple[int, int], typing.Any] | None = None
+        semantic_flow_arrays = getattr(g, 'get_semantic_edge_flows', None)
+        original_node_ids = np.zeros(graph_data.num_nodes, dtype=np.int64)
+        fake_node_flags = np.zeros(graph_data.num_nodes, dtype=np.uint8)
+        neutral_sink_flags = np.zeros(graph_data.num_nodes, dtype=np.uint8)
 
-        if residual_arrays is not None:
-            from_nodes, to_nodes, residual_caps = residual_arrays()
-            get_residuals_elapsed = time.perf_counter() - extract_start
-            residual_caps_by_edge = {}
-            for idx in range(len(from_nodes)):
-                edge = (int(from_nodes[idx]), int(to_nodes[idx]))
-                residual_value = residual_caps[idx]
-                residual_caps_by_edge[edge] = residual_caps_by_edge.get(edge, 0) + residual_value
-        else:
-            residual_graph = g.get_nx_graph()
-            get_residuals_elapsed = time.perf_counter() - extract_start
-        scan_start = time.perf_counter()
+        for idx in range(graph_data.num_nodes):
+            original_node_id = graph_data.reverse_node_mapping.get(idx)
+            if original_node_id is None:
+                continue
+            original_node_ids[idx] = original_node_id
+            if abs(original_node_id) in fake_nodes:
+                fake_node_flags[idx] = 1
+            if original_node_id in graph_data.neutral_sinks:
+                neutral_sink_flags[idx] = 1
 
-        if self.log_debug and residual_graph is not None:
-            logbook.info(f'  Extracting flow from residual graph with {residual_graph.number_of_nodes()} nodes and {residual_graph.number_of_edges()} edges')
+        if self.log_debug:
+            logbook.info(f'  _extract_flow_dict graph type: {type(g)}')
+            logbook.info(f'  _extract_flow_dict graph capabilities: has_get_semantic_edge_flows={hasattr(g, "get_semantic_edge_flows")}, has_get_forward_edge_flows={hasattr(g, "get_forward_edge_flows")}, has_get_edge_residuals={hasattr(g, "get_edge_residuals")}, has_get_nx_graph={hasattr(g, "get_nx_graph")}')
+            logbook.info(f'  _extract_flow_dict fake_nodes={sorted(fake_nodes)}, neutral_sinks={sorted(graph_data.neutral_sinks)}')
 
-        for from_idx, to_idx, capacity, _ in graph_data.edges:
-            if residual_caps_by_edge is not None:
-                residual_capacity = residual_caps_by_edge.get((from_idx, to_idx), 0)
+        with self.perf_timer.begin_move_event('_extract_flow_dict.get_semantic_edge_flows'):
+            if semantic_flow_arrays is not None:
+                semantic_from_nodes, semantic_to_nodes, semantic_flow_amounts = semantic_flow_arrays(original_node_ids, fake_node_flags, neutral_sink_flags)
             else:
-                residual_capacity = 0
-                if residual_graph is not None and residual_graph.has_edge(from_idx, to_idx):
-                    residual_capacity = residual_graph[from_idx][to_idx].get('weight', 0)
+                if self.log_debug:
+                    logbook.info(f'  _extract_flow_dict missing get_semantic_edge_flows on graph object dir sample: {[name for name in dir(g) if "flow" in name or "edge" in name or "graph" in name]}')
+                raise AttributeError('Patched local PyMaxflow build is missing get_semantic_edge_flows(). Rebuild the in-repo submodule extension.')
 
-            flow_amount = capacity - residual_capacity
-            if flow_amount <= 0:
-                continue
-
-            node_from = graph_data.reverse_node_mapping.get(from_idx)
-            node_to = graph_data.reverse_node_mapping.get(to_idx)
-
-            if self.log_debug:
-                logbook.info(f'    Residual lookup: {from_idx} -> {to_idx}, residual={residual_capacity}, flow={flow_amount}, mapped={node_from} -> {node_to}')
-
-            if node_from is None or node_to is None:
-                continue
-
-            raw_flow_dict[node_from][node_to] = raw_flow_dict[node_from].get(node_to, 0) + flow_amount
-
-        pending_fake_edges: typing.Dict[int, typing.Dict[int, int]] = defaultdict(lambda: defaultdict(int))
-
-        for node_from, targets in raw_flow_dict.items():
-            if abs(node_from) in fake_nodes:
-                pending_fake_edges[node_from].update(targets)
-                continue
-
-            for node_to, flow_amount in targets.items():
-                if abs(node_to) in fake_nodes:
-                    pending_fake_edges[node_from][node_to] = pending_fake_edges[node_from].get(node_to, 0) + flow_amount
+        with self.perf_timer.begin_move_event('_extract_flow_dict.scan_edges'):
+            for idx in range(len(semantic_from_nodes)):
+                node_from = int(semantic_from_nodes[idx])
+                node_to = int(semantic_to_nodes[idx])
+                flow_amount = semantic_flow_amounts[idx]
+                if flow_amount <= 0:
                     continue
-                flow_dict[node_from][node_to] = flow_dict[node_from].get(node_to, 0) + flow_amount
 
-        while pending_fake_edges:
-            next_pending_fake_edges: typing.Dict[int, typing.Dict[int, int]] = defaultdict(lambda: defaultdict(int))
-            progressed = False
+                if self.log_debug:
+                    logbook.info(
+                        f'    Semantic flow lookup[{idx}]: '
+                        f'{node_from} -> {node_to}, '
+                        f'flow={flow_amount}, '
+                        f'from_is_fake={abs(node_from) in fake_nodes}, '
+                        f'to_is_fake={abs(node_to) in fake_nodes}'
+                    )
 
-            for node_from, targets in pending_fake_edges.items():
-                for node_to, flow_amount in targets.items():
-                    if flow_amount <= 0:
-                        continue
+                from_is_fake = abs(node_from) in fake_nodes
+                to_is_fake = abs(node_to) in fake_nodes
 
-                    if abs(node_to) not in fake_nodes:
-                        flow_dict[node_from][node_to] = flow_dict[node_from].get(node_to, 0) + flow_amount
-                        progressed = True
-                        continue
+                if not from_is_fake and not to_is_fake:
+                    flow_dict[node_from][node_to] = flow_dict[node_from].get(node_to, 0) + flow_amount
+                    if self.log_debug:
+                        logbook.info(f'      emitted semantic real flow edge {node_from} -> {node_to} += {flow_amount}')
+                    continue
 
-                    fake_targets = raw_flow_dict.get(node_to)
-                    if not fake_targets:
-                        continue
+                if from_is_fake and not to_is_fake and node_to in graph_data.neutral_sinks:
+                    flow_dict[node_from][node_to] = flow_dict[node_from].get(node_to, 0) + flow_amount
+                    if self.log_debug:
+                        logbook.info(f'      emitted semantic fake->neutral_sink dump edge {node_from} -> {node_to} += {flow_amount}')
+                    continue
 
-                    progressed = True
-                    for fake_target, fake_target_flow in fake_targets.items():
-                        forwarded_flow = min(flow_amount, fake_target_flow)
-                        if forwarded_flow <= 0:
-                            continue
-                        if abs(fake_target) in fake_nodes:
-                            next_pending_fake_edges[node_from][fake_target] = next_pending_fake_edges[node_from].get(fake_target, 0) + forwarded_flow
-                        else:
-                            flow_dict[node_from][fake_target] = flow_dict[node_from].get(fake_target, 0) + forwarded_flow
+                if self.log_debug:
+                    logbook.info(f'      ignored edge {node_from} -> {node_to} flow={flow_amount} due to fake-node handling')
 
-            if not progressed:
-                break
-
-            pending_fake_edges = next_pending_fake_edges
-
-        scan_elapsed = time.perf_counter() - scan_start
-        total_elapsed = time.perf_counter() - extract_start
-        logbook.info(
-            f'_extract_flow_dict split: '
-            f'get_residuals={get_residuals_elapsed:.5f}s, '
-            f'scan_edges={scan_elapsed:.5f}s, '
-            f'total={total_elapsed:.5f}s'
-        )
+        if self.log_debug:
+            non_zero_flow_dict = {src: dict(targets) for src, targets in flow_dict.items() if targets}
+            logbook.info(f'  _extract_flow_dict final flow_dict={non_zero_flow_dict}')
 
         return dict(flow_dict)
 
@@ -328,6 +314,13 @@ class NxToPyMaxflowConverter(object):
             # PyMaxflow uses bidirectional edges with separate forward/reverse capacities
             # For directed flows, we set reverse capacity to 0
             if u in node_to_idx and v in node_to_idx:
+                u_is_fake = abs(u) in nx_graph_data.fake_nodes
+                v_is_fake = abs(v) in nx_graph_data.fake_nodes
+                u_demand = demands.get(u, 0)
+                if nx_graph_data.cumulative_demand < 0 and not u_is_fake and v_is_fake and u_demand < 0:
+                    if self.log_debug:
+                        logbook.info(f'  Skipping PyMaxflow excess-source fake shortcut edge: {u} -> {v} cap={capacity}')
+                    continue
                 edges.append((node_to_idx[u], node_to_idx[v], capacity, 0))
 
         # Build terminal edges based on demands

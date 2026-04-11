@@ -173,10 +173,9 @@ class ArmyAnalyzer:
     def build_chokes_and_pathways(self, maxDist: int = 100):
         maxDistOffset = self.bMap.raw[self.tileA.tile_index] + maxDist
         chokeCounterMap = {}
-        for tile in self.map.pathable_tiles:
+        for tile in itertools.chain.from_iterable([self.map.pathable_tiles, [self.tileA]]):
             # build the pathway
-            path = self.pathWayLookupMatrix.raw[tile.tile_index]
-            if path:
+            if self.pathWayLookupMatrix.raw[tile.tile_index]:
                 continue
 
             path = self.build_pathway(tile, maxDistOffset)
@@ -199,6 +198,8 @@ class ArmyAnalyzer:
                     self.chokeWidths.raw[pathTile.tile_index] = cw
 
         self.shortestPathWay = self.pathWayLookupMatrix.raw[self.tileA.tile_index]
+        if self.shortestPathWay is None:
+            raise Exception("Yo, the fuck...?")
 
     # recurse
     def build_pathway(self, tile, maxDist) -> PathWay:

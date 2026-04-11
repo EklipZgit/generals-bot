@@ -475,7 +475,8 @@ class ArmyTracker(object):
 
                     if nextTile == origTile:
                         for path in paths:
-                            DebugHelper.log_in_debug_or_unit_tests(f'for army {str(nextArmy)} ignoring SPLIT fog path move into visible: {str(path)}')
+                            if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                                logbook.info(f'for army {str(nextArmy)} ignoring SPLIT fog path move into visible: {str(path)}')
                             nextArmy.include_path(path)
 
                         if not nextArmy.scrapped:
@@ -484,12 +485,13 @@ class ArmyTracker(object):
                         continue
                     for path in paths:
                         nextArmy.include_path(path)
-
-                        DebugHelper.log_in_debug_or_unit_tests(f'respecting army {str(nextArmy)} SPLIT fog path: {str(path)}')
+                        if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                            logbook.info(f'respecting army {str(nextArmy)} SPLIT fog path: {str(path)}')
 
                         self._move_fogged_army_along_path(nextArmy, path, armyAlreadyPopped=True)
 
-                        DebugHelper.log_in_debug_or_unit_tests(f'AFTER: army {str(nextArmy)}: {str(nextArmy.expectedPaths)}')
+                        if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                            logbook.info(f'AFTER: army {str(nextArmy)}: {str(nextArmy.expectedPaths)}')
                     if not nextArmy.scrapped:
                         self.armies[nextArmy.tile] = nextArmy
 
@@ -498,14 +500,17 @@ class ArmyTracker(object):
                     logbook.info(f'FOG DEBUG: Army {str(army)} has single path, moving normally')
                 for path in army.expectedPaths:
                     if path is not None and path.start.next is not None and path.start.next.tile.visible:
-                        DebugHelper.log_in_debug_or_unit_tests(f'for army {str(army)} ignoring fog path move into visible: {str(path)}')
+                        if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                            logbook.info(f'for army {str(army)} ignoring fog path move into visible: {str(path)}')
                         continue
 
-                    DebugHelper.log_in_debug_or_unit_tests(f'respecting army {str(army)} fog path: {str(path)}')
+                    if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                        logbook.info(f'respecting army {str(army)} fog path: {str(path)}')
 
                     self._move_fogged_army_along_path(army, path)
 
-                    DebugHelper.log_in_debug_or_unit_tests(f'AFTER: army {str(army)}: {str(army.expectedPaths)}')
+                    if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                        logbook.info(f'AFTER: army {str(army)}: {str(army.expectedPaths)}')
 
             if anyNextVisible:
                 origTile.army = origTileArmy
@@ -824,7 +829,7 @@ class ArmyTracker(object):
             # Ok then we need to recalculate the expected path.
             # TODO detect if enemy army is likely trying to defend
             army.expectedPaths = ArmyTracker.get_army_expected_path(self.map, army, self.general, self.player_targets)
-            logbook.info(f'set army {str(army)} expected paths to {str(army.expectedPaths)}')
+            # logbook.info(f'set army {str(army)} expected paths to {str(army.expectedPaths)}')
 
         if army.last_seen_turn > self.map.turn - 6:
             army.last_moved_turn = self.map.turn - 1
@@ -2080,12 +2085,12 @@ class ArmyTracker(object):
             matrices.append(map.distance_mapper.get_tile_dist_matrix(general))
         summed = MapMatrix.get_summed(matrices)
         # summed.negate()
-        pathD = ArmyTracker.get_expected_enemy_expansion_path(map, army.tile, general, negativeTiles=set(itertools.chain.from_iterable(p.tileList for p in paths)), maxTurns=remainingCycleTurns, prioMatrix=summed)
+        pathD = ArmyTracker.get_expected_enemy_expansion_path(map, army.tile, general, negativeTiles=set(itertools.chain.from_iterable(p.tileList for p in paths)), maxTurns=max(15, remainingCycleTurns), prioMatrix=summed)
         if pathD is not None and pathD.length > 0:
             paths.append(pathD)
             # MapMatrix.subtract_from_matrix(summed, map.distance_mapper.get_tile_dist_matrix(pathD.tail.tile))
             MapMatrix.add_to_matrix(summed, map.distance_mapper.get_tile_dist_matrix(pathD.tail.tile))
-            pathE = ArmyTracker.get_expected_enemy_expansion_path(map, army.tile, general, negativeTiles=set(itertools.chain.from_iterable(p.tileList for p in paths)), maxTurns=max(20, remainingCycleTurns), prioMatrix=summed)
+            pathE = ArmyTracker.get_expected_enemy_expansion_path(map, army.tile, general, negativeTiles=set(itertools.chain.from_iterable(p.tileList for p in paths)), maxTurns=max(15, remainingCycleTurns), prioMatrix=summed)
             if pathE is not None and pathE.length > 0:
                 paths.append(pathE)
 
@@ -2102,7 +2107,8 @@ class ArmyTracker(object):
                 pathF = ArmyTracker.get_expected_enemy_expansion_path(map, army.tile, general, negativeTiles=set(itertools.chain.from_iterable(p.tileList for p in paths)), prioMatrix=summed, maxTurns=remainingCycleTurns, skipTiles=skips)
                 if pathF is not None and pathF.length > 0:
                     paths.append(pathF)
-
+        for path in paths:
+            logbook.info(f"Army {army} NEW expected path: {path}")
         return paths
 
     @classmethod

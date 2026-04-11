@@ -8,7 +8,7 @@ import logbook
 import SearchUtils
 from ArmyAnalyzer import ArmyAnalyzer
 from BoardAnalyzer import BoardAnalyzer
-from DangerAnalyzer import ThreatObj, ThreatType
+from DangerAnalyzer import ThreatObj, ThreatType, DangerAnalyzer
 from Interfaces.TilePlanInterface import PathMove
 from Models import Move
 from Interfaces import TilePlanInterface, MapMatrixInterface
@@ -185,6 +185,13 @@ class InterceptionOptionInfo(TilePlanInterface):
         """
         return self._econ_value
 
+    def __iter__(self) -> typing.Iterator[PathMove]:
+        return iter(self.path)
+
+    @property
+    def tiles(self) -> typing.Iterable[Tile]:
+        return iter(self.path.tiles)
+
     @econValue.setter
     def econValue(self, value: float):
         self._econ_value = value
@@ -215,7 +222,8 @@ class InterceptionOptionInfo(TilePlanInterface):
         tgTile = 'NONE'
         if self.intercept is not None:
             tgTile = str(self.intercept.target_tile)
-        return f'int {self.path.start.tile}->{self.path.start.next.tile}..{self.path.tail.tile}@{tgTile}..{self.path.tail.tile}: {self.econValue:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt), re {self.recapture_turns}, dBlk {self.damage_blocked:.2f}, eRem {self.intercepting_army_remaining}, bct {self.best_case_intercept_moves}, wct {self.worst_case_intercept_moves}, del{self.requiredDelay}'
+        fm = self.path.get_first_move()
+        return f'int {fm}..{self.path.tail.tile}@{tgTile}..{self.path.tail.tile}: {self.econValue:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt), re {self.recapture_turns}, dBlk {self.damage_blocked:.2f}, eRem {self.intercepting_army_remaining}, bct {self.best_case_intercept_moves}, wct {self.worst_case_intercept_moves}, del{self.requiredDelay}'
         # else:
         #     return f'int ?@{self.intercept.target_tile}->?: {self.econValue:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt) dBlk {self.damage_blocked:.2f}, eRem {self.intercepting_army_remaining}, bct {self.best_case_intercept_moves}, del{self.requiredDelay}'
 
@@ -444,6 +452,7 @@ class ArmyInterceptor(object):
                 commonMaxExtraMoves[tile] = max(worstCaseExtraMoves, curExtraMoves)
                 commonMinDelayTurns[tile] = min(curMinDelayTurns, delayTurns)
 
+            self.ensure_threat_army_analysis(threat)
             SearchUtils.breadth_first_foreach_fast_no_neut_cities(self.map, threat.armyAnalysis.shortestPathWay.tiles, maxDepth=1, foreachFunc=foreachFunc)
             #     for movable in tile.movable:
             #         if movable in threat.armyAnalysis.interceptChokes or movable.isObstacle:

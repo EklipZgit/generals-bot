@@ -26,3 +26,4 @@ pybind11>=3.0.0
 pandas
 tqdm
 setuptools
+PyMaxflow

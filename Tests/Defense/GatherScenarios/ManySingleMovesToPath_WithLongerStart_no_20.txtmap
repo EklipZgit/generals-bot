@@ -8,8 +8,8 @@ M    b1   b10  M    M    M    M
 b10  b1   M    M    M    M    M
 M    b1   b10  M    M    M    M
 M    b1   b1   b10  M    M    M
-M    b1   b1   b1   b1   b1   b1
-M    a77  a1   a1   a1   a1   aG40
+M    a75  b1   b1   b1   b1   b1
+M    a1   a1   a1   a1   a1   aG40
 |    |    |    |    |    |    |
 player_index=1
 loadAsIs=True

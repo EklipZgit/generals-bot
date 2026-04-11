@@ -453,7 +453,8 @@ def prune_mst_to_army_with_values(
 
     def log_verbose(message: str):
         if not noLog:
-            DebugHelper.log_in_debug_or_unit_tests(message)
+            if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                logbook.info(message)
 
     turnIncFactor = (1 + turn) & 1
 

@@ -5,6 +5,7 @@ from collections import deque
 
 import logbook
 
+from Interfaces.TilePlanInterface import PathMove
 from Models import GatherTreeNode, Move
 from Gather import GatherDebug, GatherPrune
 from Interfaces import TilePlanInterface, MapMatrixInterface, TileSet
@@ -175,6 +176,16 @@ class GatherCapturePlan(TilePlanInterface):
                     self.tileList.append(t)
                     self.tileSet.add(t)
         return self._tileList
+
+    def __iter__(self) -> typing.Iterator[PathMove]:
+        return iter(PathMove(m.source, PathMove(m.dest, None, None, False), None, m.move_half) for m in self.get_move_list())
+
+    @property
+    def tiles(self) -> typing.Iterable[Tile]:
+        for n in GatherTreeNode.iterate_tree_nodes(self.root_nodes):
+            yield n.tile
+        for t in self.approximate_capture_tiles:
+            yield t
 
     @property
     def requiredDelay(self) -> int:

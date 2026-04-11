@@ -1984,10 +1984,18 @@ class BotCombatOps:
         if path.length == 0:
             return None
 
-        path.calculate_value(bot.general.player, teams=bot._map.team_ids_by_player_index)
+        val = path.calculate_value(bot.general.player, teams=bot._map.team_ids_by_player_index, ignoreNonPlayerArmy=True)
         logbook.info(f"  value subsegment = {str(path)}")
         timingTurn = (bot._map.turn + bot.timings.offsetTurns) % bot.timings.cycleTurns
         player = bot._map.players[bot.general.player]
+
+        vt = val / path.length + 1
+        skipped = []
+        while path.start.tile.army < vt:
+            skipped.append(path.pop_first_move())
+
+        if skipped:
+            bot.info(f"Skip {len(skipped)} bad launchmoves below {vt:.1f} ({"|".join([str(t.source) for t in skipped])})")
 
         enemyGenAdj = []
         for generalAdj in bot.general.adjacents:

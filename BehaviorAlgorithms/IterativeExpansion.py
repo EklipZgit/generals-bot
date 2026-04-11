@@ -27,6 +27,7 @@ from PerformanceTimer import PerformanceTimer
 from ViewInfo import ViewInfo, TargetStyle, PathColorer
 from base import Colors
 from base.client.map import MapBase, Tile
+from BehaviorAlgorithms.PyMaxFlowIteratorHelpers import compute_island_max_flow_with_pymaxflow
 
 
 ITERATIVE_EXPANSION_EN_CAP_VAL = 2.2
@@ -126,6 +127,10 @@ class FlowGraphMethod(Enum):
     NetworkSimplex = 1,
     CapacityScaling = 2,
     MinCostFlow = 3
+
+    # PyMaxflow max-flow methods (experimental)
+    PyMaxflowBoykovKolmogorov = 10  # Standard BK maxflow - fast but not min-cost
+    PyMaxflowWithNodeSplitting = 11  # Experimental: node splitting to approximate min-cost
 
 
 class IslandFlowNode(object):
@@ -319,8 +324,12 @@ class FlowExpansionPlanOptionCollection(object):
 
 
 class ArmyFlowExpander(object):
-    def __init__(self, map: MapBase):
+    def __init__(self, map: MapBase, perfTimer: PerformanceTimer | None = None):
         self.map: MapBase = map
+        self.perf_timer: PerformanceTimer = perfTimer
+        if self.perf_timer is None:
+            self.perf_timer = PerformanceTimer()
+            self.perf_timer.begin_move(map.turn)
         self.team: int = map.team_ids_by_player_index[map.player_index]
         self.friendlyGeneral: Tile = map.generals[map.player_index]
         self.target_team: int = -1
@@ -543,10 +552,6 @@ class ArmyFlowExpander(object):
 
         return []
 
-    #
-    # def ensure_min_cost_max_flow_graph_exists(self, islands: TileIslandBuilder):
-    #     self.ensure_flow_graph_exists(islands)
-
     def _get_island_max_flow_dict(
             self,
             islands: TileIslandBuilder,
@@ -574,8 +579,14 @@ class ArmyFlowExpander(object):
                 flowCost, flowDict = nx.flow.capacity_scaling(graphData.graph)
             elif method == FlowGraphMethod.MinCostFlow:
                 flowDict = nx.flow.min_cost_flow(graphData.graph)
+            elif method in (FlowGraphMethod.PyMaxflowBoykovKolmogorov, FlowGraphMethod.PyMaxflowWithNodeSplitting):
+                # Use PyMaxflow for max-flow computation
+                flowDict = compute_island_max_flow_with_pymaxflow(
+                    islands, graphData, self.perf_timer, method, self.log_debug
+                )
+                flowCost = -1  # PyMaxflow doesn't compute cost
             else:
-                raise NotImplemented(str(method))
+                raise NotImplementedError(str(method))
         except Exception as ex:
             if GatherDebug.USE_DEBUG_ASSERTS and self.log_debug:
                 self.live_render_invalid_flow_config(islands, graphData.graph, f'{ex}')
@@ -603,8 +614,16 @@ class ArmyFlowExpander(object):
         noNeutFlowDict = self._get_island_max_flow_dict(islands, self.nxGraphDataNoNeut, method)
 
         if self.log_debug:
-            logbook.info(f'withNeutFlowDict: {repr(withNeutFlowDict)}')
-            logbook.info(f'noNeutFlowDict: {repr(noNeutFlowDict)}')
+            logbook.info(f'withNeutFlowDict keys: {list(withNeutFlowDict.keys())}')
+            for src, targets in withNeutFlowDict.items():
+                non_zero = {k: v for k, v in targets.items() if v != 0}
+                if non_zero:
+                    logbook.info(f'  {src} -> {non_zero}')
+            logbook.info(f'noNeutFlowDict keys: {list(noNeutFlowDict.keys())}')
+            for src, targets in noNeutFlowDict.items():
+                non_zero = {k: v for k, v in targets.items() if v != 0}
+                if non_zero:
+                    logbook.info(f'  {src} -> {non_zero}')
 
         start = time.perf_counter()
 
@@ -639,7 +658,8 @@ class ArmyFlowExpander(object):
 
             for targetNodeId, targetFlowAmount in targets.items():
                 if isThroughput and sourceNode:
-                    if targetNodeId != -nodeId:  # and targetNodeId not in self.nxGraphData.fake_nodes and nodeId not in self.nxGraphData.fake_nodes
+                    # Allow flow to output node OR to fake nodes (balancing nodes)
+                    if targetNodeId != -nodeId and targetNodeId not in self.nxGraphData.fake_nodes and nodeId not in self.nxGraphData.fake_nodes:
                         raise Exception(f'input node flowed to something other than output node...?  {sourceNode} ({targetFlowAmount}a) -> {targetNodeId}')
                     sourceNode.army_flow_received += targetFlowAmount
                     continue
@@ -779,22 +799,30 @@ class ArmyFlowExpander(object):
         targetIslands = islands.tile_islands_by_team_id[targetTeam]
 
         if self.use_min_cost_flow_edges_only:
-            self.ensure_flow_graph_exists(islands)
+            # method = FlowGraphMethod.CapacityScaling  # 67ms on test_should_recognize_gather_into_top_path_is_best (with single-tile islands on borders)
+            # method = FlowGraphMethod.MinCostFlow    # 6.5ms on test_should_recognize_gather_into_top_path_is_best (with single-tile islands on borders)
+            # method = FlowGraphMethod.NetworkSimplex    # 9ms on test_should_recognize_gather_into_top_path_is_best (with single-tile islands on borders)
+            # method = FlowGraphMethod.MinCostFlow
+            method = FlowGraphMethod.PyMaxflowBoykovKolmogorov
+            # method = FlowGraphMethod.PyMaxflowWithNodeSplitting
 
-            self.flow_graph = self._build_max_flow_min_cost_flow_nodes(
-                islands,
-                ourIslands,
-                targetIslands,
-                searchingPlayer,
-                turns,
-                # blockGatherFromEnemyBorders=
-                includeNeutralDemand=True,
-                negativeTiles=negativeTiles,
-                # method=FlowGraphMethod.CapacityScaling  # 67ms on test_should_recognize_gather_into_top_path_is_best (with single-tile islands on borders)
-                # method=FlowGraphMethod.MinCostFlow    # 6.5ms on test_should_recognize_gather_into_top_path_is_best (with single-tile islands on borders)
-                method=FlowGraphMethod.NetworkSimplex    # 9ms on test_should_recognize_gather_into_top_path_is_best (with single-tile islands on borders)
-                # method=FlowGraphMethod.MinCostFlow
-            )
+            # Build the flow graph data - needed by both NetworkX and PyMaxflow
+            # PyMaxflow converts from NetworkX graph format internally
+            with self.perf_timer.begin_move_event('ensure_flow_graph_exists'):
+                self.ensure_flow_graph_exists(islands)
+
+            with self.perf_timer.begin_move_event('_build_max_flow_min_cost_flow_nodes'):
+                self.flow_graph = self._build_max_flow_min_cost_flow_nodes(
+                    islands,
+                    ourIslands,
+                    targetIslands,
+                    searchingPlayer,
+                    turns,
+                    # blockGatherFromEnemyBorders=
+                    includeNeutralDemand=True,
+                    negativeTiles=negativeTiles,
+                    method=method
+                )
 
         turnsUsed: int
 
@@ -829,231 +857,129 @@ class ArmyFlowExpander(object):
         else:
             friendlyBorderingEnemy = set()
 
-        q: SearchUtils.HeapQueueMax[typing.Tuple[
-            float,
-            int,
-            int,
-            int,
-            int,
-            typing.Deque[int],
-            float,
-            int,
-            int,
-            int,
-            IslandFlowNode,
-            IslandFlowNode,
-            typing.Set[TileIsland],
-            typing.Dict[TileIsland, IslandFlowNode],
-            typing.Dict[TileIsland, IslandFlowNode],
-            typing.Dict[int, IslandFlowNode],
-            typing.Dict[int, typing.Tuple[typing.Dict[int, IslandFlowNode], float, int, int, TileIsland | None, TileIsland | None, int | None, int]],
-        ]] = SearchUtils.HeapQueueMax()
+        with self.perf_timer.begin_move_event('main flow node aStar in find_flow_plans'):
+            q: SearchUtils.HeapQueueMax[typing.Tuple[
+                float,
+                int,
+                int,
+                int,
+                int,
+                typing.Deque[int],
+                float,
+                int,
+                int,
+                int,
+                IslandFlowNode,
+                IslandFlowNode,
+                typing.Set[TileIsland],
+                typing.Dict[TileIsland, IslandFlowNode],
+                typing.Dict[TileIsland, IslandFlowNode],
+                typing.Dict[int, IslandFlowNode],
+                typing.Dict[int, typing.Tuple[typing.Dict[int, IslandFlowNode], float, int, int, TileIsland | None, TileIsland | None, int | None, int]],
+            ]] = SearchUtils.HeapQueueMax()
 
-        queueIterCount = 0
-        tileIterCount = 0
-        dumpIterCount = 0
-        tieBreaker = 0
+            queueIterCount = 0
+            tileIterCount = 0
+            dumpIterCount = 0
+            tieBreaker = 0
 
-        globalVisited = set()
+            globalVisited = set()
 
-        for targetIsland in islands.all_tile_islands:
-            if targetIsland.team == myTeam:
-                continue
-            for adjacentFriendlyIsland in targetIsland.border_islands:
-                if adjacentFriendlyIsland.team != myTeam:
+            for targetIsland in islands.all_tile_islands:
+                if targetIsland.team == myTeam:
                     continue
-
-                if not self._is_flow_allowed(adjacentFriendlyIsland, targetIsland, armyAmount=0):
-                    continue
-
-                tgCapValue = capValueByTeam[targetIsland.team]
-                tieBreaker += 1
-                pairOptions = {}
-                opts[(targetIsland, adjacentFriendlyIsland)] = pairOptions
-
-                sourceNode = IslandFlowNode(adjacentFriendlyIsland, desiredArmy=0 - adjacentFriendlyIsland.sum_army + adjacentFriendlyIsland.tile_count)
-                destNode = IslandFlowNode(targetIsland, desiredArmy=targetIsland.sum_army + targetIsland.tile_count)
-                if self.log_debug:
-                    logbook.info(f'ADDING EDGE (start) FROM {sourceNode} TO {destNode}')
-                sourceNode.set_flow_to(destNode, 0)
-                if not self.use_all_pairs_visited:
-                    visited = set()
-                else:
-                    visited = globalVisited
-                # visited.add(targetIsland)
-                # visited.add(adjacentFriendlyIsland)
-                frLeftoverIdx = sourceNode.island.tile_count - 1
-                tgTiles = deque(t.army for t in targetIsland.tiles_by_army)
-
-                nextTargs = {}
-                nextFriendlies = {}
-
-                for altNext in adjacentFriendlyIsland.border_islands:
-                    if altNext == targetIsland:
+                for adjacentFriendlyIsland in targetIsland.border_islands:
+                    if adjacentFriendlyIsland.team != myTeam:
                         continue
-                    # if altNext.team != myTeam and altNext not in nextTargs:
-                    #     nextTargs[altNext] = sourceNode
-                    if altNext.team == myTeam and altNext not in nextFriendlies:
-                        # if altNext not in friendlyBorderingEnemy:
-                        nextFriendlies[altNext] = sourceNode
 
-                for altNext in targetIsland.border_islands:
-                    if altNext == adjacentFriendlyIsland:
+                    if not self._is_flow_allowed(adjacentFriendlyIsland, targetIsland, armyAmount=0):
                         continue
-                    # if altNext.team != myTeam and altNext not in nextTargs:
-                    #     nextTargs[altNext] = destNode
-                    # if altNext.team == myTeam and altNext not in nextFriendlies:
-                    #     # if altNext not in friendlyBorderingEnemy:
-                    #     nextFriendlies[altNext] = destNode
 
-                    # allow 'targeting' our own tiles, as we may need to pass through them on the way to capture lots of enemy tiles.
-                    if altNext not in nextTargs and altNext not in nextFriendlies:
-                        nextTargs[altNext] = destNode
+                    tgCapValue = capValueByTeam[targetIsland.team]
+                    tieBreaker += 1
+                    pairOptions = {}
+                    opts[(targetIsland, adjacentFriendlyIsland)] = pairOptions
 
-                self.enqueue(
-                    q,
-                    self._get_a_star_priority_val(tgCapValue, 0.0, 0, 0, frLeftoverIdx, adjacentFriendlyIsland, targetIsland, searchTurns=turns, tgTiles=tgTiles),
-                    0,
-                    turns + 1,  # turns + 1 (and turns left -1) because the very first tile doesn't count as a move, as only the dest counts.
-                    targetIsland.sum_army + targetIsland.tile_count,
-                    tieBreaker,
-                    tgTiles,
-                    0.0,
-                    0,
-                    0,  # frTileLeftoverArmy,
-                    frLeftoverIdx,  # friendlyTileLeftoverIdx,
-                    destNode,
-                    sourceNode,
-                    visited,
-                    nextTargs,  # nextTargets
-                    nextFriendlies,  # nextFriendlies
-                    {sourceNode.island.unique_id: sourceNode},  # rootNodes
-                    pairOptions
-                )
+                    sourceNode = IslandFlowNode(adjacentFriendlyIsland, desiredArmy=0 - adjacentFriendlyIsland.sum_army + adjacentFriendlyIsland.tile_count)
+                    destNode = IslandFlowNode(targetIsland, desiredArmy=targetIsland.sum_army + targetIsland.tile_count)
+                    if self.log_debug:
+                        logbook.info(f'ADDING EDGE (start) FROM {sourceNode} TO {destNode}')
+                    sourceNode.set_flow_to(destNode, 0)
+                    if not self.use_all_pairs_visited:
+                        visited = set()
+                    else:
+                        visited = globalVisited
+                    # visited.add(targetIsland)
+                    # visited.add(adjacentFriendlyIsland)
+                    frLeftoverIdx = sourceNode.island.tile_count - 1
+                    tgTiles = deque(t.army for t in targetIsland.tiles_by_army)
 
-        start = time.perf_counter()
-        if cutoffTime is None:
-            cutoffTime = start + 300.0
+                    nextTargs = {}
+                    nextFriendlies = {}
 
-        fullTime = cutoffTime - start
-        stage1Time = fullTime / 6
-        stage2Time = 2 * fullTime / 6
-        stage3Time = 3 * fullTime / 6
-        stage4Time = 4 * fullTime / 6
+                    for altNext in adjacentFriendlyIsland.border_islands:
+                        if altNext == targetIsland:
+                            continue
+                        # if altNext.team != myTeam and altNext not in nextTargs:
+                        #     nextTargs[altNext] = sourceNode
+                        if altNext.team == myTeam and altNext not in nextFriendlies:
+                            # if altNext not in friendlyBorderingEnemy:
+                            nextFriendlies[altNext] = sourceNode
 
-        self._dynamic_heuristic_ratio = 1.0
-        self._dynamic_heuristic_falsehood_ratio = 0.0
-        stage1Ratio = 1.1
-        stage2Ratio = 1.3
-        stage3Ratio = 1.5
-        stage4Ratio = 2.0
-        logbook.info(f'beginning flow expand heuristic loop for {fullTime:.5f}s')
+                    for altNext in targetIsland.border_islands:
+                        if altNext == adjacentFriendlyIsland:
+                            continue
+                        # if altNext.team != myTeam and altNext not in nextTargs:
+                        #     nextTargs[altNext] = destNode
+                        # if altNext.team == myTeam and altNext not in nextFriendlies:
+                        #     # if altNext not in friendlyBorderingEnemy:
+                        #     nextFriendlies[altNext] = destNode
 
-        while q:
-            (
-                negVt,
-                turnsUsed,
-                turnsLeft,
-                uncappedTargetIslandArmy,
-                randomTieBreak,
-                targetTiles,
-                econValue,
-                gathSum,
-                frLeftoverArmy,
-                friendlyTileLeftoverIdx,
-                targetCalculatedNode,
-                friendlyUncalculatedNode,
-                visited,
-                nextTargets,
-                nextFriendlies,
-                rootNodes,
-                pairOptions
-            ) = q.get()
+                        # allow 'targeting' our own tiles, as we may need to pass through them on the way to capture lots of enemy tiles.
+                        if altNext not in nextTargs and altNext not in nextFriendlies:
+                            nextTargs[altNext] = destNode
 
-            # TODO this should not be necessary...
-            if turnsLeft <= 0:
-                continue
+                    self.enqueue(
+                        q,
+                        self._get_a_star_priority_val(tgCapValue, 0.0, 0, 0, frLeftoverIdx, adjacentFriendlyIsland, targetIsland, searchTurns=turns, tgTiles=tgTiles),
+                        0,
+                        turns + 1,  # turns + 1 (and turns left -1) because the very first tile doesn't count as a move, as only the dest counts.
+                        targetIsland.sum_army + targetIsland.tile_count,
+                        tieBreaker,
+                        tgTiles,
+                        0.0,
+                        0,
+                        0,  # frTileLeftoverArmy,
+                        frLeftoverIdx,  # friendlyTileLeftoverIdx,
+                        destNode,
+                        sourceNode,
+                        visited,
+                        nextTargs,  # nextTargets
+                        nextFriendlies,  # nextFriendlies
+                        {sourceNode.island.unique_id: sourceNode},  # rootNodes
+                        pairOptions
+                    )
 
-            targetTiles = targetTiles.copy()
-            # TODO THESE ARE FOR DEBUGGING PURPOSES TO ENSURE NO REFERENCE CROSS SECTION AND TO WHITTLE DOWN WHICH VARIABLE IS THE PROBLEM:
-            # tempLookup = {}
-            # rootNodes = {n.island.unique_id: n for n in _deep_copy_flow_nodes(rootNodes.values(), tempLookup)}
-            # targetCalculatedNode = _deep_copy_flow_node(targetCalculatedNode, tempLookup)
-            # friendlyUncalculatedNode = _deep_copy_flow_node(friendlyUncalculatedNode, tempLookup)
-            # nextFriendlies = {island: _deep_copy_flow_node(n, tempLookup) for island, n in nextFriendlies.items()}
-            # nextTargets = {island: _deep_copy_flow_node(n, tempLookup) for island, n in nextTargets.items()}
-            # END TODO
+            start = time.perf_counter()
+            if cutoffTime is None:
+                cutoffTime = start + 300.0
 
-            # visited = visited.copy()
+            fullTime = cutoffTime - start
+            stage1Time = fullTime / 6
+            stage2Time = 2 * fullTime / 6
+            stage3Time = 3 * fullTime / 6
+            stage4Time = 4 * fullTime / 6
 
-            targetCalculated = targetCalculatedNode.island
-            friendlyUncalculated = friendlyUncalculatedNode.island
-            if self.log_debug:
-                logbook.info(
-                    f'\r\n  popped {friendlyUncalculated} -...-> {targetCalculated}'
-                    f'\r\n        negVt: {negVt}'
-                    f'\r\n        rootNodes: {" | ".join(str(n.island.shortIdent()) for n in rootNodes.values())}  ->  {" | ".join(str(n.island.shortIdent()) for n in ArmyFlowExpander.iterate_flow_children(rootNodes.values()))}'
-                    f'\r\n        nextFriendlies {" | ".join(str(n.shortIdent()) for n in nextFriendlies.keys())}  ->  {" | ".join(str(n.island.shortIdent()) for n in ArmyFlowExpander.iterate_flow_nodes(nextFriendlies.values()))}'
-                    f'\r\n        nextTargets {" | ".join(str(n.shortIdent()) for n in nextTargets.keys())}  <-  {" | ".join(str(n.island.shortIdent()) for n in ArmyFlowExpander.iterate_flow_nodes(nextTargets.values()))}'
-                    f'\r\n        turnsUsed: {turnsUsed}, turnsLeft: {turnsLeft}'
-                    f'\r\n        uncappedTargetIslandArmy: {uncappedTargetIslandArmy}, targetTiles: {repr(targetTiles)}'
-                    f'\r\n        econValue: {econValue:.3f}, gathSum: {gathSum}'
-                    f'\r\n        frLeftoverArmy: {frLeftoverArmy}, friendlyTileLeftoverIdx: {friendlyTileLeftoverIdx}'
-                    f'\r\n        visited: {({t.shortIdent() for t in visited})}'
-                )
-            queueIterCount += 1
-            if queueIterCount & 31 == 0:
-                used = time.perf_counter() - start
-                if used > fullTime:
-                    logbook.info(f'flow expand terminating early due to used {used:.5f}s vs fullTime {fullTime:.5f}')
-                    break
-                if self._dynamic_heuristic_ratio < stage4Ratio and used > stage4Time:
-                    logbook.info(f'flow expand swapping heur ratio to {stage4Ratio} because used {used:.5f}s vs stage4Time {stage4Time:.5f}')
-                    self._dynamic_heuristic_ratio = stage4Ratio
-                    self._dynamic_heuristic_falsehood_ratio = self._dynamic_heuristic_ratio - 1.0
-                elif self._dynamic_heuristic_ratio < stage3Ratio and used > stage3Time:
-                    logbook.info(f'flow expand swapping heur ratio to {stage3Ratio} because used {used:.5f}s vs stage3Time {stage3Time:.5f}')
-                    self._dynamic_heuristic_ratio = stage3Ratio
-                    self._dynamic_heuristic_falsehood_ratio = self._dynamic_heuristic_ratio - 1.0
-                elif self._dynamic_heuristic_ratio < stage2Ratio and used > stage2Time:
-                    logbook.info(f'flow expand swapping heur ratio to {stage2Ratio} because used {used:.5f}s vs stage2Time {stage2Time:.5f}')
-                    self._dynamic_heuristic_ratio = stage2Ratio
-                    self._dynamic_heuristic_falsehood_ratio = self._dynamic_heuristic_ratio - 1.0
-                elif self._dynamic_heuristic_ratio < stage1Ratio and used > stage1Time:
-                    logbook.info(f'flow expand swapping heur ratio to {stage1Ratio} because used {used:.5f}s vs stage1Time {stage1Time:.5f}')
-                    self._dynamic_heuristic_ratio = stage1Ratio
-                    self._dynamic_heuristic_falsehood_ratio = self._dynamic_heuristic_ratio - 1.0
+            self._dynamic_heuristic_ratio = 1.0
+            self._dynamic_heuristic_falsehood_ratio = 0.0
+            stage1Ratio = 1.1
+            stage2Ratio = 1.3
+            stage3Ratio = 1.5
+            stage4Ratio = 2.0
+            logbook.info(f'beginning flow expand heuristic loop for {fullTime:.5f}s')
 
-            # we re-visit the same friendly node if we were unable to use all of its army on the last target cycle.
-            # if friendlyUncalculated in visited and friendlyUncalculated.:
-            #     logbook.info(f'DOUBLE VISITING {friendlyUncalculated} ???')
-            # continue
-
-            # TODO orig
-            if not self.log_debug:
-                visited.add(friendlyUncalculated)
-                visited.add(targetCalculated)
-            else:
-                if friendlyUncalculated not in visited:
-                    logbook.info(f'    visiting friendlyUncalculated {friendlyUncalculated}')
-                    visited.add(friendlyUncalculated)
-                if targetCalculated not in visited:
-                    logbook.info(f'    visiting targetCalculated {targetCalculated}')
-                    visited.add(targetCalculated)
-
-            # if friendlyTileLeftoverIdx < 0:
-            #     # TODO this shouldn't be necessary if my code is correct
-            #     if self.log_debug:
-            #         logbook.info(f'    Resetting friendlyTileLeftoverIdx {friendlyTileLeftoverIdx} frLeftoverArmy {frLeftoverArmy}')
-            #     friendlyTileLeftoverIdx = friendlyUncalculated.tile_count - 1
-            #     frLeftoverArmy = friendlyUncalculated.tiles_by_army[friendlyTileLeftoverIdx].army - 1
-            #     if self.log_debug:
-            #         logbook.info(f'    --Reset to friendlyTileLeftoverIdx {friendlyTileLeftoverIdx} frLeftoverArmy {frLeftoverArmy}')
-
-            # TODO remove the turnsLeft > 1, this shouldn't be necessary, something is doing a final increment after running out of moves and then letting us re-enter this loop.
-            if self.use_debug_asserts:
-                self.assertEverythingSafe(
-                    turns,
+            while q:
+                (
                     negVt,
                     turnsUsed,
                     turnsLeft,
@@ -1071,134 +997,237 @@ class ArmyFlowExpander(object):
                     nextFriendlies,
                     rootNodes,
                     pairOptions
-                )
-            # logbook.info(f'Processing {targetCalculated.name} <- {friendlyUncalculated.name}')
+                ) = q.get()
 
-            nextGathedSum = gathSum
-            capValue = capValueByTeam[targetCalculated.team]
+                # TODO this should not be necessary...
+                if turnsLeft <= 0:
+                    continue
 
-            # # have to leave 1's behind when leaving our own land
-            # friendlyCappingArmy = friendlyUncalculated.sum_army - friendlyUncalculated.tile_count
-            # necessaryToFullyCap = uncappedTargetIslandArmy
-            # # have to leave 1's behind when capping enemy land, too
-            # armyLeftIfFullyCapping = friendlyCappingArmy - necessaryToFullyCap
-            # turnsLeftIfFullyCapping = turnsLeft - numTilesLeftToCapFromTarget - friendlyUncalculated.tile_count
-            # canFullyCap = turnsLeftIfFullyCapping >= 0 and armyLeftIfFullyCapping >= 0
-            #
-            # canFullyCap = False
-            # validOpt = True
-            # # TODO turn short circuit back on? Probably no because then we can't do the partial captures...?
-            # if False and canFullyCap:
-            #     # then we can actually dump all in and shortcut the more expensive logic
-            #     turnsLeft = turnsLeftIfFullyCapping
-            #     uncappedTargetIslandArmy = 0 - armyLeftIfFullyCapping
-            #     econValue += numTilesLeftToCapFromTarget * capValue
-            #     nextGathedSum += friendlyCappingArmy
-            #     numTilesLeftToCapFromTarget = 0
-            #
-            #     turnsUsed = turns - turnsLeft
-            #     existingBestTuple = pairOptions.get(turnsUsed, None)
-            #
-            #     if validOpt and (existingBestTuple is None or existingBestTuple[1] / existingBestTuple[2] < econValue / turnsUsed):
-            #         # turnsUsed == 13 and ArmyFlowExpander.is_any_tile_in_flow(rootNodes, [self.map.GetTile(14, 1), self.map.GetTile(13, 0)])
-            #         pairOptions[turnsUsed] = (
-            #             rootNodes,
-            #             econValue,
-            #             turnsUsed,
-            #             0 - uncappedTargetIslandArmy,
-            #             None,  # TODO this may be an incomplete capture... right...?
-            #             None,
-            #             None,
-            #             nextGathedSum
-            #         )
-            # else:
-            if True:
-                # then we can't dump it all in, have to do iterative check.
+                targetTiles = targetTiles.copy()
+                # TODO THESE ARE FOR DEBUGGING PURPOSES TO ENSURE NO REFERENCE CROSS SECTION AND TO WHITTLE DOWN WHICH VARIABLE IS THE PROBLEM:
+                # tempLookup = {}
+                # rootNodes = {n.island.unique_id: n for n in _deep_copy_flow_nodes(rootNodes.values(), tempLookup)}
+                # targetCalculatedNode = _deep_copy_flow_node(targetCalculatedNode, tempLookup)
+                # friendlyUncalculatedNode = _deep_copy_flow_node(friendlyUncalculatedNode, tempLookup)
+                # nextFriendlies = {island: _deep_copy_flow_node(n, tempLookup) for island, n in nextFriendlies.items()}
+                # nextTargets = {island: _deep_copy_flow_node(n, tempLookup) for island, n in nextTargets.items()}
+                # END TODO
 
-                (
-                    uncappedTargetIslandArmy,
-                    dumpIterCount,
-                    econValue,
-                    frLeftoverArmy,
-                    friendlyTileLeftoverIdx,
-                    remainingFrIslandArmy,
-                    nextGathedSum,
-                    tileIterCount,
-                    turnsLeft
-                ) = self._execute_island_tile_gather_capture_loop_and_record_options(
-                    uncappedTargetIslandArmy,
-                    capValue,
-                    dumpIterCount,
-                    econValue,
-                    frLeftoverArmy,
-                    friendlyTileLeftoverIdx,
-                    friendlyUncalculated,
-                    nextGathedSum,
-                    pairOptions,
-                    rootNodes,
-                    targetCalculated,
-                    targetTiles,
-                    tileIterCount,
-                    turns,
-                    turnsLeft)
+                # visited = visited.copy()
 
-                if self.use_debug_asserts and remainingFrIslandArmy != 0:
-                    if uncappedTargetIslandArmy != 0 and uncappedTargetIslandArmy <= remainingFrIslandArmy and friendlyTileLeftoverIdx >= 0:
-                        raise Exception(
-                            f'Expected uncappedTargetIslandArmy {uncappedTargetIslandArmy} to be >= remainingFrIslandArmy {remainingFrIslandArmy}, turnsLeft {turnsLeft} (fr leftover {frLeftoverArmy}, index {friendlyTileLeftoverIdx}, targetTiles {targetTiles}) to always have been reduced to 0 unless there are no target tiles left')
+                targetCalculated = targetCalculatedNode.island
+                friendlyUncalculated = friendlyUncalculatedNode.island
+                if self.log_debug:
+                    logbook.info(
+                        f'\r\n  popped {friendlyUncalculated} -...-> {targetCalculated}'
+                        f'\r\n        negVt: {negVt}'
+                        f'\r\n        rootNodes: {" | ".join(str(n.island.shortIdent()) for n in rootNodes.values())}  ->  {" | ".join(str(n.island.shortIdent()) for n in ArmyFlowExpander.iterate_flow_children(rootNodes.values()))}'
+                        f'\r\n        nextFriendlies {" | ".join(str(n.shortIdent()) for n in nextFriendlies.keys())}  ->  {" | ".join(str(n.island.shortIdent()) for n in ArmyFlowExpander.iterate_flow_nodes(nextFriendlies.values()))}'
+                        f'\r\n        nextTargets {" | ".join(str(n.shortIdent()) for n in nextTargets.keys())}  <-  {" | ".join(str(n.island.shortIdent()) for n in ArmyFlowExpander.iterate_flow_nodes(nextTargets.values()))}'
+                        f'\r\n        turnsUsed: {turnsUsed}, turnsLeft: {turnsLeft}'
+                        f'\r\n        uncappedTargetIslandArmy: {uncappedTargetIslandArmy}, targetTiles: {repr(targetTiles)}'
+                        f'\r\n        econValue: {econValue:.3f}, gathSum: {gathSum}'
+                        f'\r\n        frLeftoverArmy: {frLeftoverArmy}, friendlyTileLeftoverIdx: {friendlyTileLeftoverIdx}'
+                        f'\r\n        visited: {({t.shortIdent() for t in visited})}'
+                    )
+                queueIterCount += 1
+                if queueIterCount & 31 == 0:
+                    used = time.perf_counter() - start
+                    if used > fullTime:
+                        logbook.info(f'flow expand terminating early due to used {used:.5f}s vs fullTime {fullTime:.5f}')
+                        break
+                    if self._dynamic_heuristic_ratio < stage4Ratio and used > stage4Time:
+                        logbook.info(f'flow expand swapping heur ratio to {stage4Ratio} because used {used:.5f}s vs stage4Time {stage4Time:.5f}')
+                        self._dynamic_heuristic_ratio = stage4Ratio
+                        self._dynamic_heuristic_falsehood_ratio = self._dynamic_heuristic_ratio - 1.0
+                    elif self._dynamic_heuristic_ratio < stage3Ratio and used > stage3Time:
+                        logbook.info(f'flow expand swapping heur ratio to {stage3Ratio} because used {used:.5f}s vs stage3Time {stage3Time:.5f}')
+                        self._dynamic_heuristic_ratio = stage3Ratio
+                        self._dynamic_heuristic_falsehood_ratio = self._dynamic_heuristic_ratio - 1.0
+                    elif self._dynamic_heuristic_ratio < stage2Ratio and used > stage2Time:
+                        logbook.info(f'flow expand swapping heur ratio to {stage2Ratio} because used {used:.5f}s vs stage2Time {stage2Time:.5f}')
+                        self._dynamic_heuristic_ratio = stage2Ratio
+                        self._dynamic_heuristic_falsehood_ratio = self._dynamic_heuristic_ratio - 1.0
+                    elif self._dynamic_heuristic_ratio < stage1Ratio and used > stage1Time:
+                        logbook.info(f'flow expand swapping heur ratio to {stage1Ratio} because used {used:.5f}s vs stage1Time {stage1Time:.5f}')
+                        self._dynamic_heuristic_ratio = stage1Ratio
+                        self._dynamic_heuristic_falsehood_ratio = self._dynamic_heuristic_ratio - 1.0
 
-                # Necessary because when we terminate the loop early above due to running out of TARGET tiles, we need to keep track of the remaining army we have to gather for the second loop below.
-                # TODO ACTUALLY THIS IS COVERED BY frLeftoverArmy NOW, NO...?
-                # uncappedTargetIslandArmy -= remainingFrIslandArmy
+                # we re-visit the same friendly node if we were unable to use all of its army on the last target cycle.
+                # if friendlyUncalculated in visited and friendlyUncalculated.:
+                #     logbook.info(f'DOUBLE VISITING {friendlyUncalculated} ???')
+                # continue
 
-            if turnsLeft == 0:
-                continue
+                # TODO orig
+                if not self.log_debug:
+                    visited.add(friendlyUncalculated)
+                    visited.add(targetCalculated)
+                else:
+                    if friendlyUncalculated not in visited:
+                        logbook.info(f'    visiting friendlyUncalculated {friendlyUncalculated}')
+                        visited.add(friendlyUncalculated)
+                    if targetCalculated not in visited:
+                        logbook.info(f'    visiting targetCalculated {targetCalculated}')
+                        visited.add(targetCalculated)
 
-            if not targetTiles:
-                # we need to include new targets, then.
-                dumpIterCount, tieBreaker, tileIterCount = self._queue_next_targets_and_next_friendlies(
-                    uncappedTargetIslandArmy,
-                    capValueByTeam,
-                    dumpIterCount,
-                    econValue,
-                    frLeftoverArmy,
-                    friendlyBorderingEnemy,
-                    friendlyTileLeftoverIdx,
-                    friendlyUncalculated,
-                    myTeam,
-                    nextFriendlies,
-                    nextGathedSum,
-                    nextTargets,
-                    pairOptions,
-                    q,
-                    rootNodes,
-                    targetTeam,
-                    tieBreaker,
-                    tileIterCount,
-                    targetTiles,
-                    turns,
-                    turnsLeft,
-                    visited)
-            else:
-                tieBreaker = self._queue_next_friendlies_only(
-                    uncappedTargetIslandArmy,
-                    capValue,
-                    econValue,
-                    frLeftoverArmy,
-                    friendlyUncalculated,
-                    myTeam,
-                    nextFriendlies,
-                    nextGathedSum,
-                    nextTargets,
-                    pairOptions,
-                    q,
-                    rootNodes,
-                    targetCalculatedNode,
-                    targetTiles,
-                    tieBreaker,
-                    turns,
-                    turnsLeft,
-                    visited)
+                # if friendlyTileLeftoverIdx < 0:
+                #     # TODO this shouldn't be necessary if my code is correct
+                #     if self.log_debug:
+                #         logbook.info(f'    Resetting friendlyTileLeftoverIdx {friendlyTileLeftoverIdx} frLeftoverArmy {frLeftoverArmy}')
+                #     friendlyTileLeftoverIdx = friendlyUncalculated.tile_count - 1
+                #     frLeftoverArmy = friendlyUncalculated.tiles_by_army[friendlyTileLeftoverIdx].army - 1
+                #     if self.log_debug:
+                #         logbook.info(f'    --Reset to friendlyTileLeftoverIdx {friendlyTileLeftoverIdx} frLeftoverArmy {frLeftoverArmy}')
+
+                # TODO remove the turnsLeft > 1, this shouldn't be necessary, something is doing a final increment after running out of moves and then letting us re-enter this loop.
+                if self.use_debug_asserts:
+                    self.assertEverythingSafe(
+                        turns,
+                        negVt,
+                        turnsUsed,
+                        turnsLeft,
+                        uncappedTargetIslandArmy,
+                        randomTieBreak,
+                        targetTiles,
+                        econValue,
+                        gathSum,
+                        frLeftoverArmy,
+                        friendlyTileLeftoverIdx,
+                        targetCalculatedNode,
+                        friendlyUncalculatedNode,
+                        visited,
+                        nextTargets,
+                        nextFriendlies,
+                        rootNodes,
+                        pairOptions
+                    )
+                # logbook.info(f'Processing {targetCalculated.name} <- {friendlyUncalculated.name}')
+
+                nextGathedSum = gathSum
+                capValue = capValueByTeam[targetCalculated.team]
+
+                # # have to leave 1's behind when leaving our own land
+                # friendlyCappingArmy = friendlyUncalculated.sum_army - friendlyUncalculated.tile_count
+                # necessaryToFullyCap = uncappedTargetIslandArmy
+                # # have to leave 1's behind when capping enemy land, too
+                # armyLeftIfFullyCapping = friendlyCappingArmy - necessaryToFullyCap
+                # turnsLeftIfFullyCapping = turnsLeft - numTilesLeftToCapFromTarget - friendlyUncalculated.tile_count
+                # canFullyCap = turnsLeftIfFullyCapping >= 0 and armyLeftIfFullyCapping >= 0
+                #
+                # canFullyCap = False
+                # validOpt = True
+                # # TODO turn short circuit back on? Probably no because then we can't do the partial captures...?
+                # if False and canFullyCap:
+                #     # then we can actually dump all in and shortcut the more expensive logic
+                #     turnsLeft = turnsLeftIfFullyCapping
+                #     uncappedTargetIslandArmy = 0 - armyLeftIfFullyCapping
+                #     econValue += numTilesLeftToCapFromTarget * capValue
+                #     nextGathedSum += friendlyCappingArmy
+                #     numTilesLeftToCapFromTarget = 0
+                #
+                #     turnsUsed = turns - turnsLeft
+                #     existingBestTuple = pairOptions.get(turnsUsed, None)
+                #
+                #     if validOpt and (existingBestTuple is None or existingBestTuple[1] / existingBestTuple[2] < econValue / turnsUsed):
+                #         # turnsUsed == 13 and ArmyFlowExpander.is_any_tile_in_flow(rootNodes, [self.map.GetTile(14, 1), self.map.GetTile(13, 0)])
+                #         pairOptions[turnsUsed] = (
+                #             rootNodes,
+                #             econValue,
+                #             turnsUsed,
+                #             0 - uncappedTargetIslandArmy,
+                #             None,  # TODO this may be an incomplete capture... right...?
+                #             None,
+                #             None,
+                #             nextGathedSum
+                #         )
+                # else:
+                if True:
+                    # then we can't dump it all in, have to do iterative check.
+
+                    (
+                        uncappedTargetIslandArmy,
+                        dumpIterCount,
+                        econValue,
+                        frLeftoverArmy,
+                        friendlyTileLeftoverIdx,
+                        remainingFrIslandArmy,
+                        nextGathedSum,
+                        tileIterCount,
+                        turnsLeft
+                    ) = self._execute_island_tile_gather_capture_loop_and_record_options(
+                        uncappedTargetIslandArmy,
+                        capValue,
+                        dumpIterCount,
+                        econValue,
+                        frLeftoverArmy,
+                        friendlyTileLeftoverIdx,
+                        friendlyUncalculated,
+                        nextGathedSum,
+                        pairOptions,
+                        rootNodes,
+                        targetCalculated,
+                        targetTiles,
+                        tileIterCount,
+                        turns,
+                        turnsLeft)
+
+                    if self.use_debug_asserts and remainingFrIslandArmy != 0:
+                        if uncappedTargetIslandArmy != 0 and uncappedTargetIslandArmy <= remainingFrIslandArmy and friendlyTileLeftoverIdx >= 0:
+                            raise Exception(
+                                f'Expected uncappedTargetIslandArmy {uncappedTargetIslandArmy} to be >= remainingFrIslandArmy {remainingFrIslandArmy}, turnsLeft {turnsLeft} (fr leftover {frLeftoverArmy}, index {friendlyTileLeftoverIdx}, targetTiles {targetTiles}) to always have been reduced to 0 unless there are no target tiles left')
+
+                    # Necessary because when we terminate the loop early above due to running out of TARGET tiles, we need to keep track of the remaining army we have to gather for the second loop below.
+                    # TODO ACTUALLY THIS IS COVERED BY frLeftoverArmy NOW, NO...?
+                    # uncappedTargetIslandArmy -= remainingFrIslandArmy
+
+                if turnsLeft == 0:
+                    continue
+
+                if not targetTiles:
+                    # we need to include new targets, then.
+                    dumpIterCount, tieBreaker, tileIterCount = self._queue_next_targets_and_next_friendlies(
+                        uncappedTargetIslandArmy,
+                        capValueByTeam,
+                        dumpIterCount,
+                        econValue,
+                        frLeftoverArmy,
+                        friendlyBorderingEnemy,
+                        friendlyTileLeftoverIdx,
+                        friendlyUncalculated,
+                        myTeam,
+                        nextFriendlies,
+                        nextGathedSum,
+                        nextTargets,
+                        pairOptions,
+                        q,
+                        rootNodes,
+                        targetTeam,
+                        tieBreaker,
+                        tileIterCount,
+                        targetTiles,
+                        turns,
+                        turnsLeft,
+                        visited)
+                else:
+                    tieBreaker = self._queue_next_friendlies_only(
+                        uncappedTargetIslandArmy,
+                        capValue,
+                        econValue,
+                        frLeftoverArmy,
+                        friendlyUncalculated,
+                        myTeam,
+                        nextFriendlies,
+                        nextGathedSum,
+                        nextTargets,
+                        pairOptions,
+                        q,
+                        rootNodes,
+                        targetCalculatedNode,
+                        targetTiles,
+                        tieBreaker,
+                        turns,
+                        turnsLeft,
+                        visited)
 
         dur = time.perf_counter() - start
         logbook.info(f'Flow expansion iteration complete in {dur:.5f}s, core iter {queueIterCount}, dump iter {dumpIterCount}, tile iter {tileIterCount}')
@@ -2287,18 +2316,18 @@ class ArmyFlowExpander(object):
             debugViewInfo.add_targeted_tile(tile, TargetStyle.RED)
         for tile in gathing:
             debugViewInfo.add_targeted_tile(tile, TargetStyle.GREEN)
-        debugViewInfo.add_info_line_no_log(f'GREEN = gathing')
-        debugViewInfo.add_info_line_no_log(f'RED = capping')
+        debugViewInfo.add_info_line_no_log('GREEN = gathing')
+        debugViewInfo.add_info_line_no_log('RED = capping')
         if incompleteTarget:
             debugViewInfo.add_info_line(f'ORANGE = incompleteTarget tileset: {incompleteTarget}')
             if len(incompleteTargetNode.flow_to) > 0:
-                debugViewInfo.add_info_line(f'      to {' | '.join([str(t) for t in incompleteTargetNode.flow_to])}')
+                debugViewInfo.add_info_line(f'      to {" | ".join([str(t) for t in incompleteTargetNode.flow_to])}')
             for tile in incompleteTarget.tile_set:
                 debugViewInfo.add_targeted_tile(tile, TargetStyle.ORANGE, radiusReduction=20)
         if incompleteSource:
             debugViewInfo.add_info_line(f'BLUE = incompleteSource tileset: {incompleteSource} ({sourceUnused} unused)')
             if len(incompleteSourceNode.flow_to) > 0:
-                debugViewInfo.add_info_line(f'      to {' | '.join([str(t) for t in incompleteSourceNode.flow_to])}')
+                debugViewInfo.add_info_line(f'      to {" | ".join([str(t) for t in incompleteSourceNode.flow_to])}')
             for tile in incompleteSource.tile_set:
                 debugViewInfo.add_targeted_tile(tile, TargetStyle.BLUE, radiusReduction=18)
 
@@ -2309,6 +2338,10 @@ class ArmyFlowExpander(object):
                     debugViewInfo.add_targeted_tile(tile, targetStyleColor, radiusReduction=radiusReduction)
 
         if plan:
+            move_list = plan.get_move_list()
+            logbook.info(f'  Plan has {len(move_list)} moves, {len(plan.root_nodes)} root nodes')
+            if len(move_list) == 0 and len(plan.root_nodes) > 0:
+                logbook.info(f'  Root nodes: {[str(n) for n in plan.root_nodes]}')
             ArmyFlowExpander.add_flow_expansion_option_to_view_info(
                 self.map,
                 plan,
@@ -3014,7 +3047,13 @@ class ArmyFlowExpander(object):
         else:
             safetyChecker[friendlyUncalculatedNode.island.unique_id] = friendlyUncalculatedNode
 
+        if existing != friendlyUncalculatedNode:
+            mismatches.append(f'Corrupted friendlyUncalculatedNode node; {friendlyUncalculatedNode} != {existing}')
+        else:
+            safetyChecker[friendlyUncalculatedNode.island.unique_id] = friendlyUncalculatedNode
+
         if mismatches:
+            mismatch_lines = "\r\n    ".join(mismatches)
             self.live_render_capture_stuff(
                 self.island_builder,
                 capping=set(itertools.chain.from_iterable([i.tile_set for i in visited])),
@@ -3025,10 +3064,10 @@ class ArmyFlowExpander(object):
                 incompleteTargetNode=targetCalculatedNode,
                 sourceUnused=gathSum,
                 plan=None,
-                extraInfo=f"turnsUsed {turnsUsed}, turnsLeft {turnsLeft}, econValue {econValue:.2f},"
+                extraInfo=(f"turnsUsed {turnsUsed}, turnsLeft {turnsLeft}, econValue {econValue:.2f},"
                           f"\r\n  gathSum {gathSum}, frLeftoverArmy {frLeftoverArmy}, armyToCap {armyToCap},"
                     f"\r\n  negVt {negVt},  randomTieBreak {randomTieBreak},"
-                    f"\r\n    {"\r\n    ".join(mismatches)}")
+                    f"\r\n    {mismatch_lines}"))
             msg = "Search is corrupted;\r\n" + "\r\n".join(mismatches)
             logbook.error(msg)
             raise Exception(msg)

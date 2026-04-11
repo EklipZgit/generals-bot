@@ -33,6 +33,7 @@ from DistanceMapperImpl import DistanceMapperImpl
 from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrix, MapMatrixSet
 from Path import Path
+from PerformanceTimer import PerformanceTimer
 from Sim.GameSimulator import GameSimulator, GameSimulatorHost
 from Sim.TextMapLoader import TextMapLoader
 from ViewInfo import ViewInfo, PathColorer, TargetStyle
@@ -1666,14 +1667,16 @@ class TestBase(unittest.TestCase):
         # if debugMode:
         #     self.render_tile_islands(map, builder)
 
-        expander = ArmyFlowExpander(map)
+        perfTimer = PerformanceTimer()
+        perfTimer.begin_move(map.turn)
+        expander = ArmyFlowExpander(map, perfTimer)
         expander.friendlyGeneral = general
         expander.enemyGeneral = enemyGeneral
         expander.debug_render_capture_count_threshold = renderThresh
         expander.log_debug = debugMode
-        expander.log_debug = False
         expander.use_debug_asserts = debugMode
         expander.use_debug_asserts = False
+        expander.log_debug = False
         # expander.use_min_cost_flow_edges_only = False
 
         renderAll = False

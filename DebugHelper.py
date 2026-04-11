@@ -61,11 +61,3 @@ IS_DEBUG_OR_UNIT_TEST_MODE = bool(_DynamicDebugOrUnitTestFlag())
 
 def is_debug_or_unit_test_mode() -> bool:
     return IS_DEBUG_OR_UNIT_TEST_MODE
-
-
-def log_in_debug_or_unit_tests(message: str, log_func=None):
-    if is_debug_or_unit_test_mode():
-        if log_func is None:
-            import logbook
-            log_func = logbook.info
-        log_func(message)

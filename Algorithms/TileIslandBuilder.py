@@ -1221,7 +1221,8 @@ def bifurcate_set_into_n_contiguous(
         setHolder.complete = False
 
     if logDebug:
-        DebugHelper.log_in_debug_or_unit_tests(
+        if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+            logbook.info(
             f'split {len(setToBifurcate)} tiles into {len(completedSets)} sets of rough size {breakThreshold} in {time.perf_counter() - fullStart:.5f}\r\nRECOMBINING SMALLEST:')
 
     # join small sets to larger
@@ -1269,7 +1270,8 @@ def bifurcate_set_into_n_contiguous(
     finalConvertTime = time.perf_counter() - start
 
     if logDebug:
-        DebugHelper.log_in_debug_or_unit_tests(
+        if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+            logbook.info(
             f'bifurcated {len(setToBifurcate)} tiles into {len(reMergedSets)} sets of rough size {breakThreshold} in {time.perf_counter() - fullStart:.5f} (iterations:{iter}, fullIterTime:{fullIterTime:.5f}, timeSpentJoiningResultingSets:{timeSpentJoiningResultingSets:.5f}, timeInUpdateIfWrongCheck:{timeInUpdateIfWrongCheck:.5f}, finalConvertTime:{finalConvertTime:.5f}, buildingNoOptionsTime:{buildingNoOptionsTime:.5f})')
 
     return reMergedSets
@@ -1397,7 +1399,8 @@ def bifurcate_set_into_n_contiguous_by_army(
         # these need to be marked back to incomplete or else we can't join them back up again.
         setHolder.complete = False
 
-    DebugHelper.log_in_debug_or_unit_tests(
+    if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+        logbook.info(
         f'split {len(setToBifurcate)} tiles into {len(completedSets)} sets by army in {time.perf_counter() - fullStart:.5f}\r\nRECOMBINING SMALLEST:')
 
     # join small sets to larger
@@ -1418,7 +1421,8 @@ def bifurcate_set_into_n_contiguous_by_army(
         reMergedSets.append(NamedSet(actualSet, setHolder.name))
     finalConvertTime = time.perf_counter() - start
 
-    DebugHelper.log_in_debug_or_unit_tests(
+    if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+        logbook.info(
         f'bifurcated {len(setToBifurcate)} tiles by army into {len(reMergedSets)} sets of rough size {breakThreshold} in {time.perf_counter() - fullStart:.5f} (iterations:{iter}, fullIterTime:{fullIterTime:.5f}, timeSpentJoiningResultingSets:{timeSpentJoiningResultingSets:.5f}, timeInUpdateIfWrongCheck:{timeInUpdateIfWrongCheck:.5f}, finalConvertTime:{finalConvertTime:.5f}, buildingNoOptionsTime:{buildingNoOptionsTime:.5f})')
 
     return reMergedSets

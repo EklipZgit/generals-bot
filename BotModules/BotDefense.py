@@ -31,6 +31,7 @@ from ViewInfo import TargetStyle, PathColorer
 from Models.Move import Move
 from base.client.map import Tile, MapBase
 
+
 class BotDefense:
     @staticmethod
     def determine_fog_defense_amount_available_for_tiles(bot, targetTiles, enPlayer, fogDefenseTurns: int = 0, fogReachTurns: int = 8) -> int:
@@ -596,8 +597,8 @@ class BotDefense:
         if requiredContribution is None:
             requiredContribution = threats[0].threatValue
 
-        gatherDepth = threats[0].path.length - 1 + addlTurns
-        distDict = threats[0].convert_to_dist_dict(allowNonChoke=force_turns_up_threat_path != 0, offset=-1 - addlTurns, mapForPriority=bot._map)
+        gatherDepth = threats[0].path.length + addlTurns
+        distDict = threats[0].convert_to_dist_dict(allowNonChoke=force_turns_up_threat_path != 0, offset=-1 - addlTurns)
         if bot.has_defenseless_modifier:
             for t in [h for h in distDict.keys()]:
                 if t.isGeneral:

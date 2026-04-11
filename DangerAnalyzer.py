@@ -33,23 +33,15 @@ class ThreatObj(object):
         self.saveTile: Tile | None = saveTile
         self.armyAnalysis: ArmyAnalyzer = armyAnalysis
 
-    def convert_to_dist_dict(self, offset: int = -1, allowNonChoke: bool = False, mapForPriority: MapBase | None = None, stripBad: bool = True) -> typing.Dict[Tile, int]:
+    def convert_to_dist_dict(self, offset: int = -1, allowNonChoke: bool = False, stripBad: bool = True) -> typing.Dict[Tile, int]:
         """
-        If mapForPriority is provided, then the distdict will take into account priority.
 
         @param offset:
         @param allowNonChoke:
-        @param mapForPriority:
         @return:
         """
         # if offset == -1 and not self.path.tail.tile.isGeneral:
         #     offset = 0
-
-        includePriority = False
-        hasPriority = False
-        if mapForPriority is not None:
-            includePriority = True
-            hasPriority = False
 
         distDict = self.path.get_reversed().convert_to_dist_dict(offset=offset)
 
@@ -59,16 +51,14 @@ class ThreatObj(object):
             # if dist is None:
             dist = self.armyAnalysis.aMap.raw[tile.tile_index] + offset
             newDist = dist
-            if includePriority and hasPriority:
-                newDist -= 1
 
             if allowNonChoke:
                 distDict[tile] = dist
             if tile.isGeneral:
                 # need to gather to general 1 turn earlier than otherwise necessary. hasPriority here means we moved TO the general on a non-priority turn...?
-                newDist += 1
+                # newDist += 1
                 distDict[tile] = newDist
-                logbook.info(f'Threat path +GEN {str(tile)} dist {dist} changed to {newDist}. Priority {hasPriority}')
+                logbook.info(f'Threat path +GEN {str(tile)} dist {dist} changed to {newDist}.')
             else:  # and not self.path.start.next.tile in tile.movable:
                 # pathWay = self.armyAnalysis.pathWayLookupMatrix[tile]
                 # neighbors = where(pathWay.tiles, lambda t: t != tile and self.armyAnalysis.aMap[t] == self.armyAnalysis.aMap[tile] and self.armyAnalysis.bMap[t] == self.armyAnalysis.bMap[tile])
@@ -78,10 +68,8 @@ class ThreatObj(object):
                     if chokeWidth is not None:
                         newDist = dist + chokeWidth - 1  # this 2 is almost certainly wrong, but makes some tests pass.
                         # newDist += interceptChoke + 1
-                        logbook.info(f'Threat path tile {str(tile)} dist {dist} changed to {newDist} based on chokeWidth {chokeWidth} / interceptChoke {interceptChoke}. Priority {hasPriority}')
+                        logbook.info(f'Threat path tile {str(tile)} dist {dist} changed to {newDist} based on chokeWidth {chokeWidth} / interceptChoke {interceptChoke}.')
                         distDict[tile] = newDist
-
-            hasPriority = not hasPriority
 
         if stripBad:
             # og = distDict.copy()
@@ -567,7 +555,7 @@ class DangerAnalyzer(object):
                 continue
 
             startTiles = {}
-            startTiles[armyTile] = ((0, 0, 0, 0 - army.value, armyTile.x, armyTile.y, 0.5), 0)
+            startTiles[armyTile] = ((0, 0, 0, 0, armyTile.x, armyTile.y, 0.5), 0)
             goalFunc = lambda tile, prio: tile in targets and prio[3] < 0
             path = breadth_first_dynamic(
                 self.map,
@@ -601,7 +589,7 @@ class DangerAnalyzer(object):
             if curThreat.start.tile in armies:
                 army = armies[army]
             analysis = ArmyAnalyzer(self.map, curThreat.tail.tile, army)
-            threatObj = ThreatObj(curThreat.length, curThreat.value, curThreat, ThreatType.Kill, saveTile, analysis)
+            threatObj = ThreatObj(curThreat.length - 1, curThreat.value, curThreat, ThreatType.Kill, saveTile, analysis)
             return threatObj
         else:
             logbook.info("no fastest threat found")

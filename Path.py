@@ -96,6 +96,10 @@ class Path(TilePlanInterface):
         return self._tileList
 
     @property
+    def tiles(self) -> typing.Iterable[Tile]:
+        return (t.tile for t in self._pathQueue)
+
+    @property
     def adjacentSet(self) -> typing.Set[Tile]:
         """Includes the tileSet itself, too."""
         if self._adjacentSet is None:
@@ -115,10 +119,10 @@ class Path(TilePlanInterface):
 
     def get_move_list(self) -> typing.List[Move]:
         moves = []
-        node = self.start
-        while node.next is not None:
-            moves.append(Move(node.tile, node.next.tile, node.move_half))
-            node = node.next
+        last = self._pathQueue[0]
+        for i in range(1, len(self._pathQueue)):
+            moves.append(Move(last.tile, self._pathQueue[i].tile, last.move_half))
+            last = self._pathQueue[i]
 
         return moves
 
@@ -384,6 +388,9 @@ class Path(TilePlanInterface):
             valStr = f' {self._econ_value:.2f}v'
         return f"[{self.value}a{valStr} {self.length}t] {self.to_move_string()}"
 
+    def __iter__(self) -> typing.Iterable[PathMove]:
+        return iter(self._pathQueue)
+
     def toString(self) -> str:
         return str(self)
 
@@ -604,17 +611,23 @@ class MoveListPath(Path):
     @property
     def tileList(self) -> typing.List[Tile]:
         if self._tileList is None:
-            self._tileList = []
-            lastDest = None
-            for move in self._pathQueue:
-                if move:
-                    if move.source != lastDest:
-                        self._tileList.append(move.source)
-                    self._tileList.append(move.dest)
-                    lastDest = move.dest
-                else:
-                    lastDest = None
+            self._tileList = [t for t in self.tiles]
         return self._tileList
+
+    @property
+    def tiles(self) -> typing.Iterable[Tile]:
+        if self._tileList is not None:
+            return iter(self._tileList)
+
+        lastDest = None
+        for move in self._pathQueue:
+            if move:
+                if move.source != lastDest:
+                    yield move.source
+                yield move.dest
+                lastDest = move.dest
+            else:
+                lastDest = None
 
     @property
     def adjacentSet(self) -> typing.Set[Tile]:
@@ -655,6 +668,17 @@ class MoveListPath(Path):
 
     def get_move_list(self) -> typing.List[Move]:
         return list(self._pathQueue)
+
+    def __iter__(self) -> typing.Iterable[PathMove]:
+        """
+        Does not return path moves that are properly linked.
+        :return:
+        """
+        for move in self._pathQueue:
+            if move is None:
+                yield None
+            else:
+                yield PathMove(move.source, PathMove(move.dest, None, None, False), None, move.move_half)
 
     def add_next(self, nextTile, move_half=False):
         move = PathMove(nextTile)

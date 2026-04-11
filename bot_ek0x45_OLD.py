@@ -6876,7 +6876,7 @@ class EklipZBot(object):
             requiredContribution = threats[0].threatValue
 
         gatherDepth = threats[0].path.length - 1 + addlTurns
-        distDict = threats[0].convert_to_dist_dict(allowNonChoke=force_turns_up_threat_path != 0, offset=-1 - addlTurns, mapForPriority=self._map)
+        distDict = threats[0].convert_to_dist_dict(allowNonChoke=force_turns_up_threat_path != 0, offset=-1 - addlTurns)
         if self.has_defenseless_modifier:
             for t in [h for h in distDict.keys()]:
                 if t.isGeneral:

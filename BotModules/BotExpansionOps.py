@@ -457,7 +457,7 @@ class BotExpansionOps:
             if bot.expansion_use_iterative_flow:
                 with bot.perf_timer.begin_move_event('FLOW EXPAND!'):
                     ogStart = time.perf_counter()
-                    flowExpander = ArmyFlowExpander(bot._map)
+                    flowExpander = ArmyFlowExpander(bot._map, bot.perf_timer)
 
                     cutoffTime = time.perf_counter()
                     if bot.expansion_use_legacy:

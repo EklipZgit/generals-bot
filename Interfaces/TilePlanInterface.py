@@ -10,6 +10,7 @@ T = typing.TypeVar('T', bound='Parent')  # use string
 
 
 class PathMove(object):
+    __slots__ = ('tile', 'next', 'prev', 'move_half')
     def __init__(self, tile: Tile, next: PathMove | None = None, prev: PathMove | None = None, move_half: bool = False):
         self.tile: Tile = tile
         self.next: PathMove | None = next
@@ -20,16 +21,7 @@ class PathMove(object):
         return PathMove(self.tile, self.next, self.prev)
 
     def toString(self) -> str:
-        prevVal = "[]"
-        if self.prev is not None:
-            prevVal = f"[{self.prev.tile.x},{self.prev.tile.y}]"
-        nextVal = "[]"
-        if self.next is not None:
-            nextVal = f"[{self.next.tile.x},{self.next.tile.y}]"
-        myVal = f"[{self.tile.x},{self.tile.y}]"
-
-        val = f"(prev:{prevVal} me:{myVal} next:{nextVal})"
-        return val
+        return str(self)
     #def __gt__(self, other):
     #    if (other == None):
     #        return True
@@ -40,7 +32,16 @@ class PathMove(object):
     #    return self.turn < other.turn
 
     def __str__(self) -> str:
-        return self.toString()
+        prevVal = "[]"
+        if self.prev is not None:
+            prevVal = f"[{self.prev.tile.x},{self.prev.tile.y}]"
+        nextVal = "[]"
+        if self.next is not None:
+            nextVal = f"[{self.next.tile.x},{self.next.tile.y}]"
+        myVal = f"[{self.tile.x},{self.tile.y}]"
+
+        val = f"(prev:{prevVal} me:{myVal} next:{nextVal})"
+        return val
 
     def __repr__(self) -> str:
         return str(self)
@@ -60,6 +61,16 @@ class TilePlanInterface(ABC):
     @property
     @abstractmethod
     def tileSet(self) -> typing.Set[Tile]:
+        raise NotImplementedError()
+
+    @property
+    @abstractmethod
+    def __iter__(self) -> typing.Iterable[PathMove]:
+        raise NotImplementedError()
+
+    @property
+    @abstractmethod
+    def tiles(self) -> typing.Iterable[Tile]:
         raise NotImplementedError()
 
     @property

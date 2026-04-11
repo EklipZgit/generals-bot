@@ -510,7 +510,7 @@ class Tile(object):
         if self.delta.armyDelta != 0 or self.delta.unexplainedDelta != 0:
             delta = f' {self.delta.armyDelta}d|{self.delta.unexplainedDelta}u'
 
-        return f"({self.x:d},{self.y:d}) {vRep}{delta}"
+        return f"({self.x:d},{self.y:d} {vRep}{delta})"
 
     def get_value_representation(self) -> str:
         outputToJoin = []

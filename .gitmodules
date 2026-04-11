@@ -1,0 +1,3 @@
+[submodule "third_party/PyMaxflow"]
+	path = third_party/PyMaxflow
+	url = https://github.com/EklipZgit/PyMaxflow.git

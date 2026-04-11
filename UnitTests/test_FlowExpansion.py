@@ -712,7 +712,7 @@ a2                  b1
         self.enable_search_time_limits_and_disable_debug_asserts()
         self.begin_capturing_logging()
 
-        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=40, debugMode=debugMode, renderThresh=700, tileIslandSize=5)
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=40, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=True)
         self.assertNotEqual(0, len(opts))
         self.assertGreater(opts[0].econValue / opts[0].length, 1.5, 'should find a plan with pretty high value per turn')
 
@@ -1048,7 +1048,7 @@ player_index=0
                 self.enable_search_time_limits_and_disable_debug_asserts()
                 self.begin_capturing_logging()
 
-                opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=False)
+                opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=True)
 
                 # if debugMode:
                 #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)

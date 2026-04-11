@@ -526,7 +526,7 @@ class PivotWRP:
 
             if len(componentWatchers) == 0:
                 if DebugHelper.IS_DEBUGGING:
-                    raise AssertionError(f'no watchers for {pivot}??? ({repr(pivot)}) - self.map.is_walled_city_game {self.map.is_walled_city_game}, self.map.is_low_cost_city_game {self.map.is_low_cost_city_game}')
+                    raise AssertionError(f'no watchers for {pivot.toString()}??? ({repr(pivot)}) - self.map.is_walled_city_game {self.map.is_walled_city_game}, self.map.is_low_cost_city_game {self.map.is_low_cost_city_game}')
                 logbook.error(f'no watchers for {pivot}??? ({repr(pivot)}) - self.map.is_walled_city_game {self.map.is_walled_city_game}, self.map.is_low_cost_city_game {self.map.is_low_cost_city_game}. Ignoring tile...')
                 continue
 

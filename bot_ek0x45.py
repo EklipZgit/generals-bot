@@ -363,7 +363,7 @@ class EklipZBot(object):
         self.expansion_always_include_non_terminating_leafmoves_in_iteration: bool = True
         """If true, forces the expansion plan to always consider non-terminating leafmove tiles in one of the iterations."""
 
-        self.expansion_use_iterative_flow: bool = False
+        self.expansion_use_iterative_flow: bool = True
         self.expansion_use_legacy: bool = True
         self.expansion_use_tile_islands: bool = False
         self.expansion_full_time_limit: float = 0.15

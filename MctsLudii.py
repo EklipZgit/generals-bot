@@ -768,7 +768,7 @@ class MctsDUCT(object):
         elif nodeSelectionFunction == MoveSelectionFunction.MaxAverageValue:
             return self.maximum_average_value_selection_func
 
-        raise NotImplemented(f'{str(nodeSelectionFunction)}')
+        raise NotImplementedError(f'{str(nodeSelectionFunction)}')
 
     def _calculate_killer_anti_ratio(self) -> float:
         # we have 1.0 exploit, plus 1.0 killer move exploit * self.killer, and we find the ratio we need to multiply the original by so they add up to max 1 again.

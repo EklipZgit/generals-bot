@@ -8,6 +8,8 @@ import typing
 _MODULE_NAME = 'maxflow'
 _SUBMODULE_DIR = pathlib.Path(__file__).resolve().parent / 'third_party' / 'PyMaxflow'
 _STALE_ARTIFACT_GLOB = '_maxflow*.pyd'
+_SOURCE_FILE_PATTERNS = ('setup.py', 'pyproject.toml', 'maxflow/**/*.pyx', 'maxflow/**/*.pxd', 'maxflow/**/*.h', 'maxflow/**/*.hpp', 'maxflow/**/*.cpp')
+_PYTHON_ABI_TAG = f'cp{sys.version_info.major}{sys.version_info.minor}'
 
 
 def _import_local_pymaxflow():
@@ -31,8 +33,50 @@ def _build_local_pymaxflow_inplace():
     )
 
 
+def _get_local_pymaxflow_artifact() -> pathlib.Path | None:
+    artifacts = sorted(
+        (
+            path for path in (_SUBMODULE_DIR / 'maxflow').glob(_STALE_ARTIFACT_GLOB)
+            if _PYTHON_ABI_TAG in path.name
+        ),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True
+    )
+    if artifacts:
+        return artifacts[0]
+    return None
+
+
+def _iter_local_pymaxflow_source_files() -> typing.Iterable[pathlib.Path]:
+    for pattern in _SOURCE_FILE_PATTERNS:
+        yield from _SUBMODULE_DIR.glob(pattern)
+
+
+def _should_rebuild_local_pymaxflow() -> bool:
+    artifact = _get_local_pymaxflow_artifact()
+    if artifact is None or not artifact.exists():
+        return True
+
+    artifact_mtime = artifact.stat().st_mtime
+    for source_file in _iter_local_pymaxflow_source_files():
+        if source_file.is_file() and source_file.stat().st_mtime > artifact_mtime:
+            return True
+
+    return False
+
+
+def _load_local_pymaxflow():
+    if _should_rebuild_local_pymaxflow():
+        _clear_local_pymaxflow_modules()
+        _build_local_pymaxflow_inplace()
+        importlib.invalidate_caches()
+
+    _clear_local_pymaxflow_modules()
+    return _import_local_pymaxflow()
+
+
 try:
-    maxflow = _import_local_pymaxflow()
+    maxflow = _load_local_pymaxflow()
 except (ModuleNotFoundError, ImportError):
     try:
         _clear_local_pymaxflow_modules()

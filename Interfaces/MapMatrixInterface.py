@@ -94,7 +94,7 @@ class EmptyTileSet(set):
     dont use this for things that take raw underlying types for int / .raw implementations.
     """
     def add(self, item: Tile):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def __getitem__(self, key: Tile) -> bool:
         return False
@@ -103,7 +103,7 @@ class EmptyTileSet(set):
         return iter(())
 
     def update(self, tiles: typing.Iterable[Tile]):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def copy(self) -> MetaTileSet:
         return set()
@@ -134,7 +134,7 @@ class EmptySet(set):
     dont use this for things that take raw underlying types for int / .raw implementations.
     """
     def add(self, item):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     # def __getitem__(self, key) -> bool:
     #     return False
@@ -146,7 +146,7 @@ class EmptySet(set):
     #     return False
 
     def update(self, tiles: typing.Iterable):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def copy(self) -> set:
         return set()

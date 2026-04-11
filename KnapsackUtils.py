@@ -12,6 +12,9 @@ import typing
 
 _MODULE_NAME = 'KnapsackUtilsCpp'
 _MODULE_DIR = pathlib.Path(__file__).resolve().parent
+_MODULE_ARTIFACT_GLOB = f'{_MODULE_NAME}*.pyd'
+_SOURCE_FILE_PATTERNS = ('setup.py', 'KnapsackUtilsCython.pyx', 'KnapsackUtilsCpp.cpp')
+_PYTHON_ABI_TAG = f'cp{sys.version_info.major}{sys.version_info.minor}'
 
 
 def _import_knapsack_utils_cpp():
@@ -26,15 +29,54 @@ def _build_knapsack_utils_cpp_inplace():
     )
 
 
+def _get_knapsack_utils_cpp_artifact() -> pathlib.Path | None:
+    artifacts = sorted(
+        (
+            path for path in _MODULE_DIR.glob(_MODULE_ARTIFACT_GLOB)
+            if _PYTHON_ABI_TAG in path.name
+        ),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True
+    )
+    if artifacts:
+        return artifacts[0]
+    return None
+
+
+def _iter_knapsack_utils_cpp_source_files() -> typing.Iterable[pathlib.Path]:
+    for pattern in _SOURCE_FILE_PATTERNS:
+        yield from _MODULE_DIR.glob(pattern)
+
+
+def _should_rebuild_knapsack_utils_cpp() -> bool:
+    artifact = _get_knapsack_utils_cpp_artifact()
+    if artifact is None or not artifact.exists():
+        return True
+
+    artifact_mtime = artifact.stat().st_mtime
+    for source_file in _iter_knapsack_utils_cpp_source_files():
+        if source_file.is_file() and source_file.stat().st_mtime > artifact_mtime:
+            return True
+
+    return False
+
+
+def _load_knapsack_utils_cpp():
+    if _should_rebuild_knapsack_utils_cpp():
+        _build_knapsack_utils_cpp_inplace()
+        importlib.invalidate_caches()
+    return _import_knapsack_utils_cpp()
+
+
 try:
-    KnapsackUtilsCpp = _import_knapsack_utils_cpp()
+    KnapsackUtilsCpp = _load_knapsack_utils_cpp()
 except ModuleNotFoundError as original_ex:
     try:
         _build_knapsack_utils_cpp_inplace()
         importlib.invalidate_caches()
         KnapsackUtilsCpp = _import_knapsack_utils_cpp()
     except Exception as build_ex:
-        stale_artifacts = sorted(path.name for path in _MODULE_DIR.glob(f'{_MODULE_NAME}*.pyd'))
+        stale_artifacts = sorted(path.name for path in _MODULE_DIR.glob(_MODULE_ARTIFACT_GLOB))
         stale_artifacts_msg = ''
         if stale_artifacts:
             stale_artifacts_msg = f" Found existing compiled artifacts: {', '.join(stale_artifacts)}."

@@ -864,6 +864,75 @@ a2                  b1
         self.assertNotEqual(0, len(opts))
         self.assertGreater(opts[0].econValue / opts[0].length, 0.99, 'should find a plan with pretty high value per turn')
 
+    def test_should_have_enemy_general_backpressure(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+
+        for (extraArmy, expectEnFlow) in [
+            (0, 100),
+            (50, 50),
+            (200, -50), # we overflow the enemy general and need excess sink. I think this isn't -100 because after overflowing enemy land we start filling neutral tiles we were ignoring...? or something? idk. This was the no-neut though
+        ]:
+            with self.subTest(extraArmy=extraArmy, expectEnFlow=expectEnFlow):
+                mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+                map.GetTile(12, 8).isMountain = True
+                map.GetTile(12, 9).isMountain = True
+                map.GetTile(12, 10).isMountain = True
+                map.GetTile(12, 11).isMountain = True
+                map.GetTile(10, 11).isMountain = True
+                map.GetTile(10, 12).isMountain = True
+                map.GetTile(10, 13).isMountain = True
+                # map.GetTile(5, 1).isMountain = True # leave this wall open
+                map.GetTile(8, 10).isMountain = True
+                map.GetTile(8, 11).isMountain = True
+                map.GetTile(8, 12).isMountain = True
+                map.GetTile(3, 3).isMountain = True
+                map.GetTile(2, 1).isMountain = True
+                map.GetTile(2, 2).isMountain = True
+                map.GetTile(5, 0).isMountain = True
+                # map.GetTile(14, 1).isMountain = True
+                # map.GetTile(13, 0).isMountain = True
+                # map.GetTile(14, 4).isMountain = True
+                map.GetTile(14, 8).isMountain = True
+                map.GetTile(15, 10).isMountain = True
+                map.GetTile(15, 11).isMountain = True
+                map.GetTile(14, 12).isMountain = True
+                map.GetTile(11, 8).isMountain = True
+                map.GetTile(13, 10).isMountain = True
+                map.GetTile(13, 11).isMountain = True
+                map.GetTile(13, 1).isMountain = True
+                map.GetTile(15, 14).isMountain = True
+                map.GetTile(13, 16).isMountain = True
+                map.GetTile(11, 16).isMountain = True
+                map.GetTile(10, 16).isMountain = True
+                map.GetTile(8, 17).isMountain = True
+                for i in range(12, 16):
+                    map.GetTile(7, i).isMountain = True
+                for i in range(6, 11):
+                    map.GetTile(10, i).isMountain = True
+                for i in range(7, 10):
+                    map.GetTile(i, 15).isMountain = True
+                general.army += extraArmy
+
+                map.update_reachable()
+
+                # if debugMode:
+                #     self.render_map(map)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                self.begin_capturing_logging()
+
+                expander, opts = self.run_army_flow_expansion_and_get_expander(map, general, enemyGeneral, turns=400, debugMode=debugMode, renderThresh=700, tileIslandSize=5)
+                flowGraph = expander.flow_graph
+                tgGenFlowNode = flowGraph.flow_node_lookup_by_tile_no_neut.raw[enemyGeneral.tile_index]
+                flowedFromEnGen = sum(i.edge_army for i in tgGenFlowNode.flow_to if i.target_flow_node is not None)
+                actualFlowSum = flowedFromEnGen - tgGenFlowNode.army_flow_received
+                self.assertGreater(actualFlowSum, expectEnFlow, f'flowedFromEnGen {flowedFromEnGen}, tgGenFlowNode.army_flow_received {tgGenFlowNode.army_flow_received}, not enough to capture all en land so there should be backpressure from enemy general to its own land.')
+                self.assertLess(actualFlowSum, expectEnFlow + 50, f'flowedFromEnGen {flowedFromEnGen}, tgGenFlowNode.army_flow_received {tgGenFlowNode.army_flow_received}, not enough to capture all en land so there should be backpressure from enemy general to its own land.')
+                self.assertNotEqual(0, len(opts))
+                self.assertGreater(opts[0].econValue / opts[0].length, 0.99, 'should find a plan with pretty high value per turn')
+
     def test_should_not_produce_invalid_enemy_captures(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'

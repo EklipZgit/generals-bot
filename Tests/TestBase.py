@@ -49,7 +49,7 @@ __unittest = True
 
 
 class TestBase(unittest.TestCase):
-    GLOBAL_BYPASS_REAL_TIME_TEST = True
+    GLOBAL_BYPASS_REAL_TIME_TEST = False
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -1654,6 +1654,34 @@ class TestBase(unittest.TestCase):
             shouldRender: bool = True,
             timeLimit: float | None = None
     ) -> typing.List[FlowExpansionPlanOption]:
+        expander, opts = self.run_army_flow_expansion_and_get_expander(
+            map,
+            general,
+            enemyGeneral,
+            turns,
+            negativeTiles,
+            debugMode,
+            renderThresh,
+            tileIslandSize,
+            shouldRender,
+            timeLimit,
+        )
+
+        return opts
+
+    def run_army_flow_expansion_and_get_expander(
+            self,
+            map: MapBase,
+            general: Tile,
+            enemyGeneral: Tile,
+            turns: int,
+            negativeTiles: typing.Set[Tile] | None = None,
+            debugMode: bool = False,
+            renderThresh: int = 10000,
+            tileIslandSize: int | None = None,
+            shouldRender: bool = True,
+            timeLimit: float | None = None
+    ) -> typing.Tuple[ArmyFlowExpander, typing.List[FlowExpansionPlanOption]]:
         cutoffTime = None
         if timeLimit is not None:
             cutoffTime = time.perf_counter() + timeLimit
@@ -1739,8 +1767,7 @@ class TestBase(unittest.TestCase):
             builder.add_tile_islands_to_view_info(vi, printIslandInfoLines=True, printIslandNames=True)
 
             self.render_view_info(map, vi)
-
-        return opts
+        return expander, opts
 
     def a_b_test(
             self,

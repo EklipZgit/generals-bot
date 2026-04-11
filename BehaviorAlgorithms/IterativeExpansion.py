@@ -15,10 +15,8 @@ import DebugHelper
 import Gather
 import SearchUtils
 from Gather import GatherDebug, GatherCapturePlan
-from Interfaces.MapMatrixInterface import EmptyTileSet
 from MapMatrix import MapMatrix
 from Path import Path
-from SearchUtils import HeapQueue
 from Algorithms import TileIslandBuilder, TileIsland
 from BoardAnalyzer import BoardAnalyzer
 from Models import Move
@@ -28,7 +26,6 @@ from ViewInfo import ViewInfo, TargetStyle, PathColorer
 from base import Colors
 from base.client.map import MapBase, Tile
 from BehaviorAlgorithms.PyMaxFlowIteratorHelpers import compute_island_max_flow_with_pymaxflow
-
 
 ITERATIVE_EXPANSION_EN_CAP_VAL = 2.2
 
@@ -556,7 +553,8 @@ class ArmyFlowExpander(object):
             self,
             islands: TileIslandBuilder,
             graphData: NxFlowGraphData,
-            method: FlowGraphMethod = FlowGraphMethod.NetworkSimplex
+            method: FlowGraphMethod = FlowGraphMethod.NetworkSimplex,
+            render_on_exception: bool = True
     ) -> typing.Dict[int, typing.Dict[int, int]]:
         """Returns the flow dict produced from the input graph data"""
         start = time.perf_counter()
@@ -588,9 +586,17 @@ class ArmyFlowExpander(object):
             else:
                 raise NotImplementedError(str(method))
         except Exception as ex:
-            if GatherDebug.USE_DEBUG_ASSERTS and self.log_debug:
-                self.live_render_invalid_flow_config(islands, graphData.graph, f'{ex}')
+            if render_on_exception and GatherDebug.USE_DEBUG_ASSERTS and self.log_debug:
+                self.live_render_invalid_flow_config(islands, graphData.graph, f'Invalid Graph input... Caught flow exception: {ex}')
             raise
+
+        if self.log_debug:
+            non_zero_flow_dict = {
+                src: {dst: amount for dst, amount in targets.items() if amount != 0}
+                for src, targets in flowDict.items()
+                if any(amount != 0 for amount in targets.values())
+            }
+            logbook.info(f'{method} non-zero flowDict={non_zero_flow_dict}')
 
         logbook.info(f'{method} complete with flowCost {flowCost} in {time.perf_counter() - start:.5f}s')
 
@@ -624,6 +630,22 @@ class ArmyFlowExpander(object):
                 non_zero = {k: v for k, v in targets.items() if v != 0}
                 if non_zero:
                     logbook.info(f'  {src} -> {non_zero}')
+            if method in (FlowGraphMethod.PyMaxflowBoykovKolmogorov, FlowGraphMethod.PyMaxflowWithNodeSplitting):
+                try:
+                    nx_with_neut_flow_dict = self._get_island_max_flow_dict(islands, self.nxGraphData, FlowGraphMethod.NetworkSimplex, render_on_exception=False)
+                    nx_no_neut_flow_dict = self._get_island_max_flow_dict(islands, self.nxGraphDataNoNeut, FlowGraphMethod.NetworkSimplex, render_on_exception=False)
+                    logbook.info(f'NX comparison withNeutFlowDict keys: {list(nx_with_neut_flow_dict.keys())}')
+                    for src, targets in nx_with_neut_flow_dict.items():
+                        non_zero = {k: v for k, v in targets.items() if v != 0}
+                        if non_zero:
+                            logbook.info(f'  NX with-neut {src} -> {non_zero}')
+                    logbook.info(f'NX comparison noNeutFlowDict keys: {list(nx_no_neut_flow_dict.keys())}')
+                    for src, targets in nx_no_neut_flow_dict.items():
+                        non_zero = {k: v for k, v in targets.items() if v != 0}
+                        if non_zero:
+                            logbook.info(f'  NX no-neut {src} -> {non_zero}')
+                except Exception as ex:
+                    logbook.info(f'NX comparison skipped due to flow exception: {ex}')
 
         start = time.perf_counter()
 
@@ -641,7 +663,45 @@ class ArmyFlowExpander(object):
             flowNodeWithNeut = IslandFlowNode(island, demandWithNeut)
             withNeutGraphLookup[island.unique_id] = flowNodeWithNeut
 
-        backfillNeutEdges = []
+        backfillNeutEdges, enemyBackfillFlowNodes, finalRootFlowNodes = self.get_flow_nodes_from_lookups(ourIslands, targetGeneralIsland, targetIslands, withNeutFlowDict, withNeutGraphLookup, self.nxGraphData)
+
+        backfillNeutNoNeutEdges, enemyBackfillNoNeutFlowNodes, finalRootNoNeutFlowNodes = self.get_flow_nodes_from_lookups(ourIslands, targetGeneralIsland, targetIslands, noNeutFlowDict, noNeutGraphLookup, self.nxGraphDataNoNeut)
+
+        noNeutFlowNodeLookup: MapMatrixInterface[IslandFlowNode] = MapMatrix(self.map, None)
+        incNeutFlowNodeLookup: MapMatrixInterface[IslandFlowNode] = MapMatrix(self.map, None)
+        for flowNode in noNeutGraphLookup.values():
+            for t in flowNode.island.tile_set:
+                noNeutFlowNodeLookup.raw[t.tile_index] = flowNode
+        for flowNode in withNeutGraphLookup.values():
+            for t in flowNode.island.tile_set:
+                incNeutFlowNodeLookup.raw[t.tile_index] = flowNode
+
+        flowGraph = IslandMaxFlowGraph(finalRootNoNeutFlowNodes, finalRootFlowNodes, enemyBackfillNoNeutFlowNodes, enemyBackfillFlowNodes, backfillNeutEdges, backfillNeutNoNeutEdges, noNeutFlowNodeLookup, incNeutFlowNodeLookup, noNeutGraphLookup, withNeutGraphLookup)
+
+        logbook.info(f'{method} FlowNodes complete in {time.perf_counter() - start:.5f}s')
+        return flowGraph
+
+    def get_flow_nodes_from_lookups(
+            self,
+            ourIslands: list[TileIsland],
+            targetGeneralIsland: TileIsland,
+            targetIslands: list[TileIsland],
+            withNeutFlowDict: dict[int, dict[int, int]],
+            graphLookup: dict[int, IslandFlowNode],
+            nxGraphData: NxFlowGraphData,
+    ) -> tuple[list[IslandFlowEdge], list[IslandFlowNode], list[IslandFlowNode]]:
+        """
+        Converts nx flow graph data into flow edges and flow nodes.
+
+        :param ourIslands:
+        :param targetGeneralIsland:
+        :param targetIslands:
+        :param withNeutFlowDict:
+        :param graphLookup:
+        :param nxGraphData:
+        :return: backfillNeutEdges, enemyBackfillFlowNodes, finalRootFlowNodes
+        """
+        backfillNeutEdges: typing.List[IslandFlowEdge] = []
         ourSet = {i.unique_id for i in ourIslands}
         targetSet = {i.unique_id for i in targetIslands}
 
@@ -654,110 +714,64 @@ class ArmyFlowExpander(object):
             else:
                 nodeId = -nodeId
 
-            sourceNode = withNeutGraphLookup.get(nodeId, None)
+            sourceNode = graphLookup.get(nodeId, None)
 
             for targetNodeId, targetFlowAmount in targets.items():
-                if isThroughput and sourceNode:
-                    # Allow flow to output node OR to fake nodes (balancing nodes)
-                    if targetNodeId != -nodeId and targetNodeId not in self.nxGraphData.fake_nodes and nodeId not in self.nxGraphData.fake_nodes:
-                        raise Exception(f'input node flowed to something other than output node...?  {sourceNode} ({targetFlowAmount}a) -> {targetNodeId}')
-                    sourceNode.army_flow_received += targetFlowAmount
-                    continue
-
                 if targetFlowAmount == 0:
                     # it outputs a dict entry for all edges even if it decides to flow 0 to them.
                     continue
 
-                if nodeId not in self.nxGraphData.fake_nodes:
-                    ourSet.discard(targetNodeId)
-                    targetSet.discard(targetNodeId)
-                targetNode = withNeutGraphLookup.get(targetNodeId, None)
-                if targetNode is None:
-                    logbook.info(f'Flow of {targetFlowAmount} to fake node {targetNodeId} from {sourceNode}')
-                    continue
-
-                if targetNodeId in self.nxGraphData.neutral_sinks and (sourceNode is None or sourceNode.island is targetGeneralIsland):
-                    edge = IslandFlowEdge(targetNode, targetFlowAmount)
-                    backfillNeutEdges.append(edge)
-                    continue
-
-                if sourceNode is None:
-                    logbook.info(f'Flow from fake node {nodeId} of {targetFlowAmount} to {targetNode}')
-                    continue
-
-                sourceNode.set_flow_to(targetNode, targetFlowAmount)
-                if self.log_debug:
-                    logbook.info(f'FOUND INC NEUT FLOW EDGE {sourceNode} ({targetFlowAmount}a) -> {targetNode}')
-
-        finalRootFlowNodes = [withNeutGraphLookup[id] for id in ourSet]
-        enemyBackfillFlowNodes = [withNeutGraphLookup[id] for id in targetSet]
-
-        backfillNeutNoNeutEdges = []
-        ourSetNoNeut = {i.unique_id for i in ourIslands}
-        targetSetNoNeut = {i.unique_id for i in targetIslands}
-
-        # first see what ALWAYS goes to enemy territory, these are our highest priority to gather things.
-        for nodeId, targets in noNeutFlowDict.items():
-            isThroughput = False
-            if nodeId > 0:
-                isThroughput = True
-                # we don't care about the movement of army through a node so skip the input -> output entries
-            else:
-                nodeId = -nodeId
-
-            sourceNode = noNeutGraphLookup.get(nodeId, None)
-
-            for targetNodeId, targetFlowAmount in targets.items():
                 if isThroughput and sourceNode:
-                    if targetNodeId != -nodeId:
+                    # Allow flow to output node OR to fake nodes (balancing nodes)
+                    if targetNodeId != -nodeId:  # and targetNodeId not in self.nxGraphData.fake_nodes and nodeId not in self.nxGraphData.fake_nodes  # added (incorrectly?) by AI in pymax impl for "Allow flow to output node OR to fake nodes (balancing nodes)"
                         raise Exception(f'input node flowed to something other than output node...?  {sourceNode} ({targetFlowAmount}a) -> {targetNodeId}')
+                    if sourceNode.island is targetGeneralIsland:
+                        logbook.info(
+                            f'Flow THROUGH EN GEN of {targetFlowAmount} ?? sourceNode.army_flow_received was {sourceNode.army_flow_received} (now {sourceNode.army_flow_received + targetFlowAmount})')
                     sourceNode.army_flow_received += targetFlowAmount
                     continue
-                if targetFlowAmount == 0:
-                    # raise Exception(f'wut? Connection, but zero flow between  {sourceNode} ({targetFlowAmount}a) -> {targetNodeId}')
-                    # logbook.info(f'wut? Connection, but zero flow between  {sourceNode} ({targetFlowAmount}a) -> {targetNodeId}')
-                    continue
 
-                if nodeId not in self.nxGraphDataNoNeut.fake_nodes:
-                    targetSetNoNeut.discard(targetNodeId)
-                    ourSetNoNeut.discard(targetNodeId)
-
-                targetNode = noNeutGraphLookup.get(targetNodeId, None)
-
+                if nodeId not in nxGraphData.fake_nodes:
+                    ourSet.discard(targetNodeId)
+                    targetSet.discard(targetNodeId)
+                targetNode = graphLookup.get(targetNodeId, None)
                 if targetNode is None:
-                    logbook.info(f'Flow of {targetFlowAmount} to fake node {targetNodeId} from {sourceNode}')
+                    if sourceNode.island is targetGeneralIsland:
+                        logbook.info(
+                            f'Flow from EN GEN of {targetFlowAmount} to fake node {targetNodeId} -- we overflow the enemy land? sourceNode.army_flow_received was {sourceNode.army_flow_received}')
+                    else:
+                        logbook.info(f'Flow of {targetFlowAmount} to fake node {targetNodeId} from {sourceNode}')
                     continue
 
-                if targetNodeId in self.nxGraphDataNoNeut.neutral_sinks and (sourceNode is None or sourceNode.island is targetGeneralIsland):
-                    # raise Exception(f'wut? shouldnt have backfill neut edges here? No demand allowed on neuts?   {sourceNode} ({targetFlowAmount}a) -> {targetNode}')
-                    edge = IslandFlowEdge(targetNode, targetFlowAmount)
-                    backfillNeutNoNeutEdges.append(edge)
-                    continue
+                if targetNodeId in nxGraphData.neutral_sinks:
+                    if sourceNode is None:
+                        edge = IslandFlowEdge(targetNode, targetFlowAmount)
+                        backfillNeutEdges.append(edge)
+                        continue
+
+                    if sourceNode.island is targetGeneralIsland:
+                        edge = IslandFlowEdge(targetNode, targetFlowAmount)
+                        backfillNeutEdges.append(edge)
+                        logbook.info(
+                                f'NEUT SINK EN GEN FLOW of {targetFlowAmount} to fake node {targetNodeId} -- we overflow the enemy land? sourceNode.army_flow_received was {sourceNode.army_flow_received} (now {sourceNode.army_flow_received - targetFlowAmount})')
+                        sourceNode.army_flow_received -= targetFlowAmount
+                        continue
 
                 if sourceNode is None:
-                    logbook.info(f'Flow from fake node {nodeId} of {targetFlowAmount} to {targetNode}')
+                    if targetNode.island is targetGeneralIsland:
+                        logbook.info(f'Flow TO EN GEN from fake node {nodeId} of {targetFlowAmount} -- we DONT overflow enemy land, targetNode.army_flow_received (en gen backpressure) was {targetNode.army_flow_received} (now {targetNode.army_flow_received - targetFlowAmount})')
+                        targetNode.army_flow_received -= targetFlowAmount
+                    else:
+                        logbook.info(f'Flow from fake node {nodeId} of {targetFlowAmount} to {targetNode}')
                     continue
 
                 sourceNode.set_flow_to(targetNode, targetFlowAmount)
                 if self.log_debug:
-                    logbook.info(f'FOUND NO-NEUT FLOW EDGE {sourceNode} ({targetFlowAmount}a) -> {targetNode}')
+                    logbook.info(f'FOUND FLOW EDGE {sourceNode} ({targetFlowAmount}a) -> {targetNode}')
 
-        finalRootNoNeutFlowNodes = [noNeutGraphLookup[id] for id in ourSetNoNeut]
-        enemyBackfillNoNeutFlowNodes = [noNeutGraphLookup[id] for id in targetSetNoNeut]
-
-        noNeutFlowNodeLookup: MapMatrixInterface[IslandFlowNode] = MapMatrix(self.map, None)
-        incNeutFlowNodeLookup: MapMatrixInterface[IslandFlowNode] = MapMatrix(self.map, None)
-        for flowNode in withNeutGraphLookup.values():
-            for t in flowNode.island.tile_set:
-                incNeutFlowNodeLookup.raw[t.tile_index] = flowNode
-        for flowNode in noNeutGraphLookup.values():
-            for t in flowNode.island.tile_set:
-                noNeutFlowNodeLookup.raw[t.tile_index] = flowNode
-
-        flowGraph = IslandMaxFlowGraph(finalRootNoNeutFlowNodes, finalRootFlowNodes, enemyBackfillNoNeutFlowNodes, enemyBackfillFlowNodes, backfillNeutEdges, backfillNeutNoNeutEdges, noNeutFlowNodeLookup, incNeutFlowNodeLookup, withNeutGraphLookup, noNeutGraphLookup)
-
-        logbook.info(f'{method} FlowNodes complete in {time.perf_counter() - start:.5f}s')
-        return flowGraph
+        finalRootFlowNodes = [graphLookup[id] for id in ourSet]
+        enemyBackfillFlowNodes = [graphLookup[id] for id in targetSet]
+        return backfillNeutEdges, enemyBackfillFlowNodes, finalRootFlowNodes
 
     def find_flow_plans(
             self,
@@ -800,10 +814,10 @@ class ArmyFlowExpander(object):
 
         if self.use_min_cost_flow_edges_only:
             # method = FlowGraphMethod.CapacityScaling  # 67ms on test_should_recognize_gather_into_top_path_is_best (with single-tile islands on borders)
-            # method = FlowGraphMethod.MinCostFlow    # 6.5ms on test_should_recognize_gather_into_top_path_is_best (with single-tile islands on borders)
+            method = FlowGraphMethod.MinCostFlow    # 6.5ms on test_should_recognize_gather_into_top_path_is_best (with single-tile islands on borders)
             # method = FlowGraphMethod.NetworkSimplex    # 9ms on test_should_recognize_gather_into_top_path_is_best (with single-tile islands on borders)
             # method = FlowGraphMethod.MinCostFlow
-            method = FlowGraphMethod.PyMaxflowBoykovKolmogorov
+            # method = FlowGraphMethod.PyMaxflowBoykovKolmogorov
             # method = FlowGraphMethod.PyMaxflowWithNodeSplitting
 
             # Build the flow graph data - needed by both NetworkX and PyMaxflow
@@ -2513,6 +2527,7 @@ class ArmyFlowExpander(object):
         # TODO use capacity to avoid chokepoints and such and route around enemy focal points?
         #  USE CAPACITY TO PREVENT OVER-FLOWING INTO BACKWARDS NEUTRAL LAND
         targetGeneralIsland: TileIsland = islands.tile_island_lookup.raw[self.enemyGeneral.tile_index]
+
         frGeneralIsland: TileIsland = islands.tile_island_lookup.raw[self.friendlyGeneral.tile_index]
 
         cumulativeDemand, demands = self._determine_initial_demands_and_split_input_output_nodes(graph, islands, ourSet, targetSet, useNeutralFlow)
@@ -2625,6 +2640,30 @@ class ArmyFlowExpander(object):
         graph.add_edge(fakeNode, targetGeneralIsland.unique_id, weight=backpressureWeight, capacity=1000000)
         graph.add_edge(fakeNode, frGeneralIsland.unique_id, weight=1000, capacity=1000000)
         fakeNodes = {fakeNode}
+
+        if self.log_debug:
+            special_node_ids = {
+                frGeneralIsland.unique_id,
+                -frGeneralIsland.unique_id,
+                targetGeneralIsland.unique_id,
+                -targetGeneralIsland.unique_id,
+                fakeNode,
+            }
+            special_edges = []
+            for from_id, to_id, data_bag in graph.edges(data=True):
+                if from_id in special_node_ids or to_id in special_node_ids:
+                    special_edges.append((from_id, to_id, data_bag.get('weight'), data_bag.get('capacity')))
+            special_edges.sort()
+            logbook.info(
+                f'flow precursor special nodes: '
+                f'friendly_general_in={frGeneralIsland.unique_id}, '
+                f'friendly_general_out={-frGeneralIsland.unique_id}, '
+                f'enemy_general_in={targetGeneralIsland.unique_id}, '
+                f'enemy_general_out={-targetGeneralIsland.unique_id}, '
+                f'fake_node={fakeNode}, '
+                f'useNeutralFlow={useNeutralFlow}'
+            )
+            logbook.info(f'flow precursor special edges={special_edges}')
 
         return NxFlowGraphData(graph, neutSinks, demands, cumulativeDemand, fakeNodes)
 
@@ -3041,12 +3080,7 @@ class ArmyFlowExpander(object):
             safetyChecker[targetCalculatedNode.island.unique_id] = targetCalculatedNode
 
         existing = safetyChecker.get(friendlyUncalculatedNode.island.unique_id, None)
-        if existing is not None:
-            if existing != friendlyUncalculatedNode:
-                mismatches.append(f'Corrupted friendlyUncalculatedNode node; {friendlyUncalculatedNode}  !=  {existing}')
-        else:
-            safetyChecker[friendlyUncalculatedNode.island.unique_id] = friendlyUncalculatedNode
-
+        # if existing is not None:
         if existing != friendlyUncalculatedNode:
             mismatches.append(f'Corrupted friendlyUncalculatedNode node; {friendlyUncalculatedNode} != {existing}')
         else:
@@ -3065,7 +3099,7 @@ class ArmyFlowExpander(object):
                 sourceUnused=gathSum,
                 plan=None,
                 extraInfo=(f"turnsUsed {turnsUsed}, turnsLeft {turnsLeft}, econValue {econValue:.2f},"
-                          f"\r\n  gathSum {gathSum}, frLeftoverArmy {frLeftoverArmy}, armyToCap {armyToCap},"
+                    f"\r\n  gathSum {gathSum}, frLeftoverArmy {frLeftoverArmy}, armyToCap {armyToCap},"
                     f"\r\n  negVt {negVt},  randomTieBreak {randomTieBreak},"
                     f"\r\n    {mismatch_lines}"))
             msg = "Search is corrupted;\r\n" + "\r\n".join(mismatches)

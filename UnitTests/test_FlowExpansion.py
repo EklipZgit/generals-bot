@@ -1106,6 +1106,8 @@ player_index=0
 
         for turns, bestTurns, bestEcon, expectedPath in [
             (40, 10, 7 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,0->10,0'),
+            (2, 2, 1 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '1,0->3,0'),
+            (3, 2, 1 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '1,0->3,0'),
             (7, 6, 4 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '1,0->7,0'),  # should not use the extra 7th turn when not necessary, to grab extra army...?
             (6, 6, 4 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '1,0->7,0'),
             (9, 9, 6 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,0->9,0'),

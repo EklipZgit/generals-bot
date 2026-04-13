@@ -363,7 +363,7 @@ aG3  a3   a1   b1   bG1
 
 
     def test_build_flow_expand_plan__should_produce_valid_only__pull_through_neutral__multi_enemy_tiles(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapData = """
 |    |    |    |    |     
 aG2  a5   b1        bG1 
@@ -379,6 +379,9 @@ aG2  a5   b1        bG1
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
+
+        if debugMode:
+            self.render_flow_expansion_debug(builder, flowExpander, flowResult, renderAll=False)
 
         self.assertEqual(3, len(opts), 'taking the neut, and taking the neut + enemy 1, and + enemy 2')
         longestOpt = self.get_longest_flow_expansion_option(opts)

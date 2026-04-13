@@ -24,7 +24,7 @@ import base
 from ArmyEngine import ArmySimResult
 from ArmyTracker import Army, ArmyTracker
 from Behavior.ArmyInterceptor import ArmyInterception, ArmyInterceptor, InterceptionOptionInfo
-from BehaviorAlgorithms.IterativeExpansion import FlowExpansionPlanOption, IslandFlowNode, ArmyFlowExpander, IslandMaxFlowGraph, FlowGraphMethod
+from BehaviorAlgorithms.IterativeExpansion import FlowExpansionPlanOption, IslandFlowNode, ArmyFlowExpander, IslandMaxFlowGraph, FlowGraphMethod, FlowExpansionPlanOptionCollection
 from BoardAnalyzer import BoardAnalyzer
 from DangerAnalyzer import ThreatType, ThreatObj
 from Gather import GatherCapturePlan, GatherDebug
@@ -41,6 +41,7 @@ from Viewer import ViewerProcessHost
 from Viewer.ViewerProcessHost import ViewerHost
 from base import Colors
 from base.client.map import MapBase, Tile, Score, Player, TILE_FOG, TILE_OBSTACLE, MODIFIER_DEFENSELESS
+from base.client.tile import Tile
 from bot_ek0x45 import EklipZBot
 from BotModules.BotTimings import BotTimings
 
@@ -1732,47 +1733,54 @@ class TestBase(unittest.TestCase):
         opts = optCollection.flow_plans
 
         if debugMode and shouldRender:
-            vi = self.get_renderable_view_info(map)
+            self.render_flow_expansion_debug(builder, expander, optCollection, renderAll, turnsLimit=turns)
+        return expander, opts
 
-            # expander.ensure_flow_graph_exists(builder)
+    def render_flow_expansion_debug(self, builder: TileIslandBuilder, expander: ArmyFlowExpander, optCollection: FlowExpansionPlanOptionCollection, renderAll: bool, turnsLimit: int = 100):
+        map = expander.map
+        vi = self.get_renderable_view_info(map)
+        enemyGeneral = expander.enemyGeneral
+        general = expander.friendlyGeneral
+        opts = optCollection.flow_plans
 
-            bestOpts = []
-            if not renderAll:
+        # expander.ensure_flow_graph_exists(builder)
+
+        bestOpts = []
+        if not renderAll:
+            try:
+                bestOpt = next(filter(lambda opt: opt.length > turnsLimit // 4, opts))
+            except:
                 try:
-                    bestOpt = next(filter(lambda opt: opt.length > turns // 4, opts))
+                    bestOpt = next(filter(lambda opt: opt.length > turnsLimit // 8, opts))
                 except:
                     try:
-                        bestOpt = next(filter(lambda opt: opt.length > turns // 8, opts))
+                        bestOpt = next(filter(lambda opt: opt.length > 3, opts))
                     except:
-                        try:
-                            bestOpt = next(filter(lambda opt: opt.length > 3, opts))
-                        except:
-                            bestOpt = opts[0]
+                        bestOpt = opts[0]
 
-                logbook.info(f'best opt {bestOpt}')
-                bestOpts = [bestOpt]
-            else:
-                for supersetPlan in optCollection.superset_flow_plans:
-                    bestOpts.append(supersetPlan)
-                # visited = set()
-                # for tile in map.get_all_tiles():
-                #     plan = optCollection.flow_plan_supersets_by_tile.raw[tile.tile_index]
-                #     if plan is not None and plan not in visited:
-                #         visited.add(plan)
-                #         bestOpts.append(plan)
+            logbook.info(f'best opt {bestOpt}')
+            bestOpts = [bestOpt]
+        else:
+            for supersetPlan in optCollection.superset_flow_plans:
+                bestOpts.append(supersetPlan)
+            # visited = set()
+            # for tile in map.get_all_tiles():
+            #     plan = optCollection.flow_plan_supersets_by_tile.raw[tile.tile_index]
+            #     if plan is not None and plan not in visited:
+            #         visited.add(plan)
+            #         bestOpts.append(plan)
 
-            for bestOpt in bestOpts:
-                vi.add_info_line(str(bestOpt))
-                ArmyFlowExpander.add_flow_expansion_option_to_view_info(map, bestOpt, general.player, enemyGeneral.player, vi)
+        for bestOpt in bestOpts:
+            vi.add_info_line(str(bestOpt))
+            ArmyFlowExpander.add_flow_expansion_option_to_view_info(map, bestOpt, general.player, enemyGeneral.player, vi)
 
-            flowGraph = expander.flow_graph
-            if flowGraph is not None:
-                ArmyFlowExpander.add_flow_graph_to_view_info(flowGraph, vi, lastRun=expander.last_run)
+        flowGraph = expander.flow_graph
+        if flowGraph is not None:
+            ArmyFlowExpander.add_flow_graph_to_view_info(flowGraph, vi, lastRun=expander.last_run)
 
-            builder.add_tile_islands_to_view_info(vi, printIslandInfoLines=True, printIslandNames=True)
+        builder.add_tile_islands_to_view_info(vi, printIslandInfoLines=True, printIslandNames=True)
 
-            self.render_view_info(map, vi)
-        return expander, opts
+        self.render_view_info(map, vi)
 
     def a_b_test(
             self,

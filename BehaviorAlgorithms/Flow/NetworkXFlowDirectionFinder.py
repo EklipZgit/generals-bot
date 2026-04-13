@@ -11,6 +11,8 @@ import SearchUtils
 from MapMatrix import MapMatrix
 from Gather import GatherDebug
 from BehaviorAlgorithms.Flow.FlowDirectionFinderABC import FlowDirectionFinderABC
+from BehaviorAlgorithms.Flow.FlowGraphModels import FlowGraphMethod, IslandFlowEdge, IslandFlowNode, IslandMaxFlowGraph
+from BehaviorAlgorithms.Flow.NxFlowGraphData import NxFlowGraphData
 
 if typing.TYPE_CHECKING:
     from Algorithms import TileIslandBuilder, TileIsland
@@ -18,7 +20,6 @@ if typing.TYPE_CHECKING:
     from base.client.map import Tile
     from base.client.map import MapBase
     from PerformanceTimer import PerformanceTimer
-    from BehaviorAlgorithms.IterativeExpansion import FlowGraphMethod, IslandFlowEdge, IslandFlowNode, IslandMaxFlowGraph, NxFlowGraphData
 
 
 class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
@@ -243,7 +244,6 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
             )
             logbook.info(f'flow precursor special edges={special_edges}')
 
-        from BehaviorAlgorithms.IterativeExpansion import NxFlowGraphData
         nxData = NxFlowGraphData(graph, neutSinks, demands, cumulativeDemand, fakeNodes)
         nxData.friendly_army_supply = friendlyArmySupply
         nxData.enemy_army_demand = enemyArmyDemand
@@ -301,7 +301,6 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
         flowDict: typing.Dict[int, typing.Dict[int, int]]
 
         try:
-            from BehaviorAlgorithms.IterativeExpansion import FlowGraphMethod
             if method == FlowGraphMethod.NetworkSimplex:
                 flowCost, flowDict = nx.flow.network_simplex(graphData.graph)
             elif method == FlowGraphMethod.CapacityScaling:
@@ -338,8 +337,6 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
             includeNeutralDemand: bool = False,
             method: 'FlowGraphMethod' = None
     ) -> 'IslandMaxFlowGraph':
-        from BehaviorAlgorithms.IterativeExpansion import FlowGraphMethod, IslandFlowNode, IslandMaxFlowGraph
-
         if method is None:
             method = FlowGraphMethod.NetworkSimplex
 

@@ -7,11 +7,12 @@ import logbook
 
 
 
+from BehaviorAlgorithms.Flow.FlowGraphModels import IslandFlowEdge, IslandFlowNode, IslandMaxFlowGraph
+
 if typing.TYPE_CHECKING:
     from Algorithms import TileIslandBuilder, TileIsland
     from base.client.map import Tile
     from Interfaces import TileSet
-    from BehaviorAlgorithms.IterativeExpansion import IslandFlowEdge, IslandFlowNode, IslandMaxFlowGraph
 
 
 class FlowDirectionFinderABC(ABC):
@@ -79,8 +80,6 @@ class FlowDirectionFinderABC(ABC):
             graph_lookup,
             graph_data,
     ):
-        from BehaviorAlgorithms.IterativeExpansion import IslandFlowEdge
-
         backfill_neut_edges: typing.List[IslandFlowEdge] = []
         our_set = {i.unique_id for i in our_islands}
         target_set = {i.unique_id for i in target_islands}

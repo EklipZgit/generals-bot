@@ -24,7 +24,7 @@ import base
 from ArmyEngine import ArmySimResult
 from ArmyTracker import Army, ArmyTracker
 from Behavior.ArmyInterceptor import ArmyInterception, ArmyInterceptor, InterceptionOptionInfo
-from BehaviorAlgorithms.IterativeExpansion import FlowExpansionPlanOption, IslandFlowNode, ArmyFlowExpander, IslandMaxFlowGraph
+from BehaviorAlgorithms.IterativeExpansion import FlowExpansionPlanOption, IslandFlowNode, ArmyFlowExpander, IslandMaxFlowGraph, FlowGraphMethod
 from BoardAnalyzer import BoardAnalyzer
 from DangerAnalyzer import ThreatType, ThreatObj
 from Gather import GatherCapturePlan, GatherDebug
@@ -1652,7 +1652,8 @@ class TestBase(unittest.TestCase):
             renderThresh: int = 10000,
             tileIslandSize: int | None = None,
             shouldRender: bool = True,
-            timeLimit: float | None = None
+            timeLimit: float | None = None,
+            method: FlowGraphMethod | None = None,
     ) -> typing.List[FlowExpansionPlanOption]:
         expander, opts = self.run_army_flow_expansion_and_get_expander(
             map,
@@ -1665,6 +1666,7 @@ class TestBase(unittest.TestCase):
             tileIslandSize,
             shouldRender,
             timeLimit,
+            method=method,
         )
 
         return opts
@@ -1680,7 +1682,8 @@ class TestBase(unittest.TestCase):
             renderThresh: int = 10000,
             tileIslandSize: int | None = None,
             shouldRender: bool = True,
-            timeLimit: float | None = None
+            timeLimit: float | None = None,
+            method: FlowGraphMethod | None = None,
     ) -> typing.Tuple[ArmyFlowExpander, typing.List[FlowExpansionPlanOption]]:
         cutoffTime = None
         if timeLimit is not None:
@@ -1698,6 +1701,8 @@ class TestBase(unittest.TestCase):
         perfTimer = PerformanceTimer()
         perfTimer.begin_move(map.turn)
         expander = ArmyFlowExpander(map, perfTimer)
+        if method is not None:
+            expander.method = method
         expander.friendlyGeneral = general
         expander.enemyGeneral = enemyGeneral
         expander.debug_render_capture_count_threshold = renderThresh
@@ -1729,7 +1734,7 @@ class TestBase(unittest.TestCase):
         if debugMode and shouldRender:
             vi = self.get_renderable_view_info(map)
 
-            expander.ensure_flow_graph_exists(builder)
+            # expander.ensure_flow_graph_exists(builder)
 
             bestOpts = []
             if not renderAll:

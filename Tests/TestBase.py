@@ -1762,7 +1762,7 @@ class TestBase(unittest.TestCase):
 
             flowGraph = expander.flow_graph
             if flowGraph is not None:
-                ArmyFlowExpander.add_flow_graph_to_view_info(flowGraph, vi)
+                ArmyFlowExpander.add_flow_graph_to_view_info(flowGraph, vi, lastRun=expander.last_run)
 
             builder.add_tile_islands_to_view_info(vi, printIslandInfoLines=True, printIslandNames=True)
 

@@ -3,12 +3,107 @@ from __future__ import annotations
 import typing
 from enum import Enum
 
+import Gather
 import SearchUtils
 from Interfaces import MapMatrixInterface
 
 if typing.TYPE_CHECKING:
     from Algorithms import TileIsland
 
+
+# ___nxPreload = nx.DiGraph()
+# ___nxPreload.add_edge(1, 2, weight=5, capacity=20)
+# ___nxPreload.add_edge(2, 3, weight=5, capacity=20)
+# ___nxPreload.add_node(1, demand=-1)
+# ___nxPreload.add_node(3, demand=1)
+# nx.min_cost_flow(___nxPreload)
+
+
+class IslandCompletionInfo(object):
+    def __init__(self, island: TileIsland):
+        self.tiles_left: int = island.tile_count
+        self.army_left: int = island.sum_army
+
+
+FlowExpansionPlanOption = Gather.GatherCapturePlan
+
+
+#
+# class FlowExpansionPlanOption(TilePlanInterface):
+#     def __init__(self, moveList: typing.List[Move] | None, econValue: float, turns: int, captures: int, armyRemaining: int):
+#         self.moves: typing.List[Move] = moveList
+#         self._tileSet: typing.Set[Tile] | None = None
+#         self._tileList: typing.List[Tile] | None = None
+#         self._econ_value: float = econValue
+#         self._turns: int = turns
+#         self.num_captures: int = captures
+#         """The number of tiles this plan captures."""
+#         self.armyRemaining: int = armyRemaining
+#
+#     @property
+#     def length(self) -> int:
+#         return self._turns
+#
+#     @property
+#     def econValue(self) -> float:
+#         return self._econ_value
+#
+#     @econValue.setter
+#     def econValue(self, value: float):
+#         self._econ_value = value
+#
+#     @property
+#     def tileSet(self) -> typing.Set[Tile]:
+#         if self._tileSet is None:
+#             self._tileSet = set()
+#             for move in self.moves:
+#                 self._tileSet.add(move.source)
+#                 self._tileSet.add(move.dest)
+#         return self._tileSet
+#
+#     @property
+#     def tileList(self) -> typing.List[Tile]:
+#         if self._tileList is None:
+#             self._tileList = []
+#             for move in self.moves:
+#                 self._tileList.append(move.source)
+#                 self._tileList.append(move.dest)
+#         return self._tileList
+#
+#     @property
+#     def requiredDelay(self) -> int:
+#         return 0
+#
+#     def get_move_list(self) -> typing.List[Move]:
+#         return self.moves
+#
+#     def get_first_move(self) -> Move:
+#         return self.moves[0]
+#
+#     def pop_first_move(self) -> Move:
+#         move = self.moves[0]
+#         self.moves.remove(move)
+#         return move
+#
+#     def __str__(self):
+#         return f'flow {self.econValue:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt) cap {self.num_captures}, rA {self.armyRemaining}: {self.moves}'
+#
+#     def __repr__(self):
+#         return str(self)
+#
+#     def clone(self) -> FlowExpansionPlanOption:
+#         clone = FlowExpansionPlanOption(
+#             self.moves.copy(),
+#             self.econValue,
+#             self._turns,
+#             self.num_captures,
+#             self.armyRemaining)
+#         return clone
+
+
+
+# FlowGraphMethod, IslandFlowNode, IslandFlowEdge, IslandMaxFlowGraph moved to BehaviorAlgorithms.Flow.FlowGraphModels
+# Re-exported via top-level import for backwards compatibility.
 
 class FlowGraphMethod(Enum):
     NetworkSimplex = 1,

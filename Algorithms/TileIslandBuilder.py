@@ -222,6 +222,7 @@ class TileIslandBuilder(object):
         start = time.perf_counter()
         self.reset_for_rebuild()
 
+        logbook.info(f'building initial islands')
         self._team_stats_by_team_id = self.map.get_team_stats_lookup_by_team_id()  # yeah, shut up
         self._team_stats_by_player = [self._team_stats_by_team_id[p.team] for p in self.map.players]
         self._team_stats_by_player.append(self._team_stats_by_team_id[-1])
@@ -230,10 +231,11 @@ class TileIslandBuilder(object):
         gen = self.map.generals[self.map.player_index]
 
         tiles = [t for t in self.map.reachable_tiles]  # get_all_tiles()
+        distMat = self.map.distance_mapper.get_tile_dist_matrix(gen)
         if mode == IslandBuildMode.BuildByDistance:
-            tiles = sorted(tiles, key=lambda t: (t.player, self.map.distance_mapper.get_distance_between(gen, t), t.x, t.y))
+            tiles = sorted(tiles, key=lambda t: (t.player, distMat.raw[t.tile_index], t.tile_index))
         elif mode == IslandBuildMode.GroupByArmy:
-            tiles = sorted(tiles, key=lambda t: (t.player, t.army, self.map.distance_mapper.get_distance_between(gen, t), t.x, t.y))
+            tiles = sorted(tiles, key=lambda t: (t.player, t.army, distMat.raw[t.tile_index], t.tile_index))
 
         for tile in tiles:
             if tile.isObstacle:
@@ -241,15 +243,14 @@ class TileIslandBuilder(object):
             # if tile not in self.map.reachableTiles:
             #     continue
 
-            existingIsland = self.tile_island_lookup.raw[tile.tile_index]
-            if existingIsland is not None:
+            if self.tile_island_lookup.raw[tile.tile_index] is not None:
                 continue
 
             newIsland = self._build_island_from_tile(tile, tile.player)
             brokenUp = self._break_up_initial_island_if_necessary(newIsland, mode)
             newIslands.extend(brokenUp)
 
-        logbook.info(f'initial islands built ({time.perf_counter() - start:.5f}s in)')
+        logbook.info(f'breaking apart large islands ({time.perf_counter() - start:.5f}s in)')
 
         self.all_tile_islands.clear()
 
@@ -989,6 +990,12 @@ class TileIslandBuilder(object):
     def must_tile_be_solo(self, tile: Tile, teamId: int) -> bool:
         for adj in tile.movable:
             if self.teams[adj.player] != teamId:
+                return True
+
+        if teamId != self.friendly_team:
+            # walls (missing adjacents) + obstacle neighbors count as blocked sides
+            blockedSides = (4 - len(tile.movable)) + sum(1 for adj in tile.movable if adj.isObstacle)
+            if blockedSides >= 3:
                 return True
 
         return False

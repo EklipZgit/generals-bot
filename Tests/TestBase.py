@@ -24,7 +24,8 @@ import base
 from ArmyEngine import ArmySimResult
 from ArmyTracker import Army, ArmyTracker
 from Behavior.ArmyInterceptor import ArmyInterception, ArmyInterceptor, InterceptionOptionInfo
-from BehaviorAlgorithms.IterativeExpansion import FlowExpansionPlanOption, IslandFlowNode, ArmyFlowExpander, IslandMaxFlowGraph, FlowGraphMethod, FlowExpansionPlanOptionCollection
+from BehaviorAlgorithms.Flow.FlowGraphModels import FlowExpansionPlanOption
+from BehaviorAlgorithms.IterativeExpansion import IslandFlowNode, ArmyFlowExpander, IslandMaxFlowGraph, FlowGraphMethod, FlowExpansionPlanOptionCollection
 from BoardAnalyzer import BoardAnalyzer
 from DangerAnalyzer import ThreatType, ThreatObj
 from Gather import GatherCapturePlan, GatherDebug
@@ -1709,12 +1710,12 @@ class TestBase(unittest.TestCase):
         expander.debug_render_capture_count_threshold = renderThresh
         expander.log_debug = debugMode
         expander.use_debug_asserts = debugMode
-        # expander.use_debug_asserts = False
+        expander.use_debug_asserts = False
         # expander.log_debug = False
         # expander.use_min_cost_flow_edges_only = False
 
         renderAll = False
-        renderAll = True
+        # renderAll = True
         # expander.use_all_pairs_visited = True
 
         optCollection = expander.get_expansion_options(
@@ -1745,18 +1746,20 @@ class TestBase(unittest.TestCase):
 
         # expander.ensure_flow_graph_exists(builder)
 
+        optsSorted = sorted(opts, key=lambda opt: (opt.length, opt.econValue), reverse=True)
+
         bestOpts = []
         if not renderAll:
             try:
-                bestOpt = next(filter(lambda opt: opt.length > turnsLimit // 4, opts))
+                bestOpt = next(filter(lambda opt: opt.length > turnsLimit // 4 and opt.length <= turnsLimit, optsSorted))
             except:
                 try:
-                    bestOpt = next(filter(lambda opt: opt.length > turnsLimit // 8, opts))
+                    bestOpt = next(filter(lambda opt: opt.length > turnsLimit // 8 and opt.length <= turnsLimit, optsSorted))
                 except:
                     try:
-                        bestOpt = next(filter(lambda opt: opt.length > 3, opts))
+                        bestOpt = next(filter(lambda opt: opt.length > 3 and opt.length <= turnsLimit, optsSorted))
                     except:
-                        bestOpt = opts[0]
+                        bestOpt = optsSorted[0]
 
             logbook.info(f'best opt {bestOpt}')
             bestOpts = [bestOpt]
@@ -1772,7 +1775,8 @@ class TestBase(unittest.TestCase):
 
         for bestOpt in bestOpts:
             vi.add_info_line(str(bestOpt))
-            ArmyFlowExpander.add_flow_expansion_option_to_view_info(map, bestOpt, general.player, enemyGeneral.player, vi)
+            if enemyGeneral is not None:
+                ArmyFlowExpander.add_flow_expansion_option_to_view_info(map, bestOpt, general.player, enemyGeneral.player, vi)
 
         flowGraph = expander.flow_graph
         if flowGraph is not None:

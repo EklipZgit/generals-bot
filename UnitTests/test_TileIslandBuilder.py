@@ -145,6 +145,7 @@ class TileIslandBuilderUnitTests(TestBase):
                 self.assertAllIslandsContiguous(builder, debugMode)
                 duration = time.perf_counter() - start
                 self.assertLess(duration, maxDuration, 'should not take ages to build tile islands')
+                logbook.info(f'took {duration:.4f}')
 
     def test_builds_tile_islands(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -157,7 +158,10 @@ class TileIslandBuilderUnitTests(TestBase):
 
         self.begin_capturing_logging()
         builder = TileIslandBuilder(map)
+        builder.force_territory_borders_to_single_tile_islands = False
+        builder.break_apart_neutral_islands = False
         builder.recalculate_tile_islands(enemyGeneral)
+        # self.render_tile_islands(map, builder)
         self.assertAllIslandsContiguous(builder, debugMode)
 
         bottomLeftNeutIsland = builder.tile_island_lookup[map.GetTile(1, 19)]
@@ -419,6 +423,7 @@ aG1
 
         self.begin_capturing_logging()
         builder = TileIslandBuilder(map)
+        builder.force_territory_borders_to_single_tile_islands = False
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
         self.reset_tile_deltas_to_current_state(map)
@@ -458,6 +463,7 @@ aG1
 
         self.begin_capturing_logging()
         builder = TileIslandBuilder(map)
+        builder.force_territory_borders_to_single_tile_islands = False
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
 
@@ -493,6 +499,7 @@ a2
 
         self.begin_capturing_logging()
         builder = TileIslandBuilder(map)
+        builder.force_territory_borders_to_single_tile_islands = False
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
 
         if debugMode:
@@ -520,6 +527,7 @@ a2
 
         self.begin_capturing_logging()
         builder = TileIslandBuilder(map)
+        builder.force_territory_borders_to_single_tile_islands = False
         builder.desired_tile_island_size = 1
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
 

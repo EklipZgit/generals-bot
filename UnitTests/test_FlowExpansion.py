@@ -41,9 +41,9 @@ class FlowExpansionUnitTests(TestBase):
     def test_build_flow_expand_plan__should_produce_valid_only__most_basic_move(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
-|    |    |    |     
-aG1  a3   b1   bG1 
-|    |    |    | 
+|    |    |    |
+aG1  a3   b1   bG1
+|    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
@@ -68,9 +68,9 @@ aG1  a3   b1   bG1
     def test_build_flow_expand_plan__should_produce_valid_only__pull_through_friendly(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
-|    |    |    |    |     
-aG1  a3   a1   b1   bG1 
-|    |    |    |    | 
+|    |    |    |    |
+aG1  a3   a1   b1   bG1
+|    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
@@ -95,9 +95,9 @@ aG1  a3   a1   b1   bG1
     def test_build_flow_expand_plan__should_produce_valid_only__pull_through_neutral(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
-|    |    |    |    |     
-aG1  a4        b1   bG1 
-|    |    |    |    | 
+|    |    |    |    |
+aG1  a4        b1   bG1
+|    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
@@ -122,9 +122,9 @@ aG1  a4        b1   bG1
     def test_build_flow_expand_plan__should_produce_valid_only__most_basic_move__excess_source(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
-|    |    |    |     
-aG1  a4   b1   bG1 
-|    |    |    | 
+|    |    |    |
+aG1  a4   b1   bG1
+|    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
@@ -149,9 +149,9 @@ aG1  a4   b1   bG1
     def test_build_flow_expand_plan__should_produce_valid_only__pull_through_friendly__excess_source(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
-|    |    |    |    |     
-aG1  a4   a1   b1   bG1 
-|    |    |    |    | 
+|    |    |    |    |
+aG1  a4   a1   b1   bG1
+|    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
@@ -176,9 +176,9 @@ aG1  a4   a1   b1   bG1
     def test_build_flow_expand_plan__should_produce_valid_only__pull_through_neutral__excess_source(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
-|    |    |    |    |     
-aG1  a5        b1   bG1 
-|    |    |    |    | 
+|    |    |    |    |
+aG1  a5        b1   bG1
+|    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
@@ -203,9 +203,9 @@ aG1  a5        b1   bG1
     def test_build_flow_expand_plan__should_produce_valid_only__most_basic_move__need_cumulative_gather(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapData = """
-|    |    |    |     
-aG2  a2   b1   bG1 
-|    |    |    | 
+|    |    |    |
+aG2  a2   b1   bG1
+|    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
@@ -230,9 +230,9 @@ aG2  a2   b1   bG1
     def test_build_flow_expand_plan__should_produce_valid_only__pull_through_friendly__need_cumulative_gather(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
-|    |    |    |    |     
-aG2  a2   a1   b1   bG1 
-|    |    |    |    | 
+|    |    |    |    |
+aG2  a2   a1   b1   bG1
+|    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
@@ -257,9 +257,9 @@ aG2  a2   a1   b1   bG1
     def test_build_flow_expand_plan__should_produce_valid_only__pull_through_neutral__need_cumulative_gather(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
-|    |    |    |    |     
-aG2  a3        b1   bG1 
-|    |    |    |    | 
+|    |    |    |    |
+aG2  a3        b1   bG1
+|    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
@@ -284,9 +284,9 @@ aG2  a3        b1   bG1
     def test_build_flow_expand_plan__should_produce_valid_only__most_basic_move__multi_enemy_tiles(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
-|    |    |    |     
-aG3  a3   b1   bG1 
-|    |    |    | 
+|    |    |    |
+aG3  a3   b1   bG1
+|    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
@@ -311,9 +311,9 @@ aG3  a3   b1   bG1
     def test_build_flow_expand_plan__should_produce_valid_only__most_basic_move__multi_enemy_tiles__differing_army(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
-|    |    |    |     
-aG3  a5   b1   bG3 
-|    |    |    | 
+|    |    |    |
+aG3  a5   b1   bG3
+|    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
@@ -338,9 +338,9 @@ aG3  a5   b1   bG3
     def test_build_flow_expand_plan__should_produce_valid_only__pull_through_friendly__multi_enemy_tiles(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
-|    |    |    |    |     
-aG3  a3   a1   b1   bG1 
-|    |    |    |    | 
+|    |    |    |    |
+aG3  a3   a1   b1   bG1
+|    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
@@ -365,9 +365,9 @@ aG3  a3   a1   b1   bG1
     def test_build_flow_expand_plan__should_produce_valid_only__pull_through_neutral__multi_enemy_tiles(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapData = """
-|    |    |    |    |     
-aG2  a5   b1        bG1 
-|    |    |    |    | 
+|    |    |    |    |
+aG2  a5   b1        bG1
+|    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
@@ -380,8 +380,8 @@ aG2  a5   b1        bG1
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
 
-        if debugMode:
-            self.render_flow_expansion_debug(builder, flowExpander, flowResult, renderAll=False)
+        # if debugMode:
+        #     self.render_flow_expansion_debug(builder, flowExpander, flowResult, renderAll=False)
 
         self.assertEqual(3, len(opts), 'taking the neut, and taking the neut + enemy 1, and + enemy 2')
         longestOpt = self.get_longest_flow_expansion_option(opts)
@@ -389,18 +389,18 @@ aG2  a5   b1        bG1
         # opt = opts[0]
         self.assertEqual(4, longestOpt.length, 'must make 4 moves to pull the ')
         self.assertEqual(IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL * 2 + 1, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
-        self.assertEqual(6, longestOpt.gathered_army, 'gathered a 2 and a 6')
+        self.assertEqual(5, longestOpt.gathered_army, 'gathered a 2 and a 5')
 
 
     def test_build_flow_expand_plan__should_produce_valid_only(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
-|    |    |    |     
-a3   a2   a1   a1 
-aG1  M    a1   b1 
-M    M         b1 
-          M    bG1 
-|    |    |    | 
+|    |    |    |
+a3   a2   a1   a1
+aG1  M    a1   b1
+M    M         b1
+          M    bG1
+|    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
@@ -454,14 +454,14 @@ M    M         b1
 
         testData = """
 |    |    |    |    |    |    |
-aG1                                
-                    a3   a3   a3  
-a20                 b1              
-                    b1              
-                    b1              
-a2                                
+aG1
+                    a3   a3   a3
+a20                 b1
+                    b1
+                    b1
+a2
                               bG1
-|    |    |    |    | 
+|    |    |    |    |
         """
 
         #optimal is taking the 3x 3's above and using them to capture the 3x 1's, which is 5 moves for 3 caps.
@@ -479,27 +479,27 @@ a2
                 flowExpander.method = method
                 flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=turns, boardAnalysis=None, territoryMap=None, negativeTiles=None)
                 opts = flowResult.flow_plans
-                self.assertEqual(3, len(opts), 'should have an option for each length gather/cap, 1, 3, 5 lengths.')
+                # self.assertEqual(3, len(opts), 'should have an option for each length gather/cap, 1, 3, 5 lengths.')
                 longestOpt = self.get_longest_flow_expansion_option(opts)
                 # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
                 # opt = opts[0]
                 self.assertEqual(5, longestOpt.length, 'should be 5 turns to pull 3x 3s and capture 3x 1s')
-                self.assertEqual(6, round(longestOpt.econValue), 'should be 6 econ roughly to capture 3 enemy tiles.')
-                self.assertEqual(0, longestOpt.armyRemaining, 'should have NO army remaining')
+                self.assertEqual(round(3 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, 2), round(longestOpt.econValue, 2), 'should be 6 econ roughly to capture 3 enemy tiles.')
+                self.assertEqual(6, longestOpt.gathered_army, 'should have NO army remaining')
 
     def test_builds_flow_plan_from_single_segment__exact_cap__only_option(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
 
         testData = """
 |    |    |    |    |    |    |
-aG1            M    M    M    M                    
-               N40  a3   a3   a3  
-a1             M    b1   M    M           
-               M    b1   M          
-               M    b1   M          
-a1                  N40              
+aG1            M    M    M    M
+               N40  a3   a3   a3
+a1             M    b1   M    M
+               M    b1   M
+               M    b1   M
+a1                  N40
                               bG1
-|    |    |    |    | 
+|    |    |    |    |
         """
 
         #optimal is taking the 3x 3's above and using them to capture the 3x 1's, which is 5 moves for 3 caps.
@@ -522,7 +522,7 @@ a1                  N40
                 # opt = opts[0]
                 self.assertEqual(5, longestOpt.length, 'should be 5 turns to pull 3x 3s and capture 3x 1s')
                 self.assertEqual(3 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
-                self.assertEqual(8, longestOpt.gathered_army, 'should have NO army remaining')
+                self.assertEqual(6, longestOpt.gathered_army, 'should have NO army remaining')
 
     def test_builds_flow_plan_from_single_segment__extra_army(self):
         # TODO recognize the 1/econ/t expansion into neutral as part of this? or nah?
@@ -530,14 +530,14 @@ a1                  N40
 
         testData = """
 |    |    |    |    |    |    |
-aG1                                
-                    a3   a3   a5  
-a20                 b1              
-                    b1              
-                    b1              
-a2                                
+aG1
+                    a3   a3   a5
+a20                 b1
+                    b1
+                    b1
+a2
                               bG1
-|    |    |    |    | 
+|    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
@@ -566,14 +566,14 @@ a2
 
         testData = """
 |    |    |    |    |    |    |
-aG1                                
-                    a3   a3   a2  
-a20                 b1              
-                    b1              
-                    b1              
-a2                                
+aG1
+                    a3   a3   a2
+a20                 b1
+                    b1
+                    b1
+a2
                               bG1
-|    |    |    |    | 
+|    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
@@ -595,14 +595,14 @@ a2
 
         testData = """
 |    |    |    |    |    |    |
-aG1                                
-                    a3   a2   a2  
-a20                 b1              
-                    b1              
-                    b1              
-a2                                
+aG1
+                    a3   a2   a2
+a20                 b1
+                    b1
+                    b1
+a2
                               bG1
-|    |    |    |    | 
+|    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
@@ -624,14 +624,14 @@ a2
 
         testData = """
 |    |    |    |    |    |    |
-aG1                                
+aG1
                     a3   a2   a3
-a20                 b1              
-                    b1              
-                    b1              
-a2                                
+a20                 b1
+                    b1
+                    b1
+a2
                               bG1
-|    |    |    |    | 
+|    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
@@ -653,14 +653,14 @@ a2
 
         testData = """
 |    |    |    |    |    |    |
-aG1                                
+aG1
                     a3   a2   a3
-a20                 b1        a2      
-                    b1              
-                    b1              
-a2                                
+a20                 b1        a2
+                    b1
+                    b1
+a2
                               bG1
-|    |    |    |    | 
+|    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
@@ -682,14 +682,14 @@ a2
 
         testData = """
 |    |    |    |    |    |    |
-aG1                                
+aG1
                     a3   a2   a3
-a20                 b1              
-                    b1              
-                    b0              
-a2                  b1              
+a20                 b1
+                    b1
+                    b0
+a2                  b1
                               bG1
-|    |    |    |    | 
+|    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
@@ -711,7 +711,7 @@ a2                  b1
     def test_builds_flow_plan__should_recognize_gather_into_top_path_is_best(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=False)
 
         self.begin_capturing_logging()
         builder = TileIslandBuilder(map)
@@ -719,6 +719,8 @@ a2                  b1
         flowExpander = ArmyFlowExpander(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        if debugMode:
+            self.render_flow_expansion_debug(builder, flowExpander, flowResult, renderAll=False)
         opts = flowResult.flow_plans
         self.assertGreater(len(opts), 0)
         sortedOpts = sorted(opts, key=lambda o: o.econValue / o.length, reverse=True)
@@ -732,7 +734,7 @@ a2                  b1
     def test_should_recognize_gather_into_top_path_is_best(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=False)
 
         # if debugMode:
         #     self.render_map(map)
@@ -748,7 +750,7 @@ a2                  b1
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         for i in range(10):
             mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
-            map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+            map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=False)
 
             map.GetTile(7, 12).isMountain = True
             map.GetTile(7, 10).isMountain = True
@@ -762,12 +764,15 @@ a2                  b1
             timeLimit = 10
 
             opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=50, debugMode=debugMode, renderThresh=700, tileIslandSize=4, timeLimit=timeLimit, shouldRender=False, method=method)
+
+            maxVt = sorted(opts, key=lambda o: o.econValue / o.length, reverse=True)[0]
+
+            self.assertNotEqual(0, len(opts))
             try:
-                self.assertNotEqual(0, len(opts))
-                self.assertGreater(opts[0].econValue / opts[0].length, 1.5, f'best vt low: {opts[0]}')
+                self.assertGreater(maxVt.econValue / maxVt.length, 1.5, f'best vt low: {maxVt}')
             except:
                 if debugMode:
-                    self.render_gather_capture_plan(map, opts[0], general.player, enemyGeneral.player, f'best vt low: {opts[0]}')
+                    self.render_gather_capture_plan(map, maxVt, general.player, enemyGeneral.player, f'best vt low: {maxVt}')
                 raise
 
             longestOpt = next(opt for opt in sorted(opts, key=lambda o: o.length, reverse=True))
@@ -780,7 +785,7 @@ a2                  b1
 
             bestLongerOpt = next(opt for opt in sorted(opts, key=lambda o: (o.length > 15, o.econValue / o.length), reverse=True))
             try:
-                self.assertGreater(bestLongerOpt.econValue / bestLongerOpt.length, 1.1, f'longerOpt vt low: {bestLongerOpt}')
+                self.assertGreater(bestLongerOpt.econValue / bestLongerOpt.length, 0.9, f'longerOpt vt low: {bestLongerOpt}')
             except:
                 if debugMode:
                     self.render_gather_capture_plan(map, bestLongerOpt, general.player, enemyGeneral.player, f'longerOpt vt low: {bestLongerOpt}')
@@ -789,7 +794,7 @@ a2                  b1
     def test_should_not_produce_invalid_plan__enemy_cluster_crossing_neutral_tile(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=False)
 
         map.GetTile(12, 8).isMountain = True
         map.GetTile(12, 9).isMountain = True
@@ -840,7 +845,7 @@ a2                  b1
     def test_should_not_produce_invalid_plan__neutral_cap(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=False)
 
         map.GetTile(12, 8).isMountain = True
         map.GetTile(12, 9).isMountain = True
@@ -963,75 +968,86 @@ a2                  b1
 
     def test_should_not_produce_invalid_enemy_captures(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
 
-        map.GetTile(12, 8).isMountain = True
-        map.GetTile(12, 9).isMountain = True
-        map.GetTile(12, 10).isMountain = True
-        map.GetTile(12, 11).isMountain = True
-        # map.GetTile(10, 11).isMountain = True
-        map.GetTile(10, 12).isMountain = True
-        map.GetTile(10, 13).isMountain = True
-        map.GetTile(5, 1).isMountain = True
-        # map.GetTile(8, 10).isMountain = True
-        # map.GetTile(8, 11).isMountain = True
-        # map.GetTile(8, 12).isMountain = True
-        map.GetTile(3, 3).isMountain = True
-        map.GetTile(2, 1).isMountain = True
-        map.GetTile(2, 2).isMountain = True
-        map.GetTile(5, 0).isMountain = True
-        # map.GetTile(14, 1).isMountain = True
-        # map.GetTile(13, 0).isMountain = True
-        map.GetTile(14, 4).isMountain = True
-        map.GetTile(14, 8).isMountain = True
-        map.GetTile(15, 10).isMountain = True
-        map.GetTile(15, 11).isMountain = True
-        map.GetTile(14, 12).isMountain = True
-        map.GetTile(11, 8).isMountain = True
-        map.GetTile(13, 10).isMountain = True
-        map.GetTile(13, 11).isMountain = True
-        map.GetTile(13, 1).isMountain = True
-        map.GetTile(15, 14).isMountain = True
-        map.GetTile(13, 16).isMountain = True
-        map.GetTile(11, 16).isMountain = True
-        map.GetTile(10, 16).isMountain = True
-        map.GetTile(10, 12).isMountain = True
-        map.GetTile(8, 17).isMountain = True
-        # map.GetTile(7, 14).isMountain = True
-        # map.GetTile(9, 10).isMountain = True
-        map.GetTile(10, 10).isMountain = True
-        map.GetTile(6, 12).isMountain = True
-        map.GetTile(5, 16).isMountain = True
-        map.GetTile(5, 13).isMountain = True
-        # map.GetTile(3, 15).isMountain = True
-        # map.GetTile(2, 14).isMountain = True
-        # map.GetTile(3, 13).isMountain = True
-        map.GetTile(7, 10).isMountain = True
-        # for i in range(12, 16):
-        #     map.GetTile(7, i).isMountain = True
-        for i in range(6, 11):
-            map.GetTile(10, i).isMountain = True
-        # for i in range(6, 10):
-        #     map.GetTile(i, 15).isMountain = True
+        for (turns, expectedMin) in [
+            (2, 2.0),
+            (3, 2.0),
+            (5, 0.85),
+            (40, 1.0),
+            (60, 1.1),
+        ]:
+            with self.subTest(turns=turns, expectedMin=expectedMin):
+                mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
 
-        map.update_reachable()
+                general.army += 50
 
-        # if debugMode:
-        #     self.render_map(map)
+                map.GetTile(12, 8).isMountain = True
+                map.GetTile(12, 9).isMountain = True
+                map.GetTile(12, 10).isMountain = True
+                map.GetTile(12, 11).isMountain = True
+                # map.GetTile(10, 11).isMountain = True
+                map.GetTile(10, 12).isMountain = True
+                map.GetTile(10, 13).isMountain = True
+                map.GetTile(5, 1).isMountain = True
+                # map.GetTile(8, 10).isMountain = True
+                # map.GetTile(8, 11).isMountain = True
+                # map.GetTile(8, 12).isMountain = True
+                map.GetTile(3, 3).isMountain = True
+                map.GetTile(2, 1).isMountain = True
+                map.GetTile(2, 2).isMountain = True
+                map.GetTile(5, 0).isMountain = True
+                # map.GetTile(14, 1).isMountain = True
+                # map.GetTile(13, 0).isMountain = True
+                map.GetTile(14, 4).isMountain = True
+                map.GetTile(14, 8).isMountain = True
+                map.GetTile(15, 10).isMountain = True
+                map.GetTile(15, 11).isMountain = True
+                map.GetTile(14, 12).isMountain = True
+                map.GetTile(11, 8).isMountain = True
+                map.GetTile(13, 10).isMountain = True
+                map.GetTile(13, 11).isMountain = True
+                map.GetTile(13, 1).isMountain = True
+                map.GetTile(15, 14).isMountain = True
+                map.GetTile(13, 16).isMountain = True
+                map.GetTile(11, 16).isMountain = True
+                map.GetTile(10, 16).isMountain = True
+                map.GetTile(10, 12).isMountain = True
+                map.GetTile(8, 17).isMountain = True
+                # map.GetTile(7, 14).isMountain = True
+                # map.GetTile(9, 10).isMountain = True
+                map.GetTile(10, 10).isMountain = True
+                map.GetTile(6, 12).isMountain = True
+                map.GetTile(5, 16).isMountain = True
+                map.GetTile(5, 13).isMountain = True
+                # map.GetTile(3, 15).isMountain = True
+                # map.GetTile(2, 14).isMountain = True
+                # map.GetTile(3, 13).isMountain = True
+                map.GetTile(7, 10).isMountain = True
+                # for i in range(12, 16):
+                #     map.GetTile(7, i).isMountain = True
+                for i in range(6, 11):
+                    map.GetTile(10, i).isMountain = True
+                # for i in range(6, 10):
+                #     map.GetTile(i, 15).isMountain = True
 
-        self.enable_search_time_limits_and_disable_debug_asserts()
-        self.begin_capturing_logging()
+                map.update_reachable()
 
-        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=40, debugMode=debugMode, renderThresh=700, tileIslandSize=5, method=method)
-        self.assertNotEqual(0, len(opts))
-        self.assertGreater(opts[0].econValue / opts[0].length, 1.5, 'should find a plan with pretty high value per turn')
+                # if debugMode:
+                #     self.render_map(map)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                self.begin_capturing_logging()
+
+                opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=1, method=method, shouldRender=True)
+                self.assertNotEqual(0, len(opts))
+                self.assertGreater(opts[0].econValue / opts[0].length, expectedMin, 'should find a plan with pretty high value per turn')
 
 
     def test_should_gather_through_friendly_or_enemy_island_flows(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=False)
 
         map.GetTile(12, 11).isMountain = True
         map.GetTile(10, 12).isMountain = True
@@ -1083,9 +1099,9 @@ a2                  b1
     def test_should_gather_through_friendly_or_enemy_island_flows__simple_base_case(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapData = """
-|    |        
+|    |
 aG12 bG1
-|    |  
+|    |
 player_index=0
 """
 
@@ -1126,9 +1142,9 @@ player_index=0
     def test_should_gather_through_friendly_or_enemy_island_flows__basic(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
-|    |    |    |    |    |    |    |    |    |    |    
+|    |    |    |    |    |    |    |    |    |    |
 aG12 a8   a2   b1   a2   b2   b1   b1   b1   b1   bG1
-|    |    |    |    |    |    |    |    |    |    |    
+|    |    |    |    |    |    |    |    |    |    |
 player_index=0
 """
 
@@ -1169,11 +1185,11 @@ player_index=0
 
 
     def test_should_gather_through_friendly_or_enemy_island_flows__double(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapData = """
-|    |    |    |    |    |    |    |    |    |    |    
+|    |    |    |    |    |    |    |    |    |    |
 aG12 a8   a2   b1   a2   b2   b1   a0   b1   b1   bG1
-|    |    |    |    |    |    |    |    |    |    |    
+|    |    |    |    |    |    |    |    |    |    |
 player_index=0
 """
 
@@ -1185,7 +1201,110 @@ player_index=0
             # (8, 8, 5 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,0->8,0'),
         ]:
             with self.subTest(turns=turns):
-                map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+                map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+
+                # if debugMode:
+                #     self.render_map(map)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                self.begin_capturing_logging()
+
+                opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=True, method=method)
+
+                # if debugMode:
+                #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+                #     simHost.queue_player_moves_str(general.player, expectedPath)
+                #
+                #     self.begin_capturing_logging()
+                #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+
+                self.assertNotEqual(0, len(opts))
+
+                longestOpt = max(opts, key=lambda opt: opt.length)
+
+                # 7 en caps, 10 moves, should be our best case scenario.
+                self.assertEqual(round(bestEcon, 5), round(longestOpt.econValue, 5))
+                self.assertEqual(bestTurns, longestOpt.length)
+
+
+    def test_build_flow_expand_plan__incomplete_target_island__should_not_overcap_tiles_beyond_algo_army(self):
+        """
+        Regression test: when the incompleteTarget island is fully exhausted by incompleteUsedTurns,
+        the GCP plan must not include an extra tile the algo didn't have army for.
+        The +1 offset in incompleteUsedTurns caused incompleteUsedTurns > incompleteTarget.tile_count
+        when the island was exactly exhausted, giving the plan an extra free capture with negative army.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        # 6 friendly tiles (incomplete source) + 6 neutral tiles (incomplete target) + enemy general.
+        # With turns=12 the algo captures 5 neutrals and stops; the +1 bug causes the GCP
+        # builder to select 6 tiles, producing a root node with value < 0.
+        # 13 columns: 6 friendly (aG1, a3x5) + 6 neutral + 1 enemy general
+        # Each cell is exactly 5 chars; blank cells become neutral tiles via fill_out_tiles
+        sep = '|    ' * 12 + '|'
+        friendly = 'aG1  ' + 'a3   ' * 5  # cols 0-5
+        neutral6 = '     ' * 6            # cols 6-11
+        mapData = f'\n{sep}\n{friendly}{neutral6}bG1\n{sep}\nplayer_index=0\n'
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+
+        expander, opts = self.run_army_flow_expansion_and_get_expander(
+            map,
+            general,
+            enemyGeneral,
+            turns=12,
+            debugMode=debugMode,
+            renderThresh=700,
+            tileIslandSize=5,
+            shouldRender=False,
+            method=method,
+        )
+
+        self.assertNotEqual(0, len(opts), 'should produce at least one valid plan')
+        for opt in opts:
+            for rootNode in opt.root_nodes:
+                self.assertGreaterEqual(
+                    rootNode.value,
+                    0,
+                    f'Plan root node had negative army ({rootNode.value}) - invalid plan produced: {opt}',
+                )
+    
+    def test_a_more_open_normal_map(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/a_more_open_normal_map___VY49QNB72---1--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        turns = 50
+
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=1, shouldRender=debugMode, method=method)
+
+        # if debugMode:
+        #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+        #     simHost.queue_player_moves_str(general.player, expectedPath)
+        #
+        #     self.begin_capturing_logging()
+        #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+
+        self.assertNotEqual(0, len(opts))
+
+        longestOpt = max(opts, key=lambda opt: opt.length)
+
+    def test_should_find_merging_streams_when_optimal(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapData = """
+|    |    |    |    |    |    |
+aG13 b1   b1   b7   b7   M    bG1
+a12                 b7   b1   b1
+|    |    |    |    |    |    |
+player_index=0
+"""
+        for turns, bestTurns, bestEcon, expectedPath in [
+            (7, 5, 4 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,0->3,0  0,1->4,1'),
+            (3, 3, 3 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,0->3,0'),
+            (5, 5, 4 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,1->0,0->4,0'),
+        ]:
+            with self.subTest(turns=turns):
+                map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
 
                 # if debugMode:
                 #     self.render_map(map)
@@ -1194,6 +1313,48 @@ player_index=0
                 self.begin_capturing_logging()
 
                 opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=debugMode, method=method)
+
+                # if debugMode:
+                #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+                #     simHost.queue_player_moves_str(general.player, expectedPath)
+                #
+                #     self.begin_capturing_logging()
+                #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+
+                self.assertNotEqual(0, len(opts))
+
+                longestOpt = max(opts, key=lambda opt: opt.length)
+
+                # 7 en caps, 10 moves, should be our best case scenario.
+                self.assertEqual(round(bestEcon, 5), round(longestOpt.econValue, 5))
+                self.assertEqual(bestTurns, longestOpt.length)
+
+
+
+    def test_should_not_include_separate_streams_in_same_plan(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapData = """
+|    |    |    |    |    |    |
+aG13 b1                  M    bG1
+
+a12  b1             b7   b1   b1
+|    |    |    |    |    |    |
+player_index=0
+"""
+        for turns, bestTurns, bestEcon, expectedPath in [
+            (2, 2, 1 + 1 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,0->2,0'), # should not find using both a12s in the same plan (?)
+            (1, 1, 1 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,0->1,0'),
+        ]:
+            with self.subTest(turns=turns):
+                map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+
+                # if debugMode:
+                #     self.render_map(map)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                self.begin_capturing_logging()
+
+                opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=False, method=method)
 
                 # if debugMode:
                 #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)

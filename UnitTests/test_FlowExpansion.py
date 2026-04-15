@@ -381,7 +381,7 @@ aG2  a5   b1        bG1
         opts = flowResult.flow_plans
 
         # if debugMode:
-        #     self.render_flow_expansion_debug(builder, flowExpander, flowResult, renderAll=False)
+        #     self.render_flow_expansion_debug(flowExpander, flowResult, renderAll=False)
 
         self.assertEqual(3, len(opts), 'taking the neut, and taking the neut + enemy 1, and + enemy 2')
         longestOpt = self.get_longest_flow_expansion_option(opts)
@@ -720,7 +720,7 @@ a2                  b1
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         if debugMode:
-            self.render_flow_expansion_debug(builder, flowExpander, flowResult, renderAll=False)
+            self.render_flow_expansion_debug(flowExpander, flowResult, renderAll=False)
         opts = flowResult.flow_plans
         self.assertGreater(len(opts), 0)
         sortedOpts = sorted(opts, key=lambda o: o.econValue / o.length, reverse=True)
@@ -1312,7 +1312,32 @@ player_index=0
                 self.enable_search_time_limits_and_disable_debug_asserts()
                 self.begin_capturing_logging()
 
-                opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=debugMode, method=method)
+                expander, optCollection = self.run_army_flow_expansion_and_get_expander_and_collection(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=debugMode, method=method)
+                opts = optCollection.flow_plans
+                if turns == 7:
+                    try:
+                        self.assertGreaterEqual(len(opts), 2)
+                        # we expect it to RETURN the len 3 and len 4 best options at least
+                        opt3 = next(opt for opt in opts if opt.length == 3 and opt.get_first_move().source.coords == (0, 0))
+                        self.assertEqual(3 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, round(opt3.econValue, 5))
+                        self.assertEqual(map.GetTile(0, 0), opt3.tileList[0])
+                        self.assertEqual(map.GetTile(1, 0), opt3.tileList[1])
+                        self.assertEqual(map.GetTile(2, 0), opt3.tileList[2])
+                        self.assertEqual(map.GetTile(3, 0), opt3.tileList[3])
+
+                        opt4 = next(opt for opt in opts if opt.length == 4 and opt.get_first_move().source.coords == (0, 1))
+                        self.assertEqual(1 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL + 3, round(opt4.econValue, 5))
+                        self.assertEqual(map.GetTile(0, 1), opt4.tileList[0])
+                        self.assertEqual(map.GetTile(1, 1), opt4.tileList[1])
+                        self.assertEqual(map.GetTile(2, 1), opt4.tileList[2])
+                        self.assertEqual(map.GetTile(3, 1), opt4.tileList[3])
+                        self.assertEqual(map.GetTile(4, 1), opt4.tileList[4])
+                    except Exception as ex:
+                        if debugMode:
+                            self.render_flow_expansion_debug(expander, optCollection, renderAll=True)
+                        raise
+                    continue
+
 
                 # if debugMode:
                 #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
@@ -1321,6 +1346,7 @@ player_index=0
                 #     self.begin_capturing_logging()
                 #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
 
+                # otherwise just the one option
                 self.assertNotEqual(0, len(opts))
 
                 longestOpt = max(opts, key=lambda opt: opt.length)

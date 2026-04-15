@@ -171,10 +171,11 @@ class GatherCapturePlan(TilePlanInterface):
             for n in GatherTreeNode.iterate_tree_nodes(self.root_nodes):
                 self._tileList.append(n.tile)
                 self._tileSet.add(n.tile)
+            self._tileList.reverse()
             for t in self.approximate_capture_tiles:
                 if t not in self._tileSet:
-                    self.tileList.append(t)
-                    self.tileSet.add(t)
+                    self._tileList.append(t)
+                    self._tileSet.add(t)
         return self._tileList
 
     def __iter__(self) -> typing.Iterator[PathMove]:

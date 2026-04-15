@@ -1687,6 +1687,35 @@ class TestBase(unittest.TestCase):
             timeLimit: float | None = None,
             method: FlowGraphMethod | None = None,
     ) -> typing.Tuple[ArmyFlowExpander, typing.List[FlowExpansionPlanOption]]:
+        expander, optCollection = self.run_army_flow_expansion_and_get_expander_and_collection(
+            map,
+            general,
+            enemyGeneral,
+            turns,
+            negativeTiles,
+            debugMode,
+            renderThresh,
+            tileIslandSize,
+            shouldRender,
+            timeLimit,
+            method,
+        )
+        return expander, optCollection.flow_plans
+
+    def run_army_flow_expansion_and_get_expander_and_collection(
+            self,
+            map: MapBase,
+            general: Tile,
+            enemyGeneral: Tile,
+            turns: int,
+            negativeTiles: typing.Set[Tile] | None = None,
+            debugMode: bool = False,
+            renderThresh: int = 10000,
+            tileIslandSize: int | None = None,
+            shouldRender: bool = True,
+            timeLimit: float | None = None,
+            method: FlowGraphMethod | None = None,
+    ) -> typing.Tuple[ArmyFlowExpander, FlowExpansionPlanOptionCollection]:
         cutoffTime = None
         if timeLimit is not None:
             cutoffTime = time.perf_counter() + timeLimit
@@ -1731,14 +1760,13 @@ class TestBase(unittest.TestCase):
 
         logbook.info(f'full islands + expand completed in {time.perf_counter() - start:.5f}s in total.')
 
-        opts = optCollection.flow_plans
-
         if debugMode and shouldRender:
-            self.render_flow_expansion_debug(builder, expander, optCollection, renderAll, turnsLimit=turns)
-        return expander, opts
+            self.render_flow_expansion_debug(expander, optCollection, renderAll, turnsLimit=turns)
+        return expander, optCollection
 
-    def render_flow_expansion_debug(self, builder: TileIslandBuilder, expander: ArmyFlowExpander, optCollection: FlowExpansionPlanOptionCollection, renderAll: bool, turnsLimit: int = 100):
+    def render_flow_expansion_debug(self, expander: ArmyFlowExpander, optCollection: FlowExpansionPlanOptionCollection, renderAll: bool, turnsLimit: int = 100):
         map = expander.map
+        builder: TileIslandBuilder = expander.island_builder
         vi = self.get_renderable_view_info(map)
         enemyGeneral = expander.enemyGeneral
         general = expander.friendlyGeneral
@@ -1774,9 +1802,15 @@ class TestBase(unittest.TestCase):
             #         bestOpts.append(plan)
 
         for bestOpt in bestOpts:
-            vi.add_info_line(str(bestOpt))
+            vi.add_info_line(str(bestOpt) + '   ' + '|'.join(f'{t.x},{t.y}' for t in bestOpt.tileList))
             if enemyGeneral is not None:
                 ArmyFlowExpander.add_flow_expansion_option_to_view_info(map, bestOpt, general.player, enemyGeneral.player, vi)
+        vi.add_info_line('-------- v all options --------')
+
+        for opt in optCollection.flow_plans:
+            vi.add_info_line(str(opt) + '   ' + '|'.join(f'{t.x},{t.y}' for t in opt.tileList))
+            if enemyGeneral is not None:
+                ArmyFlowExpander.add_flow_expansion_option_to_view_info(map, opt, general.player, enemyGeneral.player, vi)
 
         flowGraph = expander.flow_graph
         if flowGraph is not None:

@@ -2381,33 +2381,6 @@ class ArmyFlowExpander(object):
         return used
 
     @staticmethod
-    def is_any_tile_in_flow(rootNodes: typing.Iterable[IslandFlowNode], tiles: typing.Iterable[Tile]) -> bool:
-        for n in ArmyFlowExpander.iterate_flow_nodes(rootNodes):
-            for tile in tiles:
-                if tile in n.island.tile_set:
-                    return True
-
-        return False
-
-    @staticmethod
-    def are_all_tiles_in_flow(rootNodes: typing.Iterable[IslandFlowNode], tiles: typing.Iterable[Tile]) -> bool:
-        toFind = set(t for t in tiles)
-        for n in ArmyFlowExpander.iterate_flow_nodes(rootNodes):
-            toFind.difference_update(n.island.tile_set)
-            if len(toFind) == 0:
-                return True
-
-        return False
-
-    @staticmethod
-    def is_tile_in_flow(rootNodes: typing.Iterable[IslandFlowNode], tile: Tile) -> bool:
-        for n in ArmyFlowExpander.iterate_flow_nodes(rootNodes):
-            if tile in n.island.tile_set:
-                return True
-
-        return False
-
-    @staticmethod
     def iterate_flow_nodes(rootNodes: typing.Iterable[IslandFlowNode]) -> typing.Generator[IslandFlowNode, None, None]:
         q = deque()
 
@@ -2844,13 +2817,17 @@ class ArmyFlowExpander(object):
         toNoNeut = self.flow_graph.flow_node_lookup_by_island_no_neut[toIsland.unique_id]
         for dest in fromNoNeut.flow_to:
             if toNoNeut == dest.target_flow_node:
+                return True
                 allow = True
+                break
 
         fromWithNeut = self.flow_graph.flow_node_lookup_by_island_inc_neut[fromIsland.unique_id]
         toWithNeut = self.flow_graph.flow_node_lookup_by_island_inc_neut[toIsland.unique_id]
         for dest in fromWithNeut.flow_to:
             if toWithNeut == dest.target_flow_node:
+                return True
                 allow = True
+                break
 
         return allow
         # fromWithNeut = self.flow_graph.flow_node_lookup_by_island_inc_neut[fromIsland.unique_id]

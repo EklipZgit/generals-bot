@@ -4,6 +4,7 @@
 Implement a new `ArmyFlowExpanderV2` that eventually replaces `ArmyFlowExpander`, while preserving the public interface expected by `UnitTests/test_FlowExpansion.py` and related callers.
 
 The V2 design should:
+
 - Reuse only the specific existing pieces that are trustworthy.
 - Not assume `IterativeExpansion.py` is bug free.
 - Treat `flowplan prompt half.txt` as the primary design source, not `IterativeExpansion.py` behavior.
@@ -13,6 +14,7 @@ The V2 design should:
 ## Current Architecture Summary
 
 ### Existing stable-ish pieces worth reusing
+
 - `NetworkXFlowDirectionFinder.build_graph_data(...)`
   - Builds the min-cost flow precursor graph and `NxFlowGraphData`.
 - `NetworkXFlowDirectionFinder.compute_flow_dict(...)`
@@ -105,6 +107,7 @@ Important exception:
 - they may still appear inside target-side traversals as turn-cost-only crossing nodes.
 
 ### 2. Lookup tables should be indexed by turns, not army
+
 The prompt should be read as turn-indexed only.
 
 For implementation and testability, use **turn-indexed entries** as the authoritative representation.
@@ -134,6 +137,7 @@ Likely end state:
 - we will probably consolidate primarily onto the neutral-inclusive flow graph path once validated
 
 ### 4. Step 1 should not depend on `IterativeExpansion` search correctness
+
 We should only reuse the **partial tile walking ideas**, not the old queue/visited heuristics.
 
 Meaning:
@@ -144,6 +148,7 @@ Meaning:
 - Do not reuse the old search state machine as the authoritative algorithm.
 
 ### 5. Stream uniqueness across the current plan
+
 Within a single max-flow output, streams are expected to be unique and non-overlapping.
 
 Therefore:
@@ -167,6 +172,7 @@ Some friendly islands should be marked `target crossable`, meaning:
 These nodes should be treated as target-side routing / bridge nodes to reach more valuable downstream capture nodes.
 
 #### `target crossable` detection rule
+
 A friendly island should be marked `target crossable` when all of the following hold:
 
 - it is a friendly island
@@ -186,12 +192,14 @@ This behavior should be shared by both algorithms that iterate border pairs / bo
 ## Proposed Data Structures
 
 ### `FlowStreamIslandContribution`
+
 Represents one stream contribution record used during preprocessing / ordering / reconstruction.
 
 This is **not** intended to be the full A* node/state object.
 It is lightweight metadata about one flow node's contribution to a stream.
 
 Clarifications:
+
 - `sort_score`
   - the heuristic ordering score used when ranking candidate next stream contributions during preprocessing
   - not necessarily persisted into final tight-loop table walking if a cheaper derived ordering can replace it
@@ -200,6 +208,7 @@ Clarifications:
   - intended as a stream-ordering feature, not as a separate semantic game value
 
 Fields:
+
 - `island_id: int`
 - `is_friendly: bool`
 - `flow_node: IslandFlowNode`
@@ -211,6 +220,7 @@ Fields:
   - `True` when a friendly island is being used as a target-side crossing/bridge node rather than as a gather contribution
 
 ### `FlowTurnsEntry`
+
 One lookup-table entry for exactly `n` turns.
 
 This structure should stay small and cheap because it will be touched in tight loops.
@@ -236,6 +246,7 @@ Fields:
   - populated in Step 2
 
 Notes:
+
 - `combined_turn_cost` does not need to be stored as a field if the entry is still being accessed through its table index and `gather_index`
 - island references should generally be recovered from the included flow nodes rather than redundantly stored
 - no `capture_tiles` / `gather_tiles` tuple payload should be stored here; that was underspecified and unnecessary for the lookup-table structure
@@ -270,11 +281,11 @@ Fields:
 
 ## Phase Plan
 
-## Phase -1: Split algorithm-specific test harnesses first
+## Phase -1: Split algorithm-specific test harnesses first ✅
 Before implementing V2 algorithms, create separate test files for each planned algorithm / planning mode.
 
 Goal:
-- make it easy to iterate independently on each algorithm’s expected behavior
+- make it easy to iterate independently on each algorithm's expected behavior
 - keep scenario coverage aligned across algorithms
 - allow expectations to diverge cleanly where algorithm design intentionally differs
 
@@ -284,48 +295,48 @@ Suggested test layout:
 
 Examples:
 
-- `UnitTests/test_FlowExpansion_BorderStreamPreprocess.py`
-- `UnitTests/test_FlowExpansion_LookupGeneration.py`
-- `UnitTests/test_FlowExpansion_GroupedKnapsack.py`
-- `UnitTests/test_FlowExpansion_PostOptimization.py`
+- `UnitTests/test_FlowExpansion_BorderStreamPreprocess.py` ✅
+- `UnitTests/test_FlowExpansion_LookupGeneration.py` ✅
+- `UnitTests/test_FlowExpansion_GroupedKnapsack.py` ✅
+- `UnitTests/test_FlowExpansion_PostOptimization.py` ✅
 - or, if you prefer the files to map directly to concrete runtime planners instead of phases, use names matching the actual algorithm classes/modes
 
 Initial content plan:
 
-- copy the tests from `UnitTests/test_FlowExpansion.py` that use explicit inline map data
-- use those copied tests as the seed scenarios in each algorithm-specific file
-- keep the scenarios duplicated across files on purpose initially so each algorithm is exercised against the same tiny deterministic map situations
-- do not spend time normalizing all assertions up front; the copied expectations can be tuned later while implementation proceeds
+- copy the tests from `UnitTests/test_FlowExpansion.py` that use explicit inline map data ✅
+- use those copied tests as the seed scenarios in each algorithm-specific file ✅
+- keep the scenarios duplicated across files on purpose initially so each algorithm is exercised against the same tiny deterministic map situations ✅
+- do not spend time normalizing all assertions up front; the copied expectations can be tuned later while implementation proceeds ✅
 
 Important scope note:
 
-- prioritize the tests with hardcoded inline maps first
+- prioritize the tests with hardcoded inline maps first ✅
 - these are the scenarios where we can most confidently assert hard truths about behavior
 - file-based larger / fuzzier / performance cases can stay in later phases until the algorithm foundations exist
 
 Recommended first execution steps:
 
-1. Identify all `test_FlowExpansion.py` tests that build maps from inline string literals.
-2. Copy those scenarios into each algorithm-specific test file.
-3. Keep the copied assertions close to the original for now, even if some will later change.
-4. Use those duplicated scenario sets as the collaborative surface for expectation tuning during implementation.
+1. Identify all `test_FlowExpansion.py` tests that build maps from inline string literals. ✅
+2. Copy those scenarios into each algorithm-specific test file. ✅
+3. Keep the copied assertions close to the original for now, even if some will later change. ✅
+4. Use those duplicated scenario sets as the collaborative surface for expectation tuning during implementation. ✅
 
-## Phase 0: Lock down invariants and compatibility
+## Phase 0: Lock down invariants and compatibility ✅
 Deliverables:
-- Define exact V2 class surface.
-- Decide which existing methods are delegated vs reimplemented.
-- Define turn accounting rules in one place.
-- Confirm implementation file/module.
+- Define exact V2 class surface. ✅
+- Decide which existing methods are delegated vs reimplemented. ✅
+- Define turn accounting rules in one place. ✅
+- Confirm implementation file/module. ✅
 
 Compatibility target:
-- `get_expansion_options(...)` must still return `FlowExpansionPlanOptionCollection` with `GatherCapturePlan` outputs.
+- `get_expansion_options(...)` must still return `FlowExpansionPlanOptionCollection` with `GatherCapturePlan` outputs. ✅
 - For simple cases with a clear optimum, V2 should still produce the same best solution.
 - For complex cases, V2 is allowed to differ from V1 and from some current tests.
 - We should not assume the current V1 test suite is a complete or correct spec for V2.
 
 Implementation location:
-- `BehaviorAlgorithms/FlowExpansion.py`
-- primary class: `ArmyFlowExpanderV2`
+- `BehaviorAlgorithms/FlowExpansion.py` ✅
+- primary class: `ArmyFlowExpanderV2` ✅
 
 Unit tests to add first:
 - **Interface parity smoke test**
@@ -336,9 +347,10 @@ Unit tests to add first:
   - verify first crossing counts the same way as current tests expect
 
 Test harness prerequisite:
-- complete Phase -1 first so new assertions land in algorithm-specific files, not by continuing to grow one monolithic `test_FlowExpansion.py`
+- complete Phase -1 first so new assertions land in algorithm-specific files, not by continuing to grow one monolithic `test_FlowExpansion.py` ✅
 
 ## Phase 1: Build explicit border stream extraction
+
 Implement a preprocessing stage that identifies valid border-pair streams from `IslandMaxFlowGraph`.
 
 Responsibilities:
@@ -354,10 +366,10 @@ Important rule:
 - Border-pair lookup tables should be generated separately for each flow variant (`include neutral`, `enemy only`).
 
 Suggested functions:
-- `enumerate_border_pairs(flow_graph, islands, my_team, target_team) -> list[FlowBorderPairKey]`
-- `build_border_pair_stream_data(...) -> FlowBorderPairStreamData`
-- `preprocess_flow_stream_tilecounts(...)`
-- `detect_target_crossable_friendly_islands(...) -> set[int]`
+- `enumerate_border_pairs(flow_graph, islands, my_team, target_team) -> list[FlowBorderPairKey]` ✅
+- `build_border_pair_stream_data(...) -> FlowBorderPairStreamData` 🏗️
+- `preprocess_flow_stream_tilecounts(...)` 🏗️
+- `detect_target_crossable_friendly_islands(...) -> set[int]` ✅
 
 Unit tests:
 - **Enumerates border pairs correctly**
@@ -403,6 +415,7 @@ Important caveat:
 The prompt’s “highest value stream first” is not globally optimal. Treat it as preprocessing order only, not proof of optimality.
 
 Unit tests:
+
 - **Friendly ranking prefers better army-per-tile**
 - **Target ranking prefers enemy over neutral at equal cost when continuation value is otherwise similar**
 - **Target ranking prefers lower army tiles first**
@@ -412,12 +425,15 @@ Unit tests:
 - **Locally bad capture step can be preferred when it unlocks better downstream aggregate capture payoff**
 
 ## Phase 2: Build per-border gather/capture lookup tables
+
 Implement:
+
 - `process_flow_into_flow_army_turns(...) -> list[FlowArmyTurnsLookupTable]`
 
 This is the main Step 1 from the prompt, clarified.
 
 ### Capture lookup generation
+
 For each border pair:
 - Walk target-side stream in preferred order.
 - Incrementally add islands.
@@ -430,6 +446,7 @@ Clarification:
 - do account for any army-burn reduction implied by traversing a friendly-held island instead of hostile tiles
 
 Turn accounting rule:
+
 - a border crossing plan that starts with a friendly island of size `1` and a target island of size `1` has total cost `1`
 - each additional island added on either side costs its consumed tile count
 - therefore, if `gatherLookup[0]` represents the zero-cost starting border tile state, then:
@@ -440,6 +457,7 @@ Turn accounting rule:
   - using `1.5` tiles should be treated according to the implementation’s partial-tile accounting, but the effective turn cost at that point is the amount consumed
 
 ### Gather lookup generation
+
 Similarly:
 - Walk gather-side stream in preferred order.
 - Incrementally add friendly islands.
@@ -666,6 +684,7 @@ When splitting `UnitTests/test_FlowExpansion.py` into algorithm-specific files:
 ## Finalized Decisions
 
 ### 1. Stream uniqueness
+
 Within a single flow graph output, streams are assumed unique.
 Separate lookup-table families should be produced for:
 
@@ -679,6 +698,7 @@ No separate army-indexed lookup table should be built.
 Army requirement should remain payload on each turn entry.
 
 ### 3. Turn accounting rule
+
 - starting border pair cost for `size-1 friendly -> size-1 target` is `1`
 - each additional island costs the number of consumed tiles from that island
 - combined partial-solution cost follows `gather_index + capture_index`

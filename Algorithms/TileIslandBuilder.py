@@ -321,6 +321,7 @@ class TileIslandBuilder(object):
         changedArmyTiles: typing.Set[Tile] = set()
         changedOwnerTiles: typing.Set[Tile] = set()
         impactedLeafIslands: typing.Set[TileIsland] = set()
+        noIslandChangedTiles: typing.Set[Tile] = set()
         affectedTeams: typing.Set[int] = set()
 
         for tile in self.map.tiles_by_index:
@@ -356,6 +357,11 @@ class TileIslandBuilder(object):
                 else:
                     # Owned island: ownership change may split the component, so all siblings must be rebuilt.
                     impactedLeafIslands.update(self._get_leaf_islands_for_island(existingIsland))
+            else:
+                # Tile had no island (was outside reachable_tiles at recalculate time, e.g. undiscovered
+                # pocket tile). It still needs to be rebuilt — track it separately so it is included in
+                # impactedTiles even though there is no prior leaf island to tear down.
+                noIslandChangedTiles.add(tile)
 
         logbook.info(
             f'update_tile_islands changedTiles ({len(changedTiles)}): '
@@ -391,6 +397,7 @@ class TileIslandBuilder(object):
         impactedTiles: typing.Set[Tile] = set()
         for island in impactedLeafIslands:
             impactedTiles.update(island.tile_set)
+        impactedTiles.update(noIslandChangedTiles)
 
         if len(impactedTiles) == 0:
             complete = time.perf_counter() - start

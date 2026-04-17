@@ -183,7 +183,7 @@ class TileIslandBuilderUnitTests(TestBase):
 
         for mapSize, maxDuration in [
             ('small', 0.005),
-            ('large', 0.02)
+            ('large', 0.010)
         ]:
             with self.subTest(mapSize=mapSize):
                 if mapSize == 'large':
@@ -198,11 +198,13 @@ class TileIslandBuilderUnitTests(TestBase):
 
                 self.begin_capturing_logging()
                 builder = TileIslandBuilder(map)
+                builder.use_debug_asserts = False
+                builder.log_debug = False
 
                 start = time.perf_counter()
                 builder.recalculate_tile_islands(enemyGeneral)
-                self.assertAllIslandsContiguous(builder, debugMode)
                 duration = time.perf_counter() - start
+                self.assertAllIslandsContiguous(builder, debugMode)
                 self.assertLess(duration, maxDuration, 'should not take ages to build tile islands')
                 logbook.info(f'took {duration:.4f}')
 

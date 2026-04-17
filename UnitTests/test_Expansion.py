@@ -183,13 +183,13 @@ class ExpansionLegacyUnitTests(TestBase):
 
     def test_validate_expansion__calculates_basic_longer_to_enemy_tiles_expansion_correctly(self):
         rawMapData = """
-|    |    |    |    |    |    |    |    |    |    |    |   
-a8   a1   a1   a2   a1   a2   a2   a2   a2   a1   a1   a5  
+|    |    |    |    |    |    |    |    |    |    |    |
+a8   a1   a1   a2   a1   a2   a2   a2   a2   a1   a1   a5
 a1   a1   a1   a1   a1   a1   a1   a1   a1             b1
 a1   a1   a1   a1   a1                                 b1D
-a1   a1   a1   aG1 
-     a5   a1   a1   
-     a1   a1   a1   
+a1   a1   a1   aG1
+     a5   a1   a1
+     a1   a1   a1
      b1
      b1D
 
@@ -197,7 +197,7 @@ a1   a1   a1   aG1
                                                        bG50D
 |    |    |    |    |    |    |    |    |    |    |    |
 player_index=0
-bot_target_player=1   
+bot_target_player=1
 """
         # 2 in 3 moves
         # 4 in 5 moves
@@ -227,21 +227,21 @@ bot_target_player=1
     def test_validate_expansion__calculates_city_expansion_correctly(self):
         # TODO expansion doesn't take city increment into account currently so this test will never pass until that is implemented.
         rawMapData = """
-|    |    |    |    |    |    |    |    |    |    |    |   
-a8   a1   a1   a2   a1   a2   a2   a2   a2   a1   a1   a5  
+|    |    |    |    |    |    |    |    |    |    |    |
+a8   a1   a1   a2   a1   a2   a2   a2   a2   a1   a1   a5
 a1   a1   a1   a1   a1   a1   a1   a1   a1             b1
 a1   a1   a1   a1   a1                                 b1D
-a1   a1   a1   aG11 
-     a5   a1   a1   
-     a1   a1   a1   
+a1   a1   a1   aG11
+     a5   a1   a1
+     a1   a1   a1
      b1
-     b1D      
+     b1D
 
 
                                                        bG50D
 |    |    |    |    |    |    |    |    |    |    |    |
 player_index=0
-bot_target_player=1   
+bot_target_player=1
 """
         # 2 in 3 moves
         # 4 in 5 moves

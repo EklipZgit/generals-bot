@@ -1512,3 +1512,123 @@ player_index=0
             f'Neutral candidates: {[str(t) for t in neutral_adj_to_8_3]}. '
             f'All plan captures: {[[str(t) for t in opt.approximate_capture_tiles] for opt in opts]}'
         )
+
+    def test_should_find_most_basic_neutral_capture(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapData = """
+|    |    |    |    |
+aG1  a2        a1   bG1
+|    |    |    |    |
+player_index=0
+"""
+        for turns in [1, 2, 3]:
+            with self.subTest(turns=turns):
+                map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+
+                # if debugMode:
+                #     self.render_map(map)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                self.begin_capturing_logging()
+
+                opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=False, method=method)
+
+                # if debugMode:
+                #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+                #     simHost.queue_player_moves_str(general.player, expectedPath)
+                #
+                #     self.begin_capturing_logging()
+                #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+
+                self.assertEqual(1, len(opts), 'should not find invalid options')
+                longestOpt = opts[0]
+
+                # 7 en caps, 10 moves, should be our best case scenario.
+                self.assertEqual(1, round(longestOpt.econValue, 5))
+                self.assertEqual(1, longestOpt.length)
+
+    def test_should_not_use_same_tiles_multiple_times_in_solution_sets(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapData = """
+|    |
+     bG2
+C41  a2
+b2   a3
+a2   aG2
+|    |  
+player_index=0
+"""
+        for turns, bestTurns, planCount, bestEcon, expectedPath in [
+            (1, 0, 0, 0, None), # should not find using both a12s in the same plan (?)
+            (2, 2, 1, 1 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '1,2->1,0'), # OR 1,3->1,2->0,2
+            (4, 2, 1, 1 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '1,2->1,0'), # OR 1,3->1,2->0,2
+            (6, 2, 1, 1 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '1,2->1,0'), # OR 1,3->1,2->0,2
+        ]:
+            with self.subTest(turns=turns):
+                map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+
+                # if debugMode:
+                #     self.render_map(map)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                self.begin_capturing_logging()
+
+                opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=False, method=method)
+
+                # if debugMode:
+                #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+                #     simHost.queue_player_moves_str(general.player, expectedPath)
+                #
+                #     self.begin_capturing_logging()
+                #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+
+                self.assertEqual(planCount, len(opts), 'should not find invalid options')
+                if planCount > 0:
+                    longestOpt = max(opts, key=lambda opt: opt.length)
+
+                    # 7 en caps, 10 moves, should be our best case scenario.
+                    self.assertEqual(round(bestEcon, 5), round(longestOpt.econValue, 5))
+                    self.assertEqual(bestTurns, longestOpt.length)
+
+    def test_should_not_use_same_tiles_multiple_times_in_solution_sets__wider_left(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapData = """
+|    |    |
+a1   bG1  b2
+a1   C41  a2
+a1   b2   a3
+a2   a2   aG2
+|    |    |
+player_index=0
+"""
+        for turns, bestTurns, planCount, bestEcon, expectedPath in [
+            (1, 0, 0, 0, None), # should not find using both a12s in the same plan (?)
+            (2, 2, 1, 1 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '1,2->1,0'), # OR 1,3->1,2->0,2
+            (4, 2, 1, 1 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '1,2->1,0'), # OR 1,3->1,2->0,2
+            (6, 2, 1, 1 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '1,2->1,0'), # OR 1,3->1,2->0,2
+        ]:
+            with self.subTest(turns=turns):
+                map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+
+                # if debugMode:
+                #     self.render_map(map)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                self.begin_capturing_logging()
+
+                opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=False, method=method)
+
+                # if debugMode:
+                #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+                #     simHost.queue_player_moves_str(general.player, expectedPath)
+                #
+                #     self.begin_capturing_logging()
+                #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+
+                self.assertEqual(planCount, len(opts), 'should not find invalid options')
+                if planCount > 0:
+                    longestOpt = max(opts, key=lambda opt: opt.length)
+
+                    # 7 en caps, 10 moves, should be our best case scenario.
+                    self.assertEqual(round(bestEcon, 5), round(longestOpt.econValue, 5))
+                    self.assertEqual(bestTurns, longestOpt.length)

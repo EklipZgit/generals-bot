@@ -189,6 +189,16 @@ class ViewInfo(object):
     def add_info_multiline_no_log(self, additionalInfo: str):
         self.infoLines.extend(additionalInfo.splitlines())
 
+    def add_info_line_opt_log(self, additionalInfo: str, noLog: bool):
+        self.infoLines.append(additionalInfo)
+        if not noLog:
+            logbook.info(additionalInfo)
+
+    def add_info_multiline_opt_log(self, additionalInfo: str, noLog: bool):
+        self.infoLines.extend(additionalInfo.splitlines())
+        if not noLog:
+            logbook.info(additionalInfo)
+
     def add_stats_line(self, statsLine: str):
         logbook.info(statsLine)
         self.statsLines.append(statsLine)

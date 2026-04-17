@@ -44,6 +44,7 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
         self._enemy_general: 'Tile | None' = None
         self.nx_graph_data: 'NxFlowGraphData | None' = None
         self.nx_graph_data_no_neut: 'NxFlowGraphData | None' = None
+        self._last_built_graphs_turn: int = -1
 
     def configure(self, team: int, target_team: int, enemy_general: 'Tile | None'):
         self.team = team
@@ -108,8 +109,10 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
         return self.build_flow_graph(islands, ourIslands, targetIslands, searchingPlayer, turns, blockGatherFromEnemyBorders, negativeTiles, includeNeutralDemand, method)
 
     def ensure_graph_data_available(self, islands: 'TileIslandBuilder'):
-        self.nx_graph_data = self.build_graph_data(islands, use_neutral_flow=True)
-        self.nx_graph_data_no_neut = self.build_graph_data(islands, use_neutral_flow=False)
+        if self.nx_graph_data is None or self.nx_graph_data_no_neut is None or self._last_built_graphs_turn < self.map.turn:
+            self.nx_graph_data = self.build_graph_data(islands, use_neutral_flow=True)
+            self.nx_graph_data_no_neut = self.build_graph_data(islands, use_neutral_flow=False)
+            self._last_built_graphs_turn = self.map.turn
 
     def build_graph_data(self, islands: 'TileIslandBuilder', use_neutral_flow: bool) -> 'NxFlowGraphData':
         graph: nx.DiGraph = nx.DiGraph()

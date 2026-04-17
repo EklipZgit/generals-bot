@@ -280,6 +280,8 @@ class EklipZBot(object):
         self.timings: Timings | None = None
         self.tileIslandBuilder: TileIslandBuilder = None
         self._should_recalc_tile_islands: bool = False
+        self.last_flow_expander: ArmyFlowExpander | None = None
+        self.last_flow_opt_collection = None
         self.armyTracker: ArmyTracker = None
         self.army_interceptor: ArmyInterceptor = None
         self.win_condition_analyzer: WinConditionAnalyzer = None
@@ -364,7 +366,7 @@ class EklipZBot(object):
         """If true, forces the expansion plan to always consider non-terminating leafmove tiles in one of the iterations."""
 
         self.expansion_use_iterative_flow: bool = True
-        self.expansion_use_legacy: bool = True
+        self.expansion_use_legacy: bool = False
         self.expansion_use_tile_islands: bool = False
         self.expansion_full_time_limit: float = 0.15
         """The full time limit for an optimal_expansion cycle. Will be cut short if it would run the move too long."""
@@ -432,6 +434,7 @@ class EklipZBot(object):
         self.info_render_tile_islands: bool = False
         self.info_render_defense_spanning_tree: bool = True
         self.info_render_friendly_city_spanning_tree: bool = True
+        self.info_render_flow_expand: bool = True
 
     # STEP2: Stay in EklipZBotV2.py. Tiny object-display helper with no domain logic; keep on the outer bot shell unchanged.
     def __repr__(self):

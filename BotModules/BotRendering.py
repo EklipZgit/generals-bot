@@ -9,6 +9,7 @@ from base import Colors
 from base.client.map import MapBase, PLAYER_CHAR_BY_INDEX
 from ViewInfo import ViewInfo
 
+from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander
 from BotModules.BotSerialization import BotSerialization
 
 class BotRendering:
@@ -155,6 +156,58 @@ class BotRendering:
                             bot.viewInfo.midRightGridText[tile] = island.name
                         else:
                             bot.viewInfo.topRightGridText[tile] = island.name
+
+        if bot.info_render_flow_expand and bot.last_flow_expander is not None and bot.last_flow_opt_collection is not None:
+            BotRendering.render_flow_expand_in_view_info(bot)
+
+    @staticmethod
+    def render_flow_expand_in_view_info(bot):
+        expander = bot.last_flow_expander
+        optCollection = bot.last_flow_opt_collection
+        vi: ViewInfo = bot.viewInfo
+        general = expander.friendlyGeneral
+        enemyGeneral = expander.enemyGeneral
+        opts = optCollection.flow_plans
+
+        optsSorted = sorted(opts, key=lambda opt: (opt.length, opt.econValue), reverse=True)
+
+        first = set()
+        dupes = set()
+
+        for opt in optsSorted:
+            for tile in opt.tileSet:
+                if tile in first:
+                    dupes.add(tile)
+                else:
+                    first.add(tile)
+
+        for tile in dupes:
+            vi.add_targeted_tile(tile, TargetStyle.GRAY, radiusReduction=-1)
+        if dupes:
+            vi.add_info_line('GRAY = DUPLICATE FLOW OPTION TILES:')
+            vi.add_info_line(f'|'.join(f'{t.x},{t.y}' for t in dupes))
+
+        if optsSorted:
+            try:
+                bestOpt = next(filter(lambda opt: opt.length > 3, optsSorted))
+            except StopIteration:
+                bestOpt = optsSorted[0]
+
+            vi.add_info_line_no_log(str(bestOpt) + '   ' + '|'.join(f'{t.x},{t.y}' for t in bestOpt.tileList))
+            if enemyGeneral is not None:
+                ArmyFlowExpander.add_flow_expansion_option_to_view_info(bot._map, bestOpt, general.player, enemyGeneral.player, vi)
+
+        vi.add_info_line('-------- v all options --------')
+        for opt in opts:
+            vi.add_info_line_no_log(str(opt) + '   ' + '|'.join(f'{t.x},{t.y}' for t in opt.tileList))
+            if enemyGeneral is not None:
+                ArmyFlowExpander.add_flow_expansion_option_to_view_info(bot._map, opt, general.player, enemyGeneral.player, vi)
+
+        flowGraph = expander.flow_graph
+        if flowGraph is not None:
+            ArmyFlowExpander.add_flow_graph_to_view_info(flowGraph, vi, lastRun=expander.last_run, noLog=True)
+
+        expander.island_builder.add_tile_islands_to_view_info(vi, printIslandInfoLines=False, renderIslandNames=True)
 
     @staticmethod
     def mark_tile(bot, tile, alpha=100):

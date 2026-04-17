@@ -471,18 +471,70 @@ class BotExpansionOps:
                     flowExpander.log_debug = False
                     flowExpander.use_debug_asserts = False
 
-                    optCollection = flowExpander.get_expansion_options(
-                        islands=bot.tileIslandBuilder,
-                        asPlayer=bot.player.index,
-                        targetPlayer=bot.targetPlayer,
-                        turns=remainingCycleTurns,
-                        boardAnalysis=bot.board_analysis,
-                        territoryMap=bot.territories.territoryMap,
-                        negativeTiles=expansionNegatives,
-                        cutoffTime=cutoffTime,
-                    )
-
-                    addlOptions.extend(optCollection.flow_plans)
+                    try:
+                        optCollection = flowExpander.get_expansion_options(
+                            islands=bot.tileIslandBuilder,
+                            asPlayer=bot.player.index,
+                            targetPlayer=bot.targetPlayer,
+                            turns=remainingCycleTurns,
+                            boardAnalysis=bot.board_analysis,
+                            territoryMap=bot.territories.territoryMap,
+                            negativeTiles=expansionNegatives,
+                            cutoffTime=cutoffTime,
+                        )
+                        addlOptions.extend(optCollection.flow_plans)
+                        bot.last_flow_expander = flowExpander
+                        bot.last_flow_opt_collection = optCollection
+                    except Exception as flowEx:
+                        isl = bot.tileIslandBuilder
+                        logbook.error(
+                            f'FLOW_EXPAND_INFEASIBLE turn={bot._map.turn} '
+                            f'player={bot.player.index} targetPlayer={bot.targetPlayer} '
+                            f'remainingCycleTurns={remainingCycleTurns} '
+                            f'ex={type(flowEx).__name__}: {flowEx}'
+                        )
+                        logbook.error(
+                            f'FLOW_EXPAND_INFEASIBLE islands summary: '
+                            f'all_islands={len(isl.all_tile_islands)} '
+                            f'friendly_player_islands={len(isl.tile_islands_by_player[bot.player.index])} '
+                            f'target_team_islands={len(isl.tile_islands_by_team_id[bot._map.team_ids_by_player_index[bot.targetPlayer]])}'
+                        )
+                        for island in isl.all_tile_islands:
+                            tiles_repr = ', '.join(f'({t.x},{t.y})a{t.army}' for t in sorted(island.tile_set, key=lambda t: t.tile_index))
+                            # Check tile→island lookup consistency for each tile in this island
+                            lookup_mismatches = []
+                            for t in island.tile_set:
+                                mapped = isl.tile_island_lookup.raw[t.tile_index]
+                                if mapped is not island:
+                                    lookup_mismatches.append(f'({t.x},{t.y})->uid={mapped.unique_id if mapped else None}')
+                            # Check border reciprocity: each border island should list this island as a border too
+                            non_reciprocal = []
+                            for b in island.border_islands:
+                                if island not in b.border_islands:
+                                    non_reciprocal.append(f'uid={b.unique_id}(name={b.name},team={b.team})')
+                            # Check adjacency: verify each border island actually has a tile adjacent to this island
+                            not_adjacent = []
+                            for b in island.border_islands:
+                                found_adj = False
+                                for t in island.tile_set:
+                                    for adj in t.movable:
+                                        if adj in b.tile_set:
+                                            found_adj = True
+                                            break
+                                    if found_adj:
+                                        break
+                                if not found_adj:
+                                    not_adjacent.append(f'uid={b.unique_id}(name={b.name})')
+                            logbook.error(
+                                f'FLOW_EXPAND_INFEASIBLE island uid={island.unique_id} name={island.name} '
+                                f'team={island.team} tiles={island.tile_count} sum_army={island.sum_army} '
+                                f'borders=[{", ".join(str(b.unique_id) for b in island.border_islands)}] '
+                                f'tile_set=[{tiles_repr}]'
+                                + (f' LOOKUP_MISMATCH=[{", ".join(lookup_mismatches)}]' if lookup_mismatches else '')
+                                + (f' NON_RECIPROCAL_BORDERS=[{", ".join(non_reciprocal)}]' if non_reciprocal else '')
+                                + (f' PHANTOM_BORDERS=[{", ".join(not_adjacent)}]' if not_adjacent else '')
+                            )
+                        raise
 
                     timeLimit = timeLimit - (time.perf_counter() - ogStart)
 

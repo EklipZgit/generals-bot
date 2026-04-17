@@ -184,7 +184,7 @@ class TileIslandBuilder(object):
 
         " -------------------------- ANYTHING YOU ADD TO THIS SECTION NEEDS TO BE COVERED IN reset_for_rebuild ---------------"
         self.tile_island_lookup: MapMatrixInterface[TileIsland] = MapMatrix(self.map, None)
-        self.all_tile_islands: typing.List[TileIsland] = []
+        self.all_tile_islands: typing.Set[TileIsland] = set()
         """Does not include unreachable islands"""
         self.tile_islands_by_player: typing.List[typing.List[TileIsland]] = [[] for _ in self.map.players]
         self.tile_islands_by_player.append([])  # for -1 player
@@ -207,7 +207,7 @@ class TileIslandBuilder(object):
 
     def reset_for_rebuild(self):
         self.tile_island_lookup = MapMatrix(self.map, None)
-        self.all_tile_islands = []
+        self.all_tile_islands = set()
         self.tile_islands_by_player = [[] for _ in self.map.players]
         self.tile_islands_by_player.append([])  # for -1 player
         self.tile_islands_by_team_id = [[] for _ in range(max(self.teams) + 2)]
@@ -271,7 +271,7 @@ class TileIslandBuilder(object):
                 nextNewIslands = self._break_apart_island_if_too_large(island)
 
             for newIsland in nextNewIslands:
-                self.all_tile_islands.append(newIsland)
+                self.all_tile_islands.add(newIsland)
                 for teammate in self._team_stats_by_team_id[island.team].teamPlayers:
                     self.tile_islands_by_player[teammate].append(newIsland)
                 self.tile_islands_by_team_id[newIsland.team].append(newIsland)
@@ -491,8 +491,7 @@ class TileIslandBuilder(object):
         return [island]
 
     def _remove_leaf_island(self, island: TileIsland):
-        if island in self.all_tile_islands:
-            self.all_tile_islands.remove(island)
+        self.all_tile_islands.discard(island)
 
         teamIslands = self.tile_islands_by_team_id[island.team]
 
@@ -511,7 +510,7 @@ class TileIslandBuilder(object):
     def _register_leaf_island(self, island: TileIsland):
         if island.name is None or island.name == '':
             island.name = IslandNamer.get_letter()
-        self.all_tile_islands.append(island)
+        self.all_tile_islands.add(island)
         self.tile_islands_by_team_id[island.team].append(island)
         stats = self._team_stats_by_team_id[island.team]
         for teammate in stats.teamPlayers:
@@ -1023,9 +1022,10 @@ class TileIslandBuilder(object):
 
         return borderLookup
 
-    def add_tile_islands_to_view_info(self, viewInfo, printIslandInfoLines: bool = False, printIslandNames: bool = True):
+    def add_tile_islands_to_view_info(self, viewInfo, printIslandInfoLines: bool = False, renderIslandNames: bool = True):
         for island in sorted(self.all_tile_islands, key=lambda i: (i.team, i.unique_id)):
-            color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+            _rng = random.Random(hash(island.unique_id))
+            color = (_rng.randint(0, 255), _rng.randint(0, 255), _rng.randint(0, 255))
             zoneAlph = 80
             divAlph = 200
             if island.team == -1:
@@ -1035,13 +1035,13 @@ class TileIslandBuilder(object):
             viewInfo.add_map_zone(island.tile_set, color, alpha=zoneAlph)
             viewInfo.add_map_division(island.tile_set, color, alpha=divAlph)
 
-            if island.name and printIslandNames:
+            if island.name and renderIslandNames:
                 for tile in island.tile_set:
-                    if viewInfo.bottomRightGridText[tile]:
-                        viewInfo.midRightGridText[tile] = island.name
+                    if viewInfo.bottomRightGridText.raw[tile.tile_index]:
+                        viewInfo.midRightGridText.raw[tile.tile_index] = island.name
                     else:
-                        viewInfo.bottomRightGridText[tile] = island.name
-                    viewInfo.topRightGridText[tile] = island.unique_id
+                        viewInfo.bottomRightGridText.raw[tile.tile_index] = island.name
+                    viewInfo.topRightGridText.raw[tile.tile_index] = island.unique_id
 
             if printIslandInfoLines:
                 viewInfo.add_info_line(f'{island.team}: island {island.unique_id}/{island.name} - {island.sum_army}a/{island.tile_count}t ({island.sum_army_all_adjacent_friendly}a/{island.tile_count_all_adjacent_friendly}t) {str(island.tile_set)}')

@@ -595,7 +595,7 @@ class TestBase(unittest.TestCase):
     def render_tile_islands(self, map: MapBase, builder: TileIslandBuilder, viewInfoMod: typing.Callable[[ViewInfo], None] | None = None):
         viewInfo = self.get_renderable_view_info(map)
 
-        builder.add_tile_islands_to_view_info(viewInfo, printIslandInfoLines=True, printIslandNames=True)
+        builder.add_tile_islands_to_view_info(viewInfo, printIslandInfoLines=True, renderIslandNames=True)
 
         if viewInfoMod:
             viewInfoMod(viewInfo)
@@ -1817,7 +1817,7 @@ class TestBase(unittest.TestCase):
         if flowGraph is not None:
             ArmyFlowExpander.add_flow_graph_to_view_info(flowGraph, vi, lastRun=expander.last_run)
 
-        builder.add_tile_islands_to_view_info(vi, printIslandInfoLines=True, printIslandNames=True)
+        builder.add_tile_islands_to_view_info(vi, printIslandInfoLines=True, renderIslandNames=True)
 
         self.render_view_info(map, vi)
 

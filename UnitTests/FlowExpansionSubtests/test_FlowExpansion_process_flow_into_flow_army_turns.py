@@ -464,8 +464,8 @@ aG1  a5        b1   bG1
         mapData = """
 |    |    |    |    |    |
 b1   b1   b1   b1   b1   b1
-aG1  a1   a1   a1   b1   bG1
-a1   a1   a1   b1   a1   b1
+aG1  a1   a1   a1   b1   b1
+a1   a1   a1   b1   a1   bG1
 a1   a1   a1   a1   b1   b1
 b1   b1   b1   b1   b1   b1
 |    |    |    |    |    |
@@ -479,7 +479,7 @@ b1   b1   b1   b1   b1   b1
         )
 
         if len(target_crossable) == 0:
-            self.skipTest('No target-crossable islands detected; outpost may not qualify in this flow graph configuration')
+            self.fail('No target-crossable islands detected; outpost may not qualify in this flow graph configuration')
 
         border_pairs = expander._enumerate_border_pairs(
             expander.flow_graph, builder, expander.team, expander.target_team, target_crossable

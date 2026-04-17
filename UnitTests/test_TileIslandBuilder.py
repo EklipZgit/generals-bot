@@ -1,10 +1,11 @@
 import time
+import typing
 from collections import deque
 
 import logbook
 
 from Algorithms import TileIslandBuilder
-from Algorithms.TileIslandBuilder import IslandBuildMode
+from Algorithms.TileIslandBuilder import IslandBuildMode, TileIsland
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
 from ViewInfo import ViewInfo
@@ -114,6 +115,49 @@ class TileIslandBuilderUnitTests(TestBase):
                     f'island {island} has stale border_island reference to {border} '
                     f'(unique_id={border.unique_id}) which is not in all_tile_islands'
                 )
+
+    def assertNoZombieIslands(self, builder: TileIslandBuilder):
+        """
+        No island in all_tile_islands may claim a tile whose tile_island_lookup maps to a different
+        island. Such 'zombie' islands cause disconnected flow graphs and NetworkXUnfeasible errors.
+        """
+        zombies = []
+        for island in builder.all_tile_islands:
+            for tile in island.tile_set:
+                mapped = builder.tile_island_lookup.raw[tile.tile_index]
+                if mapped is not island:
+                    zombies.append(
+                        f'{island} claims {tile} but lookup maps to {mapped.unique_id if mapped else None}'
+                    )
+                    break
+        if zombies:
+            self.fail(
+                f'Zombie islands found ({len(zombies)}) — in all_tile_islands but lookup disagrees:\n'
+                + '\n'.join(f'  {z}' for z in zombies[:10])
+            )
+
+    def assertNoLookupMismatches(self, builder: TileIslandBuilder):
+        """
+        For every non-obstacle tile, if tile_island_lookup maps it to an island, that island's
+        tile_set must include that tile — and the island must be in all_tile_islands.
+        """
+        live = set(builder.all_tile_islands)
+        mismatches = []
+        for tile in builder.map.tiles_by_index:
+            if tile.isObstacle:
+                continue
+            island = builder.tile_island_lookup.raw[tile.tile_index]
+            if island is None:
+                continue
+            if tile not in island.tile_set:
+                mismatches.append(f'lookup[{tile}] = {island} but tile not in island.tile_set')
+            elif island not in live:
+                mismatches.append(f'lookup[{tile}] = {island} which is not in all_tile_islands')
+        if mismatches:
+            self.fail(
+                f'tile_island_lookup mismatches found ({len(mismatches)}):\n'
+                + '\n'.join(f'  {m}' for m in mismatches[:10])
+            )
 
     def assertAllIslandsNamed(self, builder: TileIslandBuilder):
         seenIslands = set(builder.all_tile_islands)
@@ -677,12 +721,14 @@ a2   b2   b2   b2   b2
         self.mark_tile_captured(capturedTile, general.player, 1)
 
         builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
-
         self.assertNoBorderIslandsPointToRemovedIslands(builder, debugMode)
         self.assertAllIslandsContiguous(builder, debugMode)
         self.assertNoTilesWithNullIslands(builder, debugMode)
         self.assertNoFullIslandCycles(builder)
         self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
 
     def test_update_tile_islands__army_increment_clears_stale_border_refs_on_distant_island(self):
         """
@@ -737,12 +783,14 @@ a2   a2   a2   a2   a2
         self.mark_tile_army_incremented(changedTile, 1)
 
         builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
-
         self.assertNoBorderIslandsPointToRemovedIslands(builder, debugMode)
         self.assertAllIslandsContiguous(builder, debugMode)
         self.assertNoTilesWithNullIslands(builder, debugMode)
         self.assertNoFullIslandCycles(builder)
         self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
 
     def test_update_tile_islands__tile_capture_leaves_no_null_island_assignments(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -775,6 +823,9 @@ a2   a2   a2   b2
         self.assertNoTilesWithNullIslands(builder, debugMode)
         self.assertNoFullIslandCycles(builder)
         self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
 
         self.assertIsNotNone(builder.tile_island_lookup[capturedTile], 'captured tile should belong to an island after update')
         self.assertEqual(general.player, capturedTile.player, 'captured tile should now belong to general.player')
@@ -810,6 +861,10 @@ a2   a2   a2   b2
         self.assertAllIslandsContiguous(builder, debugMode)
         self.assertNoTilesWithNullIslands(builder, debugMode)
         self.assertUpdateMatchesRecalculate(map, builder, enemyGeneral, IslandBuildMode.GroupByArmy, debugMode)
+        self.assertNoFullIslandCycles(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
 
     def test_update_tile_islands__multiple_captures_leave_no_null_island_assignments(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -843,6 +898,9 @@ a2   a2   a2   b2   b2
         self.assertNoTilesWithNullIslands(builder, debugMode)
         self.assertNoFullIslandCycles(builder)
         self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
 
     def test_update_tile_islands__ownership_change_splits_enemy_island_correctly(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -875,6 +933,9 @@ aG1
         self.assertNoTilesWithNullIslands(builder, debugMode)
         self.assertNoFullIslandCycles(builder)
         self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
 
         # Every tile that used to be in the same enemy island must still have a valid island
         for tile in map.tiles_by_index:
@@ -906,6 +967,9 @@ aG1
         self.assertNoTilesWithNullIslands(builder, debugMode)
         self.assertNoFullIslandCycles(builder)
         self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
 
     def test_update_tile_islands__ownership_change_on_real_map_matches_recalculate(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -931,6 +995,10 @@ aG1
         self.assertAllIslandsContiguous(builder, debugMode)
         self.assertNoTilesWithNullIslands(builder, debugMode)
         self.assertUpdateMatchesRecalculate(map, builder, enemyGeneral, IslandBuildMode.GroupByArmy, debugMode)
+        self.assertNoFullIslandCycles(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
 
     def test_update_tile_islands__army_increment_then_capture_leaves_no_null_islands(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -968,6 +1036,9 @@ a2   a2   a2   b3
         self.assertNoTilesWithNullIslands(builder, debugMode)
         self.assertNoFullIslandCycles(builder)
         self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
 
     def test_update_tile_islands__stale_islands_not_in_all_tile_islands_after_capture(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -999,6 +1070,13 @@ a2   a2   a2   b2
         oldTeam = islandBeforeCapture.team
 
         builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoTilesWithNullIslands(builder, debugMode)
+        self.assertNoFullIslandCycles(builder)
+        self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
 
         # The captured tile should now have a friendly-team island in the lookup
         islandAfterCapture = builder.tile_island_lookup[capturedTile]
@@ -1063,8 +1141,12 @@ a1
 
         builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoTilesWithNullIslands(builder, debugMode)
         self.assertNoFullIslandCycles(builder)
         self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
 
         # Sibling neutral leaf islands must be the SAME objects with SAME tiles — they were not touched
         for siblingIsland, tilesBefore in siblingIslandObjects.items():
@@ -1127,8 +1209,12 @@ a1
 
         builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoTilesWithNullIslands(builder, debugMode)
         self.assertNoFullIslandCycles(builder)
         self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
 
         for remoteIsland, tilesBefore in remoteNeutralIslands.items():
             sampleTile = next(iter(tilesBefore))
@@ -1190,8 +1276,12 @@ a1
 
         builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoTilesWithNullIslands(builder, debugMode)
         self.assertNoFullIslandCycles(builder)
         self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
 
         largestNeutAfterUpdate = max(
             (isl for isl in builder.all_tile_islands if isl.team == -1),
@@ -1270,8 +1360,11 @@ a1
 
         builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoTilesWithNullIslands(builder, debugMode)
         self.assertNoFullIslandCycles(builder)
         self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
 
         # THE CRITICAL ASSERTION: no island must have a stale border_islands reference
         # to an island that was torn down and not re-registered.
@@ -1288,3 +1381,594 @@ a1
                 f'{borderIsland} (id={borderIsland.unique_id}) not in all_tile_islands after update+split'
             )
 
+    def test_update_tile_islands__newly_discovered_pocket_gets_islands_when_enemy_captures(self):
+        """
+        Regression test for the bug where tiles that had no island (tile_island_lookup==None)
+        because they were outside reachable_tiles during recalculate_tile_islands would
+        permanently remain None even after being captured and revealed.
+
+        Scenario: neutral tile(s) form a pocket completely surrounded by enemy territory.
+        At recalculate time they are neutral and outside reachable_tiles so they get no
+        island (tile_island_lookup==None). On the next turn the enemy captures them all.
+        update_tile_islands must assign them islands — without the fix, the
+        existingIsland==None branch silently skips them and they stay None forever,
+        producing disconnected flow graph components (NetworkXUnfeasible).
+
+        Then we further verify that if friendly recaptures one of those tiles, the
+        resulting islands are structurally valid.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        # Map layout (5 cols x 6 rows):
+        #   (0,0) aG1  — friendly general (player 0)
+        #   (0,1) a1   — one friendly tile
+        #   Enemy ring around a 2x2 neutral pocket:
+        #     (1,2)(2,2)(3,2) b1  — top of ring
+        #     (1,3)       (3,3) b1  — sides
+        #     (1,4)(2,4)(3,4) b1  — bottom of ring
+        #   Neutral pocket: (2,3) — single neutral tile fully enclosed by enemy
+        #   (4,5) bG1  — enemy general (player 1)
+        #
+        # The neutral tile at (2,3) is surrounded by enemy on all 4 sides and not
+        # adjacent to any friendly tile. We evict its island after recalculate to
+        # simulate it being undiscovered (tile_island_lookup==None) at recalculate
+        # time — the exact pre-condition that triggered the production bug.
+        testData = """
+|    |    |    |    |    |
+aG1
+a1
+          b1   b1   b1
+          b1        b1
+          b1   b1   b1
+                         bG1
+|    |    |    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 100)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+        builder.force_territory_borders_to_single_tile_islands = False
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.reset_tile_deltas_to_current_state(map)
+
+        # Find the neutral tile(s) fully enclosed by enemy — these are the pocket
+        pocketTiles = [
+            t for t in map.tiles_by_index
+            if not t.isObstacle
+            and t.player == -1
+            and all(adj.player == enemyGeneral.player or adj.isObstacle for adj in t.movable)
+        ]
+        self.assertGreater(len(pocketTiles), 0, 'fixture: at least one neutral tile must be fully enclosed by enemy tiles')
+        for t in pocketTiles:
+            self.assertEqual(-1, t.player, f'fixture: pocket tile {t} should be neutral at start')
+
+        # Simulate the tiles having been outside reachable_tiles at recalculate time
+        # (undiscovered fog tiles). Clear their lookup entries and remove their islands
+        # from the registry — this is the exact state that caused the bug in production
+        # where update_tile_islands silently skipped None-island changed tiles.
+        pocketIslandsToEvict = {
+            builder.tile_island_lookup.raw[t.tile_index]
+            for t in pocketTiles
+            if builder.tile_island_lookup.raw[t.tile_index] is not None
+        }
+        for island in pocketIslandsToEvict:
+            builder._remove_leaf_island(island)
+            for tileInIsland in island.tile_set:
+                builder.tile_island_lookup.raw[tileInIsland.tile_index] = None
+
+        for t in pocketTiles:
+            self.assertIsNone(
+                builder.tile_island_lookup.raw[t.tile_index],
+                f'fixture: pocket tile {t} should have no island after eviction'
+            )
+
+        # Simulate enemy capturing all 4 pocket tiles simultaneously (newly discovered)
+        for t in pocketTiles:
+            self.mark_tile_captured(t, enemyGeneral.player, 1)
+
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoTilesWithNullIslands(builder, debugMode)
+        self.assertNoFullIslandCycles(builder)
+        self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
+        self.assertNoBorderIslandsPointToRemovedIslands(builder, debugMode)
+
+        # Every pocket tile must now have an island
+        for t in pocketTiles:
+            island = builder.tile_island_lookup.raw[t.tile_index]
+            self.assertIsNotNone(island, f'pocket tile {t} must have an island after enemy capture')
+            self.assertEqual(enemyGeneral.player, t.player, f'pocket tile {t} should be enemy-owned')
+
+        # All pocket islands must border the surrounding enemy islands (i.e. be connected)
+        pocketIslands = {builder.tile_island_lookup.raw[t.tile_index] for t in pocketTiles}
+        for isl in pocketIslands:
+            self.assertIn(isl, builder.all_tile_islands, f'pocket island {isl} must be in all_tile_islands')
+
+        self.reset_tile_deltas_to_current_state(map)
+
+        # Now simulate friendly recapturing one pocket tile — the update must remain consistent
+        self.mark_tile_captured(pocketTiles[0], general.player, 1)
+
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoTilesWithNullIslands(builder, debugMode)
+        self.assertNoFullIslandCycles(builder)
+        self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
+        self.assertNoBorderIslandsPointToRemovedIslands(builder, debugMode)
+
+
+    def test_shouldnt_create_broken_islands_after_captures(self):
+        """
+        Regression test for the production NetworkXUnfeasible at turn 746.
+
+        Turn 745 moves:
+          - Player 0 (blue/enemy) moves 16,9 -> 16,10, capturing player 1's tile at 16,10.
+          - Player 1 (red/bot) moves 11,14 -> 11,13, capturing player 0's tile at 11,13.
+
+        After update_tile_islands processes these two captures, two neutral tiles (7,7 and
+        3,19) were being left with tile_island_lookup==None, producing disconnected components
+        in the flow graph and raising NetworkXUnfeasible on the next expansion call.
+
+        This test directly applies those exact tile-ownership changes to the TileIslandBuilder
+        and asserts that every structural invariant holds after the update.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/shouldnt_create_broken_islands_after_captures___9GHWHfzuU---1--745.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoTilesWithNullIslands(builder, debugMode)
+        self.reset_tile_deltas_to_current_state(map)
+
+        # Turn 745 move results:
+        #   Player 0 moved from 16,9 to 16,10 (captured player 1's tile at 16,10)
+        #   Player 1 moved from 11,14 to 11,13 (captured player 0's tile at 11,13)
+        tile_16_9 = map.GetTile(16, 9)
+        tile_16_10 = map.GetTile(16, 10)
+        tile_11_13 = map.GetTile(11, 13)
+        tile_11_14 = map.GetTile(11, 14)
+
+        self.assertEqual(enemyGeneral.player, tile_16_9.player, 'fixture: 16,9 should be player 0 (blue) before move')
+        self.assertEqual(general.player, tile_16_10.player, 'fixture: 16,10 should be player 1 (red) before move')
+        self.assertEqual(enemyGeneral.player, tile_11_13.player, 'fixture: 11,13 should be player 0 (blue) before move')
+        self.assertEqual(general.player, tile_11_14.player, 'fixture: 11,14 should be player 1 (red) before move')
+
+        # Player 0 moves 16,9->16,10: their army at 16,9 decreases, they capture 16,10
+        self.mark_tile_army_incremented(tile_16_9, -2)   # army 3 -> 1
+        self.mark_tile_captured(tile_16_10, enemyGeneral.player, 1)
+
+        # Player 1 moves 11,14->11,13: their army at 11,14 decreases, they capture 11,13
+        self.mark_tile_army_incremented(tile_11_14, -3)  # army 4 -> 1
+        self.mark_tile_captured(tile_11_13, general.player, 2)
+
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+
+        self.assertNoBorderIslandsPointToRemovedIslands(builder, debugMode)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoTilesWithNullIslands(builder, debugMode)
+        self.assertNoFullIslandCycles(builder)
+        self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
+
+        # The two captured tiles must have islands belonging to their new owners
+        capturedByBlue = map.GetTile(16, 10)
+        capturedByRed = map.GetTile(11, 13)
+        self.assertEqual(enemyGeneral.player, capturedByBlue.player, '16,10 should now belong to player 0')
+        self.assertEqual(general.player, capturedByRed.player, '11,13 should now belong to player 1')
+        blueIsland = builder.tile_island_lookup.raw[capturedByBlue.tile_index]
+        redIsland = builder.tile_island_lookup.raw[capturedByRed.tile_index]
+        self.assertIsNotNone(blueIsland, '16,10 must have an island after capture')
+        self.assertIsNotNone(redIsland, '11,13 must have an island after capture')
+        self.assertEqual(
+            map.team_ids_by_player_index[enemyGeneral.player], blueIsland.team,
+            '16,10 island must have enemy team'
+        )
+        self.assertEqual(
+            map.team_ids_by_player_index[general.player], redIsland.team,
+            '11,13 island must have friendly team'
+        )
+
+        # Every tile currently owned by either player must have a valid island (the core
+        # invariant that prevents disconnected flow graph components).
+        for tile in map.tiles_by_index:
+            if tile.isObstacle or tile.player < 0:
+                continue
+            self.assertIsNotNone(
+                builder.tile_island_lookup.raw[tile.tile_index],
+                f'owned tile {tile} (player={tile.player}) has no island after update'
+            )
+
+    # -----------------------------------------------------------------------
+    # simHost-based tests: run real bot turns and assert island rebuild scope
+    # -----------------------------------------------------------------------
+
+    def _snapshot_all_island_objects(self, builder: TileIslandBuilder) -> typing.Dict[int, TileIsland]:
+        """Returns {tile_index: island_object} for every non-obstacle tile that has an island."""
+        return {
+            tile.tile_index: builder.tile_island_lookup.raw[tile.tile_index]
+            for tile in builder.map.tiles_by_index
+            if not tile.isObstacle and builder.tile_island_lookup.raw[tile.tile_index] is not None
+        }
+
+    def _tiles_changed_this_turn(self, playerMap: MapBase) -> typing.Set[int]:
+        """Returns tile_indices of tiles whose army or owner changed since last turn."""
+        return {
+            tile.tile_index
+            for tile in playerMap.tiles_by_index
+            if not tile.isObstacle and (tile.delta.oldArmy != tile.army or tile.delta.oldOwner != tile.player)
+        }
+
+    def _tiles_adjacent_to_set(self, tileIndices: typing.Set[int], playerMap: MapBase) -> typing.Set[int]:
+        """Returns tile_indices of all non-obstacle tiles adjacent to any tile in tileIndices."""
+        result: typing.Set[int] = set()
+        indexSet = set(tileIndices)
+        for tile in playerMap.tiles_by_index:
+            if tile.tile_index not in indexSet or tile.isObstacle:
+                continue
+            for adj in tile.movable:
+                if not adj.isObstacle:
+                    result.add(adj.tile_index)
+        return result
+
+    def assertOnlyExpectedIslandsRebuilt(
+            self,
+            snapshotBefore: typing.Dict[int, TileIsland],
+            builder: TileIslandBuilder,
+            allowedRebuildIndices: typing.Set[int],
+    ):
+        """
+        Asserts that every tile whose island object changed between snapshotBefore and now
+        is within allowedRebuildIndices. Any tile outside that set whose island object
+        changed counts as a spurious rebuild.
+        """
+        spurious = []
+        for tileIndex, islandBefore in snapshotBefore.items():
+            islandAfter = builder.tile_island_lookup.raw[tileIndex]
+            if islandAfter is None:
+                continue
+            if islandAfter is not islandBefore and tileIndex not in allowedRebuildIndices:
+                tile = builder.map.tiles_by_index[tileIndex]
+                spurious.append(f'{tile} (was {islandBefore}, now {islandAfter})')
+        if spurious:
+            self.fail(
+                f'update_tile_islands spuriously rebuilt {len(spurious)} island(s) outside expected scope:\n'
+                + '\n'.join(f'  {s}' for s in spurious[:20])
+            )
+
+    def test_simhost__general_army_increment_only_rebuilds_general_island(self):
+        """
+        Every 2 turns the general's army increments. update_tile_islands must only rebuild
+        the general's own single-tile island and refresh its immediate neighbours' borders.
+        No friendly non-adjacent islands and no enemy islands should get new objects.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        mapFile = 'GameContinuationEntries/should_recognize_army_collision_from_fog___BlpaDuBT2---b--136.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136, fill_out_tiles=True)
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, allAfkExceptMapPlayer=True, botInitOnly=True)
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+        simHost.reveal_player_general(playerToReveal=enemyGeneral.player, playerToRevealTo=general.player)
+
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        snapshotBefore: typing.Dict[int, TileIsland] = {}
+
+        def before_turn():
+            snapshotBefore.clear()
+            snapshotBefore.update(self._snapshot_all_island_objects(bot.tileIslandBuilder))
+
+        def after_turn():
+            changed = self._tiles_changed_this_turn(playerMap)
+            changedAndAdjacent = changed | self._tiles_adjacent_to_set(changed, playerMap)
+            # Also pull in all tiles of any island that contains a changed tile — those are always fair game
+            allowedRebuildIndices: typing.Set[int] = set(changedAndAdjacent)
+            for idx in changed:
+                isl = snapshotBefore.get(idx)
+                if isl is not None:
+                    for t in isl.tile_set:
+                        allowedRebuildIndices.add(t.tile_index)
+
+            self.assertOnlyExpectedIslandsRebuilt(snapshotBefore, bot.tileIslandBuilder, allowedRebuildIndices)
+            self.assertAllIslandsContiguous(bot.tileIslandBuilder, debugMode)
+            self.assertNoZombieIslands(bot.tileIslandBuilder)
+            self.assertNoBorderIslandsStale(bot.tileIslandBuilder)
+            self.assertNoLookupMismatches(bot.tileIslandBuilder)
+
+        simHost.run_between_turns(before_turn)
+        simHost.run_between_turns(after_turn)
+
+        # Queue the bot to stay put (pass moves) so only army-increment turns cause changes
+        simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  None  None  None  None  None')
+        self.begin_capturing_logging()
+        simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+
+    def test_simhost__bot_captures_enemy_tile_only_rebuilds_local_islands(self):
+        """
+        When the bot captures an adjacent enemy tile, only the islands directly containing
+        or adjacent to the changed tiles should get new objects. All islands further away —
+        especially the bulk of the enemy land and large neutral blobs — must retain the
+        exact same island objects they had before the turn.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        mapFile = 'GameContinuationEntries/should_recognize_army_collision_from_fog___BlpaDuBT2---b--136.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136, fill_out_tiles=True)
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, allAfkExceptMapPlayer=True, botInitOnly=True)
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+        simHost.reveal_player_general(playerToReveal=enemyGeneral.player, playerToRevealTo=general.player)
+
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        snapshotBefore: typing.Dict[int, TileIsland] = {}
+
+        def before_turn():
+            snapshotBefore.clear()
+            snapshotBefore.update(self._snapshot_all_island_objects(bot.tileIslandBuilder))
+
+        def after_turn():
+            changed = self._tiles_changed_this_turn(playerMap)
+            if not changed:
+                return
+            changedAndAdjacent = changed | self._tiles_adjacent_to_set(changed, playerMap)
+            allowedRebuildIndices: typing.Set[int] = set(changedAndAdjacent)
+            for idx in changed:
+                isl = snapshotBefore.get(idx)
+                if isl is not None:
+                    for t in isl.tile_set:
+                        allowedRebuildIndices.add(t.tile_index)
+
+            self.assertOnlyExpectedIslandsRebuilt(snapshotBefore, bot.tileIslandBuilder, allowedRebuildIndices)
+            self.assertAllIslandsContiguous(bot.tileIslandBuilder, debugMode)
+            self.assertNoZombieIslands(bot.tileIslandBuilder)
+            self.assertNoBorderIslandsStale(bot.tileIslandBuilder)
+            self.assertNoLookupMismatches(bot.tileIslandBuilder)
+
+        simHost.run_between_turns(before_turn)
+        simHost.run_between_turns(after_turn)
+
+        self.begin_capturing_logging()
+        simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+
+    def test_simhost__enemy_army_increment_does_not_rebuild_friendly_islands(self):
+        """
+        When an enemy general/city increments army, the enemy islands update but absolutely
+        no friendly-owned islands should be torn down and rebuilt. The friendly island objects
+        must be identical before and after the turn on every tile not adjacent to the change.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, allAfkExceptMapPlayer=True, botInitOnly=True)
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+        simHost.reveal_player_general(playerToReveal=enemyGeneral.player, playerToRevealTo=general.player)
+
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        snapshotBefore: typing.Dict[int, TileIsland] = {}
+
+        def before_turn():
+            snapshotBefore.clear()
+            snapshotBefore.update(self._snapshot_all_island_objects(bot.tileIslandBuilder))
+
+        def after_turn():
+            changed = self._tiles_changed_this_turn(playerMap)
+            if not changed:
+                return
+            changedAndAdjacent = changed | self._tiles_adjacent_to_set(changed, playerMap)
+            allowedRebuildIndices: typing.Set[int] = set(changedAndAdjacent)
+            for idx in changed:
+                isl = snapshotBefore.get(idx)
+                if isl is not None:
+                    for t in isl.tile_set:
+                        allowedRebuildIndices.add(t.tile_index)
+
+            friendlyTeam = bot.tileIslandBuilder.friendly_team
+            spurious = []
+            for tileIndex, islandBefore in snapshotBefore.items():
+                if tileIndex in allowedRebuildIndices:
+                    continue
+                islandAfter = bot.tileIslandBuilder.tile_island_lookup.raw[tileIndex]
+                if islandAfter is None:
+                    continue
+                if islandAfter is not islandBefore and islandBefore.team == friendlyTeam:
+                    tile = playerMap.tiles_by_index[tileIndex]
+                    spurious.append(f'{tile} friendly island rebuilt (was {islandBefore}, now {islandAfter})')
+            if spurious:
+                self.fail(
+                    f'enemy army increment spuriously rebuilt {len(spurious)} friendly island(s):\n'
+                    + '\n'.join(f'  {s}' for s in spurious[:20])
+                )
+
+            self.assertAllIslandsContiguous(bot.tileIslandBuilder, debugMode)
+            self.assertNoZombieIslands(bot.tileIslandBuilder)
+            self.assertNoBorderIslandsStale(bot.tileIslandBuilder)
+
+        simHost.run_between_turns(before_turn)
+        simHost.run_between_turns(after_turn)
+
+        # Bot stays put — enemy is AFK — so only army-increment turns fire
+        simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  None  None  None  None  None  None  None')
+        self.begin_capturing_logging()
+        simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=12)
+
+    def test_simhost__multi_turn_update_always_matches_recalculate(self):
+        """
+        Over many turns of a real game (bot moves + AFK enemy), update_tile_islands must
+        produce island assignments that agree with a fresh recalculate_tile_islands on the
+        same map state, and all structural invariants must hold every turn.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        mapFile = 'GameContinuationEntries/should_recognize_army_collision_from_fog___BlpaDuBT2---b--136.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136, fill_out_tiles=True)
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, allAfkExceptMapPlayer=True, botInitOnly=True)
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+        simHost.reveal_player_general(playerToReveal=enemyGeneral.player, playerToRevealTo=general.player)
+
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        def after_turn():
+            builder = bot.tileIslandBuilder
+            self.assertAllIslandsContiguous(builder, debugMode)
+            self.assertNoZombieIslands(builder)
+            self.assertNoBorderIslandsStale(builder)
+            self.assertNoLookupMismatches(builder)
+            self.assertNoFullIslandCycles(builder)
+            self.assertNoTilesWithNullIslands(builder, debugMode)
+
+        simHost.run_between_turns(after_turn)
+
+        self.begin_capturing_logging()
+        simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=20)
+
+    def test_simhost__large_map_neutral_islands_not_mass_rebuilt_on_army_increment(self):
+        """
+        On a larger map with many neutral islands, an army-increment turn (general/city tick)
+        must not cause the bulk of neutral islands to be rebuilt. Neutral islands that have
+        no tile adjacent to any changed tile should keep their exact same island objects.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        mapFile = 'GameContinuationEntries/fog_land_builder_should_not_take_ages_to_build___Sx5Tl3mwJ---2--880.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 880, fill_out_tiles=True)
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, allAfkExceptMapPlayer=True, botInitOnly=True)
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+        simHost.reveal_player_general(playerToReveal=enemyGeneral.player, playerToRevealTo=general.player)
+
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        snapshotBefore: typing.Dict[int, TileIsland] = {}
+
+        def before_turn():
+            snapshotBefore.clear()
+            snapshotBefore.update(self._snapshot_all_island_objects(bot.tileIslandBuilder))
+
+        def after_turn():
+            changed = self._tiles_changed_this_turn(playerMap)
+            if not changed:
+                return
+            changedAndAdjacent = changed | self._tiles_adjacent_to_set(changed, playerMap)
+            allowedRebuildIndices: typing.Set[int] = set(changedAndAdjacent)
+            for idx in changed:
+                isl = snapshotBefore.get(idx)
+                if isl is not None:
+                    for t in isl.tile_set:
+                        allowedRebuildIndices.add(t.tile_index)
+
+            neutralTeam = -1
+            spuriousNeutral = []
+            for tileIndex, islandBefore in snapshotBefore.items():
+                if tileIndex in allowedRebuildIndices:
+                    continue
+                if islandBefore.team != neutralTeam:
+                    continue
+                islandAfter = bot.tileIslandBuilder.tile_island_lookup.raw[tileIndex]
+                if islandAfter is None:
+                    continue
+                if islandAfter is not islandBefore:
+                    tile = playerMap.tiles_by_index[tileIndex]
+                    spuriousNeutral.append(f'{tile} (was {islandBefore}, now {islandAfter})')
+
+            if spuriousNeutral:
+                self.fail(
+                    f'army-increment turn spuriously rebuilt {len(spuriousNeutral)} non-adjacent neutral island(s):\n'
+                    + '\n'.join(f'  {s}' for s in spuriousNeutral[:20])
+                )
+
+            self.assertAllIslandsContiguous(bot.tileIslandBuilder, debugMode)
+            self.assertNoZombieIslands(bot.tileIslandBuilder)
+            self.assertNoBorderIslandsStale(bot.tileIslandBuilder)
+
+        simHost.run_between_turns(before_turn)
+        simHost.run_between_turns(after_turn)
+
+        simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  None  None  None  None  None  None  None')
+        self.begin_capturing_logging()
+        simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=12)
+
+    def test_simhost__enemy_capture_does_not_rebuild_distant_friendly_islands(self):
+        """
+        When an AFK enemy makes no moves (all army increments), no friendly island that is
+        non-adjacent to any changed tile should be rebuilt. This specifically guards against
+        the old O(all_tile_islands) zombie scan that would pull in entire island families.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, allAfkExceptMapPlayer=True, botInitOnly=True)
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+        simHost.reveal_player_general(playerToReveal=enemyGeneral.player, playerToRevealTo=general.player)
+
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        snapshotBefore: typing.Dict[int, TileIsland] = {}
+        rebuiltCounts: typing.List[typing.Tuple[int, int, int]] = []  # (turn, total_rebuilt, spurious)
+
+        def before_turn():
+            snapshotBefore.clear()
+            snapshotBefore.update(self._snapshot_all_island_objects(bot.tileIslandBuilder))
+
+        def after_turn():
+            changed = self._tiles_changed_this_turn(playerMap)
+            if not changed:
+                return
+            changedAndAdjacent = changed | self._tiles_adjacent_to_set(changed, playerMap)
+            allowedRebuildIndices: typing.Set[int] = set(changedAndAdjacent)
+            for idx in changed:
+                isl = snapshotBefore.get(idx)
+                if isl is not None:
+                    for t in isl.tile_set:
+                        allowedRebuildIndices.add(t.tile_index)
+
+            spurious = [
+                tileIndex for tileIndex, islandBefore in snapshotBefore.items()
+                if tileIndex not in allowedRebuildIndices
+                and bot.tileIslandBuilder.tile_island_lookup.raw[tileIndex] is not None
+                and bot.tileIslandBuilder.tile_island_lookup.raw[tileIndex] is not islandBefore
+            ]
+            rebuiltCounts.append((playerMap.turn, len(changed), len(spurious)))
+
+            if spurious:
+                spuriousTiles = [str(playerMap.tiles_by_index[i]) for i in spurious[:10]]
+                self.fail(
+                    f'Turn {playerMap.turn}: {len(spurious)} spurious island rebuild(s) '
+                    f'(changed={len(changed)} tiles): {spuriousTiles}'
+                )
+
+            self.assertAllIslandsContiguous(bot.tileIslandBuilder, debugMode)
+            self.assertNoZombieIslands(bot.tileIslandBuilder)
+            self.assertNoBorderIslandsStale(bot.tileIslandBuilder)
+            self.assertNoLookupMismatches(bot.tileIslandBuilder)
+
+        simHost.run_between_turns(before_turn)
+        simHost.run_between_turns(after_turn)
+
+        simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None')
+        self.begin_capturing_logging()
+        simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=16)

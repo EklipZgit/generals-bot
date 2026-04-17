@@ -2025,6 +2025,22 @@ class ArmyFlowExpander(object):
             for tile in incompleteSource.tile_set:
                 debugViewInfo.add_targeted_tile(tile, TargetStyle.BLUE, radiusReduction=14)
 
+        first = set()
+        dupes = set()
+
+        for opt in optsSorted:
+            for tile in opt.tiles:
+                if tile in first:
+                    dupes.add(tile)
+                else:
+                    first.add(tile)
+
+        for tile in dupes:
+            debugViewInfo.add_targeted_tile(tile, TargetStyle.GRAY, radiusReduction=-1)
+        if dupes:
+            debugViewInfo.add_info_line('GRAY = DUPLICATE FLOW OPTION TILES:')
+            debugViewInfo.add_info_line('|'.join(f'{t.x},{t.y}' for t in dupes))
+
         if addlTileColorings:
             for targetStyleColor, radiusReduction, name, tileSet in addlTileColorings:
                 debugViewInfo.add_info_line_no_log(f'{targetStyleColor} = {name}')
@@ -2048,7 +2064,7 @@ class ArmyFlowExpander(object):
                     dontAddSourceTargetCircles=True
                 )
 
-        islandBuilder.add_tile_islands_to_view_info(debugViewInfo, printIslandInfoLines=True, printIslandNames=True)
+        islandBuilder.add_tile_islands_to_view_info(debugViewInfo, printIslandInfoLines=True, renderIslandNames=True)
         ViewerProcessHost.render_view_info_debug(inf, inf if extraInfo is None else None, self.map, debugViewInfo)
 
     def live_render_invalid_flow_config(
@@ -2065,12 +2081,18 @@ class ArmyFlowExpander(object):
             debugViewInfo.add_info_line(inf)
 
         ArmyFlowExpander.add_nx_flow_precursor_graph_to_view_info(nxGraph, islandBuilder, debugViewInfo)
-        islandBuilder.add_tile_islands_to_view_info(debugViewInfo, printIslandInfoLines=False, printIslandNames=True)
+        islandBuilder.add_tile_islands_to_view_info(debugViewInfo, printIslandInfoLines=False, renderIslandNames=True)
 
         ViewerProcessHost.render_view_info_debug(inf, inf, self.map, debugViewInfo)
 
     @staticmethod
-    def add_flow_expansion_option_to_view_info(map: MapBase, bestOpt: FlowExpansionPlanOption, sourcePlayer: int, tgPlayer: int, viewInfo: ViewInfo, dontAddSourceTargetCircles=False):
+    def add_flow_expansion_option_to_view_info(
+            map: MapBase,
+            bestOpt: FlowExpansionPlanOption,
+            sourcePlayer: int,
+            tgPlayer: int,
+            viewInfo: ViewInfo,
+            dontAddSourceTargetCircles: bool = False):
         tgTeam = map.team_ids_by_player_index[tgPlayer]
         sourceTeam = map.team_ids_by_player_index[sourcePlayer]
 
@@ -2096,23 +2118,30 @@ class ArmyFlowExpander(object):
                 viewInfo.add_targeted_tile(tile, ts, radiusReduction=10)
 
     @staticmethod
-    def add_flow_graph_to_view_info(flowGraph: IslandMaxFlowGraph, viewInfo: ViewInfo, noNeut: bool = True, withNeut: bool = True, showBackfillNeut: bool = False, lastRun: ArmyFlowExpanderLastRun | None = None):
+    def add_flow_graph_to_view_info(
+            flowGraph: IslandMaxFlowGraph,
+            viewInfo: ViewInfo,
+            noNeut: bool = True,
+            withNeut: bool = True,
+            showBackfillNeut: bool = False,
+            lastRun: ArmyFlowExpanderLastRun | None = None,
+            noLog: bool = False):
         # things drawn last win
         if withNeut:
-            viewInfo.add_info_line(f'PURPLE/BLUE = YES neutral max flows')
+            viewInfo.add_info_line_opt_log(f'PURPLE/BLUE = YES neutral max flows', noLog=noLog)
             if lastRun is not None:
-                viewInfo.add_info_line(lastRun.flow_stats_inc_neut.summary_line('YES neut'))
+                viewInfo.add_info_line_opt_log(lastRun.flow_stats_inc_neut.summary_line('YES neut'), noLog=noLog)
             else:
-                viewInfo.add_info_line(ArmyFlowExpander._get_flow_graph_summary_line(flowGraph.root_flow_nodes_inc_neut, flowGraph.enemy_backfill_nodes_inc_neut, flowGraph.flow_node_lookup_by_island_inc_neut, 'YES neut'))
+                viewInfo.add_info_line_opt_log(ArmyFlowExpander._get_flow_graph_summary_line(flowGraph.root_flow_nodes_inc_neut, flowGraph.enemy_backfill_nodes_inc_neut, flowGraph.flow_node_lookup_by_island_inc_neut, 'YES neut'), noLog=noLog)
             # Need to draw the blue last since it will be covered by the gray if drawn earlier.
             ArmyFlowExpander._include_flow_with_colors(viewInfo, flowGraph.enemy_backfill_nodes_inc_neut, Colors.LIGHT_BLUE)
 
         if noNeut:
-            viewInfo.add_info_line(f'BLACK/PINK = NO neutral max flows')
+            viewInfo.add_info_line_opt_log(f'BLACK/PINK = NO neutral max flows', noLog=noLog)
             if lastRun is not None:
-                viewInfo.add_info_line(lastRun.flow_stats_no_neut.summary_line('NO neut'))
+                viewInfo.add_info_line_opt_log(lastRun.flow_stats_no_neut.summary_line('NO neut'), noLog=noLog)
             else:
-                viewInfo.add_info_line(ArmyFlowExpander._get_flow_graph_summary_line(flowGraph.root_flow_nodes_no_neut, flowGraph.enemy_backfill_nodes_no_neut, flowGraph.flow_node_lookup_by_island_no_neut, 'NO neut'))
+                viewInfo.add_info_line_opt_log(ArmyFlowExpander._get_flow_graph_summary_line(flowGraph.root_flow_nodes_no_neut, flowGraph.enemy_backfill_nodes_no_neut, flowGraph.flow_node_lookup_by_island_no_neut, 'NO neut'), noLog=noLog)
             ArmyFlowExpander._include_flow_with_colors(viewInfo, flowGraph.enemy_backfill_nodes_no_neut, Colors.WHITE_PURPLE)
             ArmyFlowExpander._include_flow_with_colors(viewInfo, flowGraph.root_flow_nodes_no_neut, Colors.BLACK)
 

@@ -1,0 +1,2 @@
+If you make a change and it does not change or fix the issue after testing, revert that change before trying to make other changes.
+Prefer adding logging to be certain what an issue is rather than guessing. This is a very complex system and random changes can have a lot of cascading effects.

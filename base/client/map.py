@@ -1921,7 +1921,7 @@ AttributeError: 'Map' object has no attribute 'grid'
                 destArmyInterferedToo = False
                 if not hasDestDeltaMismatch:
                     # then we almost certainly didn't have source attacked with priority.
-                    logbook.warn(
+                    logbook.warning(
                         f'MOVE {str(last_player_index_submitted_move)} ? src attacked for srcUnexpectedDelta {srcUnexpectedDelta} WITHOUT priority based on actualSrcDelta {actualSrcDelta} vs expectedSourceDelta {expectedSourceDelta}')
                 elif destHasEnDeltasNearby:
                     armyMadeItToDest = dest.delta.unexplainedDelta
@@ -1929,12 +1929,12 @@ AttributeError: 'Map' object has no attribute 'grid'
                     if source.army == 0:
                         srcUnexpectedDelta -= 1  # enemy can attack us down to 0 without flipping the tile, special case this
 
-                    logbook.warn(
+                    logbook.warning(
                         f'MOVE {str(last_player_index_submitted_move)} ? src attacked for srcUnexpectedDelta {srcUnexpectedDelta} based on destDelta {dest.delta.unexplainedDelta} vs expectedDestDelta {expectedDestDelta}')
                 else:
                     destArmyInterferedToo = True
                     # TODO what to do here?
-                    logbook.warn(
+                    logbook.warning(
                         f'???MOVE {str(last_player_index_submitted_move)} ? player had priority but we still had a dest delta as well as source delta...?')
                     self._update_moved_here(dest, True)
 

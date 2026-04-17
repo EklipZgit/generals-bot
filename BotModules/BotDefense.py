@@ -2641,7 +2641,7 @@ class BotDefense:
                         tDist = 100
                 if defDist < tDist:
                     block.add_blocked_destination(t)
-            bot.info(f'blocking {defensiveTile} from moving to {'|'.join([str(t) for t in block.blocked_destinations])}')
+            bot.info(f'blocking {defensiveTile} from moving to {"|".join([str(t) for t in block.blocked_destinations])}')
 
 
 BM.BotDefense = BotDefense

@@ -122,6 +122,8 @@ class IslandFlowNode(object):
         """Negative if wishes to send army (friendly), positive if wishes to receive army (enemy/neutral)"""
         self.army_flow_received: int = 0
         self.flow_to: typing.List[IslandFlowEdge] = []
+        self.flow_from: typing.List[IslandFlowEdge] = []
+        """Reverse edges: each entry is the edge whose target_flow_node is this node."""
 
     def base_str(self) -> str:
         return f'{{t{self.island.team}:{self.island.unique_id}/{self.island.name} {self.island.tile_count}t {self.island.sum_army}a ({next(i for i in self.island.tile_set)})}}'
@@ -148,7 +150,10 @@ class IslandFlowNode(object):
 
     def copy(self) -> IslandFlowNode:
         clone = IslandFlowNode(self.island, self.desired_army)
-        clone.flow_to = [e.copy() for e in self.flow_to]
+        for e in self.flow_to:
+            cloned_edge = e.copy(clone)
+            clone.flow_to.append(cloned_edge)
+            cloned_edge.target_flow_node.flow_from.append(cloned_edge)
         return clone
 
     def set_flow_to(self, destNode: IslandFlowNode, edgeArmy: int) -> bool:
@@ -166,12 +171,15 @@ class IslandFlowNode(object):
             existingEdge[0].edge_army = edgeArmy
             return False
         else:
-            self.flow_to.append(IslandFlowEdge(destNode, edgeArmy))
+            new_edge = IslandFlowEdge(self, destNode, edgeArmy)
+            self.flow_to.append(new_edge)
+            destNode.flow_from.append(new_edge)
             return True
 
 
 class IslandFlowEdge(object):
-    def __init__(self, targetIslandFlowNode: IslandFlowNode, edgeArmy: int):
+    def __init__(self, sourceIslandFlowNode: IslandFlowNode, targetIslandFlowNode: IslandFlowNode, edgeArmy: int):
+        self.source_flow_node: IslandFlowNode = sourceIslandFlowNode
         self.target_flow_node: IslandFlowNode = targetIslandFlowNode
         self.edge_army: int = edgeArmy
 
@@ -181,8 +189,9 @@ class IslandFlowEdge(object):
     def __repr__(self) -> str:
         return str(self)
 
-    def copy(self) -> IslandFlowEdge:
-        return IslandFlowEdge(self.target_flow_node.copy(), self.edge_army)
+    def copy(self, new_source: IslandFlowNode) -> IslandFlowEdge:
+        """Copy this edge with a new source node. The target is shallow-copied (not recursed here)."""
+        return IslandFlowEdge(new_source, self.target_flow_node.copy(), self.edge_army)
 
 
 class IslandMaxFlowGraph(object):

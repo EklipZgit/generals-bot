@@ -30,7 +30,7 @@ class ArmyAnalyzerUnitTests(TestBase):
         self.assertEqual(2, analyzer.chokeWidths[map.GetTile(7, 10)])
 
     def test_should_recognize_inbound_choke_points(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_allow_opp_to_walk_all_over_territory___Hn8ec1Na9---0--283.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 283, fill_out_tiles=True)
 

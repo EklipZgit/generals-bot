@@ -689,6 +689,12 @@ def _knapsack_max_set_gather_iterative_prune(
             for path in newPaths:
                 last = path.tileList[0]
                 for tile in path.tileList[1:]:
+                    if tile.isObstacle or not tile.discovered:
+                        logbook.info(
+                            f'_knapsack iter {itr.value}: non-pathable/undiscovered tile added to gather path: '
+                            f'{tile} pl={tile.player} army={tile.army} isObst={tile.isObstacle} disc={tile.discovered} idx={tile.tile_index} '
+                            f'path={path}'
+                        )
                     forest.merge(tile, last)
                     newStartTilesDict[tile] = (baseCaseFunc(tile, 0), 0)
 
@@ -827,6 +833,13 @@ def _knapsack_max_set_gather_iterative_prune(
 
             if pruneToTurns == fullTurns:
                 break
+
+            _nonPathInForest = [t for t in rootForestSubset if t.isObstacle or not t.discovered]
+            if _nonPathInForest:
+                logbook.info(
+                    f'_knapsack iter {itr.value}: {len(_nonPathInForest)} non-pathable/undiscovered tile(s) in rootForestSubset before prune_set_to_turns_and_reconnect: '
+                    + ' | '.join(f'{t} pl={t.player} army={t.army} isObst={t.isObstacle} disc={t.discovered} idx={t.tile_index}' for t in _nonPathInForest)
+                )
 
             totalTurns, totalValue, prunedSet = prune_set_to_turns_and_reconnect_with_values(
                 map,
@@ -1258,6 +1271,13 @@ def prune_set_to_turns_and_reconnect_with_values(
     # numToPruneNaive = int(pruneDiff * 1.5)
     # prune_set_naive(rootTiles, toPrune, numToPruneNaive, valueMatrix)
 
+    nonPathable = [t for t in toPrune if t.isObstacle or not t.discovered]
+    if nonPathable:
+        logbook.info(
+            f'prune_set_to_turns_and_reconnect: {len(nonPathable)} non-pathable/undiscovered tile(s) in toPrune: '
+            + ' | '.join(f'{t} pl={t.player} army={t.army} isObst={t.isObstacle} disc={t.discovered} idx={t.tile_index}' for t in nonPathable)
+        )
+
     baselineValue = sum(valueMatrix.raw[t.tile_index] for t in toPrune if t not in rootTiles)
     baselineValuePerTurn = baselineValue / max(1, len(toPrune) - len(rootTiles))
 
@@ -1426,6 +1446,20 @@ def _reconnect_steiner_subprune(
     )
     # Filter out any tiles that were skipped from the graph to avoid NodeNotFound error
     toReconnectInGraph = [t for t in toReconnect if t not in skipTiles] if skipTiles else toReconnect
+    notInGraph = [t for t in toReconnectInGraph if t.tile_index not in steinerGraph]
+    if notInGraph:
+        logbook.info(
+            f'_reconnect_steiner_subprune: {len(notInGraph)} toReconnect tile(s) NOT in steinerGraph '
+            f'(pathable={[t for t in notInGraph if not t.isObstacle]}, obstacle={[t for t in notInGraph if t.isObstacle]}): '
+            + ' | '.join(f'{t} pl={t.player} army={t.army} isObst={t.isObstacle} isCostlyNeut={t.isCostlyNeutral} idx={t.tile_index}' for t in notInGraph)
+        )
+        logbook.info(
+            f'_reconnect_steiner_subprune: toReconnect full list ({len(toReconnectInGraph)} tiles): '
+            + ' | '.join(f'{t}' for t in toReconnectInGraph)
+        )
+        logbook.info(
+            f'_reconnect_steiner_subprune: skipTiles={[str(t) for t in skipTiles] if skipTiles else None}'
+        )
     reconnectedSubset = GatherSteiner.build_network_x_steiner_tree_from_arbitrary_nx_graph(map, steinerGraph, requiredTiles=toReconnectInGraph)
     reconnectionTiles = []
     gathVal = 0

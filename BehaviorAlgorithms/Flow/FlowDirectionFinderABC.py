@@ -120,12 +120,12 @@ class FlowDirectionFinderABC(ABC):
 
                 if target_node_id in graph_data.neutral_sinks:
                     if source_node is None:
-                        edge = IslandFlowEdge(target_node, target_flow_amount)
+                        edge = IslandFlowEdge(None, target_node, target_flow_amount)
                         backfill_neut_edges.append(edge)
                         continue
 
                     if source_node.island is target_general_island:
-                        edge = IslandFlowEdge(target_node, target_flow_amount)
+                        edge = IslandFlowEdge(source_node, target_node, target_flow_amount)
                         backfill_neut_edges.append(edge)
                         logbook.info(
                             f'NEUT SINK EN GEN FLOW of {target_flow_amount} to fake node {target_node_id} -- we overflow the enemy land? sourceNode.army_flow_received was {source_node.army_flow_received} (now {source_node.army_flow_received - target_flow_amount})')

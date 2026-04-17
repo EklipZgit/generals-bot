@@ -133,7 +133,7 @@ class BotPathingUtils:
                                 bot.targetingArmy = bot.armyTracker.armies[threat.path.start.tile]
                                 return (True, BotPathingUtils.get_first_path_move(bot, killThreatPath))
                         else:
-                            logbook.warn("Negative tiles prevented a move but there was no threat???")
+                            logbook.warning("Negative tiles prevented a move but there was no threat???")
 
                     elif nextMove.source.player != bot._map.player_index or nextMove.source.army < 2:
                         logbook.info("\n\n\n~~~~~~~~~~~\nCleaned useless move from path\n~~~~~~~~~~~~~\n\n~~~\n")
@@ -328,7 +328,7 @@ class BotPathingUtils:
                     bot.curPath.pop_first_move()
                     bot.curPath.pop_first_move()
                 elif bot.curPath.start.next is not None and bot.curPath.start.tile.x == bot.curPath.start.next.tile.x and bot.curPath.start.tile.y == bot.curPath.start.next.tile.y:
-                    logbook.warn("           wtf, doubled up tiles in path?????")
+                    logbook.warning("           wtf, doubled up tiles in path?????")
                     bot.curPath.pop_first_move()
                     bot.curPath.pop_first_move()
         else:

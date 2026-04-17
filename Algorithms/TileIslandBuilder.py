@@ -286,11 +286,27 @@ class TileIslandBuilder(object):
         for team in self.teams:
             self._build_large_island_distances_for_team(team)
 
+        nullIslandNonObstTiles = [
+            t for t in self.map.tiles_by_index
+            if not t.isObstacle and self.tile_island_lookup.raw[t.tile_index] is None
+        ]
+        if nullIslandNonObstTiles:
+            logbook.info(
+                f'recalculate_tile_islands POST-BUILD: {len(nullIslandNonObstTiles)} non-obstacle tile(s) with None island: '
+                + ' | '.join(
+                    f'{t} pl={t.player} army={t.army} isCity={t.isCity} isGen={t.isGeneral} '
+                    f'isCostlyNeut={t.isCostlyNeutral} disc={t.discovered} isReachable={t in self.map.reachable_tiles} idx={t.tile_index}'
+                    for t in nullIslandNonObstTiles
+                )
+            )
+        else:
+            logbook.info('recalculate_tile_islands POST-BUILD: all non-obstacle tiles have islands (no None)')
+
         complete = time.perf_counter() - start
         logbook.info(f'islands all built in {complete:.5f}s')
 
     def update_tile_islands(self, enemyGeneralExpectedLocation: Tile | None, mode: IslandBuildMode = IslandBuildMode.GroupByArmy):
-        logbook.info('update_tile_islands starting')
+        logbook.info(f'update_tile_islands starting (turn={self.map.turn})')
         start = time.perf_counter()
 
         self._team_stats_by_team_id = self.map.get_team_stats_lookup_by_team_id()
@@ -319,7 +335,32 @@ class TileIslandBuilder(object):
 
             existingIsland = self.tile_island_lookup.raw[tile.tile_index]
             if existingIsland is not None:
-                impactedLeafIslands.update(self._get_leaf_islands_for_island(existingIsland))
+                existingTeam = existingIsland.team if existingIsland.full_island is None else existingIsland.full_island.team
+                if existingTeam == -1:
+                    # Neutral island: only add the direct leaf containing this tile.
+                    # _get_leaf_islands_for_island would return ALL siblings under the same full_island,
+                    # tearing down the entire neutral blob and rebuilding it as one giant island.
+                    # Neutral siblings are contiguous and unchanged — they never need to be rebuilt here.
+                    directLeaf = existingIsland.full_island if existingIsland.full_island is not None else existingIsland
+                    if directLeaf.child_islands is not None:
+                        for child in directLeaf.child_islands:
+                            if tile in child.tile_set:
+                                impactedLeafIslands.add(child)
+                                break
+                    else:
+                        impactedLeafIslands.add(existingIsland)
+                else:
+                    # Owned island: ownership change may split the component, so all siblings must be rebuilt.
+                    impactedLeafIslands.update(self._get_leaf_islands_for_island(existingIsland))
+
+        logbook.info(
+            f'update_tile_islands changedTiles ({len(changedTiles)}): '
+            + ' | '.join(
+                f'{t} pl={t.player}(was {t.delta.oldOwner}) army={t.army}(was {t.delta.oldArmy}) '
+                f'isObst={t.isObstacle} isCostlyNeut={t.isCostlyNeutral} disc={t.discovered} idx={t.tile_index}'
+                for t in changedTiles
+            )
+        )
 
         if len(changedTiles) == 0:
             complete = time.perf_counter() - start
@@ -352,29 +393,23 @@ class TileIslandBuilder(object):
             logbook.info(f'islands updated in {complete:.5f}s')
             return
 
-        refreshTiles = impactedTiles.copy()
-        for tile in changedTiles:
-            refreshTiles.add(tile)
-            for adj in tile.movable:
-                if not adj.isObstacle:
-                    refreshTiles.add(adj)
-
-        refreshIslands: typing.Set[TileIsland] = set()
-        for tile in refreshTiles:
-            island = self.tile_island_lookup.raw[tile.tile_index]
-            if island is not None:
-                refreshIslands.add(island)
-
         priorLeafIslandByTile: typing.Dict[Tile, TileIsland] = {}
         for island in impactedLeafIslands:
             for tile in island.tile_set:
                 priorLeafIslandByTile[tile] = island
 
+        logbook.info(
+            f'update_tile_islands impactedLeafIslands ({len(impactedLeafIslands)}): '
+            + ' | '.join(str(isl) for isl in impactedLeafIslands)
+        )
+        logbook.info(
+            f'update_tile_islands impactedTiles ({len(impactedTiles)}): '
+            + ' | '.join(str(t) for t in sorted(impactedTiles, key=lambda t: t.tile_index))
+        )
+
         for island in impactedLeafIslands:
             self._remove_leaf_island(island)
             self.borders_by_island.pop(island.unique_id, None)
-
-        refreshIslands.difference_update(impactedLeafIslands)
 
         visited: typing.Set[Tile] = set()
         rebuiltIslands: typing.List[TileIsland] = []
@@ -396,7 +431,23 @@ class TileIslandBuilder(object):
             componentPriorLeafIslands = {priorLeafIslandByTile[t] for t in componentTiles if t in priorLeafIslandByTile}
             rebuiltIslands.extend(self._rebuild_leaf_islands_from_component(componentTiles, team, changedArmyTiles, changedOwnerTiles, componentPriorLeafIslands, mode))
 
-        refreshIslands.update(rebuiltIslands)
+        # Build refreshTiles and refreshIslands AFTER the rebuild so tile_island_lookup reflects
+        # the final island assignments (including any children from _break_apart_island_if_too_large).
+        # Pre-populating before rebuild was wrong: neighbors of rebuilt tiles that weren't adjacent
+        # to changedTiles would get stale border_islands.
+        refreshTiles: typing.Set[Tile] = set()
+        for tile in impactedTiles:
+            refreshTiles.add(tile)
+            for adj in tile.movable:
+                if not adj.isObstacle:
+                    refreshTiles.add(adj)
+        for tile in changedTiles:
+            refreshTiles.add(tile)
+            for adj in tile.movable:
+                if not adj.isObstacle:
+                    refreshTiles.add(adj)
+
+        refreshIslands: typing.Set[TileIsland] = set(rebuiltIslands)
         for tile in refreshTiles:
             island = self.tile_island_lookup.raw[tile.tile_index]
             if island is not None:
@@ -412,6 +463,22 @@ class TileIslandBuilder(object):
         for team in affectedTeams:
             if team >= 0:
                 self._build_large_island_distances_for_team(team)
+
+        nullIslandNonObstTiles = [
+            t for t in self.map.tiles_by_index
+            if not t.isObstacle and self.tile_island_lookup.raw[t.tile_index] is None
+        ]
+        if nullIslandNonObstTiles:
+            logbook.info(
+                f'update_tile_islands POST-UPDATE: {len(nullIslandNonObstTiles)} non-obstacle tile(s) with None island: '
+                + ' | '.join(
+                    f'{t} pl={t.player} army={t.army} isCity={t.isCity} isGen={t.isGeneral} '
+                    f'isCostlyNeut={t.isCostlyNeutral} disc={t.discovered} idx={t.tile_index}'
+                    for t in nullIslandNonObstTiles
+                )
+            )
+        else:
+            logbook.info('update_tile_islands POST-UPDATE: all non-obstacle tiles have islands (no None)')
 
         complete = time.perf_counter() - start
         logbook.info(f'islands updated in {complete:.5f}s')
@@ -562,6 +629,8 @@ class TileIslandBuilder(object):
                 island = TileIsland(candidateTiles, team, 1, tile.army)
             else:
                 self._update_island_state(island, candidateTiles, team, 1, tile.army)
+            island.full_island = None
+            island.child_islands = None
             leafIslands.append(island)
             leafIslandByTile[tile] = island
 
@@ -580,9 +649,15 @@ class TileIslandBuilder(object):
                 island = TileIsland(tileSet, team, len(tileSet), sum(t.army for t in tileSet))
             else:
                 self._update_island_state(island, tileSet, team, len(tileSet), sum(t.army for t in tileSet))
-            leafIslands.append(island)
-            for islandTile in island.tile_set:
-                leafIslandByTile[islandTile] = island
+            brokenUp = self._break_apart_island_if_too_large(island)
+            if len(brokenUp) == 1 and brokenUp[0] is island:
+                # Not split — clear any stale full_island/child_islands from a prior recalculate
+                island.full_island = None
+                island.child_islands = None
+            leafIslands.extend(brokenUp)
+            for brokenIsland in brokenUp:
+                for islandTile in brokenIsland.tile_set:
+                    leafIslandByTile[islandTile] = brokenIsland
 
         for tile in pendingArmyTiles:
             matchingIslands: typing.List[TileIsland] = []

@@ -1,28 +1,18 @@
-import time
-import typing
-from collections import deque
-
 import logbook
 
-import Gather
-import SearchUtils
 from Algorithms import TileIslandBuilder
-from Algorithms.TileIslandBuilder import IslandBuildMode
 from BehaviorAlgorithms import IterativeExpansion
-from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander, IslandFlowNode, FlowGraphMethod
-from BoardAnalyzer import BoardAnalyzer
+from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander, FlowGraphMethod
+from BehaviorAlgorithms.FlowExpansion import FlowExpansionPlanOptionCollection
 from Gather import GatherDebug
 from Sim.GameSimulator import GameSimulatorHost
-from TestBase import TestBase
-from ViewInfo import ViewInfo
+from Tests.TestBase import TestBase
 from base.client.map import MapBase
-from base.client.tile import Tile
-from base.viewer import PLAYER_COLORS
 from bot_ek0x45 import EklipZBot
 
 method = FlowGraphMethod.MinCostFlow
 
-class FlowExpansionBorderStreamPreprocessTests(TestBase):
+class FlowExpansionPostOptimizationTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
         GatherDebug.USE_DEBUG_ASSERTS = True
@@ -37,8 +27,8 @@ class FlowExpansionBorderStreamPreprocessTests(TestBase):
 
         return bot
 
-    def test_border_stream_preprocessing__basic_two_island_map(self):
-        """Test basic border stream preprocessing on a simple two-island map"""
+    def test_post_optimization__basic_two_island_map(self):
+        """Test post-optimization and plan materialization on a simple two-island map"""
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
 |    |    |    |
@@ -54,29 +44,57 @@ aG1  a3   b1   bG1
         # Import and test the V2 expander
         from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
+        flowExpanderV2.target_team = enemyGeneral.player
+        flowExpanderV2.enemyGeneral = enemyGeneral
 
-        # Test the preprocessing components
+        # Set up the flow graph and preprocessing
         flowExpanderV2._ensure_flow_graph_exists(builder)
-        self.assertIsNotNone(flowExpanderV2.flow_graph, 'Flow graph should be built')
-
-        # Test target-crossable detection
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
-        self.assertEqual(0, len(target_crossable), 'No islands should be target-crossable in this simple map')
-
-        # Test border pair enumeration
         border_pairs = flowExpanderV2._enumerate_border_pairs(
             flowExpanderV2.flow_graph, builder, flowExpanderV2.team, flowExpanderV2.target_team, target_crossable
         )
-        self.assertEqual(1, len(border_pairs), 'Should find exactly one border pair')
+        lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
+            border_pairs, flowExpanderV2.flow_graph, target_crossable
+        )
+        flowExpanderV2._postprocess_flow_stream_gather_capture_lookup_pairs(lookup_tables)
 
-        # Verify the border pair is correct
-        border_pair = border_pairs[0]
-        friendly_island = builder.get_island_for_tile(general)
-        target_island = builder.get_island_for_tile(enemyGeneral)
-        self.assertEqual(friendly_island.unique_id, border_pair.friendly_island_id)
-        self.assertEqual(target_island.unique_id, border_pair.target_island_id)
+        # Test grouped knapsack optimization
+        turn_budget = 10
+        solution = flowExpanderV2._solve_grouped_knapsack(lookup_tables, turn_budget)
+
+        # Test post-optimization (Phase 6)
+        optimized_solution = flowExpanderV2._post_optimize_locally(
+            solution, lookup_tables, turn_budget
+        )
+
+        self.assertIsNotNone(optimized_solution, 'Should produce an optimized solution')
+        self.assertIsInstance(optimized_solution, dict, 'Optimized solution should be a dict keyed by border pair')
+        self.assertGreater(len(optimized_solution), 0, 'Optimized solution should contain at least one selected border pair')
+
+        # Test plan materialization (Phase 5)
+        plans = flowExpanderV2._materialize_plans(optimized_solution, lookup_tables)
+
+        self.assertIsInstance(plans, list, 'Should return a list of plans')
+
+        # For this simple case, we expect at least one plan
+        self.assertGreater(len(plans), 0, 'Should materialize at least one plan')
+
+        # Verify the plan structure
+        first_plan = plans[0]
+        self.assertIsNotNone(first_plan, 'Plan should not be None')
+        # Note: The exact structure will depend on GatherCapturePlan implementation
+        # For now, we just verify we get something reasonable back
+
+        # Test the full integration through the main interface
+        result = flowExpanderV2.get_expansion_options(
+            builder, general.player, enemyGeneral.player,
+            turns=turn_budget, boardAnalysis=None, territoryMap=None, negativeTiles=None
+        )
+
+        self.assertIsInstance(result, FlowExpansionPlanOptionCollection, 'Should return FlowExpansionPlanOptionCollection')
+        self.assertIsInstance(result.flow_plans, list, 'Should contain a list of flow plans')
 
 
     def test_build_flow_expand_plan__should_produce_valid_only__pull_through_friendly(self):

@@ -1995,7 +1995,7 @@ class BotCombatOps:
             skipped.append(path.pop_first_move())
 
         if skipped:
-            bot.info(f"Skip {len(skipped)} bad launchmoves below {vt:.1f} ({"|".join([str(t.source) for t in skipped])})")
+            bot.info(f"Skip {len(skipped)} bad launchmoves below {vt:.1f} ({'|'.join([str(t.source) for t in skipped])})")
 
         enemyGenAdj = []
         for generalAdj in bot.general.adjacents:

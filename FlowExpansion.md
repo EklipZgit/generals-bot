@@ -177,7 +177,7 @@ A friendly island should be marked `target crossable` when all of the following 
 
 - it is a friendly island
 - it is bordered by more enemy island tile counts than friendly island tile counts
-- its parent island contains less than `1/5` of the friendly team’s total tile count
+- its parent island (`island.full_island`) contains less than `1/5` of the friendly team’s total tile count
 - the max-flow graph/path results show pathing into the friendly island **from enemy islands**
   - regardless of whether that flow ultimately originates from enemy-general sink pressure or from friendly source tiles routed through the graph
 
@@ -384,7 +384,7 @@ Unit tests:
 - **No duplicate island inclusion inside one stream**
   - cyclic / converging flow graph case
 
-## Phase 1.5: Compute stream ordering metadata
+## Phase 1.5: Compute stream ordering metadata ✅
 This is the prompt’s `preprocess_flow_stream_tilecounts(...)` idea and should be made concrete.
 
 For each border pair stream, compute:
@@ -424,11 +424,11 @@ Unit tests:
 - **Converging friendly streams compute upstream counts correctly**
 - **Locally bad capture step can be preferred when it unlocks better downstream aggregate capture payoff**
 
-## Phase 2: Build per-border gather/capture lookup tables
+## Phase 2: Build per-border gather/capture lookup tables ✅
 
 Implement:
 
-- `process_flow_into_flow_army_turns(...) -> list[FlowArmyTurnsLookupTable]`
+- `process_flow_into_flow_army_turns(...) -> list[FlowArmyTurnsLookupTable]` ✅
 
 This is the main Step 1 from the prompt, clarified.
 
@@ -493,9 +493,9 @@ Unit tests:
   - mirrors existing tests like "not enough army to fully cap"
 - **Neutral-inclusive capture table values neutral appropriately**
 
-## Phase 3: Enrich capture entries with minimum gather support
+## Phase 3: Enrich capture entries with minimum gather support ✅
 Implement prompt Step 2 as:
-- `postprocess_flow_stream_gather_capture_lookup_pairs(...)`
+- `postprocess_flow_stream_gather_capture_lookup_pairs(...)` ✅
 
 For each border pair and each capture entry:
 - find the minimum-turn gather entry whose `gathered_army >= capture.required_army`
@@ -519,7 +519,7 @@ Unit tests:
 - **Combined density computed correctly**
 - **Tie-breaking prefers shorter supporting gather**
 
-## Phase 4: Simple solution path via grouped knapsack
+## Phase 4: Simple solution path via grouped knapsack ✅
 Implement the prompt’s `.use_simple_flow_stream_maximization: bool`.
 
 When enabled:

@@ -309,7 +309,7 @@ class ArmyInterception(object):
 
             if valPerTurn > maxValPerTurn or (valPerTurn == maxValPerTurn and threatInfo.threat.path.length > maxThreatInfo.threat.path.length and not isMaxThreatKill):
                 if isMaxThreatKill:
-                    logbook.warn(f'WARNING: replacing best_enemy_threat kill threat with non-kill:\r\nreplacing: {maxThreatInfo.threat}\r\nwith: {threatInfo.threat}')
+                    logbook.warning(f'WARNING: replacing best_enemy_threat kill threat with non-kill:\r\nreplacing: {maxThreatInfo.threat}\r\nwith: {threatInfo.threat}')
                 isMaxThreatKill = False
                 maxValPerTurn = valPerTurn
                 maxThreatInfo = threatInfo
@@ -388,13 +388,13 @@ class ArmyInterceptor(object):
 
             if countMightBeMovable == 0:
                 # TODO do something with this info...?
-                logbook.warn(f'ALL of the {len(interception.common_intercept_chokes)} common intercept chokes were only one tile adjacent to the threat. Should probably re-evaluate which threats we care about, then...?')
+                logbook.warning(f'ALL of the {len(interception.common_intercept_chokes)} common intercept chokes were only one tile adjacent to the threat. Should probably re-evaluate which threats we care about, then...?')
 
         interception.base_threat_army = self._get_threats_army_amount(threats)
         # potentialRecaptureArmyInterceptTable = self._get_potential_intercept_table(turnsLeftInCycle, interception.base_threat_army)
         interception.intercept_options = self._get_intercept_plan_options(interception, turnsLeftInCycle, otherThreatsBlockingTiles)
         if len(interception.intercept_options) == 0:
-            logbook.warn(f'No intercept options found, retrying shared chokes but being more lenient filtering out threats')
+            logbook.warning(f'No intercept options found, retrying shared chokes but being more lenient filtering out threats')
             # try again, more friendly
             altThreatValues = [t for t in threatValues if t.threat.path.get_first_move().dest != t.threat.path.start.tile.delta.fromTile]
             if len(threatValues) > len(altThreatValues) > 0:

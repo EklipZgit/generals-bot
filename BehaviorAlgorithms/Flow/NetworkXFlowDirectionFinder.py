@@ -108,16 +108,17 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
         return self.build_flow_graph(islands, ourIslands, targetIslands, searchingPlayer, turns, blockGatherFromEnemyBorders, negativeTiles, includeNeutralDemand, method)
 
     def ensure_graph_data_available(self, islands: 'TileIslandBuilder'):
-        if self.nx_graph_data is None or self.nx_graph_data_no_neut is None:
-            self.nx_graph_data = self.build_graph_data(islands, use_neutral_flow=True)
-            self.nx_graph_data_no_neut = self.build_graph_data(islands, use_neutral_flow=False)
+        self.nx_graph_data = self.build_graph_data(islands, use_neutral_flow=True)
+        self.nx_graph_data_no_neut = self.build_graph_data(islands, use_neutral_flow=False)
 
     def build_graph_data(self, islands: 'TileIslandBuilder', use_neutral_flow: bool) -> 'NxFlowGraphData':
         graph: nx.DiGraph = nx.DiGraph()
         myTeam = self.team
         ourSet = {i.unique_id for i in islands.tile_islands_by_team_id[myTeam]}
         targetSet = {i.unique_id for i in islands.tile_islands_by_team_id[self.target_team]}
-        if self.enemy_general is None or self.map.is_player_on_team(self.enemy_general.player, myTeam):
+        logbook.info(f'build_graph_data entry: enemy_general={self.enemy_general!r} (player={getattr(self.enemy_general, "player", None)}) myTeam={myTeam} target_team={self.target_team} use_neutral_flow={use_neutral_flow}')
+        if self.enemy_general is None or (self.enemy_general.player >= 0 and self.map.is_player_on_team(self.enemy_general.player, myTeam)):
+            logbook.info(f'build_graph_data: enemy_general fallback triggered (was {self.enemy_general!r})')
             try:
                 self.enemy_general = next(t for t in self.map.pathable_tiles if not t.discovered and self.map.is_tile_on_team(t, self.target_team))
             except:
@@ -131,6 +132,7 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
                             self.enemy_general = next(t for t in self.map.pathable_tiles if self.map.is_tile_on_team(t, self.target_team))
                         except:
                             self.enemy_general = next(t for t in self.map.pathable_tiles if not self.map.is_tile_on_team(t, self.team))
+        logbook.info(f'build_graph_data: after fallback enemy_general={self.enemy_general!r}')
 
         if self.enemy_general is None or self.map.is_player_on_team(self.enemy_general.player, myTeam):
             raise Exception(f'Cannot call ensure_flow_graph_exists without setting enemyGeneral to some (enemy) tile.')
@@ -190,7 +192,11 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
 
             sinkEnemyGeneral: bool
             if use_neutral_flow:
-                sinkEnemyGeneral = areAllBordersNeut and island.unique_id not in capacityLookup
+                ## GPT REPLACED:                sinkEnemyGeneral = areAllBordersNeut and island.unique_id not in capacityLookup
+                ## WITH isIslandNeut and GPT commented:
+                # Every neutral island has demand assigned in _determine_initial_demands_and_split_input_output_nodes,
+                # so every neutral island must have a fakeNode drain edge or the graph is infeasible.
+                sinkEnemyGeneral = isIslandNeut
             else:
                 sinkEnemyGeneral = isIslandNeut and not bordersBothPlayers
             if sinkEnemyGeneral:
@@ -243,6 +249,68 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
                 f'useNeutralFlow={use_neutral_flow}'
             )
             logbook.info(f'flow precursor special edges={special_edges}')
+
+        neutSinkTotalCap = sum(islands.tile_islands_by_unique_id[uid].tile_count for uid in neutSinks if uid in islands.tile_islands_by_unique_id)
+        fakeNodeSupply = -cumulativeDemand
+        logbook.error(
+            f'build_graph_data neutSinks: count={len(neutSinks)}, totalCap={neutSinkTotalCap}, '
+            f'fakeNodeSupply={fakeNodeSupply}, '
+            f'cumulativeDemand={cumulativeDemand}, use_neutral_flow={use_neutral_flow}'
+        )
+        if use_neutral_flow and neutSinkTotalCap > fakeNodeSupply:
+            logbook.error(
+                f'build_graph_data IMBALANCE: neutSinkTotalCap {neutSinkTotalCap} '
+                f'exceeds fakeNodeSupply {fakeNodeSupply} — graph likely infeasible'
+            )
+
+        isolatedDemandIslands = [
+            isl for isl in islands.all_tile_islands
+            if len(isl.border_islands) == 0 and demands.get(isl.unique_id, 0) != 0
+        ]
+        if isolatedDemandIslands:
+            logbook.error(
+                f'build_graph_data ISOLATED islands with non-zero demand (use_neutral_flow={use_neutral_flow}): '
+                + ' | '.join(f'{isl}(team={isl.team},dem={demands.get(isl.unique_id)})' for isl in isolatedDemandIslands)
+            )
+
+        topDemandIslands = sorted(
+            [(demands[isl.unique_id], isl) for isl in islands.all_tile_islands if isl.unique_id in demands],
+            key=lambda x: abs(x[0]), reverse=True
+        )[:10]
+        logbook.info(
+            f'build_graph_data top 10 demand contributors (use_neutral_flow={use_neutral_flow}): '
+            + ' | '.join(f'{isl}(team={isl.team},dem={dem})' for dem, isl in topDemandIslands)
+        )
+        logbook.info(
+            f'build_graph_data: fakeNode demand={-cumulativeDemand}, '
+            f'targetGeneralIsland={targetGeneralIsland}(borders={len(targetGeneralIsland.border_islands) if targetGeneralIsland else "N/A"}), '
+            f'frGeneralIsland={frGeneralIsland}'
+        )
+        if targetGeneralIsland:
+            logbook.info(
+                f'build_graph_data targetGeneralIsland border_islands: '
+                + ' | '.join(f'{b}(team={b.team})' for b in targetGeneralIsland.border_islands)
+            )
+
+        weakComponents = list(nx.weakly_connected_components(graph))
+        if len(weakComponents) > 1:
+            logbook.error(
+                f'build_graph_data DISCONNECTED GRAPH: {len(weakComponents)} weakly connected components, '
+                f'use_neutral_flow={use_neutral_flow}, cumulativeDemand={cumulativeDemand}'
+            )
+            for i, comp in enumerate(weakComponents):
+                islandIds = [n for n in comp if n > 0]
+                islandDescs = []
+                for uid in islandIds[:8]:
+                    isl = islands.tile_islands_by_unique_id.get(uid)
+                    if isl:
+                        islandDescs.append(f'{isl}(team={isl.team})')
+                logbook.error(f'  component {i}: nodes={len(comp)}, islands={islandDescs}{"..." if len(islandIds) > 8 else ""}')
+        else:
+            logbook.info(
+                f'build_graph_data graph OK: fully connected, use_neutral_flow={use_neutral_flow}, '
+                f'cumulativeDemand={cumulativeDemand}'
+            )
 
         nxData = NxFlowGraphData(graph, neutSinks, demands, cumulativeDemand, fakeNodes)
         nxData.friendly_army_supply = friendlyArmySupply
@@ -310,6 +378,25 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
             else:
                 raise NotImplementedError(str(method))
         except Exception as ex:
+            nodeDemandsNonZero = {n: d for n, d in graphData.graph.nodes(data="demand") if d}
+            demandSum = sum(nodeDemandsNonZero.values())
+            logbook.error(
+                f'compute_flow_dict INFEASIBLE: method={method}, '
+                f'cumulativeDemand={graphData.cumulative_demand}, '
+                f'nodes={graphData.graph.number_of_nodes()}, '
+                f'edges={graphData.graph.number_of_edges()}, '
+                f'fakeNodes={graphData.fake_nodes}, '
+                f'demandSum={demandSum} (should be 0)'
+            )
+            logbook.error(f'compute_flow_dict non-zero node demands: {nodeDemandsNonZero}')
+            capViolations = [
+                (u, v, d)
+                for u, v, d in graphData.graph.edges(data=True)
+                if d.get('capacity', 100000) < abs(nodeDemandsNonZero.get(u, 0))
+                   or d.get('capacity', 100000) < abs(nodeDemandsNonZero.get(v, 0))
+            ]
+            if capViolations:
+                logbook.error(f'compute_flow_dict capacity violations (demand > capacity): {capViolations}')
             if render_on_exception and GatherDebug.USE_DEBUG_ASSERTS and self.log_debug:
                 self.invalid_flow_renderer(islands, graphData.graph, f'Invalid Graph input... Caught flow exception: {ex}')
             raise

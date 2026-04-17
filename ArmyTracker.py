@@ -703,7 +703,7 @@ class ArmyTracker(object):
                     toTile.isCity = True
                     toTile.player = armyDetectedAsMove.player
                     toTile.army = armyDetectedAsMove.value
-                    logbook.warn(f'CONVERTING {str(tile.delta.toTile)} UNDISCOVERED MOUNTAIN TO CITY DUE TO MAP SAYING DEFINITELY TILE MOVED THERE. {str(tile)}->{str(tile.delta.toTile)}')
+                    logbook.warning(f'CONVERTING {str(tile.delta.toTile)} UNDISCOVERED MOUNTAIN TO CITY DUE TO MAP SAYING DEFINITELY TILE MOVED THERE. {str(tile)}->{str(tile.delta.toTile)}')
                 armyDetectedAsMove.update()
                 if not tile.delta.toTile.visible:
                     # map knows what it is doing, force tile army update.
@@ -3658,7 +3658,7 @@ class ArmyTracker(object):
         #     requiredIncluded.add(pathToUnelim.tail.tile)
         #     requiredTiles.append(pathToUnelim.tail.tile)
         # if len(requiredTiles) == 0:
-        #     logbook.warn(f'ArmyTracker found no tiles to build fog land from for player {player}')
+        #     logbook.warning(f'ArmyTracker found no tiles to build fog land from for player {player}')
         #     return
         with self.perf_timer.begin_move_event(f'Fog land build get_spanning_tree_set_from_tile_lists p{player} (num required {len(requiredTiles)})'):
             connectedSet, missingRequired = MapSpanningUtils.get_spanning_tree_set_from_tile_lists(self.map, requiredTiles, bannedTiles)

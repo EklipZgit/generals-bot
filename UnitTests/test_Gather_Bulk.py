@@ -1956,9 +1956,9 @@ player_index=0
                 )
             except:
                 self.begin_capturing_logging()
-                logbook.warn(f'{mapFileName} map failed for depth {depth}')
-                logbook.warn(traceback.format_exc())
-                logbook.warn(f'{mapFileName} map failed for depth {depth}')
+                logbook.warning(f'{mapFileName} map failed for depth {depth}')
+                logbook.warning(traceback.format_exc())
+                logbook.warning(f'{mapFileName} map failed for depth {depth}')
                 bencher.undo_current_run()
                 self.stop_capturing_logging()
 

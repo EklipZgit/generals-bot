@@ -474,7 +474,7 @@ def get_round_plan_with_expansion(
             if viewInfo is not None:
                 viewInfo.add_info_line(msg)
             else:
-                logbook.warn(msg)
+                logbook.warning(msg)
 
             path, otherPaths, totalTurns, neutCaps, enCaps, totalValue = altPath, altOtherPaths, altTotalTurns, altNeutCaps, altEnCaps, altTotalValue
 

@@ -908,7 +908,7 @@ class GeneralsViewer(object):
             # logbook.info("inf")  # Log it or whatever here
             # logbook.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
             # logbook.info("warn")  # Log it or whatever here
-            # logbook.warn(''.join('!! ' + line for line in lines))  # Log it or whatever here
+            # logbook.warning(''.join('!! ' + line for line in lines))  # Log it or whatever here
             logbook.info("err")  # Log it or whatever here
             logbook.error(''.join('!! ' + line for line in lines))  # Log it or whatever here
             raise

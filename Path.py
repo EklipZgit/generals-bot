@@ -524,7 +524,7 @@ class Path(TilePlanInterface):
             path.remove_end()
 
         if path.tail.tile.visible:
-            logbook.warn(f'couldn\'t successfully get_subsegment_excluding_trailing_visible because even the first move in the path was visible. Returning the length 1 subsegment: {path}')
+            logbook.warning(f'couldn\'t successfully get_subsegment_excluding_trailing_visible because even the first move in the path was visible. Returning the length 1 subsegment: {path}')
 
         return path
 

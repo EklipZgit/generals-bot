@@ -13,7 +13,7 @@ from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander, IslandFlowNo
 from BoardAnalyzer import BoardAnalyzer
 from Gather import GatherDebug
 from Sim.GameSimulator import GameSimulatorHost
-from TestBase import TestBase
+from Tests.TestBase import TestBase
 from ViewInfo import ViewInfo
 from base.client.map import MapBase
 from base.client.tile import Tile
@@ -22,7 +22,7 @@ from bot_ek0x45 import EklipZBot
 
 method = FlowGraphMethod.MinCostFlow
 
-class FlowExpansionLookupGenerationTests(TestBase):
+class FlowExpansionBorderStreamPreprocessTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
         GatherDebug.USE_DEBUG_ASSERTS = True
@@ -37,8 +37,8 @@ class FlowExpansionLookupGenerationTests(TestBase):
 
         return bot
 
-    def test_lookup_generation__basic_two_island_map(self):
-        """Test lookup table generation on a simple two-island map"""
+    def test_border_stream_preprocessing__basic_two_island_map(self):
+        """Test basic border stream preprocessing on a simple two-island map"""
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
 |    |    |    |
@@ -54,38 +54,35 @@ aG1  a3   b1   bG1
         # Import and test the V2 expander
         from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
+        flowExpanderV2.target_team = enemyGeneral.player
+        flowExpanderV2.enemyGeneral = enemyGeneral
 
-        # Set up the flow graph and preprocessing
+        # Test the preprocessing components
         flowExpanderV2._ensure_flow_graph_exists(builder)
+        self.assertIsNotNone(flowExpanderV2.flow_graph, 'Flow graph should be built')
+
+        # Test target-crossable detection
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
+        self.assertEqual(0, len(target_crossable), 'No islands should be target-crossable in this simple map')
+
+        # Test border pair enumeration
         border_pairs = flowExpanderV2._enumerate_border_pairs(
             flowExpanderV2.flow_graph, builder, flowExpanderV2.team, flowExpanderV2.target_team, target_crossable
         )
+        self.assertEqual(1, len(border_pairs), 'Should find exactly one border pair')
 
-        # Test lookup table generation (Phase 2)
-        lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
-        )
-
-        self.assertEqual(1, len(lookup_tables), 'Should generate one lookup table for the single border pair')
-
-        # Verify basic lookup table structure
-        lookup_table = lookup_tables[0]
-        self.assertIsNotNone(lookup_table.border_pair, 'Border pair should be set')
-        self.assertIsNotNone(lookup_table.capture_entries_by_turn, 'Capture entries should be initialized')
-        self.assertIsNotNone(lookup_table.gather_entries_by_turn, 'Gather entries should be initialized')
-
-        # For this simple case, we expect at least one valid capture entry
-        capture_entries = [entry for entry in lookup_table.capture_entries_by_turn if entry is not None]
-        self.assertGreater(len(capture_entries), 0, 'Should have at least one capture entry')
-
-        # Verify the first capture entry has reasonable values
-        first_capture = capture_entries[0]
-        self.assertGreater(first_capture.turns, 0, 'Turns should be positive')
-        self.assertGreaterEqual(first_capture.required_army, 1, 'Should require at least 1 army')
-        self.assertGreater(first_capture.econ_value, 0, 'Should have positive econ value')
+        # Verify the border pair is correct.
+        # The friendly border island is the a3 tile at (1,0) — the tile that directly touches the enemy,
+        # not the general at (0,0). The target island is b1 at (2,0), which contains the enemy general.
+        border_pair = border_pairs[0]
+        friendly_border_tile = map.GetTile(1, 0)  # a3 — the friendly tile adjacent to enemy
+        target_border_tile = map.GetTile(2, 0)    # b1 — the enemy tile adjacent to friendly (contains bG1 island)
+        friendly_island = builder.tile_island_lookup.raw[friendly_border_tile.tile_index]
+        target_island = builder.tile_island_lookup.raw[target_border_tile.tile_index]
+        self.assertEqual(friendly_island.unique_id, border_pair.friendly_island_id)
+        self.assertEqual(target_island.unique_id, border_pair.target_island_id)
 
 
     def test_build_flow_expand_plan__should_produce_valid_only__pull_through_friendly(self):

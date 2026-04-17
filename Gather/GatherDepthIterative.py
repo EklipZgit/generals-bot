@@ -856,7 +856,7 @@ def _knapsack_levels_gather_iterative_depth_prune(
             if perIterationFunc is not None:
                 perIterationFunc(newStartTilesDict)
             if itr.value > 200:
-                logbook.warn(f'pre-inf loop   :( fullTurns {fullTurns}, turnsSoFar {turnsSoFar}, turnsToGather {turnsToGather}, lastPrunedTo {lastPrunedTo}')
+                logbook.warning(f'pre-inf loop   :( fullTurns {fullTurns}, turnsSoFar {turnsSoFar}, turnsToGather {turnsToGather}, lastPrunedTo {lastPrunedTo}')
             if itr.value > 250:
                 raise Exception(f'Infinite looped :( fullTurns {fullTurns}, turnsSoFar {turnsSoFar}, turnsToGather {turnsToGather}, lastPrunedTo {lastPrunedTo}')
 

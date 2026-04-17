@@ -2320,10 +2320,10 @@ class ArmyFlowExpander(object):
                     heapq.heappush(q, (1 - mv.army, mv))
 
         if toUse < 0:
-            logbook.warn(
+            logbook.warning(
                 f'toUse was {toUse}, expected 0. (used {used}). We will have extra army in the flow that isnt going to be known about by the algo. unusedSourceArmy was {unusedSourceArmy}, island tile army was {[t.army for t in incompleteSource.island.tiles_by_army]}')
         if toUse > 0:
-            logbook.warn(f'toUse was {toUse}, expected 0. (used {used}). THIS IS INVALID. unusedSourceArmy was {unusedSourceArmy}, island tile army was {[t.army for t in incompleteSource.island.tiles_by_army]}')
+            logbook.warning(f'toUse was {toUse}, expected 0. (used {used}). THIS IS INVALID. unusedSourceArmy was {unusedSourceArmy}, island tile army was {[t.army for t in incompleteSource.island.tiles_by_army]}')
 
         return used
 
@@ -2524,10 +2524,9 @@ class ArmyFlowExpander(object):
                 incompleteTargetNode=targetCalculatedNode,
                 sourceUnused=gathSum,
                 plan=None,
-                extraInfo=f"turnsUsed {turnsUsed}, turnsLeft {turnsLeft}, econValue {econValue:.2f},"
-                          f"\r\n  gathSum {gathSum}, frLeftoverArmy {frLeftoverArmy}, armyToCap {armyToCap},"
-                    f"\r\n  negVt {negVt},  randomTieBreak {randomTieBreak},"
-                    f"\r\n    {"\r\n    ".join(mismatches)}")
+                extraInfo=(f"turnsUsed {turnsUsed}, turnsLeft {turnsLeft}, econValue {econValue:.2f},"
+                    f"\r\n  gathSum {gathSum}, frLeftoverArmy {frLeftoverArmy}, armyToCap {armyToCap},"
+                    f"\r\n  negVt {negVt},  randomTieBreak {randomTieBreak}"))
             raise Exception('no nodes in flow')
         for n in nodes:
             existing = safetyChecker.get(n.island.unique_id, None)
@@ -2811,8 +2810,10 @@ class ArmyFlowExpander(object):
         #         return False
 
         allow = False
+        if fromIsland.unique_id not in self.flow_graph.flow_node_lookup_by_island_no_neut:
+            return False
         if toIsland.unique_id not in self.flow_graph.flow_node_lookup_by_island_no_neut:
-            pass
+            return False
         fromNoNeut = self.flow_graph.flow_node_lookup_by_island_no_neut[fromIsland.unique_id]
         toNoNeut = self.flow_graph.flow_node_lookup_by_island_no_neut[toIsland.unique_id]
         for dest in fromNoNeut.flow_to:

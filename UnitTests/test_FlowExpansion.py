@@ -9,6 +9,7 @@ import SearchUtils
 from Algorithms import TileIslandBuilder
 from Algorithms.TileIslandBuilder import IslandBuildMode
 from BehaviorAlgorithms import IterativeExpansion
+from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander, IslandFlowNode, FlowGraphMethod
 from BoardAnalyzer import BoardAnalyzer
 from Gather import GatherDebug
@@ -51,7 +52,7 @@ aG1  a3   b1   bG1
         builder = TileIslandBuilder(map)
 
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -78,7 +79,7 @@ aG1  a3   a1   b1   bG1
         builder = TileIslandBuilder(map)
 
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -105,7 +106,7 @@ aG1  a4        b1   bG1
         builder = TileIslandBuilder(map)
 
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -132,7 +133,7 @@ aG1  a4   b1   bG1
         builder = TileIslandBuilder(map)
 
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -159,7 +160,7 @@ aG1  a4   a1   b1   bG1
         builder = TileIslandBuilder(map)
 
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -186,7 +187,7 @@ aG1  a5        b1   bG1
         builder = TileIslandBuilder(map)
 
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -213,7 +214,7 @@ aG2  a2   b1   bG1
         builder = TileIslandBuilder(map)
 
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -240,7 +241,7 @@ aG2  a2   a1   b1   bG1
         builder = TileIslandBuilder(map)
 
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -267,7 +268,7 @@ aG2  a3        b1   bG1
         builder = TileIslandBuilder(map)
 
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -294,7 +295,7 @@ aG3  a3   b1   bG1
         builder = TileIslandBuilder(map)
 
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -321,7 +322,7 @@ aG3  a5   b1   bG3
         builder = TileIslandBuilder(map)
 
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -348,7 +349,7 @@ aG3  a3   a1   b1   bG1
         builder = TileIslandBuilder(map)
 
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -375,7 +376,7 @@ aG2  a5   b1        bG1
         builder = TileIslandBuilder(map)
 
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -409,7 +410,7 @@ M    M         b1
 
         start = time.perf_counter()
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -439,7 +440,7 @@ M    M         b1
 
                 start = time.perf_counter()
                 builder.recalculate_tile_islands(enemyGeneral)
-                flowExpander = ArmyFlowExpander(map)
+                flowExpander = ArmyFlowExpanderV2(map)
                 flowExpander.method = method
                 flowExpander.use_debug_asserts = False
                 flowExpander.log_debug = False
@@ -475,7 +476,7 @@ a2
                 builder = TileIslandBuilder(map)
                 # builder.break_apart_neutral_islands = True
                 builder.recalculate_tile_islands(enemyGeneral)
-                flowExpander = ArmyFlowExpander(map)
+                flowExpander = ArmyFlowExpanderV2(map)
                 flowExpander.method = method
                 flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=turns, boardAnalysis=None, territoryMap=None, negativeTiles=None)
                 opts = flowResult.flow_plans
@@ -512,7 +513,7 @@ a1                  N40
                 builder = TileIslandBuilder(map)
                 # builder.break_apart_neutral_islands = True
                 builder.recalculate_tile_islands(enemyGeneral)
-                flowExpander = ArmyFlowExpander(map)
+                flowExpander = ArmyFlowExpanderV2(map)
                 flowExpander.method = method
                 flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=turns, boardAnalysis=None, territoryMap=None, negativeTiles=None)
                 opts = flowResult.flow_plans
@@ -544,7 +545,7 @@ a2
         self.begin_capturing_logging()
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -580,7 +581,7 @@ a2
         self.begin_capturing_logging()
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -609,7 +610,7 @@ a2
         self.begin_capturing_logging()
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -638,7 +639,7 @@ a2
         self.begin_capturing_logging()
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -667,7 +668,7 @@ a2
         self.begin_capturing_logging()
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -698,7 +699,7 @@ a2                  b1
         builder.desired_tile_island_size = 0.3
         builder.recalculate_tile_islands(enemyGeneral)
         self.assertEqual(len(builder.tile_islands_by_player[enemyGeneral.player]), 5)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
@@ -708,6 +709,62 @@ a2                  b1
         self.assertEqual(5, longest.length, 'should be 5 turns to pull everything and capture the 0 too')
         self.assertEqual(0, longest.armyRemaining)
 
+    def test_builds_flow_plan__strange_wrap_around_scenario(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapData = """
+|    |    |    |    |    |    |    |    |    |    |    |    |    |
+a12  a4   a2   a3   aG2  a16  b2   b2   b2   b2   b3   b3   b3   bG1
+|    |    |    |    |    |    |    |    |    |    |    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+        builder.desired_tile_island_size = 1
+        builder.recalculate_tile_islands(enemyGeneral)
+        flowExpander = ArmyFlowExpanderV2(map)
+        flowExpander.method = method
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        if debugMode:
+            self.render_flow_expansion_debug(flowExpander, flowResult, renderAll=False)
+        opts = flowResult.flow_plans
+        self.assertGreater(len(opts), 0)
+        sortedOpts = sorted(opts, key=lambda o: o.econValue / o.length, reverse=True)
+        maxOpt = sortedOpts[0]
+        maxVt = maxOpt.econValue / maxOpt.length
+        self.assertGreater(maxVt, 1.6, 'at least SOME plan should have had a higher value-per-turn than 1.6...?')
+        self.assertLess(maxVt, 2.3, 'this method of capture calculation should not be possible to acquire much more than 2 econ value per turn even with priomatrix bonuses')
+        # self.assertEqual(5, maxOpt.length, 'should be 5 turns to pull 3x 2s and capture 3x 1s')
+        # self.assertEqual(6, round(maxOpt.econValue), 'should be 6 econ roughly to capture 3 enemy tiles.')
+
+    def test_builds_flow_plan__wrap_through_neutral(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapData = """
+|    |    |    |    |    |    |    |    |    |    |
+a3   aG4  a2   a2   a2             b2   N40       bG1
+|    |    |    |    |    |    |    |    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+        builder.desired_tile_island_size = 1
+        builder.recalculate_tile_islands(enemyGeneral)
+        flowExpander = ArmyFlowExpanderV2(map)
+        flowExpander.method = method
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        if debugMode:
+            self.render_flow_expansion_debug(flowExpander, flowResult, renderAll=False)
+        opts = flowResult.flow_plans
+        self.assertGreater(len(opts), 0)
+        sortedOpts = sorted(opts, key=lambda o: o.econValue / o.length, reverse=True)
+        maxOpt = sortedOpts[0]
+        maxVt = maxOpt.econValue / maxOpt.length
+        self.assertGreater(maxVt, 1.6, 'at least SOME plan should have had a higher value-per-turn than 1.6...?')
+        self.assertLess(maxVt, 2.3, 'this method of capture calculation should not be possible to acquire much more than 2 econ value per turn even with priomatrix bonuses')
+        # self.assertEqual(5, maxOpt.length, 'should be 5 turns to pull 3x 2s and capture 3x 1s')
+        # self.assertEqual(6, round(maxOpt.econValue), 'should be 6 econ roughly to capture 3 enemy tiles.')
+
     def test_builds_flow_plan__should_recognize_gather_into_top_path_is_best(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
@@ -716,7 +773,7 @@ a2                  b1
         self.begin_capturing_logging()
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
-        flowExpander = ArmyFlowExpander(map)
+        flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         if debugMode:
@@ -1268,15 +1325,15 @@ player_index=0
                     0,
                     f'Plan root node had negative army ({rootNode.value}) - invalid plan produced: {opt}',
                 )
-    
+
     def test_a_more_open_normal_map(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/a_more_open_normal_map___VY49QNB72---1--250.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
 
         turns = 50
-
-        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=1, shouldRender=debugMode, method=method)
+        self.begin_capturing_logging()
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=debugMode, method=method)
 
         # if debugMode:
         #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
@@ -1396,3 +1453,62 @@ player_index=0
                 # 7 en caps, 10 moves, should be our best case scenario.
                 self.assertEqual(round(bestEcon, 5), round(longestOpt.econValue, 5))
                 self.assertEqual(bestTurns, longestOpt.length)
+
+    def test_should_be_able_to_flow_expand_towards_neutrals_and_predicted_general_in_1v1(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_be_able_to_flow_expand_towards_neutrals_and_predicted_general_in_1v1___Human.exe-TEST__d151ce15-cc2d-4bfc-8540-0b2b63dce963---1--50.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 50, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=50)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+
+        opts = self.run_army_flow_expansion(rawMap, rawMap.GetTile(general.x, general.y), rawMap.GetTile(enemyGeneral.x, enemyGeneral.y), turns=50, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=True, method=method)
+
+        # if debugMode:
+        #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+        #     simHost.queue_player_moves_str(general.player, expectedPath)
+        #
+        #     self.begin_capturing_logging()
+        #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+
+        self.assertNotEqual(0, len(opts))
+
+        # The isolated 2-army tile at (0,0) borders one neutral. A 2-army tile CAN capture a
+        # 0-army neutral in one move (sends 1, arrives with 1 > 0 defender). The solution must
+        # include a plan that captures the neutral adjacent to (0,0) — i.e., has it in its captures.
+        tile_0_0 = rawMap.GetTile(0, 0)
+        neutral_adj_to_0_0 = [t for t in tile_0_0.movable if t.player == -1 and not t.isObstacle]
+        self.assertGreater(
+            len(neutral_adj_to_0_0), 0,
+            'Expected at least one neutral adjacent to (0,0) — map layout may have changed'
+        )
+        plans_capturing_0_0_neighbor = [
+            opt for opt in opts
+            if any(t in opt.approximate_capture_tiles for t in neutral_adj_to_0_0)
+        ]
+        self.assertGreater(
+            len(plans_capturing_0_0_neighbor), 0,
+            f'Expected at least one plan capturing the neutral adjacent to the isolated 2-army tile at (0,0). '
+            f'Neutral candidates: {[str(t) for t in neutral_adj_to_0_0]}. '
+            f'All plan captures: {[[str(t) for t in opt.approximate_capture_tiles] for opt in opts]}'
+        )
+
+        # The isolated 2-army tile at (8,3) borders one neutral at (8,4). Same reasoning applies.
+        tile_8_3 = rawMap.GetTile(8, 3)
+        neutral_adj_to_8_3 = [t for t in tile_8_3.movable if t.player == -1 and not t.isObstacle]
+        self.assertGreater(
+            len(neutral_adj_to_8_3), 0,
+            'Expected at least one neutral adjacent to (8,3) — map layout may have changed'
+        )
+        plans_capturing_8_3_neighbor = [
+            opt for opt in opts
+            if any(t in opt.approximate_capture_tiles for t in neutral_adj_to_8_3)
+        ]
+        self.assertGreater(
+            len(plans_capturing_8_3_neighbor), 0,
+            f'Expected at least one plan capturing the neutral adjacent to the isolated 2-army tile at (8,3). '
+            f'Neutral candidates: {[str(t) for t in neutral_adj_to_8_3]}. '
+            f'All plan captures: {[[str(t) for t in opt.approximate_capture_tiles] for opt in opts]}'
+        )

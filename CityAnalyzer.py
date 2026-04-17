@@ -366,7 +366,7 @@ class CityAnalyzer(object):
         # +baseOffset - 15 for example, where +baseOffset is on the shortest path and 15 is way out of the way
         differentialNormalizedPositive = 0 - min(baseOffset, score.intergeneral_distance_differential + baseOffset)
         pathRelevance = score.neighboring_city_relevance / differentialNormalizedPositive
-        # logbook.warn(f'TODO REMOVE pathRelevance probably not working right, tile {tile} scored {pathRelevance:.3f} (from neighboring_city_relevance {score.neighboring_city_relevance:.3f} / differentialNormalizedPositive {differentialNormalizedPositive}; intergeneral_distance_differential {score.intergeneral_distance_differential})')
+        # logbook.warning(f'TODO REMOVE pathRelevance probably not working right, tile {tile} scored {pathRelevance:.3f} (from neighboring_city_relevance {score.neighboring_city_relevance:.3f} / differentialNormalizedPositive {differentialNormalizedPositive}; intergeneral_distance_differential {score.intergeneral_distance_differential})')
         if pathRelevance < 0:
             pathRelevance = 0
 

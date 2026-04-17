@@ -871,18 +871,18 @@ class ArmyEngine(object):
                         enEqMoves.append(enEnumMoves[moveIdx])
 
             if len(frEqMoves) > 1:
-                logbook.warn(
+                logbook.warning(
                     f'{len(frEqMoves)} fr support moves returned...? {", ".join([str(move) for move in frEqMoves])}')
             if len(enEqMoves) > 1:
-                logbook.warn(
+                logbook.warning(
                     f'{len(enEqMoves)} en support moves returned...? {", ".join([str(move) for move in enEqMoves])}')
 
             if len(frEqMoves) == 0 and len(frEnumMoves) > 0:
-                logbook.warn(
+                logbook.warning(
                     f'{len(frEqMoves)} fr support moves returned...? {", ".join([str(move) for move in frEqMoves])}')
                 frEqMoves = frEnumMoves
             if len(enEqMoves) == 0 and len(enEnumMoves) > 0:
-                logbook.warn(
+                logbook.warning(
                     f'{len(enEqMoves)} en support moves returned...? {", ".join([str(move) for move in enEqMoves])}')
                 enEqMoves = enEnumMoves
 
@@ -932,18 +932,18 @@ class ArmyEngine(object):
                     enEqMoves.append(enEnumMoves[moveIdx])
 
         if len(frEqMoves) > 1:
-            logbook.warn(
+            logbook.warning(
                 f'{len(frEqMoves)} fr lemke moves returned...? {", ".join([str(move) for move in frEqMoves])}')
         if len(enEqMoves) > 1:
-            logbook.warn(
+            logbook.warning(
                 f'{len(enEqMoves)} en lemke moves returned...? {", ".join([str(move) for move in enEqMoves])}')
 
         if len(frEqMoves) == 0 and len(frEnumMoves) > 0:
-            logbook.warn(
+            logbook.warning(
                 f'{len(frEqMoves)} fr lemke moves returned...? {", ".join([str(move) for move in frEqMoves])}')
             frEqMoves = frEnumMoves
         if len(enEqMoves) == 0 and len(enEnumMoves) > 0:
-            logbook.warn(
+            logbook.warning(
                 f'{len(enEqMoves)} en lemke moves returned...? {", ".join([str(move) for move in enEqMoves])}')
             enEqMoves = enEnumMoves
 

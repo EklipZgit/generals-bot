@@ -733,7 +733,7 @@ def build_capture_mst_from_root_and_contiguous_tiles(map: MapBase, tiles: typing
                 qq.appendleft((movable, dist + 1))
 
     if unvisited:
-        logbook.warn(f'the input tiles were not fully connected to one another. disconnected tiles {" | ".join([f"{t.x},{t.y}" for t in sorted(unvisited)])}')
+        logbook.warning(f'the input tiles were not fully connected to one another. disconnected tiles {" | ".join([f"{t.x},{t.y}" for t in sorted(unvisited)])}')
         if GatherDebug.USE_DEBUG_ASSERTS:
             raise Exception(f'the input tiles were not fully connected to one another. disconnected tiles {" | ".join([f"{t.x},{t.y}" for t in sorted(unvisited)])}')
 

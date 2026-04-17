@@ -25,6 +25,7 @@ from ArmyEngine import ArmySimResult
 from ArmyTracker import Army, ArmyTracker
 from Behavior.ArmyInterceptor import ArmyInterception, ArmyInterceptor, InterceptionOptionInfo
 from BehaviorAlgorithms.Flow.FlowGraphModels import FlowExpansionPlanOption
+from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
 from BehaviorAlgorithms.IterativeExpansion import IslandFlowNode, ArmyFlowExpander, IslandMaxFlowGraph, FlowGraphMethod, FlowExpansionPlanOptionCollection
 from BoardAnalyzer import BoardAnalyzer
 from DangerAnalyzer import ThreatType, ThreatObj
@@ -1731,7 +1732,7 @@ class TestBase(unittest.TestCase):
 
         perfTimer = PerformanceTimer()
         perfTimer.begin_move(map.turn)
-        expander = ArmyFlowExpander(map, perfTimer)
+        expander = ArmyFlowExpanderV2(map, perfTimer)
         if method is not None:
             expander.method = method
         expander.friendlyGeneral = general
@@ -1764,7 +1765,7 @@ class TestBase(unittest.TestCase):
             self.render_flow_expansion_debug(expander, optCollection, renderAll, turnsLimit=turns)
         return expander, optCollection
 
-    def render_flow_expansion_debug(self, expander: ArmyFlowExpander, optCollection: FlowExpansionPlanOptionCollection, renderAll: bool, turnsLimit: int = 100):
+    def render_flow_expansion_debug(self, expander: ArmyFlowExpanderV2, optCollection: FlowExpansionPlanOptionCollection, renderAll: bool, turnsLimit: int = 100):
         map = expander.map
         builder: TileIslandBuilder = expander.island_builder
         vi = self.get_renderable_view_info(map)
@@ -2586,7 +2587,7 @@ class TestBase(unittest.TestCase):
             try:
                 map, general, enemyGeneral = self.load_map_and_generals(f'GameContinuationEntries/{file}')
             except Exception as ex:
-                logbook.warn(f'failed to load map {file}: {ex}')
+                logbook.warning(f'failed to load map {file}: {ex}')
                 continue
 
             if mapSkipFilterer and mapSkipFilterer(map, general, enemyGeneral):

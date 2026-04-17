@@ -203,7 +203,8 @@ class TileIslandBuilder(object):
         self.force_territory_borders_to_single_tile_islands: bool = True
         """If True, any tile that borders a different teams territory will be a single-tile-island. Useful for algorithms that dont safely deal with skews along borders between islands."""
 
-        self.log_debug: bool = False
+        self.log_debug: bool = True
+        self.use_debug_asserts: bool = True
 
     def reset_for_rebuild(self):
         self.tile_island_lookup = MapMatrix(self.map, None)
@@ -301,6 +302,9 @@ class TileIslandBuilder(object):
             )
         else:
             logbook.info('recalculate_tile_islands POST-BUILD: all non-obstacle tiles have islands (no None)')
+
+        if self.log_debug or self.use_debug_asserts:
+            self.debug_verify_all_islands(context='recalculate_tile_islands')
 
         complete = time.perf_counter() - start
         logbook.info(f'islands all built in {complete:.5f}s')
@@ -407,6 +411,8 @@ class TileIslandBuilder(object):
             + ' | '.join(str(t) for t in sorted(impactedTiles, key=lambda t: t.tile_index))
         )
 
+        islandsBeforeUpdate: typing.Set[TileIsland] = set(self.all_tile_islands) if (self.log_debug or self.use_debug_asserts) else None
+
         for island in impactedLeafIslands:
             self._remove_leaf_island(island)
             self.borders_by_island.pop(island.unique_id, None)
@@ -480,6 +486,21 @@ class TileIslandBuilder(object):
         else:
             logbook.info('update_tile_islands POST-UPDATE: all non-obstacle tiles have islands (no None)')
 
+        if self.log_debug or self.use_debug_asserts:
+            droppedIslands = [isl for isl in islandsBeforeUpdate if isl not in self.all_tile_islands]
+            newIslands = [isl for isl in self.all_tile_islands if isl not in islandsBeforeUpdate]
+            borderAdjustedIslands = [isl for isl in refreshIslands if isl in islandsBeforeUpdate and isl not in impactedLeafIslands]
+            logbook.info(
+                f'update_tile_islands DEBUG REPORT:\n'
+                f'  dropped ({len(droppedIslands)}): '
+                + ' | '.join(str(isl) for isl in droppedIslands)
+                + f'\n  net-new ({len(newIslands)}): '
+                + ' | '.join(str(isl) for isl in newIslands)
+                + f'\n  border-adjusted ({len(borderAdjustedIslands)}): '
+                + ' | '.join(str(isl) for isl in borderAdjustedIslands)
+            )
+            self.debug_verify_all_islands(context='update_tile_islands', deletingIslandSet=impactedLeafIslands)
+
         complete = time.perf_counter() - start
         logbook.info(f'islands updated in {complete:.5f}s')
 
@@ -489,6 +510,331 @@ class TileIslandBuilder(object):
         if island.child_islands is not None:
             return island.child_islands.copy()
         return [island]
+
+    def debug_verify_island(self, island: TileIsland, deletingIslandSet: typing.Set[TileIsland], sourceLabel: str) -> typing.List[str]:
+        """
+        Validates a single TileIsland for structural consistency. Does NOT mutate anything.
+        Returns a (possibly empty) list of error strings describing every invariant violation found.
+        """
+        errors: typing.List[str] = []
+        prefix = f'[{sourceLabel} id={island.unique_id}/{island.name}]'
+
+        # --- deletingIslandSet membership ---
+        # An island in deletingIslandSet that was reused/re-registered is fine; only flag it if
+        # it is truly gone (not in all_tile_islands) but still referenced somewhere.
+        if island in deletingIslandSet and island not in self.all_tile_islands:
+            errors.append(f'{prefix} island is in deletingIslandSet and not in all_tile_islands (dead island still referenced)')
+
+        # --- tile_set basic sanity ---
+        if island.tile_set is None:
+            errors.append(f'{prefix} tile_set is None')
+            return errors  # nothing else is safe to check
+        if len(island.tile_set) == 0:
+            errors.append(f'{prefix} tile_set is empty')
+
+        # --- tile_count ---
+        actualCount = len(island.tile_set)
+        if island.tile_count != actualCount:
+            errors.append(f'{prefix} tile_count mismatch: reported={island.tile_count} actual={actualCount}')
+
+        # --- sum_army ---
+        actualArmy = sum(t.army for t in island.tile_set)
+        if island.sum_army != actualArmy:
+            errors.append(f'{prefix} sum_army mismatch: reported={island.sum_army} actual={actualArmy}')
+
+        # --- tile_count_all_adjacent_friendly vs tile_count ---
+        if island.tile_count_all_adjacent_friendly < island.tile_count:
+            errors.append(
+                f'{prefix} tile_count_all_adjacent_friendly={island.tile_count_all_adjacent_friendly} < tile_count={island.tile_count} (must be >=)'
+            )
+
+        # --- sum_army_all_adjacent_friendly vs sum_army ---
+        if island.sum_army_all_adjacent_friendly < island.sum_army:
+            errors.append(
+                f'{prefix} sum_army_all_adjacent_friendly={island.sum_army_all_adjacent_friendly} < sum_army={island.sum_army} (must be >=)'
+            )
+
+        # --- tiles_by_army ---
+        if island.tiles_by_army is None:
+            errors.append(f'{prefix} tiles_by_army is None')
+        else:
+            tbaSet = set(island.tiles_by_army)
+            if tbaSet != island.tile_set:
+                missing = island.tile_set - tbaSet
+                extra = tbaSet - island.tile_set
+                if missing:
+                    errors.append(f'{prefix} tiles_by_army missing {len(missing)} tile(s): {sorted(str(t) for t in missing)[:5]}')
+                if extra:
+                    errors.append(f'{prefix} tiles_by_army has {len(extra)} extra tile(s) not in tile_set: {sorted(str(t) for t in extra)[:5]}')
+            if len(island.tiles_by_army) != len(set(island.tiles_by_army)):
+                errors.append(f'{prefix} tiles_by_army contains duplicate tiles')
+            # verify descending army order
+            for i in range(len(island.tiles_by_army) - 1):
+                if island.tiles_by_army[i].army < island.tiles_by_army[i + 1].army:
+                    errors.append(
+                        f'{prefix} tiles_by_army not sorted descending at index {i}: '
+                        f'{island.tiles_by_army[i].army} < {island.tiles_by_army[i+1].army}'
+                    )
+                    break  # one report per island is enough
+
+        # --- cities ---
+        if island.cities is None:
+            errors.append(f'{prefix} cities is None')
+        else:
+            actualCities = [t for t in island.tile_set if t.isCity]
+            if set(island.cities) != set(actualCities):
+                missing = set(actualCities) - set(island.cities)
+                extra = set(island.cities) - set(actualCities)
+                if missing:
+                    errors.append(f'{prefix} cities missing {len(missing)} city tile(s): {sorted(str(t) for t in missing)[:5]}')
+                if extra:
+                    errors.append(f'{prefix} cities has {len(extra)} stale city tile(s) not in tile_set or not isCity: {sorted(str(t) for t in extra)[:5]}')
+
+        # --- full_island / child_islands cross-references ---
+        if island.full_island is not None:
+            if island.full_island is island:
+                errors.append(f'{prefix} full_island is self (self-cycle)')
+            else:
+                fi = island.full_island
+                if fi.child_islands is None:
+                    errors.append(f'{prefix} full_island {fi.unique_id}/{fi.name} has child_islands=None but this island claims it as parent')
+                else:
+                    if island not in fi.child_islands:
+                        errors.append(f'{prefix} this island is not listed in full_island {fi.unique_id}/{fi.name}.child_islands')
+                if fi.full_island is not None:
+                    errors.append(f'{prefix} full_island {fi.unique_id}/{fi.name} itself has a full_island set (grandparent chain unsupported)')
+                if fi.team != island.team:
+                    errors.append(f'{prefix} full_island {fi.unique_id}/{fi.name} has team={fi.team} but this island.team={island.team}')
+                if not island.tile_set.issubset(fi.tile_set):
+                    diff = island.tile_set - fi.tile_set
+                    errors.append(f'{prefix} tile_set is not a subset of full_island {fi.unique_id}/{fi.name}.tile_set; extra tiles: {sorted(str(t) for t in diff)[:5]}')
+
+        if island.child_islands is not None:
+            if len(island.child_islands) == 0:
+                errors.append(f'{prefix} child_islands is set but empty (should be None if no children)')
+            childTileUnion: typing.Set[Tile] = set()
+            seenChildIds: typing.Set[int] = set()
+            for child in island.child_islands:
+                if child is island:
+                    errors.append(f'{prefix} child_islands contains self')
+                    continue
+                if child.unique_id in seenChildIds:
+                    errors.append(f'{prefix} child_islands contains duplicate id={child.unique_id}')
+                seenChildIds.add(child.unique_id)
+                if child.full_island is not island:
+                    errors.append(
+                        f'{prefix} child {child.unique_id}/{child.name}.full_island={child.full_island} '
+                        f'does not point back to this island'
+                    )
+                if child.team != island.team:
+                    errors.append(f'{prefix} child {child.unique_id}/{child.name} has team={child.team} != parent.team={island.team}')
+                childTileUnion.update(child.tile_set)
+            if childTileUnion != island.tile_set:
+                missing = island.tile_set - childTileUnion
+                extra = childTileUnion - island.tile_set
+                if missing:
+                    errors.append(f'{prefix} child tile union missing {len(missing)} tile(s) from parent tile_set: {sorted(str(t) for t in missing)[:5]}')
+                if extra:
+                    errors.append(f'{prefix} child tile union has {len(extra)} extra tile(s) not in parent tile_set: {sorted(str(t) for t in extra)[:5]}')
+
+        # --- all tiles: team alignment and lookup pointer ---
+        for tile in island.tile_set:
+            actualTeam = self.teams[tile.player]
+            if actualTeam != island.team:
+                errors.append(
+                    f'{prefix} tile {tile} has player={tile.player} (team={actualTeam}) but island.team={island.team}'
+                )
+            lookupIsland = self.tile_island_lookup.raw[tile.tile_index]
+            if lookupIsland is not island:
+                errors.append(
+                    f'{prefix} tile {tile} tile_island_lookup points to {lookupIsland} (id={getattr(lookupIsland,"unique_id",None)}) not this island'
+                )
+
+        # --- border_islands: every border must be a leaf, tiles must align with lookup, back-ref must exist ---
+        for border in island.border_islands:
+            if border is island:
+                errors.append(f'{prefix} border_islands contains self')
+                continue
+            if border in deletingIslandSet and border not in self.all_tile_islands:
+                errors.append(f'{prefix} border {border.unique_id}/{border.name} is in deletingIslandSet and not in all_tile_islands (stale ref to dead island)')
+            # borders must be leaf islands — a leaf has child_islands=None
+            # (full_island being set is fine: it just means the leaf is a child of a broken-up parent)
+            if border.child_islands is not None:
+                errors.append(
+                    f'{prefix} border {border.unique_id}/{border.name} has child_islands set '
+                    f'— borders should only be leaf islands, not parent/full islands'
+                )
+            if island not in border.border_islands:
+                errors.append(
+                    f'{prefix} border {border.unique_id}/{border.name} does not have this island in its border_islands (missing back-ref)'
+                )
+            for btile in border.tile_set:
+                lookupIsland = self.tile_island_lookup.raw[btile.tile_index]
+                if lookupIsland is not border:
+                    errors.append(
+                        f'{prefix} border {border.unique_id}/{border.name}: tile {btile} lookup={lookupIsland} '
+                        f'(id={getattr(lookupIsland,"unique_id",None)}) but expected the border island'
+                    )
+                actualTeam = self.teams[btile.player]
+                if actualTeam != border.team:
+                    errors.append(
+                        f'{prefix} border {border.unique_id}/{border.name}: tile {btile} player={btile.player} '
+                        f'(team={actualTeam}) but border.team={border.team}'
+                    )
+
+        # --- movable neighbours: every non-obstacle neighbour is either in this island or in border_islands ---
+        for tile in island.tile_set:
+            for movable in tile.movable:
+                if movable.isObstacle:
+                    continue
+                neighborIsland = self.tile_island_lookup.raw[movable.tile_index]
+                if neighborIsland is None:
+                    continue
+                if neighborIsland is island:
+                    if movable not in island.tile_set:
+                        errors.append(
+                            f'{prefix} tile {tile} neighbour {movable}: lookup maps to THIS island but movable is not in tile_set'
+                        )
+                else:
+                    if neighborIsland not in island.border_islands:
+                        errors.append(
+                            f'{prefix} tile {tile} neighbour {movable}: lookup island {neighborIsland.unique_id}/{neighborIsland.name} '
+                            f'is adjacent but not in border_islands'
+                        )
+                    if island not in neighborIsland.border_islands:
+                        errors.append(
+                            f'{prefix} tile {tile} neighbour {movable}: neighbour island {neighborIsland.unique_id}/{neighborIsland.name} '
+                            f'does not have this island in its border_islands (missing back-ref)'
+                        )
+
+        # --- border_islands must all be truly adjacent (at least one tile pair confirms adjacency) ---
+        for border in island.border_islands:
+            adjacencyConfirmed = False
+            for tile in island.tile_set:
+                for movable in tile.movable:
+                    if movable in border.tile_set:
+                        adjacencyConfirmed = True
+                        break
+                if adjacencyConfirmed:
+                    break
+            if not adjacencyConfirmed:
+                errors.append(
+                    f'{prefix} border {border.unique_id}/{border.name} is listed in border_islands but no tile pair is actually adjacent (phantom border)'
+                )
+
+        return errors
+
+    def debug_verify_all_islands(self, context: str = '', deletingIslandSet: typing.Set[TileIsland] | None = None):
+        """
+        Iterates every island reachable via all lookup tables and index structures, calls
+        debug_verify_island on each, aggregates all errors, and raises AssertionError with
+        the full report if any are found.  Only call when self.log_debug is True.
+        """
+        if deletingIslandSet is None:
+            deletingIslandSet = set()
+        allErrors: typing.List[str] = []
+        seenIds: typing.Set[int] = set()
+
+        # --- tile_island_lookup: primary source of truth ---
+        for tile in self.map.tiles_by_index:
+            if tile.isObstacle:
+                continue
+            island = self.tile_island_lookup.raw[tile.tile_index]
+            if island is None:
+                if tile in self.map.pathable_tiles:
+                    allErrors.append(f'{context}: tile {tile} is pathable but not in tile_island_lookup')
+                continue
+            if island.unique_id in seenIds:
+                continue
+            seenIds.add(island.unique_id)
+            allErrors.extend(self.debug_verify_island(island, deletingIslandSet, f'{context}:lookup@{tile}'))
+
+        # --- all_tile_islands: flag zombies (present in set but no lookup tile points here) ---
+        for island in self.all_tile_islands:
+            if island.unique_id not in seenIds:
+                seenIds.add(island.unique_id)
+                allErrors.extend(self.debug_verify_island(island, deletingIslandSet, f'{context}:all_tile_islands(zombie)'))
+                sampleTile = next(iter(island.tile_set), None)
+                allErrors.append(
+                    f'[{context}:all_tile_islands id={island.unique_id}/{island.name}] '
+                    f'ZOMBIE: in all_tile_islands but no lookup tile points to it (sample={sampleTile})'
+                )
+
+        # --- tile_islands_by_unique_id: must be a bijection with all_tile_islands ---
+        for uid, island in self.tile_islands_by_unique_id.items():
+            if uid != island.unique_id:
+                allErrors.append(
+                    f'[{context}:by_unique_id key={uid}] key mismatch: island.unique_id={island.unique_id}'
+                )
+            if island not in self.all_tile_islands:
+                allErrors.append(
+                    f'[{context}:by_unique_id id={uid}] present in by_unique_id but NOT in all_tile_islands: {island}'
+                )
+        for island in self.all_tile_islands:
+            if island.unique_id not in self.tile_islands_by_unique_id:
+                allErrors.append(
+                    f'[{context}:all_tile_islands id={island.unique_id}] in all_tile_islands but missing from tile_islands_by_unique_id: {island}'
+                )
+            elif self.tile_islands_by_unique_id[island.unique_id] is not island:
+                allErrors.append(
+                    f'[{context}:all_tile_islands id={island.unique_id}] tile_islands_by_unique_id[{island.unique_id}] '
+                    f'is a different object than the island in all_tile_islands'
+                )
+
+        # --- tile_islands_by_team_id: every island in all_tile_islands must appear exactly once ---
+        for island in self.all_tile_islands:
+            team = island.team
+            if team < 0:
+                teamList = self.tile_islands_by_team_id[-1] if -1 < len(self.tile_islands_by_team_id) else []
+            else:
+                teamList = self.tile_islands_by_team_id[team] if team < len(self.tile_islands_by_team_id) else []
+            count = teamList.count(island)
+            if count == 0:
+                allErrors.append(
+                    f'[{context}:by_team_id team={team}] island {island.unique_id}/{island.name} '
+                    f'in all_tile_islands but not in tile_islands_by_team_id[{team}]'
+                )
+            elif count > 1:
+                allErrors.append(
+                    f'[{context}:by_team_id team={team}] island {island.unique_id}/{island.name} '
+                    f'appears {count}x in tile_islands_by_team_id[{team}] (should be exactly once)'
+                )
+
+        # --- tile_islands_by_player: every island must appear for each teammate ---
+        for island in self.all_tile_islands:
+            team = island.team
+            if team < 0:
+                continue  # neutral islands are not in by_player
+            stats = self._team_stats_by_team_id[team] if team < len(self._team_stats_by_team_id) else None
+            if stats is None:
+                continue
+            for teammate in stats.teamPlayers:
+                playerList = self.tile_islands_by_player[teammate] if teammate < len(self.tile_islands_by_player) else []
+                count = playerList.count(island)
+                if count == 0:
+                    allErrors.append(
+                        f'[{context}:by_player player={teammate}] island {island.unique_id}/{island.name} '
+                        f'(team={team}) in all_tile_islands but not in tile_islands_by_player[{teammate}]'
+                    )
+                elif count > 1:
+                    allErrors.append(
+                        f'[{context}:by_player player={teammate}] island {island.unique_id}/{island.name} '
+                        f'appears {count}x in tile_islands_by_player[{teammate}] (should be exactly once)'
+                    )
+
+        # --- borders_by_island: keys must correspond to live islands ---
+        for uid in self.borders_by_island:
+            if uid not in self.tile_islands_by_unique_id:
+                allErrors.append(
+                    f'[{context}:borders_by_island uid={uid}] key present but island not in tile_islands_by_unique_id (stale entry)'
+                )
+
+        if allErrors:
+            raise AssertionError(
+                f'debug_verify_all_islands ({context}) found {len(allErrors)} error(s):\n'
+                + '\n'.join(allErrors)
+            )
+        logbook.info(f'debug_verify_all_islands ({context}) passed with no problems found.')
 
     def _remove_leaf_island(self, island: TileIsland):
         self.all_tile_islands.discard(island)
@@ -823,11 +1169,14 @@ class TileIslandBuilder(object):
             if largestEnemyBorder is None:
                 largestEnemyBorder = island
 
+            # Walk to the root parent so full_island is never more than one level deep.
+            rootIsland = island.full_island if island.full_island is not None else island
+
             sets = bifurcate_set_into_n_contiguous(self.map, largestEnemyBorder.tile_set, island.tile_set, breakIntoSubCount, self.log_debug)
             for namedTileSet in sets:
                 tileSet = namedTileSet.set
                 newIsland = TileIsland(tileSet, island.team)
-                newIsland.full_island = island
+                newIsland.full_island = rootIsland
                 newIsland.sum_army_all_adjacent_friendly = island.sum_army_all_adjacent_friendly
                 newIsland.tile_count_all_adjacent_friendly = island.tile_count_all_adjacent_friendly
                 newIsland.name = namedTileSet.name
@@ -836,6 +1185,15 @@ class TileIslandBuilder(object):
                 for tile in tileSet:
                     self.tile_island_lookup.raw[tile.tile_index] = newIsland
 
+            # Replace `island` in the root's child list with the new sub-pieces, if island was already a child.
+            if island.full_island is not None and rootIsland.child_islands is not None:
+                rootChildren = rootIsland.child_islands
+                if island in rootChildren:
+                    insertIdx = rootChildren.index(island)
+                    rootChildren[insertIdx:insertIdx + 1] = brokenInto
+                else:
+                    rootChildren.extend(brokenInto)
+
             island.child_islands = brokenInto.copy()
 
             return brokenInto
@@ -843,6 +1201,9 @@ class TileIslandBuilder(object):
             return [island]
 
     def _break_up_initial_island_if_necessary(self, island: TileIsland, mode: IslandBuildMode) -> typing.List[TileIsland]:
+        # Clear stale parent/child pointers from any prior recalculate run on this reused island object.
+        island.full_island = None
+        island.child_islands = None
         brokenUp = []
         leftoverTiles = island.tile_set.copy()
         # shouldForceBorderSolo = mode != IslandBuildMode.GroupByArmy
@@ -913,11 +1274,14 @@ class TileIslandBuilder(object):
             if len(contiguousArmyGroups) <= 1:
                 return [island]
 
+            # Walk to the root parent so full_island is never more than one level deep.
+            rootIsland = island.full_island if island.full_island is not None else island
+
             brokenByBorders = []
 
             for tileSet in contiguousArmyGroups:
                 newIsland = TileIsland(tileSet, island.team)
-                newIsland.full_island = island
+                newIsland.full_island = rootIsland
                 newIsland.sum_army_all_adjacent_friendly = island.sum_army_all_adjacent_friendly
                 newIsland.tile_count_all_adjacent_friendly = island.tile_count_all_adjacent_friendly
                 newIsland.name = IslandNamer.get_letter()
@@ -925,6 +1289,15 @@ class TileIslandBuilder(object):
                 brokenByBorders.append(newIsland)
                 for tile in tileSet:
                     self.tile_island_lookup.raw[tile.tile_index] = newIsland
+
+            # Replace `island` in the root's child list with the new sub-pieces, if island was already a child.
+            if island.full_island is not None and rootIsland.child_islands is not None:
+                rootChildren = rootIsland.child_islands
+                if island in rootChildren:
+                    insertIdx = rootChildren.index(island)
+                    rootChildren[insertIdx:insertIdx + 1] = brokenByBorders
+                else:
+                    rootChildren.extend(brokenByBorders)
 
             island.child_islands = brokenByBorders.copy()
 
